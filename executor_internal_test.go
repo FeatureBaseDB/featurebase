@@ -321,12 +321,12 @@ func TestValCountComparisons(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			gotLarger := test.vc.larger(test.other)
+			gotLarger := test.vc.Larger(test.other)
 			if gotLarger != test.expLarger {
 				t.Fatalf("larger failed, expected:\n%+v\ngot:\n%+v", test.expLarger, gotLarger)
 			}
 
-			gotSmaller := test.vc.smaller(test.other)
+			gotSmaller := test.vc.Smaller(test.other)
 			if gotSmaller != test.expSmaller {
 				t.Fatalf("smaller failed, expected:\n%+v\ngot:\n%+v", test.expSmaller, gotSmaller)
 			}

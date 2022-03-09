@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -38,6 +39,8 @@ const (
 func LevelPrefix(level int) string {
 	return [...]string{"PANIC: ", "ERROR: ", "WARN:  ", "INFO:  ", "DEBUG: "}[level]
 }
+
+var StderrLogger = NewStandardLogger(os.Stderr)
 
 // NopLogger represents a Logger that doesn't do anything.
 var NopLogger Logger = &nopLogger{}

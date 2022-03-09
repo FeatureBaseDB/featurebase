@@ -21,6 +21,7 @@ import (
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/client/types"
 	fbproto "github.com/molecula/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
@@ -60,6 +61,12 @@ type Client struct {
 	shardNodes shardNodes
 	tick       *time.Ticker
 	done       chan struct{}
+
+	// pathPrefix is prepended to every URL path. This is used, for example,
+	// when running a compute nodes as a sub-service of the featurebase command.
+	// In that case, a path might look like `localhost:8080/compute/schema`,
+	// where `/compute` is the pathPrefix.
+	pathPrefix string
 
 	AuthToken string
 }
@@ -193,6 +200,8 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		done:       make(chan struct{}),
 
 		nat: options.nat,
+
+		pathPrefix: options.pathPrefix,
 	}
 
 	if options.tracer == nil {
@@ -264,6 +273,15 @@ func NewClient(addrURIOrCluster interface{}, options ...ClientOption) (*Client, 
 	return newClientWithCluster(cluster, clientOptions), nil
 }
 
+// prefix is a helper function which allows us to provide a pathPrefix value as
+// "compute" instead of "/compute".
+func (c *Client) prefix() string {
+	if c.pathPrefix == "" {
+		return ""
+	}
+	return "/" + c.pathPrefix
+}
+
 // Query runs the given query against the server with the given options.
 // Pass nil for default options.
 func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, error) {
@@ -283,7 +301,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, errors.Wrap(err, "making request data")
 	}
-	path := fmt.Sprintf("/index/%s/query", query.Index().name)
+	path := fmt.Sprintf("%s/index/%s/query", c.prefix(), query.Index().name)
 	_, respData, err := c.HTTPRequest("POST", path, reqData, c.augmentHeaders(defaultProtobufHeaders()))
 	if err != nil {
 		return nil, err
@@ -306,7 +324,7 @@ func (c *Client) CreateIndex(index *Index) error {
 	defer span.Finish()
 
 	data := []byte(index.options.String())
-	path := fmt.Sprintf("/index/%s", index.name)
+	path := fmt.Sprintf("%s/index/%s", c.prefix(), index.name)
 	status, body, err := c.HTTPRequest("POST", path, data, c.augmentHeaders(nil))
 	if err != nil {
 		return errors.Wrapf(err, "creating index: %s", index.name)
@@ -330,7 +348,7 @@ func (c *Client) CreateField(field *Field) error {
 	defer span.Finish()
 
 	data := []byte(field.options.String())
-	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
+	path := fmt.Sprintf("%s/index/%s/field/%s", c.prefix(), field.index.name, field.name)
 	status, body, err := c.HTTPRequest("POST", path, data, c.augmentHeaders(nil))
 	if err != nil {
 		return errors.Wrapf(err, "creating field: %s in index: %s", field.name, field.index.name)
@@ -398,7 +416,7 @@ func (c *Client) DeleteIndexByName(index string) error {
 	span := c.tracer.StartSpan("Client.DeleteIndex")
 	defer span.Finish()
 
-	path := fmt.Sprintf("/index/%s", index)
+	path := fmt.Sprintf("%s/index/%s", c.prefix(), index)
 	_, _, err := c.HTTPRequest("DELETE", path, nil, c.augmentHeaders(nil))
 	return err
 }
@@ -408,7 +426,7 @@ func (c *Client) DeleteField(field *Field) error {
 	span := c.tracer.StartSpan("Client.DeleteField")
 	defer span.Finish()
 
-	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
+	path := fmt.Sprintf("%s/index/%s/field/%s", c.prefix(), field.index.name, field.name)
 	_, _, err := c.HTTPRequest("DELETE", path, nil, c.augmentHeaders(nil))
 	return err
 }
@@ -519,7 +537,7 @@ func (c *Client) EncodeImport(field *Field, shard uint64, vals, ids []uint64, cl
 	if err != nil {
 		return "", nil, errors.Wrap(err, "marshaling Import to protobuf")
 	}
-	path = fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", field.index.Name(), field.Name(), strconv.FormatBool(clear))
+	path = fmt.Sprintf("%s/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", c.prefix(), field.index.Name(), field.Name(), strconv.FormatBool(clear))
 	return path, data, nil
 }
 
@@ -566,7 +584,7 @@ func (c *Client) EncodeImportValues(field *Field, shard uint64, vals []int64, id
 	if err != nil {
 		return "", nil, errors.Wrap(err, "marshaling ImportValue to protobuf")
 	}
-	path = fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", field.index.Name(), field.Name(), strconv.FormatBool(clear))
+	path = fmt.Sprintf("%s/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", c.prefix(), field.index.Name(), field.Name(), strconv.FormatBool(clear))
 	return path, data, nil
 }
 
@@ -597,7 +615,7 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	if c.manualFragmentNode != nil {
 		return []fragmentNode{*c.manualFragmentNode}, nil
 	}
-	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
+	path := fmt.Sprintf("%s/internal/fragment/nodes?shard=%d&index=%s", c.prefix(), shard, indexName)
 	_, body, err := c.HTTPRequest("GET", path, []byte{}, c.augmentHeaders(nil))
 	if err != nil {
 		return nil, err
@@ -660,7 +678,7 @@ func (c *Client) ImportRoaringShard(index string, shard uint64, request *pilosa.
 	for _, uri := range uris {
 		uri := uri
 		eg.Go(func() error {
-			return c.importData(uri, fmt.Sprintf("/index/%s/shard/%d/import-roaring", index, shard), data)
+			return c.importData(uri, fmt.Sprintf("%s/index/%s/shard/%d/import-roaring", c.prefix(), index, shard), data)
 		})
 	}
 	err = eg.Wait()
@@ -694,7 +712,7 @@ func (c *Client) importRoaringBitmap(uri *pnet.URI, field *Field, shard uint64, 
 	}
 	params := url.Values{}
 	params.Add("clear", strconv.FormatBool(options.clear))
-	path := makeRoaringImportPath(field, shard, params)
+	path := makeRoaringImportPath(field, shard, params, c.prefix())
 	req := &pb.ImportRoaringRequest{
 		Clear:          options.clear,
 		Views:          protoViews,
@@ -748,7 +766,8 @@ func (c *Client) Info() (Info, error) {
 	span := c.tracer.StartSpan("Client.Info")
 	defer span.Finish()
 
-	_, data, err := c.HTTPRequest("GET", "/info", nil, c.augmentHeaders(nil))
+	path := fmt.Sprintf("%s/info", c.prefix())
+	_, data, err := c.HTTPRequest("GET", path, nil, c.augmentHeaders(nil))
 	if err != nil {
 		return Info{}, errors.Wrap(err, "requesting /info")
 	}
@@ -765,7 +784,8 @@ func (c *Client) Status() (Status, error) {
 	span := c.tracer.StartSpan("Client.Status")
 	defer span.Finish()
 
-	_, data, err := c.HTTPRequest("GET", "/status", nil, nil)
+	path := fmt.Sprintf("%s/status", c.prefix())
+	_, data, err := c.HTTPRequest("GET", path, nil, nil)
 	if err != nil {
 		return Status{}, errors.Wrap(err, "requesting /status")
 	}
@@ -778,7 +798,8 @@ func (c *Client) Status() (Status, error) {
 }
 
 func (c *Client) readSchema() ([]SchemaIndex, error) {
-	_, data, err := c.HTTPRequest("GET", "/schema", nil, c.augmentHeaders(nil))
+	path := fmt.Sprintf("%s/schema", c.prefix())
+	_, data, err := c.HTTPRequest("GET", path, nil, c.augmentHeaders(nil))
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /schema")
 	}
@@ -791,7 +812,8 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.HTTPRequest("GET", "/internal/shards/max", nil, nil)
+	path := fmt.Sprintf("%s/internal/shards/max", c.prefix())
+	_, data, err := c.HTTPRequest("GET", path, nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
@@ -834,7 +856,8 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		// doRequest implements expotential backoff
 		status, body, err = c.doRequest(host, method, path, c.augmentHeaders(headers), data)
 		// conditions when primary should not be tried
-		if err == nil || usePrimary || path == "/status" {
+		pathCheck := fmt.Sprintf("%s/status", c.prefix())
+		if err == nil || usePrimary || path == pathCheck {
 			break
 		}
 
@@ -1017,7 +1040,7 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 // FindFieldKeys looks up the IDs associated with specified keys in a field.
 // If a key does not exist, the result will not include it.
 func (c *Client) FindFieldKeys(field *Field, keys ...string) (map[string]uint64, error) {
-	path := fmt.Sprintf("/internal/translate/field/%s/%s/keys/find", field.index.name, field.name)
+	path := fmt.Sprintf("%s/internal/translate/field/%s/%s/keys/find", c.prefix(), field.index.name, field.name)
 
 	reqData, err := json.Marshal(keys)
 	if err != nil {
@@ -1049,7 +1072,7 @@ func (c *Client) FindFieldKeys(field *Field, keys ...string) (map[string]uint64,
 // CreateFieldKeys looks up the IDs associated with specified keys in a field.
 // If a key does not exist, it will be created.
 func (c *Client) CreateFieldKeys(field *Field, keys ...string) (map[string]uint64, error) {
-	path := fmt.Sprintf("/internal/translate/field/%s/%s/keys/create", field.index.name, field.name)
+	path := fmt.Sprintf("%s/internal/translate/field/%s/%s/keys/create", c.prefix(), field.index.name, field.name)
 
 	reqData, err := json.Marshal(keys)
 	if err != nil {
@@ -1081,7 +1104,7 @@ func (c *Client) CreateFieldKeys(field *Field, keys ...string) (map[string]uint6
 // FindIndexKeys looks up the IDs associated with specified column keys in an index.
 // If a key does not exist, the result will not include it.
 func (c *Client) FindIndexKeys(idx *Index, keys ...string) (map[string]uint64, error) {
-	path := fmt.Sprintf("/internal/translate/index/%s/keys/find", idx.name)
+	path := fmt.Sprintf("%s/internal/translate/index/%s/keys/find", c.prefix(), idx.name)
 
 	reqData, err := json.Marshal(keys)
 	if err != nil {
@@ -1113,7 +1136,7 @@ func (c *Client) FindIndexKeys(idx *Index, keys ...string) (map[string]uint64, e
 // CreateIndexKeys looks up the IDs associated with specified column keys in an index.
 // If a key does not exist, it will be created.
 func (c *Client) CreateIndexKeys(idx *Index, keys ...string) (map[string]uint64, error) {
-	path := fmt.Sprintf("/internal/translate/index/%s/keys/create", idx.name)
+	path := fmt.Sprintf("%s/internal/translate/index/%s/keys/create", c.prefix(), idx.name)
 
 	reqData, err := json.Marshal(keys)
 	if err != nil {
@@ -1167,7 +1190,8 @@ func (c *Client) startTransaction(id string, timeout time.Duration, exclusive bo
 		return nil, errors.Wrap(err, "marshalling transaction")
 	}
 
-	status, data, err := c.httpRequest("POST", "/transaction", bod, c.augmentHeaders(defaultJSONHeaders()), true)
+	path := fmt.Sprintf("%s/transaction", c.prefix())
+	status, data, err := c.httpRequest("POST", path, bod, c.augmentHeaders(defaultJSONHeaders()), true)
 	if status == http.StatusConflict && time.Now().Before(deadline) {
 		// if we're getting StatusConflict after all the usual timeouts/retries, keep retrying until the deadline
 		time.Sleep(time.Second)
@@ -1194,7 +1218,8 @@ func (c *Client) startTransaction(id string, timeout time.Duration, exclusive bo
 }
 
 func (c *Client) FinishTransaction(id string) (*pilosa.Transaction, error) {
-	_, data, err := c.httpRequest("POST", "/transaction/"+id+"/finish", nil, c.augmentHeaders(defaultJSONHeaders()), true)
+	path := fmt.Sprintf("%s/transaction/%s/finish", c.prefix(), id)
+	_, data, err := c.httpRequest("POST", path, nil, c.augmentHeaders(defaultJSONHeaders()), true)
 	if err != nil && len(data) == 0 {
 		return nil, err
 	}
@@ -1216,7 +1241,8 @@ func (c *Client) FinishTransaction(id string) (*pilosa.Transaction, error) {
 }
 
 func (c *Client) Transactions() (map[string]*pilosa.Transaction, error) {
-	_, respData, err := c.httpRequest("GET", "/transactions", nil, c.augmentHeaders(defaultJSONHeaders()), true)
+	path := fmt.Sprintf("%s/transactions", c.prefix())
+	_, respData, err := c.httpRequest("GET", path, nil, c.augmentHeaders(defaultJSONHeaders()), true)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting transactions")
 	}
@@ -1230,7 +1256,8 @@ func (c *Client) Transactions() (map[string]*pilosa.Transaction, error) {
 }
 
 func (c *Client) GetTransaction(id string) (*pilosa.Transaction, error) {
-	_, data, err := c.httpRequest("GET", "/transaction/"+id, nil, c.augmentHeaders(defaultJSONHeaders()), true)
+	path := fmt.Sprintf("%s/transaction/%s", c.prefix(), id)
+	_, data, err := c.httpRequest("GET", path, nil, c.augmentHeaders(defaultJSONHeaders()), true)
 	if err != nil {
 		return nil, err
 	}
@@ -1307,9 +1334,9 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func makeRoaringImportPath(field *Field, shard uint64, params url.Values) string {
-	return fmt.Sprintf("/index/%s/field/%s/import-roaring/%d?%s",
-		field.index.name, field.name, shard, params.Encode())
+func makeRoaringImportPath(field *Field, shard uint64, params url.Values, pathPrefix string) string {
+	return fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?%s",
+		pathPrefix, field.index.name, field.name, shard, params.Encode())
 }
 
 type viewImports map[string]*roaring.Bitmap
@@ -1326,6 +1353,7 @@ type ClientOptions struct {
 	retries             *int
 	stats               stats.StatsClient
 	nat                 map[pnet.URI]pnet.URI
+	pathPrefix          string
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -1433,6 +1461,14 @@ func OptClientNAT(nat map[string]string) ClientOption {
 			}
 		}
 		options.nat = m
+		return nil
+	}
+}
+
+// OptClientPathPrefix sets the http path prefix.
+func OptClientPathPrefix(prefix string) ClientOption {
+	return func(options *ClientOptions) error {
+		options.pathPrefix = prefix
 		return nil
 	}
 }
@@ -1689,7 +1725,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		fieldType:      so.FieldType,
 		cacheSize:      int(so.CacheSize),
 		cacheType:      CacheType(so.CacheType),
-		timeQuantum:    TimeQuantum(so.TimeQuantum),
+		timeQuantum:    types.TimeQuantum(so.TimeQuantum),
 		ttl:            so.TTL,
 		min:            so.Min,
 		max:            so.Max,
@@ -1733,8 +1769,8 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		headers := map[string]string{
 			"Accept": "text/csv",
 		}
-		path := fmt.Sprintf("/export?index=%s&field=%s&shard=%d",
-			r.field.index.Name(), r.field.Name(), r.currentShard)
+		path := fmt.Sprintf("%s/export?index=%s&field=%s&shard=%d",
+			r.client.prefix(), r.field.index.Name(), r.field.Name(), r.currentShard)
 		_, respData, err := r.client.doRequest(uri, "GET", path, headers, nil)
 		if err != nil {
 			return 0, errors.Wrap(err, "doing export request")
@@ -1749,4 +1785,10 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		r.currentShard++
 	}
 	return
+}
+
+// SetAuthToken sets the Client.AuthToken value. We needed this to be a method
+// in order to satisfy the SchemaManager interface.
+func (c *Client) SetAuthToken(token string) {
+	c.AuthToken = token
 }

@@ -20,16 +20,19 @@ RUN apt install -y docker.io
 ADD https://github.com/docker/compose/releases/latest/download/docker-compose-Linux-x86_64 /usr/local/bin/docker-compose
 RUN chmod +x /usr/local/bin/docker-compose
 
+WORKDIR /go/src/github.com/molecula/featurebase/cmd/featurebase
+
 # generate an instrumented binary to allow for calculating code coverage for clustertests
 # the entrypoint for the binary is TestRunMain, which is wrapper for main
-RUN cd /go/src/github.com/molecula/featurebase/cmd/featurebase && \
-    go test -covermode=atomic -coverpkg=../../... -c -tags testrunmain -o featurebase && \
-    cp /go/src/github.com/molecula/featurebase/cmd/featurebase/featurebase /featurebase
+RUN go test -covermode=atomic -coverpkg=../../... -c -tags testrunmain -o featurebase
+RUN cp /go/src/github.com/molecula/featurebase/cmd/featurebase/featurebase /featurebase
 
 COPY NOTICE /NOTICE
 
 EXPOSE 10101
 VOLUME /data
 
-ENTRYPOINT ["bash", "-c"]
-CMD ["/featurebase", "-test.run=TestRunMain", "-test.coverprofile=/results/coverage.out", "server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]
+
+# use e.g. "-test.coverprofile=/results/coverage.out"
+CMD ["/featurebase", "-test.run=TestRunMain", "server"]
+

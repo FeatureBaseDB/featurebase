@@ -349,9 +349,9 @@ func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c
 		idx := c.Args["valueidx"].(int64)
 		if idx >= 0 && idx < int64(len(opt.EmbeddedData)) {
 			row := opt.EmbeddedData[idx]
-			c.Precomputed = make(map[uint64]interface{}, len(row.segments))
-			for _, segment := range row.segments {
-				c.Precomputed[segment.shard] = &Row{segments: []rowSegment{segment}}
+			c.Precomputed = make(map[uint64]interface{}, len(row.Segments))
+			for _, segment := range row.Segments {
+				c.Precomputed[segment.shard] = &Row{Segments: []RowSegment{segment}}
 			}
 		} else {
 			return fmt.Errorf("no precomputed data! index %d, len %d", idx, len(opt.EmbeddedData))
@@ -424,9 +424,9 @@ func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c
 	opt.EmbeddedData = append(opt.EmbeddedData, row)
 	// and stash a copy locally, so local calls can use it
 	if row != nil {
-		c.Precomputed = make(map[uint64]interface{}, len(row.segments))
-		for _, segment := range row.segments {
-			c.Precomputed[segment.shard] = &Row{segments: []rowSegment{segment}}
+		c.Precomputed = make(map[uint64]interface{}, len(row.Segments))
+		for _, segment := range row.Segments {
+			c.Precomputed[segment.shard] = &Row{Segments: []RowSegment{segment}}
 		}
 	}
 	return nil
@@ -581,7 +581,7 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		}
 
 		if vc, ok := v.(ValCount); ok {
-			vc.cleanup()
+			vc.Cleanup()
 			v = vc
 		}
 
@@ -605,7 +605,7 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 // functions may return both integer and the interpreted value, but we
 // don't want to pass that all the way back to the client, so we
 // remove it here.
-func (vc *ValCount) cleanup() {
+func (vc *ValCount) Cleanup() {
 	if vc.Val != 0 && (vc.FloatVal != 0 || !vc.TimestampVal.IsZero() || vc.DecimalVal != nil) {
 		vc.Val = 0
 	}
@@ -1028,8 +1028,8 @@ func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string,
 	if offset != 0 {
 		i := 0
 		var leadingBits []uint64
-		for i < len(result.segments) && offset > 0 {
-			seg := result.segments[i]
+		for i < len(result.Segments) && offset > 0 {
+			seg := result.Segments[i]
 			count := seg.Count()
 			if count > offset {
 				data := seg.Columns()
@@ -1043,14 +1043,14 @@ func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string,
 			i++
 		}
 		row := NewRow(leadingBits...)
-		row.Merge(&Row{segments: result.segments[i:]})
+		row.Merge(&Row{Segments: result.Segments[i:]})
 		result = row
 	}
 	if limit < result.Count() {
 		i := 0
 		var trailingBits []uint64
-		for i < len(result.segments) && limit > 0 {
-			seg := result.segments[i]
+		for i < len(result.Segments) && limit > 0 {
+			seg := result.Segments[i]
 			count := seg.Count()
 			if count > limit {
 				data := seg.Columns()
@@ -1063,7 +1063,7 @@ func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string,
 			i++
 		}
 		row := NewRow(trailingBits...)
-		row.Merge(&Row{segments: result.segments[:i]})
+		row.Merge(&Row{Segments: result.Segments[:i]})
 		result = row
 	}
 
@@ -1108,7 +1108,7 @@ func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pq
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.add(v.(ValCount))
+		return other.Add(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -1164,7 +1164,7 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 		}
 		switch other := prev.(type) {
 		case SignedRow:
-			return other.union(v.(SignedRow))
+			return other.Union(v.(SignedRow))
 		case *Row:
 			if other == nil {
 				return v
@@ -1187,7 +1187,7 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 	}
 
 	if other, ok := result.(SignedRow); ok {
-		other.field = field
+		other.Field = field
 	}
 	return result, nil
 }
@@ -1213,7 +1213,7 @@ func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pq
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.smaller(v.(ValCount))
+		return other.Smaller(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -1249,7 +1249,7 @@ func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pq
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.larger(v.(ValCount))
+		return other.Larger(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -1597,8 +1597,8 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 			return result, errors.Wrap(err, "executing bitmap call")
 		}
 		filter = row
-		if filter != nil && len(filter.segments) > 0 {
-			filterBitmap = filter.segments[0].data
+		if filter != nil && len(filter.Segments) > 0 {
+			filterBitmap = filter.Segments[0].data
 		}
 		// if we had a filter to consider, but it came back empty, we
 		// can go ahead and save time by returning the empty results,
@@ -2112,7 +2112,7 @@ func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *p
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		x, _ := prev.([]*Row)
 		y, _ := v.([]*Row)
-		return ([]*Row)(addBSI(x, y))
+		return ([]*Row)(AddBSI(x, y))
 	}
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -2136,7 +2136,7 @@ func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *p
 	}
 
 	var dst []Pair
-	bsiData(results).pivotDescending(NewRow().Union(results...), 0, limit, nil, func(count uint64, ids ...uint64) {
+	BSIData(results).PivotDescending(NewRow().Union(results...), 0, limit, nil, func(count uint64, ids ...uint64) {
 		for _, id := range ids {
 			dst = append(dst, Pair{
 				ID:    id,
@@ -2279,7 +2279,7 @@ func (e *executor) executeTopKShardTime(ctx context.Context, tx Tx, filter *Row,
 
 // topKFragments builds a perpendicular BSI bitmap from fragments.
 // The fragments are expected to be from set fields.
-func topKFragments(ctx context.Context, tx Tx, filter *Row, fragments ...*fragment) (bsiData, error) {
+func topKFragments(ctx context.Context, tx Tx, filter *Row, fragments ...*fragment) (BSIData, error) {
 	// Acquire fragment container iterators.
 	iters := make([]roaring.ContainerIterator, len(fragments))
 	for i, f := range fragments {
@@ -2449,7 +2449,7 @@ func (h mergeratorHeap) minHeapify() {
 
 // doTopK uses a raw Pilosa matrix to produce a perpendicular BSI bitmap.
 // It will apply a row filter if one is provided.
-func doTopK(ctx context.Context, it roaring.ContainerIterator, filter *topKFilter) (bsiData, error) {
+func doTopK(ctx context.Context, it roaring.ContainerIterator, filter *topKFilter) (BSIData, error) {
 	row := ^uint64(0)
 	var count uint64
 
@@ -2498,7 +2498,7 @@ type topKFilter [ShardWidth >> 16]*roaring.Container
 
 // fill the filter with the contents of a Row.
 func (f *topKFilter) fill(row *Row) {
-	for _, s := range row.segments {
+	for _, s := range row.Segments {
 		it, _ := s.data.Containers.Iterator(0)
 		f.fillIt(it)
 	}
@@ -2726,12 +2726,12 @@ func (e *executor) executeDifferenceShard(ctx context.Context, qcx *Qcx, index s
 type RowIdentifiers struct {
 	Rows  []uint64 `json:"rows"`
 	Keys  []string `json:"keys,omitempty"`
-	field string
+	Field string
 }
 
 func (r *RowIdentifiers) Clone() (clone *RowIdentifiers) {
 	clone = &RowIdentifiers{
-		field: r.field,
+		Field: r.Field,
 	}
 	if r.Rows != nil {
 		clone.Rows = make([]uint64, len(r.Rows))
@@ -2758,7 +2758,7 @@ func (r RowIdentifiers) ToTable() (*proto.TableResponse, error) {
 // ToRows implements the ToRowser interface.
 func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 	if len(r.Keys) > 0 {
-		ci := []*proto.ColumnInfo{{Name: r.Field(), Datatype: "string"}}
+		ci := []*proto.ColumnInfo{{Name: r.Field, Datatype: "string"}}
 		for _, key := range r.Keys {
 			if err := callback(&proto.RowResponse{
 				Headers: ci,
@@ -2771,7 +2771,7 @@ func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 			ci = nil
 		}
 	} else {
-		ci := []*proto.ColumnInfo{{Name: r.Field(), Datatype: "uint64"}}
+		ci := []*proto.ColumnInfo{{Name: r.Field, Datatype: "uint64"}}
 		for _, id := range r.Rows {
 			if err := callback(&proto.RowResponse{
 				Headers: ci,
@@ -2787,18 +2787,13 @@ func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 	return nil
 }
 
-// Field returns the field name associated to the row.
-func (r *RowIdentifiers) Field() string {
-	return r.field
-}
-
 // RowIDs is a query return type for just uint64 row ids.
 // It should only be used internally (since RowIdentifiers
 // is the external return type), but it is exported because
 // the proto package needs access to it.
 type RowIDs []uint64
 
-func (r RowIDs) merge(other RowIDs, limit int) RowIDs {
+func (r RowIDs) Merge(other RowIDs, limit int) RowIDs {
 	i, j := 0, 0
 	result := make(RowIDs, 0)
 	for i < len(r) && j < len(other) && len(result) < limit {
@@ -3150,7 +3145,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		for subj, cond := range having.Args {
 			switch subj {
 			case "count", "sum":
-				results = applyConditionToGroupCounts(results, subj, cond.(*pql.Condition))
+				results = ApplyConditionToGroupCounts(results, subj, cond.(*pql.Condition))
 			default:
 				return nil, errors.New("Condition() only supports count or sum")
 			}
@@ -3653,10 +3648,10 @@ func (g GroupCount) satisfiesCondition(subj string, cond *pql.Condition) bool {
 	return false
 }
 
-// applyConditionToGroupCounts filters the contents of gcs according
+// ApplyConditionToGroupCounts filters the contents of gcs according
 // to the condition. Currently, `count` and `sum` are the only
 // fields supported.
-func applyConditionToGroupCounts(gcs []GroupCount, subj string, cond *pql.Condition) []GroupCount {
+func ApplyConditionToGroupCounts(gcs []GroupCount, subj string, cond *pql.Condition) []GroupCount {
 	var i int
 	for _, gc := range gcs {
 		if !gc.satisfiesCondition(subj, cond) {
@@ -3787,7 +3782,7 @@ func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *p
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return other.merge(v.(RowIDs), limit)
+		return other.Merge(v.(RowIDs), limit)
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -3925,7 +3920,7 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 		if err != nil {
 			return nil, err
 		}
-		rowIDs = rowIDs.merge(viewRows, limit)
+		rowIDs = rowIDs.Merge(viewRows, limit)
 	}
 
 	return rowIDs, nil
@@ -6143,14 +6138,14 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	}
 	newRows := make([]*Row, len(allRows))
 	for i, row := range allRows {
-		if row == nil || len(row.segments) == 0 {
+		if row == nil || len(row.Segments) == 0 {
 			continue
 		}
 		if row.NoSplit {
 			newRows[i] = row
 			continue
 		}
-		segments := row.segments
+		segments := row.Segments
 		segmentIndex := 0
 		newRows[i] = &Row{
 			Index: row.Index,
@@ -6165,7 +6160,7 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 				break
 			}
 			if segments[segmentIndex].shard == shard {
-				newRows[i].segments = append(newRows[i].segments, segments[segmentIndex])
+				newRows[i].Segments = append(newRows[i].Segments, segments[segmentIndex])
 				segmentIndex++
 				if segmentIndex >= len(segments) {
 					// no more segments, we're done
@@ -7230,7 +7225,7 @@ func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, re
 			return errors.Wrap(err, "determining how to translate")
 		}
 		if strategy == byCurrentIndex {
-			for _, segment := range result.Segments() {
+			for _, segment := range result.Segments {
 				for _, col := range segment.Columns() {
 					idSet[col] = struct{}{}
 				}
@@ -7267,7 +7262,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		switch strategy {
 		case byCurrentIndex:
 			other := &Row{}
-			for _, segment := range result.Segments() {
+			for _, segment := range result.Segments {
 				for _, col := range segment.Columns() {
 					other.Keys = append(other.Keys, idSet[col])
 				}
@@ -7284,7 +7279,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			if idx == nil {
 				return nil, errors.Errorf("foreign index %s not found for field %s in index %s", rowField.ForeignIndex(), rowField.Name(), rowField.Index())
 			}
-			for _, segment := range result.Segments() {
+			for _, segment := range result.Segments {
 				keys, err := e.Cluster.translateIndexIDs(context.Background(), rowField.ForeignIndex(), segment.Columns())
 				if err != nil {
 					return nil, errors.Wrap(err, "translating index ids")
@@ -7293,7 +7288,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			}
 
 		case byRowIndex:
-			for _, segment := range result.Segments() {
+			for _, segment := range result.Segments {
 				keys, err := e.Cluster.translateIndexIDs(context.Background(), rowIdx.Name(), segment.Columns())
 				if err != nil {
 					return nil, errors.Wrap(err, "translating index ids")
@@ -7325,7 +7320,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 					return &SignedRow{Pos: &Row{}}, nil
 				}
 				other := &Row{}
-				for _, segment := range rslt.Segments() {
+				for _, segment := range rslt.Segments {
 					keys, err := e.Cluster.translateIndexIDs(context.Background(), field.ForeignIndex(), segment.Columns())
 					if err != nil {
 						return nil, errors.Wrap(err, "translating index ids")
@@ -7477,7 +7472,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		}
 
 		other := RowIdentifiers{
-			field: fieldName,
+			Field: fieldName,
 		}
 
 		if field := idx.Field(fieldName); field == nil {
@@ -7824,23 +7819,18 @@ func needsShards(call *pql.Call) bool {
 
 // SignedRow represents a signed *Row with two (neg/pos) *Rows.
 type SignedRow struct {
-	Neg   *Row `json:"neg"`
-	Pos   *Row `json:"pos"`
-	field string
+	Neg   *Row   `json:"neg"`
+	Pos   *Row   `json:"pos"`
+	Field string `json:"-"`
 }
 
 func (s *SignedRow) Clone() (r *SignedRow) {
 	r = &SignedRow{
 		Neg:   s.Neg.Clone(), // Row.Clone() returns nil for nil.
 		Pos:   s.Pos.Clone(),
-		field: s.field,
+		Field: s.Field,
 	}
 	return
-}
-
-// Field returns the field name associated to the signed row.
-func (s *SignedRow) Field() string {
-	return s.field
 }
 
 // ToTable implements the ToTabler interface.
@@ -7857,7 +7847,7 @@ func (s SignedRow) ToTable() (*proto.TableResponse, error) {
 
 // ToRows implements the ToRowser interface.
 func (s SignedRow) ToRows(callback func(*proto.RowResponse) error) error {
-	ci := []*proto.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
+	ci := []*proto.ColumnInfo{{Name: s.Field, Datatype: "int64"}}
 	if s.Neg != nil {
 		negs := s.Neg.Columns()
 		for i := len(negs) - 1; i >= 0; i-- {
@@ -7923,7 +7913,7 @@ func toInt64(n uint64) (int64, error) {
 	return int64(n), nil
 }
 
-func (sr *SignedRow) union(other SignedRow) SignedRow {
+func (sr *SignedRow) Union(other SignedRow) SignedRow {
 	ret := SignedRow{&Row{}, &Row{}, ""}
 
 	// merge in sr
@@ -8041,7 +8031,7 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 	return nil
 }
 
-func (vc *ValCount) add(other ValCount) ValCount {
+func (vc *ValCount) Add(other ValCount) ValCount {
 	return ValCount{
 		Val:   vc.Val + other.Val,
 		Count: vc.Count + other.Count,
@@ -8049,7 +8039,7 @@ func (vc *ValCount) add(other ValCount) ValCount {
 }
 
 // smaller returns the smaller of the two ValCounts.
-func (vc *ValCount) smaller(other ValCount) ValCount {
+func (vc *ValCount) Smaller(other ValCount) ValCount {
 	if vc.DecimalVal != nil || other.DecimalVal != nil {
 		return vc.decimalSmaller(other)
 	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
@@ -8129,7 +8119,7 @@ func (vc *ValCount) floatSmaller(other ValCount) ValCount {
 }
 
 // larger returns the larger of the two ValCounts.
-func (vc *ValCount) larger(other ValCount) ValCount {
+func (vc *ValCount) Larger(other ValCount) ValCount {
 	if vc.DecimalVal != nil || other.DecimalVal != nil {
 		return vc.decimalLarger(other)
 	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
@@ -8723,10 +8713,10 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index strin
 	if err != nil {
 		return false, err
 	}
-	if len(row.segments) == 0 {
+	if len(row.Segments) == 0 {
 		return
 	}
-	columns := row.segments[0].data
+	columns := row.Segments[0].data
 	if columns.Count() == 0 {
 		return
 	}
@@ -8876,14 +8866,14 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 }
 
 func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64, normalFlow bool) (change bool, err error) {
-	if len(src.segments) == 0 { // nothing to remove
+	if len(src.Segments) == 0 { //nothing to remove
 		return false, nil
 	}
-	columns := src.segments[0].data // should only be one segment
+	columns := src.Segments[0].data //should only be one segment
 	if columns.Count() == 0 {
 		return false, nil
 	}
-	bits := src.segments[0].data.Slice()
+	bits := src.Segments[0].data.Slice()
 	min := func(a, b int) int {
 		if a <= b {
 			return a

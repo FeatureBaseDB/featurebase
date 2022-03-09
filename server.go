@@ -16,6 +16,8 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 
+	"github.com/molecula/featurebase/v3/dax/computer"
+	"github.com/molecula/featurebase/v3/dax/inmem"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
@@ -91,6 +93,10 @@ type Server struct { // nolint: maligned
 	queryHistoryLength int
 
 	executionPlannerFn ExecutionPlannerFn
+
+	writeLogReader     computer.WriteLogReader
+	writeLogWriter     computer.WriteLogWriter
+	snapshotReadWriter computer.SnapshotReadWriter
 }
 
 type ExecutionPlannerFn func(executor Executor, api *API, sql string) sql3.CompilePlanner
@@ -418,9 +424,44 @@ func OptServerPartitionAssigner(p string) ServerOption {
 	}
 }
 
+// OptServerWriteLogReader provides an implemenation of the WriteLogReader
+// interface.
+func OptServerWriteLogReader(wlr computer.WriteLogReader) ServerOption {
+	return func(s *Server) error {
+		s.writeLogReader = wlr
+		return nil
+	}
+}
+
 func OptServerExecutionPlannerFn(fn ExecutionPlannerFn) ServerOption {
 	return func(s *Server) error {
 		s.executionPlannerFn = fn
+		return nil
+	}
+}
+
+// OptServerWriteLogWriter provides an implemenation of the WriteLogWriter
+// interface.
+func OptServerWriteLogWriter(wlw computer.WriteLogWriter) ServerOption {
+	return func(s *Server) error {
+		s.writeLogWriter = wlw
+		return nil
+	}
+}
+
+// OptServerSnapshotReadWriter provides an implemenation of the
+// SnapshotReadWriter interface.
+func OptServerSnapshotReadWriter(snap computer.SnapshotReadWriter) ServerOption {
+	return func(s *Server) error {
+		s.snapshotReadWriter = snap
+		return nil
+	}
+}
+
+// OptServerIsComputeNode specifies that this node is running as a DAX compute node.
+func OptServerIsComputeNode(is bool) ServerOption {
+	return func(s *Server) error {
+		s.cluster.isComputeNode = is
 		return nil
 	}
 }
@@ -509,12 +550,23 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.Logger.Infof("cwd: %v", cwd)
 	s.holder.Logger.Infof("cmd line: %v", strings.Join(os.Args, " "))
 
+	// The compute nodes keep a local cache of the VersionStore which applies
+	// only to the data (shard, partitions, fields) managed by the compute node
+	// (as opposed to the VersionStore in MDS which keeps information about all
+	// data). It would be okay for this to be an in-memory implementation as
+	// long as the compute node isn't expected to survive a restart; in that
+	// case, it would be necessary to use an implementation which saves state
+	// somewhere, such as local disk.
+	versionStore := inmem.NewVersionStore()
+
 	s.cluster.Path = path
 	s.cluster.logger = s.logger
 	s.cluster.holder = s.holder
 	s.cluster.disCo = s.disCo
 	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
+	s.cluster.writeLogWriter = s.writeLogWriter
+	s.cluster.versionStore = versionStore
 
 	// Append the NodeID tag to stats.
 	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
@@ -530,6 +582,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.broadcaster = s
 	s.holder.sharder = s.sharder
 	s.holder.serializer = s.serializer
+	s.holder.versionStore = versionStore
 
 	// Initial stats must be invoked after the executor obtains reference to the holder.
 	s.executor.InitStats()

@@ -1,10 +1,6 @@
 run go tests batch:
-  extends:
-    - .setup_ssh
   variables:
-    USERNAME: fb-idk-access
     PROJECT: batch_${CI_CONCURRENT_ID}
-    GIT_STRATEGY: clone
   # this test relies on stuff that happens after build-lattice, which
   # makes it pause the entire CI run waiting for this. we accept the
   # small risk of wasting a build against the near certainty of spending
@@ -15,11 +11,11 @@ run go tests batch:
     - echo "Running test-all"
     - cd ./batch/
     - echo $PROJECT
-    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
+    - make build-featurebase
+    - make test-all
   after_script:
     - cd ./batch/
-    - make save-pilosa-logs
+    - make save-featurebase-logs
     - make shutdown
   artifacts:
     paths:

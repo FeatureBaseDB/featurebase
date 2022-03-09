@@ -9,6 +9,7 @@ BINOUT ?= bin
 VERSION := $(shell git describe --tags 2> /dev/null || git rev-parse --verify --short=7 HEAD)
 VERSION_ID = $(VERSION)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
+AWS_ACCOUNTID ?= undefined
 BRANCH_NAME ?= ""
 
 # We allow setting a custom docker-compose "project". Multiple of the
@@ -141,10 +142,11 @@ save-%-logs:
 	$(DOCKER_COMPOSE) logs $* > ./testdata/$(PROJECT)_$*_logs.txt
 
 
-start-all: .pulled testenv build-wait
+start-all: testenv build-wait
 	echo "branch name" ${BRANCH_NAME}
 	$(DOCKER_COMPOSE) up -d zookeeper
 	$(DOCKER_COMPOSE) run -T  wait zookeeper 'echo "ruok" | nc -w 2 zookeeper 2181 | grep imok'
+	$(DOCKER_COMPOSE) up -d dax
 	$(DOCKER_COMPOSE) up -d kafka
 	$(DOCKER_COMPOSE) up -d schema-registry
 	$(DOCKER_COMPOSE) up -d postgres
@@ -155,22 +157,23 @@ start-all: .pulled testenv build-wait
 	$(DOCKER_COMPOSE) run -T  wait pilosa curl --silent --fail http://pilosa:10101/status
 	$(DOCKER_COMPOSE) run -T  wait pilosa-tls curl --silent --cacert /certs/ca.crt --key /certs/theclient.key --cert /certs/theclient.crt --fail https://pilosa-tls:10111/status
 	$(DOCKER_COMPOSE) run -T  wait pilosa-auth curl --silent --fail http://pilosa-auth:10105/version
+	$(DOCKER_COMPOSE) run -T wait dax curl --silent --fail http://dax:8080/computer/status
 	$(DOCKER_COMPOSE) run -T  wait kafka nc -z kafka 9092
 	$(DOCKER_COMPOSE) run -T  wait schema-registry curl --silent --fail http://schema-registry:8081/config
 
-start-postgres: build-wait testenv .pulled
+start-postgres: build-wait testenv
 	$(DOCKER_COMPOSE) up -d postgres
 	$(DOCKER_COMPOSE) run -T  wait postgres pg_isready -h postgres -p 5432 -U postgres
 
-start-pilosa: build-pilosa start-postgres build-wait testenv .pulled
+start-pilosa: build-pilosa start-postgres build-wait testenv
 	$(DOCKER_COMPOSE) up -d pilosa
 	$(DOCKER_COMPOSE) run -T  wait pilosa curl --silent --fail http://pilosa:10101/status
 
-start-pilosa-tls: build-pilosa-tls build-wait testenv .pulled
+start-pilosa-tls: build-pilosa-tls build-wait testenv
 	$(DOCKER_COMPOSE) up -d pilosa-tls
 	$(DOCKER_COMPOSE) run -T  wait pilosa-tls curl --silent --cacert /certs/ca.crt --key /certs/theclient.key --cert /certs/theclient.crt --fail https://pilosa-tls:10111/status
 
-start-pilosa-auth: build-pilosa-auth build-wait testenv .pulled
+start-pilosa-auth: build-pilosa-auth build-wait testenv
 	$(DOCKER_COMPOSE) up -d pilosa-auth
 	$(DOCKER_COMPOSE) run -T  wait pilosa-auth curl --silent --fail http://pilosa-auth:10105/version
 
@@ -191,7 +194,6 @@ startup: start-all
 
 shutdown:
 	$(DOCKER_COMPOSE) down -v --remove-orphans
-	rm -f .pulled
 
 test-all: testenv
 	$(MAKE) startup
@@ -212,7 +214,7 @@ test-all-kafka-sasl: testenv
 
 TCMD ?= ./...
 # do "make startup", then e.g. "make test-run-local TCMD='-run=MyFavTest ./kafka'"
-test-run-local:
+test-run-local: vendor
 	pwd
 	$(DOCKER_COMPOSE) build idk-test
 	$(DOCKER_COMPOSE) run -T idk-test go test -mod=vendor -tags=odbc,dynamic $(TCMD)
@@ -233,9 +235,6 @@ test-run-kafka-sasl: testenv vendor
 	$(DOCKER_COMPOSE) build idk-test
 	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v --tags=kafka_sasl -mod=vendor -race -timeout=30m $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -json -coverprofile=/testdata/$(PROJECT)_sasl_coverage.out  | tee /testdata/$(PROJECT)_report.out"
 
-.pulled:
-	$(DOCKER_COMPOSE) pull 
-	touch .pulled
 
 testenv: testenv/certs
 
@@ -292,6 +291,9 @@ docker: docker-image
 docker-tag-push:
 	docker push registry.gitlab.com/molecula/featurebase/idk:$(VERSION_ID)
 	@echo Pushed docker image: registry.gitlab.com/molecula/featurebase/idk:$(VERSION_ID)
+
+build-datagen:
+	CGO_ENABLED=1 $(GO) build -tags dynamic $(GO_BUILD_FLAGS) -o build/datagen ./cmd/datagen
 
 clean:
 	$(MAKE) shutdown

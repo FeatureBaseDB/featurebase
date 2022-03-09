@@ -1,0 +1,548 @@
+openapi: 3.0.3
+
+info:
+  title: MDS
+  description: Metadata Services.
+  version: 0.0.0
+
+paths:
+  /mds/health:
+    get:
+      summary: Health check endpoint.
+      description: Provides an endpoint to check the overall health of the MDS service.
+      operationId: GetHealth
+      responses:
+        200:
+          description: Service is healthy.
+
+  /mds/create-table:
+    post:
+      summary: Create a table.
+      description: Create a table based on the provided schema.
+      operationId: PostCreateTable
+      requestBody:
+        content:
+          application/json:
+            examples:
+              table:
+                $ref: '#/components/examples/Table'
+            schema:
+              $ref: '#/components/schemas/Table'
+      responses:
+        200:
+          $ref: '#/components/responses/CreateTableResponse'
+
+  /mds/drop-table:
+    post:
+      summary: Drop a table.
+      description: Drop a table based on the provided table name.
+      operationId: PostDropTable
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: tbl
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        200:
+          description: Table was dropped.
+
+  /mds/create-field:
+    post:
+      summary: Create a field.
+      description: Create a field based on the provided table and schema.
+      operationId: PostCreateField
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              field:
+                name: a_string
+                type: string
+                options:
+                  cacheType: ranked
+                  cacheSize: 50000
+            schema:
+              $ref: '#/components/schemas/TableField'
+      responses:
+        200:
+          description: Field was created.
+
+  /mds/drop-field:
+    post:
+      summary: Drop a field.
+      description: Drop a field based on the provided table and field name.
+      operationId: PostDropField
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              field: fld
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                field:
+                  type: string
+      responses:
+        200:
+          description: Field was dropped.
+
+  /mds/table:
+    post:
+      summary: Get a table.
+      description: Get a table based on the provided table name.
+      operationId: PostTable
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: tbl
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        200:
+          $ref: '#/components/responses/Table'
+
+  /mds/tables:
+    post:
+      summary: Get a list of table.
+      description: Get a list of tables. If a filter is provided, only those tables will be included in the result.
+      operationId: PostTables
+      requestBody:
+        content:
+          application/json:
+            example:
+              names:
+              - tbl1
+              - tbl2
+            schema:
+              type: object
+              properties:
+                names:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        200:
+          $ref: '#/components/responses/Tables'
+
+  /mds/ingest-partition:
+    post:
+      summary: Request to ingest partition data.
+      description: Request to ingest (write) partition data. The address of the compute node responsible is returned.
+      operationId: PostIngestPartition
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              partition: 7
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                partition:
+                  type: integer
+                  format: int32
+      responses:
+        200:
+          $ref: '#/components/responses/Address'
+
+  /mds/ingest-shard:
+    post:
+      summary: Request to ingest shard data.
+      description: Request to ingest (write) shard data. The address of the compute node responsible is returned.
+      operationId: PostIngestShard
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              shard: 12
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                shard:
+                  type: integer
+                  format: int64
+      responses:
+        200:
+          $ref: '#/components/responses/Address'
+
+  /mds/snapshot/shard-data:
+    post:
+      summary: Request to snapshot shard data.
+      description: Request to snapshot shard data.
+      operationId: PostSnapshotShardData
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              shard: 12
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                shard:
+                  type: integer
+                  format: int64
+      responses:
+        200:
+          description: Shard snapshot was successful.
+
+  /mds/snapshot/table-keys:
+    post:
+      summary: Request to snapshot table keys.
+      description: Request to snapshot table keys.
+      operationId: PostSnapshotTableKeys
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              partition: 7
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                partition:
+                  type: integer
+                  format: int32
+      responses:
+        200:
+          description: Table keys snapshot was successful.
+
+  /mds/snapshot/field-keys:
+    post:
+      summary: Request to snapshot field keys.
+      description: Request to snapshot field keys.
+      operationId: PostSnapshotFieldKeys
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              field: fld
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                field:
+                  type: string
+      responses:
+        200:
+          description: Field keys snapshot was successful.
+
+  /mds/register-node:
+    post:
+      summary: Register node.
+      description: Register a node with MDS.
+      operationId: PostRegisterNode
+      requestBody:
+        content:
+          application/json:
+            example:
+              address: 10.0.0.1:8000
+              roleTypes:
+              - compute
+              - translate
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+                roleTypes:
+                  type: array
+                  items:
+                    types: string
+      responses:
+        200:
+          description: Node registration was successful.
+
+  /mds/deregister-nodes:
+    post:
+      summary: Deregister nodes.
+      description: Deregister nodes with MDS.
+      operationId: PostDeregisterNodes
+      requestBody:
+        content:
+          application/json:
+            example:
+              address: 10.0.0.1:8000
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+      responses:
+        200:
+          description: Node deregistration was successful.
+
+  /mds/compute-nodes:
+    post:
+      summary: Get compute nodes.
+      description: Get the compute nodes responsible for the given shards.
+      operationId: PostComputeNodes
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              shards:
+              - 10
+              - 11
+              - 12
+              isWrite: false
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                shards:
+                  type: array
+                  items:
+                    type: integer
+                    format: int64
+                isWrite:
+                  type: boolean  
+      responses:
+        200:
+          $ref: '#/components/responses/ComputeNodes'
+
+  /mds/translate-nodes:
+    post:
+      summary: Get translate nodes.
+      description: Get the translate nodes responsible for the given partitions.
+      operationId: PostTranslateNodes
+      requestBody:
+        content:
+          application/json:
+            example:
+              table: tbl
+              partitions:
+              - 6
+              - 7
+              isWrite: false
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                partitions:
+                  type: array
+                  items:
+                    type: integer
+                    format: int32
+                isWrite:
+                  type: boolean  
+      responses:
+        200:
+          $ref: '#/components/responses/TranslateNodes'
+
+components:
+  responses:
+    CreateTableResponse:
+      description: Placeholder response.
+      content:
+        application/json:
+          schema:
+            type: object
+
+    Address:
+      description: Single node address.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              address:
+                type: string
+
+    Table:
+      description: Table response.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Table'
+
+    Tables:
+      description: Tables response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Table'
+
+    ComputeNodes:
+      description: Compute nodes response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ComputeNode'
+
+    TranslateNodes:
+      description: Translate nodes response.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TranslateNode'
+
+  schemas:
+    ComputeNode:
+      type: object
+      properties:
+        address:
+          type: string
+        table:
+          type: string
+        shards:
+          type: array
+          items:
+            type: integer
+            format: int64
+
+    TranslateNode:
+      type: object
+      properties:
+        address:
+          type: string
+        table:
+          type: string
+        partitions:
+          type: array
+          items:
+            type: integer
+            format: int32
+
+    Table:
+      type: object
+      properties:
+        name:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+        partitionN:
+          type: integer
+          format: int32
+
+    TableField:
+      type: object
+      properties:
+        table:
+          type: string
+        field:
+          $ref: '#/components/schemas/Field'
+
+    Field:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - bool
+          - decimal
+          - id
+          - idset
+          - int
+          - string
+          - stringset
+          - timestamp
+        options:
+          type: object
+          properties:
+            min:
+              type: integer
+              format: int64
+            max:
+              type: integer
+              format: int64
+            scale:
+              type: integer
+              format: int64
+              minimum: 0
+            noStandardView:
+              type: boolean
+            cacheType:
+              type: string
+            cacheSize:
+              type: integer
+              format: int32
+            timeUnit:
+              type: string
+            epoch:
+              type: string
+              format: date-time
+            timeQuantum:
+              type: string
+            ttl:
+              type: string
+            foreignIndex:
+              type: string
+
+  examples:
+    Table:
+      name: tbl
+      fields:
+      - name: _id
+        type: string
+      - name: a_bool
+        type: bool
+      - name: an_id
+        type: id
+        options:
+          cacheType: ranked
+          cacheSize: 50000
+      - name: an_id_set
+        type: idset
+        options:
+          cacheType: ranked
+          cacheSize: 50000
+      - name: a_string
+        type: string
+        options:
+          cacheType: ranked
+          cacheSize: 50000
+      - name: a_string_set
+        type: stringset
+        options:
+          cacheType: ranked
+          cacheSize: 50000
+      - name: an_int
+        type: int
+        options:
+          min: -100
+          max: 500
+      - name: a_decimal
+        type: decimal
+        options:
+          min: -10.24
+          max: 50.75
+          scale: 2
+      partitionN: 16

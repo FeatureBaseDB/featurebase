@@ -63,15 +63,23 @@ func NewDefaultConfig() *Config {
 	}
 }
 
-func (cfg *Config) DefineFlags(flags *pflag.FlagSet) {
+func (cfg *Config) DefineFlags(flags *pflag.FlagSet, prefix string) {
+	// pre applies prefix to s when a prefix is provided.
+	pre := func(s string) string {
+		if prefix == "" {
+			return s
+		}
+		return prefix + "." + s
+	}
+
 	default0 := NewDefaultConfig()
-	flags.Int64Var(&cfg.MaxSize, "rbf.max-db-size", default0.MaxSize, "RBF maximum size in bytes of a database file (distinct from a WAL file)")
-	flags.Int64Var(&cfg.MaxWALSize, "rbf.max-wal-size", default0.MaxWALSize, "RBF maximum size in bytes of a WAL file (distinct from a DB file)")
-	flags.Int64Var(&cfg.MinWALCheckpointSize, "rbf.min-wal-checkpoint-size", default0.MinWALCheckpointSize, "RBF minimum size in bytes of a WAL file before attempting checkpoint")
-	flags.Int64Var(&cfg.MaxWALCheckpointSize, "rbf.max-wal-checkpoint-size", default0.MaxWALCheckpointSize, "RBF maximum size in bytes of a WAL file before forcing checkpoint")
+	flags.Int64Var(&cfg.MaxSize, pre("rbf.max-db-size"), default0.MaxSize, "RBF maximum size in bytes of a database file (distinct from a WAL file)")
+	flags.Int64Var(&cfg.MaxWALSize, pre("rbf.max-wal-size"), default0.MaxWALSize, "RBF maximum size in bytes of a WAL file (distinct from a DB file)")
+	flags.Int64Var(&cfg.MinWALCheckpointSize, pre("rbf.min-wal-checkpoint-size"), default0.MinWALCheckpointSize, "RBF minimum size in bytes of a WAL file before attempting checkpoint")
+	flags.Int64Var(&cfg.MaxWALCheckpointSize, pre("rbf.max-wal-checkpoint-size"), default0.MaxWALCheckpointSize, "RBF maximum size in bytes of a WAL file before forcing checkpoint")
 
 	// renamed from --rbf-fsync to just --fsync because now it applies to all Tx backends.
-	flags.BoolVar(&cfg.FsyncEnabled, "fsync", default0.FsyncEnabled, "enable fsync fully safe flush-to-disk")
-	flags.BoolVar(&cfg.FsyncWALEnabled, "fsync-wal", default0.FsyncWALEnabled, "enable fsync on write-ahead log")
-	flags.Int64Var(&cfg.CursorCacheSize, "rbf.cursor-cache-size", default0.CursorCacheSize, "how big a Cursor arena to maintain. 0 means use sync.Pool with dynamic sizing. Note that <= 20 is needed to pass CI. Controls the memory footprint of rbf.")
+	flags.BoolVar(&cfg.FsyncEnabled, pre("fsync"), default0.FsyncEnabled, "enable fsync fully safe flush-to-disk")
+	flags.BoolVar(&cfg.FsyncWALEnabled, pre("fsync-wal"), default0.FsyncWALEnabled, "enable fsync on write-ahead log")
+	flags.Int64Var(&cfg.CursorCacheSize, pre("rbf.cursor-cache-size"), default0.CursorCacheSize, "how big a Cursor arena to maintain. 0 means use sync.Pool with dynamic sizing. Note that <= 20 is needed to pass CI. Controls the memory footprint of rbf.")
 }

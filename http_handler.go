@@ -32,6 +32,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/monitor"
@@ -309,7 +310,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear", "ignoreKeyCheck")
 	h.validators["PostImportAtomicRecord"] = queryValidationSpecRequired().Optional("simPowerLossAfter")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "excludeColumns", "profile")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "excludeColumns", "profile", "remote")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
 	h.validators["GetSchema"] = queryValidationSpecRequired().Optional("views")
@@ -607,6 +608,12 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/auth", handler.handleCheckAuthentication).Methods("GET").Name("CheckAuthentication")
 	router.HandleFunc("/userinfo", handler.handleUserInfo).Methods("GET").Name("UserInfo")
 	router.HandleFunc("/internal/oauth-config", handler.handleOAuthConfig).Methods("GET").Name("GetOAuthConfig")
+
+	router.HandleFunc("/health", handler.handleGetHealth).Methods("GET").Name("GetHealth")
+	router.HandleFunc("/directive", handler.handlePostDirective).Methods("POST").Name("PostDirective")
+	router.HandleFunc("/snapshot/shard-data", handler.handlePostSnapshotShardData).Methods("POST").Name("PostShapshotShardData")
+	router.HandleFunc("/snapshot/table-keys", handler.handlePostSnapshotTableKeys).Methods("POST").Name("PostShapshotTableKeys")
+	router.HandleFunc("/snapshot/field-keys", handler.handlePostSnapshotFieldKeys).Methods("POST").Name("PostShapshotFieldKeys")
 
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
@@ -2471,6 +2478,8 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		return nil, errors.New("invalid shard argument")
 	}
 
+	remote := parseBool(q.Get("remote"))
+
 	// Optional profiling
 	profile := false
 	profileString := q.Get("profile")
@@ -2483,9 +2492,14 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 
 	return &QueryRequest{
 		Query:   query,
+		Remote:  remote,
 		Shards:  shards,
 		Profile: profile,
 	}, nil
+}
+
+func parseBool(a string) bool {
+	return strings.ToLower(a) == "true"
 }
 
 // writeQueryResponse writes the response from the executor to w.
@@ -3543,7 +3557,6 @@ func (h *Handler) handleFindOrCreateKeys(w http.ResponseWriter, r *http.Request,
 		translations, err = h.api.CreateIndexKeys(r.Context(), indexName, keys...)
 	case !requireField && !create:
 		translations, err = h.api.FindIndexKeys(r.Context(), indexName, keys...)
-
 	}
 	if err != nil {
 		http.Error(w, fmt.Sprintf("translating keys: %v", err), http.StatusInternalServerError)
@@ -3894,4 +3907,104 @@ func getTokens(r *http.Request) (string, string) {
 	}
 
 	return access, refresh
+}
+
+func (h *Handler) handlePostDirective(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	body := r.Body
+	defer body.Close()
+
+	d := &dax.Directive{}
+	if err := json.NewDecoder(body).Decode(d); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.api.Directive(r.Context(), d); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// POST /snapshot/shard-data
+func (h *Handler) handlePostSnapshotShardData(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	body := r.Body
+	defer body.Close()
+
+	req := &dax.SnapshotShardDataRequest{}
+	if err := json.NewDecoder(body).Decode(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.api.SnapshotShardData(r.Context(), req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// POST /snapshot/table-keys
+func (h *Handler) handlePostSnapshotTableKeys(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	body := r.Body
+	defer body.Close()
+
+	req := &dax.SnapshotTableKeysRequest{}
+	if err := json.NewDecoder(body).Decode(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.api.SnapshotTableKeys(r.Context(), req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// POST /snapshot/field-keys
+func (h *Handler) handlePostSnapshotFieldKeys(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	body := r.Body
+	defer body.Close()
+
+	req := &dax.SnapshotFieldKeysRequest{}
+	if err := json.NewDecoder(body).Decode(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.api.SnapshotFieldKeys(r.Context(), req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// GET /health
+func (h *Handler) handleGetHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }

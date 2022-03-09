@@ -1,4 +1,5 @@
-.PHONY: build clean build-lattice cover cover-viz default docker docker-build docker-tag-push generate generate-protoc generate-pql generate-statik generate-stringer install install-protoc-gen-gofast install-protoc install-statik install-peg test 
+.PHONY: build clean build-lattice cover cover-viz default docker docker-build docker-tag-push generate generate-protoc generate-pql generate-statik generate-stringer install install-protoc-gen-gofast install-protoc install-statik install-peg test docker-login
+
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 VARIANT = Molecula
 GO=go
@@ -18,6 +19,7 @@ RACE_TEST_TIMEOUT=10m
 export GO111MODULE=on
 export GOPRIVATE=github.com/molecula
 export CGO_ENABLED=0
+AWS_ACCOUNTID ?= undefined
 
 # Run tests and compile Pilosa
 default: test build
@@ -26,7 +28,7 @@ default: test build
 clean:
 	rm -rf vendor build
 	rm -f *.rpm *.deb
-	
+
 # Set up vendor directory using `go mod vendor`
 vendor: go.mod
 	$(GO) mod vendor
@@ -92,10 +94,10 @@ build:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
 
 package:
-	go build -o featurebase ./cmd/featurebase
+	GOOS=$(GOOS) GOARCH=$(GOARCH) FLAGS="-o featurebase" $(MAKE) build
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager deb --target featurebase.$(VERSION).$(GOARCH).deb
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager rpm --target featurebase.$(VERSION).$(GOARCH).rpm
-	
+
 # We allow setting a custom docker-compose "project". Multiple of the
 # same docker-compose environment can exist simultaneously as long as
 # they use different projects (the project name is prepended to
@@ -122,9 +124,14 @@ authclustertests: vendor
 	PROJECT=$(PROJECT) ENABLE_AUTH=1 $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml run client1
 	CLUSTERTESTS_FB_ARGS=$(AUTH_ARGS) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
-# Install FeatureBase
-install:
+# Install FeatureBase and IDK
+install: install-featurebase install-idk
+
+install-featurebase:
 	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
+
+install-idk:
+	$(MAKE) -C ./idk install
 
 # Build the lattice assets
 build-lattice:
@@ -182,6 +189,48 @@ docker-image: vendor
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE)" \
 	    --tag featurebase:$(VERSION) .
 	@echo Created docker image: featurebase:$(VERSION)
+
+docker-image-featurebase: vendor
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+		--file Dockerfile-dax \
+		--tag dax/featurebase .
+
+docker-image-featurebase-test: vendor
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+		--file Dockerfile-clustertests \
+		--tag dax/featurebase-test .
+
+
+# build-for-quick builds a linux featurebase binary outside of docker
+# (which is much faster for some reason), and places it in the .quick
+# subdirectory.
+build-for-quick:
+	GOOS=linux $(MAKE) build FLAGS="-o .quick/fb_linux"
+
+# docker-image-featurebase-quick uses a pre-built featurebase binary
+# to quickly create a fresh docker image without needing to send the
+# context of the featurebase top level directory.
+docker-image-featurebase-quick: build-for-quick
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+	    --file Dockerfile-dax-quick ./.quick/
+
+
+docker-image-datagen: vendor
+	docker build --tag dax/datagen --file Dockerfile-datagen .
+
+ecr-push-featurebase: docker-login
+	docker tag dax/featurebase:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax:latest
+	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax:latest
+
+ecr-push-datagen: docker-login
+	docker tag dax/datagen:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/datagen:latest
+	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/datagen:latest
+
+docker-login:
+	aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com
 
 # Create docker image (alias)
 docker: docker-image # alias

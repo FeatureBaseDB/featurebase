@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/rbf"
 
@@ -50,6 +52,16 @@ type API struct {
 	importWork           chan importJob
 
 	Serializer Serializer
+
+	writeLogReader     computer.WriteLogReader
+	writeLogWriter     computer.WriteLogWriter
+	snapshotReadWriter computer.SnapshotReadWriter
+
+	directiveWorkerPoolSize int
+
+	// isComputeNode is set to true if this node is running as a DAX compute
+	// node.
+	isComputeNode bool
 }
 
 func (api *API) Holder() *Holder {
@@ -76,10 +88,50 @@ func OptAPIImportWorkerPoolSize(size int) apiOption {
 	}
 }
 
+func OptAPIWriteLogReader(wlr computer.WriteLogReader) apiOption {
+	return func(a *API) error {
+		a.writeLogReader = wlr
+		return nil
+	}
+}
+
+func OptAPIWriteLogWriter(wlw computer.WriteLogWriter) apiOption {
+	return func(a *API) error {
+		a.writeLogWriter = wlw
+		return nil
+	}
+}
+
+func OptAPISnapshotter(snap computer.SnapshotReadWriter) apiOption {
+	return func(a *API) error {
+		a.snapshotReadWriter = snap
+		return nil
+	}
+}
+
+func OptAPIDirectiveWorkerPoolSize(size int) apiOption {
+	return func(a *API) error {
+		a.directiveWorkerPoolSize = size
+		return nil
+	}
+}
+
+func OptAPIIsComputeNode(is bool) apiOption {
+	return func(a *API) error {
+		a.isComputeNode = is
+		return nil
+	}
+}
+
 // NewAPI returns a new API instance.
 func NewAPI(opts ...apiOption) (*API, error) {
 	api := &API{
 		importWorkerPoolSize: 2,
+		writeLogReader:       computer.NewNopWriteLogReader(),
+		writeLogWriter:       computer.NewNopWriteLogWriter(),
+		snapshotReadWriter:   computer.NewNopSnapshotReadWriter(),
+
+		directiveWorkerPoolSize: 2,
 	}
 
 	for _, opt := range opts {
@@ -103,7 +155,7 @@ func NewAPI(opts ...apiOption) (*API, error) {
 	return api, nil
 }
 
-// Setter for API options.
+// SetAPIOptions applies the given functional options to the API.
 func (api *API) SetAPIOptions(opts ...apiOption) error {
 	for _, opt := range opts {
 		err := opt(api)
@@ -553,9 +605,18 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return errors.Wrap(err, "validating api method")
 	}
 
+	api.server.logger.Debugf("ImportRoaring: %v %v %v", indexName, fieldName, shard)
 	index, field, err := api.indexField(indexName, fieldName, shard)
 	if index == nil || field == nil {
 		return err
+	}
+
+	// This node only handles the shard(s) that it owns.
+	if api.isComputeNode {
+		directive := api.holder.Directive()
+		if !shardInShards(dax.ShardNum(shard), directive.ComputeShards(dax.TableKey(index.Name()))) {
+			return errors.Errorf("import request shard is not supported (roaring): %d", shard)
+		}
 	}
 
 	if err = req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
@@ -607,9 +668,64 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 
 		// Exit once all nodes are processed.
 		if maxNode == len(nodes) {
+			if api.isComputeNode && !req.SuppressLog {
+				// Write the request to the write logger.
+				partition := disco.ShardToShardPartition(indexName, shard, disco.DefaultPartitionN)
+				msg := &computer.ImportRoaringMessage{
+					Table:           indexName,
+					Field:           fieldName,
+					Partition:       partition,
+					Shard:           shard,
+					Clear:           req.Clear,
+					Action:          req.Action,
+					Block:           req.Block,
+					UpdateExistence: req.UpdateExistence,
+					Views:           req.Views,
+				}
+
+				// Get the current version for shard.
+				version, err := api.getOrCreateShardVersion(ctx, indexName, shard)
+				if err != nil {
+					return errors.Wrap(err, "get or creating shard version")
+				}
+
+				tkey := dax.TableKey(indexName)
+				qtid := tkey.QualifiedTableID()
+				partitionNum := dax.PartitionNum(partition)
+				shardNum := dax.ShardNum(shard)
+
+				api.server.logger.Debugf("importroaring writing to writelogger: %+v, %[1]T len(msg.Views): %d, table: %s", api.writeLogWriter, len(msg.Views), msg.Table)
+				if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
+					return err
+				}
+			}
+
 			return qcx.Finish()
 		}
 	}
+}
+
+func (api *API) getOrCreateShardVersion(ctx context.Context, indexName string, shard uint64) (int, error) {
+	tableName := dax.TableName(indexName)
+	shardNum := dax.ShardNum(shard)
+
+	// Here we assume that indexName is the string encoding of QualifiedTableID.
+	qtid, err := dax.QualifiedTableIDFromKey(indexName)
+	if err != nil {
+		return -1, errors.Wrap(err, "decoding qtid from key (indexName)")
+	}
+
+	version, found, err := api.holder.versionStore.ShardVersion(ctx, qtid, shardNum)
+	if err != nil {
+		return -1, errors.Wrap(err, "getting shard version")
+	} else if !found {
+		version = 0
+		api.server.logger.Printf("could not find version for shard: %s, %d, so creating 0", tableName, shardNum)
+		if err := api.holder.versionStore.AddShards(ctx, qtid, dax.NewShard(shardNum, version)); err != nil {
+			return -1, errors.Wrap(err, "adding shard 0")
+		}
+	}
+	return version, nil
 }
 
 // DeleteField removes the named field from the named index. If the index is not
@@ -1049,6 +1165,22 @@ func (api *API) IndexInfo(ctx context.Context, name string) (*IndexInfo, error) 
 	return nil, ErrIndexNotFound
 }
 
+// FieldInfo returns the same information as Schema(), but only for a single
+// field.
+func (api *API) FieldInfo(ctx context.Context, indexName, fieldName string) (*FieldInfo, error) {
+	idx, err := api.IndexInfo(ctx, indexName)
+	if err != nil {
+		return nil, err
+	}
+
+	fld := idx.Field(fieldName)
+	if fld == nil {
+		return nil, ErrFieldNotFound
+	}
+
+	return fld, nil
+}
+
 // ApplySchema takes the given schema and applies it across the
 // cluster (if remote is false), or just to this node (if remote is
 // true). This is designed for the use case of replicating a schema
@@ -1182,6 +1314,7 @@ type ImportOptions struct {
 	IgnoreKeyCheck bool
 	Presorted      bool
 	fullySorted    bool // format-aware sorting, internal use only please.
+	suppressLog    bool
 
 	// test Tx atomicity if > 0
 	SimPowerLossAfter int
@@ -1211,6 +1344,13 @@ func OptImportOptionsIgnoreKeyCheck(b bool) ImportOption {
 func OptImportOptionsPresorted(b bool) ImportOption {
 	return func(o *ImportOptions) error {
 		o.Presorted = b
+		return nil
+	}
+}
+
+func OptImportOptionsSuppressLog(b bool) ImportOption {
+	return func(o *ImportOptions) error {
+		o.suppressLog = b
 		return nil
 	}
 }
@@ -1305,10 +1445,70 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	if err != nil {
 		return errors.Wrap(err, "setting up import options")
 	}
+
+	/////////////////////////////////////////////////////////////////////////////
+	// We build the ImportMessage here BEFORE the call to api.ImportWithTx(),
+	// because something in that method is modifying the values of req, so if we
+	// build ImportMessage after the call to api.ImportWithTx(), then the values
+	// that get logged are incorrect. An example I saw were RowIDS going from:
+	// shard 0 [1, 2, 3]
+	// shard 4 [0]
+	//
+	// to:
+	// shard 0 [1048577, 2097154, 3145731]
+	// shard 4 [1]
+	//
+	// which seem to be the offset in the field shard bitmap.
+	var partition int
+	var msg *computer.ImportMessage
+	if api.isComputeNode && !options.suppressLog {
+		partition = disco.ShardToShardPartition(req.Index, req.Shard, disco.DefaultPartitionN)
+		msg = &computer.ImportMessage{
+			Table:      req.Index,
+			Field:      req.Field,
+			Partition:  partition,
+			Shard:      req.Shard,
+			RowIDs:     make([]uint64, len(req.RowIDs)),
+			ColumnIDs:  make([]uint64, len(req.ColumnIDs)),
+			RowKeys:    make([]string, len(req.RowKeys)),
+			ColumnKeys: make([]string, len(req.ColumnKeys)),
+			Timestamps: make([]int64, len(req.Timestamps)),
+			Clear:      req.Clear,
+
+			IgnoreKeyCheck: options.IgnoreKeyCheck,
+			Presorted:      options.Presorted,
+		}
+		copy(msg.RowIDs, req.RowIDs)
+		copy(msg.ColumnIDs, req.ColumnIDs)
+		copy(msg.RowKeys, req.RowKeys)
+		copy(msg.ColumnKeys, req.ColumnKeys)
+		copy(msg.Timestamps, req.Timestamps)
+	}
+	/////////////////////////////////////////////////////////////////////////////
+
 	err = api.ImportWithTx(ctx, qcx, req, options)
 	if err != nil {
 		return err
 	}
+
+	if api.isComputeNode && !options.suppressLog {
+		// Get the current version for shard.
+		version, err := api.getOrCreateShardVersion(ctx, req.Index, req.Shard)
+		if err != nil {
+			return errors.Wrap(err, "get or creating shard version")
+		}
+
+		tkey := dax.TableKey(req.Index)
+		qtid := tkey.QualifiedTableID()
+		partitionNum := dax.PartitionNum(partition)
+		shardNum := dax.ShardNum(req.Shard)
+
+		// Write the request to the write logger.
+		if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -1321,9 +1521,18 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 		return errors.Wrap(err, "validating api method")
 	}
 
+	api.server.logger.Debugf("ImportWithTx: %v %v %v", req.Index, req.Field, req.Shard)
 	idx, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting index and field")
+	}
+
+	// This node only handles the shard(s) that it owns.
+	if api.isComputeNode {
+		directive := api.holder.Directive()
+		if !shardInShards(dax.ShardNum(req.Shard), directive.ComputeShards(dax.TableKey(idx.Name()))) {
+			return errors.Errorf("import request shard is not supported (with tx): %d", req.Shard)
+		}
 	}
 
 	if err := req.ValidateWithTimestamp(idx.CreatedAt(), field.CreatedAt()); err != nil {
@@ -1449,7 +1658,8 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 	defer finisher(&err1)
 
 	if !req.Remote {
-		return errors.New("forwarding unimplemented on this endpoint")
+		err1 = errors.New("forwarding unimplemented on this endpoint")
+		return err1
 	}
 
 	for _, viewUpdate := range req.Views {
@@ -1513,6 +1723,42 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		}
 	}
 
+	if api.isComputeNode && !req.SuppressLog {
+		partition := disco.ShardToShardPartition(indexName, shard, disco.DefaultPartitionN)
+		msg := &computer.ImportRoaringShardMessage{
+			Table:     indexName,
+			Partition: partition,
+			Shard:     shard,
+			Views:     make([]computer.RoaringUpdate, len(req.Views)),
+		}
+		for i, view := range req.Views {
+			msg.Views[i] = computer.RoaringUpdate{
+				Field:        view.Field,
+				View:         view.View,
+				Clear:        view.Clear,
+				Set:          view.Set,
+				ClearRecords: view.ClearRecords,
+			}
+		}
+		// Get the current version for shard.
+		version, err := api.getOrCreateShardVersion(ctx, indexName, shard)
+		if err != nil {
+			err1 = errors.Wrap(err, "get or creating shard version")
+			return err1
+		}
+		tkey := dax.TableKey(indexName)
+		qtid := tkey.QualifiedTableID()
+		partitionNum := dax.PartitionNum(partition)
+		shardNum := dax.ShardNum(shard)
+
+		api.server.logger.Debugf("importroaringshard writing shard to writelogger: %+v, len(msg.Views): %d, table: %s", api.writeLogWriter, len(msg.Views), msg.Table)
+
+		if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
+			err1 = errors.Wrap(err, "writing import-roaring-shard to writelogger")
+			return err1
+		}
+	}
+
 	return nil
 }
 
@@ -1548,7 +1794,64 @@ func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueReque
 	if err != nil {
 		return errors.Wrap(err, "setting up import options")
 	}
-	return api.ImportValueWithTx(ctx, qcx, req, options)
+
+	/////////////////////////////////////////////////////////////////////////////
+	// We build the ImportValueMessage here BEFORE the call to
+	// api.ImportValueWithTx() because we don't trust that req doesn't get
+	// changed out from under us. See the similar comment in the API.Import()
+	// method above.
+	var partition int
+	var msg *computer.ImportValueMessage
+	if api.isComputeNode && !options.suppressLog {
+		partition = disco.ShardToShardPartition(req.Index, req.Shard, disco.DefaultPartitionN)
+		msg = &computer.ImportValueMessage{
+			Table:           req.Index,
+			Field:           req.Field,
+			Partition:       partition,
+			Shard:           req.Shard,
+			ColumnIDs:       make([]uint64, len(req.ColumnIDs)),
+			ColumnKeys:      make([]string, len(req.ColumnKeys)),
+			Values:          make([]int64, len(req.Values)),
+			FloatValues:     make([]float64, len(req.FloatValues)),
+			TimestampValues: make([]time.Time, len(req.TimestampValues)),
+			StringValues:    make([]string, len(req.StringValues)),
+			Clear:           req.Clear,
+
+			IgnoreKeyCheck: options.IgnoreKeyCheck,
+			Presorted:      options.Presorted,
+		}
+		copy(msg.ColumnIDs, req.ColumnIDs)
+		copy(msg.ColumnKeys, req.ColumnKeys)
+		copy(msg.Values, req.Values)
+		copy(msg.FloatValues, req.FloatValues)
+		copy(msg.TimestampValues, req.TimestampValues)
+		copy(msg.StringValues, req.StringValues)
+	}
+	/////////////////////////////////////////////////////////////////////////////
+
+	if err := api.ImportValueWithTx(ctx, qcx, req, options); err != nil {
+		return errors.Wrap(err, "importing value with tx")
+	}
+
+	if api.isComputeNode && !options.suppressLog {
+		// Get the current version for shard.
+		version, err := api.getOrCreateShardVersion(ctx, req.Index, req.Shard)
+		if err != nil {
+			return errors.Wrap(err, "get or creating shard version")
+		}
+
+		tkey := dax.TableKey(req.Index)
+		qtid := tkey.QualifiedTableID()
+		partitionNum := dax.PartitionNum(partition)
+		shardNum := dax.ShardNum(req.Shard)
+
+		// Write the request to the write logger.
+		if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
+			return errors.Wrap(err, "writing shard to write logger")
+		}
+	}
+
+	return nil
 }
 
 // ImportValueWithTx bulk imports values into a particular field.
@@ -1569,19 +1872,24 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 		return nil
 	}
 
+	api.server.logger.Debugf("ImportValueWithTx: %v %v %v", req.Index, req.Field, req.Shard)
 	idx, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("getting index '%v' and field '%v'; shard=%v", req.Index, req.Field, req.Shard))
+	}
+
+	// This node only handles the shard(s) that it owns.
+	if api.isComputeNode {
+		directive := api.holder.Directive()
+		if !shardInShards(dax.ShardNum(req.Shard), directive.ComputeShards(dax.TableKey(idx.Name()))) {
+			return errors.Errorf("import request shard is not supported (value with tx): %d", req.Shard)
+		}
 	}
 
 	if err := req.ValidateWithTimestamp(idx.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
 	}
 
-	idx, field, err = api.indexField(req.Index, req.Field, req.Shard)
-	if err != nil {
-		return errors.Wrap(err, "getting index and field")
-	}
 	span.LogKV(
 		"index", req.Index,
 		"field", req.Field)
@@ -1820,8 +2128,6 @@ func (api *API) validateShardOwnership(indexName string, shard uint64) error {
 }
 
 func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
-	api.server.logger.Debugf("importing: %v %v %v", indexName, fieldName, shard)
-
 	// Find the Index.
 	index := api.holder.Index(indexName)
 	if index == nil {
@@ -2269,7 +2575,7 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 	return err
 }
 
-// RestoreShard
+// RestoreShard is used by the restore tool to restore previously backed up data. This call is specific to RBF data for a shard.
 func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64, rd io.Reader) error {
 	snap := api.cluster.NewSnapshot()
 	if !snap.OwnsShard(api.server.nodeID, indexName, shard) {
@@ -2759,6 +3065,144 @@ func (api *API) RBFDebugInfo() map[string]*rbf.DebugInfo {
 	return infos
 }
 
+func (api *API) Directive(ctx context.Context, d *dax.Directive) error {
+	return api.ApplyDirective(ctx, d)
+}
+
+// SnapshotShardData triggers the node to perform a shard snapshot based on the
+// provided SnapshotShardDataRequest.
+func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDataRequest) error {
+	qtid := req.TableKey.QualifiedTableID()
+
+	// Confirm that this node is currently responsible for table/shard/fromVersion.
+	var version int
+	if v, ok, err := api.holder.versionStore.ShardVersion(ctx, qtid, req.ShardNum); err != nil {
+		return err
+	} else if !ok {
+		return errors.Errorf("shard not managed by this node: %s, %d", req.TableKey, req.ShardNum)
+	} else if v != req.FromVersion {
+		return errors.Errorf("shard managed by this node is at version: %d, not: %d", v, req.FromVersion)
+	} else {
+		version = v
+	}
+
+	partition := disco.ShardToShardPartition(string(req.TableKey), uint64(req.ShardNum), disco.DefaultPartitionN)
+	partitionNum := dax.PartitionNum(partition)
+
+	// Create the snapshot for the current version.
+	rc, err := api.IndexShardSnapshot(ctx, string(req.TableKey), uint64(req.ShardNum))
+	if err != nil {
+		return errors.Wrap(err, "getting index/shard readcloser")
+	}
+
+	// The following closes rc, the ReadCloser.
+	if err := api.snapshotReadWriter.WriteShardData(ctx, qtid, partitionNum, req.ShardNum, version, rc); err != nil {
+		return errors.Wrap(err, "snapshotting shard data")
+	}
+
+	// Increment the version of the shard managed by this node.
+	if err := api.holder.versionStore.AddShards(ctx, qtid,
+		dax.NewShard(req.ShardNum, req.ToVersion),
+	); err != nil {
+		return errors.Wrap(err, "incrementing shard version locally")
+	}
+
+	// Update the cached directive on the holder.
+	api.holder.SetDirective(&req.Directive)
+
+	// Finally, delete the log file for the previous version.
+	return api.writeLogWriter.DeleteShard(ctx, qtid, partitionNum, req.ShardNum, req.FromVersion)
+}
+
+// SnapshotTableKeys triggers the node to perform a table keys snapshot based on
+// the provided SnapshotTableKeysRequest.
+func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKeysRequest) error {
+	// If the index is not keyed, no-op on snapshotting its keys.
+	if idx, err := api.Index(ctx, string(req.TableKey)); err != nil {
+		return newNotFoundError(ErrIndexNotFound, string(req.TableKey))
+	} else if !idx.Keys() {
+		return nil
+	}
+
+	qtid := req.TableKey.QualifiedTableID()
+
+	// Confirm that this node is currently responsible for table/partition/fromVersion.
+	var version int
+	if v, ok, err := api.holder.versionStore.PartitionVersion(ctx, qtid, req.PartitionNum); err != nil {
+		return err
+	} else if !ok {
+		return errors.Errorf("partition not managed by this node: %s, %d", req.TableKey, req.PartitionNum)
+	} else if v != req.FromVersion {
+		return errors.Errorf("partition managed by this node is at version: %d, not: %d", v, req.FromVersion)
+	} else {
+		version = v
+	}
+
+	// Create the snapshot for the current version.
+	wrTo, err := api.TranslateData(ctx, string(req.TableKey), int(req.PartitionNum))
+	if err != nil {
+		return errors.Wrapf(err, "getting index/partition writeto: %s/%d", req.TableKey, req.PartitionNum)
+	}
+
+	if err := api.snapshotReadWriter.WriteTableKeys(ctx, qtid, req.PartitionNum, version, wrTo); err != nil {
+		return errors.Wrap(err, "snapshotting table keys")
+	}
+
+	// Increment the version of the partition managed by this node.
+	if err := api.holder.versionStore.AddPartitions(ctx, qtid,
+		dax.NewPartition(req.PartitionNum, req.ToVersion),
+	); err != nil {
+		return errors.Wrap(err, "incrementing partition version locally")
+	}
+
+	// Update the cached directive on the holder.
+	api.holder.SetDirective(&req.Directive)
+
+	// Finally, delete the log file for the previous version.
+	return api.writeLogWriter.DeleteTableKeys(ctx, qtid, req.PartitionNum, req.FromVersion)
+}
+
+// SnapshotFieldKeys triggers the node to perform a field keys snapshot based on
+// the provided SnapshotFieldKeysRequest.
+func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKeysRequest) error {
+	qtid := req.TableKey.QualifiedTableID()
+
+	// Confirm that this node is currently responsible for table/field/fromVersion.
+	var version int
+	if v, ok, err := api.holder.versionStore.FieldVersion(ctx, qtid, req.Field); err != nil {
+		return err
+	} else if !ok {
+		return errors.Errorf("field not managed by this node: %s, %s", req.TableKey, req.Field)
+	} else if v != req.FromVersion {
+		return errors.Errorf("field managed by this node is at version: %d, not: %d", v, req.FromVersion)
+	} else {
+		version = v
+	}
+
+	// Create the snapshot for the current version.
+	wrTo, err := api.FieldTranslateData(ctx, string(req.TableKey), string(req.Field))
+	if err != nil {
+		return errors.Wrap(err, "getting index/field writeto")
+	}
+
+	if err := api.snapshotReadWriter.WriteFieldKeys(ctx, qtid, req.Field, version, wrTo); err != nil {
+		return errors.Wrap(err, "snapshotting field keys")
+	}
+
+	// Increment the version of the field managed by this node.
+	if err := api.holder.versionStore.AddFields(ctx, qtid,
+		dax.NewFieldVersion(req.Field, req.ToVersion),
+	); err != nil {
+		return errors.Wrap(err, "incrementing field version locally")
+	}
+
+	// Update the cached directive on the holder.
+	api.holder.SetDirective(&req.Directive)
+
+	// Finally, delete the log file for the previous version.
+	return api.writeLogWriter.DeleteFieldKeys(ctx, qtid, req.Field, req.FromVersion)
+}
+
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
 	ReplicaN         int    `json:"replicaN"`
@@ -2879,19 +3323,39 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiMutexCheck:           {},
 }
 
+func shardInShards(i dax.ShardNum, s dax.Shards) bool {
+	for _, o := range s {
+		if i == o.Num {
+			return true
+		}
+	}
+	return false
+}
+
 // SchemaAPI is a subset of the API methods which have to do with schema. This
 // interface was introduced in order to remove, from the sql3 package, the
 // pointer to API, and instead use this interface. In the current FeatureBase,
-// this interface can be implemented directly with API. But in an implementation
-// for DAX, for example, we might want something else servicing the
-// schema-related calls to the SchemaAPI.
+// this interface can be implemented directly with API (well, not directly, but
+// with FeatureBaseSchemaAPI, which is a wrapper around API). But in an
+// implementation for DAX, for example, we might want something else servicing
+// the schema-related calls to the SchemaAPI.
 type SchemaAPI interface {
 	CreateIndexAndFields(ctx context.Context, indexName string, options IndexOptions, fields []CreateFieldObj) error
 	CreateField(ctx context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error)
 	DeleteField(ctx context.Context, indexName string, fieldName string) error
 	DeleteIndex(ctx context.Context, indexName string) error
-	IndexInfo(ctx context.Context, indexName string) (*IndexInfo, error)
+
+	// Schema returns the list of tables and fields. While it might make sense
+	// to have this as part of the SchemaInfoAPI interface instead of here, it's
+	// never used by consumers of that interface.
 	Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error)
+
+	SchemaInfoAPI
+}
+
+type SchemaInfoAPI interface {
+	IndexInfo(ctx context.Context, indexName string) (*IndexInfo, error)
+	FieldInfo(ctx context.Context, indexName, fieldName string) (*FieldInfo, error)
 }
 
 type ClusterNode struct {
@@ -2934,6 +3398,28 @@ type ComputeAPI interface {
 type QueryAPI interface {
 	Query(ctx context.Context, req *QueryRequest) (QueryResponse, error)
 }
+
+// Ensure type implements interface.
+var _ ComputeAPI = (*NopComputeAPI)(nil)
+
+// NopComputeAPI is a no-op implementation of the ComputeAPI interface.
+type NopComputeAPI struct{}
+
+func NewNopComputeAPI() *NopComputeAPI {
+	return &NopComputeAPI{}
+}
+
+func (c *NopComputeAPI) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
+	return nil
+}
+func (c *NopComputeAPI) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error {
+	return nil
+}
+
+func (c *NopComputeAPI) Txf() *TxFactory { return nil }
+
+// Ensure type implements interface.
+var _ SchemaAPI = (*FeatureBaseSchemaAPI)(nil)
 
 // FeatureBaseSchemaAPI is a wrapper around pilosa.API. It implements the
 // SchemaAPI interface with methods which are not a part of pilosa.API.

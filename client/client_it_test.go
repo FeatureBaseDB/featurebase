@@ -9,6 +9,7 @@ import (
 	"time"
 
 	featurebase "github.com/molecula/featurebase/v3"
+	client_types "github.com/molecula/featurebase/v3/client/types"
 	"github.com/molecula/featurebase/v3/disco"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/roaring"
@@ -44,7 +45,7 @@ func setup(t *testing.T, cli *Client) {
 		OptIndexTrackExistence(false),
 	)
 	testField = testIndex.Field("test-field")
-	testFieldTimeQuantum = testIndex.Field("test-field-timequantum", OptFieldTypeTime(TimeQuantumYear))
+	testFieldTimeQuantum = testIndex.Field("test-field-timequantum", OptFieldTypeTime(client_types.TimeQuantumYear))
 	testFieldTimestamp = testIndex.Field("test-field-timestamp", OptFieldTypeTimestamp(time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC), "s"))
 	testFieldInt = testIndex.Field("test-field-int", OptFieldTypeInt(0, 100000))
 	testIndexKeyTranslation = testSchema.Index("test-index-key-translation", OptIndexKeys(true))
@@ -587,7 +588,7 @@ func TestClientAgainstCluster(t *testing.T) {
 				setup(t, cli)
 				defer tearDown(t, cli)
 
-				testFieldRange := testIndex.Field("test-field-range", OptFieldTypeTime(TimeQuantumMonthDayHour))
+				testFieldRange := testIndex.Field("test-field-range", OptFieldTypeTime(client_types.TimeQuantumMonthDayHour))
 				err := cli.EnsureField(testFieldRange)
 				require.NoError(t, err)
 

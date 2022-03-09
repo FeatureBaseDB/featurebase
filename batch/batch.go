@@ -1,3 +1,4 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
 // Package batch provides tooling to prepare batches of records for ingest.
 package batch
 
@@ -182,6 +183,8 @@ type Batch struct {
 	clearFrags     fragments
 
 	useShardTransactionalEndpoint bool
+
+	mdsHost string
 }
 
 func (b *Batch) Len() int { return len(b.ids) }
@@ -332,6 +335,7 @@ func NewBatch(importer Importer, size int, index *featurebase.IndexInfo, fields 
 			return nil, errors.Wrap(err, "applying options")
 		}
 	}
+
 	return b, nil
 }
 

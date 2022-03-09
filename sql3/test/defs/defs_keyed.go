@@ -13,8 +13,8 @@ var keyed = TableTest{
 		),
 		srcRows(
 			srcRow("one", int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}),
-			srcRow("two", int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
-			srcRow("three", int64(33), []int64{31, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
+			srcRow("two", int64(22), []int64{11, 12, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
+			srcRow("three", int64(33), []int64{11, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
 			srcRow("four", int64(44), []int64{41, 42, 43}, int64(401), "str4", []string{"a4", "b4", "c4"}),
 		),
 	),
@@ -36,8 +36,8 @@ var keyed = TableTest{
 			),
 			ExpRows: rows(
 				row("one", int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}),
-				row("two", int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
-				row("three", int64(33), []int64{31, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
+				row("two", int64(22), []int64{11, 12, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
+				row("three", int64(33), []int64{11, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
 				row("four", int64(44), []int64{41, 42, 43}, int64(401), "str4", []string{"a4", "b4", "c4"}),
 			),
 			Compare:        CompareExactUnordered,
@@ -59,8 +59,8 @@ var keyed = TableTest{
 			),
 			ExpRows: rows(
 				row("one", int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}),
-				row("two", int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
-				row("three", int64(33), []int64{31, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
+				row("two", int64(22), []int64{11, 12, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
+				row("three", int64(33), []int64{11, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
 				row("four", int64(44), []int64{41, 42, 43}, int64(401), "str4", []string{"a4", "b4", "c4"}),
 			),
 			Compare:        CompareIncludedIn,
@@ -84,10 +84,127 @@ var keyed = TableTest{
 				hdr("a_string_set", fldTypeStringSet),
 			),
 			ExpRows: rows(
-				row("two", int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
+				row("two", int64(22), []int64{11, 12, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,
+		},
+	},
+	PQLTests: []PQLTest{
+		{
+			name:  "minrow",
+			Table: "keyed",
+			PQLs:  []string{"MinRow(field=an_id_set)"},
+			ExpHdrs: hdrs(
+				hdr("an_id_set", fldTypeID),
+				hdr("count", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(11), int64(1)),
+			),
+		},
+		{
+			name:  "maxrow",
+			Table: "keyed",
+			PQLs:  []string{"MaxRow(field=an_id_set)"},
+			ExpHdrs: hdrs(
+				hdr("an_id_set", fldTypeID),
+				hdr("count", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(43), int64(1)),
+			),
+		},
+		{
+			name:  "topk",
+			Table: "keyed",
+			PQLs:  []string{"TopK(an_id_set, k=2)"},
+			ExpHdrs: hdrs(
+				hdr("an_id_set", fldTypeID),
+				hdr("count", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(11), int64(3)),
+				row(int64(12), int64(2)),
+			),
+		},
+		{
+			name:  "topn",
+			Table: "keyed",
+			PQLs:  []string{"TopN(an_id_set, n=2)"},
+			ExpHdrs: hdrs(
+				hdr("an_id_set", fldTypeID),
+				hdr("count", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(11), int64(3)),
+				row(int64(12), int64(2)),
+			),
+		},
+		{
+			name:  "rows",
+			Table: "keyed",
+			PQLs:  []string{"Rows(field=an_id_set)"},
+			ExpHdrs: hdrs(
+				hdr("an_id_set", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(11)),
+				row(int64(12)),
+				row(int64(13)),
+				row(int64(23)),
+				row(int64(32)),
+				row(int64(33)),
+				row(int64(41)),
+				row(int64(42)),
+				row(int64(43)),
+			),
+		},
+		{
+			name:  "includescolumn",
+			Table: "keyed",
+			PQLs:  []string{"IncludesColumn(Row(an_id_set=12), column='two')"},
+			ExpHdrs: hdrs(
+				hdr("result", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(true),
+			),
+		},
+		{
+			name:  "constrow",
+			Table: "keyed",
+			PQLs:  []string{"Extract(ConstRow(columns=['two']), Rows(an_id))"},
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeString),
+				hdr("an_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row("two", int64(201)),
+			),
+		},
+		{
+			name:  "fieldvalue",
+			Table: "keyed",
+			PQLs:  []string{"FieldValue(field=an_int, column='three')"},
+			ExpHdrs: hdrs(
+				hdr("value", fldTypeInt),
+				hdr("count", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(33), int64(1)),
+			),
+		},
+		{
+			name:  "unionrows",
+			Table: "unkeyed",
+			PQLs:  []string{"Count(UnionRows(Rows(field=an_id_set)))"},
+			ExpHdrs: hdrs(
+				hdr("count", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(4)),
+			),
 		},
 	},
 }

@@ -1,3 +1,5 @@
+// Copyright 2021 Molecula Corp. All rights reserved.
+
 package batch
 
 import (
@@ -1842,7 +1844,7 @@ func testImportBatchSetsAndClears(t *testing.T, importer Importer, sapi featureb
 
 // testTopNCacheRegression recreates an issue we saw in an IDK test
 // where if a value is completely removed (all bits unset from a row),
-// it didn't get removed from the cache beacuse a full recalculation
+// it didn't get removed from the cache because a full recalculation
 // had no way to clear the cache, it would just reset existing
 // values. We added Clear on the cache interface to fix this.
 func testTopNCacheRegression(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {

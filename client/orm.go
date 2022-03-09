@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/molecula/featurebase/v3/client/types"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/pkg/errors"
 )
@@ -727,7 +728,7 @@ type FieldInfo struct {
 // FieldOptions contains options to customize Field objects and field queries.
 type FieldOptions struct {
 	fieldType      FieldType
-	timeQuantum    TimeQuantum
+	timeQuantum    types.TimeQuantum
 	ttl            time.Duration
 	cacheType      CacheType
 	cacheSize      int
@@ -747,9 +748,14 @@ func (fo FieldOptions) Type() FieldType {
 	return fo.fieldType
 }
 
+// Base returns the base of the field.
+func (fo FieldOptions) Base() int64 {
+	return fo.base
+}
+
 // TimeQuantum returns the configured time quantum for a time field. Empty
 // string otherwise.
-func (fo FieldOptions) TimeQuantum() TimeQuantum {
+func (fo FieldOptions) TimeQuantum() types.TimeQuantum {
 	return fo.timeQuantum
 }
 
@@ -795,10 +801,6 @@ func (fo FieldOptions) ForeignIndex() string {
 
 func (fo FieldOptions) TimeUnit() string {
 	return fo.timeUnit
-}
-
-func (fo FieldOptions) Base() int64 {
-	return fo.base
 }
 
 // NoStandardView suppresses creating the standard view for supported field types (currently, time)
@@ -868,12 +870,12 @@ func (fo *FieldOptions) addOptions(options ...FieldOption) {
 
 // MinTimestamp returns the minimum value for a timestamp field.
 func (o FieldOptions) MinTimestamp() time.Time {
-	return time.Unix(0, o.min.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit())))
+	return time.Unix(0, o.min.ToInt64(0)*int64(types.TimeUnitNano(o.TimeUnit())))
 }
 
 // MaxTimestamp returns the maxnimum value for a timestamp field.
 func (o FieldOptions) MaxTimestamp() time.Time {
-	return time.Unix(0, o.max.ToInt64(0)*int64(TimeUnitNano(o.TimeUnit())))
+	return time.Unix(0, o.max.ToInt64(0)*int64(types.TimeUnitNano(o.TimeUnit())))
 }
 
 // FieldOption is used to pass an option to index.Field function.
@@ -916,7 +918,7 @@ func OptFieldTypeInt(limits ...int64) FieldOption {
 }
 
 // OptFieldTypeTime adds a time field.
-func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
+func OptFieldTypeTime(quantum types.TimeQuantum, opts ...bool) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeTime
 		options.timeQuantum = quantum
@@ -943,11 +945,11 @@ var (
 // TimeUnitNanos returns the number of nanoseconds in unit.
 func TimeUnitNanos(unit string) int64 {
 	switch unit {
-	case TimeUnitSeconds:
+	case types.TimeUnitSeconds:
 		return int64(time.Second)
-	case TimeUnitMilliseconds:
+	case types.TimeUnitMilliseconds:
 		return int64(time.Millisecond)
-	case TimeUnitMicroseconds:
+	case types.TimeUnitMicroseconds:
 		return int64(time.Microsecond)
 	default:
 		return int64(time.Nanosecond)
@@ -1243,46 +1245,6 @@ const (
 	FieldTypeDecimal   FieldType = "decimal"
 	FieldTypeTimestamp FieldType = "timestamp"
 )
-
-// TimeQuantum type represents valid time quantum values time fields.
-type TimeQuantum string
-
-// TimeQuantum constants
-const (
-	TimeQuantumNone             TimeQuantum = ""
-	TimeQuantumYear             TimeQuantum = "Y"
-	TimeQuantumMonth            TimeQuantum = "M"
-	TimeQuantumDay              TimeQuantum = "D"
-	TimeQuantumHour             TimeQuantum = "H"
-	TimeQuantumYearMonth        TimeQuantum = "YM"
-	TimeQuantumMonthDay         TimeQuantum = "MD"
-	TimeQuantumDayHour          TimeQuantum = "DH"
-	TimeQuantumYearMonthDay     TimeQuantum = "YMD"
-	TimeQuantumMonthDayHour     TimeQuantum = "MDH"
-	TimeQuantumYearMonthDayHour TimeQuantum = "YMDH"
-)
-
-// List of time units.
-const (
-	TimeUnitSeconds      = "s"
-	TimeUnitMilliseconds = "ms"
-	TimeUnitMicroseconds = "µs"
-	TimeUnitNanoseconds  = "ns"
-)
-
-// TimeUnitNano returns the number of nanoseconds in unit.
-func TimeUnitNano(unit string) int64 {
-	switch unit {
-	case TimeUnitSeconds:
-		return int64(time.Second)
-	case TimeUnitMilliseconds:
-		return int64(time.Millisecond)
-	case TimeUnitMicroseconds:
-		return int64(time.Microsecond)
-	default:
-		return int64(time.Nanosecond)
-	}
-}
 
 // CacheType represents cache type for a field
 type CacheType string

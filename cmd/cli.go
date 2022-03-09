@@ -26,6 +26,14 @@ func newCLICommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	flags := cliCmd.Flags()
 	flags.StringVarP(&cli.Host, "host", "", cli.Host, "hostname of FeatureBase.")
 	flags.StringVarP(&cli.Port, "port", "", cli.Port, "port of FeatureBase.")
+	flags.StringVar(&cli.HistoryPath, "history-path", cli.HistoryPath, "path for history files.")
+	flags.StringVar(&cli.OrganizationID, "org-id", cli.OrganizationID, "OrganizationID.")
+	flags.StringVar(&cli.DatabaseID, "db-id", cli.DatabaseID, "DatabaseID.")
+
+	flags.StringVar(&cli.ClientID, "client-id", cli.ClientID, "Cognito Client ID for FeatureBase Cloud access.")
+	flags.StringVar(&cli.Region, "region", cli.Region, "Cloud region for FeatureBase Cloud access (e.g. us-east-2).")
+	flags.StringVar(&cli.Email, "email", cli.Email, "Email address for FeatureBase Cloud access.")
+	flags.StringVar(&cli.Password, "password", cli.Password, "Password for FeatureBase Cloud access.")
 
 	return cliCmd
 }

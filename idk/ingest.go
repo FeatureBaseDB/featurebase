@@ -28,6 +28,10 @@ import (
 	pilosagrpc "github.com/molecula/featurebase/v3/api/client"
 	pilosabatch "github.com/molecula/featurebase/v3/batch"
 	pilosaclient "github.com/molecula/featurebase/v3/client"
+	client_types "github.com/molecula/featurebase/v3/client/types"
+	"github.com/molecula/featurebase/v3/dax"
+	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
+	"github.com/molecula/featurebase/v3/idk/mds"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/prometheus"
@@ -96,6 +100,11 @@ type Main struct {
 
 	UseShardTransactionalEndpoint bool `flag:"use-shard-transactional-endpoint" help:"Use alternate import endpoint. Currently unstable/testing"`
 
+	MDSAddress     string             `short:"" help:"MDS address."`
+	OrganizationID dax.OrganizationID `short:"" help:"auto-assigned organization ID"`
+	DatabaseID     dax.DatabaseID     `short:"" help:"auto-assigned database ID"`
+	TableName      dax.TableName      `short:"" help:"human friendly table name"`
+
 	csvWriter *csv.Writer
 	csvFile   *os.File
 	// TODO implement the auto-generated IDs... hopefully using Pilosa to manage it.
@@ -114,6 +123,11 @@ type Main struct {
 	client     *pilosaclient.Client
 	index      *pilosaclient.Index
 	grpcClient *pilosagrpc.GRPCClient
+
+	NewImporterFn func() pilosabatch.Importer `flag:"-"`
+
+	SchemaManager SchemaManager       `flag:"-"`
+	Qtbl          *dax.QualifiedTable `flag:"-"`
 
 	newNexter func(c int) (IDAllocator, error)
 	ra        RangeAllocator
@@ -212,6 +226,8 @@ func NewMain() *Main {
 		Pprof: "localhost:6062",
 		Stats: "localhost:9093",
 
+		SchemaManager: NopSchemaManager,
+
 		stats: stats.NopStatsClient,
 
 		log: logger.NewStandardLogger(os.Stderr),
@@ -268,11 +284,15 @@ func (m *Main) run() error {
 }
 
 func (m *Main) clone() (*Main, error) {
-	schema, err := m.client.Schema()
+	var index *pilosaclient.Index
+
+	schema, err := m.SchemaManager.Schema()
 	if err != nil {
 		return nil, err
 	}
-	var index *pilosaclient.Index = schema.Index(m.Index)
+
+	index = schema.Index(m.Index)
+
 	// use a copy (schema race condition issues)
 	mClone := *m
 	mClone.index = index
@@ -654,7 +674,6 @@ initialFetch:
 }
 
 func (m *Main) Setup() (onFinishRun func(), err error) {
-
 	if err := m.validate(); err != nil {
 		return nil, errors.Wrap(err, "validating configuration")
 	}
@@ -664,7 +683,7 @@ func (m *Main) Setup() (onFinishRun func(), err error) {
 		fmt.Printf("Delete index '%s' and all data already imported into it (enter '%[1]s' to delete)? ", m.Index)
 		text, _ := reader.ReadString('\n')
 		if strings.TrimSpace(text) == strings.TrimSpace(m.Index) {
-			err := m.client.DeleteIndex(m.index)
+			err := m.SchemaManager.DeleteIndex(m.index)
 			if err != nil {
 				return nil, errors.Wrap(err, "deleting index")
 			}
@@ -734,11 +753,11 @@ func (m *Main) Setup() (onFinishRun func(), err error) {
 	}
 
 	if m.AuthToken != "" {
-		m.AuthToken = "Bearer " + m.AuthToken // Gets added to context
-		m.client.AuthToken = m.AuthToken      // Gets used for calls made from the client
+		m.AuthToken = "Bearer " + m.AuthToken     // Gets added to context
+		m.SchemaManager.SetAuthToken(m.AuthToken) // Gets used for calls made from the client
 	}
 
-	schema, err := m.client.Schema()
+	schema, err := m.SchemaManager.Schema()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting schema")
 	}
@@ -756,10 +775,10 @@ func (m *Main) Setup() (onFinishRun func(), err error) {
 
 	keyTranslation := len(m.PrimaryKeyFields) > 0
 	m.index = schema.Index(m.Index, pilosaclient.OptIndexKeys(keyTranslation))
-	err = m.client.SyncIndex(m.index)
-	if err != nil {
+	if err := m.SchemaManager.SyncIndex(m.index); err != nil {
 		return nil, errors.Wrap(err, "syncing index")
 	}
+
 	if m.AutoGenerate {
 		shardWidth := m.index.ShardWidth()
 		if shardWidth == 0 {
@@ -953,21 +972,57 @@ func (m *Main) NewLookupClient() (*PostgresClient, error) {
 func (m *Main) setupClient() (*tls.Config, error) {
 	var tlsConfig *tls.Config
 	var err error
+	var opts = []pilosaclient.ClientOption{pilosaclient.OptClientStatsClient(m.stats)}
 	if m.TLS.CertificatePath != "" {
 		tlsConfig, err = GetTLSConfig(&m.TLS, m.Log())
 		if err != nil {
 			return nil, errors.Wrap(err, "getting TLS config")
 		}
-		m.client, err = pilosaclient.NewClient(m.PilosaHosts, pilosaclient.OptClientTLSConfig(tlsConfig), pilosaclient.OptClientStatsClient(m.stats))
+		opts = append(opts, pilosaclient.OptClientTLSConfig(tlsConfig))
+	} else {
+		opts = append(opts,
+			pilosaclient.OptClientRetries(2),
+			pilosaclient.OptClientTotalPoolSize(1000),
+			pilosaclient.OptClientPoolSizePerRoute(400),
+		)
+	}
+	if m.useMDS() {
+		opts = append(opts, pilosaclient.OptClientPathPrefix(dax.ServicePrefixComputer))
+	}
+
+	m.client, err = pilosaclient.NewClient(m.PilosaHosts, opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting featurebase client")
+	}
+
+	// Set up the SchemaManager
+	if m.useMDS() {
+		ctx := context.Background()
+
+		// MDS doesn't auto-create a table based on IDK ingest; the table must
+		// already exist.
+		mdsClient := mdsclient.New(dax.Address(m.MDSAddress))
+		qual := dax.NewTableQualifier(m.OrganizationID, m.DatabaseID)
+		qtid, err := mdsClient.TableID(ctx, qual, m.TableName)
 		if err != nil {
-			return nil, errors.Wrap(err, "getting featurebase client with TLS")
+			return nil, errors.Wrapf(err, "getting table id: qual: %s, table name: %s", qual, m.TableName)
+		}
+		qtbl, err := mdsClient.Table(ctx, qtid)
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting table id: qtid: %s", qtid)
+		}
+
+		m.Qtbl = qtbl
+		m.Index = string(qtbl.Key())
+		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qual)
+
+		m.NewImporterFn = func() pilosabatch.Importer {
+			return mds.NewImporter(mdsClient, qtbl)
 		}
 	} else {
-		m.client, err = pilosaclient.NewClient(m.PilosaHosts, pilosaclient.OptClientRetries(2), pilosaclient.OptClientTotalPoolSize(1000), pilosaclient.OptClientPoolSizePerRoute(400), pilosaclient.OptClientStatsClient(m.stats))
-		if err != nil {
-			return nil, errors.Wrap(err, "getting featurebase client")
-		}
+		m.SchemaManager = m.client
 	}
+
 	return tlsConfig, nil
 }
 
@@ -1127,7 +1182,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 			return errors.Wrap(err, "retrieving values for delete")
 		}
 
-		trns, err := m.client.StartTransaction("", time.Minute, false, time.Hour)
+		trns, err := m.SchemaManager.StartTransaction("", time.Minute, false, time.Hour)
 		if err != nil {
 			return errors.Wrap(err, "starting transaction")
 		}
@@ -1162,7 +1217,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 			// get field, refreshing schema if needed
 			field, ok := index.Fields()[fieldName]
 			if !ok {
-				schema, err := m.client.Schema()
+				schema, err := m.SchemaManager.Schema()
 				if err != nil {
 					return errors.Wrap(err, "unknown field, getting new schema")
 				}
@@ -1241,7 +1296,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				return errors.Errorf("unhandled field type %s", field.Options().Type())
 			}
 		}
-		_, err = m.client.FinishTransaction(trns.ID)
+		_, err = m.SchemaManager.FinishTransaction(trns.ID)
 		if err != nil {
 			return errors.Wrap(err, "finishing transaction")
 		}
@@ -1307,7 +1362,7 @@ func inspect(grpcClient *pilosagrpc.GRPCClient, index string, columnIDs []uint64
 }
 
 func (m *Main) findPrimary() (*url.URL, error) {
-	status, err := m.client.Status()
+	status, err := m.SchemaManager.Status()
 	if err != nil {
 		return nil, errors.Wrap(err, "looking up cluster status")
 	}
@@ -1578,7 +1633,7 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosabatch.Record
 				hasMutex = true
 				opts = append(opts, CacheConfigOf(fld).mutexOption())
 			} else if q := QuantumOf(fld); q != "" {
-				opts = append(opts, pilosaclient.OptFieldTypeTime(pilosaclient.TimeQuantum(q)))
+				opts = append(opts, pilosaclient.OptFieldTypeTime(client_types.TimeQuantum(q)))
 
 				ttl, err := TTLOf(fld)
 				if err != nil {
@@ -1749,20 +1804,29 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosabatch.Record
 		}
 	}
 
-	err = m.client.SyncIndex(m.index)
+	err = m.SchemaManager.SyncIndex(m.index)
 	if err != nil {
-		return nil, nil, nil, nil, errors.Wrap(err, "syncing schema")
+		return nil, nil, nil, nil, errors.Wrap(err, "syncing index")
 	}
 
 	// Now we need to get the schema back from the server and rewrite
 	// our local fields to make sure we have all the computed options
 	// (like 'base' on int fields).
-	sSchema, err := m.client.Schema()
+	sSchema, err := m.SchemaManager.Schema()
 	if err != nil {
 		return nil, nil, nil, nil, errors.Wrap(err, "fetching final schema")
 	}
+
+	// The table name we use to look up in the index in the schema returned from
+	// SchemaManager.Schema() differs depending on whether this is MDS supported
+	// or not (i.e. whether it has a table qualifier).
+	tblName := m.index.Name()
+	if m.useMDS() {
+		tblName = string(m.Qtbl.Key())
+	}
+
 	for i, fld := range fields {
-		fields[i] = sSchema.Index(m.index.Name()).Field(fld.Name())
+		fields[i] = sSchema.Index(tblName).Field(fld.Name())
 	}
 
 	batch, err := m.newBatch(fields)
@@ -1777,14 +1841,23 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosabatch.Record
 }
 
 func (m *Main) newBatch(fields []*pilosaclient.Field) (pilosabatch.RecordBatch, error) {
-	return pilosabatch.NewBatch(pilosaclient.NewImporter(m.client), m.BatchSize, pilosaclient.FromClientIndex(m.index), pilosaclient.FromClientFields(fields),
+	opts := []pilosabatch.BatchOption{
 		pilosabatch.OptLogger(m.log),
 		pilosabatch.OptCacheMaxAge(m.CacheLength),
 		pilosabatch.OptSplitBatchMode(m.ExpSplitBatchMode),
 		pilosabatch.OptMaxStaleness(m.BatchMaxStaleness),
 		pilosabatch.OptKeyTranslateBatchSize(m.KeyTranslateBatchSize),
 		pilosabatch.OptUseShardTransactionalEndpoint(m.UseShardTransactionalEndpoint),
-	)
+	}
+	var importer pilosabatch.Importer
+	if m.useMDS() {
+		importer = m.NewImporterFn()
+	} else {
+		importer = pilosaclient.NewImporter(m.client)
+	}
+	opts = append(opts, pilosabatch.OptImporter(importer))
+
+	return pilosabatch.NewBatch(importer, m.BatchSize, pilosaclient.FromClientIndex(m.index), pilosaclient.FromClientFields(fields), opts...)
 }
 
 // validateField ensures that the field is configured correctly.
@@ -1821,7 +1894,7 @@ func (m *Main) checkFieldCompatibility(pFld *pilosaclient.Field, iFld Field, pac
 	// against pFldOpts.
 	iFldOpts := struct {
 		fieldType    pilosaclient.FieldType
-		timeQuantum  pilosaclient.TimeQuantum
+		timeQuantum  client_types.TimeQuantum
 		cacheType    pilosaclient.CacheType
 		cacheSize    int
 		min          pql.Decimal
@@ -1860,7 +1933,7 @@ func (m *Main) checkFieldCompatibility(pFld *pilosaclient.Field, iFld Field, pac
 				iFldOpts.cacheSize = pilosacore.DefaultCacheSize
 			} else if q := QuantumOf(fld); q != "" {
 				iFldOpts.fieldType = pilosaclient.FieldTypeTime
-				iFldOpts.timeQuantum = pilosaclient.TimeQuantum(q)
+				iFldOpts.timeQuantum = client_types.TimeQuantum(q)
 
 				ttl, err := TTLOf(fld)
 				if err != nil {
@@ -2083,9 +2156,18 @@ func (m *Main) validate() error {
 		return errors.New("must set exactly one of --primary-key-field <fieldnames>, --id-field <fieldname>, --auto-generate")
 	}
 
-	if m.Index == "" {
+	if m.useMDS() {
+		if m.OrganizationID == "" {
+			return errors.New("must set an organization with --featurebase.org-id")
+		} else if m.DatabaseID == "" {
+			return errors.New("must set a database with --featurebase.db-id")
+		} else if m.TableName == "" {
+			return errors.New("must set a table with --featurebase.table-name")
+		}
+	} else if m.Index == "" {
 		return errors.New("must set an index with --pilosa.index")
 	}
+
 	if m.NewSource == nil {
 		return errors.New("must set a NewSource function on IDK ingester")
 	}
@@ -2104,4 +2186,8 @@ func (m *Main) allowError(err error) bool {
 	default:
 		return false
 	}
+}
+
+func (m *Main) useMDS() bool {
+	return m.MDSAddress != ""
 }

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
@@ -48,7 +49,8 @@ type Index struct {
 	holder *Holder
 
 	// Per-partition translation stores
-	translateStores map[int]TranslateStore
+	translatePartitions dax.Partitions
+	translateStores     map[int]TranslateStore
 
 	translationSyncer TranslationSyncer
 
@@ -239,6 +241,28 @@ func (i *Index) open(idx *disco.Index) (err error) {
 
 		var g errgroup.Group
 		var mu sync.Mutex
+		// TODO(tlt): this for loop doesn't work because if we assign a
+		// translate partition to this node later (after the table has been
+		// created with a sub-set of translatePartitions), then the new
+		// TranslateStores don't get initialized. For now I just put it back so
+		// it opens a TranslateStore for every partition no matter what, but we
+		// really need to have the ApplyDirective logic able to initialize any
+		// TranslateStore which doesn't already exist (and perhaps shut down any
+		// that are to be removed).
+		//
+		// for _, partition := range i.translatePartitions {
+		//	  partitionID := int(partition.Num)
+		//
+		//
+		// TODO(tlt): instead of i.holder.partitionN, we need to use
+		// len(i.translatePartitions), or actually we need to know the
+		// keypartitions for the qtbl (i don't think we can rely on the length
+		// of this slice) but that will only apply here... we need to go through
+		// all the code and see where these are being used:
+		// - i.holder.partitionN
+		// - DefaultPartitionN
+		//
+		//
 		for partitionID := 0; partitionID < i.holder.partitionN; partitionID++ {
 			partitionID := partitionID
 
@@ -932,6 +956,21 @@ func (i *Index) DeleteField(name string) error {
 	// remove shard metadata for field
 	i.fieldView2shard.removeField(name)
 	return i.translationSyncer.Reset()
+}
+
+// SetTranslatePartitions sets the cached value: translatePartitions.
+//
+// There's already logic in api_directive.go which creates a new index with
+// partitions. This particular function is used when the index already exists on
+// the node, but we get a Directive which changes its partition list. In that
+// case, we need to update this cached value. Really, this is kind of hacky and
+// we need to revisit the ApplyDirective logic so that it's more intuitive with
+// respect to index.translatePartitions.
+func (i *Index) SetTranslatePartitions(tp dax.Partitions) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	i.translatePartitions = tp
 }
 
 type indexSlice []*Index

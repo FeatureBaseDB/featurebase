@@ -1,6 +1,7 @@
 package ctl
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,9 @@ import (
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/jedib0t/go-pretty/text"
 	featurebase "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	queryerhttp "github.com/molecula/featurebase/v3/dax/queryer/http"
+	"github.com/molecula/featurebase/v3/fbcloud"
 	"github.com/pkg/errors"
 )
 
@@ -36,8 +40,19 @@ type CLICommand struct {
 	Port        string `json:"port"`
 	HistoryPath string `json:"history-path"`
 
+	// Cloud Auth
+	ClientID string `json:"client-id"`
+	Region   string `json:"region"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+
 	// commands holds the list of sql commands to be executed.
 	commands []string
+
+	OrganizationID string `json:"org-id"`
+	DatabaseID     string `json:"db-id"`
+
+	queryer FBQueryer
 }
 
 func NewCLICommand(stdin io.Reader, stdout, stderr io.Writer) *CLICommand {
@@ -56,14 +71,147 @@ func NewCLICommand(stdin io.Reader, stdout, stderr io.Writer) *CLICommand {
 	}
 	return &CLICommand{
 		Host:        "localhost",
-		Port:        "10101",
 		HistoryPath: historyPath,
+
+		OrganizationID: "",
+		DatabaseID:     "",
 	}
+}
+
+// printQualifiers displays the currently set OrganizationID and DatabaseID.
+func (cmd *CLICommand) printQualifiers() {
+	fmt.Printf(" Host: %s\n  Org: %s\n   DB: %s\n",
+		hostPort(cmd.Host, cmd.Port),
+		cmd.OrganizationID,
+		cmd.DatabaseID,
+	)
+}
+
+func (cmd *CLICommand) setupClient() error {
+	if strings.TrimSpace(cmd.Host) == "" {
+		return errors.Errorf("no host provided")
+	}
+
+	if !strings.HasPrefix(cmd.Host, "http") {
+		cmd.Host = "http://" + cmd.Host
+	}
+
+	typ, err := cmd.detectFBType()
+	if err != nil {
+		return errors.Wrap(err, "detecting FeatureBase deployment type")
+	}
+
+	switch typ {
+	case featurebaseTypeStandard:
+		fmt.Println("Detected standard deployment")
+		cmd.queryer = &standardQueryer{
+			Host: cmd.Host,
+			Port: cmd.Port,
+		}
+	case featurebaseTypeDAX:
+		fmt.Println("Detected dax deployment")
+		cmd.queryer = &daxQueryer{
+			Host: cmd.Host,
+			Port: cmd.Port,
+		}
+	case featurebaseTypeCloud:
+		fmt.Println("Detected cloud deployment")
+		cmd.queryer = &fbcloud.Queryer{
+			Host: cmd.Host,
+
+			ClientID: cmd.ClientID,
+			Region:   cmd.Region,
+			Email:    cmd.Email,
+			Password: cmd.Password,
+		}
+	default:
+		return errors.Errorf("unknown type: %s", typ)
+	}
+	return nil
+}
+
+type featurebaseType string
+
+const (
+	featurebaseTypeStandard featurebaseType = "standard"
+	featurebaseTypeDAX      featurebaseType = "dax"
+	featurebaseTypeCloud    featurebaseType = "cloud"
+)
+
+func hostPort(host, port string) string {
+	if port == "" {
+		return host
+	}
+	return host + ":" + port
+}
+
+// detectFBType determines if we're talking to standalone FeatureBase
+// or FeatureBase Cloud
+func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
+	type trial struct {
+		port   string
+		health string
+		typ    featurebaseType
+	}
+
+	// trials is populated with the url/endpoints to try in order to detect if a
+	// process is running there which can support the cli requests.
+	trials := []trial{}
+
+	if cmd.Port != "" {
+		trials = append(trials,
+			// dax
+			trial{
+				port:   cmd.Port,
+				health: "/queryer/health",
+				typ:    featurebaseTypeDAX,
+			},
+			// standard
+			trial{
+				port:   cmd.Port,
+				health: "/status",
+				typ:    featurebaseTypeStandard,
+			},
+		)
+	} else {
+		// Try default ports just in case.
+		trials = append(trials,
+			// dax
+			trial{
+				port:   "8080",
+				health: "/queryer/health",
+				typ:    featurebaseTypeDAX,
+			},
+			// standard
+			trial{
+				port:   "10101",
+				health: "/status",
+				typ:    featurebaseTypeStandard,
+			},
+		)
+	}
+
+	for _, trial := range trials {
+		url := hostPort(cmd.Host, trial.port) + trial.health
+		if resp, err := http.Get(url); err != nil {
+			continue
+		} else if resp.StatusCode/100 == 2 {
+			cmd.Port = trial.port
+			return trial.typ, nil
+		}
+	}
+
+	return featurebaseTypeCloud, nil
 }
 
 func (cmd *CLICommand) Run(ctx context.Context) error {
 	// Print the splash message.
 	fmt.Print(splash)
+	err := cmd.setupClient()
+	if err != nil {
+		return errors.Wrap(err, "setting up client")
+	}
+	cmd.printQualifiers()
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:                 promptBegin,
@@ -75,10 +223,6 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 		return errors.Wrap(err, "getting readline")
 	}
 	defer rl.Close()
-
-	if !strings.HasPrefix(cmd.Host, "http") {
-		cmd.Host = "http://" + cmd.Host
-	}
 
 	// partialCommand holds all input prior to receiving a termination
 	// character.
@@ -174,6 +318,10 @@ func appendCommand(orig string, part string) string {
 	}
 }
 
+type FBQueryer interface {
+	Query(org, db, sql string) (*featurebase.SQLResponse, error)
+}
+
 func (cmd *CLICommand) executeCommands(ctx context.Context) error {
 	// Clear out the buffered commands on any exit from this method.
 	defer func() {
@@ -181,23 +329,19 @@ func (cmd *CLICommand) executeCommands(ctx context.Context) error {
 	}()
 
 	for _, sql := range cmd.commands {
-		resp, err := http.Post(fmt.Sprintf("%s:%s/sql", cmd.Host, cmd.Port), "application/sql", strings.NewReader(sql))
-		if err != nil {
-			return errors.Wrapf(err, "posting query")
+		// Handle non-sql commands (for example, SET commands).
+		if handled, err := cmd.handleIfNonSQLCommand(ctx, sql); err != nil {
+			return errors.Wrapf(err, "handling non-SQL command: %s", sql)
+		} else if handled {
+			continue
 		}
 
-		var sqlResponse response
-		fullbod, err := io.ReadAll(resp.Body)
+		sqlResponse, err := cmd.queryer.Query(cmd.OrganizationID, cmd.DatabaseID, sql)
 		if err != nil {
-			return errors.Wrap(err, "reading response")
+			fmt.Printf("making query: %v\n", err)
+			continue
 		}
-		err = json.Unmarshal(fullbod, &sqlResponse)
-		if err != nil {
-			fmt.Printf("couldn't decode response: %v\n", err)
-			fmt.Printf("%s\n", fullbod)
-		}
-
-		err = sqlResponse.WriteOut(os.Stdout)
+		err = WriteOut(sqlResponse, os.Stdout)
 		if err != nil {
 			return errors.Wrap(err, "writing out response")
 		}
@@ -206,15 +350,58 @@ func (cmd *CLICommand) executeCommands(ctx context.Context) error {
 	return nil
 }
 
-type response struct {
-	Schema        featurebase.SQLSchema `json:"schema"`
-	Data          [][]interface{}       `json:"data"`
-	Error         string                `json:"error"`
-	Warnings      []string              `json:"warnings"`
-	ExecutionTime int64                 `json:"exec_time"`
+// handleIfNonSQLCommand will handle special case command like "SET ..." and
+// "USE ...". If the sql command matches one of these conditions and is handled,
+// the bool returned will be true;
+func (cmd *CLICommand) handleIfNonSQLCommand(ctx context.Context, sql string) (bool, error) {
+	var handled bool
+
+	// Get the first token from the SQL:
+	parts := strings.Split(sql, " ")
+	if len(parts) < 1 {
+		return handled, nil
+	}
+
+	token := strings.ToUpper(parts[0])
+
+	// Supported:
+	// SET ORG acme
+	// SET DB db1
+	// USE db1
+	switch token {
+	case "SET":
+		handled = true
+		switch len(parts) {
+		case 1:
+			// This will fall through and just print the qualifiers.
+		case 3:
+			switch strings.ToUpper(parts[1]) {
+			case "HOST":
+				cmd.Host = parts[2]
+			case "ORG":
+				cmd.OrganizationID = parts[2]
+			case "DB":
+				cmd.DatabaseID = parts[2]
+			}
+		default:
+			return handled, errors.Errorf("SET command takes a name and a value (SET DB db1)")
+		}
+
+	case "USE":
+		handled = true
+		if len(parts) != 2 {
+			return handled, errors.Errorf("USE command takes a single value (USE db1)")
+		}
+		cmd.DatabaseID = parts[1]
+	default:
+		return handled, nil
+	}
+
+	cmd.printQualifiers()
+	return handled, nil
 }
 
-func (r *response) WriteWarnings(w io.Writer) error {
+func WriteWarnings(r *featurebase.SQLResponse, w io.Writer) error {
 	if len(r.Warnings) > 0 {
 		if _, err := w.Write([]byte("\n")); err != nil {
 			return errors.Wrapf(err, "writing warning: %s", r.Error)
@@ -228,12 +415,15 @@ func (r *response) WriteWarnings(w io.Writer) error {
 	return nil
 }
 
-func (r *response) WriteOut(w io.Writer) error {
+func WriteOut(r *featurebase.SQLResponse, w io.Writer) error {
+	if r == nil {
+		return errors.New("attempt to write out nil response")
+	}
 	if r.Error != "" {
 		if _, err := w.Write([]byte("Error: " + r.Error + "\n")); err != nil {
 			return errors.Wrapf(err, "writing error: %s", r.Error)
 		}
-		return r.WriteWarnings(w)
+		return WriteWarnings(r, w)
 	}
 
 	t := table.NewWriter()
@@ -255,7 +445,7 @@ func (r *response) WriteOut(w io.Writer) error {
 	}
 	t.Render()
 
-	err := r.WriteWarnings(w)
+	err := WriteWarnings(r, w)
 	if err != nil {
 		return err
 	}
@@ -281,4 +471,78 @@ func schemaToRow(schema featurebase.SQLSchema) []interface{} {
 		ret[i] = field.Name
 	}
 	return ret
+}
+
+// Ensure type implements interface.
+var _ FBQueryer = (*standardQueryer)(nil)
+
+// standardQueryer supports a standard featurebase deployment hitting the /sql
+// endpoint with a payload containing only the sql statement.
+type standardQueryer struct {
+	Host string
+	Port string
+}
+
+func (qryr *standardQueryer) Query(org, db, sql string) (*featurebase.SQLResponse, error) {
+	buf := bytes.Buffer{}
+	url := fmt.Sprintf("%s/sql", hostPort(qryr.Host, qryr.Port))
+
+	buf.Write([]byte(sql))
+
+	resp, err := http.Post(url, "application/json", &buf)
+	if err != nil {
+		return nil, errors.Wrapf(err, "posting query")
+	}
+
+	fullbod, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading response")
+	}
+	sqlResponse := &featurebase.SQLResponse{}
+	if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
+		return nil, errors.Wrapf(err, "unmarshaling query response, body:\n'%s'\n", fullbod)
+	}
+
+	return sqlResponse, nil
+}
+
+// Ensure type implements interface.
+var _ FBQueryer = (*daxQueryer)(nil)
+
+// daxQueryer is similar to the standardQueryer except that it hits a different
+// endpoint, and its payload is a json object which includes, in addition to the
+// sql statement, things like org and db.
+type daxQueryer struct {
+	Host string
+	Port string
+}
+
+func (qryr *daxQueryer) Query(org, db, sql string) (*featurebase.SQLResponse, error) {
+	buf := bytes.Buffer{}
+	url := fmt.Sprintf("%s/queryer/sql", hostPort(qryr.Host, qryr.Port))
+
+	sqlReq := &queryerhttp.SQLRequest{
+		OrganizationID: dax.OrganizationID(org),
+		DatabaseID:     dax.DatabaseID(db),
+		SQL:            sql,
+	}
+	if err := json.NewEncoder(&buf).Encode(sqlReq); err != nil {
+		return nil, errors.Wrapf(err, "encoding sql request: %s", sql)
+	}
+
+	resp, err := http.Post(url, "application/json", &buf)
+	if err != nil {
+		return nil, errors.Wrapf(err, "posting query")
+	}
+
+	fullbod, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading response")
+	}
+	sqlResponse := &featurebase.SQLResponse{}
+	if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
+		return nil, errors.Wrapf(err, "unmarshaling query response, body:\n'%s'\n", fullbod)
+	}
+
+	return sqlResponse, nil
 }

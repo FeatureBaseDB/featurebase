@@ -294,6 +294,36 @@ func Do(t testing.TB, method, urlStr string, body string) *httpResponse {
 	return &httpResponse{Response: resp, Body: string(buf)}
 }
 
+// Do executes http.Do() with an http.NewRequest().
+func DoProto(t testing.TB, method, urlStr string, body []byte) *gohttp.Response {
+	t.Helper()
+	req, err := gohttp.NewRequest(
+		method,
+		urlStr,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+
+	// set a timeout instead of allowing gohttp.Defaultclient to
+	// potentially hang forever.
+	hc := &gohttp.Client{
+		Timeout: time.Second * 30,
+	}
+	resp, err := hc.Do(req)
+
+	if err != nil {
+		fmt.Printf(" hc.Do() err = '%v'\n", err)
+		t.Fatal(err)
+	}
+
+	return resp
+}
+
 func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 	t.Helper()
 	if len(results) != len(expected) {

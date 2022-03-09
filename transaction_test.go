@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/test"
 )

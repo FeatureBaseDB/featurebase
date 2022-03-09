@@ -94,4 +94,17 @@ var unkeyed = TableTest{
 			SortStringKeys: true,
 		},
 	},
+	PQLTests: []PQLTest{
+		{
+			name:  "options",
+			Table: "unkeyed",
+			PQLs:  []string{"Options(Count(Row(an_id_set=1)), shards=[0])"},
+			ExpHdrs: hdrs(
+				hdr("count", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(0)),
+			),
+		},
+	},
 }

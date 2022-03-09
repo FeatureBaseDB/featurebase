@@ -75,3 +75,11 @@ tags.dot
 
 # SQL3
 /sql3/sql3.html
+
+staticcheck.conf
+
+
+.quick
+dax/dax-data
+
+coverage-from-docker

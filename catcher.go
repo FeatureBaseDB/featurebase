@@ -216,6 +216,6 @@ func (c *catcherTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txke
 	return c.b.GetSortedFieldViewList(idx, shard)
 }
 
-func (tx *catcherTx) GetFieldSizeBytes(index, field string) (uint64, error) {
+func (c *catcherTx) GetFieldSizeBytes(index, field string) (uint64, error) {
 	return 0, nil
 }

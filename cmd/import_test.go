@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 
 	"github.com/molecula/featurebase/v3/cmd"
 	"github.com/molecula/featurebase/v3/pql"

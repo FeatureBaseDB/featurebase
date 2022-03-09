@@ -4,6 +4,7 @@ import (
 	"context"
 
 	featurebase "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/client/types"
 	"github.com/molecula/featurebase/v3/errors"
 )
 
@@ -104,7 +105,7 @@ func (s *schemaAPI) addFieldToIndex(idx *Index, fieldName string, opts ...featur
 		cfos = append(cfos, OptFieldTypeDecimal(ffos.Scale, ffos.Min, ffos.Max))
 	case featurebase.FieldTypeTime:
 		cfos = append(cfos,
-			OptFieldTypeTime(TimeQuantum(ffos.TimeQuantum), ffos.NoStandardView),
+			OptFieldTypeTime(types.TimeQuantum(ffos.TimeQuantum), ffos.NoStandardView),
 			OptFieldKeys(ffos.Keys),
 		)
 	case featurebase.FieldTypeTimestamp:
@@ -150,6 +151,12 @@ func (s *schemaAPI) IndexInfo(ctx context.Context, indexName string) (*featureba
 
 	idx := schema.Index(indexName)
 	return FromClientIndex(idx), nil
+}
+
+// FieldInfo returns the same information as Schema(), but only for a single
+// index.
+func (s *schemaAPI) FieldInfo(ctx context.Context, indexName, fieldName string) (*featurebase.FieldInfo, error) {
+	return nil, nil
 }
 
 func (s *schemaAPI) Schema(ctx context.Context, withViews bool) ([]*featurebase.IndexInfo, error) {

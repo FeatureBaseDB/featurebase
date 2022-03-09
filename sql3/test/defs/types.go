@@ -39,6 +39,7 @@ type TableTest struct {
 	name     string
 	Table    source
 	SQLTests []SQLTest
+	PQLTests []PQLTest
 }
 
 // Name returns a string name which can be used to distingish test runs. It
@@ -95,6 +96,26 @@ type SQLTest struct {
 // takes an integer value which will be used as part of a generic table name in
 // the case where a name value was not provided in the definition.
 func (s SQLTest) Name(i int) string {
+	name := fmt.Sprintf("test-%d", i)
+	if s.name != "" {
+		name = s.name
+	}
+	return name
+}
+
+type PQLTest struct {
+	name    string
+	PQLs    []string
+	Table   string
+	ExpHdrs []*planner_types.PlannerColumn
+	ExpRows [][]interface{}
+	ExpErr  string
+}
+
+// Name returns a string name which can be used to distingish test runs. It
+// takes an integer value which will be used as part of a generic table name in
+// the case where a name value was not provided in the definition.
+func (s PQLTest) Name(i int) string {
 	name := fmt.Sprintf("test-%d", i)
 	if s.name != "" {
 		name = s.name

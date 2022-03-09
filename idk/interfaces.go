@@ -1309,3 +1309,51 @@ func (f Fields) ContainsBool() bool {
 	}
 	return false
 }
+
+// SchemaManager is meant to be an interface for managing schema information;
+// i.e. for interacting with a single source of truth for schema information,
+// like the MDS Schemar. But... it currently contains methods which are not
+// related to schema because the first goal was just to introduce an interface
+// in ingest.go for any methods being called on *m.client. We don't want a
+// FeatureBase client directly called from ingest, rather, we want to call these
+// interface methods and allow for different implementations (such as an MDS
+// implementation which uses the Schemar in MDS as opposed to a FeatureBase node
+// or cluster).
+type SchemaManager interface {
+	StartTransaction(id string, timeout time.Duration, exclusive bool, requestTimeout time.Duration) (*pilosacore.Transaction, error)
+	FinishTransaction(id string) (*pilosacore.Transaction, error)
+	Schema() (*pilosaclient.Schema, error)
+	SyncIndex(index *pilosaclient.Index) error
+	DeleteIndex(index *pilosaclient.Index) error
+	Status() (pilosaclient.Status, error)
+	SetAuthToken(string)
+}
+
+// Ensure type implements interface.
+var _ SchemaManager = &nopSchemaManager{}
+
+// NopSchemaManager is an implementation of the SchemaManager interface that
+// doesn't do anything.
+var NopSchemaManager SchemaManager = &nopSchemaManager{}
+
+type nopSchemaManager struct{}
+
+func (n *nopSchemaManager) StartTransaction(id string, timeout time.Duration, exclusive bool, requestTimeout time.Duration) (*pilosacore.Transaction, error) {
+	return nil, nil
+}
+func (n *nopSchemaManager) FinishTransaction(id string) (*pilosacore.Transaction, error) {
+	return nil, nil
+}
+func (n *nopSchemaManager) Schema() (*pilosaclient.Schema, error) {
+	return nil, nil
+}
+func (n *nopSchemaManager) SyncIndex(index *pilosaclient.Index) error {
+	return nil
+}
+func (n *nopSchemaManager) DeleteIndex(index *pilosaclient.Index) error {
+	return nil
+}
+func (n *nopSchemaManager) Status() (pilosaclient.Status, error) {
+	return pilosaclient.Status{}, nil
+}
+func (n *nopSchemaManager) SetAuthToken(token string) {}

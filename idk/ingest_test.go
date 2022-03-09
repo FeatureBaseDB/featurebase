@@ -16,10 +16,14 @@ import (
 
 	"github.com/golang-jwt/jwt"
 	"github.com/molecula/featurebase/v3/authn"
-	"github.com/molecula/featurebase/v3/batch"
+	batch "github.com/molecula/featurebase/v3/batch"
 	pilosaclient "github.com/molecula/featurebase/v3/client"
+	"github.com/molecula/featurebase/v3/dax"
+	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
 	"github.com/molecula/featurebase/v3/idk/idktest"
+	"github.com/molecula/featurebase/v3/idk/mds"
 	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -37,6 +41,24 @@ func configureTestFlags(main *Main) {
 	}
 
 	main.Stats = ""
+}
+
+func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedTable) {
+	main.MDSAddress = address.String()
+	main.Stats = ""
+	main.Pprof = ""
+	main.PackBools = ""
+	main.OrganizationID = qtbl.Qualifier().OrganizationID
+	main.DatabaseID = qtbl.Qualifier().DatabaseID
+	main.TableName = qtbl.Name
+	main.Qtbl = qtbl
+	main.SchemaManager = mds.NewSchemaManager(address, qtbl.Qualifier())
+	main.Index = string(qtbl.Key())
+
+	mdsClient := mdsclient.New(dax.Address(address))
+	main.NewImporterFn = func() batch.Importer {
+		return mds.NewImporter(mdsClient, qtbl)
+	}
 }
 
 func TestErrFlush(t *testing.T) {
@@ -1719,4 +1741,180 @@ func TestBoolIngest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBatchTargetMDS(t *testing.T) {
+	var mdsHost string
+	if mds, ok := os.LookupEnv("IDK_TEST_MDS_HOST"); ok {
+		mdsHost = mds
+	} else {
+		mdsHost = "dax:8080"
+	}
+
+	mdsAddress := dax.Address(mdsHost)
+	orgID := dax.OrganizationID("acme")
+	dbID := dax.DatabaseID("db1")
+
+	t.Run("FieldTypes", func(t *testing.T) {
+		tests := []struct {
+			fieldType    dax.FieldType
+			fieldOptions dax.FieldOptions
+			fieldFn      fieldFn
+			in           [][]interface{}
+		}{
+			// {
+			// 	fieldType: types.FieldTypeBool,
+			// 	fieldFn:   boolFn,
+			// 	in: [][]interface{}{
+			// 		{1, true},
+			// 		{2, false},
+			// 	},
+			// },
+			{
+				fieldType: dax.FieldTypeDecimal,
+				fieldOptions: dax.FieldOptions{
+					Scale: 4,
+				},
+				fieldFn: decimalFn,
+				in: [][]interface{}{
+					{1, "12.3456"},
+					{2, "-7.8"},
+				},
+			},
+			{
+				fieldType: dax.FieldTypeID,
+				fieldFn:   idFn,
+				in: [][]interface{}{
+					{1, uint64(11)},
+					{2, uint64(22)},
+				},
+			},
+			{
+				fieldType: dax.FieldTypeIDSet,
+				fieldFn:   idSetFn,
+				in: [][]interface{}{
+					{1, []uint64{11, 12, 13}},
+					{2, []uint64{22, 24, 26, 28}},
+				},
+			},
+			{
+				fieldType: dax.FieldTypeInt,
+				fieldFn:   intFn,
+				in: [][]interface{}{
+					{1, int(11)},
+					{2, int(-22)},
+				},
+				fieldOptions: dax.FieldOptions{Min: pql.NewDecimal(-100, 0), Max: pql.NewDecimal(100, 0)},
+			},
+			{
+				fieldType: dax.FieldTypeString,
+				fieldFn:   stringFn,
+				in: [][]interface{}{
+					{1, "cycling"},
+					{2, "running"},
+				},
+			},
+			{
+				fieldType: dax.FieldTypeStringSet,
+				fieldFn:   stringSetFn,
+				in: [][]interface{}{
+					{1, []string{"cycling", "swimming"}},
+					{2, []string{"running", "cooking"}},
+				},
+			},
+			{
+				fieldType: dax.FieldTypeTimestamp,
+				fieldFn:   timestampFn,
+				in: [][]interface{}{
+					{1, time.Now()},
+					{2, time.Now()},
+				},
+				fieldOptions: dax.FieldOptions{TimeUnit: "s", Epoch: time.Unix(0, 0)}, // TODO w/o this, it used to silently fail (just logs in the mds svc). Eventually should probably have a default unit and not fail at all.
+			},
+		}
+		for i, test := range tests {
+			t.Run(fmt.Sprintf("test-%s-%d", test.fieldType, i), func(t *testing.T) {
+				// Generate a random tableName to use for the test.
+				rand.Seed(time.Now().UTC().UnixNano())
+				tableName := fmt.Sprintf("tbl_%s_%d", test.fieldType, rand.Intn(100000))
+				fieldName := fmt.Sprintf("fld_%s_%d", test.fieldType, rand.Intn(100000))
+
+				tblName := dax.TableName(tableName)
+
+				tbl := dax.NewTable(tblName)
+				tbl.PartitionN = dax.DefaultPartitionN
+				tbl.Fields = []*dax.Field{
+					{
+						Name: dax.PrimaryKeyFieldName,
+						Type: dax.FieldTypeID,
+					},
+					{
+						Name:    dax.FieldName(fieldName),
+						Type:    test.fieldType,
+						Options: test.fieldOptions,
+					},
+				}
+
+				qtbl := dax.NewQualifiedTable(
+					dax.NewTableQualifier(orgID, dbID),
+					tbl,
+				)
+
+				ctx := context.Background()
+
+				// Create the table in MDS Schemar.
+				mdsClient := mdsclient.New(mdsAddress)
+				if err := mdsClient.CreateTable(ctx, qtbl); err != nil {
+					t.Fatalf("creating table: %v", err)
+				}
+
+				qtblWithID, err := mdsClient.Table(ctx, qtbl.QualifiedID())
+				assert.NoError(t, err)
+
+				ts := newTestSource([]Field{
+					IDField{NameVal: "id"},
+					test.fieldFn(fieldName, test.fieldOptions),
+				}, test.in)
+
+				ingester := NewMain()
+				configureTestFlagsMDS(ingester, mdsAddress, qtblWithID)
+
+				ingester.NewSource = func() (Source, error) { return ts, nil }
+				ingester.BatchSize = 10
+				//ingester.PrimaryKeyFields = []string{"rcid"}
+				ingester.IDField = "id"
+
+				if err := ingester.Run(); err != nil {
+					t.Fatalf("running ingester: %v", err)
+				}
+			})
+		}
+	})
+}
+
+type fieldFn func(string, dax.FieldOptions) Field
+
+func boolFn(name string, fo dax.FieldOptions) Field {
+	return BoolField{NameVal: name}
+}
+func decimalFn(name string, fo dax.FieldOptions) Field {
+	return DecimalField{NameVal: name, Scale: fo.Scale}
+}
+func idFn(name string, fo dax.FieldOptions) Field {
+	return IDField{NameVal: name, Mutex: true}
+}
+func idSetFn(name string, fo dax.FieldOptions) Field {
+	return IDArrayField{NameVal: name}
+}
+func intFn(name string, fo dax.FieldOptions) Field {
+	return IntField{NameVal: name}
+}
+func stringFn(name string, fo dax.FieldOptions) Field {
+	return StringField{NameVal: name, Mutex: true}
+}
+func stringSetFn(name string, fo dax.FieldOptions) Field {
+	return StringArrayField{NameVal: name}
+}
+func timestampFn(name string, fo dax.FieldOptions) Field {
+	return TimestampField{NameVal: name}
 }

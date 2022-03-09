@@ -7,6 +7,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	pilosaclient "github.com/molecula/featurebase/v3/client"
+	clienttypes "github.com/molecula/featurebase/v3/client/types"
 	"github.com/pkg/errors"
 )
 
@@ -116,7 +117,7 @@ func (f schemaField) applyToPilosa(idx *pilosaclient.Index) error {
 		case f.FieldOptions.EnforceMutualExclusion:
 			opts = []pilosaclient.FieldOption{pilosaclient.OptFieldTypeMutex(pilosaclient.CacheType(f.FieldOptions.CacheType), f.FieldOptions.CacheSize)}
 		case f.FieldOptions.TimeQuantum != "":
-			opts = []pilosaclient.FieldOption{pilosaclient.OptFieldTypeTime(pilosaclient.TimeQuantum(f.FieldOptions.TimeQuantum))}
+			opts = []pilosaclient.FieldOption{pilosaclient.OptFieldTypeTime(clienttypes.TimeQuantum(f.FieldOptions.TimeQuantum))}
 			if f.FieldOptions.TTL != "" {
 				ttl, err := time.ParseDuration(f.FieldOptions.TTL)
 				if err != nil {
@@ -134,7 +135,7 @@ func (f schemaField) applyToPilosa(idx *pilosaclient.Index) error {
 		case f.FieldOptions.EnforceMutualExclusion:
 			opts = []pilosaclient.FieldOption{pilosaclient.OptFieldTypeMutex(pilosaclient.CacheType(f.FieldOptions.CacheType), f.FieldOptions.CacheSize)}
 		case f.FieldOptions.TimeQuantum != "":
-			opts = []pilosaclient.FieldOption{pilosaclient.OptFieldTypeTime(pilosaclient.TimeQuantum(f.FieldOptions.TimeQuantum))}
+			opts = []pilosaclient.FieldOption{pilosaclient.OptFieldTypeTime(clienttypes.TimeQuantum(f.FieldOptions.TimeQuantum))}
 			if f.FieldOptions.TTL != "" {
 				ttl, err := time.ParseDuration(f.FieldOptions.TTL)
 				if err != nil {
