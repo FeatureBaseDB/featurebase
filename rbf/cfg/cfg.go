@@ -41,6 +41,9 @@ type Config struct {
 	// background checkpoints. It cannot be set from toml. The default is
 	// to use stderr.
 	Logger logger.Logger `toml:"-"`
+
+	// The maximum number of bits to be deleted in a single transaction default(65536)
+	MaxDelete int `toml:"max-delete"`
 }
 
 func NewDefaultConfig() *Config {
@@ -50,6 +53,7 @@ func NewDefaultConfig() *Config {
 		MinWALCheckpointSize: DefaultMinWALCheckpointSize,
 		MaxWALCheckpointSize: DefaultMaxWALCheckpointSize,
 		FsyncEnabled:         true,
+		MaxDelete:            DefaultMaxDelete,
 
 		// CI passed with 20. 50 was too big for CI, even on X-large instances.
 		// For now we default to 0, which means use sync.Pool.

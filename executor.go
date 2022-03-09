@@ -8504,7 +8504,7 @@ func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64,
 	}
 	var change bool
 	var err error
-	limit := 65536
+	limit := idx.holder.cfg.RBFConfig.MaxDelete
 	for i := 0; i < len(bits); i += limit {
 		batch := roaring.NewBitmap(bits[i:min(i+limit, len(bits))]...)
 		if idx.Keys() {
