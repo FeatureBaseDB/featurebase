@@ -328,7 +328,7 @@ func (f *fragment) rowFromStorage(tx Tx, rowID uint64) (*Row, error) {
 	}
 
 	row := &Row{
-		segments: []rowSegment{{
+		Segments: []RowSegment{{
 			data:     data,
 			shard:    f.shard,
 			writable: true,
@@ -735,7 +735,7 @@ func (f *fragment) sum(tx Tx, filter *Row, bitDepth uint64) (sum int64, count ui
 	// though, we want to run with no-filter, as opposed to an empty filter.
 	var filterData *roaring.Bitmap
 	if filter != nil {
-		for _, seg := range filter.segments {
+		for _, seg := range filter.Segments {
 			if seg.shard == f.shard {
 				filterData = seg.data
 				break
@@ -2524,7 +2524,7 @@ func (f *fragment) unprotectedUnionRows(ctx context.Context, tx Tx, rows []uint6
 		return nil, err
 	} else {
 		row := &Row{
-			segments: []rowSegment{{
+			Segments: []RowSegment{{
 				data:     filter.Results(f.shard),
 				shard:    f.shard,
 				writable: true,

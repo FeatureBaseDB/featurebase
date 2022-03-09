@@ -69,11 +69,11 @@ func TestBSIAdd(t *testing.T) {
 				builderB.Insert(uint64(id), vb)
 			}
 			dataA, dataB := builderA.Build(), builderB.Build()
-			dataC := addBSI(dataA, dataB)
+			dataC := AddBSI(dataA, dataB)
 
 			// build results from added bsiData; results[i] should hold a[i]+b[i]
 			results := make([]uint64, len(a))
-			dataC.pivotDescending(NewRow().Union(dataC...), 0, nil, nil, func(count uint64, ids ...uint64) {
+			dataC.PivotDescending(NewRow().Union(dataC...), 0, nil, nil, func(count uint64, ids ...uint64) {
 				for _, id := range ids {
 					results[idToIndex[int(id)]] = count
 				}
@@ -141,10 +141,10 @@ func TestBSIAddCases(t *testing.T) {
 			}
 
 			dataA, dataB := builderA.Build(), builderB.Build()
-			dataC := addBSI(dataA, dataB)
+			dataC := AddBSI(dataA, dataB)
 			// maps id to count
 			results := make(map[uint64]uint64)
-			dataC.pivotDescending(NewRow().Union(dataC...), 0, nil, nil, func(count uint64, ids ...uint64) {
+			dataC.PivotDescending(NewRow().Union(dataC...), 0, nil, nil, func(count uint64, ids ...uint64) {
 				for _, id := range ids {
 					results[id] = count
 				}

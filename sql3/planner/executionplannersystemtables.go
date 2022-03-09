@@ -11,6 +11,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Ensure type implements interface.
+var _ pilosa.SchemaAPI = (*systemTableDefintionsWrapper)(nil)
+
 type systemTableDefintionsWrapper struct {
 	schemaAPI pilosa.SchemaAPI
 }
@@ -51,6 +54,10 @@ func (s *systemTableDefintionsWrapper) IndexInfo(ctx context.Context, indexName 
 		return nil, err
 	}
 	return i, nil
+}
+
+func (s *systemTableDefintionsWrapper) FieldInfo(ctx context.Context, indexName, fieldName string) (*pilosa.FieldInfo, error) {
+	return nil, pilosa.ErrNotImplemented
 }
 
 func (s *systemTableDefintionsWrapper) Schema(ctx context.Context, withViews bool) ([]*pilosa.IndexInfo, error) {

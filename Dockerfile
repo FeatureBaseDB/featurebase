@@ -38,7 +38,7 @@ FROM alpine:3.13.2 as runner
 
 LABEL maintainer "dev@molecula.com"
 
-RUN apk add --no-cache curl jq
+RUN apk add --no-cache curl jq tree
 
 COPY --from=pilosa-builder /pilosa/build/featurebase /
 

@@ -22,7 +22,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // container turns a docker-compose service name into a container ID
@@ -313,91 +312,6 @@ func ingestRandomData(ctx context.Context, cli *pilosa.InternalClient, index, fi
 		}
 	}
 	return nil
-}
-
-func TestRetryLogic(t *testing.T) {
-	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
-		t.Skip("pilosa cluster tests are not enabled")
-	}
-	ctx := context.Background()
-	auth := false
-	if os.Getenv("ENABLE_AUTH") == "1" {
-		auth = true
-	}
-	if auth {
-		token := GetAuthToken(t)
-		ctx = authn.WithAccessToken(ctx, "Bearer "+token)
-	}
-
-	var addrs = []string{"pilosa1:10101", "pilosa2:10101", "pilosa3:10101"}
-	cli, err := getClients(addrs)
-	if err != nil {
-		t.Fatalf("getting client: %v", err)
-	}
-	g := new(errgroup.Group)
-	g.Go(func() error {
-		return ingestRandomData(ctx, cli[0], "testidx1", "testfield1", 100000)
-	})
-	if err := pauseNode(t, "pilosa2"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	if err := pauseNode(t, "pilosa3"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	time.Sleep(6 * time.Second)
-	if err := unpauseNode(t, "pilosa2"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	if err := unpauseNode(t, "pilosa3"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	time.Sleep(10 * time.Second)
-	g.Go(func() error {
-		return ingestRandomData(ctx, cli[1], "testidx2", "testfield2", 10000)
-	})
-	if err := pauseNode(t, "pilosa3"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	if err := pauseNode(t, "pilosa1"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	time.Sleep(6 * time.Second)
-	if err := unpauseNode(t, "pilosa3"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	time.Sleep(6 * time.Second)
-	if err := pauseNode(t, "pilosa2"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	time.Sleep(6 * time.Second)
-	if err := unpauseNode(t, "pilosa1"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	if err := unpauseNode(t, "pilosa2"); err != nil {
-		t.Fatalf("sending pause command: %v", err)
-	}
-	if err = g.Wait(); err != nil {
-		t.Fatal(err)
-	}
-	waitForStatus(t, cli[0].Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
-
-	// check data in all three nodes.
-	for i, c := range cli {
-		r, err := c.Query(ctx, "testidx1", &pilosa.QueryRequest{Index: "testidx1", Query: "Count(Row(testfield1 = 0))"})
-		if err != nil {
-			t.Fatalf("count querying pilosa%d, %v", i, err)
-		}
-		if r.Results[0].(uint64) != 100000 {
-			t.Fatalf("count on pilosa%d after import is %d", i, r.Results[0].(uint64))
-		}
-		r, err = c.Query(ctx, "testidx2", &pilosa.QueryRequest{Index: "testidx2", Query: "Count(Row(testfield2 = 0))"})
-		if err != nil {
-			t.Fatalf("count querying pilosa%d, %v", i, err)
-		}
-		if r.Results[0].(uint64) != 10000 {
-			t.Fatalf("count on pilosa%d after import is %d", i, r.Results[0].(uint64))
-		}
-	}
 }
 
 func waitForStatus(t *testing.T, stator func(context.Context) (string, error), status string, n int, sleep time.Duration, ctx context.Context) {

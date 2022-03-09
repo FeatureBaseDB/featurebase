@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+
+##########################
+### datagen builder    ###
+##########################
+
+FROM golang:alpine as builder
+
+WORKDIR /featurebase
+
+COPY . ./
+
+RUN apk add --no-cache build-base bash git make librdkafka pkgconfig
+
+# install librdkafka
+RUN git clone https://github.com/edenhill/librdkafka.git
+RUN cd librdkafka && ./configure --prefix /usr && make && make install
+
+ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
+
+RUN cd idk && make build-datagen
+
+# ENTRYPOINT ["tail", "-f", "/dev/null"]
+
+#########################
+### datagen runner    ###
+#########################
+
+FROM alpine:3.15.3 as runner
+
+WORKDIR /
+
+LABEL maintainer "dev@molecula.com"
+
+RUN apk add --no-cache curl jq
+
+COPY --from=builder /featurebase/idk/build/datagen /bin/
+COPY --from=builder /usr/lib/librdkafka* /usr/lib/
+COPY idk/datagen/testdata/* /testdata/
+
+EXPOSE 8080
+
+# VOLUME /data
+# ENV ADDR 0.0.0.0:8080
+
+#ENTRYPOINT ["sleep", "infinity"]
+ENTRYPOINT ["datagen"]

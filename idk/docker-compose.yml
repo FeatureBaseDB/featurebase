@@ -35,7 +35,7 @@ services:
       KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
     volumes:
       - ./docker-sasl/ssl_keys:/etc/kafka/secrets
-      
+
     depends_on:
       - zookeeper
 
@@ -67,20 +67,22 @@ services:
       - kafka
 
   pilosa:
-    image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    #image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME} # (jaffee) I think we should build directly from this tree rather than pulling the image... makes the local dev flow easier
+    build: ..
     environment:
       PILOSA_DATA_DIR: /data
       PILOSA_BIND: 0.0.0.0:10101
       PILOSA_BIND_GRPC: 0.0.0.0:20101
       PILOSA_ADVERTISE: pilosa:10101
       PILOSA_LOOKUP_DB_DSN: "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable"
-    depends_on: 
+    depends_on:
       - postgres
     volumes:
       - ./testenv/certs:/certs
 
   pilosa-tls:
-    image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    #image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    build: ..
     environment:
       PILOSA_DATA_DIR: /data
       PILOSA_BIND: https://0.0.0.0:10111
@@ -94,7 +96,8 @@ services:
       - ./testenv/certs:/certs
 
   pilosa-auth:
-    image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    #image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    build: ..
     environment:
       PILOSA_DATA_DIR: /data
       PILOSA_BIND: 0.0.0.0:10105
@@ -122,8 +125,8 @@ services:
       - ./docker-sasl/ssl_keys:/ssl_keys
       - ./testdata:/testdata
     depends_on:
-      - kafka
-      - postgres
+      #- kafka
+      #- postgres
       - fakeidp
   wait:
     build:
@@ -132,5 +135,21 @@ services:
     volumes:
       - ./testenv/certs:/certs
 
-
-
+  dax:
+    build:
+      context: ..
+      dockerfile: Dockerfile-dax
+    image: idk_dax:latest
+    environment:
+      FEATUREBASE_BIND: 0.0.0.0:8080
+      FEATUREBASE_VERBOSE: "true"
+      FEATUREBASE_STORAGE_METHOD: boltdb
+      FEATUREBASE_STORAGE_DSN: file:/dax-data/mds.boldtb
+      FEATUREBASE_QUERYER_RUN: "true"
+      FEATUREBASE_MDS_RUN: "true"
+      FEATUREBASE_WRITELOGGER_RUN: "true"
+      FEATUREBASE_WRITELOGGER_CONFIG_DATA_DIR: /dax-data/wl
+      FEATUREBASE_SNAPSHOTTER_RUN: "true"
+      FEATUREBASE_SNAPSHOTTER_CONFIG_DATA_DIR: /dax-data/snaps
+      FEATUREBASE_COMPUTER_RUN: "true"
+      FEATUREBASE_COMPUTER_CONFIG_DATA_DIR: /dax-data/computer

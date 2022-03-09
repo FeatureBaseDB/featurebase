@@ -296,6 +296,8 @@ func (c *Custom) Source(cfg SourceConfig) idk.Source {
 		recordsToGenerate = cfg.endAt - cfg.startFrom
 	}
 	return &CustomSource{
+		cur:    cfg.startFrom,
+		endAt:  cfg.endAt,
 		conf:   c.CustomConfig,
 		schema: c.IDKAndGenFields.schema,
 
@@ -333,6 +335,8 @@ var _ idk.Source = (*CustomSource)(nil)
 // CustomSource is an instance of a source generated
 // by the Sourcer implementation Custom.
 type CustomSource struct {
+	cur        uint64
+	endAt      uint64
 	conf       *CustomConfig
 	generators []FieldGenerator
 
@@ -353,6 +357,10 @@ func (cs *CustomSource) Schema() []idk.Field {
 // any of the generators are nil, it uses the value from the last
 // non-nil generator.
 func (cs *CustomSource) Record() (idk.Record, error) {
+	if cs.cur >= cs.endAt {
+		return nil, io.EOF
+	}
+
 	// track last generated value
 	var last interface{}
 	for i, gen := range cs.generators {
@@ -364,7 +372,7 @@ func (cs *CustomSource) Record() (idk.Record, error) {
 		var err error
 		cs.record[i], err = gen.Generate(cs.record[i])
 		if err == io.EOF {
-			return nil, nil
+			return nil, io.EOF
 		}
 		if err != nil {
 			return nil, errors.Wrapf(err, "generating for %+v", cs.schema[i])
@@ -377,6 +385,7 @@ func (cs *CustomSource) Record() (idk.Record, error) {
 	} else {
 		cs.recordCounter++
 	}
+	cs.cur++
 	return cs.record, nil
 }
 

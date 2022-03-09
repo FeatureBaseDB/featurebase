@@ -39,8 +39,8 @@ func fromClientIndexOptions(cio IndexOptions) featurebase.IndexOptions {
 	}
 }
 
-// toClientIndex
-func toClientIndex(fi *featurebase.IndexInfo) *Index {
+// ToClientIndex
+func ToClientIndex(fi *featurebase.IndexInfo) *Index {
 	sch := NewSchema()
 	return sch.Index(fi.Name,
 		OptIndexKeys(fi.Options.Keys),
@@ -80,8 +80,8 @@ func fromClientFieldOptions(cfo FieldOptions) featurebase.FieldOptions {
 	}
 }
 
-// toClientField
-func toClientField(index string, ff *featurebase.FieldInfo) (*Field, error) {
+// ToClientField
+func ToClientField(index string, ff *featurebase.FieldInfo) (*Field, error) {
 	sch := NewSchema()
 	idx := sch.Index(index)
 
@@ -171,11 +171,11 @@ func (i *importer) FinishTransaction(ctx context.Context, id string) (*featureba
 }
 
 func (i *importer) CreateIndexKeys(ctx context.Context, idx *featurebase.IndexInfo, keys ...string) (map[string]uint64, error) {
-	return i.Client.CreateIndexKeys(toClientIndex(idx), keys...)
+	return i.Client.CreateIndexKeys(ToClientIndex(idx), keys...)
 }
 
 func (i *importer) CreateFieldKeys(ctx context.Context, index string, field *featurebase.FieldInfo, keys ...string) (map[string]uint64, error) {
-	fld, err := toClientField(index, field)
+	fld, err := ToClientField(index, field)
 	if err != nil {
 		return nil, errors.Wrap(err, "converting to client field")
 	}
@@ -183,7 +183,7 @@ func (i *importer) CreateFieldKeys(ctx context.Context, index string, field *fea
 }
 
 func (i *importer) ImportRoaringBitmap(ctx context.Context, index string, field *featurebase.FieldInfo, shard uint64, views map[string]*roaring.Bitmap, clear bool) error {
-	fld, err := toClientField(index, field)
+	fld, err := ToClientField(index, field)
 	if err != nil {
 		return errors.Wrap(err, "converting to client field")
 	}
@@ -195,7 +195,7 @@ func (i *importer) ImportRoaringShard(ctx context.Context, index string, shard u
 }
 
 func (i *importer) EncodeImportValues(ctx context.Context, index string, field *featurebase.FieldInfo, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error) {
-	fld, err := toClientField(index, field)
+	fld, err := ToClientField(index, field)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "converting to client field")
 	}
@@ -203,7 +203,7 @@ func (i *importer) EncodeImportValues(ctx context.Context, index string, field *
 }
 
 func (i *importer) EncodeImport(ctx context.Context, index string, field *featurebase.FieldInfo, shard uint64, vals, ids []uint64, clear bool) (path string, data []byte, err error) {
-	fld, err := toClientField(index, field)
+	fld, err := ToClientField(index, field)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "converting to client field")
 	}

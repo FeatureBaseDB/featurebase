@@ -28,6 +28,9 @@ at https://docs.featurebase.com/.
 ` + pilosa.VersionInfo(true) + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
+			if cmd.Use == "dax" {
+				v.Set("future.rename", true) // always use FEATUREBASE env for dax
+			}
 			err := setAllConfig(v, cmd.Flags())
 			if err != nil {
 				return err
@@ -67,6 +70,7 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
 	rc.AddCommand(newKeygenCommand(stdin, stdout, stderr))
 	rc.AddCommand(newCLICommand(stdin, stdout, stderr))
+	rc.AddCommand(newDAXCommand(stdin, stdout, stderr))
 
 	rc.SetOutput(stderr)
 	return rc
@@ -118,10 +122,12 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet) error { // nolint: unpar
 
 		for _, key := range v.AllKeys() {
 			if _, ok := validTags[key]; !ok {
+				if key == "future.rename" {
+					continue
+				}
 				return fmt.Errorf("invalid option in configuration file: %v", key)
 			}
 		}
-
 	}
 
 	// set all values from viper

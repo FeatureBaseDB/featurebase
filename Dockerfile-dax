@@ -1,0 +1,32 @@
+ARG GO_VERSION=latest
+
+
+###########################
+### FeatureBase Builder ###
+###########################
+
+FROM golang:${GO_VERSION} as featurebase-builder
+ARG MAKE_FLAGS
+WORKDIR /fb
+
+COPY . ./
+RUN make build FLAGS="-o build/featurebase" ${MAKE_FLAGS}
+
+##########################
+### FeatureBase runner ###
+##########################
+
+FROM alpine:3.13.2 as runner
+
+LABEL maintainer "dev@featurebase.com"
+
+RUN apk add --no-cache curl jq tree
+
+COPY --from=featurebase-builder /fb/build/featurebase /
+
+COPY NOTICE /NOTICE
+
+EXPOSE 8080
+
+ENTRYPOINT ["/featurebase"]
+CMD ["dax"]

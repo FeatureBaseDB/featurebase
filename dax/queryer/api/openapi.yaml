@@ -1,0 +1,99 @@
+openapi: 3.0.3
+
+info:
+  title: Queryer
+  description: The query layer of the DAX architecture.
+  version: 0.0.0
+
+paths:
+  /queryer/health:
+    get:
+      summary: Health check endpoint.
+      description: Provides an endpoint to check the overall health of the Queryer service.
+      operationId: GetHealth
+      responses:
+        200:
+          description: Service is healthy.
+
+  /queryer/query:
+    post:
+      summary: Execute either a PQL or SQL command.
+      description: Executes the given PQL or SQL command based on input, and returns the results in a standard format.
+      operationId: PostQuery
+      requestBody:
+        content:
+          application/json:
+            examples:
+              pql:
+                summary: Query via PQL
+                value:
+                  table: tbl
+                  pql: Row(fld=1)
+              sql:
+                summary: Query via SQL
+                value:
+                  sql: SELECT * from tbl
+            schema:
+              type: object
+              properties:
+                table:
+                  type: string
+                pql:
+                  type: string
+                sql:
+                  type: string
+      responses:
+        200:
+          $ref: '#/components/responses/QueryResponse'
+
+  /queryer/sql:
+    post:
+      summary: Execute a SQL command.
+      description: Executes the given SQL command, and returns the results in a standard format.
+      operationId: PostSQL
+      requestBody:
+        content:
+          text/plain:
+            example: SELECT * FROM tbl
+            schema:
+              type: string
+      responses:
+        200:
+          $ref: '#/components/responses/QueryResponse'
+
+components:
+  responses:
+    QueryResponse:
+      description: Standard tabular response with optional error and warnings.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QueryResult'
+  schemas:
+    QueryResult:
+      type: object
+      properties:
+        schema:
+          type: array # fields
+          items:
+            type: object  # field
+            properties:
+              name:
+                type: string # column name
+              type:
+                type: string # column type
+        data:
+          type: array
+          items:
+            type: array
+            items:
+              type: string # this could really be any type; interface{}
+        error:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        exec_time:
+          type: integer
+          format: int64

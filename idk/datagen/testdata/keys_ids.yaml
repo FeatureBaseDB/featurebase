@@ -1,0 +1,25 @@
+fields:
+  - name: "uuid"
+    type: string
+    distribution: "shifting"
+    step: 10 # step for "shifting" distribution means how often do we shift. Every time we generate a value, we'll add an amount to it, every <step> generations, we'll increase the amount by one. 
+    cardinality: 400000000
+    max_len: 32
+    s: 1.01
+    v: 200
+    null_chance: 0  
+  - name: "slice"
+    type: "uint-set" # (default IDArrayField)
+    min: 0
+    max: 35000
+    distribution: "zipfian"
+    s: 1.1
+    v: 5.1
+    min_num: 1
+    max_num: 50
+
+# idk_params describe how data from "fields" should be ingested by IDK
+idk_params:
+  primary_key_config:
+    field: "uuid" 
+

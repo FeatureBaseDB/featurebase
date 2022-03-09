@@ -1,4 +1,4 @@
-// Package errors wraps pkg/errors and includes some custom featurs such as
+// Package errors wraps pkg/errors and includes some custom features such as
 // error codes.
 package errors
 
@@ -83,3 +83,7 @@ func (ce codedError) Is(err error) bool {
 	}
 	return false
 }
+
+const (
+	ErrUncoded Code = "Uncoded"
+)

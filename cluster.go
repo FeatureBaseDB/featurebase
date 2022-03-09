@@ -5,12 +5,15 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/dax/computer"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -68,6 +71,13 @@ type cluster struct { // nolint: maligned
 	confirmDownSleep   time.Duration
 
 	partitionAssigner string
+
+	writeLogWriter computer.WriteLogWriter
+	versionStore   dax.VersionStore
+
+	// isComputeNode is set to true if this node is running as a DAX compute
+	// node.
+	isComputeNode bool
 }
 
 // newCluster returns a new instance of Cluster with defaults.
@@ -90,6 +100,8 @@ func newCluster() *cluster {
 
 		disCo: disco.NopDisCo,
 		noder: disco.NewEmptyLocalNoder(),
+
+		writeLogWriter: computer.NewNopWriteLogWriter(),
 	}
 }
 
@@ -323,8 +335,35 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 		return nil, errors.Errorf("translating field(%s/%s) keys(%v) - cannot find primary node", field.Index(), field.Name(), keys)
 	}
 	if c.Node.ID == primary.ID {
-		// The local copy is the authoritative copy.
-		return field.TranslateStore().CreateKeys(keys...)
+		translations, err := field.TranslateStore().CreateKeys(keys...)
+		if err != nil {
+			return nil, errors.Errorf("creating field(%s/%s) keys(%v)", field.Index(), field.Name(), keys)
+		}
+
+		// If this is not a DAX compute node, bail early; there's no need to
+		// send data to the write log.
+		if !c.isComputeNode {
+			return translations, nil
+		}
+
+		// Send to write log.
+		tkey := dax.TableKey(field.Index())
+		qtid := tkey.QualifiedTableID()
+		fieldName := dax.FieldName(field.Name())
+
+		// Get the current version for field.
+		version, found, err := c.versionStore.FieldVersion(ctx, qtid, fieldName)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting field version")
+		} else if !found {
+			return nil, errors.Errorf("no version found for table(%s) field(%s)", qtid, fieldName)
+		}
+
+		if err := c.writeLogWriter.CreateFieldKeys(ctx, qtid, fieldName, version, translations); err != nil {
+			return nil, errors.Errorf("logging field(%s/%s) keys(%v)", field.Index(), field.Name(), keys)
+		}
+
+		return translations, nil
 	}
 
 	// Attempt to find the keys locally.
@@ -515,6 +554,13 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	for _, key := range keys {
 		partitionID := snap.KeyToKeyPartition(indexName, key)
 		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
+
+		// This node only handles keys for the partition(s) that it owns.
+		if c.isComputeNode {
+			if !intInPartitions(partitionID, idx.translatePartitions) {
+				return nil, errors.Errorf("cannot find key on this partition: %s, %d", key, partitionID)
+			}
+		}
 	}
 
 	// TODO: use local replicas to short-circuit network traffic
@@ -624,6 +670,14 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 	for _, key := range keys {
 		partitionID := snap.KeyToKeyPartition(indexName, key)
 		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
+
+		// This node only handles keys for the partition(s) that it owns.
+		if c.isComputeNode {
+			if !intInPartitions(partitionID, idx.translatePartitions) {
+				log.Printf("cannot create key on this partition: %s, %d", key, partitionID)
+				return nil, errors.Errorf("cannot create key on this partition: %s, %d", key, partitionID)
+			}
+		}
 	}
 
 	// TODO: use local replicas to short-circuit network traffic
@@ -689,7 +743,27 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 			}
 
 			translateResults <- translations
-			return nil
+
+			// If this is not a DAX compute node, bail early; there's no need to
+			// send data to the write log.
+			if !c.isComputeNode {
+				return nil
+			}
+
+			// Send to write log.
+			tkey := dax.TableKey(idx.Name())
+			qtid := tkey.QualifiedTableID()
+			partitionNum := dax.PartitionNum(partitionID)
+
+			// Get the current version for partition.
+			version, found, err := c.versionStore.PartitionVersion(ctx, qtid, partitionNum)
+			if err != nil {
+				return errors.Wrap(err, "getting partition version")
+			} else if !found {
+				return errors.Errorf("no version found for table(%s) partition(%d)", qtid, partitionNum)
+			}
+
+			return c.writeLogWriter.CreateTableKeys(ctx, qtid, partitionNum, version, translations)
 		})
 	}
 
@@ -744,6 +818,12 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 	idsByPartition := make(map[int][]uint64, c.partitionN)
 	for id := range idSet {
 		partitionID := snap.IDToShardPartition(indexName, id)
+		// This node only handles keys for the partition(s) that it owns.
+		if c.isComputeNode {
+			if !intInPartitions(partitionID, index.translatePartitions) {
+				return nil, errors.Errorf("cannot find id on this partition: %d, %d", id, partitionID)
+			}
+		}
 		idsByPartition[partitionID] = append(idsByPartition[partitionID], id)
 	}
 
@@ -911,4 +991,13 @@ const (
 type TransactionMessage struct {
 	Transaction *Transaction
 	Action      string
+}
+
+func intInPartitions(i int, s dax.Partitions) bool {
+	for _, a := range s {
+		if int(a.Num) == i {
+			return true
+		}
+	}
+	return false
 }

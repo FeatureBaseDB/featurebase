@@ -14,8 +14,9 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/pql"
+	pilosa "github.com/molecula/featurebase/v3"
+	clienttypes "github.com/molecula/featurebase/v3/client/types"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/pkg/errors"
 )
 
@@ -102,7 +103,7 @@ func TestORM(t *testing.T) {
 
 	t.Run("NewIndexCopy", func(t *testing.T) {
 		index := schema.Index("my-index-4copy", OptIndexKeys(true))
-		index.Field("my-field-4copy", OptFieldTypeTime(TimeQuantumDayHour))
+		index.Field("my-field-4copy", OptFieldTypeTime(clienttypes.TimeQuantumDayHour))
 		copiedIndex := index.copy()
 		if !reflect.DeepEqual(index, copiedIndex) {
 			t.Fatalf("copied index should be equivalent")
@@ -920,7 +921,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeSet,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeRanked,
 			9999,
 			pql.NewDecimal(0, 0),
@@ -940,7 +941,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeInt,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(-10, 0),
@@ -959,7 +960,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeInt,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(-10, 0),
@@ -976,7 +977,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeInt,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(math.MinInt64, 0),
@@ -994,7 +995,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeInt,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(math.MinInt64, 0),
@@ -1005,7 +1006,7 @@ func TestORM(t *testing.T) {
 	})
 
 	t.Run("TimeFieldOptions", func(t *testing.T) {
-		field := sampleIndex.Field("time-field", OptFieldTypeTime(TimeQuantumDayHour, true))
+		field := sampleIndex.Field("time-field", OptFieldTypeTime(clienttypes.TimeQuantumDayHour, true))
 		if true != field.Opts().NoStandardView() {
 			t.Fatalf("field noStandardView %v != %v", true, field.Opts().NoStandardView())
 		}
@@ -1017,7 +1018,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeTime,
-			TimeQuantumDayHour,
+			clienttypes.TimeQuantumDayHour,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(0, 0),
@@ -1028,7 +1029,7 @@ func TestORM(t *testing.T) {
 	})
 
 	t.Run("TTLOptions", func(t *testing.T) {
-		field := sampleIndex.Field("ttl-field", OptFieldTypeTime(TimeQuantumDayHour, true), OptFieldTTL(0))
+		field := sampleIndex.Field("ttl-field", OptFieldTypeTime(clienttypes.TimeQuantumDayHour, true), OptFieldTTL(0))
 		if true != field.Opts().NoStandardView() {
 			t.Fatalf("field noStandardView %v != %v", true, field.Opts().NoStandardView())
 		}
@@ -1040,7 +1041,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeTime,
-			TimeQuantumDayHour,
+			clienttypes.TimeQuantumDayHour,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(0, 0),
@@ -1060,7 +1061,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeMutex,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeRanked,
 			9999,
 			pql.NewDecimal(0, 0),
@@ -1080,7 +1081,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeBool,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(0, 0),
@@ -1100,7 +1101,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeDecimal,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(7, 3),
@@ -1120,7 +1121,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeDecimal,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(7, 3),
@@ -1142,7 +1143,7 @@ func TestORM(t *testing.T) {
 		compareFieldOptions(t,
 			field.Options(),
 			FieldTypeTimestamp,
-			TimeQuantumNone,
+			clienttypes.TimeQuantumNone,
 			CacheTypeDefault,
 			0,
 			pql.NewDecimal(MinTimestamp.UnixNano()/TimeUnitNanos(pilosa.TimeUnitSeconds), 0),
@@ -1198,7 +1199,7 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, timeQuantum TimeQuantum, cacheType CacheType, cacheSize int, min pql.Decimal, max pql.Decimal, foreignIndex string, timeUnit string, ttl time.Duration) {
+func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, timeQuantum clienttypes.TimeQuantum, cacheType CacheType, cacheSize int, min pql.Decimal, max pql.Decimal, foreignIndex string, timeUnit string, ttl time.Duration) {
 	if fieldType != opts.Type() {
 		t.Fatalf("%s != %s", fieldType, opts.Type())
 	}

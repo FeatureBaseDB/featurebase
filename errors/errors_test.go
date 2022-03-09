@@ -9,27 +9,8 @@ import (
 )
 
 func TestErrors(t *testing.T) {
-
-	var errUncoded errors.Code = "TestErrUncoded"
-	var errFieldNotFound errors.Code = "TestErrFieldNotFound"
-	var errTableNotFound errors.Code = "TestErrTableNotFound"
-
-	newErrFieldNotFound := func(fld string) error {
-		return errors.New(
-			errFieldNotFound,
-			fmt.Sprintf("field not found '%s'", fld),
-		)
-	}
-
-	newErrTableNotFound := func(tbl string) error {
-		return errors.New(
-			errTableNotFound,
-			fmt.Sprintf("table not found '%s'", tbl),
-		)
-	}
-
 	t.Run("Is", func(t *testing.T) {
-		uncoded := errors.New(errUncoded, "uncoded error")
+		uncoded := newUncoded("uncoded error")
 		fnf := newErrFieldNotFound("fld")
 		tnf := newErrTableNotFound("tbl")
 		fnfCustom := errors.New(errFieldNotFound, "custom field message")
@@ -78,4 +59,33 @@ func TestErrors(t *testing.T) {
 			})
 		}
 	})
+}
+
+// Test error codes.
+
+const (
+	errUncoded       errors.Code = "Uncoded"
+	errFieldNotFound errors.Code = "FieldNotFound"
+	errTableNotFound errors.Code = "TableNotFound"
+)
+
+func newUncoded(message string) error {
+	return errors.New(
+		errUncoded,
+		message,
+	)
+}
+
+func newErrFieldNotFound(field string) error {
+	return errors.New(
+		errFieldNotFound,
+		"field not found: "+field,
+	)
+}
+
+func newErrTableNotFound(table string) error {
+	return errors.New(
+		errTableNotFound,
+		"table not found: "+table,
+	)
 }

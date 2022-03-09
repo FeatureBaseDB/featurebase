@@ -4,7 +4,6 @@ package planner
 
 import (
 	"context"
-	"encoding/json"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/batch"
@@ -84,18 +83,6 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	// Optimize the plan.
 	if err == nil {
 		rootOperator, err = p.optimizePlan(ctx, rootOperator)
-	}
-
-	// Log the plan. This happens even if an error occurred.
-	switch rootOperator.(type) {
-	case *PlanOpInsert:
-		// Don't log the insert plan since it can be very large.
-	case nil:
-		// pass
-	default:
-		plan := rootOperator.Plan()
-		a, _ := json.MarshalIndent(plan, "", "    ")
-		p.logger.Debugf(string(a))
 	}
 
 	return rootOperator, err
