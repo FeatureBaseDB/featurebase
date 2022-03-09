@@ -287,6 +287,44 @@ func (h *Holder) IndexesPath() string {
 	return filepath.Join(h.path, IndexesDir)
 }
 
+func (h *Holder) deletePerShard(index *Index, shard uint64) error {
+	inprocessRecords := NewRow()
+
+	frag := h.fragment(index.name, existenceFieldName, viewStandard, shard)
+	if frag == nil {
+		return nil
+	}
+
+	tx := index.Txf().NewTx(Txo{Write: !writable, Index: index, Shard: shard})
+	defer tx.Rollback()
+
+	// filter rows based on having _exists>=1, which is used to flag delete in-flight
+	rows, err := frag.rows(context.Background(), tx, 1)
+	if err != nil {
+		return err
+	}
+
+	// check if any rows are found
+	if len(rows) == 0 {
+		return nil
+	}
+
+	for _, record := range rows {
+		row, err2 := frag.row(tx, record)
+		if err2 != nil {
+			return fmt.Errorf("getting row IDs: %v", err2)
+		}
+		inprocessRecords = inprocessRecords.Union(row)
+	}
+	h.Logger.Printf("retrying delete: index=%v shard=%v record count=%v", index.name, shard, inprocessRecords.Count())
+
+	_, err = DeleteRows(context.Background(), inprocessRecords, index, shard)
+	if err != nil {
+		return fmt.Errorf("deleting rows: %v", err)
+	}
+	return nil
+}
+
 // processDeleteInflight checks if deletion was in progress when server shutdown
 // the _exists field is set to row+1 when delete is started. Upon completion, the row is deleted.
 // if _exists>=1, we finish deleting the rows
@@ -294,38 +332,25 @@ func (h *Holder) processDeleteInflight() error {
 	for _, index := range h.Indexes() {
 		if index.trackExistence {
 			shards := index.AvailableShards(includeRemote).Slice()
-
+			index := index
+			ch := make(chan uint64, len(shards))
 			for _, shard := range shards {
-				inprocessRowIDs := NewRow()
-
-				frag := h.fragment(index.name, existenceFieldName, viewStandard, shard)
-				if frag == nil {
-					continue
-				}
-
-				tx := index.Txf().NewTx(Txo{Write: !writable, Index: index, Shard: shard})
-				defer tx.Rollback()
-
-				// filter rows based on having _exists>=1, which is used to flag delete in-flight
-				rows, err := frag.rows(context.Background(), tx, 1)
-				if err != nil {
-					return err
-				}
-
-				// check if any rows are found
-				if len(rows) == 0 {
-					return nil
-				}
-
-				for _, rowID := range rows {
-					row, err2 := frag.row(tx, rowID)
-					if err2 != nil {
-						return err2
-					}
-					inprocessRowIDs = inprocessRowIDs.Union(row)
-				}
-				DeleteRows(context.Background(), inprocessRowIDs, index, shard)
+				ch <- shard
 			}
+			close(ch)
+
+			g := new(errgroup.Group)
+			for i := 0; i < runtime.NumCPU(); i++ {
+				g.Go(func() error {
+					for shard := range ch {
+						if err := h.deletePerShard(index, shard); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+			}
+			g.Wait()
 		}
 	}
 	return nil
