@@ -3567,21 +3567,40 @@ func (c *Container) bitmapToArray() *Container {
 		return c
 	}
 	bitmap := c.bitmap()
-	n := int32(0)
 
-	array := make([]uint16, c.N())
-	for i, word := range bitmap {
-		for word != 0 {
-			t := word & -word
-			if roaringParanoia {
-				if n >= c.N() {
-					panic("bitmap has more bits set than container.n")
+	// FB-1247 adding an extra check just in case c.N proves to be unreliable
+	// TODO  prove this has to be reliable
+	makeArray := func(bm []uint64, ar []uint16) ([]uint16, bool, int32) {
+		n := int32(0)
+		for i, word := range bm {
+			for word != 0 {
+				t := word & -word
+				if roaringParanoia {
+					if n >= c.N() {
+						panic("bitmap has more bits set than container.n")
+					}
 				}
+				if n == int32(len(ar)) {
+					return ar, true, n
+				}
+				ar[n] = uint16((i*64 + int(popcount(t-1))))
+				n++
+				word ^= t
 			}
-			array[n] = uint16((i*64 + int(popcount(t-1))))
-			n++
-			word ^= t
 		}
+		return ar, false, n
+	}
+	array, fail, n := makeArray(bitmap, make([]uint16, c.N()))
+	if fail {
+		// the onlyreason we are here is because N was incorrect
+		// so we force a recount of N and try again
+		c.bitmapRepair() // the onlyreason we are here is because N was incorrect
+		array, fail, n = makeArray(bitmap, make([]uint16, c.N()))
+		if fail {
+			//this should not be able to happen under any circumstance
+			panic("bitmapToArray failure")
+		}
+
 	}
 	if roaringParanoia {
 		if n != c.N() {
