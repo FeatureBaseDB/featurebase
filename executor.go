@@ -8243,9 +8243,23 @@ func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index str
 		return false, errors.New("Delete() only accepts a single bitmap input")
 	}
 
+	if len(c.Children) != 1 {
+
+	}
+
+	row, err := e.executeBitmapCall(ctx, qcx, index, c.Children[0], shards, opt)
+	qcx.Abort()
+	qcx.Reset() //release the qcx to allow for rbf checkpoint
+
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
-		return e.executeDeleteRecordFromShard(ctx, qcx, index, c, shard)
+
+		for i := range row.segments {
+			if row.segments[i].shard == shard {
+				return e.executeDeleteRecordFromShard(ctx, index, row.segments[i].data, shard)
+			}
+		}
+		return false, nil
 	}
 
 	// Merge returned results at coordinating node.
@@ -8279,20 +8293,9 @@ func transactExistRow(ctx context.Context, idx *Index, shard uint64, frag *fragm
 	}
 	return rowID, tx.Commit()
 }
-func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (changed bool, err error) {
+func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index string, columns *roaring.Bitmap, shard uint64) (changed bool, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeDeleteRecordFromShard")
 	defer span.Finish()
-	//need to build the bitmap in the call
-	child := c.Children[0]
-	src, er := e.executeBitmapCallShard(ctx, qcx, index, child, shard)
-	if er != nil {
-		err = er
-		return
-	}
-	if len(src.segments) == 0 { //nothing to remove
-		return
-	}
-	columns := src.segments[0].data //should only be one segment
 	if columns.Count() == 0 {
 		return
 	}
@@ -8302,9 +8305,7 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, qcx *Qcx, i
 		err = newNotFoundError(ErrIndexNotFound, index)
 		return
 	}
-
-	qcx.Abort() // have to release the tx in order for a snapshot to be able to occur
-	qcx.Reset()
+	src := NewRowFromBitmap(columns)
 	return DeleteRowsWithFlow(ctx, src, idx, shard, true)
 }
 
