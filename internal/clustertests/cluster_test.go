@@ -19,7 +19,6 @@ import (
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/ctl"
 	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -92,15 +91,8 @@ func TestClusterStuff(t *testing.T) {
 		auth = true
 	}
 
-	cli1, err := pilosa.NewInternalClient("pilosa1:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
-	if err != nil {
-		t.Fatalf("getting client: %v", err)
-	}
-	cli2, err := pilosa.NewInternalClient("pilosa2:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
-	if err != nil {
-		t.Fatalf("getting client: %v", err)
-	}
-	cli3, err := pilosa.NewInternalClient("pilosa3:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
+	var addrs = []string{"pilosa1:10101", "pilosa2:10101", "pilosa3:10101"}
+	cli, err := getClients(addrs)
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
 	}
@@ -112,10 +104,10 @@ func TestClusterStuff(t *testing.T) {
 		ctx = context.WithValue(ctx, "token", "Bearer "+token)
 	}
 
-	if err := cli1.CreateIndex(ctx, "testidx", pilosa.IndexOptions{}); err != nil {
+	if err := cli[0].CreateIndex(ctx, "testidx", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	if err := cli1.CreateFieldWithOptions(ctx, "testidx", "testf", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: 100}); err != nil {
+	if err := cli[0].CreateFieldWithOptions(ctx, "testidx", "testf", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: 100}); err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
 
@@ -131,7 +123,7 @@ func TestClusterStuff(t *testing.T) {
 		req.ColumnIDs[i%10] = uint64((i/10)*pilosa.ShardWidth + i%10)
 		req.Shard = uint64(i / 10)
 		if i%10 == 9 {
-			err = cli1.Import(ctx, nil, req, &pilosa.ImportOptions{})
+			err = cli[0].Import(ctx, nil, req, &pilosa.ImportOptions{})
 			if err != nil {
 				t.Fatalf("importing: %v", err)
 			}
@@ -139,8 +131,8 @@ func TestClusterStuff(t *testing.T) {
 	}
 
 	// Check query results from each node.
-	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
-		r, err := cli.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
+	for i, c := range cli {
+		r, err := c.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
 		if err != nil {
 			t.Fatalf("count querying pilosa%d: %v", i, err)
 		}
@@ -158,12 +150,12 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("sending unpause: %v", err)
 		}
 		t.Log("done with pause, waiting for stability")
-		waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
+		waitForStatus(t, cli[0].Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
 		t.Log("done waiting for stability")
 
 		// Check query results from each node.
-		for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
-			r, err := cli.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
+		for i, c := range cli {
+			r, err := c.Query(ctx, "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})
 			if err != nil {
 				t.Fatalf("count querying pilosa%d: %v", i, err)
 			}
@@ -332,78 +324,68 @@ func TestRetryLogic(t *testing.T) {
 		ctx = context.WithValue(ctx, "token", "Bearer "+token)
 	}
 
-	cli1, err := pilosa.NewInternalClient("pilosa1:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
+	var addrs = []string{"pilosa1:10101", "pilosa2:10101", "pilosa3:10101"}
+	cli, err := getClients(addrs)
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
 	}
-	cli2, err := pilosa.NewInternalClient("pilosa2:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
-	if err != nil {
-		t.Fatalf("getting client: %v", err)
-	}
-	cli3, err := pilosa.NewInternalClient("pilosa3:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
-	if err != nil {
-		t.Fatalf("getting client: %v", err)
-	}
-
 	g := new(errgroup.Group)
 	g.Go(func() error {
-		return ingestRandomData(ctx, cli1, "testidx1", "testfield1", 100000)
+		return ingestRandomData(ctx, cli[0], "testidx1", "testfield1", 100000)
 	})
-	if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := pauseNode(t, "pilosa2"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
-	if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := pauseNode(t, "pilosa3"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
 	time.Sleep(6 * time.Second)
-	if err = sendCmd("docker", "unpause", container(t, "pilosa2")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := unpauseNode(t, "pilosa2"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
-	if err = sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := unpauseNode(t, "pilosa3"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
 	time.Sleep(10 * time.Second)
 	g.Go(func() error {
-		return ingestRandomData(ctx, cli2, "testidx2", "testfield2", 10000)
+		return ingestRandomData(ctx, cli[1], "testidx2", "testfield2", 10000)
 	})
-	if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := pauseNode(t, "pilosa3"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
-	if err = sendCmd("docker", "pause", container(t, "pilosa1")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
-	}
-	time.Sleep(6 * time.Second)
-	if err = sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := pauseNode(t, "pilosa1"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
 	time.Sleep(6 * time.Second)
-	if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := unpauseNode(t, "pilosa3"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
 	time.Sleep(6 * time.Second)
-	if err = sendCmd("docker", "unpause", container(t, "pilosa1")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	if err := pauseNode(t, "pilosa2"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
-	if err = sendCmd("docker", "unpause", container(t, "pilosa2")); err != nil {
-		t.Fatalf("sending docker pause %v", err)
+	time.Sleep(6 * time.Second)
+	if err := unpauseNode(t, "pilosa1"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
+	}
+	if err := unpauseNode(t, "pilosa2"); err != nil {
+		t.Fatalf("sending pause command: %v", err)
 	}
 	if err = g.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
+	waitForStatus(t, cli[0].Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
 
 	// check data in all three nodes.
-	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
-		r, err := cli.Query(ctx, "testidx1", &pilosa.QueryRequest{Index: "testidx1", Query: "Count(Row(testfield1 = 0))"})
+	for i, c := range cli {
+		r, err := c.Query(ctx, "testidx1", &pilosa.QueryRequest{Index: "testidx1", Query: "Count(Row(testfield1 = 0))"})
 		if err != nil {
 			t.Fatalf("count querying pilosa%d, %v", i, err)
 		}
 		if r.Results[0].(uint64) != 100000 {
 			t.Fatalf("count on pilosa%d after import is %d", i, r.Results[0].(uint64))
 		}
-	}
-	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
-		r, err := cli.Query(ctx, "testidx2", &pilosa.QueryRequest{Index: "testidx2", Query: "Count(Row(testfield2 = 0))"})
+		r, err = c.Query(ctx, "testidx2", &pilosa.QueryRequest{Index: "testidx2", Query: "Count(Row(testfield2 = 0))"})
 		if err != nil {
 			t.Fatalf("count querying pilosa%d, %v", i, err)
 		}
