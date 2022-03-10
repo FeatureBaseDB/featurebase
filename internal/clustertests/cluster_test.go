@@ -289,7 +289,7 @@ func TestClusterStuff(t *testing.T) {
 	})
 }
 
-func ingestRandomData(ctx context.Context, cli *pilosa.InternalClient, index, field string) error {
+func ingestRandomData(ctx context.Context, cli *pilosa.InternalClient, index, field string, size int) error {
 	if err := cli.CreateIndex(ctx, index, pilosa.IndexOptions{}); err != nil {
 		return fmt.Errorf("creating index: %v", err)
 	}
@@ -304,7 +304,7 @@ func ingestRandomData(ctx context.Context, cli *pilosa.InternalClient, index, fi
 	req.ColumnIDs = make([]uint64, 10)
 	req.RowIDs = make([]uint64, 10)
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < size; i++ {
 		req.RowIDs[i%10] = 0
 		req.ColumnIDs[i%10] = uint64((i/10)*pilosa.ShardWidth + i%10)
 		req.Shard = uint64(i / 10)
@@ -336,38 +336,82 @@ func TestRetryLogic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting client: %v", err)
 	}
+	cli2, err := pilosa.NewInternalClient("pilosa2:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
+	if err != nil {
+		t.Fatalf("getting client: %v", err)
+	}
+	cli3, err := pilosa.NewInternalClient("pilosa3:10101", pilosa.GetHTTPClient(nil), pilosa.WithSerializer(proto.Serializer{}))
+	if err != nil {
+		t.Fatalf("getting client: %v", err)
+	}
 
 	g := new(errgroup.Group)
-	runCmd("pumba", "stress", "-d 10s", container(t, "pilosa2"))
 	g.Go(func() error {
-		return ingestRandomData(ctx, cli1, "testidx1", "testfield1")
+		return ingestRandomData(ctx, cli1, "testidx1", "testfield1", 100000)
+	})
+	if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
+		t.Fatalf("sending docker pause %v", err)
+	}
+	if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
+		t.Fatalf("sending docker pause %v", err)
+	}
+	time.Sleep(6 * time.Second)
+	if err = sendCmd("docker", "unpause", container(t, "pilosa2")); err != nil {
+		t.Fatalf("sending docker pause %v", err)
+	}
+	if err = sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
+		t.Fatalf("sending docker pause %v", err)
+	}
+	time.Sleep(10 * time.Second)
+	g.Go(func() error {
+		return ingestRandomData(ctx, cli2, "testidx2", "testfield2", 10000)
 	})
 	if err = sendCmd("docker", "pause", container(t, "pilosa3")); err != nil {
-		t.Fatalf("sending docker pause")
+		t.Fatalf("sending docker pause %v", err)
 	}
-	runCmd("pumba", "stress", "-d 10s", container(t, "pilosa2"))
 	if err = sendCmd("docker", "pause", container(t, "pilosa1")); err != nil {
-		t.Fatalf("sending docker pause")
+		t.Fatalf("sending docker pause %v", err)
 	}
-	time.Sleep(10 * time.Second)
+	time.Sleep(6 * time.Second)
 	if err = sendCmd("docker", "unpause", container(t, "pilosa3")); err != nil {
-		t.Fatalf("sending docker unpause")
+		t.Fatalf("sending docker pause %v", err)
 	}
+	time.Sleep(6 * time.Second)
 	if err = sendCmd("docker", "pause", container(t, "pilosa2")); err != nil {
-		t.Fatalf("sending docker pause")
+		t.Fatalf("sending docker pause %v", err)
+	}
+	time.Sleep(6 * time.Second)
+	if err = sendCmd("docker", "unpause", container(t, "pilosa1")); err != nil {
+		t.Fatalf("sending docker pause %v", err)
 	}
 	if err = sendCmd("docker", "unpause", container(t, "pilosa2")); err != nil {
-		t.Fatalf("sending docker unpause")
+		t.Fatalf("sending docker pause %v", err)
 	}
-	if err = sendCmd("docker", "unpause", container(t, "pilosa1")); err != nil {
-		t.Fatalf("sending docker unpause")
-	}
-	time.Sleep(10 * time.Second)
 	if err = g.Wait(); err != nil {
 		t.Fatal(err)
 	}
 	waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
 
+	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
+		r, err := cli.Query(ctx, "testidx1", &pilosa.QueryRequest{Index: "testidx1", Query: "Count(Row(testfield1 = 0))"})
+		if err != nil {
+			t.Fatalf("count querying pilosa1 %v", err)
+		}
+		fmt.Println("count = ", r.Results[0].(uint64))
+		if r.Results[0].(uint64) != 100000 {
+			t.Fatalf("count on pilosa%d after import is %d", i, r.Results[0].(uint64))
+		}
+	}
+	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
+		r, err := cli.Query(ctx, "testidx2", &pilosa.QueryRequest{Index: "testidx2", Query: "Count(Row(testfield2 = 0))"})
+		if err != nil {
+			t.Fatalf("count querying pilosa1 %v", err)
+		}
+		fmt.Println("count = ", r.Results[0].(uint64))
+		if r.Results[0].(uint64) != 10000 {
+			t.Fatalf("count on pilosa%d after import is %d", i, r.Results[0].(uint64))
+		}
+	}
 }
 
 func waitForStatus(t *testing.T, stator func(context.Context) (string, error), status string, n int, sleep time.Duration, ctx context.Context) {
