@@ -343,7 +343,7 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 }
 
 func TestField_SetTimeQuantum(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
 	defer f.Close()
 
 	// Retrieve time quantum.
@@ -360,7 +360,7 @@ func TestField_SetTimeQuantum(t *testing.T) {
 }
 
 func TestField_RowTime(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
 	defer f.Close()
 
 	// Obtain transaction.

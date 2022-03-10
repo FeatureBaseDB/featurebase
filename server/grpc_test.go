@@ -534,9 +534,10 @@ func TestQuerySQL(t *testing.T) {
 					{"color", "[]string"},
 					{"height", "int64"},
 					{"score", "int64"},
+					{"timestamp", "timestamp"},
 				},
 				rows: []row{
-					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8)}},
+					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8), "2011-01-02T12:32:00Z"}},
 				},
 			},
 			eq: equal,
@@ -551,18 +552,19 @@ func TestQuerySQL(t *testing.T) {
 					{"color", "[]string"},
 					{"height", "int64"},
 					{"score", "int64"},
+					{"timestamp", "timestamp"},
 				},
 				rows: []row{
-					{[]columnResponse{uint64(1), int64(27), []string{"blue"}, int64(20), int64(-10)}},
-					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8)}},
-					{[]columnResponse{uint64(3), int64(19), []string{"red"}, int64(40), int64(6)}},
-					{[]columnResponse{uint64(4), int64(27), []string{"green"}, int64(50), int64(0)}},
-					{[]columnResponse{uint64(5), int64(16), []string{"blue"}, int64(60), int64(-2)}},
-					{[]columnResponse{uint64(6), int64(34), []string{"blue"}, int64(70), int64(100)}},
-					{[]columnResponse{uint64(7), int64(27), []string{"blue"}, int64(80), int64(0)}},
-					{[]columnResponse{uint64(8), int64(16), []string{}, int64(90), int64(-13)}},
-					{[]columnResponse{uint64(9), int64(16), []string{"red"}, int64(100), int64(80)}},
-					{[]columnResponse{uint64(10), int64(31), []string{"red"}, int64(110), int64(-2)}},
+					{[]columnResponse{uint64(1), int64(27), []string{"blue"}, int64(20), int64(-10), "2011-04-02T12:32:00Z"}},
+					{[]columnResponse{uint64(2), int64(16), []string{"blue"}, int64(30), int64(-8), "2011-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(3), int64(19), []string{"red"}, int64(40), int64(6), "2012-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(4), int64(27), []string{"green"}, int64(50), int64(0), "2013-09-02T12:32:00Z"}},
+					{[]columnResponse{uint64(5), int64(16), []string{"blue"}, int64(60), int64(-2), "2014-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(6), int64(34), []string{"blue"}, int64(70), int64(100), "2010-05-02T12:32:00Z"}},
+					{[]columnResponse{uint64(7), int64(27), []string{"blue"}, int64(80), int64(0), "2016-08-02T12:32:00Z"}},
+					{[]columnResponse{uint64(8), int64(16), []string{}, int64(90), int64(-13), "2020-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(9), int64(16), []string{"red"}, int64(100), int64(80), "2000-03-02T12:32:00Z"}},
+					{[]columnResponse{uint64(10), int64(31), []string{"red"}, int64(110), int64(-2), "2018-01-02T12:32:00Z"}},
 				},
 			},
 			eq: equal,
@@ -838,6 +840,64 @@ func TestQuerySQL(t *testing.T) {
 			eq: equal,
 		},
 		{
+			// GroupBy(Rows(field='age'),Rows(field='height'),filter=Intersect(Row(timestamp>"2017-09-02T12:32:00Z"),Row(height>40)))
+			sql: "select age, height from grouper where timestamp > '2017-09-02T12:32:00Z' and height > 40 group by age, height",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+					{"height", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(16), int64(90)}},
+					{[]columnResponse{int64(31), int64(110)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			// Extract(Union(Row(timestamp>"2017-09-02T12:32:00Z"),Row(height>90)),Rows(age), Rows(height))
+			sql: "select age, height from grouper where timestamp > '2017-09-02T12:32:00Z' or height > 90",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+					{"height", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(16), int64(90)}},
+					{[]columnResponse{int64(16), int64(100)}},
+					{[]columnResponse{int64(31), int64(110)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			//Extract(Intersect(Row(timestamp>"2017-09-02T12:32:00Z"),Row(timestamp<"2019-09-02T12:32:00Z")),Rows(age), Rows(height))
+			sql: "select age, height from grouper where timestamp > '2017-09-02T12:32:00Z' and timestamp < '2019-09-02T12:32:00Z'",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+					{"height", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(31), int64(110)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			//Distinct(Row(timestamp>"2019-09-02T12:32:00Z"), index='grouper',field='age')
+			sql: "select distinct age from grouper where timestamp > '2019-09-02T12:32:00Z'",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(16)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
 			sql: "show tables",
 			exp: tableResponse{
 				headers: []columnInfo{
@@ -865,6 +925,7 @@ func TestQuerySQL(t *testing.T) {
 					{[]columnResponse{"color", "keyed-set"}},
 					{[]columnResponse{"height", "int"}},
 					{[]columnResponse{"score", "int"}},
+					{[]columnResponse{"timestamp", "timestamp"}},
 				},
 			},
 			eq: equal,
@@ -1005,6 +1066,10 @@ func TestQuerySQLWithError(t *testing.T) {
 		{
 
 			sql: "select _id, age, field_not_found from grouper",
+			err: pilosa.ErrFieldNotFound,
+		},
+		{
+			sql: "select age, color, count(*) from grouper group by field_not_found, age, color",
 			err: pilosa.ErrFieldNotFound,
 		},
 	}
@@ -1554,6 +1619,26 @@ func setUpTestQuerySQLUnary(ctx context.Context, t *testing.T) (gh *server.GRPCH
 			t.Fatal(err)
 		}
 	}
+	m.MustCreateField(t, grouper.Name(), "timestamp", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
+	for id, timestamp := range map[int]string{
+		1:  "2011-04-02T12:32:00Z",
+		2:  "2011-01-02T12:32:00Z",
+		3:  "2012-01-02T12:32:00Z",
+		4:  "2013-09-02T12:32:00Z",
+		5:  "2014-01-02T12:32:00Z",
+		6:  "2010-05-02T12:32:00Z",
+		7:  "2016-08-02T12:32:00Z",
+		8:  "2020-01-02T12:32:00Z",
+		9:  "2000-03-02T12:32:00Z",
+		10: "2018-01-02T12:32:00Z",
+	} {
+		if _, err := gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
+			Index: grouper.Name(),
+			Pql:   fmt.Sprintf("Set(%d, timestamp=\"%s\")", id, timestamp),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// joiner
 	joiner := m.MustCreateIndex(t, "joiner", pilosa.IndexOptions{TrackExistence: true})
@@ -1653,6 +1738,8 @@ func toTableResponse(resp *pb.TableResponse) tableResponse {
 				tr.rows[i].columns[j] = v.Float64Val
 			case *pb.ColumnResponse_DecimalVal:
 				tr.rows[i].columns[j] = pql.NewDecimal(v.DecimalVal.Value, v.DecimalVal.Scale)
+			case *pb.ColumnResponse_TimestampVal:
+				tr.rows[i].columns[j] = v.TimestampVal
 			default:
 				tr.rows[i].columns[j] = nil
 			}

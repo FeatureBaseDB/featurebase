@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/molecula/featurebase/v3/ingest"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 )
@@ -84,6 +85,8 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	// It should read from the reader and replace the data store with
 	// the read payload.
 	ReadFrom(io.Reader) (int64, error)
+
+	Delete(records *roaring.Bitmap) (Commitor, error)
 }
 
 // This implements ingest's key translator interface, which differs
@@ -419,6 +422,16 @@ func (s *InMemTranslateStore) SetReadOnly(v bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.readOnly = v
+}
+func (s *InMemTranslateStore) Delete(records *roaring.Bitmap) (Commitor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range records.Slice() {
+		key := s.keysByID[id]
+		delete(s.keysByID, id)
+		delete(s.idsByKey, key)
+	}
+	return &NopCommitor{}, nil
 }
 
 // FindKeys looks up the ID for each key.

@@ -429,6 +429,8 @@ func newRouter(handler *Handler) http.Handler {
 	//router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handleGetFields, authz.Read)).Methods("GET") // Not implemented.
 	router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/{field}/view", handler.chkAuthZ(handler.handleGetView, authz.Admin)).Methods("GET")
+	router.HandleFunc("/index/{index}/field/{field}/view/{view}", handler.chkAuthZ(handler.handleDeleteView, authz.Admin)).Methods("DELETE").Name("DeleteView")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handleDeleteField, authz.Write)).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.chkAuthZ(handler.handlePostImport, authz.Write)).Methods("POST").Name("PostImport")
@@ -452,7 +454,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	// /ui endpoints are for UI use; they may change at any time.
-	router.HandleFunc("/ui/usage", handler.chkAuthZ(handler.handleGetUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/ui/transaction", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/transaction/", handler.chkAuthZ(handler.handleGetTransactionList, authz.Read)).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/ui/shard-distribution", handler.chkAuthZ(handler.handleGetShardDistribution, authz.Admin)).Methods("GET").Name("GetShardDistribution")
@@ -466,6 +467,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/translate/data", handler.chkAuthZ(handler.handlePostTranslateData, authz.Write)).Methods("POST").Name("PostTranslateData")
 
 	// other ones
+	router.HandleFunc("/internal/mem-usage", handler.chkAuthZ(handler.handleGetMemUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.chkAuthN(handler.handleGetFragmentBlocks)).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/data", handler.chkAuthN(handler.handleGetFragmentData)).Methods("GET").Name("GetFragmentData")
@@ -926,7 +928,12 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetSchema handles GET /schema/details requests.
+// handleGetSchema handles GET /schema/details requests. This is essentially the
+// same thing as a GET /schema request, except WithViews is turned on by default.
+// Previously, /schema/details returned the cardinality of each field, but this was
+// removed for performance reasons. If, at some point in the future, there is a more
+// performant way to get the cardinality of a field, that information would be
+// included here.
 func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -934,7 +941,7 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	schema, err := h.api.SchemaDetails(r.Context())
+	schema, err := h.api.Schema(r.Context(), true)
 	if err != nil {
 		h.logger.Printf("error getting detailed schema: %s", err)
 		return
@@ -987,60 +994,22 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleGetUsage handles GET /ui/usage requests.
-func (h *Handler) handleGetUsage(w http.ResponseWriter, r *http.Request) {
+// handleGetMemUsage handles GET /internal/mem-usage requests.
+func (h *Handler) handleGetMemUsage(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
 
-	q := r.URL.Query()
-	remoteStr := q.Get("remote")
-	var remote bool
-	if remoteStr == "true" {
-		remote = true
-	}
-
-	nodeUsages, err := h.api.Usage(r.Context(), remote)
+	use, err := GetMemoryUsage()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	// if auth is turned on, filter results
-	if h.auth != nil {
-		g := r.Context().Value(contextKeyGroupMembership)
-		if g == nil {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-		if !h.permissions.IsAdmin(g.([]authn.Group)) {
-			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
-			filteredNodeUsages := map[string]NodeUsage{}
-
-			for nodeId, nodeUsage := range nodeUsages {
-				filteredIndexUsage := NodeUsage{
-					Disk: DiskUsage{
-						IndexUsage: map[string]IndexUsage{},
-					},
-				}
-				for index, idxUsage := range nodeUsage.Disk.IndexUsage {
-					// is it in auth list
-					for _, authd := range allowed {
-						if index == authd {
-							filteredIndexUsage.Disk.IndexUsage[index] = idxUsage
-							break
-						}
-					}
-				}
-				filteredNodeUsages[nodeId] = filteredIndexUsage
-			}
-			nodeUsages = filteredNodeUsages
-		}
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(nodeUsages); err != nil {
-		h.logger.Errorf("write status response error: %s", err)
+	if err := json.NewEncoder(w).Encode(use); err != nil {
+		h.logger.Errorf("write mem usage response error: %s", err)
 	}
 }
 
@@ -1314,6 +1283,62 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 }
 
+// handleGetView handles GET /index/<indexname>/field/<fieldname>/view requests.
+func (h *Handler) handleGetView(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+	index, err := h.api.Index(r.Context(), indexName)
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
+		return
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		var viewsList []viewReponse
+		for _, field := range index.fields {
+			if field.name == fieldName {
+				for _, view := range field.views() {
+					viewsList = append(viewsList, viewReponse{Name: view.name, Type: view.fieldType, Field: view.field, Index: view.index})
+				}
+
+				if err := json.NewEncoder(w).Encode(viewsList); err != nil {
+					h.logger.Errorf("write response error: %s", err)
+				}
+				return
+			}
+		}
+	}
+	http.Error(w, fmt.Sprintf("Field %s Not Found", fieldName), http.StatusNotFound)
+}
+
+type viewReponse struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Field string `json:"field"`
+	Index string `json:"index"`
+}
+
+// handleDeleteIndex handles DELETE /index/<indexname>/field/<fieldname>/view/<viewname> request.
+func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+	viewName := mux.Vars(r)["view"]
+
+	resp := successResponse{h: h}
+	err := h.api.DeleteView(r.Context(), indexName, fieldName, viewName)
+	resp.write(w, err)
+}
+
 type postIndexRequest struct {
 	Options IndexOptions `json:"options"`
 }
@@ -1557,7 +1582,11 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 		}
 		fos = append(fos, OptFieldTypeTimestamp(opt.Epoch.UTC(), *opt.TimeUnit))
 	case FieldTypeTime:
-		fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, opt.NoStandardView))
+		if opt.Ttl != nil {
+			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, *opt.Ttl, opt.NoStandardView))
+		} else {
+			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, "0", opt.NoStandardView))
+		}
 	case FieldTypeMutex:
 		fos = append(fos, OptFieldTypeMutex(*opt.CacheType, *opt.CacheSize))
 	case FieldTypeBool:
@@ -1643,14 +1672,18 @@ func (h *Handler) handlePostIngestData(w http.ResponseWriter, r *http.Request) {
 
 	qcx := h.api.Txf().NewQcx()
 	err := h.api.IngestOperations(r.Context(), qcx, indexName, r.Body)
-	if err == nil {
-		err = qcx.Finish()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+	if err != nil {
+		qcx.Abort()
+		switch e := err.(type) {
+		case RedirectError:
+			http.Redirect(w, r, e.HostPort+r.URL.Path, http.StatusPermanentRedirect)
 			return
 		}
-	} else {
-		qcx.Abort()
+	}
+	err = qcx.Finish()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	resp := successResponse{h: h, Name: indexName}
@@ -1679,6 +1712,7 @@ type fieldOptionSpec struct {
 	Epoch                  *time.Time `json:"epoch"`
 	Unit                   *string    `json:"unit"`
 	TimeQuantum            *string    `json:"time-quantum"`
+	Ttl                    *string    `json:"ttl"`
 }
 
 func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
@@ -1712,157 +1746,9 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 		timeQuantumVal := TimeQuantum(*fSpec.FieldOptions.TimeQuantum)
 		opt.TimeQuantum = &timeQuantumVal
 	}
+	opt.Ttl = fSpec.FieldOptions.Ttl
 
 	return opt
-}
-
-// applyOneIngestSchema applies a single ingestSpec, which specifies operations on
-// a single index and possibly fields. If it is successful, it returns the name
-// of the index and an empty slice (if it created the index), or the name of the
-// index and a slice of the fields within that index that it created. If it
-// is unsuccessful, it tries to delete whatever it created.
-//
-// The intended idiom is that if the returned list of fields isn't empty, the index
-// already existed and only those fields need to be cleaned up in the event of
-// a later error, but if the list of fields is empty, the entire index was new,
-// and should be cleaned up, in which case there's no need to track or delete
-// the specific fields separately.
-func (h *Handler) applyOneIngestSchema(ctx context.Context, schema *ingestSpec) (index *Index, returnedFields []string, err error) {
-	// create index
-	indexName := schema.IndexName
-	var createdFields []string
-	var useKeys bool
-	switch schema.PrimaryKeyType {
-	case "string":
-		useKeys = true
-	case "uint":
-		useKeys = false
-	default:
-		return nil, nil, fmt.Errorf("invalid primary key type %q", schema.PrimaryKeyType)
-	}
-	opts := IndexOptions{
-		Keys:           useKeys,
-		TrackExistence: true,
-	}
-	createdIndex := false
-
-	// We check this up here because, if there's at least one field but we don't know what to do with
-	// it, we will necessarily fail, which means we'd delete the index anyway, so there's no point in
-	// trying to create it. We don't care about this if there's no fields specified.
-	if len(schema.Fields) > 0 {
-		switch schema.FieldAction {
-		case "create", "ensure", "require":
-			// do nothing
-		case "":
-			schema.FieldAction = schema.IndexAction
-		default:
-			return nil, nil, fmt.Errorf("invalid field-action %q, expecting create/ensure/require", schema.FieldAction)
-		}
-	}
-
-	switch schema.IndexAction {
-	case "ensure", "require":
-		index, err = h.api.Index(ctx, indexName)
-		if err != nil {
-			if _, ok := err.(NotFoundError); !ok {
-				return nil, nil, fmt.Errorf("checking for existing index %q: %w", indexName, err)
-			} else {
-				err = nil
-			}
-		}
-		if index != nil {
-			existingOpts := index.Options()
-			if existingOpts != opts {
-				return nil, nil, fmt.Errorf("index %q options mismatch: schema %#v, existing %#v", indexName, opts, existingOpts)
-			}
-			break
-		}
-		if schema.IndexAction == "require" {
-			return nil, nil, fmt.Errorf("index %q does not exist", indexName)
-		}
-		fallthrough
-	case "create":
-		index, err = h.api.CreateIndex(ctx, indexName, opts)
-		if err != nil {
-			return nil, nil, err
-		}
-		createdIndex = true
-	default:
-		return nil, nil, fmt.Errorf("invalid index-action %q, need create/ensure/require", schema.IndexAction)
-	}
-
-	// Now we might have an index, so we need our cleanup code.
-	defer func() {
-		if err == nil {
-			return
-		}
-		if createdIndex {
-			err := h.api.DeleteIndex(ctx, indexName)
-			if err != nil {
-				h.logger.Printf("trying to undo failed index %q creation: %v", indexName, err)
-			}
-			return
-		}
-		for _, field := range createdFields {
-			err := h.api.DeleteField(ctx, indexName, field)
-			if err != nil {
-				h.logger.Printf("trying to undo failed field %q creation in index %q: %v", field, indexName, err)
-			}
-		}
-	}()
-
-	// create all the fields specified in the index
-	for _, fSpec := range schema.Fields {
-		fieldName := fSpec.FieldName
-		opt := fieldSpecToFieldOption(fSpec)
-		err = opt.validate()
-		if err != nil {
-			return nil, nil, err
-		}
-		switch schema.FieldAction {
-		case "ensure", "require":
-			field, schemaErr := h.api.Field(ctx, indexName, fieldName)
-			if schemaErr != nil {
-				// NotFoundError is fine
-				if _, ok := schemaErr.(NotFoundError); !ok {
-					return nil, nil, fmt.Errorf("checking for existing field %q in %q: %w", fieldName, indexName, err)
-				}
-			}
-			if field != nil {
-				existing := field.Options()
-				if opt.Type != existing.Type {
-					return nil, nil, fmt.Errorf("existing field %q is %q, not %q", fieldName, existing.Type, opt.Type)
-				}
-				if ((opt.Keys != nil) && *opt.Keys) != existing.Keys {
-					if existing.Keys {
-						return nil, nil, fmt.Errorf("existing field %q in %q uses keys", fieldName, indexName)
-					} else {
-						return nil, nil, fmt.Errorf("existing field %q in %q doesn't use keys", fieldName, indexName)
-					}
-				}
-				// TODO: verify compatibility of other field opts, this is sorta hard
-				break
-			}
-			if schema.FieldAction == "require" {
-				return nil, nil, fmt.Errorf("field %q does not exist in %q", fieldName, indexName)
-			}
-			fallthrough
-		case "create":
-			fos := fieldOptionsToFunctionalOpts(opt)
-			_, err = h.api.CreateField(ctx, indexName, fieldName, fos...)
-			if err != nil {
-				return nil, nil, fmt.Errorf("creating field %q in %q: %v", fieldName, indexName, err)
-			}
-			createdFields = append(createdFields, fieldName)
-		}
-	}
-	// we don't report the fields back, so we can distinguish "created index"
-	// from "created fields within index"
-	if createdIndex {
-		createdFields = nil
-	}
-
-	return index, createdFields, nil
 }
 
 func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
@@ -1907,12 +1793,18 @@ func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
 			resp.write(w, err)
 			return
 		}
-		index, fields, err := h.applyOneIngestSchema(r.Context(), &schema)
+		index, fields, err := h.api.ApplyOneIngestSchema(r.Context(), &schema)
 		if err != nil {
-			// if a previous schema created things, clean them up...
-			schemaErr = err
-			resp.write(w, err)
-			return
+			switch e := err.(type) {
+			case RedirectError:
+				http.Redirect(w, r, e.HostPort+r.URL.Path, http.StatusPermanentRedirect)
+				return
+			default:
+				// if a previous schema created things, clean them up...
+				schemaErr = err
+				resp.write(w, err)
+				return
+			}
 		}
 		// we only have one slot to report these, sorry.
 		resp.Name = index.Name()
@@ -1951,6 +1843,7 @@ type fieldOptions struct {
 	Keys           *bool        `json:"keys,omitempty"`
 	NoStandardView bool         `json:"noStandardView,omitempty"`
 	ForeignIndex   *string      `json:"foreignIndex,omitempty"`
+	Ttl            *string      `json:"ttl,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -1978,6 +1871,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("max does not apply to field type set"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type set"))
 		}
 	case FieldTypeInt:
 		if o.CacheType != nil {
@@ -1986,6 +1881,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type int"))
 		}
 	case FieldTypeDecimal:
 		if o.Scale == nil {
@@ -1996,6 +1893,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type int"))
 		} else if o.ForeignIndex != nil && o.Type == FieldTypeDecimal {
 			return NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
 		}
@@ -2010,6 +1909,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type timestamp"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type timestamp"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type timestamp"))
 		} else if o.ForeignIndex != nil {
 			return NewBadRequestError(errors.New("timestamp field cannot be a foreign key"))
 		}
@@ -2038,6 +1939,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("max does not apply to field type mutex"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type mutex"))
 		}
 	case FieldTypeBool:
 		if o.CacheType != nil {
@@ -2052,6 +1955,8 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type bool"))
 		} else if o.Keys != nil {
 			return NewBadRequestError(errors.New("keys does not apply to field type bool"))
+		} else if o.Ttl != nil {
+			return NewBadRequestError(errors.New("ttl does not apply to field type bool"))
 		} else if o.ForeignIndex != nil {
 			return NewBadRequestError(errors.New("bool field cannot be a foreign key"))
 		}

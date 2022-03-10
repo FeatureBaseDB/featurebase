@@ -925,7 +925,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
 			"",
-			"")
+			"",
+			0)
 	})
 
 	t.Run("IntFieldOptions", func(t *testing.T) {
@@ -944,7 +945,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(-10, 0),
 			pql.NewDecimal(100, 0),
 			"",
-			"")
+			"",
+			0)
 
 		field = sampleIndex.Field("int-field2", OptFieldTypeInt(-10))
 		jsonString = field.options.String()
@@ -962,7 +964,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(-10, 0),
 			pql.NewDecimal(math.MaxInt64, 0),
 			"",
-			"")
+			"",
+			0)
 		field = sampleIndex.Field("int-field3", OptFieldTypeInt())
 		jsonString = field.options.String()
 		targetString = fmt.Sprintf(`{"options":{"type":"int","min":%d,"max":%d}}`, math.MinInt64, math.MaxInt64)
@@ -978,7 +981,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(math.MinInt64, 0),
 			pql.NewDecimal(math.MaxInt64, 0),
 			"",
-			"")
+			"",
+			0)
 
 		field = sampleIndex.Field("int-field4", OptFieldTypeInt(), OptFieldForeignIndex("blerg"))
 		jsonString = field.options.String()
@@ -995,7 +999,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(math.MinInt64, 0),
 			pql.NewDecimal(math.MaxInt64, 0),
 			"blerg",
-			"")
+			"",
+			0)
 	})
 
 	t.Run("TimeFieldOptions", func(t *testing.T) {
@@ -1004,7 +1009,7 @@ func TestORM(t *testing.T) {
 			t.Fatalf("field noStandardView %v != %v", true, field.Opts().NoStandardView())
 		}
 		jsonString := field.options.String()
-		targetString := `{"options":{"noStandardView":true,"type":"time","timeQuantum":"DH"}}`
+		targetString := `{"options":{"noStandardView":true,"type":"time","timeQuantum":"DH","ttl":"0s"}}`
 		if sortedString(targetString) != sortedString(jsonString) {
 			t.Fatalf("`%s` != `%s`", targetString, jsonString)
 		}
@@ -1017,7 +1022,31 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
 			"",
-			"")
+			"",
+			0)
+	})
+
+	t.Run("TtlOptions", func(t *testing.T) {
+		field := sampleIndex.Field("ttl-field", OptFieldTypeTime(TimeQuantumDayHour, true), OptFieldTtl(0))
+		if true != field.Opts().NoStandardView() {
+			t.Fatalf("field noStandardView %v != %v", true, field.Opts().NoStandardView())
+		}
+		jsonString := field.options.String()
+		targetString := `{"options":{"noStandardView":true,"type":"time","timeQuantum":"DH","ttl":"0s"}}`
+		if sortedString(targetString) != sortedString(jsonString) {
+			t.Fatalf("`%s` != `%s`", targetString, jsonString)
+		}
+		compareFieldOptions(t,
+			field.Options(),
+			FieldTypeTime,
+			TimeQuantumDayHour,
+			CacheTypeDefault,
+			0,
+			pql.NewDecimal(0, 0),
+			pql.NewDecimal(0, 0),
+			"",
+			"",
+			0)
 	})
 
 	t.Run("MutexFieldOptions", func(t *testing.T) {
@@ -1036,7 +1065,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
 			"",
-			"")
+			"",
+			0)
 	})
 
 	t.Run("BoolFieldOptions", func(t *testing.T) {
@@ -1055,7 +1085,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(0, 0),
 			pql.NewDecimal(0, 0),
 			"",
-			"")
+			"",
+			0)
 	})
 
 	t.Run("DecimalFieldOptions", func(t *testing.T) {
@@ -1074,7 +1105,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(7, 3),
 			pql.NewDecimal(999, 3),
 			"",
-			"")
+			"",
+			0)
 	})
 
 	t.Run("DecimalFieldOptions", func(t *testing.T) {
@@ -1093,7 +1125,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(7, 3),
 			pql.NewDecimal(999, 3),
 			"",
-			"")
+			"",
+			0)
 	})
 
 	t.Run("TimestampFieldOptions", func(t *testing.T) {
@@ -1114,7 +1147,8 @@ func TestORM(t *testing.T) {
 			pql.NewDecimal(MinTimestamp.UnixNano()/TimeUnitNanos(pilosa.TimeUnitSeconds), 0),
 			pql.NewDecimal(MaxTimestamp.UnixNano()/TimeUnitNanos(pilosa.TimeUnitSeconds), 0),
 			"",
-			pilosa.TimeUnitSeconds)
+			pilosa.TimeUnitSeconds,
+			0)
 
 	})
 
@@ -1163,7 +1197,7 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, timeQuantum TimeQuantum, cacheType CacheType, cacheSize int, min pql.Decimal, max pql.Decimal, foreignIndex string, timeUnit string) {
+func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, timeQuantum TimeQuantum, cacheType CacheType, cacheSize int, min pql.Decimal, max pql.Decimal, foreignIndex string, timeUnit string, ttl time.Duration) {
 	if fieldType != opts.Type() {
 		t.Fatalf("%s != %s", fieldType, opts.Type())
 	}
@@ -1187,6 +1221,9 @@ func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, 
 	}
 	if timeUnit != opts.TimeUnit() {
 		t.Fatalf("%s != %s", timeUnit, opts.TimeUnit())
+	}
+	if ttl != opts.Ttl() {
+		t.Fatalf("%s != %s", ttl, opts.Ttl())
 	}
 }
 

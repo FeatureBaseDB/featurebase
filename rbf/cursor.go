@@ -287,9 +287,6 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 
 			leafCell1 := ConvertToLeafArgs(cell.Key, cbm)
 			// ConvertToLeafArgs returns leafCell1 with BitN and ElemN updated.
-			if err := c.tx.freePgno(pgno); err != nil {
-				return false, err
-			}
 			return true, c.putLeafCell(leafCell1)
 		}
 
@@ -375,10 +372,18 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		newEstPageSize += in.Size() - len(readLeafCellBytesAtOffset(leafPage, readCellOffset(leafPage, elem.index)))
 	}
 
+	// Use the fast path if we are not splitting pages and the container types are the same.
+	useFast := newEstPageSize+16 <= PageSize
+	if useFast && !isInsert {
+		if prev := readLeafCell(leafPage, elem.index); prev.Type != in.Type {
+			useFast = false
+		}
+	}
+
 	// Use an optimized routine to insert the leaf cell if we won't overflow.
 	// We pad the estimate with 16 bytes because we do 8-byte alignment of
 	// both the cell and the index.
-	if newEstPageSize+16 <= PageSize {
+	if useFast {
 		return c.putLeafCellFast(in, isInsert)
 	}
 
@@ -402,6 +407,22 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		copy(cells[elem.index+1:], cells[elem.index:])
 
 	} else {
+		// FB-1239: Free bitmap page if replaced container is a bitmap pointer.
+		prev := cells[elem.index]
+		if prev.Type == ContainerTypeBitmapPtr {
+			if in.Type == ContainerTypeBitmapPtr {
+				if toPgno(in.Data) != toPgno(prev.Data) { // bptr-to-bptr with different bitmap pages
+					if err := c.tx.freePgno(toPgno(prev.Data)); err != nil {
+						return err
+					}
+				}
+			} else if in.Type != ContainerTypeBitmap {
+				if err := c.tx.freePgno(toPgno(prev.Data)); err != nil {
+					return err
+				}
+			}
+		}
+
 		if in.Type == ContainerTypeBitmap {
 			cell = cells[elem.index]
 			if cell.Type != ContainerTypeBitmapPtr {
@@ -411,10 +432,10 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 				}
 				cell.Type = ContainerTypeBitmapPtr
 				cell.Data = fromPgno(bitmapPgno)
-				// update the BitN too
-				cell.BitN = in.BitN
 				cell.ElemN = in.ElemN
 			}
+			// update the BitN regardless
+			cell.BitN = in.BitN
 		}
 	}
 
@@ -433,6 +454,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		}
 		cell.Data = fromPgno(bitmapPgno)
 	}
+
 	cells[elem.index] = cell
 
 	// Split into multiple pages if page size is exceeded.
@@ -474,9 +496,11 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		writeCellN(buf[:], len(group))
 
 		offset := dataOffset(len(group))
+		x := 0
 		for j, cell := range group {
 			writeLeafCell(buf[:], j, offset, cell)
 			offset += align8(cell.Size())
+			x++
 		}
 
 		if err := c.tx.writePage(buf[:]); err != nil {
@@ -614,7 +638,6 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	copy(cells[elem.index:], cells[elem.index+1:])
 	cells[len(cells)-1] = leafCell{}
 	cells = cells[:len(cells)-1]
-
 	// Write cells to page.
 	buf := allocPage()
 	writePageNo(buf[:], elem.pgno)
@@ -626,6 +649,7 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 		writeLeafCell(buf[:], j, offset, cell)
 		offset += align8(cell.Size())
 	}
+
 	if err := c.tx.writePage(buf[:]); err != nil {
 		return err
 	}

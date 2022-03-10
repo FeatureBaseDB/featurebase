@@ -29,6 +29,17 @@ func newRouter() *router {
 		handlerSelectFieldsFromTableWhere{},
 	)
 	////
+	selectRouter.addFilter(
+		NewQueryMask(
+			SelectPartDistinct|SelectPartField,
+			FromPartTable,
+			WherePartFieldCondition|WherePartMultiFieldCondition,
+			0,
+			0,
+		),
+		[]QueryMask{},
+		handlerSelectDistinctFromTable{},
+	)
 	selectRouter.addRoute("select distinct fld from tbl", handlerSelectDistinctFromTable{})
 	////
 	selectRouter.addFilter(
@@ -58,7 +69,7 @@ func newRouter() *router {
 	groupByOptional := NewQueryMask(
 		SelectPartField|SelectPartFields|SelectPartCountStar|SelectPartSumField,
 		FromPartTable,
-		WherePartFieldCondition, // TODO: this can probably handle fields as well
+		WherePartFieldCondition|WherePartMultiFieldCondition,
 		GroupByPartField|GroupByPartFields,
 		HavingPartCondition,
 	)

@@ -139,6 +139,90 @@ func TestDB_WAL(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	// initially this is just a cut and paste of the Halt test, except that
+	// we close the DB while the reads are still running.
+	t.Run("Close", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("-short enabled, skipping")
+		}
+
+		config := rbfcfg.NewDefaultConfig()
+		config.MaxWALSize = 16 * rbf.PageSize
+		config.MaxWALCheckpointSize = 8 * rbf.PageSize
+		config.MinWALCheckpointSize = 4 * rbf.PageSize
+
+		db := MustOpenDB(t, config)
+
+		// Continuously run read overlapping transactions.
+		ctx, cancel := context.WithCancel(context.Background())
+		g, ctx := errgroup.WithContext(ctx)
+		for i := 0; i < 10; i++ {
+			i := i
+			g.Go(func() error {
+				time.Sleep(time.Duration(i) * 10 * time.Millisecond) // stagger
+				for {
+					if err := ctx.Err(); err != nil {
+						return nil
+					}
+
+					if err := func() error {
+						tx, err := db.Begin(false)
+						if err != nil {
+							return err
+						}
+						// give the db time to close between when we opened and
+						// when we run the Container call
+						time.Sleep(10 * time.Millisecond)
+						_, err = tx.Container("x", 0)
+						if err != nil {
+							t.Fatalf("requesting container: %v", err)
+						}
+						defer tx.Rollback()
+						return nil
+					}(); err != nil {
+						// it's okay to ErrClosed, because we plan to close
+						// the database out from under us.
+						if err != rbf.ErrClosed {
+							return err
+						} else {
+							return nil
+						}
+					}
+				}
+			})
+		}
+
+		// Generate updates to the DB/WAL.
+		for i := 0; i < 100; i++ {
+			func() {
+				tx := MustBegin(t, db, true)
+				defer tx.Rollback()
+
+				if err := tx.CreateBitmapIfNotExists("x"); err != nil {
+					t.Fatal(err)
+				} else if _, err := tx.Add("x", uint64(i)); err != nil {
+					t.Fatal(err)
+				} else if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(1 * time.Millisecond)
+			}()
+		}
+		// close the db now.
+		err := db.Close()
+		if err != nil {
+			t.Fatalf("closing db: %v", err)
+		}
+		// delay a bit to let some readers try to read
+		time.Sleep(20 * time.Millisecond)
+
+		// Stop read transactions & wait.
+		cancel()
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestDB_Recovery(t *testing.T) {

@@ -490,7 +490,7 @@ func TestExecutor(t *testing.T) {
 				`Row(f=1, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
-				nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+				nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 
 			t.Run("Standard", func(t *testing.T) {
 				if columns := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
@@ -536,7 +536,7 @@ func TestExecutor(t *testing.T) {
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
 				&pilosa.IndexOptions{Keys: true},
-				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 
 			t.Run("Standard", func(t *testing.T) {
 				if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"six", "four", "five", "seven", "two", "three"}) {
@@ -570,7 +570,7 @@ func TestExecutor(t *testing.T) {
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
 				nil,
-				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")),
+				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"),
 				pilosa.OptFieldKeys())
 
 			t.Run("Standard", func(t *testing.T) {
@@ -605,7 +605,7 @@ func TestExecutor(t *testing.T) {
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
 				&pilosa.IndexOptions{Keys: true},
-				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")),
+				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"),
 				pilosa.OptFieldKeys())
 
 			t.Run("Standard", func(t *testing.T) {
@@ -639,7 +639,7 @@ func TestExecutor(t *testing.T) {
 				`Row(f=1, from=946598400, to=1009854000)`,
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
-				nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+				nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 
 			t.Run("Standard", func(t *testing.T) {
 				if columns := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
@@ -674,7 +674,7 @@ func TestExecutor(t *testing.T) {
 				`Range(f=1, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
-				nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+				nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 
 			t.Run("Standard", func(t *testing.T) {
 				if columns := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
@@ -693,7 +693,7 @@ func TestExecutor(t *testing.T) {
 					`Range(f=1, 1999-12-31T00:00, 2002-01-01T03:00)`,
 				}
 				responses = runCallTest(c, t, writeQuery, rq2,
-					nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+					nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 				t.Run("OldRange", func(t *testing.T) {
 					if columns := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
 						t.Fatalf("unexpected columns: %+v", columns)
@@ -721,7 +721,7 @@ func TestExecutor(t *testing.T) {
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
 				&pilosa.IndexOptions{Keys: true},
-				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 
 			t.Run("Standard", func(t *testing.T) {
 				if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"two", "three", "seven", "four", "five", "six"}) {
@@ -755,7 +755,7 @@ func TestExecutor(t *testing.T) {
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
 				nil,
-				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")),
+				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"),
 				pilosa.OptFieldKeys())
 
 			t.Run("Standard", func(t *testing.T) {
@@ -790,7 +790,7 @@ func TestExecutor(t *testing.T) {
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
 				&pilosa.IndexOptions{Keys: true},
-				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")),
+				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"),
 				pilosa.OptFieldKeys())
 
 			t.Run("Standard", func(t *testing.T) {
@@ -990,7 +990,7 @@ func TestExecutor(t *testing.T) {
 			}
 			responses := runCallTest(c, t, writeQuery, readQueries,
 				&pilosa.IndexOptions{TrackExistence: true},
-				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD")))
+				pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0"))
 			if columns := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
 				t.Fatalf("unexpected columns: %+v", columns)
 			}
@@ -1059,7 +1059,7 @@ func TestExecutor(t *testing.T) {
 		}
 
 		responses := runCallTest(c, t, writeQuery, readQueries,
-			nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
+			nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0", true))
 
 		for i := range responses {
 			t.Run(fmt.Sprintf("response-%d", i), func(t *testing.T) {
@@ -1730,7 +1730,7 @@ func TestExecutor_Execute_TopK_Time(t *testing.T) {
 	defer c.Close()
 
 	// Load some test data into a time field.
-	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f", pilosa.OptFieldTypeTime("YMD", true))
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f", pilosa.OptFieldTypeTime("YMD", "0", true))
 	c.Query(t, "i", `
 		Set(0, f=0, 2016-01-02T00:00)
 		Set(0, f=1, 2016-01-02T00:00)
@@ -3413,7 +3413,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("remote with timestamp", func(t *testing.T) {
-		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "z", pilosa.OptFieldTypeTime("Y"))
+		_, err = c.GetPrimary().API.CreateField(context.Background(), "i", "z", pilosa.OptFieldTypeTime("Y", "0"))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -3746,7 +3746,7 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 			indexName := strings.ToLower(string(tt.quantum))
 			index := hldr.MustCreateIndexIfNotExists(indexName, pilosa.IndexOptions{})
 			// Create field.
-			if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeTime(tt.quantum)); err != nil {
+			if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeTime(tt.quantum, "0")); err != nil {
 				t.Fatal(err)
 			}
 			// Populate
@@ -4691,14 +4691,14 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 		Set(3, keymutex="plugh")
 	`)
 
-	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "time", pilosa.OptFieldTypeTime("YMDH"))
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "time", pilosa.OptFieldTypeTime("YMDH", "0"))
 	c.Query(t, "i", `
 		Set(0, time=1, 2016-01-01T00:00)
 		Set(1, time=2, 2017-01-01T00:00)
 		Set(3, time=3, 2018-01-01T00:00)
 	`)
 
-	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keytime", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime("YMDH"))
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keytime", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime("YMDH", "0"))
 	c.Query(t, "i", `
 		Set(0, keytime="h", 2016-01-01T00:00)
 		Set(1, keytime="xyzzy", 2017-01-01T00:00)
@@ -5087,7 +5087,7 @@ func TestExecutor_Execute_RowsTime(t *testing.T) {
 func TestExecutor_Execute_RowsTimeEmpty(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	c.CreateField(t, "i", pilosa.IndexOptions{}, "x", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "x", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0", true))
 	rows := c.Query(t, "i", `Rows(x, from=1999-12-31T00:00, to=2002-01-01T03:00)`).Results[0].(pilosa.RowIdentifiers).Rows
 	if !reflect.DeepEqual(rows, []uint64{}) {
 		t.Fatalf("unexpected rows: %+v", rows)
@@ -5452,6 +5452,11 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f_id")
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
 	// setup some data. 10 bits in each of shards 0 through 9. starting at
 	// row/col shardNum and progressing to row/col shardNum+10. Also set the
 	// previous 2 for each bit if row >0.
@@ -5474,8 +5479,9 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 	}
 
 	tests := []struct {
-		q   string
-		exp []string
+		q      string
+		exp    []string
+		expErr string
 	}{
 		{
 			q:   `Rows(f)`,
@@ -5557,13 +5563,26 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			q:   `Rows(f, like="__")`,
 			exp: []string{"10", "11", "12", "13", "14", "15", "16", "17", "18"},
 		},
+		{
+			q:      `Rows(f_id, like=7)`,
+			expErr: "parsing:",
+		},
+		{
+			q:      `Rows(f_id, like="__")`,
+			expErr: "executing: translating call:",
+		},
 	}
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
 			if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
-				t.Fatal(err)
+				if !strings.HasPrefix(err.Error(), test.expErr) {
+					t.Fatal(err)
+				}
 			} else {
+				if test.expErr != "" {
+					t.Fatalf("got success, expected error similar to: %+v", test.expErr)
+				}
 				rows := res.Results[0].(pilosa.RowIdentifiers)
 				if !reflect.DeepEqual(rows.Keys, test.exp) {
 					t.Fatalf("\ngot: %+v\nexp: %+v", rows.Keys, test.exp)
@@ -6789,13 +6808,16 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 
 	// create an index and timestamp field
 	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, field, pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	c.CreateField(t, index, pilosa.IndexOptions{TrackExistence: true}, "set")
 
 	// add some data
 	data := []string{"2010-01-02T12:32:00Z", "2010-04-20T12:32:00Z", "2011-04-20T12:59:00Z", "2011-04-20T12:40:00Z", "2011-04-20T12:32:00Z"}
 
 	for i, datum := range data {
-		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i*(1<<20), datum))
+		c.Query(t, index, fmt.Sprintf("Set(%d, ts=\"%s\")", i*ShardWidth, datum))
 	}
+	// set something in shard 8 so there's a shard present with no timestamp data
+	c.Query(t, index, fmt.Sprintf("Set(%d, set=0)", 8*ShardWidth))
 
 	// query the Count of Distinct vals in field ts
 	count := c.Query(t, index, "Count(Distinct(field=ts))").Results[0]
@@ -6803,6 +6825,13 @@ func variousQueriesCountDistinctTimestamp(t *testing.T, c *test.Cluster) {
 		t.Fatalf("expected %v got %v", len(data), count)
 	}
 
+	// query the ones that are in or after 2011, expecting 3. this helps us
+	// hit an edge case that only happens if you have no data *because of
+	// a filter*.
+	count = c.Query(t, index, "Count(Distinct(Row(ts > \"2011-01-01T00:00:00Z\"), field=ts))").Results[0]
+	if count != uint64(3) {
+		t.Fatalf("expected %v got %v", 3, count)
+	}
 }
 
 // Ensure that a top-level, bare distinct on multiple nodes
@@ -7327,7 +7356,7 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 	// generic index
 	// worth noting, since we are using YMDH resolution, both C4 & C5
 	// get binned to the same hour
-	c.CreateField(t, "t_index", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f1", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+	c.CreateField(t, "t_index", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f1", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 	c.ImportTimeQuantumKey(t, "t_index", "f1", []test.TimeQuantumKey{
 		// from edge cases
 		{ColKey: "C1", RowKey: "R1", Ts: ts(time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC))},
@@ -7343,7 +7372,7 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 	})
 
 	// in this field, all columns have the same row value to simplify test queries for Row
-	c.CreateField(t, "t_index", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f2", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+	c.CreateField(t, "t_index", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f2", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 	c.ImportTimeQuantumKey(t, "t_index", "f2", []test.TimeQuantumKey{
 		// from
 		{ColKey: "C1", RowKey: "R", Ts: ts(time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC))},
@@ -7493,7 +7522,7 @@ func populateTestData(t *testing.T, c *test.Cluster) {
 	})
 
 	// Create and populate "places_visited" time field.
-	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "places_visited", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YM")))
+	c.CreateField(t, usersIndex, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "places_visited", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YM"), "0"))
 	ts2019Jan01 := int64(1546300800) * 1e+9 // 2019 January 1st 0:00:00
 	ts2019Aug01 := int64(1564617600) * 1e+9 // 2019 August  1st 0:00:00
 	ts2020Jan01 := int64(1577836800) * 1e+9 // 2020 January 1st 0:00:00

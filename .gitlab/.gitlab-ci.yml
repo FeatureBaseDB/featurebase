@@ -4,7 +4,7 @@ include:
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
 variables:
-  GOVERSION: "1.16.13"
+  GOVERSION: "1.17.7"
 
 stages:
   - lint
@@ -12,7 +12,9 @@ stages:
   - build
   - integration
   - gauntlet
+  - performance
   - post build
+  - nonblocking
 
 smoke build:
   image: golang:$GOVERSION
@@ -33,6 +35,15 @@ golangci-lint:
   script:
     - echo "Checking for issues in new code"
     - golangci-lint run
+
+go mod tidy:
+  stage: lint
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - go mod tidy
+    - git diff --exit-code -- go.mod go.sum
 
 build lattice:
   stage: test
@@ -83,11 +94,12 @@ run go tests:
     - aws
 
 run go tests race:
-  stage: test
+  stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
   image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
+  needs: [] # don't wait to start running this.
   script:
     - echo "Running featurebase race tests..."
     - go test -race -v -timeout=90m ./...
@@ -100,7 +112,7 @@ run go tests shardwidth22:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
-    - echo "Running featurebase race tests..."
+    - echo "Running featurebase shardwidth22 tests..."
     - go test -timeout=30m -tags=shardwidth22 ./...
   tags:
     - aws
@@ -287,6 +299,7 @@ clustertests:
   stage: integration
   tags:
     - shell
+  retry: 1
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -301,6 +314,7 @@ authclustertests:
   variables:
     PROJECT: authclustertests_${CI_CONCURRENT_ID}
   stage: integration
+  retry: 1
   tags:
     - shell
   rules:
@@ -337,7 +351,6 @@ smoke test:
     AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     TF_VAR_cluster_prefix: ""
-    TF_VAR_branch: ""
   tags:
     - aws
     - docker
@@ -369,8 +382,6 @@ smoke test:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-    - TF_VAR_branch=$CI_COMMIT_BRANCH
-    - echo "Branch --> $TF_VAR_branch"
   script:
     - ./qa/scripts/setupSmokeTest.sh
     - ./qa/scripts/testSmokeTest.sh
@@ -398,7 +409,6 @@ gauntlet:
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     ASG_NAME: "gitlab-runners"
     TF_VAR_cluster_prefix: ""
-    TF_VAR_branch: ""
   tags:
     - aws
     - docker
@@ -433,8 +443,6 @@ gauntlet:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-    - TF_VAR_branch=$CI_COMMIT_BRANCH
-    - echo "Branch --> $TF_VAR_branch"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
   script:
@@ -455,7 +463,7 @@ s3 dump:
   tags:
     - shell
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
   script:
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
@@ -477,6 +485,53 @@ s3 dump:
     - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
     - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_arm64
     - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_arm64
+  needs:
+    - job: build for darwin amd64
+    - job: build for darwin arm64
+    - job: build for linux amd64
+    - job: build for linux arm64
+
+perf_able:
+  stage: performance
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  trigger:
+    include: .gitlab/.perf-able-gitlab-ci.yml
+  variables:
+    PARENT_PIPELINE_ID: $CI_PIPELINE_ID
+
+s3 dump tag:
+  stage: post build
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    LOCATION: molecula-artifact-storage/featurebase/_tags
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          dir=featurebase-${CI_COMMIT_TAG}-${goos}-${goarch}
+          echo "Directory ${dir}"
+          mkdir $dir
+          mv featurebase_${goos}_${goarch} ${dir}/featurebase
+          mv roaring-migrate_${goos}_${goarch} ${dir}/roaring-migrate
+          cp NOTICE install/featurebase.conf install/featurebase.*.service ${dir}/
+          tar cvzf ${dir}.tar.gz ${dir}
+          aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
+          aws s3 cp ${dir}.tar.gz s3://${LOCATION}/${CI_COMMIT_TAG}/
+        done
+      done
+
   needs:
     - job: build for darwin amd64
     - job: build for darwin arm64

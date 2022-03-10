@@ -1175,6 +1175,46 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	}
 }
 
+func TestClient_CreateTimeField(t *testing.T) {
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster.GetNode(0)
+
+	c := MustNewClient(cmd.URL(), pilosa.GetHTTPClient(nil))
+
+	index := "cdf"
+	err := c.CreateIndex(context.Background(), index, pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+
+	field := "field"
+	err = c.CreateFieldWithOptions(context.Background(), index, field, pilosa.FieldOptions{Type: pilosa.FieldTypeTime, TimeQuantum: "YMDH"})
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+	fld, err := cmd.API.Field(context.Background(), index, field)
+	if err != nil {
+		t.Fatalf("getting field: %v", err)
+	}
+	if fld.Ttl() != 0 {
+		t.Fatalf("expected Ttl to be 0, got: %+v", fld.Options().Ttl.String())
+	}
+
+	fieldTtl := "field_ttl"
+	err = c.CreateFieldWithOptions(context.Background(), index, fieldTtl, pilosa.FieldOptions{Type: pilosa.FieldTypeTime, TimeQuantum: "YMDH", Ttl: time.Hour})
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+	fldTtl, err := cmd.API.Field(context.Background(), index, fieldTtl)
+	if err != nil {
+		t.Fatalf("getting field: %v", err)
+	}
+	if fldTtl.Ttl() != time.Hour {
+		t.Fatalf("expected Ttl 1 hour, got: %+v", fldTtl.Ttl().String())
+	}
+}
+
 func TestClient_CreateDecimalField(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()

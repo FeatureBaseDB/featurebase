@@ -675,6 +675,47 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	return output
 }
 
+func (b *Bitmap) Hash(hash uint64) uint64 {
+	const (
+		offset = 14695981039346656037
+		prime  = 1099511628211
+	)
+	if hash == 0 {
+		hash = uint64(offset)
+	}
+
+	it, _ := b.Containers.Iterator(0)
+	for it.Next() {
+		ki, _ := it.Value()
+		hash ^= uint64(ki)
+		hash *= prime
+	}
+
+	it, _ = b.Containers.Iterator(0)
+	for it.Next() {
+		_, ci := it.Value()
+		hash ^= 0
+		hash *= prime
+		if ci.N() > 0 {
+			var bytes []byte
+			switch ci.typ() {
+
+			case ContainerArray:
+				bytes = fromArray16(ci.array())
+			case ContainerBitmap:
+				bytes = fromArray64(ci.bitmap())
+			case ContainerRun:
+				bytes = fromInterval16(ci.runs())
+			}
+			for _, b := range bytes {
+				hash ^= uint64(b)
+				hash *= prime
+			}
+		}
+	}
+	return hash
+}
+
 type mutableContainersIterator struct {
 	c Containers
 
@@ -3526,21 +3567,40 @@ func (c *Container) bitmapToArray() *Container {
 		return c
 	}
 	bitmap := c.bitmap()
-	n := int32(0)
 
-	array := make([]uint16, c.N())
-	for i, word := range bitmap {
-		for word != 0 {
-			t := word & -word
-			if roaringParanoia {
-				if n >= c.N() {
-					panic("bitmap has more bits set than container.n")
+	// FB-1247 adding an extra check just in case c.N proves to be unreliable
+	// TODO  prove this has to be reliable
+	makeArray := func(bm []uint64, ar []uint16) ([]uint16, bool, int32) {
+		n := int32(0)
+		for i, word := range bm {
+			for word != 0 {
+				t := word & -word
+				if roaringParanoia {
+					if n >= c.N() {
+						panic("bitmap has more bits set than container.n")
+					}
 				}
+				if n == int32(len(ar)) {
+					return ar, true, n
+				}
+				ar[n] = uint16((i*64 + int(popcount(t-1))))
+				n++
+				word ^= t
 			}
-			array[n] = uint16((i*64 + int(popcount(t-1))))
-			n++
-			word ^= t
 		}
+		return ar, false, n
+	}
+	array, fail, n := makeArray(bitmap, make([]uint16, c.N()))
+	if fail {
+		// the onlyreason we are here is because N was incorrect
+		// so we force a recount of N and try again
+		c.bitmapRepair()
+		array, fail, n = makeArray(bitmap, make([]uint16, c.N()))
+		if fail {
+			//this should not be able to happen under any circumstance
+			panic("bitmapToArray failure")
+		}
+
 	}
 	if roaringParanoia {
 		if n != c.N() {
@@ -7487,4 +7547,14 @@ func (c *Container) Slice() (r []uint16) {
 		}
 	}
 	return r
+}
+
+func fromArray16(a []uint16) []byte {
+	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*2 : len(a)*2]
+}
+func fromArray64(a []uint64) []byte {
+	return (*[8192]byte)(unsafe.Pointer(&a[0]))[:8192:8192]
+}
+func fromInterval16(a []Interval16) []byte {
+	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
 }

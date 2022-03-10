@@ -201,6 +201,29 @@ func (tx *Tx) BitmapNames() ([]string, error) {
 	return a, nil
 }
 
+// BitmapExist returns true if bitmap exists.
+func (tx *Tx) BitmapExists(name string) (bool, error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	return tx.bitmapExists(name)
+}
+
+func (tx *Tx) bitmapExists(name string) (bool, error) {
+	if tx.db == nil {
+		return false, ErrTxClosed
+	} else if name == "" {
+		return false, ErrBitmapNameRequired
+	}
+
+	// Read root records and find entry for bitmap.
+	records, err := tx.RootRecords()
+	if err != nil {
+		return false, err
+	}
+	_, ok := records.Get(name)
+	return ok, nil
+}
+
 // CreateBitmap creates a new empty bitmap with the given name.
 // Returns an error if the bitmap already exists.
 func (tx *Tx) CreateBitmap(name string) error {
@@ -561,6 +584,31 @@ func (tx *Tx) Contains(name string, v uint64) (bool, error) {
 	return c.Contains(v)
 }
 
+// Depth returns the depth of the b-tree for a bitmap.
+func (tx *Tx) Depth(name string) (int, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	if tx.db == nil {
+		return 0, ErrTxClosed
+	} else if name == "" {
+		return 0, ErrBitmapNameRequired
+	}
+
+	c, err := tx.cursor(name)
+	if err == ErrBitmapNotFound {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+
+	if err := c.First(); err != nil {
+		return 0, err
+	}
+	return c.stack.top + 1, nil
+}
+
 // Cursor returns an instance of a cursor this bitmap.
 func (tx *Tx) Cursor(name string) (*Cursor, error) {
 	tx.mu.RLock()
@@ -669,6 +717,7 @@ func (tx *Tx) container(name string, key uint64) (*roaring.Container, error) {
 func (tx *Tx) PutContainer(name string, key uint64, ct *roaring.Container) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
+
 	return tx.putContainer(name, key, ct)
 }
 
@@ -725,7 +774,6 @@ func (tx *Tx) removeContainer(name string, key uint64) error {
 	if exact, err := c.Seek(key); err != nil || !exact {
 		return err
 	}
-
 	return c.deleteLeafCell(key)
 }
 
@@ -1125,7 +1173,7 @@ func (tx *Tx) readPage(pgno uint32) (_ []byte, isHeap bool, err error) {
 
 	// Verify page number requested is within current size of database.
 	pageN := readMetaPageN(tx.meta[:])
-	if pgno > pageN {
+	if pgno >= pageN {
 		return nil, false, fmt.Errorf("rbf: page read out of bounds: pgno=%d max=%d", pgno, pageN-1)
 	}
 
@@ -1210,6 +1258,22 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 	return &containerIterator{cursor: c}, exact, nil
 }
 
+// Shared pool for in-memory database pages.
+// These are used before being flushed to disk.
+var containerFilterPool = &sync.Pool{}
+
+func getContainerFilter(c *Cursor, filter roaring.BitmapFilter, tx *Tx) *containerFilter {
+	existing := containerFilterPool.Get()
+	if existing == nil {
+		return &containerFilter{cursor: c, filter: filter, tx: tx}
+	}
+	f := existing.(*containerFilter)
+	f.cursor = c
+	f.filter = filter
+	f.tx = tx
+	return f
+}
+
 func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) (err error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
@@ -1225,7 +1289,7 @@ func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) 
 	if err != nil {
 		return err
 	}
-	f := containerFilter{cursor: c, filter: filter, tx: tx}
+	f := getContainerFilter(c, filter, tx)
 	defer f.Close()
 	return f.Apply()
 }
@@ -1567,6 +1631,8 @@ type containerFilter struct {
 
 func (s *containerFilter) Close() {
 	s.cursor.Close()
+	s.cursor = nil
+	containerFilterPool.Put(s)
 }
 
 func (s *containerFilter) Apply() (err error) {
@@ -1932,6 +1998,7 @@ func (tx *Tx) Pages(pgnos []uint32) ([]Page, error) {
 // PageInfos returns meta data about all pages in the database.
 func (tx *Tx) PageInfos() ([]PageInfo, error) {
 	var errorList ErrorList
+
 	infos := make([]PageInfo, tx.PageN())
 
 	// Read meta page info.

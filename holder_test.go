@@ -453,7 +453,7 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum(quantum)))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum(quantum), "0"))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}

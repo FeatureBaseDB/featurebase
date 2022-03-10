@@ -13,7 +13,7 @@ data "aws_ami" "amazon_linux_2" {
 
   filter {
     name   = "architecture"
-    values = ["arm64"]
+    values = var.fb_cluster_arch
   }
 }
 
@@ -38,6 +38,7 @@ resource "aws_instance" "fb_cluster_nodes" {
     volume_type = var.fb_data_disk_type
     volume_size = var.fb_data_disk_size_gb
     iops        = var.fb_data_disk_iops
+    encrypted   = true 
   }
 
   tags = {
@@ -70,6 +71,7 @@ resource "aws_instance" "fb_ingest" {
     volume_type = var.fb_ingest_disk_type
     volume_size = var.fb_ingest_disk_size_gb
     iops        = var.fb_ingest_disk_iops
+    encrypted   = true
   }
 
   tags = {
@@ -251,6 +253,27 @@ resource "aws_iam_role" "fb_cluster_node_role" {
           Effect   = "Allow"
           Resource = "*"
         },
+      ]
+    })
+  }
+
+  inline_policy {
+    name = "s3_perms"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+            Sid = "VisualEditor0",
+            Effect = "Allow",
+            Action = ["s3:PutObject", "s3:GetObject"],
+            Resource = "arn:aws:s3:::molecula-perf-storage/*"
+        },
+        {
+            Sid = "VisualEditor1",
+            Effect = "Allow",
+            Action = "s3:PutObject",
+            Resource = "arn:aws:s3:::molecula-artifact-storage/*"
+        }
       ]
     })
   }

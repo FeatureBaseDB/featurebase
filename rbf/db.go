@@ -261,7 +261,7 @@ func (db *DB) methodicalWALPageN(pageN int) (lastMeta int, err error) {
 		}
 		switch {
 		case IsMetaPage(page):
-			lastMeta = i
+			lastMeta = i + 1
 		case IsBitmapHeader(page):
 			// skip the bitmap page, which we can't usefully evaluate
 			i++
@@ -411,16 +411,27 @@ func (db *DB) checkpoint() (err error) {
 
 // Close closes the database.
 func (db *DB) Close() (err error) {
-	// TODO(bbj): Add wait group to hang until last Tx is complete.
+	// mark db as closed, spawn a thing to wait for existing tx to drain, then
+	// release the lock so they CAN drain. We do this before getting the
+	// write lock, so if something else is waiting on rwmu.Lock, and will be
+	// competing with us, we can ensure that it'll exit out quickly.
+	db.mu.Lock()
+	db.opened = false
+	// wait for transactions to complete
+	ch := make(chan struct{})
+	db.afterCurrentTx(func() {
+		close(ch)
+	})
+	db.mu.Unlock()
+	<-ch
 
 	// Wait for writer lock.
 	db.rwmu.Lock()
 	defer db.rwmu.Unlock()
 
+	// and main DB lock.
 	db.mu.Lock()
 	defer db.mu.Unlock()
-
-	db.opened = false
 
 	// Close mmap handle.
 	if db.data != nil {

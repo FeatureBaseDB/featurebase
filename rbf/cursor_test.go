@@ -2,6 +2,7 @@
 package rbf_test
 
 import (
+	"bytes"
 	"io"
 	"math/bits"
 	"math/rand"
@@ -556,6 +557,44 @@ func TestCursor_RLETesting(t *testing.T) {
 	})
 }
 
+func TestCursor_BitmapBitN(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	bmData := make([]uint64, 1024)
+	for i := range bmData {
+		bmData[i] = 0x5555555555555555
+	}
+	ct := roaring.NewContainerBitmap(-1, bmData)
+	err := tx.PutContainer("x", 0, ct)
+	if err != nil {
+		t.Fatalf("error writing container: %v", err)
+	}
+	// Putting a container to the same slot, which is also a bitmap
+	// (rather than a BitmapPtr), while the existing cell is a BitmapPtr,
+	// may not update BitN correctly.
+	ct, _ = ct.Add(1)
+	err = tx.PutContainer("x", 0, ct)
+	if err != nil {
+		t.Fatalf("rewriting container: %v", err)
+	}
+	v, err := tx.Container("x", 0)
+	if err != nil {
+		t.Fatalf("getting container: %v", err)
+	}
+	c1 := v.N()
+	v.Repair()
+	c2 := v.N()
+	if c1 != c2 {
+		t.Fatalf("expected count %d, got %d", c2, c1)
+	}
+	tx.Commit()
+}
+
 func TestCursor_RLEConversion(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -852,8 +891,10 @@ func TestDumpDot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rbf.Dumpdot(tx, 0, " ", os.Stdout)
+	var b bytes.Buffer
+	rbf.Dumpdot(tx, 0, " ", &b)
 }
+
 func TestCursor_UpdateBranchCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
@@ -1205,4 +1246,64 @@ func TestForEachRange(t *testing.T) {
 	if len(valmap) != 0 {
 		t.Fatalf("expected empty container, but see %v values left: '%#v'", len(valmap), valmap)
 	}
+}
+
+func TestCursor_PutContainer(t *testing.T) {
+	t.Run("BitmapToArray", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		}
+
+		bmData := make([]uint64, 1024)
+		for i := range bmData {
+			bmData[i] = 0x5555555555555555
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerBitmap(-1, bmData)); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerArray([]uint16{0})); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("BitmapToBitmap", func(t *testing.T) {
+		db := MustOpenDB(t)
+		defer MustCloseDB(t, db)
+
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		if err := tx.CreateBitmap("x"); err != nil {
+			t.Fatal(err)
+		}
+
+		data0 := make([]uint64, 1024)
+		for i := range data0 {
+			data0[i] = 0x5555555555555555
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerBitmap(-1, data0)); err != nil {
+			t.Fatal(err)
+		}
+
+		data1 := make([]uint64, 1024)
+		for i := range data0 {
+			data1[i] = 0x7777777777777777
+		}
+		if err := tx.PutContainer("x", 0, roaring.NewContainerBitmap(-1, data1)); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

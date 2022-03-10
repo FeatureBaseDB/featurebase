@@ -44,6 +44,7 @@ var _ broadcaster = &Server{}
 type Server struct { // nolint: maligned
 	// Close management.
 	wg      sync.WaitGroup
+	muWG    sync.Mutex
 	closing chan struct{}
 
 	// Internal
@@ -75,6 +76,7 @@ type Server struct { // nolint: maligned
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
+	ttlRemovalInterval  time.Duration
 	maxWritesPerRequest int
 	confirmDownSleep    time.Duration
 	confirmDownRetries  int
@@ -97,6 +99,26 @@ type Server struct { // nolint: maligned
 // Holder returns the holder for server.
 func (s *Server) Holder() *Holder {
 	return s.holder
+}
+
+// addToWaitGroup adds to the server WaitGroup but makes sure the server isn't
+// closing, and that the WaitGroup is not already waiting before it adds
+func (s *Server) addToWaitGroup(delta int) bool {
+	select {
+	case <-s.closing:
+		return false
+	default:
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
+		select {
+		case <-s.closing:
+			// if we're closing after having gotten the lock, stop!!
+			return false
+		default:
+			s.wg.Add(delta)
+			return true
+		}
+	}
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -142,6 +164,15 @@ func OptServerDataDir(dir string) ServerOption {
 func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.antiEntropyInterval = interval
+		return nil
+	}
+}
+
+// OptServerTtlRemovalInterval is a functional option on Server
+// used to set the ttl removal interval.
+func OptServerTtlRemovalInterval(interval time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.ttlRemovalInterval = interval
 		return nil
 	}
 }
@@ -412,6 +443,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		antiEntropyInterval: 0,
 		metricInterval:      0,
 		diagnosticInterval:  0,
+		ttlRemovalInterval:  time.Hour,
 
 		disCo:      disco.NopDisCo,
 		stator:     disco.NopStator,
@@ -590,7 +622,10 @@ func (s *Server) Open() error {
 
 	// Start background process listening for translation
 	// sync resets.
-	s.wg.Add(1)
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
+
 	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
 	go func() { _ = s.translationSyncer.Reset() }()
 
@@ -617,10 +652,13 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-	s.wg.Add(3)
+	if ok := s.addToWaitGroup(4); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
+	go func() { defer s.wg.Done(); s.monitorTtl() }()
 
 	toSend := func() []Message {
 		s.holder.startMsgsMu.Lock()
@@ -631,14 +669,18 @@ func (s *Server) Open() error {
 		return toSend
 	}()
 
-	s.wg.Add(1)
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
 	go func() {
 		defer s.wg.Done()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-
-		s.wg.Add(1)
+		if ok := s.addToWaitGroup(1); !ok {
+			// the server is closing, stop!!
+			return
+		}
 		go func() {
 			defer s.wg.Done()
 			defer cancel()
@@ -716,11 +758,15 @@ func (s *Server) Close() error {
 	case <-s.closing:
 		return nil
 	default:
-		errE := s.executor.Close()
-
+		// get the muWG lock so that noone adds to the WaitGroup while it Waits
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
 		// Notify goroutines to stop.
 		close(s.closing)
 		s.wg.Wait()
+
+		errE := s.executor.Close()
+
 		var errh, errd error
 		var errhs error
 		var errc error
@@ -776,8 +822,11 @@ func (s *Server) monitorResetTranslationSync() {
 		case <-s.closing:
 			return
 		case <-s.resetTranslationSyncCh:
+			if ok := s.addToWaitGroup(1); !ok {
+				// the server is closing!!! stop!!
+				return
+			}
 			s.logger.Infof("holder translation sync beginning")
-			s.wg.Add(1)
 			go func() {
 				// Obtaining this lock ensures that there is only
 				// one instance of resetTranslationSync() running
@@ -789,6 +838,53 @@ func (s *Server) monitorResetTranslationSync() {
 					s.logger.Errorf("holder translation sync error: err=%s", err)
 				}
 			}()
+		}
+	}
+}
+
+func (s *Server) monitorTtl() {
+	ctx := context.Background()
+	ticker := time.NewTicker(s.ttlRemovalInterval)
+	for {
+		select {
+		case <-s.closing:
+			return
+		case <-ticker.C:
+			s.TtlRemoval(ctx)
+		}
+	}
+}
+
+func (s *Server) TtlRemoval(ctx context.Context) {
+	for _, index := range s.holder.Indexes() {
+		for _, field := range index.Fields() {
+			if field.Options().Type == "time" {
+				if field.Options().Ttl > 0 {
+					for _, view := range field.views() {
+						viewNames := strings.Split(view.name, "_")
+						if len(viewNames) >= 2 {
+							viewTime, err := timeOfView(view.name, false)
+							if err != nil {
+								s.logger.Printf("ttl parse view time: %s", err)
+								continue
+							}
+							timeSince := time.Since(viewTime)
+
+							if timeSince >= field.Options().Ttl {
+								for _, shard := range field.AvailableShards(true).Slice() {
+									s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
+								}
+
+								err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
+								if err != nil {
+									s.logger.Errorf("ttl delete view: %s", err)
+								}
+								s.logger.Infof("ttl deleted view: %s", view.name)
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }

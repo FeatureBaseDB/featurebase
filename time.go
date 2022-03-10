@@ -450,7 +450,7 @@ func timeOfView(v string, adj bool) (time.Time, error) {
 		return time.Time{}, nil
 	}
 
-	layout := "2006010203"
+	layout := "2006010215"
 	timePart := viewTimePart(v)
 
 	switch len(timePart) {

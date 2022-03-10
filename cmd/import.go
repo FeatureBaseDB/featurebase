@@ -46,6 +46,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Specify the cache type for a set field on creation. One of: none, lru, ranked")
 	flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Specify the cache size for a set field on creation")
 	flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Specify the time quantum for a time field on creation. One of: D, DH, H, M, MD, MDH, Y, YM, YMD, YMDH")
+	flags.DurationVarP(&Importer.FieldOptions.Ttl, "time-to-live", "t", 0, "Specify the time to live for views created by time quantum. Supported time unit: \"s\", \"m\", \"h\"") // \"ns\", \"us\" (or \"µs\"), \"ms\" also supported but ommitted for simplicity
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
 	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
