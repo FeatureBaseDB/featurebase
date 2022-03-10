@@ -94,21 +94,24 @@ func TestHolder_ProcessDeleteInflight(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		idx, f := test.idx, test.f
-		tx := idx.Txf().NewTx(Txo{Write: false, Index: idx1, Shard: uint64(0)})
-		defer tx.Rollback()
-		for _, r := range rowCol {
-			row, err := f.Row(tx, r.row)
-			if err != nil {
-				t.Fatalf("failed to get row: %v", err)
+		func() {
+			idx, f := test.idx, test.f
+			tx := idx.Txf().NewTx(Txo{Write: false, Index: idx1, Shard: uint64(0)})
+			defer tx.Rollback()
+			for _, r := range rowCol {
+				row, err := f.Row(tx, r.row)
+				if err != nil {
+					t.Fatalf("failed to get row: %v", err)
+				}
+				existenceRow, err := idx.existenceFld.Row(tx, r.row)
+				if err != nil {
+					t.Fatalf("failed to get row: %v", err)
+				}
+				if len(row.Columns()) != 0 || len(existenceRow.Columns()) != 0 {
+					t.Fatalf("expected columns for fields to be empty after delete")
+				}
 			}
-			existenceRow, err := idx.existenceFld.Row(tx, r.row)
-			if err != nil {
-				t.Fatalf("failed to get row: %v", err)
-			}
-			if len(row.Columns()) != 0 || len(existenceRow.Columns()) != 0 {
-				t.Fatalf("expected columns for fields to be empty after delete")
-			}
-		}
+		}()
+
 	}
 }

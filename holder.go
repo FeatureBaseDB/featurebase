@@ -344,13 +344,15 @@ func (h *Holder) processDeleteInflight() error {
 				g.Go(func() error {
 					for shard := range ch {
 						if err := h.deletePerShard(index, shard); err != nil {
-							return err
+							return fmt.Errorf("delete shard %d: %w", shard, err)
 						}
 					}
 					return nil
 				})
 			}
-			g.Wait()
+			if err := g.Wait(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
