@@ -318,6 +318,8 @@ func (h *Holder) deletePerShard(index *Index, shard uint64) error {
 	}
 	h.Logger.Printf("retrying delete: index=%v shard=%v record count=%v", index.name, shard, inprocessRecords.Count())
 
+	tx.Rollback() // release the read tx in case a checksum is needed in DeleteRows
+
 	_, err = DeleteRows(context.Background(), inprocessRecords, index, shard)
 	if err != nil {
 		return fmt.Errorf("deleting rows: %v", err)
