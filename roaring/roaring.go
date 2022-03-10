@@ -3594,7 +3594,7 @@ func (c *Container) bitmapToArray() *Container {
 	if fail {
 		// the onlyreason we are here is because N was incorrect
 		// so we force a recount of N and try again
-		c.bitmapRepair() // the onlyreason we are here is because N was incorrect
+		c.bitmapRepair() 
 		array, fail, n = makeArray(bitmap, make([]uint16, c.N()))
 		if fail {
 			//this should not be able to happen under any circumstance
