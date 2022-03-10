@@ -49,22 +49,3 @@ func TestHosts(t *testing.T) {
 		t.Fatalf("Host should return a value if there are hosts in the cluster")
 	}
 }
-
-func TestRemoveHost(t *testing.T) {
-	uri, err := pnet.NewURIFromAddress("index1.pilosa.com:9999")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := NewClusterWithHost(uri)
-	if len(c.hosts) != 1 {
-		t.Fatalf("The cluster should contain the host")
-	}
-	uri, err = pnet.NewURIFromAddress("index1.pilosa.com:9999")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.RemoveHost(uri)
-	if len(c.Hosts()) != 0 {
-		t.Fatalf("The cluster should not contain the host")
-	}
-}
