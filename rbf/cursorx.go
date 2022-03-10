@@ -177,7 +177,7 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
-		c = roaring.RemakeContainerBitmapN(replacing, cloneMaybe, int32(l.BitN))
+		c = roaring.RemakeContainerBitmap(replacing, cloneMaybe)
 	case ContainerTypeBitmap:
 		c = roaring.RemakeContainerBitmapN(replacing, toArray64(cpMaybe), int32(l.BitN))
 	case ContainerTypeRLE:
@@ -216,9 +216,9 @@ func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(cpMaybe))
 		cloneMaybe := bm
-		c = roaring.NewContainerBitmap(l.BitN, cloneMaybe)
+		c = roaring.NewContainerBitmap(-1, cloneMaybe)
 	case ContainerTypeBitmap:
-		c = roaring.NewContainerBitmap(l.BitN, toArray64(cpMaybe))
+		c = roaring.NewContainerBitmap(-1, toArray64(cpMaybe))
 	case ContainerTypeRLE:
 		c = roaring.NewContainerRun(toInterval16(cpMaybe))
 	}
