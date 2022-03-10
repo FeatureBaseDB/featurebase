@@ -832,31 +832,24 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		body   []byte
 		err    error
 	)
-	// try at most maxHosts non-failed hosts; protect against broken cluster.removeHost
-	for i := 0; i < maxHosts; i++ {
+	// try request on host, if it fails, try again on primary
+	for i := 0; i <= 1; i++ {
 		host, herr := c.host(usePrimary)
 		if herr != nil {
 			return status, nil, errors.Wrapf(herr, "getting host, previous err: %v", err)
 		}
 		// doRequest implements expotential backoff
 		status, body, err = c.doRequest(host, method, path, c.augmentHeaders(headers), data)
-		if err == nil {
+		// conditions when primary should not be tried
+		if err == nil || usePrimary || path == "/status" {
 			break
 		}
-		if c.manualServerURI == nil {
-			if usePrimary {
-				c.primaryLock.Lock()
-				c.primaryURI = nil
-				c.primaryLock.Unlock()
-			} else {
-				c.logger.Printf("removing host (%s) due to '%v'\n", host.Normalize(), err)
-				c.cluster.RemoveHost(host)
-			}
-		}
+
+		usePrimary = true
 	}
 
 	if err != nil {
-		err = errors.Wrap(err, ErrTriedMaxHosts.Error())
+		err = errors.Wrap(err, ErrHTTPRequest.Error())
 	}
 
 	return status, body, err

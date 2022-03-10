@@ -497,7 +497,7 @@ func TestClientAgainstCluster(t *testing.T) {
 				tmpcli, _ := NewClient(NewClusterWithHost(uri, uri, uri, uri), OptClientRetries(0))
 
 				_, err := tmpcli.Query(testIndex.All())
-				require.Error(t, err, ErrTriedMaxHosts)
+				require.Error(t, err, ErrHTTPRequest)
 			})
 
 			t.Run("InvalidQuery", func(t *testing.T) {
