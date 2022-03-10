@@ -392,12 +392,12 @@ func TestRetryLogic(t *testing.T) {
 	}
 	waitForStatus(t, cli1.Status, string(disco.ClusterStateNormal), 30, time.Second, ctx)
 
+	// check data in all three nodes.
 	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
 		r, err := cli.Query(ctx, "testidx1", &pilosa.QueryRequest{Index: "testidx1", Query: "Count(Row(testfield1 = 0))"})
 		if err != nil {
-			t.Fatalf("count querying pilosa1 %v", err)
+			t.Fatalf("count querying pilosa%d, %v", i, err)
 		}
-		fmt.Println("count = ", r.Results[0].(uint64))
 		if r.Results[0].(uint64) != 100000 {
 			t.Fatalf("count on pilosa%d after import is %d", i, r.Results[0].(uint64))
 		}
@@ -405,9 +405,8 @@ func TestRetryLogic(t *testing.T) {
 	for i, cli := range []*pilosa.InternalClient{cli1, cli2, cli3} {
 		r, err := cli.Query(ctx, "testidx2", &pilosa.QueryRequest{Index: "testidx2", Query: "Count(Row(testfield2 = 0))"})
 		if err != nil {
-			t.Fatalf("count querying pilosa1 %v", err)
+			t.Fatalf("count querying pilosa%d, %v", i, err)
 		}
-		fmt.Println("count = ", r.Results[0].(uint64))
 		if r.Results[0].(uint64) != 10000 {
 			t.Fatalf("count on pilosa%d after import is %d", i, r.Results[0].(uint64))
 		}
