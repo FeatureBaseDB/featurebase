@@ -844,6 +844,8 @@ func (s *Server) monitorResetTranslationSync() {
 
 func (s *Server) monitorTtl() {
 	ctx := context.Background()
+	// Run TtlRemoval on server start
+	s.TtlRemoval(ctx)
 	ticker := time.NewTicker(s.ttlRemovalInterval)
 	for {
 		select {
@@ -879,7 +881,7 @@ func (s *Server) TtlRemoval(ctx context.Context) {
 								if err != nil {
 									s.logger.Errorf("ttl delete view: %s", err)
 								}
-								s.logger.Infof("ttl deleted view: %s", view.name)
+								s.logger.Infof("ttl deleted - index: %s, field: %s, view: %s ", index.name, field.name, view.name)
 							}
 						}
 					}
