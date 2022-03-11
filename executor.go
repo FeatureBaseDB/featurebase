@@ -8242,24 +8242,12 @@ func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index str
 	} else if len(c.Children) > 1 {
 		return false, errors.New("Delete() only accepts a single bitmap input")
 	}
-
-	if len(c.Children) != 1 {
-
-	}
-
-	row, err := e.executeBitmapCall(ctx, qcx, index, c.Children[0], shards, opt)
 	qcx.Abort()
 	qcx.Reset() //release the qcx to allow for rbf checkpoint
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
-
-		for i := range row.segments {
-			if row.segments[i].shard == shard {
-				return e.executeDeleteRecordFromShard(ctx, index, row.segments[i].data, shard)
-			}
-		}
-		return false, nil
+		return e.executeDeleteRecordFromShard(ctx, index, c.Children[0], shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -8293,16 +8281,21 @@ func transactExistRow(ctx context.Context, idx *Index, shard uint64, frag *fragm
 	}
 	return rowID, tx.Commit()
 }
-func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index string, columns *roaring.Bitmap, shard uint64) (changed bool, err error) {
+func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index string, bmCall *pql.Call, shard uint64) (changed bool, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeDeleteRecordFromShard")
 	defer span.Finish()
-	if columns.Count() == 0 {
-		return
-	}
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		err = newNotFoundError(ErrIndexNotFound, index)
+		return
+	}
+	qcx := idx.Txf().NewQcx()
+	//bmCall is a bitmap
+	row, err := e.executeBitmapCallShard(ctx, qcx, index, bmCall, shard)
+	qcx.Abort()
+	columns := row.segments[0].data
+	if columns.Count() == 0 {
 		return
 	}
 	src := NewRowFromBitmap(columns)
