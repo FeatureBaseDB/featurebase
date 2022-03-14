@@ -60,7 +60,6 @@ type executor struct {
 
 	shutdown       bool
 	workers        *task.Pool
-	workerPoolMu   sync.Mutex
 	workerPoolSize int
 	work           chan job
 
@@ -6066,8 +6065,6 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := ctx.Done()
-	e.workerPoolMu.Lock()
-	defer e.workerPoolMu.Unlock()
 	if e.shutdown {
 		return nil, errShutdown
 	}
