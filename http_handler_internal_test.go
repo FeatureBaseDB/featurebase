@@ -789,3 +789,24 @@ func TestHandleGetMemUsage(t *testing.T) {
 		t.Fatalf("expected %v, got %v", http.StatusOK, resp.StatusCode)
 	}
 }
+
+func TestHandleGetDiskUsage(t *testing.T) {
+	h := Handler{
+		logger:      logger.NewStandardLogger(os.Stdout),
+		queryLogger: logger.NewStandardLogger(os.Stdout),
+		api: &API{
+			server: &Server{
+				dataDir: t.TempDir(),
+			},
+		},
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/whatever", nil)
+
+	h.handleGetDiskUsage(w, r)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected %v, got %v", http.StatusOK, resp.StatusCode)
+	}
+}
