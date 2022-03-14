@@ -5,7 +5,11 @@ package pilosa
 
 import (
 	"fmt"
+	"os"
+	"os/user"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/mem"
@@ -70,4 +74,31 @@ func GetMemoryUsage() (MemoryUsage, error) {
 		return MemoryUsage{}, fmt.Errorf("reading virtual memory: %v", err)
 	}
 	return MemoryUsage{Capacity: usage.Total, TotalUse: usage.Used}, nil
+}
+
+type DiskUsage struct {
+	Usage int64 `json:"usage"`
+}
+
+// GetDiskUsage gets the disk usage of the path
+func GetDiskUsage(path string) (DiskUsage, error) {
+	usr, _ := user.Current()
+	dir := usr.HomeDir
+	if path == "~" {
+		path = dir
+	} else if strings.HasPrefix(path, "~/") {
+		path = filepath.Join(dir, path[2:])
+	}
+
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return err
+	})
+	return DiskUsage{size}, err
 }

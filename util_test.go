@@ -2,7 +2,6 @@
 package pilosa
 
 // util_test.go has unit tests for utility functions from util.go
-//
 
 import (
 	"testing"
@@ -95,4 +94,16 @@ func TestGetMemoryUsage(t *testing.T) {
 	if _, err := GetMemoryUsage(); err != nil {
 		t.Fatalf("unexpected error getting memory usage: %v", err)
 	}
+}
+
+func TestGetDiskUsage(t *testing.T) {
+	tdir := t.TempDir()
+	if _, err := GetDiskUsage(tdir); err != nil {
+		t.Fatalf("unexpected error getting disk usage: %v", err)
+	}
+
+	if _, err := GetDiskUsage(""); err == nil {
+		t.Fatal("expected error getting disk usage but got nil")
+	}
+
 }
