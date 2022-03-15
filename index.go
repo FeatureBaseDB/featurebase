@@ -4,7 +4,6 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -618,14 +617,23 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	// added for backward compatablity with old schemas
 	if opt != nil && opt.Type == FieldTypeDecimal {
 		min, max := pql.MinMax(opt.Scale)
-		opt.Max = max
-		opt.Min = min
+		// ensure the provided bounds are valid
+		if max.LessThan(opt.Max) {
+			opt.Max = max
+		}
+		if min.GreaterThan(opt.Min) {
+			opt.Min = min
+		}
 	}
 	if opt != nil && opt.Type == FieldTypeDecimal {
-		min := pql.NewDecimal(int64(math.MinInt64), 0)
-		max := pql.NewDecimal(int64(math.MaxInt64), 0)
-		opt.Max = max
-		opt.Min = min
+		min, max := pql.MinMax(0)
+		// ensure the provided bounds are valid
+		if max.LessThan(opt.Max) {
+			opt.Max = max
+		}
+		if min.GreaterThan(opt.Min) {
+			opt.Min = min
+		}
 	}
 
 	cfm := &CreateFieldMessage{
