@@ -1576,14 +1576,19 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 		scale := int64(0)
 		if opt.Scale != nil {
 			scale = *opt.Scale
-		}
-		if opt.Min == nil {
-			min := pql.NewDecimal(int64(math.MinInt64), scale)
+			min, max := pql.MinMax(scale)
 			opt.Min = &min
-		}
-		if opt.Max == nil {
-			max := pql.NewDecimal(int64(math.MaxInt64), scale)
 			opt.Max = &max
+		} else {
+
+			if opt.Min == nil {
+				min := pql.NewDecimal(int64(math.MinInt64), scale)
+				opt.Min = &min
+			}
+			if opt.Max == nil {
+				max := pql.NewDecimal(int64(math.MaxInt64), scale)
+				opt.Max = &max
+			}
 		}
 		var minmax []pql.Decimal
 		if opt.Min != nil {

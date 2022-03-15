@@ -4,6 +4,7 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -612,6 +614,18 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	// Find field in cache first.
 	if f := i.fields[name]; f != nil {
 		return f, nil
+	}
+	// added for backward compatablity with old schemas
+	if opt != nil && opt.Type == FieldTypeDecimal {
+		min, max := pql.MinMax(opt.Scale)
+		opt.Max = max
+		opt.Min = min
+	}
+	if opt != nil && opt.Type == FieldTypeDecimal {
+		min := pql.NewDecimal(int64(math.MinInt64), 0)
+		max := pql.NewDecimal(int64(math.MaxInt64), 0)
+		opt.Max = max
+		opt.Min = min
 	}
 
 	cfm := &CreateFieldMessage{
