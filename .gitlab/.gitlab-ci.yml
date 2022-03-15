@@ -1,8 +1,8 @@
-#include:
-#  - template: Security/SAST.gitlab-ci.yml
-#  - template: Security/License-Scanning.gitlab-ci.yml
-#  - template: Security/Dependency-Scanning.gitlab-ci.yml
-#
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/License-Scanning.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+
 variables:
   GOVERSION: "1.17.7"
 
@@ -16,35 +16,35 @@ stages:
   - post build
   - nonblocking
 
-#smoke build:
-#  image: golang:$GOVERSION
-#  stage: lint
-#  allow_failure: false
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Let's just see if it compiles... (sometimes the linter gives unclear errors if it doesn't)"
-#    - go build ./...
-#
-#golangci-lint:
-#  image: golangci/golangci-lint:v1.39.0
-#  stage: lint
-#  allow_failure: false
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Checking for issues in new code"
-#    - golangci-lint run
-#
-#go mod tidy:
-#  stage: lint
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
-#  script:
-#    - go mod tidy
-#    - git diff --exit-code -- go.mod go.sum
-#
+smoke build:
+  image: golang:$GOVERSION
+  stage: lint
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Let's just see if it compiles... (sometimes the linter gives unclear errors if it doesn't)"
+    - go build ./...
+
+golangci-lint:
+  image: golangci/golangci-lint:v1.39.0
+  stage: lint
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Checking for issues in new code"
+    - golangci-lint run
+
+go mod tidy:
+  stage: lint
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - go mod tidy
+    - git diff --exit-code -- go.mod go.sum
+
 build lattice:
   stage: test
   image: node:14
@@ -64,92 +64,92 @@ build lattice:
   artifacts:
     paths:
       - lattice.tar.gz
-#
-#run jest tests:
-#  stage: test
-#  image: node:14
-#  variables:
-#    CI: "true"
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Testing lattice..."
-#    - cd lattice
-#    - npm install --force
-#    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
-#  artifacts:
-#    paths:
-#      - lattice/coverage/lcov.info
-#
-#run go tests:
-#  stage: test
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  retry: 1
-#  script:
-#    - echo "Running featurebase unit tests..."
-#    - go test -timeout=30m ./...
-#  tags:
-#    - aws
-#
-#run go tests race:
-#  stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  retry: 1
-#  needs: [] # don't wait to start running this.
-#  script:
-#    - echo "Running featurebase race tests..."
-#    - go test -race -v -timeout=90m ./...
-#  tags:
-#    - aws
-#
-#run go tests shardwidth22:
-#  stage: test
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Running featurebase shardwidth22 tests..."
-#    - go test -timeout=30m -tags=shardwidth22 ./...
-#  tags:
-#    - aws
-#    
-## we do coverage reporting from the future tests because the json
-## output is very difficult to human-read. The alternative would be to
-## run the regular tests twice and also run the future tests.
-#run go tests future:
-#  stage: test
-#  image: golang:1.17.6
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  retry: 1
-#  script:
-#    - echo "Running featurebase unit tests..."
-#    - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
-#    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
-#  artifacts:
-#    paths:
-#      - coverage.out
-#      - test-report.out
-#  tags:
-#    - aws
-#
-#upload to sonarcloud:
-#  stage: integration
-#  image: sonarsource/sonar-scanner-cli:4.6
-#  variables:
-#    SONAR_TOKEN: $SONAR_TOKEN
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out,results/coverage*.out -Dsonar.go.tests.reportPaths=test-report.out,results/report*  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
-#  needs:
-#    - job: run go tests future
-#    - job: run jest tests 
-#    - job: clustertests
+
+run jest tests:
+  stage: test
+  image: node:14
+  variables:
+    CI: "true"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Testing lattice..."
+    - cd lattice
+    - npm install --force
+    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
+  artifacts:
+    paths:
+      - lattice/coverage/lcov.info
+
+run go tests:
+  stage: test
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
+  script:
+    - echo "Running featurebase unit tests..."
+    - go test -timeout=30m ./...
+  tags:
+    - aws
+
+run go tests race:
+  stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
+  needs: [] # don't wait to start running this.
+  script:
+    - echo "Running featurebase race tests..."
+    - go test -race -v -timeout=90m ./...
+  tags:
+    - aws
+
+run go tests shardwidth22:
+  stage: test
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Running featurebase shardwidth22 tests..."
+    - go test -timeout=30m -tags=shardwidth22 ./...
+  tags:
+    - aws
+    
+# we do coverage reporting from the future tests because the json
+# output is very difficult to human-read. The alternative would be to
+# run the regular tests twice and also run the future tests.
+run go tests future:
+  stage: test
+  image: golang:1.17.6
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
+  script:
+    - echo "Running featurebase unit tests..."
+    - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
+    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
+  artifacts:
+    paths:
+      - coverage.out
+      - test-report.out
+  tags:
+    - aws
+
+upload to sonarcloud:
+  stage: integration
+  image: sonarsource/sonar-scanner-cli:4.6
+  variables:
+    SONAR_TOKEN: $SONAR_TOKEN
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out,results/coverage*.out -Dsonar.go.tests.reportPaths=test-report.out,results/report*  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
+  needs:
+    - job: run go tests future
+    - job: run jest tests 
+    - job: clustertests
     
 build for linux amd64:
   stage: build
@@ -292,7 +292,6 @@ build arm container fb:
 # 3. make sure docker/docker-compose is installed
 # 4. make sure the git config is done `git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"`
 # 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
-# TODO: (I think) get clustertests coverage added to coverage report
 clustertests:
   variables:
     PROJECT: clustertests_${CI_CONCURRENT_ID}
@@ -500,8 +499,12 @@ perf_able:
   variables:
     PARENT_PIPELINE_ID: $CI_PIPELINE_ID
 
+# only run on merge to master, the whole process takes about 10 minutes in total
+# (which is a long time)
 perf_delete:
-  stage: integration
+  stage: performance
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
   timeout: 2h
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
