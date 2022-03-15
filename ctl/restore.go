@@ -19,10 +19,8 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/topology"
-	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -194,13 +192,6 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 			}
 			for _, field := range index.Fields {
 				logger.Printf("Create Field %v", field.Name)
-				if field.Options.Type == pilosa.FieldTypeDecimal {
-					min, max := pql.MinMax(field.Options.Scale)
-					scale := field.Options.Scale
-					vprint.VV("setting MinMax %v %s %s", scale, min, max)
-					field.Options.Max = max
-					field.Options.Min = min
-				}
 				err = cmd.client.CreateFieldWithOptions(ctx, index.Name, field.Name, field.Options)
 				if err != nil {
 					return err
