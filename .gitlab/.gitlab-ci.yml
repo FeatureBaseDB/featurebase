@@ -559,7 +559,6 @@ perf_delete:
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
   needs:
     - job: build for linux arm64
-    - job: build for linux amd64
 
 s3 dump tag:
   stage: post build
