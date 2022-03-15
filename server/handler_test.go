@@ -886,6 +886,37 @@ func TestHandler_Endpoints(t *testing.T) {
 			}
 		}
 	})
+	t.Run("Query decimal field scale only", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-scale-only"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal", "scale": 2}}`)))
+		if w.Code != gohttp.StatusOK {
+			fmt.Println(w.Body.String())
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 2), field.Options.Min) {
+				t.Fatalf("field min %d != %d", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 2), field.Options.Max) {
+				t.Fatalf("field min %d != %d", pql.NewDecimal(math.MaxInt64, 2), field.Options.Max)
+			}
+		}
+	})
 
 	// Ensure that decimal fields error when scale is not provided.
 	t.Run("Query decimal field scale error", func(t *testing.T) {

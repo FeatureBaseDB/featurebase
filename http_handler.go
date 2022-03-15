@@ -1563,20 +1563,43 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 	case FieldTypeSet:
 		fos = append(fos, OptFieldTypeSet(*opt.CacheType, *opt.CacheSize))
 	case FieldTypeInt:
-		if opt.Min == nil {
-			min := pql.NewDecimal(int64(math.MinInt64), 0)
-			opt.Min = &min
+		min, max := pql.MinMax(0)
+		// ensure the provided bounds are valid
+		if opt.Max != nil && max.LessThan(*opt.Max) {
+			opt.Max = &max
 		}
 		if opt.Max == nil {
-			max := pql.NewDecimal(int64(math.MaxInt64), 0)
 			opt.Max = &max
+		}
+
+		if opt.Min != nil && min.GreaterThan(*opt.Min) {
+			opt.Min = &min
+		}
+		if opt.Min == nil {
+			opt.Min = &min
 		}
 		fos = append(fos, OptFieldTypeInt(opt.Min.ToInt64(0), opt.Max.ToInt64(0)))
 	case FieldTypeDecimal:
 		scale := int64(0)
 		if opt.Scale != nil {
 			scale = *opt.Scale
+			min, max := pql.MinMax(scale)
+			// ensure the provided bounds are valid
+			if opt.Max != nil && max.LessThan(*opt.Max) {
+				opt.Max = &max
+			}
+			if opt.Max == nil {
+				opt.Max = &max
+			}
+
+			if opt.Min != nil && min.GreaterThan(*opt.Min) {
+				opt.Min = &min
+			}
+			if opt.Min == nil {
+				opt.Min = &min
+			}
 		}
+
 		if opt.Min == nil {
 			min := pql.NewDecimal(int64(math.MinInt64), scale)
 			opt.Min = &min

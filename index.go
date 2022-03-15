@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -612,6 +613,27 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	// Find field in cache first.
 	if f := i.fields[name]; f != nil {
 		return f, nil
+	}
+	// added for backward compatablity with old schemas
+	if opt != nil && opt.Type == FieldTypeDecimal {
+		min, max := pql.MinMax(opt.Scale)
+		// ensure the provided bounds are valid
+		if max.LessThan(opt.Max) {
+			opt.Max = max
+		}
+		if min.GreaterThan(opt.Min) {
+			opt.Min = min
+		}
+	}
+	if opt != nil && opt.Type == FieldTypeDecimal {
+		min, max := pql.MinMax(0)
+		// ensure the provided bounds are valid
+		if max.LessThan(opt.Max) {
+			opt.Max = max
+		}
+		if min.GreaterThan(opt.Min) {
+			opt.Min = min
+		}
 	}
 
 	cfm := &CreateFieldMessage{
