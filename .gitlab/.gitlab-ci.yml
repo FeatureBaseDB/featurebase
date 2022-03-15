@@ -292,7 +292,6 @@ build arm container fb:
 # 3. make sure docker/docker-compose is installed
 # 4. make sure the git config is done `git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"`
 # 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
-# TODO: (I think) get clustertests coverage added to coverage report
 clustertests:
   variables:
     PROJECT: clustertests_${CI_CONCURRENT_ID}
@@ -499,6 +498,67 @@ perf_able:
     include: .gitlab/.perf-able-gitlab-ci.yml
   variables:
     PARENT_PIPELINE_ID: $CI_PIPELINE_ID
+
+# only run on merge to master, the whole process takes about 10 minutes in total
+# (which is a long time)
+perf_delete:
+  stage: performance
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  timeout: 2h
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    PROFILE: "service-terraform"
+    INFRA_PROFILE: "service-gitlab"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    ASG_NAME: "gitlab-runners"
+    TF_VAR_cluster_prefix: ""
+  tags:
+    - aws
+    - docker
+    - fbsmoke
+  before_script:
+    - apt-get update && apt-get install -y gnupg software-properties-common curl git
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    - apt-get update && apt-get install terraform 
+    - apt-get update && apt-get install python3.7
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $PROFILE
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
+    - aws configure set region "us-east-2" --profile $PROFILE
+    - aws configure set aws_profile $PROFILE
+    - aws configure set aws_access_key_id $AWS_INFRA_ACCESS_KEY_ID --profile $INFRA_PROFILE
+    - aws configure set aws_secret_access_key $AWS_INFRA_SECRET_ACCESS_KEY --profile $INFRA_PROFILE
+    - aws configure set region "us-east-2" --profile $INFRA_PROFILE
+    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+    - chmod 400 gitlab-featurebase-ci.pem
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
+    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
+    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+    - chmod 700 /root/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt update && apt -y install jq wget
+    - wget -q https://go.dev/dl/go1.17.5.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
+    - export PATH=$PATH:/usr/local/go/bin
+    - TF_VAR_cluster_prefix="delete-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
+  script:
+    - ./qa/scripts/perf/delete/deleteSetup.sh
+    - ./qa/scripts/perf/delete/deleteTest.sh
+  after_script:
+    - ./qa/scripts/perf/delete/deleteTeardown.sh || true
+    - export INSTANCE_ID=$(cat instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
+  needs:
+    - job: build for linux arm64
 
 s3 dump tag:
   stage: post build

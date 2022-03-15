@@ -47,14 +47,13 @@ EOT
     #echo "featurebase.service <<"
 
     scp -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" featurebase.service ec2-user@${NODEIP}:
-    if (( $? != 0 )) 
-    then 
+    if (( $? != 0 ))
+    then
         echo "featurebase.service copy failed"
         exit 1
     fi
 
     rm -f featurebase.service
-    
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "sudo mv featurebase.service ${SERVICE_FILE_PATH}"
 }
 
@@ -127,8 +126,8 @@ executeGeneralNodeConfigCommands() {
     
     # TODO handle different archs
     scp -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" featurebase_linux_arm64 ec2-user@${NODEIP}:
-    if (( $? != 0 )) 
-    then 
+    if (( $? != 0 ))
+    then
         echo "featurebase binary copy failed"
         exit 1
     fi
@@ -136,7 +135,7 @@ executeGeneralNodeConfigCommands() {
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "chown ec2-user:ec2-user /home/ec2-user/featurebase_linux_arm64"
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "chmod ugo+x /home/ec2-user/featurebase_linux_arm64"
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "sudo mv /home/ec2-user/featurebase_linux_arm64 /usr/local/bin/featurebase"
-    
+
     echo "featurebase binary copied."
 }
 
