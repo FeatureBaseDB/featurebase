@@ -2,6 +2,7 @@
 package pilosa
 
 import (
+	"math"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -48,14 +49,6 @@ func UnmarshalFieldOptions(name string, createdAt int64, buf []byte) (*FieldInfo
 	}
 	fi.Options.CacheType = pbi.CacheType
 	fi.Options.CacheSize = pbi.CacheSize
-	fi.Options.Min = pql.Decimal{
-		Value: pbi.OldMin,
-		Scale: 3, //what scale?
-	}
-	fi.Options.Max = pql.Decimal{
-		Value: pbi.OldMax,
-		Scale: 3, //what scale? its 3
-	}
 	fi.Options.Base = pbi.Base
 	fi.Options.BitDepth = pbi.BitDepth
 	fi.Options.TimeQuantum = TimeQuantum(pbi.TimeQuantum)
@@ -66,6 +59,23 @@ func UnmarshalFieldOptions(name string, createdAt int64, buf []byte) (*FieldInfo
 	fi.Options.Ttl = ttlValue
 	fi.Options.Keys = pbi.Keys
 	fi.Options.NoStandardView = pbi.NoStandardView
+
+	// hard code for the unmarshal go broken with a version change
+	switch fi.Options.Type {
+	case "int":
+		min := int64(math.MinInt64)
+		max := int64(math.MaxInt64)
+		fi.Options.Min = pql.NewDecimal(min, 0)
+		fi.Options.Max = pql.NewDecimal(max, 0)
+		fi.Options.Base = 0
+	case "decimal":
+		scale := int64(3)
+		min, max := pql.MinMax(scale)
+		fi.Options.Min = min
+		fi.Options.Max = max
+		fi.Options.Base = 0
+		fi.Options.Scale = scale
+	}
 
 	return fi, nil
 }
