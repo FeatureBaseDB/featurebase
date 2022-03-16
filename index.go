@@ -536,7 +536,9 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 
 	// Create the field in etcd as the system of record. We do this without
 	// the lock held because it can take an arbitrary amount of time...
-	if err := i.persistField(context.Background(), cfm); err != nil {
+	if err := i.persistField(context.Background(), cfm); errors.Cause(err) == ErrFieldExists {
+		return nil, newConflictError(ErrFieldExists)
+	} else if err != nil {
 		return nil, errors.Wrap(err, "persisting field")
 	}
 
@@ -585,7 +587,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 	}
 
 	// Create the field in etcd as the system of record.
-	if err := i.persistField(context.Background(), cfm); err != nil {
+	if err := i.persistField(context.Background(), cfm); err != nil && errors.Cause(err) != ErrFieldExists {
 		// There is a case where the index is not in memory, but it is in
 		// persistent storage. In that case, this will return an "index exists"
 		// error, which in that case should return the index. TODO: We may need
@@ -644,7 +646,7 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	}
 
 	// Create the field in etcd as the system of record.
-	if err := i.persistField(context.Background(), cfm); err != nil {
+	if err := i.persistField(context.Background(), cfm); err != nil && errors.Cause(err) != ErrFieldExists {
 		// There is a case where the index is not in memory, but it is in
 		// persistent storage. In that case, this will return an "index exists"
 		// error, which in that case should return the index. TODO: We may need
