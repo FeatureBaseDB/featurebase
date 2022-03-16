@@ -669,7 +669,9 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 
 	if b, err := i.serializer.Marshal(cfm); err != nil {
 		return errors.Wrap(err, "marshaling")
-	} else if err := i.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); err != nil {
+	} else if err := i.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldExists {
+		return ErrFieldExists
+	} else if err != nil {
 		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
 	}
 	return nil
