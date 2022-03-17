@@ -184,7 +184,6 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 
 func TestField_ValCountize(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDefault())
-	defer f.Close()
 	// check that you get an empty val count and err
 	// BSIGroupNotFound on nil bsig from
 	// f.bsiGroup(f.name)
@@ -202,7 +201,6 @@ func TestField_ValCountize(t *testing.T) {
 // Ensure field can open and retrieve a view.
 func TestField_DeleteView(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDefault())
-	defer f.Close()
 
 	viewName := viewStandard + "_v"
 
@@ -319,7 +317,6 @@ func (f *TestField) MustSetBit(tx Tx, row, col uint64, ts ...time.Time) {
 // Ensure field can open and retrieve a view.
 func TestField_CreateViewIfNotExists(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDefault())
-	defer f.Close()
 
 	// Create view.
 	view, err := f.createViewIfNotExists("v")
@@ -344,7 +341,6 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 
 func TestField_SetTimeQuantum(t *testing.T) {
 	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
-	defer f.Close()
 
 	// Retrieve time quantum.
 	if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
@@ -361,7 +357,6 @@ func TestField_SetTimeQuantum(t *testing.T) {
 
 func TestField_RowTime(t *testing.T) {
 	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
-	defer f.Close()
 
 	// Obtain transaction.
 	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
@@ -414,7 +409,6 @@ func TestField_RowTime(t *testing.T) {
 func TestField_PersistAvailableShards(t *testing.T) {
 	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
-	defer f.Close()
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -501,7 +495,6 @@ func TestField_ApplyOptions(t *testing.T) {
 // to result in a value of 9 instead of 1.
 func TestBSIGroup_importValue(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
-	defer f.Close()
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -566,7 +559,6 @@ func BenchmarkField_ImportValue(b *testing.B) {
 
 	for _, bitDepth := range depths {
 		f := OpenField(b, OptFieldTypeInt(0, 1<<bitDepth))
-		defer f.Close()
 
 		qcx := f.idx.holder.txf.NewQcx()
 		defer qcx.Abort()
@@ -582,7 +574,6 @@ func BenchmarkField_ImportValue(b *testing.B) {
 
 func TestIntField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
-	defer f.Close()
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -742,7 +733,6 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 
 func TestDecimalField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDecimal(3))
-	defer f.Close()
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -819,7 +809,6 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 
 func TestBSIGroup_TxReopenDB(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
-	defer f.Close()
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -872,7 +861,6 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 // Ensure that an integer field has the same BitDepth after reopening.
 func TestField_SaveMeta(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-10, 1000))
-	defer f.Close()
 
 	colID := uint64(1)
 	val := int64(88)

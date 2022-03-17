@@ -59,8 +59,10 @@ func getTempDirString() (td *string) {
 
 func TestExecutor(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-
+	defer func() {
+		t.Logf("TestExecutor: closing cluster")
+		c.Close()
+	}()
 	// Ensure a row query can be executed.
 	t.Run("ExecuteRow", func(t *testing.T) {
 		t.Run("RowIDColumnID", func(t *testing.T) {
@@ -1084,7 +1086,6 @@ func runCallTest(c *test.Cluster, t *testing.T, writeQuery string, readQueries [
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer index.Close()
 	_, err = index.CreateField("f", fieldOption...)
 	if err != nil {
 		t.Fatal(err)

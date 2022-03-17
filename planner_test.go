@@ -19,7 +19,6 @@ func TestPlanner_Count(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer index.Close()
 
 	if _, err := index.CreateField("f", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
@@ -164,7 +163,6 @@ func TestPlanner_Select(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer i0.Close()
 
 	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
@@ -176,7 +174,6 @@ func TestPlanner_Select(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer i1.Close()
 
 	if _, err := i1.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
@@ -301,7 +298,6 @@ func TestPlanner_GroupBy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer i0.Close()
 
 	if _, err := i0.CreateField("x"); err != nil {
 		t.Fatal(err)
@@ -423,7 +419,6 @@ func TestPlanner_InnerJoin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer i0.Close()
 
 	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
@@ -433,7 +428,6 @@ func TestPlanner_InnerJoin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer i1.Close()
 
 	if _, err := i1.CreateField("parentid", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
@@ -457,10 +451,10 @@ func TestPlanner_InnerJoin(t *testing.T) {
 		Query: `
 			Set(1, parentid=1)
 			Set(1, x=100)
-			
+
 			Set(2, parentid=1)
 			Set(2, x=200)
-			
+
 			Set(3, parentid=2)
 			Set(3, x=300)
 	`}); err != nil {

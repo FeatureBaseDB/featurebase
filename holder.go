@@ -1068,7 +1068,16 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// Delete index directory.
 	if err := os.RemoveAll(h.IndexPath(name)); err != nil {
-		return errors.Wrap(err, "removing directory")
+		// There is a rare edge case here: If a cache flush was happening, RemoveAll
+		// can fail because a file gets created, say in a fragment directory, after
+		// RemoveAll has deleted everything it found in the directory, but before
+		// the actual directory is unlinked. In theory, though, this can't happen
+		// twice; by the time we get here, everything was closed, so at most one
+		// more file should get created.
+		err = os.RemoveAll(h.IndexPath(name))
+		if err != nil {
+			return errors.Wrap(err, "removing directory")
+		}
 	}
 
 	// Remove reference.
@@ -1136,20 +1145,11 @@ func (h *Holder) monitorCacheFlush() {
 
 func (h *Holder) flushCaches() {
 	for _, index := range h.Indexes() {
-		for _, field := range index.Fields() {
-			for _, view := range field.views() {
-				for _, fragment := range view.allFragments() {
-					select {
-					case <-h.closing:
-						return
-					default:
-					}
-
-					if err := fragment.FlushCache(); err != nil {
-						h.Logger.Errorf("flushing cache: err=%s, path=%s", err, fragment.cachePath())
-					}
-				}
-			}
+		select {
+		case <-h.closing:
+			return
+		default:
+			index.flushCaches()
 		}
 	}
 }
