@@ -122,7 +122,7 @@ run go tests shardwidth22:
 # run the regular tests twice and also run the future tests.
 run go tests future:
   stage: test
-  image: golang:1.17.6
+  image: golang:1.18
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
