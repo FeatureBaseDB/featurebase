@@ -155,7 +155,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m1 := test.NewCommandNode(t)
 		lsns := make([]*net.TCPListener, 3)
 		for i := range lsns {
-			l, err := net.Listen("tcp", ":0")
+			l, err := net.Listen("tcp", "localhost:0")
 			if err != nil {
 				t.Fatal(err)
 			}
