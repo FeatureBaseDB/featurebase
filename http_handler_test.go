@@ -27,7 +27,7 @@ func TestHandlerOptions(t *testing.T) {
 		t.Fatalf("expected error making handler without options, got nil")
 	}
 
-	ln, err := net.Listen("tcp", ":0")
+	ln, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatalf("creating listener: %v", err)
 	}

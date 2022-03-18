@@ -25,7 +25,7 @@ const newVal = "newValue"
 // URL, and returns those. Identical to the copy in /test, except we can't
 // import that because it imports us.
 func listenerWithURL() (listener *net.TCPListener, url string, err error) {
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		return listener, url, err
 	}

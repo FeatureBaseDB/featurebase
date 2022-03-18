@@ -1043,7 +1043,7 @@ Set("h", adec=100.22)
 }
 
 func TestMain(m *testing.M) {
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		panic(err)
 	}
