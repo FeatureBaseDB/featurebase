@@ -8291,6 +8291,9 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index strin
 	//bmCall is a bitmap
 	row, err := e.executeBitmapCallShard(ctx, qcx, index, bmCall, shard)
 	qcx.Abort()
+	if err != nil {
+		return false, err
+	}
 	if len(row.segments) == 0 {
 		return
 	}
