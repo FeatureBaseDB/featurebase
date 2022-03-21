@@ -341,7 +341,9 @@ func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) 
 	}
 
 	i.holder.Logger.Debugf("add field to index.fields: %s", file)
+	mu.Lock()
 	i.fields[fld.Name()] = fld
+	mu.Unlock()
 
 	return fld, nil
 }
