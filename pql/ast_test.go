@@ -69,16 +69,35 @@ func TestQuery_ExpandVars(t *testing.T) {
 			vars:   map[string]interface{}{"var1": []interface{}{"cat", "dog", "pig"}},
 		},
 		{
+			name:   "ExpandRowEQInterior-NoValues",
+			input:  `count(row(animal=$var1))`,
+			output: `Count(All())`,
+			vars:   map[string]interface{}{"var1": []interface{}{}},
+		},
+		{
 			name:   "ExpandRowEQExterior",
 			input:  `row(animal=$var1)`,
 			output: `Union(Row(animal="cat"))`,
 			vars:   map[string]interface{}{"var1": []interface{}{"cat"}},
 		},
 		{
+			name:    "ExpandRowEQExterior-NoValues",
+			input:   `row(animal=$var1)`,
+			output:  ``,
+			vars:    map[string]interface{}{"var1": []interface{}{}},
+			wantErr: true,
+		},
+		{
 			name:   "ExpandRowGT",
 			input:  `count(row(num>$var1))`,
 			output: `Count(Union(Row(num>5), Row(num>10)))`,
 			vars:   map[string]interface{}{"var1": []interface{}{5, 10}},
+		},
+		{
+			name:   "ExpandRowGT-NoValues",
+			input:  `count(row(num>$var1))`,
+			output: `Count(All())`,
+			vars:   map[string]interface{}{"var1": []interface{}{}},
 		},
 		{
 			name:   "ExpandRowNOT",
@@ -99,16 +118,50 @@ func TestQuery_ExpandVars(t *testing.T) {
 			vars:   map[string]interface{}{"var1": []interface{}{"cat", "dog"}},
 		},
 		{
+			name:    "ExpandRowsInterior-NoValues",
+			input:   `GroupBy(rows($var1), limit=5)`,
+			output:  `GroupBy(), limit=5)`,
+			vars:    map[string]interface{}{"var1": []interface{}{}},
+			wantErr: true,
+		},
+		{
 			name:   "ExpandRowsExterior",
 			input:  `rows($var1)`,
 			output: `Rows(_field="cat")` + "\n" + `Rows(_field="dog")`,
 			vars:   map[string]interface{}{"var1": []interface{}{"cat", "dog"}},
 		},
 		{
+			name:    "ExpandRowsExterior-NoValues",
+			input:   `rows($var1)`,
+			output:  ``,
+			vars:    map[string]interface{}{"var1": []interface{}{}},
+			wantErr: true,
+		},
+		{
 			name:   "ExpandRowAndRows",
 			input:  `GroupBy(Rows($animal), limit=7, filter=Row(size=$size))`,
 			output: `GroupBy(Rows(_field="cat"), Rows(_field="dog"), filter=Union(Row(size="lg"), Row(size="md")), limit=7)`,
 			vars:   map[string]interface{}{"animal": []interface{}{"cat", "dog"}, "size": []interface{}{"lg", "md"}},
+		},
+		{
+			name:    "ExpandRowAndRows-NoValues1",
+			input:   `GroupBy(Rows($animal), limit=7, filter=Row(size=$size))`,
+			output:  `GroupBy(filter=All(), limit=7)`,
+			vars:    map[string]interface{}{"animal": []interface{}{}, "size": []interface{}{}},
+			wantErr: true,
+		},
+		{
+			name:   "ExpandRowAndRows-NoValues2",
+			input:  `GroupBy(Rows($animal), limit=7, filter=Row(size=$size))`,
+			output: `GroupBy(Rows(_field="cat"), Rows(_field="dog"), filter=All(), limit=7)`,
+			vars:   map[string]interface{}{"animal": []interface{}{"cat", "dog"}, "size": []interface{}{}},
+		},
+		{
+			name:    "ExpandRowAndRows-NoValues3",
+			input:   `GroupBy(Rows($animal), limit=7, filter=Row(size=$size))`,
+			output:  `GroupBy(filter=Union(Row(size="lg"), Row(size="md")), limit=7)`,
+			vars:    map[string]interface{}{"animal": []interface{}{}, "size": []interface{}{"lg", "md"}},
+			wantErr: true,
 		},
 		{
 			name:    "ExpandBad",
@@ -129,10 +182,53 @@ func TestQuery_ExpandVars(t *testing.T) {
 			vars:   map[string]interface{}{"var1": []interface{}{"cat", "dog"}, "var2": []interface{}{5, 10}},
 		},
 		{
+			name:   "ExpandAsCSV-NoValues",
+			input:  `Intersect(ConstRow(columns=$var2), Row(animal=$var1))`,
+			output: `Intersect(ConstRow(columns=[]))`,
+			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{}},
+		},
+		{
 			name:   "ExpandPercentile",
 			input:  `Percentile(field="bytes", nth=99.0, filter=Row(level=$animal))`,
 			output: `Percentile(field="bytes", filter=Union(Row(level="cat"), Row(level="dog")), nth=99)`,
 			vars:   map[string]interface{}{"animal": []interface{}{"cat", "dog"}, "columns": []interface{}{5, 10}},
+		},
+		{
+			name:   "ExpandPercentile-NoValues",
+			input:  `Percentile(field="bytes", nth=99.0, filter=Row(level=$animal))`,
+			output: `Percentile(field="bytes", filter=All(), nth=99)`,
+			vars:   map[string]interface{}{"animal": []interface{}{}, "columns": []interface{}{}},
+		},
+		{
+			name:   "Union-NoValues-1",
+			input:  `Count(Union(row(x=$var1), row(y=$var2)), limit=5)`,
+			output: `Count(Union(Union(Row(y="cat"), Row(y="dog"))), limit=5)`,
+			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{"cat", "dog"}},
+		},
+		{
+			name:    "Rows-NoValues-1",
+			input:   `groupby(rows($var1))`,
+			output:  `GroupBy()`,
+			vars:    map[string]interface{}{"var1": []interface{}{}},
+			wantErr: true,
+		},
+		{
+			name:   "Extract-NoValues-1",
+			input:  `Extract(Limit(Row(animals=$var1), limit=1000), Rows($var2))`,
+			output: `Extract(Limit(All(), limit=1000))`,
+			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{}},
+		},
+		{
+			name:   "Extract-NoValues-2",
+			input:  `Extract(Limit(Row(animals=$var1), limit=1000), Rows($var2))`,
+			output: `Extract(Limit(Union(Row(animals="a"), Row(animals="b")), limit=1000))`,
+			vars:   map[string]interface{}{"var1": []interface{}{"a", "b"}, "var2": []interface{}{}},
+		},
+		{
+			name:   "Extract-NoValues-3",
+			input:  `Extract(Limit(Row(animals=$var1), limit=1000), Rows($var2))`,
+			output: `Extract(Limit(All(), limit=1000), Rows(_field="a"), Rows(_field="b"))`,
+			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{"a", "b"}},
 		},
 	}
 	for _, tt := range tests {
@@ -140,18 +236,23 @@ func TestQuery_ExpandVars(t *testing.T) {
 			q, err := pql.NewParser(strings.NewReader(tt.input)).Parse()
 			if err != nil {
 				if !tt.wantErr {
-					t.Errorf("Parse error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("Parse error = %v", err)
 				}
 				return
 			}
 
 			got, err := q.ExpandVars(tt.vars)
 			if err != nil {
-				t.Errorf("Query.ExpandVars() error = %v", err)
+				if !tt.wantErr {
+					t.Errorf("Query.ExpandVars() error = %v", err)
+				}
 				return
 			}
-			if tt.output != got.String() {
+			if tt.output != got.String() && !tt.wantErr {
 				t.Errorf("got %v, want %v", got, tt.output)
+			}
+			if tt.wantErr {
+				t.Error("test succeeded, but expected error")
 			}
 		})
 	}
