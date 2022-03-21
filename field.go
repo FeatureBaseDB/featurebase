@@ -114,6 +114,9 @@ type Field struct {
 	// the remoteAvailableShards
 	availableShardChan chan struct{}
 	wg                 sync.WaitGroup
+
+	// track whether we're shutting down
+	closing chan struct{}
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -528,6 +531,8 @@ func (f *Field) Options() FieldOptions {
 
 // Open opens and initializes the field.
 func (f *Field) Open() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if err := func() (err error) {
 		// Ensure the field's path exists.
 		f.holder.Logger.Debugf("ensure field path exists: %s", f.path)
@@ -570,9 +575,10 @@ func (f *Field) Open() error {
 		go f.writeAvailableShards()
 		return nil
 	}(); err != nil {
-		f.Close()
+		f.unprotectedClose()
 		return err
 	}
+	f.closing = make(chan struct{})
 
 	_ = testhook.Opened(f.holder.Auditor, f, nil)
 	f.holder.Logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
@@ -846,6 +852,21 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 func (f *Field) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.unprotectedClose()
+}
+
+// unprotectedClose is the actual closing part of the operation, without the
+// locking.
+func (f *Field) unprotectedClose() error {
+	if f.closing != nil {
+		select {
+		case <-f.closing:
+			// already closed. prevent double-close
+			return errors.New("double close of field")
+		default:
+		}
+		close(f.closing)
+	}
 	defer func() {
 		_ = testhook.Closed(f.holder.Auditor, f, nil)
 	}()
@@ -872,6 +893,23 @@ func (f *Field) Close() error {
 	f.viewMap = make(map[string]*view)
 
 	return nil
+}
+
+func (f *Field) flushCaches() {
+	// look up the close channel so if we somehow end up living until the
+	// field gets reopened, we don't have a data race, but correctly detect
+	// that the old one is closed.
+	f.mu.RLock()
+	closing := f.closing
+	f.mu.RUnlock()
+	for _, v := range f.views() {
+		select {
+		case <-closing:
+			return
+		default:
+			v.flushCaches()
+		}
+	}
 }
 
 // Keys returns true if the field uses string keys.
@@ -905,9 +943,6 @@ func (f *Field) hasBSIGroup(name string) bool {
 
 // createBSIGroup creates a new bsiGroup on the field.
 func (f *Field) createBSIGroup(bsig *bsiGroup) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	// Append bsiGroup.
 	if err := bsig.validate(); err != nil {
 		return errors.Wrap(err, "validating bsigroup")

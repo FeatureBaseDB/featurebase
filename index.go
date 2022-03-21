@@ -53,6 +53,9 @@ type Index struct {
 
 	// track the subset of shards available to our views
 	fieldView2shard *FieldView2Shards
+
+	// indicate that we're closing and should wrap up and not allow new actions
+	closing chan struct{}
 }
 
 // NewIndex returns an existing (but possibly empty) instance of
@@ -180,11 +183,15 @@ func (i *Index) OpenWithSchema(idx *disco.Index) error {
 // metadata for the index is not changed from its existing value, and fields are
 // not validated against the schema as they are opened.
 func (i *Index) open(idx *disco.Index) (err error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.FieldsPath())
 	if err := os.MkdirAll(i.FieldsPath(), 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
+	i.closing = make(chan struct{})
+	// fmt.Printf("new channel %p for index %p\n", i.closing, i)
 
 	// we don't want to open *all* the views for each shard, since
 	// most are empty when we are doing time quantums. It slows
@@ -239,9 +246,6 @@ func (i *Index) open(idx *disco.Index) (err error) {
 
 				mu.Lock()
 				defer mu.Unlock()
-
-				i.mu.Lock()
-				defer i.mu.Unlock()
 				i.translateStores[partitionID] = store
 				return nil
 			})
@@ -337,9 +341,7 @@ func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) 
 	}
 
 	i.holder.Logger.Debugf("add field to index.fields: %s", file)
-	i.mu.Lock()
 	i.fields[fld.Name()] = fld
-	i.mu.Unlock()
 
 	return fld, nil
 }
@@ -399,6 +401,16 @@ func (i *Index) setFieldBitDepths() error {
 func (i *Index) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	// flag that we're trying to shut down
+	if i.closing != nil {
+		select {
+		case <-i.closing:
+			// already closed. prevent double-close
+			return errors.New("double close of index")
+		default:
+		}
+		close(i.closing)
+	}
 	defer func() {
 		_ = testhook.Closed(i.holder.Auditor, i, nil)
 	}()
@@ -425,6 +437,23 @@ func (i *Index) Close() error {
 	i.fields = make(map[string]*Field)
 
 	return nil
+}
+
+func (i *Index) flushCaches() {
+	// look up the close channel so if we somehow end up living until the
+	// index gets reopened, we don't have a data race, but correctly detect
+	// that the old one is closed.
+	i.mu.RLock()
+	closing := i.closing
+	i.mu.RUnlock()
+	for _, field := range i.Fields() {
+		select {
+		case <-closing:
+			return
+		default:
+			field.flushCaches()
+		}
+	}
 }
 
 // make it clear what the Index.AvailableShards() calls are trying to obtain.

@@ -16,7 +16,6 @@ import (
 func TestField_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		idx := test.MustOpenIndex(t)
-		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
@@ -52,7 +51,6 @@ func TestField_SetValue(t *testing.T) {
 
 	t.Run("Overwrite", func(t *testing.T) {
 		idx := test.MustOpenIndex(t)
-		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
@@ -88,7 +86,6 @@ func TestField_SetValue(t *testing.T) {
 
 	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
 		idx := test.MustOpenIndex(t)
-		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
 		if err != nil {
@@ -106,7 +103,6 @@ func TestField_SetValue(t *testing.T) {
 
 	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
 		idx := test.MustOpenIndex(t)
-		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
@@ -124,7 +120,6 @@ func TestField_SetValue(t *testing.T) {
 
 	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
 		idx := test.MustOpenIndex(t)
-		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
@@ -197,7 +192,6 @@ const includeRemote = false // for calls to Index.AvailableShards(localOnly bool
 // Ensure can update and delete available shards.
 func TestField_AvailableShards(t *testing.T) {
 	idx := test.MustOpenIndex(t)
-	defer idx.Close()
 
 	f, err := idx.CreateField("fld-shards", pilosa.OptFieldTypeDefault())
 	if err != nil {
@@ -239,7 +233,6 @@ func TestField_AvailableShards(t *testing.T) {
 func TestField_ClearValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		idx := test.MustOpenIndex(t)
-		defer idx.Close()
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {

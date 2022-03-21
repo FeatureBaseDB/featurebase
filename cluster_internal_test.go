@@ -162,7 +162,6 @@ func TestFragSources(t *testing.T) {
 	c5.addNodeBasicSorted(node3)
 
 	idx := newIndexWithTempPath(t, "i")
-	defer idx.Close()
 
 	field, err := idx.CreateFieldIfNotExists("f", OptFieldTypeDefault())
 	if err != nil {

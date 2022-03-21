@@ -492,7 +492,6 @@ func TestExecutorSafeCopyDistinctTimestamp(t *testing.T) {
 
 func TestGetScaledInt(t *testing.T) {
 	f := OpenField(t, OptFieldTypeTimestamp(time.Now(), "ms"))
-	defer f.Close()
 	// check that fields with type timestamp return the int64 passed in to getScaledInt with nil err
 	v := time.Now().Unix()
 	res, err := getScaledInt(f.Field, v)

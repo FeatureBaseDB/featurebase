@@ -34,7 +34,8 @@ func TestHolder_Open(t *testing.T) {
 			t.Skip("Skipping permissions test since user is root.")
 		}
 		h := test.MustOpenHolder(t)
-		defer h.Close()
+		// no automatic close here, because we manually close this, and then
+		// *fail* to reopen it.
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)

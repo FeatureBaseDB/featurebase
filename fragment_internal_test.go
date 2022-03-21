@@ -1328,7 +1328,6 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 
 	// Create Index.
 	index := mustOpenIndex(t, IndexOptions{})
-	defer index.Close()
 
 	// Create field.
 	field, err := index.CreateFieldIfNotExists("f", OptFieldTypeSet(CacheTypeRanked, cacheSize))

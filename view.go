@@ -54,6 +54,8 @@ type view struct {
 
 	knownShards       *roaring.Bitmap
 	knownShardsCopied uint32
+
+	closing chan struct{}
 }
 
 // newView returns a new instance of View.
@@ -78,6 +80,8 @@ func newView(holder *Holder, path, index, field, name string, fieldOptions Field
 		broadcaster: NopBroadcaster,
 		stats:       stats.NopStatsClient,
 		knownShards: roaring.NewSliceBitmap(),
+
+		closing: make(chan struct{}),
 	}
 }
 
@@ -227,6 +231,7 @@ var workQueue = make(chan struct{}, runtime.NumCPU()*2)
 func (v *view) close() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	close(v.closing)
 	defer func() {
 		_ = testhook.Closed(v.holder.Auditor, v, nil)
 	}()
@@ -257,6 +262,21 @@ fragLoop:
 	v.fragments = make(map[uint64]*fragment)
 	v.knownShards = nil
 	return err
+}
+
+func (v *view) flushCaches() {
+	// we don't have a lock/cache of the closing mutex here, because
+	// individual view objects never get reopened, just discarded and recreated.
+	for _, f := range v.allFragments() {
+		select {
+		case <-v.closing:
+			return
+		default:
+			if err := f.FlushCache(); err != nil {
+				v.holder.Logger.Errorf("flushing cache: err=%s, path=%s", err, f.cachePath())
+			}
+		}
+	}
 }
 
 // flags returns a set of flags for the underlying fragments.
