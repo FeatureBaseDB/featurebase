@@ -29,6 +29,9 @@ func (q *Query) ExpandVars(vars map[string]interface{}) (*Query, error) {
 		if err != nil {
 			return nil, err
 		}
+		if len(newCalls) == 0 {
+			return nil, fmt.Errorf("no values to use for variable expansion")
+		}
 		other.Calls = append(other.Calls, newCalls...)
 	}
 
@@ -1011,10 +1014,32 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 				if err != nil {
 					return nil, err
 				}
-				if len(newArg) != 1 {
+
+				switch len(newArg) {
+				case 0:
+					if call.Name == "Row" {
+						other.Args[key] = &Call{Name: "All"}
+					} else {
+						return nil, fmt.Errorf("variable: non-Row calls require values be supplied, got: %+v", newArg)
+					}
+				case 1:
+					other.Args[key] = newArg[0]
+				default:
 					return nil, fmt.Errorf("variable: requires single value for argument, got: %+v", newArg)
 				}
-				other.Args[key] = newArg[0]
+
+			}
+		}
+
+		// if the call had children, but due to variable expansion, it now has none - then the user
+		// did not select any values for any variables. If the child was originally a Row call, we equate
+		// this to an All() (i.e. the user chooses to apply no conditions to the query).
+		if len(c.Children) > 0 && len(other.Children) == 0 {
+			if c.Children[0].Name == "Row" {
+				r := Call{Name: "All"}
+				other.Children = []*Call{&r}
+			} else {
+				return nil, fmt.Errorf("variable: non-Row calls require values be supplied")
 			}
 		}
 		return []*Call{&other}, nil
@@ -1025,6 +1050,9 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 func (c *Call) expandVars(name string, values []interface{}) []*Call {
 	switch c.Name {
 	case "Row":
+		if len(values) == 0 {
+			return []*Call{}
+		}
 		union := &Call{Name: "Union"}
 		for i := range values {
 			r := Call{Name: "Row", Args: CopyArgs(c.Args)}
