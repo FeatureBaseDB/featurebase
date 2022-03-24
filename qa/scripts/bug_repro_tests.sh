@@ -17,7 +17,7 @@ echo "using DATANODE0 ${DATANODE0}"
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "sudo yum -y install librdkafka" 
 
 echo "Copying tests to remote"
-scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/testcases/FB-1270_repro/test.sh ec2-user@${INGESTNODE0}:/data
+scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/testcases/bug-repros/ ec2-user@${INGESTNODE0}:/data
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./datagen_linux_arm64 ec2-user@${INGESTNODE0}:/data
 if (( $? != 0 )) 
 then 
@@ -25,17 +25,17 @@ then
     exit 1
 fi
 
-# run 1270 repro
-echo "Running smoke test..."
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data/; ./test.sh ${DATANODE0}:10101" 
+# run all repros
+echo "Running smoke tests..."
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data/bug-repros; ./run-all.sh ${DATANODE0}:10101"
 SMOKETESTRESULT=$?
 
 
 if (( $SMOKETESTRESULT != 0 )) 
 then 
-    echo "FB-1270 test complete with test failures"
+    echo "smoke tests complete with test failures"
 else
-    echo "FB-1270 test complete"
+    echo "smoke tests complete"
 fi
 
 exit $SMOKETESTRESULT 

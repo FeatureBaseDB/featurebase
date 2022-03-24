@@ -410,7 +410,7 @@ func minMaxViews(views []string, q TimeQuantum) (min string, max string) {
 	// Sort the list of views.
 	sort.Strings(views)
 
-	// Determine the least significant quantum and set that as the
+	// Determine the least precise quantum and set that as the
 	// number of string characters to compare against.
 	var chars int
 	if q.HasYear() {
@@ -499,5 +499,9 @@ func timeOfView(v string, adj bool) (time.Time, error) {
 // e.g. the view "string_201901" would return "201901".
 func viewTimePart(v string) string {
 	parts := strings.Split(v, "_")
+	if _, err := strconv.Atoi(parts[len(parts)-1]); err != nil {
+		// it's not a number!
+		return ""
+	}
 	return parts[len(parts)-1]
 }

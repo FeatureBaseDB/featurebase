@@ -398,3 +398,15 @@ func TestParsePartialTime(t *testing.T) {
 	}
 
 }
+
+func TestViewTimePart(t *testing.T) {
+	for input, want := range map[string]string{
+		"standard":         "",
+		"standard_1234567": "1234567",
+		"standard1234567":  "",
+	} {
+		if got := viewTimePart(input); got != want {
+			t.Errorf("expected %v got %v", want, got)
+		}
+	}
+}
