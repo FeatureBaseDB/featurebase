@@ -221,6 +221,17 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 			after := convert(m.Columns)
 			require.Equal([]uint64{0, 1}, after, "these records should be remaining")
 		})
+
+		// FB-1281: Delete() calls with an invalid bitmap filter would cause a panic.
+		// This test validates that the error is correctly propagated to the caller.
+		t.Run("DeleteWithBitmapError", func(t *testing.T) {
+			setup(t, require, c)
+			defer tearDown(t, require, c)
+			_, err := c.GetPrimary().API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: `Delete(Row(setfield == 1))`})
+			if err == nil || err.Error() != `executing: executeDelete: mapping on primary node: bsigroup not found` {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
 	})
 	t.Run("DeleteRecordsBigWithRestart", func(t *testing.T) {
 		c := test.MustNewCluster(t, 1)
