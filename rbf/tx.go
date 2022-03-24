@@ -1118,6 +1118,9 @@ func (tx *Tx) allocateNewPgno() uint32 {
 
 // deallocate releases a page number to the freelist.
 func (tx *Tx) freePgno(pgno uint32) (outErr error) {
+	delete(tx.dirtyPages, pgno)
+	delete(tx.dirtyBitmapPages, pgno)
+
 	if tx.modifyingFreelist {
 		tx.pendingFreelistAdds = append(tx.pendingFreelistAdds, pgno)
 		return nil
