@@ -376,14 +376,18 @@ smoke test:
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - apt update && apt -y install jq wget
-    - wget -q https://go.dev/dl/go1.17.5.linux-amd64.tar.gz
-    - tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
+    - wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go$GOVERSION.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    # download datagen for FB-1270 repro test. TODO replace w/ locally built datagen once we merge IDK into FB
+    - aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
+    - chmod +x ./datagen_linux_arm64
   script:
     - ./qa/scripts/setupSmokeTest.sh
     - ./qa/scripts/testSmokeTest.sh
+    - ./qa/scripts/test_FB-1270_repro.sh
   after_script:
     - ./qa/scripts/teardownSmokeTest.sh
   needs:
