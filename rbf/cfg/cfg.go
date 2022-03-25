@@ -28,7 +28,8 @@ type Config struct {
 	MaxWALCheckpointSize int64 `toml:"max-wal-checkpoint-size"`
 
 	// Set before calling db.Open()
-	FsyncEnabled bool `toml:"fsync"`
+	FsyncEnabled    bool `toml:"fsync"`
+	FsyncWALEnabled bool `toml:"fsync-wal"`
 
 	// for mmap correctness testing.
 	DoAllocZero bool `toml:"do-alloc-zero"`
@@ -53,6 +54,7 @@ func NewDefaultConfig() *Config {
 		MinWALCheckpointSize: DefaultMinWALCheckpointSize,
 		MaxWALCheckpointSize: DefaultMaxWALCheckpointSize,
 		FsyncEnabled:         true,
+		FsyncWALEnabled:      true,
 		MaxDelete:            DefaultMaxDelete,
 
 		// CI passed with 20. 50 was too big for CI, even on X-large instances.
@@ -70,5 +72,6 @@ func (cfg *Config) DefineFlags(flags *pflag.FlagSet) {
 
 	// renamed from --rbf-fsync to just --fsync because now it applies to all Tx backends.
 	flags.BoolVar(&cfg.FsyncEnabled, "fsync", default0.FsyncEnabled, "enable fsync fully safe flush-to-disk")
+	flags.BoolVar(&cfg.FsyncWALEnabled, "fsync-wal", default0.FsyncWALEnabled, "enable fsync on write-ahead log")
 	flags.Int64Var(&cfg.CursorCacheSize, "rbf.cursor-cache-size", default0.CursorCacheSize, "how big a Cursor arena to maintain. 0 means use sync.Pool with dynamic sizing. Note that <= 20 is needed to pass CI. Controls the memory footprint of rbf.")
 }

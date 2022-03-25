@@ -1900,7 +1900,7 @@ func (tx *Tx) flush() error {
 	// Flush & sync WAL.
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("flush wal: %w", err)
-	} else if err := tx.db.fsync(tx.db.walFile); err != nil {
+	} else if err := tx.db.fsyncWAL(tx.db.walFile); err != nil {
 		return fmt.Errorf("sync wal: %w", err)
 	}
 
