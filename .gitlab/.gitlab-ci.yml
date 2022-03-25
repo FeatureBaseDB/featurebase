@@ -387,7 +387,7 @@ smoke test:
   script:
     - ./qa/scripts/setupSmokeTest.sh
     - ./qa/scripts/testSmokeTest.sh
-    - ./qa/scripts/test_FB-1270_repro.sh
+    - ./qa/scripts/bug_repro_tests.sh
   after_script:
     - ./qa/scripts/teardownSmokeTest.sh
   needs:
