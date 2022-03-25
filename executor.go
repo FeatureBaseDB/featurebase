@@ -8308,24 +8308,30 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index strin
 func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, error) {
 	return DeleteRowsWithFlow(ctx, src, idx, shard, false)
 }
-func clearFragment(writeTx Tx, columns *roaring.Bitmap, frag *fragment, resChan chan countResults) (changed bool, err error) {
-	posChan := make(chan uint64, 8192)
-	findExisting := roaring.NewBitmapBitmapFilter(columns, func(pos uint64) error {
-		posChan <- pos
-		return nil
-	})
-	go writeTx.RemoveChannel(frag.index(), frag.field(), frag.view(), frag.shard, posChan, resChan)
+func clearFragment(writeTx Tx, columns *roaring.Bitmap, frag *fragment, toClear []uint64) (changed bool, err error) {
 
+	rowSet := make(map[uint64]struct{})
+	toClear = toClear[:0]
+	callback := func(pos uint64) error {
+		toClear = append(toClear, pos)
+		rowID := pos / ShardWidth
+		rowSet[rowID] = struct{}{}
+		return nil
+	}
+	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
 	err = writeTx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
-	close(posChan)
+
 	if err != nil {
 		return false, err
 	}
-	r := <-resChan
-
-	changed = r.changeCount > 0
-	err = r.err
-	return
+	if len(toClear) > 0 {
+		err = frag.importPositions(writeTx, []uint64{}, toClear, rowSet)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, idx *Index, shard uint64, normalFlow bool) (bool, error) {
@@ -8378,8 +8384,8 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 		}
 
 	}()
-	resChan := make(chan countResults)
 
+	toClear := make([]uint64, 0)
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
 
@@ -8387,7 +8393,7 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 			if !ok {
 				continue
 			}
-			c, err := clearFragment(writeTx, columns, frag, resChan)
+			c, err := clearFragment(writeTx, columns, frag, toClear)
 			if err != nil {
 				return false, err
 			}
@@ -8397,7 +8403,6 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 
 		}
 	}
-	close(resChan)
 	if existenceFragment != nil { //a string keys have been deleted and the deleteRow was created
 		if normalFlow {
 			existenceFragment.clearRow(writeTx, deletedRowID)
@@ -8431,7 +8436,7 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 			return
 		}
 	}()
-	resChan := make(chan countResults)
+	toClear := make([]uint64, 0)
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
 
@@ -8439,7 +8444,7 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 			if !ok {
 				continue
 			}
-			c, err := clearFragment(writeTx, columns, frag, resChan)
+			c, err := clearFragment(writeTx, columns, frag, toClear)
 			if err != nil {
 				return false, err
 			}
@@ -8449,7 +8454,6 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 
 		}
 	}
-	close(resChan)
 	if existenceFragment == nil { //a string keys have been deleted and the deleteRow was created
 		return changed, nil
 	}
