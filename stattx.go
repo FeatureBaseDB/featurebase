@@ -159,7 +159,6 @@ const (
 	kOffsetRange
 	kLast // mark the end, always keep this last. The following aren't tracked atm:
 	kType
-	kRemoveChannel
 )
 
 func (k kall) String() string {
@@ -206,8 +205,6 @@ func (k kall) String() string {
 		return "kLast"
 	case kType:
 		return "kType"
-	case kRemoveChannel:
-		return "kRemoveChannel"
 	}
 	vprint.PanicOn(fmt.Sprintf("unknown kall '%v'", int(k)))
 	return ""
@@ -223,15 +220,6 @@ func (c *statTx) NewTxIterator(index, field, view string, shard uint64) *roaring
 		c.stats.add(me, time.Since(t0))
 	}()
 	return c.b.NewTxIterator(index, field, view, shard)
-}
-func (c *statTx) RemoveChannel(index, field, view string, shard uint64, a chan uint64, resChan chan countResults) {
-	me := kRemoveChannel
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-	c.b.RemoveChannel(index, field, view, shard, a, resChan)
-	return
 }
 
 func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
