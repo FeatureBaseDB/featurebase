@@ -3,6 +3,7 @@ package roaring
 
 import (
 	"fmt"
+	"sort"
 	"unsafe"
 )
 
@@ -110,6 +111,132 @@ func (c *Container) String() string {
 func NewContainer() *Container {
 	statsHit("NewContainer")
 	return NewContainerArray(nil)
+}
+
+// GetMatchingKeysFrom is a helper function which, given a sorted input list
+// which starts at or above the given key, returns the portion of it matching
+// that key, the remainder, and a next key to check, or ^0 if it's done.
+//
+// If the list is unsorted, this function does not make much sense, but if
+// the key it's called with is the key of the first element, it will still
+// "work", producing the values matching that key, the remainder, and the
+// next value as expected.
+func GetMatchingKeysFrom(source []uint64, key uint64) (matching []uint64, remaining []uint64, nextKey uint64) {
+	var i int
+	for i = 0; i < len(source); i++ {
+		if source[i]>>16 != key {
+			break
+		}
+	}
+	// If there's any items left, the "next" key we expect is the key (v>>16)
+	// of the first remaining item. Otherwise it's ^0.
+	if i == len(source) {
+		nextKey = ^uint64(0)
+	} else {
+		nextKey = source[i] >> 16
+	}
+	return source[:i], source[i:], nextKey
+}
+
+// RemakeContainerFrom takes an input list of uint64, and an existing container,
+// and remakes the container using those values.
+//
+// For lists of values under 4,080 (the RBF cutoff for array size), we just
+// smash values into a type-punned []uint16 backed by the corresponding portion
+// of source. For larger values, we shuffle data into the []uint16 until we
+// have enough extra space to do a 1024-word bitmap, then populate that bitmap.
+//
+// DANGER: RemakeContainerFrom *overwrites its inputs* to avoid allocation.
+// For array containers, it scribbles uint16 values over the initial period
+// of source. For bitmaps, it scribbles some uint16 values to free up space,
+// then makes a bitmap container in the middle of source. The parts of the
+// source slice that are not returned may have been arbitrarily overwritten and
+// may be getting used in containers. You should not look at the original
+// slice again, and you should not write to that storage.
+//
+// If overwriting the input data is a problem, don't use this, or make a
+// fresh copy of the input to use it on. If being unable to write to the
+// input data later is a problem, clone the containers this returns so they
+// have their own storage.
+//
+// The input should be sorted, but if it's not, this will still work at
+// some performance penalty.
+func RemakeContainerFrom(c *Container, source []uint64) (result *Container) {
+	// RBF imports roaring, so we can't import RBF to find this. Sorry. This
+	// is the cutoff at which RBF switches to a bitmap representation instead
+	// of an array.
+	const maxArrayRBF = 4080
+	// Okay, there's some magic here. We will want a bitmap, so we need
+	// 1024 uint64s that we can store the bitmap in. But we need to store
+	// their values somewhere, which requires 256 uint64s repurposed as
+	// uint16s. But then we need to store *their* values somewhere, which
+	// requires 64 more slots, and then 16 more, and then 4 more, and then
+	// 1 more. So we need 1024+256+64+16+4+1, which is 1365. But also we
+	// need to round up. But... we could also just ignore that and pick a
+	// nice round number. 1376 is a multiple of 32, so, 1376 16-bit values
+	// gets us a multiple of 64 bytes of 16-bit values, getting us a
+	// 64-byte aligned bitmap assuming the original data was 64-byte aligned.
+	// Which it might not be. So we have 1376 64-bit values reduced to 1376
+	// 16-bit values, which pack into the first 344 64-bit words, and then
+	// we skip ahead 8 and use the 1024 remaining to hold a bitmap.
+	const u16padding = 1376
+	const u16offset = (u16padding - 1024)
+	if len(source) == 0 {
+		return RemakeContainerArray(c, []uint16{})
+	}
+	// total number to write
+	n := len(source)
+	n16 := n
+	if n16 > maxArrayRBF {
+		n16 = u16padding
+	}
+	// i is now the index of the first member of source which didn't match this
+	// key, and we know there's at least one item in source or else we wouldn't
+	// have gotten this far.
+	u16 := (*[65536]uint16)(unsafe.Pointer(&source[0]))[:n16:n16]
+	if n16 == n {
+		// if they're not in order, sort them so the array is valid.
+		prev := uint16(source[0])
+		u16[0] = prev
+		unsorted := false
+		for i := 1; i < n16; i++ {
+			// you will note that we're overwriting source. but it's okay; we've
+			// read source[0] before we write into part of it, and then we never
+			// catch up.
+			u := uint16(source[i])
+			if u < prev {
+				unsorted = true
+			}
+			prev = u
+			u16[i] = u
+		}
+		if unsorted {
+			sort.Slice(u16, func(i, j int) bool { return u16[i] < u16[j] })
+		}
+		return RemakeContainerArray(c, u16)
+	}
+	// we don't actually care about them being in order, we're going to make
+	// a bitmap anyway
+	for i := 0; i < n16; i++ {
+		u16[i] = uint16(source[i])
+	}
+	// Now u16 holds the first u16padding values, compressed into less space
+	// than u16offset. We need 1024 uint64 for a roaring bitmap container.
+	u64 := source[u16offset : u16offset+1024]
+	// zero out the bits
+	for i := range u64 {
+		u64[i] = 0
+	}
+	// or in the stashed bits
+	for _, v := range u16 {
+		u64[v/64] |= 1 << (v % 64)
+	}
+	// or in the remaining bits
+	for _, v := range source[u16padding:n] {
+		v16 := uint16(v)
+		u64[v16/64] |= 1 << (v16 % 64)
+	}
+	return RemakeContainerBitmapN(c, u64, int32(n))
 }
 
 // RemakeContainerBitmap overwrites the contents of c, which must not be
