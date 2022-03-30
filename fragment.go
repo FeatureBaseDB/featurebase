@@ -2155,25 +2155,84 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64, options *I
 	if unsorted {
 		sort.Slice(toSet, func(i, j int) bool { return toSet[i] < toSet[j] })
 	}
-	// we'll reuse the row IDs as the values to clear, if any.
-	toClear := columnIDs[:0]
-	callback := func(pos uint64) error {
-		toClear = append(toClear, pos)
-		rowID := pos / ShardWidth
-		rowSet[rowID] = struct{}{}
+
+	nextKey := toSet[0] >> 16
+	scratchContainer := roaring.NewContainerArray([]uint16{})
+	rewriteExisting := roaring.NewBitmapBitmapTrimmer(columns, func(key roaring.FilterKey, data *roaring.Container, filter *roaring.Container, writeback roaring.ContainerWriteback) error {
+		var inserting []uint64
+		for roaring.FilterKey(nextKey) < key {
+			thisKey := roaring.FilterKey(nextKey)
+			inserting, toSet, nextKey = roaring.GetMatchingKeysFrom(toSet, nextKey)
+			scratchContainer = roaring.RemakeContainerFrom(scratchContainer, inserting)
+
+			err := writeback(thisKey, scratchContainer)
+			if err != nil {
+				return err
+			}
+		}
+		// we only wanted to insert the data we had before the end, there's
+		// no actual data here to modify.
+		if data == nil {
+			return nil
+		}
+		if roaring.FilterKey(nextKey) > key {
+			// simple path: we only have to remove things from the filter,
+			// if there are any.
+			if filter.N() == 0 {
+				return nil
+			}
+			existing := data.N()
+			data = data.DifferenceInPlace(filter)
+			if data.N() != existing {
+				rowSet[key.Row()] = struct{}{}
+				return writeback(key, data)
+			}
+			return nil
+		}
+		// nextKey has to be the same as key. we have values to insert, and
+		// necessarily have a filter to remove which matches them. so we're
+		// going to remove everything in the filter, then add all the values
+		// we have to insert. but! in the case where a bit is already set,
+		// and we remove it and re-add it, we don't want to count that.
+		inserting, toSet, nextKey = roaring.GetMatchingKeysFrom(toSet, nextKey)
+
+		existing := data.N()
+
+		// so, we want to remove anything that's in the filter, *but*, if a
+		// thing is in the filter, and we then add it back, that doesn't
+		// count. but if a thing is in the filter, but *wasn't originally
+		// there*, that counts. But we can't check that *after* we compute
+		// the difference, so...
+		reAdds := 0
+		for _, v := range inserting {
+			if filter.Contains(uint16(v)) && data.Contains(uint16(v)) {
+				reAdds++
+			}
+		}
+		data = data.DifferenceInPlace(filter)
+		removes := int(existing - data.N())
+		var changed bool
+		adds := 0
+		for _, v := range inserting {
+			data, changed = data.Add(uint16(v))
+			if changed {
+				adds++
+			}
+		}
+		// if we added more things than were being readded, or removed more
+		// things than were being readded, we changed something.
+		if adds > reAdds || removes > reAdds {
+			rowSet[key.Row()] = struct{}{}
+			return writeback(key, data)
+		}
 		return nil
-	}
-	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
-	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
+	})
+
+	err := tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriteExisting)
 	if err != nil {
-		return errors.Wrap(err, "finding existing positions")
+		return err
 	}
-	// if we're clearing things, anything being set that is being cleared
-	// should not be cleared
-	if len(toClear) > 0 {
-		toClear = sliceDifference(toClear, toSet)
-	}
-	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
+	return f.updateCaching(tx, rowSet)
 }
 
 // ClearRecords deletes all bits for the given records. It's basically
