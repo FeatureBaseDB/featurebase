@@ -1919,7 +1919,7 @@ func (api *API) applyOperations(ctx context.Context, qcx *Qcx, index *Index, sha
 				// We delete from the existence field unconditionally and other fields
 				// if we know they exist.
 				if op.OpType == ingest.OpDelete {
-					err = clearExistenceColumns(qcx, index, op.ClearRecordIDs, shard)
+					err = clearExistenceColumns(tx, index, op.ClearRecordIDs, shard)
 					if err != nil {
 						return fmt.Errorf("clearing existence columns: %w", err)
 					}
@@ -1997,21 +1997,20 @@ func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard ui
 	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, &options)
 }
 
-func clearExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) error {
+func clearExistenceColumns(tx Tx, index *Index, columnIDs []uint64, shard uint64) error {
 	ef := index.existenceField()
 	if ef == nil {
 		return nil
 	}
-
-	existenceRowIDs := make([]uint64, len(columnIDs))
-	// If we don't gratuitously hand-duplicate things in field.Import,
-	// the fact that fragment.bulkImport rewrites its row and column
-	// lists can burn us if we don't make a copy before doing the
-	// existence field write.
-	columnCopy := make([]uint64, len(columnIDs))
-	copy(columnCopy, columnIDs)
-	options := ImportOptions{Clear: true}
-	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, &options)
+	v := ef.view("standard")
+	if v == nil {
+		return nil
+	}
+	f := v.Fragment(shard)
+	if f == nil {
+		return nil
+	}
+	return f.ClearRecords(tx, columnIDs)
 }
 
 // ShardDistribution returns an object representing the distribution of shards
