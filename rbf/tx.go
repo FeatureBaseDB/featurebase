@@ -1754,17 +1754,13 @@ func (s *containerFilter) ApplyFilter() (err error) {
 		if key < minKey {
 			continue
 		}
-		s.tx.mu.RUnlock()
 		res := s.filter.ConsiderKey(key, int32(cell.BitN))
-		s.tx.mu.RLock()
 		if res.Err != nil {
 			return res.Err
 		}
 		if res.YesKey <= key && res.NoKey <= key {
 			data := intoContainer(cell, s.cursor.tx, &s.header, s.body[:])
-			s.tx.mu.RUnlock()
 			res = s.filter.ConsiderData(key, data)
-			s.tx.mu.RLock()
 			if res.Err != nil {
 				return res.Err
 			}
@@ -1820,17 +1816,13 @@ func (s *containerFilter) ApplyRewriter() (err error) {
 		if key < minKey {
 			continue
 		}
-		s.tx.mu.RUnlock()
 		res := s.rewriter.ConsiderKey(key, int32(cell.BitN))
-		s.tx.mu.RLock()
 		if res.Err != nil {
 			return res.Err
 		}
 		if res.YesKey <= key && res.NoKey <= key {
 			data := intoWritableContainer(cell, s.cursor.tx, &s.header, s.body[:])
-			s.tx.mu.RUnlock()
 			res = s.rewriter.RewriteData(key, data, writeback)
-			s.tx.mu.RLock()
 			if res.Err != nil {
 				return res.Err
 			}
