@@ -3,6 +3,7 @@ package rbf
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -1301,6 +1302,16 @@ func (tx *Tx) leafCellBitmap(pgno uint32) (uint32, []uint64, error) {
 	return pgno, toArray64(page), err
 }
 
+// leafCellBitmapInto copies the bitmap into provided space
+func (tx *Tx) leafCellBitmapInto(pgno uint32, into []byte) (uint32, []uint64, error) {
+	page, _, err := tx.readPage(pgno)
+	if err != nil {
+		return 0, nil, err
+	}
+	copy(into, page)
+	return pgno, toArray64(into), err
+}
+
 func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.ContainerIterator, found bool, err error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
@@ -1319,20 +1330,50 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 	return &containerIterator{cursor: c}, exact, nil
 }
 
-// Shared pool for in-memory database pages.
-// These are used before being flushed to disk.
+// Shared pool for container filters, used because they contain cursors
+// which are large.
 var containerFilterPool = &sync.Pool{}
 
-func getContainerFilter(c *Cursor, filter roaring.BitmapFilter, tx *Tx) *containerFilter {
+// getContainerFilter generates a containerFilter, which may actually secretly
+// be used for rewriting; the data structures are similar enough that sharing
+// a pool for both types seems advantageous.
+func getContainerFilter(c *Cursor, name string, filter roaring.BitmapFilter, rewriter roaring.BitmapRewriter, tx *Tx) *containerFilter {
 	existing := containerFilterPool.Get()
 	if existing == nil {
-		return &containerFilter{cursor: c, filter: filter, tx: tx}
+		return &containerFilter{cursor: c, name: name, filter: filter, rewriter: rewriter, tx: tx}
 	}
 	f := existing.(*containerFilter)
 	f.cursor = c
+	f.name = name
 	f.filter = filter
+	f.rewriter = rewriter
 	f.tx = tx
 	return f
+}
+
+func (tx *Tx) ApplyRewriter(name string, key uint64, rewriter roaring.BitmapRewriter) (err error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	// Unlike a Filter, Rewriter makes sense to apply to an empty bitmap.
+	if err = tx.createBitmapIfNotExists(name); err != nil {
+		return err
+	}
+
+	c, err := tx.cursor(name)
+	if err == ErrBitmapNotFound {
+		return nil // nothing available.
+	} else if err != nil {
+		return err
+	}
+
+	_, err = c.Seek(key)
+	if err != nil {
+		return err
+	}
+	f := getContainerFilter(c, name, nil, rewriter, tx)
+	defer f.Close()
+	return f.ApplyRewriter()
 }
 
 func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) (err error) {
@@ -1350,9 +1391,9 @@ func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) 
 	if err != nil {
 		return err
 	}
-	f := getContainerFilter(c, filter, tx)
+	f := getContainerFilter(c, name, filter, nil, tx)
 	defer f.Close()
-	return f.Apply()
+	return f.ApplyFilter()
 }
 
 func (tx *Tx) ForEach(name string, fn func(i uint64) error) error {
@@ -1681,13 +1722,16 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 	return other, nil
 }
 
-// containerFilter is like ContainerIterator, but implements ApplyFilter
+// containerFilter is like ContainerIterator, but implements ApplyFilter and
+// also ApplyRewriter, depending on which is provided to it.
 type containerFilter struct {
-	cursor *Cursor
-	filter roaring.BitmapFilter
-	tx     *Tx
-	header roaring.Container
-	body   [8192]byte
+	cursor   *Cursor
+	name     string
+	filter   roaring.BitmapFilter
+	rewriter roaring.BitmapRewriter
+	tx       *Tx
+	header   roaring.Container
+	body     [8192]byte
 }
 
 func (s *containerFilter) Close() {
@@ -1696,9 +1740,12 @@ func (s *containerFilter) Close() {
 	containerFilterPool.Put(s)
 }
 
-func (s *containerFilter) Apply() (err error) {
+func (s *containerFilter) ApplyFilter() (err error) {
 	var minKey roaring.FilterKey
 	var cell leafCell
+	if s.filter == nil {
+		return errors.New("can't apply filter without a filter")
+	}
 	for err := s.cursor.Next(); err == nil; err = s.cursor.Next() {
 		elem := &s.cursor.stack.elems[s.cursor.stack.top]
 		leafPage, _, _ := s.cursor.tx.readPage(elem.pgno)
@@ -1731,6 +1778,81 @@ func (s *containerFilter) Apply() (err error) {
 		}
 	}
 	return nil
+}
+
+func (s *containerFilter) ApplyRewriter() (err error) {
+	var minKey roaring.FilterKey
+	var cell leafCell
+	if s.rewriter == nil {
+		return errors.New("can't apply rewriter without a rewriter")
+	}
+	var dirty bool
+	var key roaring.FilterKey
+	var writeback roaring.ContainerWriteback = func(updateKey roaring.FilterKey, data *roaring.Container) (err error) {
+		var exact bool
+		if updateKey != key {
+			exact, err = s.cursor.Seek(uint64(updateKey))
+			if err != nil {
+				return err
+			}
+		} else {
+			exact = true
+		}
+		if data.N() == 0 {
+			if exact {
+				err = s.cursor.deleteLeafCell(uint64(updateKey))
+				key = ^roaring.FilterKey(0)
+			}
+			// if we don't delete, we aren't changing our situation at all
+		} else {
+			cell = ConvertToLeafArgs(uint64(updateKey), data)
+			err = s.cursor.putLeafCell(cell)
+			key = ^roaring.FilterKey(0)
+		}
+		dirty = true
+		return err
+	}
+	for err := s.cursor.Next(); err == nil; err = s.cursor.Next() {
+		elem := &s.cursor.stack.elems[s.cursor.stack.top]
+		leafPage, _, _ := s.cursor.tx.readPage(elem.pgno)
+		readLeafCellInto(&cell, leafPage, elem.index)
+		key = roaring.FilterKey(cell.Key)
+		if key < minKey {
+			continue
+		}
+		s.tx.mu.RUnlock()
+		res := s.rewriter.ConsiderKey(key, int32(cell.BitN))
+		s.tx.mu.RLock()
+		if res.Err != nil {
+			return res.Err
+		}
+		if res.YesKey <= key && res.NoKey <= key {
+			data := intoWritableContainer(cell, s.cursor.tx, &s.header, s.body[:])
+			s.tx.mu.RUnlock()
+			res = s.rewriter.RewriteData(key, data, writeback)
+			s.tx.mu.RLock()
+			if res.Err != nil {
+				return res.Err
+			}
+		}
+		minKey = res.NoKey
+		// if the callback did any writing, we need to reset our cursor,
+		// and if the next key is far away, we should also reset our cursor.
+		//
+		// In practice the "key+64" probably comes out to "we've been told
+		// we're done".
+		if dirty || minKey > (key+64) {
+			dirty = false
+			_, err := s.cursor.Seek(uint64(minKey))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// notify rewriter that we're done, telling them the last key we
+	// processed.
+	res := s.rewriter.RewriteData(^roaring.FilterKey(0), nil, writeback)
+	return res.Err
 }
 
 // containerIterator wraps Cursor to implement roaring.ContainerIterator.

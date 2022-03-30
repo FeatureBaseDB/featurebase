@@ -191,8 +191,37 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 	return c
 }
 
-func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
+// intoWritableContainer always uses the provided target for a copy of
+// the container's contents, so the container can be modified safely.
+func intoWritableContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []byte) (c *roaring.Container) {
+	if len(l.Data) == 0 {
+		return nil
+	}
+	orig := l.Data
+	target = target[:len(orig)]
+	copy(target, orig)
+	switch l.Type {
+	case ContainerTypeArray:
+		c = roaring.RemakeContainerArray(replacing, toArray16(target))
+	case ContainerTypeBitmapPtr:
+		pgno := toPgno(target)
+		target = target[:PageSize] // reslice back to full size
+		_, bm, _ := tx.leafCellBitmapInto(pgno, target)
+		c = roaring.RemakeContainerBitmapN(replacing, bm, int32(l.BitN))
+	case ContainerTypeBitmap:
+		c = roaring.RemakeContainerBitmapN(replacing, toArray64(target), int32(l.BitN))
+	case ContainerTypeRLE:
+		c = roaring.RemakeContainerRunN(replacing, toInterval16(target), int32(l.BitN))
+	}
+	// Note: If the "roaringparanoia" build tag isn't set, this
+	// should be optimized away entirely. Otherwise it's moderately
+	// expensive.
+	c.CheckN()
+	c.SetMapped(false)
+	return c
+}
 
+func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
 	if len(l.Data) == 0 {
 		return nil
 	}
