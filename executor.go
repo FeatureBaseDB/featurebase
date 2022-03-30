@@ -8291,31 +8291,6 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index strin
 func DeleteRows(ctx context.Context, src *Row, idx *Index, shard uint64) (bool, error) {
 	return DeleteRowsWithFlow(ctx, src, idx, shard, false)
 }
-func clearFragment(writeTx Tx, columns *roaring.Bitmap, frag *fragment, toClear []uint64) (changed bool, err error) {
-
-	rowSet := make(map[uint64]struct{})
-	toClear = toClear[:0]
-	callback := func(pos uint64) error {
-		toClear = append(toClear, pos)
-		rowID := pos / ShardWidth
-		rowSet[rowID] = struct{}{}
-		return nil
-	}
-	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
-	err = writeTx.ApplyFilter(frag.index(), frag.field(), frag.view(), frag.shard, 0, findExisting)
-
-	if err != nil {
-		return false, err
-	}
-	if len(toClear) > 0 {
-		err = frag.importPositions(writeTx, []uint64{}, toClear, rowSet)
-		if err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-	return false, nil
-}
 
 func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, idx *Index, shard uint64, normalFlow bool) (bool, error) {
 	var existenceFragment *fragment
@@ -8368,22 +8343,19 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 
 	}()
 
-	toClear := make([]uint64, 0)
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
-
-			frag, ok := view.fragments[shard]
-			if !ok {
+			frag := view.Fragment(shard)
+			if frag == nil {
 				continue
 			}
-			c, err := clearFragment(writeTx, columns, frag, toClear)
+			c, err := frag.clearRecordsByBitmap(writeTx, columns)
 			if err != nil {
 				return false, err
 			}
 			if c {
 				changed = true
 			}
-
 		}
 	}
 	if existenceFragment != nil { //a string keys have been deleted and the deleteRow was created
@@ -8419,15 +8391,14 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 			return
 		}
 	}()
-	toClear := make([]uint64, 0)
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
 
-			frag, ok := view.fragments[shard]
-			if !ok {
+			frag := view.Fragment(shard)
+			if frag == nil {
 				continue
 			}
-			c, err := clearFragment(writeTx, columns, frag, toClear)
+			c, err := frag.clearRecordsByBitmap(writeTx, columns)
 			if err != nil {
 				return false, err
 			}

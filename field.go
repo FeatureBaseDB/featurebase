@@ -1310,7 +1310,8 @@ func (f *Field) ClearBits(tx Tx, shard uint64, recordIDs ...uint64) error {
 	if frag == nil {
 		return nil
 	}
-	return frag.ClearRecords(tx, recordIDs)
+	_, err := frag.ClearRecords(tx, recordIDs)
+	return err
 }
 
 func groupCompare(a, b string, offset int) (lt, eq bool) {
