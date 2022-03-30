@@ -176,14 +176,6 @@ func TestSliceContainers(t *testing.T) {
 	})
 }
 
-func TestContainersFB1247(t *testing.T) {
-	bm := [bitmapN]uint64{0xF}
-	co := NewContainerBitmap(1, bm[:])
-	co = co.bitmapToArray()
-	//should not panic
-
-}
-
 func genRun(r *rand.Rand) Interval16 {
 gen:
 	dat := r.Uint32()
