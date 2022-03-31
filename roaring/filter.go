@@ -625,7 +625,7 @@ func (b *BitmapBitmapFilter) ConsiderData(key FilterKey, data *Container) Filter
 	base := uint64(key << 16)
 	filter := b.containers[pos]
 	if filter == nil {
-		key.RejectUntilOffset(b.nextOffsets[pos])
+		return key.RejectUntilOffset(b.nextOffsets[pos])
 	}
 	var lastErr error
 	matched := false
@@ -1040,7 +1040,7 @@ func (b *BitmapBSICountFilter) ConsiderData(key FilterKey, data *Container) Filt
 	pos := key & keyMask
 	filter := b.containers[pos]
 	if filter == nil {
-		key.RejectUntilOffset(b.nextOffsets[pos])
+		return key.RejectUntilOffset(b.nextOffsets[pos])
 	}
 	row := uint64(key >> rowExponent) // row count within the fragment
 	// How do we translate the filter and existence bit into actionable things?
