@@ -349,6 +349,37 @@ type ImportRoaringRequest struct {
 	UpdateExistence bool
 }
 
+type ImportRoaringShardRequest struct {
+	// Has this request already been forwarded to all replicas? If
+	// Remote=false, then the handling server is responsible for
+	// ensuring this request is sent to all repliacs before returning
+	// a successful response to the client.
+	Remote bool
+	Views  []RoaringUpdate
+}
+
+// RoaringUpdate represents the bits to clear and then set in a particular view.
+type RoaringUpdate struct {
+	Field string
+	View  string
+
+	// Clear is a roaring encoded bitmatrix of bits to clear. For
+	// mutex or int-like fields, only the first row is looked at and
+	// the bits in that row are cleared from every row.
+	Clear []byte
+
+	// Set is the roaring encoded bitmatrix of bits to set. If this is
+	// a mutex or int-like field, we'll assume the first shard width
+	// of containers is the exists row and we will first clear all
+	// bits in those columns and then set
+	Set []byte
+
+	// ClearRecords, when true, denotes that Clear should be
+	// interpreted as a single row which will be subtracted from every
+	// row in this view.
+	ClearRecords bool
+}
+
 // ValidateWithTimestamp ensures that the payload of the request is valid.
 func (irr *ImportRoaringRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreatedAt int64) error {
 	if (irr.IndexCreatedAt != 0 && irr.IndexCreatedAt != indexCreatedAt) ||

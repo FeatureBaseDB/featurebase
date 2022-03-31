@@ -2,10 +2,13 @@
 package client
 
 import (
+	"bytes"
+	"math/bits"
 	"sort"
 	"sync"
 	"time"
 
+	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/client/egpool"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/roaring"
@@ -164,6 +167,8 @@ type Batch struct {
 	splitBatchMode bool
 	frags          fragments
 	clearFrags     fragments
+
+	useShardTransactionalEndpoint bool
 }
 
 func (b *Batch) Len() int { return len(b.ids) }
@@ -202,6 +207,13 @@ func OptMaxStaleness(t time.Duration) BatchOption {
 func OptKeyTranslateBatchSize(v int) BatchOption {
 	return func(b *Batch) error {
 		b.keyTranslateBatchSize = v
+		return nil
+	}
+}
+
+func OptUseShardTransactionalEndpoint(use bool) BatchOption {
+	return func(b *Batch) error {
+		b.useShardTransactionalEndpoint = use
 		return nil
 	}
 }
@@ -687,6 +699,14 @@ func (b *Batch) Import() error {
 	if err != nil {
 		return errors.Wrap(err, "making fragments (flush)")
 	}
+	if b.useShardTransactionalEndpoint {
+		// TODO handle bool?
+		frags, clearFrags, err = b.makeSingleValFragments(frags, clearFrags)
+		if err != nil {
+			return errors.Wrap(err, "making single val fragments")
+		}
+	}
+
 	makeTime := time.Now()
 	b.log.Printf("making fragments for batch of %d took %v", size, makeTime.Sub(transTime))
 
@@ -698,11 +718,18 @@ func (b *Batch) Import() error {
 		b.clearFrags = make(fragments)
 		// create bitmaps out of each field in b.rowIDs and import. Also
 		// import int data.
-		err = b.doImport(frags, clearFrags)
-		if err != nil {
-			return errors.Wrap(err, "doing import")
+		if !b.useShardTransactionalEndpoint {
+			err = b.doImport(frags, clearFrags)
+			if err != nil {
+				return errors.Wrap(err, "doing import")
+			}
+			b.log.Printf("importing fragments took %v", time.Since(makeTime))
+		} else {
+			err = b.doImportShardTransactional(frags, clearFrags)
+			if err != nil {
+				return errors.Wrap(err, "doing shard transactional import")
+			}
 		}
-		b.log.Printf("importing fragments took %v", time.Since(makeTime))
 	}
 
 	b.reset()
@@ -749,7 +776,7 @@ func (b *Batch) doTranslation() error {
 
 	// Translate the column keys.
 	eg.Go(func() error {
-		// Dedupliucate keys to translate.
+		// Deduplicate keys to translate.
 		dedup := make(map[string]struct{})
 		var keys []string
 		for _, key := range b.toTranslateID {
@@ -1026,6 +1053,78 @@ func (b *Batch) createFieldKeys(field *Field, keys ...string) (map[string]uint64
 	return results, nil
 }
 
+func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
+	start := time.Now()
+	requests := make(map[uint64]*featurebase.ImportRoaringShardRequest)
+	getOrCreate := func(requests map[uint64]*featurebase.ImportRoaringShardRequest, shard uint64) *featurebase.ImportRoaringShardRequest {
+		request, ok := requests[shard]
+		if !ok {
+			request = &featurebase.ImportRoaringShardRequest{
+				Remote: true, // the client will send to all replicas TODO probably rename before merge
+				Views:  make([]featurebase.RoaringUpdate, 0, 1),
+			}
+			requests[shard] = request
+		}
+		return request
+	}
+
+	for fragKey, viewMap := range frags {
+		request := getOrCreate(requests, fragKey.shard)
+
+		for view, bitmap := range viewMap {
+			buf := &bytes.Buffer{}
+			_, err := bitmap.WriteTo(buf)
+			if err != nil {
+				return errors.Wrap(err, "serializing bitmap")
+			}
+			request.Views = append(request.Views, featurebase.RoaringUpdate{Field: fragKey.field, View: view, Set: buf.Bytes()})
+
+			// handle clear bitmap now if it exists so we don't have to go searching later
+			if clearVM := clearFrags.GetViewMap(fragKey.shard, fragKey.field); clearVM != nil {
+				if clearBitmap, ok := clearVM[view]; ok {
+					clearBuf := &bytes.Buffer{}
+					_, err := clearBitmap.WriteTo(clearBuf)
+					if err != nil {
+						return errors.Wrap(err, "serializing clear bitmap")
+					}
+					request.Views[len(request.Views)-1].Clear = clearBuf.Bytes()
+					// delete from clearFrags so any remaining we know for sure must be added new
+					clearFrags.DeleteView(fragKey.shard, fragKey.field, view)
+				}
+			}
+		}
+	}
+
+	for fragKey, viewMap := range clearFrags {
+		request := getOrCreate(requests, fragKey.shard)
+
+		for view, bitmap := range viewMap {
+			buf := &bytes.Buffer{}
+			_, err := bitmap.WriteTo(buf)
+			if err != nil {
+				return errors.Wrap(err, "serializing bitmap")
+			}
+			request.Views = append(request.Views, featurebase.RoaringUpdate{Field: fragKey.field, View: view, Clear: buf.Bytes()})
+		}
+	}
+
+	b.client.Stats.Timing(MetricBatchShardImportBuildRequestsSeconds, time.Since(start), 1.0)
+	start = time.Now()
+	eg := egpool.Group{PoolSize: 20}
+	for shard, request := range requests {
+		shard := shard
+		request := request
+		eg.Go(func() error {
+			return b.client.ImportRoaringShard(b.index.Name(), shard, request)
+		})
+	}
+	err := eg.Wait()
+	dur := time.Since(start)
+	b.client.Stats.Timing(MetricBatchShardImportDurationSeconds, dur, 1.0)
+	b.log.Printf("import shard took: %v\n", dur)
+	return errors.Wrap(err, "doing shard-transactional imports")
+}
+
 func (b *Batch) doImport(frags, clearFrags fragments) error {
 
 	start := time.Now()
@@ -1088,6 +1187,14 @@ func anyCause(cause error, errs ...error) error {
 	return nil
 }
 
+func (b *Batch) shardWidth() uint64 {
+	shardWidth := b.index.ShardWidth()
+	if shardWidth == 0 {
+		shardWidth = DefaultShardWidth
+	}
+	return shardWidth
+}
+
 // this is kind of bad as it means we can never import column id
 // ^uint64(0) which is a valid column ID. I think it's unlikely to
 // matter much in practice (we could maybe special case it somewhere
@@ -1095,10 +1202,7 @@ func anyCause(cause error, errs ...error) error {
 var nilSentinel = ^uint64(0)
 
 func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments, error) {
-	shardWidth := b.index.ShardWidth()
-	if shardWidth == 0 {
-		shardWidth = DefaultShardWidth
-	}
+	shardWidth := b.shardWidth()
 	emptyClearRows := make(map[int]uint64)
 
 	// create _exists fragments if needed
@@ -1219,6 +1323,133 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 	return frags, clearFrags, nil
 }
 
+func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, fragments, error) {
+	shardWidth := b.shardWidth()
+	ids := make([]uint64, len(b.ids))
+
+	// -------------------------
+	// int-like fields
+	// -------------------------
+	for fieldName, bvalues := range b.values {
+		ids = ids[:len(b.ids)]
+
+		// trim out null values from ids and values.
+		nullIndices := b.nullIndices[fieldName]
+
+		i, n := uint64(0), 0
+		for _, nullIndex := range nullIndices {
+			copy(ids[n:], b.ids[i:nullIndex])
+			n += copy(bvalues[n:], bvalues[i:nullIndex])
+			i = nullIndex + 1
+		}
+
+		copy(ids[n:], b.ids[i:])
+		n += copy(bvalues[n:], bvalues[i:])
+		ids, bvalues = ids[:n], bvalues[:n]
+
+		if len(ids) == 0 {
+			continue
+		}
+
+		sc := &valsByIDsSortable{ids: ids, vals: bvalues, width: shardWidth}
+		if !sort.IsSorted(sc) {
+			sort.Stable(sc)
+		}
+		field := b.headerMap[fieldName]
+		base := field.Options().base
+
+		shard := ids[0] / shardWidth
+		bitmap := frags.GetOrCreate(shard, fieldName, "bsig_"+fieldName) // TODO... grab bsig_ prefix from elsewhere
+		for i, id := range ids {
+			if i+1 < len(ids) {
+				// we only want the last value set for each id
+				if ids[i+1] == id {
+					continue
+				}
+			}
+			if shard != id/shardWidth {
+				shard = id / shardWidth
+				bitmap = frags.GetOrCreate(shard, fieldName, "bsig_"+fieldName)
+			}
+			fragmentColumn := id % shardWidth
+			bitmap.Add(fragmentColumn) // existence bit
+			svalue := bvalues[i] - base
+			negative := svalue < 0
+			var value uint64
+			if negative {
+				bitmap.Add(shardWidth + fragmentColumn) // set sign bit
+				value = uint64(svalue * -1)
+			} else {
+				value = uint64(svalue)
+			}
+			lz := bits.LeadingZeros64(value)
+			row := uint64(2)
+			for mask := uint64(0x1); mask <= 1<<(64-lz) && mask != 0; mask = mask << 1 {
+				if value&mask > 0 {
+					bitmap.Add(row*shardWidth + fragmentColumn)
+				}
+				row++
+			}
+		}
+	}
+
+	// -------------------------
+	// mutex fields
+	// -------------------------
+	for findex, rowIDs := range b.rowIDs {
+		field := b.header[findex]
+		if field.Opts().Type() != FieldTypeMutex {
+			continue
+		}
+		ids = ids[:0]
+
+		// get slice of column ids for non-nil rowIDs and cut nil row
+		// IDs out of rowIDs.
+		idsIndex := 0
+		for i, id := range b.ids {
+			rowID := rowIDs[i]
+			if rowID == nilSentinel {
+				continue
+			}
+			rowIDs[idsIndex] = rowID
+			ids = append(ids, id)
+			idsIndex++
+		}
+		rowIDs = rowIDs[:idsIndex]
+
+		if len(ids) == 0 {
+			continue
+		}
+
+		sc := &rowsByIDsSortable{ids: ids, rows: rowIDs, width: shardWidth}
+		if !sort.IsSorted(sc) {
+			sort.Stable(sc)
+		}
+
+		shard := ids[0] / shardWidth
+		bitmap := frags.GetOrCreate(shard, field.Name(), "standard")
+		clearBM := clearFrags.GetOrCreate(shard, field.Name(), "standard")
+		for i, id := range ids {
+			if i+1 < len(ids) {
+				// we only want the last value set for each id
+				if ids[i+1] == id {
+					continue
+				}
+			}
+			row := rowIDs[i]
+			if shard != id/shardWidth {
+				shard = id / shardWidth
+				bitmap = frags.GetOrCreate(shard, field.Name(), "standard")
+			}
+			fragmentColumn := id % shardWidth
+			clearBM.Add(fragmentColumn) // Will use this to clear columns.
+			bitmap.Add(row*shardWidth + fragmentColumn)
+		}
+	}
+
+	return frags, clearFrags, nil
+}
+
 type valsByIDsSortable struct {
 	ids  []uint64
 	vals []int64
@@ -1268,7 +1499,7 @@ func (b *Batch) importValueData() error {
 
 		sc := &valsByIDsSortable{ids: ids, vals: bvalues, width: shardWidth}
 		if !sort.IsSorted(sc) {
-			sort.Sort(sc)
+			sort.Stable(sc) // TODO(jaffee) this was sort.Sort which I think is a bug. If we get multiple of the same record w/in a batch with different int values, the last one needs to win. We need a test for this.
 		}
 
 		curShard := ids[0] / shardWidth
@@ -1320,7 +1551,7 @@ type rowsByIDsSortable struct {
 func (v *rowsByIDsSortable) Len() int { return len(v.ids) }
 
 // comparing on shard rather than ID was twice as fast in informal tests
-func (v *rowsByIDsSortable) Less(i, j int) bool { return v.ids[i]/v.width < v.ids[j]/v.width }
+func (v *rowsByIDsSortable) Less(i, j int) bool { return v.ids[i] < v.ids[j] }
 func (v *rowsByIDsSortable) Swap(i, j int) {
 	v.ids[i], v.ids[j] = v.ids[j], v.ids[i]
 	v.rows[i], v.rows[j] = v.rows[j], v.rows[i]
@@ -1363,7 +1594,7 @@ func (b *Batch) importMutexData() error {
 
 		sc := &rowsByIDsSortable{ids: ids, rows: rowIDs, width: shardWidth}
 		if !sort.IsSorted(sc) {
-			sort.Sort(sc)
+			sort.Stable(sc)
 		}
 
 		curShard := ids[0] / shardWidth
@@ -1506,4 +1737,12 @@ func (f fragments) GetViewMap(shard uint64, field string) map[string]*roaring.Bi
 		}
 	}
 	return viewMap
+}
+
+func (f fragments) DeleteView(shard uint64, field, view string) {
+	vm := f.GetViewMap(shard, field)
+	if vm == nil {
+		return
+	}
+	delete(vm, view)
 }

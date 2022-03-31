@@ -2,9 +2,17 @@
 
 set -e
 
-for i in {41..44}; do
+if [ -f /data/datagen_linux_arm64 ]; then
+    datagen_loc=/data/datagen_linux_arm64
+else
+    datagen_loc=`which datagen`
+fi
+
+declare -i end=${2:-44} # end at 44 or whatever the second argument is
+
+for (( c=41; c<=$end; c++ )); do
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "ROUND $i"
+    echo "ROUND $c"
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    /data/datagen_linux_arm64 -s texas_health --pilosa.index thr --end-at 1048575 --pilosa.batch-size 1048576 --concurrency 1 --seed=$i --pilosa.hosts=$1
+    $datagen_loc -s texas_health --pilosa.index thr --end-at 1048575 --pilosa.batch-size 1048576 --concurrency 1 --seed=$c --pilosa.hosts=$1
 done

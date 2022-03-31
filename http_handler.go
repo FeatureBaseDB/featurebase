@@ -454,6 +454,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.chkAuthZ(handler.handlePostImport, authz.Write)).Methods("POST").Name("PostImport")
 	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.chkAuthZ(handler.handleGetMutexCheck, authz.Read)).Methods("GET").Name("GetMutexCheck")
 	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.chkAuthZ(handler.handlePostImportRoaring, authz.Write)).Methods("POST").Name("PostImportRoaring")
+	router.HandleFunc("/index/{index}/shard/{shard}/import-roaring", handler.chkAuthZ(handler.handlePostShardImportRoaring, authz.Write)).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.chkAuthZ(handler.handlePostQuery, authz.Read)).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.chkAuthZ(handler.handleGetInfo, authz.Admin)).Methods("GET").Name("GetInfo")
 	router.HandleFunc("/recalculate-caches", handler.chkAuthZ(handler.handleRecalculateCaches, authz.Admin)).Methods("POST").Name("RecalculateCaches")
@@ -3332,6 +3333,81 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	_, err = w.Write(buf)
 	if err != nil {
 		h.logger.Errorf("writing import-roaring response: %v", err)
+		return
+	}
+}
+
+// handlePostShardImportRoaring takes data for multiple fields for a
+// particular shard and imports it all in a single transaction. It was
+// developed in the post-RBF world and should probably ultimately
+// replace most of the other import endpoints.
+func (h *Handler) handlePostShardImportRoaring(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if error, code := validateProtobufHeader(r); error != "" {
+		http.Error(w, error, code)
+		return
+	}
+
+	// Get index and field type to determine how to handle the
+	// import data.
+	indexName := mux.Vars(r)["index"]
+
+	ctx := r.Context()
+
+	// Read entire body.
+	span, _ := tracing.StartSpanFromContext(ctx, "ioutil.ReadAll-Body")
+	body, err := readBody(r)
+	span.LogKV("bodySize", len(body))
+	span.Finish()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	req := &ImportRoaringShardRequest{}
+	span, _ = tracing.StartSpanFromContext(ctx, "Unmarshal")
+	err = h.serializer.Unmarshal(body, req)
+	span.Finish()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	urlVars := mux.Vars(r)
+	shard, err := strconv.ParseUint(urlVars["shard"], 10, 64)
+	if err != nil {
+		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
+		return
+	}
+	resp := &ImportResponse{}
+	// TODO give meaningful stats for import
+	err = h.api.ImportRoaringShard(ctx, indexName, shard, req)
+	if err != nil {
+		resp.Err = err.Error()
+		if errors.Is(err, ErrIndexNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+		} else if errors.As(err, &BadRequestError{}) {
+			w.WriteHeader(http.StatusBadRequest)
+		} else if _, ok := errors.Cause(err).(NotFoundError); ok {
+			w.WriteHeader(http.StatusNotFound)
+		} else if errors.As(err, &PreconditionFailedError{}) {
+			w.WriteHeader(http.StatusPreconditionFailed)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+
+	// Marshal response object.
+	buf, err := h.serializer.Marshal(resp)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("marshal shard-import-roaring response: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Errorf("writing shard-import-roaring response: %v", err)
 		return
 	}
 }

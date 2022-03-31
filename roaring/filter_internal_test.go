@@ -382,3 +382,99 @@ func TestMutexDupFilter(t *testing.T) {
 		})
 	}
 }
+
+const (
+	shardWidth = 1 << shardwidth.Exponent
+)
+
+func TestGetNextFromIteratorEmpty(t *testing.T) {
+	data := NewBitmap().Roaring()
+	cit, err := NewContainerIterator(data)
+	if err != nil {
+		t.Fatalf("getting roaring iterator: %v", err)
+	}
+
+	key, cont := getNextFromIterator(cit)
+	if key != KEY_DONE || cont != nil {
+		t.Fatalf("expected iterator done, but got: %d, %v", key, cont.Slice())
+	}
+
+}
+
+func TestGetNextFromIterator(t *testing.T) {
+	data := NewBitmap(1, 7, 100000, 500000, shardWidth, shardWidth+3, shardWidth+containerWidth-1, shardWidth+containerWidth).Roaring()
+	cit, err := NewContainerIterator(data)
+	if err != nil {
+		t.Fatalf("getting roaring iterator: %v", err)
+	}
+
+	expected := []struct {
+		key   FilterKey
+		slice []uint16
+	}{
+		{0, []uint16{1, 7}},
+		{1, []uint16{100000 % containerWidth}},
+		{500000 / containerWidth, []uint16{500000 % containerWidth}},
+		{shardWidth / containerWidth, []uint16{0, 3, 65535}},
+		{shardWidth/containerWidth + 1, []uint16{0}},
+	}
+
+	for i, exp := range expected {
+		key, cont := getNextFromIterator(cit)
+		if key != exp.key {
+			t.Errorf("key mismatch at %d, got: %d, exp: %d", i, key, exp.key)
+		}
+		if !reflect.DeepEqual(cont.Slice(), exp.slice) {
+			t.Fatalf("data misatch at %d, got: %v, exp: %v", i, cont.Slice(), exp.slice)
+		}
+	}
+	key, cont := getNextFromIterator(cit)
+	if key != KEY_DONE || cont != nil {
+		t.Fatalf("expected iterator done, but got: %d, %v", key, cont.Slice())
+	}
+
+}
+
+func TestClearColumnsAndSetRewriter(t *testing.T) {
+	data := NewBitmap(1, 7, 100000, 500000,
+		shardWidth, shardWidth+1, shardWidth+7, shardWidth+containerWidth-1, shardWidth+containerWidth,
+		shardWidth*2+7, shardWidth*2+9).Roaring()
+	clearIter, err := NewRepeatedRowIteratorFromBytes(data)
+	if err != nil {
+		t.Fatalf("getting clear iterator: %v", err)
+	}
+	setIter, err := NewContainerIterator(data)
+	if err != nil {
+		t.Fatalf("getting set iterator: %v", err)
+	}
+
+	rewriter, err := NewClearAndSetRewriter(clearIter, setIter)
+	if err != nil {
+		t.Fatalf("getting rewriter: %v", err)
+	}
+
+	expClearKeys := []FilterKey{
+		0, 1, 500000 / containerWidth,
+		shardWidth / containerWidth, shardWidth/containerWidth + 1, (shardWidth + 500000) / containerWidth,
+		shardWidth * 2 / containerWidth, shardWidth*2/containerWidth + 1, (shardWidth*2 + 500000) / containerWidth,
+	}
+	for i, key := range expClearKeys {
+		if rewriter.curClearKey != key {
+			t.Errorf("unexpected clear key at %d, exp: %d, got: %d", i, key, rewriter.curClearKey)
+		}
+		rewriter.nextClear()
+	}
+
+	expSetKeys := []FilterKey{
+		0, 1, 500000 / containerWidth,
+		shardWidth / containerWidth, shardWidth/containerWidth + 1,
+		shardWidth * 2 / containerWidth, KEY_DONE,
+	}
+	for i, key := range expSetKeys {
+		if rewriter.curSetKey != key {
+			t.Errorf("unexpected clear key at %d, exp: %d, got: %d", i, key, rewriter.curClearKey)
+		}
+		rewriter.nextSet()
+	}
+
+}

@@ -2,8 +2,10 @@
 package roaring
 
 import (
-	"errors"
 	"fmt"
+	"math"
+
+	"github.com/pkg/errors"
 
 	"github.com/molecula/featurebase/v3/shardwidth"
 )
@@ -30,7 +32,8 @@ type FilterKey uint64
 // key, or data. The values are represented as exclusive upper bounds on
 // a series of matches followed by a series of rejections. So for instance,
 // if called on key 23, the result {YesKey: 23, NoKey: 24} indicates that
-// key 23 is a "no". This may seem confusing but it makes the math a lot
+// key 23 is a "no". (TODO what about key 24, presumably that's a no as well?)
+// This may seem confusing but it makes the math a lot
 // easier to write. It can also report an error, which indicates that the
 // entire operation should be stopped with that error.
 type FilterResult struct {
@@ -1136,4 +1139,210 @@ func NewBitmapBSICountFilter(filter *Bitmap) *BitmapBSICountFilter {
 	}
 
 	return b
+}
+
+// getNextFromIterator is a convenience function which calls Next and then Value
+// on a ContainerIterator and changes the key to a FilterKey, and
+// returns KEY_DONE if the iterator is done.
+func getNextFromIterator(contIter ContainerIterator) (FilterKey, *Container) {
+	if !contIter.Next() {
+		return KEY_DONE, nil
+	}
+	key, val := contIter.Value()
+	return FilterKey(key), val
+}
+
+// NewRepeatedRowIteratorFromBytes interprets "data" as a roaring
+// bitmap and returns a ContainerIterator which will repeatedly return
+// the first "row" of data as determined by shard width, but with
+// increasing keys. It is essentially a conveniece wrapper around
+// NewContainerIterator and NewRepeatedRowContainerIterator. It treats
+// empty "data" as valid and returns a no-op iterator.
+func NewRepeatedRowIteratorFromBytes(data []byte) (ContainerIterator, error) {
+	iter, err := NewContainerIterator(data)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting container iterator")
+	}
+	return NewRepeatedRowContainerIterator(iter), nil
+}
+
+// NewRepeatedRowContainerIterator returns a ContainerIterator which
+// reads the first "row" of containers out of iter (as determined by
+// shard width, so up to and including key 15 by default). It then
+// returns a ContainerIterator which will repeatedly emit the
+// containers in that row, but with increasing keys such that each
+// time a particular container is emitted it has its key from the last
+// time plus number of containers in a row (16 by default).
+func NewRepeatedRowContainerIterator(iter ContainerIterator) *repeatedRowIterator {
+	conts := getFirstRowAsContainers(iter)
+	return &repeatedRowIterator{
+		containers: conts,
+		cur:        -1,
+	}
+}
+
+type containerWithKey struct {
+	*Container
+	key FilterKey
+}
+
+type repeatedRowIterator struct {
+	containers []containerWithKey
+	row        uint64
+	cur        int
+}
+
+func (r *repeatedRowIterator) Next() bool {
+	r.cur++
+	if r.cur >= len(r.containers) {
+		r.cur = 0
+		r.row++
+	}
+	return len(r.containers) > 0
+}
+
+func (r *repeatedRowIterator) Value() (uint64, *Container) {
+	if len(r.containers) == 0 {
+		return 0, nil
+	}
+	return r.row*rowWidth + uint64(r.containers[r.cur].key%rowWidth), r.containers[r.cur].Container
+}
+
+func (r *repeatedRowIterator) Close() {}
+
+func getFirstRowAsContainers(citer ContainerIterator) []containerWithKey {
+	citerContainers := make([]containerWithKey, 0)
+	for citer.Next() {
+		key, cont := citer.Value()
+		if key > 15 {
+			continue
+		}
+		citerContainers = append(citerContainers, containerWithKey{Container: cont, key: FilterKey(key)})
+	}
+	return citerContainers
+}
+
+// NewClearAndSetRewriter instantiates a ClearAndSetRewriter
+func NewClearAndSetRewriter(clear, set ContainerIterator) (*ClearAndSetRewriter, error) {
+	curSetKey, curSet := getNextFromIterator(set)
+	curClearKey, curClear := getNextFromIterator(clear)
+
+	return &ClearAndSetRewriter{
+		curSetKey:   curSetKey,
+		curSet:      curSet,
+		curClearKey: curClearKey,
+		curClear:    curClear,
+		clearIter:   clear,
+		setIter:     set,
+	}, nil
+}
+
+const KEY_DONE FilterKey = math.MaxUint64
+
+// ClearAndSetRewriter is a BitmapRewriter which can operate on two
+// ContainerIterators, clearing bits from one and setting bits from
+// the other. It tries to do this pretty efficiently such that it
+// doesn't look at the clear iterator unless there is actually a
+// container that might need bits cleared, and it doesn't write a
+// container unless bits have actually changed.
+type ClearAndSetRewriter struct {
+	curSetKey   FilterKey
+	curSet      *Container
+	curClearKey FilterKey
+	curClear    *Container
+	clearIter   ContainerIterator
+	setIter     ContainerIterator
+}
+
+func (csr *ClearAndSetRewriter) nextClear() (FilterKey, *Container) {
+	csr.curClearKey, csr.curClear = getNextFromIterator(csr.clearIter)
+	return csr.curClearKey, csr.curClear
+}
+func (csr *ClearAndSetRewriter) nextSet() (FilterKey, *Container) {
+	csr.curSetKey, csr.curSet = getNextFromIterator(csr.setIter)
+	return csr.curSetKey, csr.curSet
+}
+func (csr *ClearAndSetRewriter) lowestKey() FilterKey {
+	if csr.curSetKey < csr.curClearKey {
+		return csr.curSetKey
+	}
+	return csr.curClearKey
+}
+
+func (csr *ClearAndSetRewriter) ConsiderKey(key FilterKey, n int32) FilterResult {
+	if key < csr.lowestKey() {
+		return key.RejectUntil(csr.lowestKey())
+	}
+	return key.NeedData()
+}
+
+// writeCurrent writes the current clear and set if they match the
+// key. It takes some care to try to determine if any bits actually
+// changed to avoid unnecessary writes.
+func (csr *ClearAndSetRewriter) writeCurrent(key FilterKey, data *Container, writeback ContainerWriteback) error {
+	if key == KEY_DONE {
+		return nil
+	}
+	changed := false
+	startN := data.N()
+	if csr.curClearKey == key && csr.curSetKey == key {
+		actualClear := csr.curClear.Difference(csr.curSet) // don't need to clear bits that we're going to set
+		data = data.DifferenceInPlace(actualClear)
+		clearedN := data.N()
+		changed = clearedN != startN
+		data = data.UnionInPlace(csr.curSet)
+		data.Repair()
+		setN := data.N()
+		changed = changed || clearedN != setN
+	} else if csr.curClearKey == key {
+		data = data.DifferenceInPlace(csr.curClear)
+		clearedN := data.N()
+		changed = clearedN != startN
+	} else if csr.curSetKey == key {
+		data = data.UnionInPlace(csr.curSet)
+		data.Repair()
+		setN := data.N()
+		changed = startN != setN
+	}
+	if changed {
+		if err := writeback(key, data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (csr *ClearAndSetRewriter) RewriteData(key FilterKey, data *Container, writeback ContainerWriteback) FilterResult {
+	if data == nil {
+		key = KEY_DONE
+	}
+
+	// when we're called with a container, we need to process all the
+	// sets up to that container that we haven't done yet. Then we
+	// need to do any clears on that container, then any sets on that
+	// container. Then we can reject until the lowest next container.
+	// When we enter this function, curSet and curClear are the next
+	// things we need to process. When we leave this function they
+	// must be set to the next things we need to process.
+
+	for ; csr.curSetKey < key; csr.nextSet() {
+		if err := writeback(csr.curSetKey, csr.curSet); err != nil {
+			return key.Fail(errors.Wrapf(err, "writing set container at %d", csr.curSetKey))
+		}
+	}
+
+	// fast forward clears to this key
+	for ; csr.curClearKey < key && key != KEY_DONE; csr.nextClear() {
+	}
+	err := csr.writeCurrent(key, data, writeback)
+	if err != nil {
+		return key.Fail(errors.Wrapf(err, "writing current key %d", key))
+	}
+	if csr.curSetKey == key {
+		csr.nextSet()
+	}
+	if csr.curClearKey == key {
+		csr.nextClear()
+	}
+	return key.RejectUntil(csr.lowestKey())
 }

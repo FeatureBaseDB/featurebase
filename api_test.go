@@ -25,6 +25,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/test"
@@ -541,17 +542,13 @@ func TestAPI_Ingest(t *testing.T) {
 			)},
 	)
 	defer c.Close()
-
 	coord := c.GetPrimary()
-	// m0 := c.GetNode(0)
-	// m1 := c.GetNode(1)
-	// m2 := c.GetNode(2)
-
 	index := "ingest"
 	setField := "set"
 	timeField := "tq"
+	intField := "int"
 
-	_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
+	_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false, TrackExistence: true})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
@@ -563,69 +560,167 @@ func TestAPI_Ingest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-	sampleJson := []byte(`
-[
-  {
-    "action": "set",
-    "records": {
-      "2": {
-	"set": [2],
-	"tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [6] }
-      },
-      "5": { "set": [3] },
-      "8": { "set": [3] },
-      "1": {
-	"set": [2],
-	"tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [3, 4] }
-      },
-      "4": { "set": [3, 7] }
-    }
-  },
-  {
-    "action": "clear",
-    "record_ids": [ 5, 6, 7 ],
-    "fields": [ "tq", "set" ]
-  },
-  {
-    "action": "write",
-    "records": {
-      "8": { "tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [3, 4] } },
-      "9": { "set": [7, 3] }
-    }
-  },
-  {
-    "action": "delete",
-    "record_ids": [ 9 ]
-  }
-]
-`)
-	// just for set row 3:
-	// first operation should set it for 4, 5, and 8.
-	// clear operation should clear it for 5, 6, and 7, leaving it still set for 4 and 8.
-	// the write operation should clear set for record 8, even though record 8 doesn't
-	// contain that field in that op, because set is present in record 9, which also
-	// gets row 3 set. but then we delete 9.
-	// so after all that we expect Row(set=3) to be 4...
-	sampleBuf := bytes.NewBuffer(sampleJson)
-	qcx := coord.API.Txf().NewQcx()
-	defer func() {
-		if err := qcx.Finish(); err != nil {
-			t.Fatalf("finishing qcx: %v", err)
+	_, err = coord.API.CreateField(ctx, index, intField, pilosa.OptFieldTypeInt(0, 100000))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	t.Run("IngestAPI", func(t *testing.T) {
+		sampleJson := []byte(`
+	[
+	  {
+	    "action": "set",
+	    "records": {
+	      "2": {
+		"set": [2],
+		"tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [6] }
+	      },
+	      "5": { "set": [3] },
+	      "8": { "set": [3] },
+	      "1": {
+		"set": [2],
+		"tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [3, 4] }
+	      },
+	      "4": { "set": [3, 7] }
+	    }
+	  },
+	  {
+	    "action": "clear",
+	    "record_ids": [ 5, 6, 7 ],
+	    "fields": [ "tq", "set" ]
+	  },
+	  {
+	    "action": "write",
+	    "records": {
+	      "8": { "tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [3, 4] } },
+	      "9": { "set": [7, 3] }
+	    }
+	  },
+	  {
+	    "action": "delete",
+	    "record_ids": [ 9 ]
+	  }
+	]
+	`)
+		// just for set row 3:
+		// first operation should set it for 4, 5, and 8.
+		// clear operation should clear it for 5, 6, and 7, leaving it still set for 4 and 8.
+		// the write operation should clear set for record 8, even though record 8 doesn't
+		// contain that field in that op, because set is present in record 9, which also
+		// gets row 3 set. but then we delete 9.
+		// so after all that we expect Row(set=3) to be 4...
+		sampleBuf := bytes.NewBuffer(sampleJson)
+		qcx := coord.API.Txf().NewQcx()
+		defer func() {
+			if err := qcx.Finish(); err != nil {
+				t.Fatalf("finishing qcx: %v", err)
+			}
+		}()
+		err = coord.API.IngestOperations(ctx, qcx, index, sampleBuf)
+		if err != nil {
+			t.Fatalf("importing data: %v", err)
 		}
-	}()
-	err = coord.API.IngestOperations(ctx, qcx, index, sampleBuf)
-	if err != nil {
-		t.Fatalf("importing data: %v", err)
-	}
-	query := "Row(set=3)"
-	res, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
-	if err != nil {
-		t.Errorf("query: %v", err)
-	}
-	r := res.Results[0].(*pilosa.Row).Columns()
-	if len(r) != 1 || r[0] != 4 {
-		t.Fatalf("expected row with 4 set, got %d", r)
-	}
+		query := "Row(set=3)"
+		res, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
+		if err != nil {
+			t.Errorf("query: %v", err)
+		}
+		r := res.Results[0].(*pilosa.Row).Columns()
+		if len(r) != 1 || r[0] != 4 {
+			t.Fatalf("expected row with 4 set, got %d", r)
+		}
+	})
+
+	t.Run("ImportRoaringShard", func(t *testing.T) {
+		setBuf := &bytes.Buffer{}
+		setBits := roaring.NewBitmap(7, pilosa.ShardWidth+7)
+		_, _ = setBits.WriteTo(setBuf) // bytes.Buffer never errors
+		intBuf := &bytes.Buffer{}
+		intBits := roaring.NewBitmap(7, pilosa.ShardWidth*2+7)
+		_, _ = intBits.WriteTo(intBuf) // bytes.Buffer never errors
+		request := &pilosa.ImportRoaringShardRequest{
+			Remote: true,
+			Views: []pilosa.RoaringUpdate{
+				{
+					Field: setField,
+					View:  "standard",
+					Set:   setBuf.Bytes(),
+				},
+				{
+					Field: intField,
+					View:  "bsig_" + intField,
+					Set:   intBuf.Bytes(),
+				},
+			},
+		}
+		if err := coord.API.ImportRoaringShard(context.Background(), "ingest", 8, request); err != nil {
+			t.Fatalf("ingesting: %v", err)
+		}
+
+		mustQuery := func(t *testing.T, index, query string) pilosa.QueryResponse {
+			res, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
+			if err != nil {
+				t.Fatalf("querying: %v", err)
+			}
+			return res
+		}
+
+		res := mustQuery(t, "ingest", "Row(set=0)")
+		r := res.Results[0].(*pilosa.Row).Columns()
+		if len(r) != 1 || r[0] != pilosa.ShardWidth*8+7 {
+			t.Fatalf("expected row with pilosa.ShardWidth*8+7 set, got %d", r)
+		}
+
+		res = mustQuery(t, "ingest", "Row(set=1)")
+		r = res.Results[0].(*pilosa.Row).Columns()
+		if len(r) != 1 || r[0] != pilosa.ShardWidth*8+7 {
+			t.Fatalf("expected row with pilosa.ShardWidth*8+7 set, got %d", r)
+		}
+
+		res = mustQuery(t, "ingest", "Row(int==1)")
+		r = res.Results[0].(*pilosa.Row).Columns()
+		if len(r) != 1 || r[0] != pilosa.ShardWidth*8+7 {
+			t.Fatalf("expected row with, pilosa.ShardWidth*8+7 set, got %d", r)
+		}
+
+		request = &pilosa.ImportRoaringShardRequest{
+			Remote: true,
+			Views: []pilosa.RoaringUpdate{
+				{
+					Field: setField,
+					View:  "standard",
+					Clear: setBuf.Bytes(),
+				},
+				{
+					Field: intField,
+					View:  "bsig_" + intField,
+					Clear: intBuf.Bytes(),
+				},
+			},
+		}
+		if err := coord.API.ImportRoaringShard(context.Background(), "ingest", 8, request); err != nil {
+			t.Fatalf("ingesting: %v", err)
+		}
+
+		res = mustQuery(t, "ingest", "Row(set=0)")
+		r = res.Results[0].(*pilosa.Row).Columns()
+		if len(r) != 0 {
+			t.Fatalf("expected no values after clearing, got: %v", r)
+		}
+
+		res = mustQuery(t, "ingest", "Row(set=1)")
+		r = res.Results[0].(*pilosa.Row).Columns()
+		if len(r) != 0 {
+			t.Fatalf("expected no values after clearing, got: %v", r)
+		}
+
+		res = mustQuery(t, "ingest", "Row(int==1)")
+		r = res.Results[0].(*pilosa.Row).Columns()
+		if len(r) != 0 {
+			t.Fatalf("expected no values after clearing, got: %v", r)
+		}
+
+	})
 }
 
 // ingestBenchmarkHelper makes it easier to exclude this from benchmark computations

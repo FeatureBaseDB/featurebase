@@ -24,6 +24,7 @@ Provides a set of commands for inspecting RBF data files.
 	cmd.AddCommand(newRBFDumpCommand(stdin, stdout, stderr))
 	cmd.AddCommand(newRBFPagesCommand(stdin, stdout, stderr))
 	cmd.AddCommand(newRBFPageCommand(stdin, stdout, stderr))
+	cmd.AddCommand(newRBFVizCommand(stdin, stdout, stderr))
 	return cmd
 }
 
@@ -137,6 +138,30 @@ Prints the header & cell data for one or more pages.
 				c.Pgnos = append(c.Pgnos, uint32(pgno))
 			}
 
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.Run(context.Background())
+		},
+	}
+	return cmd
+}
+
+func newRBFVizCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	c := ctl.NewRBFVizCommand(stdin, stdout, stderr)
+	cmd := &cobra.Command{
+		Use:   "viz [flags] PATH",
+		Short: "Show visualization of RBF data. Experimental.",
+		Long: `
+Show visualization of RBF data. Experimental, do not depend on specifics of the output or the flags of this command.
+`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("data directory path required")
+			} else if len(args) > 1 {
+				return fmt.Errorf("too many command line arguments")
+			}
+			c.Path = args[0]
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

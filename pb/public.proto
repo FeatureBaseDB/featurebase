@@ -239,6 +239,20 @@ message ImportRoaringRequest {
         bool UpdateExistence = 7;
 }
 
+message RoaringUpdate {
+	string Field = 1;
+	string View = 2;
+	bytes Clear = 3;
+	bytes Set = 4;
+	bool ClearRecords = 5;
+}
+
+message ImportRoaringShardRequest {
+	bool Remote = 1;
+	repeated RoaringUpdate Views = 2;
+}
+
+
 message GroupCounts{
 	string Aggregate = 1;
 	repeated GroupCount Groups = 2;

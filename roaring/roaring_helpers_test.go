@@ -5,7 +5,7 @@ import "sync"
 
 ///////////////////////////////////////////////////////////////////////////
 
-var containerWidth uint64 = 65536
+const containerWidth = 1 << 16
 
 ////////////////// array
 func arrayEmpty() []uint16 {

@@ -2,13 +2,16 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"testing"
 	"time"
 
+	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/disco"
 	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/require"
@@ -23,6 +26,8 @@ var (
 	testIndexKeyTranslation  *Index
 
 	testField            *Field
+	testFieldTimestamp   *Field
+	testFieldInt         *Field
 	testFieldTimeQuantum *Field
 	testFieldInt0        *Field
 	testFieldInt1        *Field
@@ -40,6 +45,8 @@ func setup(t *testing.T, cli *Client) {
 	)
 	testField = testIndex.Field("test-field")
 	testFieldTimeQuantum = testIndex.Field("test-field-timequantum", OptFieldTypeTime(TimeQuantumYear))
+	testFieldTimestamp = testIndex.Field("test-field-timestamp", OptFieldTypeTimestamp(time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC), "s"))
+	testFieldInt = testIndex.Field("test-field-int", OptFieldTypeInt(0, 100000))
 	testIndexKeyTranslation = testSchema.Index("test-index-key-translation", OptIndexKeys(true))
 
 	testIndexAtomicRecord = testSchema.Index("test-index-atomic-record")
@@ -433,20 +440,20 @@ func TestClientAgainstCluster(t *testing.T) {
 				require.NoError(t, err)
 
 				_, err = cli.Query(testIndex.RawQuery(`
-		Set(0,      test-field-group-by-int=1)
-		Set(1,      test-field-group-by-int=2)
+			Set(0,      test-field-group-by-int=1)
+			Set(1,      test-field-group-by-int=2)
 
-		Set(2,      test-field-group-by-int=-2)
-		Set(3,      test-field-group-by-int=-1)
+			Set(2,      test-field-group-by-int=-2)
+			Set(3,      test-field-group-by-int=-1)
 
-		Set(4,      test-field-group-by-int=4)
+			Set(4,      test-field-group-by-int=4)
 
-		Set(10,     test-field-group-by-int=0)
-		Set(100,    test-field-group-by-int=0)
-		Set(1000,   test-field-group-by-int=0)
-		Set(10000,  test-field-group-by-int=0)
-		Set(100000, test-field-group-by-int=0)
-		`))
+			Set(10,     test-field-group-by-int=0)
+			Set(100,    test-field-group-by-int=0)
+			Set(1000,   test-field-group-by-int=0)
+			Set(10000,  test-field-group-by-int=0)
+			Set(100000, test-field-group-by-int=0)
+			`))
 				require.NoError(t, err, "Set(0..100000)")
 
 				resp, err := cli.Query(testIndex.GroupBy(testFieldGroupBy.Rows()))
@@ -737,6 +744,118 @@ func TestClientAgainstCluster(t *testing.T) {
 				require.Equalf(t, "blah", trns.ID, "TranslateColumnKeys ID")
 				require.Equalf(t, time.Minute, trns.Timeout, "TranslateColumnKeys Timeout")
 				require.Truef(t, trns.Active, "TranslateColumnKeys Active")
+			})
+
+			t.Run("ImportRoaringShard", func(t *testing.T) {
+				setup(t, cli)
+
+				shardWidth := uint64(1 << shardwidth.Exponent)
+				bitmap := roaring.NewBitmap(1, shardWidth*2+1, shardWidth*3+1)
+				buf := &bytes.Buffer{}
+				_, err := bitmap.WriteTo(buf)
+				if err != nil {
+					t.Fatalf("serializing bitmap: %v", err)
+				}
+				request := &featurebase.ImportRoaringShardRequest{
+					Remote: true,
+					Views: []featurebase.RoaringUpdate{
+						{
+							Field: "test-field",
+							View:  "standard",
+							Set:   buf.Bytes(),
+						},
+						{
+							Field: "test-field-timestamp",
+							View:  "bsig_test-field-timestamp",
+							Set:   buf.Bytes(),
+						},
+						{
+							Field: "test-field-int",
+							View:  "bsig_test-field-int",
+							Set:   buf.Bytes(),
+						},
+					},
+				}
+				err = cli.ImportRoaringShard("test-index", 3, request)
+				if err != nil {
+					t.Fatalf("import-roaring-shard: %v", err)
+				}
+				if resp, err := cli.Query(testField.Row(2)); err != nil {
+					t.Fatalf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 1 || res[0] != shardWidth*3+1 {
+					t.Fatalf("unexpected result: %v", res)
+				}
+				if resp, err := cli.Query(testFieldInt.NotNull()); err != nil {
+					t.Fatalf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 1 || res[0] != shardWidth*3+1 {
+					t.Fatalf("unexpected result: %v", res)
+				}
+				if resp, err := cli.Query(testFieldTimestamp.NotNull()); err != nil {
+					t.Fatalf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 1 || res[0] != shardWidth*3+1 {
+					t.Fatalf("unexpected result: %v", res)
+				}
+
+				if resp, err := cli.Query(testIndex.RawQuery("Row(test-field-timestamp>'1969-12-31T23:59:59Z')")); err != nil {
+					t.Fatalf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 1 || res[0] != shardWidth*3+1 {
+					t.Fatalf("unexpected result: %v", res)
+				}
+
+				// now write more data
+				bitmap = roaring.NewBitmap(1, 2, shardWidth*3+1, shardWidth*3+2)
+				buf = &bytes.Buffer{}
+				_, err = bitmap.WriteTo(buf)
+				if err != nil {
+					t.Fatalf("serializing bitmap: %v", err)
+				}
+				request = &featurebase.ImportRoaringShardRequest{
+					Remote: true,
+					Views: []featurebase.RoaringUpdate{
+						{
+							Field: "test-field",
+							View:  "standard",
+							Set:   buf.Bytes(),
+						},
+						{
+							Field: "test-field-timestamp",
+							View:  "bsig_test-field-timestamp",
+							Set:   buf.Bytes(),
+						},
+						{
+							Field: "test-field-int",
+							View:  "bsig_test-field-int",
+							Set:   buf.Bytes(),
+						},
+					},
+				}
+
+				err = cli.ImportRoaringShard("test-index", 3, request)
+				if err != nil {
+					t.Fatalf("import-roaring-shard: %v", err)
+				}
+				if resp, err := cli.Query(testField.Row(3)); err != nil {
+					t.Errorf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 2 || res[0] != shardWidth*3+1 || res[1] != shardWidth*3+2 {
+					t.Errorf("unexpected result: %v", res)
+				}
+				if resp, err := cli.Query(testFieldInt.NotNull()); err != nil {
+					t.Errorf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 2 || res[0] != shardWidth*3+1 || res[1] != shardWidth*3+2 {
+					t.Errorf("unexpected result: %v", res)
+				}
+				if resp, err := cli.Query(testFieldTimestamp.NotNull()); err != nil {
+					t.Errorf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 2 || res[0] != shardWidth*3+1 || res[1] != shardWidth*3+2 {
+					t.Errorf("unexpected result: %v", res)
+				}
+
+				if resp, err := cli.Query(testIndex.RawQuery("Row(test-field-timestamp>'1969-12-31T23:59:59Z')")); err != nil {
+					t.Errorf("querying: %v", err)
+				} else if res := resp.ResultList[0].Row().Columns; len(res) != 2 || res[0] != shardWidth*3+1 || res[1] != shardWidth*3+2 {
+					t.Errorf("unexpected result: %v", res)
+				}
+
 			})
 		})
 	}

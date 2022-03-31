@@ -1017,10 +1017,7 @@ func (c *Cursor) First() error {
 	}
 }
 
-// Last moves to the last element of the btree. Returns io.EOF if there are no
-// elements. The first call to Prev() will not move the position but subsequent
-// calls will move the position backward until it reaches the beginning and
-// return io.EOF.
+// Last moves to the last element of the btree.
 func (c *Cursor) Last() error {
 	// c.stack.elems[0].pgno = c.root
 	c.buffered = true
@@ -1058,6 +1055,7 @@ func (c *Cursor) Last() error {
 
 // Seek moves to the specified container of the btree.
 // If the container does not exist then it moves to the next container after the key.
+// TODO: what happens if there are no more containers?!?!
 func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 	// c.stack.elems[0].pgno = c.bitmap.root
 	c.buffered = true
@@ -1248,6 +1246,7 @@ func (se *stackElem) clear() {
 	se.key = 0
 }
 
+// TODO wtf does this do?
 var _ = (&stackElem{}).clear
 var _ = (&stackElem{}).String
 var _ = (&stackElem{}).equal
@@ -1454,7 +1453,7 @@ func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
 	}
 
 	res := roaring.Difference(container, data)
-	if res == nil {
+	if res.N() == 0 {
 		return true, c.deleteLeafCell(cell.Key)
 	}
 

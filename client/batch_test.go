@@ -38,6 +38,7 @@ func TestAgainstCluster(t *testing.T) {
 	t.Run("test-batches", func(t *testing.T) { testBatches(t, c, client) })
 	t.Run("batches-strings-ids", func(t *testing.T) { testBatchesStringIDs(t, c, client) })
 	t.Run("test-batch-staleness", func(t *testing.T) { testBatchStaleness(t, c, client) })
+	t.Run("test-import-batch-multiple-ints", func(t *testing.T) { testImportBatchMultipleInts(t, c, client) })
 }
 
 func testStringSliceCombos(t *testing.T, c *test.Cluster, client *Client) {
@@ -1347,4 +1348,42 @@ func testBatchStaleness(t *testing.T, c *test.Cluster, client *Client) {
 	if err != ErrBatchNowStale {
 		t.Fatal("batch expected to be stale")
 	}
+}
+
+func testImportBatchMultipleInts(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-import-batch-multi-int")
+	field := idx.Field("anint", OptFieldTypeInt())
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 6, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	r := Row{Values: make([]interface{}, 1)}
+
+	vals := []int64{16, 8, 32, 1, 2, 4}
+	for i := uint64(0); i < 6; i++ {
+		r.ID = uint64(1)
+		r.Values[0] = vals[i]
+		err := b.Add(r)
+		if err != nil && err != ErrBatchNowFull {
+			t.Fatalf("adding to batch: %v", err)
+		}
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	if resp, err := client.Query(field.Equals(4)); err != nil {
+		t.Fatalf("querying: %v", err)
+	} else if res := resp.Results()[0].Row().Columns; len(res) != 1 || res[0] != 1 {
+		t.Fatalf("unepxected result: %v", res)
+	}
+
 }

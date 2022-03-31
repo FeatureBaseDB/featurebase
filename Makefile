@@ -334,6 +334,10 @@ install-protoc-gen-go:
 
 install-protoc:
 	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
+	@echo On mac, brew install protobuf seems to work.
+	@echo As of the commit that added this line, protoc-gen-gofast was at 226206f39bd7, and the protoc version in use was:
+	@echo $$ protoc --version
+	@echo libprotoc 3.19.4
 
 install-peg:
 	GO111MODULE=off $(GO) get github.com/pointlander/peg

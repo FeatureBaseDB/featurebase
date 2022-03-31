@@ -2845,19 +2845,19 @@ func TestBitmapClone(t *testing.T) {
 // sets 100 bits per true
 func rleCont(num int, left, mid, right bool) []uint64 {
 	ret := make([]uint64, 0)
-	base := containerWidth * uint64(num)
+	base := uint64(containerWidth * uint64(num))
 	if left {
 		for i := uint64(0); i < 100; i++ {
 			ret = append(ret, base+i)
 		}
 	}
 	if mid {
-		for i := containerWidth / 2; i < containerWidth/2+100; i++ {
+		for i := uint64(containerWidth / 2); i < containerWidth/2+100; i++ {
 			ret = append(ret, base+i)
 		}
 	}
 	if right {
-		for i := containerWidth - 100; i < containerWidth; i++ {
+		for i := uint64(containerWidth - 100); i < containerWidth; i++ {
 			ret = append(ret, base+i)
 		}
 	}
@@ -2872,7 +2872,7 @@ func arrCont(num int, left, mid, right bool) []uint64 {
 		ret = append(ret, base+0, base+2)
 	}
 	if mid {
-		half := containerWidth / 2
+		half := uint64(containerWidth / 2)
 		ret = append(ret, base+half, base+half+2)
 	}
 	if right {

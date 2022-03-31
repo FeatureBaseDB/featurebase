@@ -2384,6 +2384,82 @@ func (f *fragment) importRoaring(ctx context.Context, tx Tx, data []byte, clear 
 	return nil
 }
 
+// ImportRoaringClearAndSet simply clears the bits in clear and sets the bits in set.
+func (f *fragment) ImportRoaringClearAndSet(ctx context.Context, tx Tx, clear, set []byte) error {
+	clearIter, err := roaring.NewContainerIterator(clear)
+	if err != nil {
+		return errors.Wrap(err, "getting clear iterator")
+	}
+	setIter, err := roaring.NewContainerIterator(set)
+	if err != nil {
+		return errors.Wrap(err, "getting set iterator")
+	}
+
+	rewriter, err := roaring.NewClearAndSetRewriter(clearIter, setIter)
+	if err != nil {
+		return errors.Wrap(err, "getting rewriter")
+	}
+
+	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriter)
+	return errors.Wrap(err, "applying rewriter")
+}
+
+// ImportRoaringBSI interprets "clear" as a single row specifying
+// records to be cleared, and "set" as specifying the values to be set
+// which implies clearing any other values in those columns.
+func (f *fragment) ImportRoaringBSI(ctx context.Context, tx Tx, clear, set []byte) error {
+	// In this first block, we take the first row of clear as records
+	// we want to unconditionally clear, and the first row of set as
+	// records we also want to clear because they're going to get set
+	// and Union the two together into a single clearing iterator.
+	clearclearIter, err := roaring.NewRepeatedRowIteratorFromBytes(clear)
+	if err != nil {
+		return errors.Wrap(err, "getting clear iterator")
+	}
+	setClearIter, err := roaring.NewRepeatedRowIteratorFromBytes(set)
+	if err != nil {
+		return errors.Wrap(err, "getting set/clear iterator")
+	}
+	clearIter := roaring.NewUnionContainerIterator(clearclearIter, setClearIter)
+
+	// Then we get the set iterator and create the rewriter.
+	setIter, err := roaring.NewContainerIterator(set)
+	if err != nil {
+		return errors.Wrap(err, "getting set iterator")
+	}
+	rewriter, err := roaring.NewClearAndSetRewriter(clearIter, setIter)
+	if err != nil {
+		return errors.Wrap(err, "getting rewriter")
+	}
+
+	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriter)
+	return errors.Wrap(err, "applying rewriter")
+}
+
+// ImportRoaringSingleValued treats "clear" as a single row and clears
+// all the columns specified, then sets all the bits in set. It's very
+// similar to ImportRoaringBSI, but doesn't treate the first row of
+// "set" as the existence row to also be cleared. Essentially it's for
+// FieldTypeMutex.
+func (f *fragment) ImportRoaringSingleValued(ctx context.Context, tx Tx, clear, set []byte) error {
+	clearIter, err := roaring.NewRepeatedRowIteratorFromBytes(clear)
+	if err != nil {
+		return errors.Wrap(err, "getting cleariterator")
+	}
+	setIter, err := roaring.NewContainerIterator(set)
+	if err != nil {
+		return errors.Wrap(err, "getting set iterator")
+	}
+
+	rewriter, err := roaring.NewClearAndSetRewriter(clearIter, setIter)
+	if err != nil {
+		return errors.Wrap(err, "getting rewriter")
+	}
+
+	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriter)
+	return errors.Wrap(err, "applying rewriter")
+}
+
 func (f *fragment) doImportRoaring(ctx context.Context, tx Tx, data []byte, clear bool) (map[uint64]int, bool, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()

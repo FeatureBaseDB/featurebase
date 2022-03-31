@@ -21,6 +21,7 @@ import (
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	pilosa "github.com/molecula/featurebase/v3"
+	fbproto "github.com/molecula/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/pb"
@@ -644,6 +645,27 @@ func (c *Client) importData(uri *pnet.URI, path string, data []byte) error {
 	}
 
 	return nil
+}
+
+func (c *Client) ImportRoaringShard(index string, shard uint64, request *pilosa.ImportRoaringShardRequest) error {
+	uris, err := c.getURIsForShard(index, shard)
+	if err != nil {
+		return errors.Wrap(err, "getting URIs for import")
+	}
+
+	data, err := fbproto.DefaultSerializer.Marshal(request)
+	if err != nil {
+		return errors.Wrap(err, "marshaling")
+	}
+	eg := errgroup.Group{}
+	for _, uri := range uris {
+		uri := uri
+		eg.Go(func() error {
+			return c.importData(uri, fmt.Sprintf("/index/%s/shard/%d/import-roaring", index, shard), data)
+		})
+	}
+	err = eg.Wait()
+	return errors.Wrap(err, "importing")
 }
 
 // ImportRoaringBitmap can import pre-made bitmaps for a number of

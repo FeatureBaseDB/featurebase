@@ -1603,6 +1603,112 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	return errors.Wrap(err, "committing")
 }
 
+func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard uint64, req *ImportRoaringShardRequest) error {
+	index, err := api.Index(ctx, indexName)
+	if err != nil {
+		return errors.Wrap(err, "getting index")
+	}
+
+	// we really only need a Tx, but getting a Qcx so that there's only one path for getting a Tx
+	qcx := api.Txf().NewQcx()
+	qcx.write = true
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: index, Shard: shard})
+	if err != nil {
+		return errors.Wrap(err, "getting Tx")
+	}
+	defer qcx.Finish()
+	var err1 error
+	defer finisher(&err1)
+
+	if !req.Remote {
+		return errors.New("forwarding unimplemented on this endpoint")
+	}
+
+	for _, viewUpdate := range req.Views {
+		field := index.Field(viewUpdate.Field)
+		if field == nil {
+			err1 = errors.Errorf("no field named '%s' found.", viewUpdate.Field)
+			return err1
+		}
+
+		fieldType := field.Options().Type
+		if err1 = cleanupView(fieldType, &viewUpdate); err1 != nil {
+			return err1
+		}
+
+		view, err := field.createViewIfNotExists(viewUpdate.View)
+		if err != nil {
+			err1 = errors.Wrap(err, "getting view")
+			return err1
+		}
+
+		frag, err := view.CreateFragmentIfNotExists(shard)
+		if err != nil {
+			err1 = errors.Wrap(err, "getting fragment")
+			return err1
+		}
+
+		switch fieldType {
+		case FieldTypeSet, FieldTypeTime:
+			if !viewUpdate.ClearRecords {
+				err1 = frag.ImportRoaringClearAndSet(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+			} else {
+				err1 = frag.ImportRoaringSingleValued(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+			}
+		case FieldTypeInt, FieldTypeTimestamp, FieldTypeDecimal:
+			err1 = frag.ImportRoaringBSI(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+		case FieldTypeMutex, FieldTypeBool:
+			err1 = frag.ImportRoaringSingleValued(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+		default:
+			err1 = errors.Errorf("field type %s is not supported", fieldType)
+		}
+		if err1 != nil {
+			return err1
+		}
+
+		// need to update field/bsiGroup bitDepth value if this is an int-like field.
+		//
+		// TODO get rid of cached bitDepth entirely because the fact
+		// that we have to do this is weird and since this state isn't
+		// in RBF might have transactional issues.
+		if len(field.bsiGroups) > 0 {
+			maxRowID, _, err := frag.maxRow(tx, nil)
+			if err != nil {
+				err1 = errors.Wrapf(err, "getting fragment max row id")
+				return err1
+			}
+			var bd uint64
+			if maxRowID+1 > bsiOffsetBit {
+				bd = maxRowID + 1 - bsiOffsetBit
+			}
+			field.cacheBitDepth(bd) // updating bitDepth shouldn't harm anything even if we roll back... only might make some ops slightly more inefficient
+		}
+	}
+
+	return nil
+}
+
+func cleanupView(fieldType string, viewUpdate *RoaringUpdate) error {
+	// TODO wouldn't hurt to have consolidated logic somewhere for validating view names.
+	switch fieldType {
+	case FieldTypeSet, FieldTypeTime:
+		if viewUpdate.View == "" {
+			viewUpdate.View = "standard"
+		}
+		// add 'standard_' if we just have a time... this is how IDK works by default
+		if fieldType == FieldTypeTime && !strings.HasPrefix(viewUpdate.View, viewStandard) {
+			viewUpdate.View = fmt.Sprintf("%s_%s", viewStandard, viewUpdate.View)
+		}
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		if viewUpdate.View == "" {
+			viewUpdate.View = "bsig_" + viewUpdate.Field
+		} else if viewUpdate.View != "bsig_"+viewUpdate.Field {
+			return NewBadRequestError(errors.Errorf("invalid view name (%s) for field %s of type %s", viewUpdate.View, viewUpdate.Field, fieldType))
+		}
+	}
+	return nil
+}
+
 // ImportValue is a wrapper around the common code in ImportValueWithTx, which
 // currently just translates req.Clear into a clear ImportOption.
 func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error {

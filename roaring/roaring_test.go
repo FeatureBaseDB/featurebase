@@ -11,7 +11,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/generator"
 	"github.com/molecula/featurebase/v3/roaring"
 	_ "github.com/molecula/featurebase/v3/test"
@@ -2293,5 +2293,85 @@ func TestContainer_UnionInPlace_TwoBigArrays(t *testing.T) {
 	typ := roaring.ContainerType(resCt)
 	if typ == roaring.ContainerArray {
 		panic("should be NOT be an array now")
+	}
+}
+
+func TestContainerIteratorRoaringIteratorWrapper(t *testing.T) {
+	data := roaring.NewBitmap(1, 7, 100000, 500000).Roaring()
+
+	cit, err := roaring.NewContainerIterator(data)
+	if err != nil {
+		t.Fatalf("getting roaring iterator: %v", err)
+	}
+
+	// First Container (1, 7)
+	if !cit.Next() {
+		t.Fail()
+	}
+	if k, v := cit.Value(); k != 0 || !reflect.DeepEqual(v.Slice(), []uint16{1, 7}) {
+		t.Fail()
+	}
+
+	// Second Container (100,000)
+	if !cit.Next() {
+		t.Fail()
+	}
+	if k, v := cit.Value(); k != 1 || !reflect.DeepEqual(v.Slice(), []uint16{100000 % (1 << 16)}) {
+		t.Fail()
+	}
+
+	// Third Container (500,000)
+	if !cit.Next() {
+		t.Fail()
+	}
+	if k, v := cit.Value(); k != 500000/(1<<16) || !reflect.DeepEqual(v.Slice(), []uint16{500000 % (1 << 16)}) {
+		t.Fail()
+	}
+
+	// Next should now return false
+	if cit.Next() {
+		t.Fail()
+	}
+}
+
+func TestUnionContainerIterator(t *testing.T) {
+	data1 := roaring.NewBitmap(1, 7, 100000, 500000).Roaring()
+	d1iter, err := roaring.NewContainerIterator(data1)
+	if err != nil {
+		t.Fatalf("getting iterator: %v", err)
+	}
+	data2 := roaring.NewBitmap(1, 2, 100000, 200000, 500000, 700000).Roaring()
+	d2iter, err := roaring.NewContainerIterator(data2)
+	if err != nil {
+		t.Fatalf("getting iterator: %v", err)
+	}
+
+	ci := roaring.NewUnionContainerIterator(d1iter, d2iter)
+	exps := []struct {
+		key  uint64
+		vals []uint16
+	}{
+		{0, []uint16{1, 2, 7}},
+		{1, []uint16{100000 % (1 << 16)}},
+		{3, []uint16{200000 % (1 << 16)}},
+		{7, []uint16{500000 % (1 << 16)}},
+		{10, []uint16{700000 % (1 << 16)}},
+	}
+
+	for i, exp := range exps {
+		if !ci.Next() {
+			t.Fatalf("Next unexpected false at %d", i)
+		}
+		k, c := ci.Value()
+		if exp.key != k {
+			t.Errorf("key mismatch at %d, exp: %d, got: %d", i, exp.key, k)
+		}
+		if !reflect.DeepEqual(exp.vals, c.Slice()) {
+			t.Errorf("data mismatch at %d, exp: %v, got: %v", i, exp.vals, c.Slice())
+		}
+	}
+	if ci.Next() {
+		k, c := ci.Value()
+		t.Fatalf("unexpected data at the end: %d, %v", k, c)
 	}
 }

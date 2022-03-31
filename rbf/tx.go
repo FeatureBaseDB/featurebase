@@ -3,7 +3,6 @@ package rbf
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -15,6 +14,7 @@ import (
 	"github.com/molecula/featurebase/v3/roaring"
 	txkey "github.com/molecula/featurebase/v3/short_txkey"
 	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/pkg/errors"
 )
 
 var _ = txkey.ToString
@@ -678,7 +678,7 @@ func (tx *Tx) Depth(name string) (int, error) {
 	}
 	defer c.Close()
 
-	if err := c.First(); err != nil {
+	if err := c.First(); err != nil { // TODO, EOF check?
 		return 0, err
 	}
 	return c.stack.top + 1, nil

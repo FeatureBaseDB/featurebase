@@ -222,6 +222,14 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeImportRoaringRequest(msg, mt)
 		return nil
+	case *pilosa.ImportRoaringShardRequest:
+		msg := &pb.ImportRoaringShardRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ImportRoaringShardRequest")
+		}
+		s.decodeImportRoaringShardRequest(msg, mt)
+		return nil
 	case *pilosa.ImportResponse:
 		msg := &pb.ImportResponse{}
 		err := proto.Unmarshal(buf, msg)
@@ -385,6 +393,8 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeImportValueRequest(mt)
 	case *pilosa.ImportRoaringRequest:
 		return s.encodeImportRoaringRequest(mt)
+	case *pilosa.ImportRoaringShardRequest:
+		return s.encodeImportRoaringShardRequest(mt)
 	case *pilosa.ImportResponse:
 		return s.encodeImportResponse(mt)
 	case *pilosa.BlockDataRequest:
@@ -485,6 +495,27 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 		Block:           uint64(m.Block),
 		Views:           views,
 		UpdateExistence: m.UpdateExistence,
+	}
+}
+
+func (s Serializer) encodeImportRoaringShardRequest(m *pilosa.ImportRoaringShardRequest) *pb.ImportRoaringShardRequest {
+	views := make([]*pb.RoaringUpdate, len(m.Views))
+	for i, view := range m.Views {
+		views[i] = s.encodeRoaringUpdate(view)
+	}
+	return &pb.ImportRoaringShardRequest{
+		Remote: m.Remote,
+		Views:  views,
+	}
+}
+
+func (s Serializer) encodeRoaringUpdate(m pilosa.RoaringUpdate) *pb.RoaringUpdate {
+	return &pb.RoaringUpdate{
+		Field:        m.Field,
+		View:         m.View,
+		Clear:        m.Clear,
+		Set:          m.Set,
+		ClearRecords: m.ClearRecords,
 	}
 }
 
@@ -1319,6 +1350,23 @@ func (s Serializer) decodeImportRoaringRequest(pb *pb.ImportRoaringRequest, m *p
 	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.FieldCreatedAt = pb.FieldCreatedAt
 	m.UpdateExistence = pb.UpdateExistence
+}
+
+func (s Serializer) decodeImportRoaringShardRequest(pb *pb.ImportRoaringShardRequest, m *pilosa.ImportRoaringShardRequest) {
+	m.Remote = pb.Remote
+	for _, viewUpdate := range pb.Views {
+		pru := &pilosa.RoaringUpdate{}
+		s.decodeRoaringUpdate(viewUpdate, pru)
+		m.Views = append(m.Views, *pru)
+	}
+}
+
+func (s Serializer) decodeRoaringUpdate(pb *pb.RoaringUpdate, m *pilosa.RoaringUpdate) {
+	m.Field = pb.Field
+	m.View = pb.View
+	m.Clear = pb.Clear
+	m.Set = pb.Set
+	m.ClearRecords = pb.ClearRecords
 }
 
 func (s Serializer) decodeImportResponse(pb *pb.ImportResponse, m *pilosa.ImportResponse) {

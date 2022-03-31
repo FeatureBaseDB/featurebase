@@ -3,6 +3,7 @@
 package roaring
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
@@ -163,6 +164,67 @@ type ContainerIterator interface {
 	Value() (uint64, *Container)
 	Close()
 }
+
+type nopContainerIterator struct{}
+
+func (n nopContainerIterator) Next() bool                  { return false }
+func (n nopContainerIterator) Value() (uint64, *Container) { return 0, nil }
+func (n nopContainerIterator) Close()                      {}
+
+type unionContainerIterator struct {
+	iters []ContainerIterator
+	curs  []containerWithKey
+	cur   FilterKey
+}
+
+func NewUnionContainerIterator(iters ...ContainerIterator) ContainerIterator {
+	return &unionContainerIterator{
+		iters: iters,
+		curs:  make([]containerWithKey, len(iters)),
+		cur:   0,
+	}
+}
+
+func (u *unionContainerIterator) Next() bool {
+	if u.cur == KEY_DONE {
+		return false
+	}
+	// Next all iters that are at cur and save lowest
+	lowest := uint64(KEY_DONE)
+	for i, iter := range u.iters {
+		if u.curs[i].key == u.cur {
+			if iter.Next() {
+				key, c := iter.Value()
+				u.curs[i].key, u.curs[i].Container = FilterKey(key), c
+				if key < lowest {
+					lowest = key
+				}
+			} else {
+				u.curs[i].key = KEY_DONE
+				u.curs[i].Container = nil
+			}
+		}
+	}
+	u.cur = FilterKey(lowest)
+	return u.cur != KEY_DONE
+}
+
+func (u *unionContainerIterator) Value() (uint64, *Container) {
+	if u.cur == KEY_DONE {
+		return uint64(KEY_DONE), nil
+	}
+	var ret *Container
+	for _, cur := range u.curs {
+		if cur.key == u.cur {
+			ret = ret.UnionInPlace(cur.Container)
+		}
+	}
+	ret.Repair()
+	return uint64(u.cur), ret
+
+}
+
+func (u *unionContainerIterator) Close() {}
 
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
@@ -1715,6 +1777,43 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 	return n, nil
 }
 
+// NewContainerIterator takes a byte slice which is either standard
+// roaring or pilosa roaring and returns a ContainerIterator.
+func NewContainerIterator(data []byte) (ContainerIterator, error) {
+	if len(data) == 0 {
+		return nopContainerIterator{}, nil
+	}
+	ri, err := NewRoaringIterator(data)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting roaring iterator")
+	}
+	return &containerIteratorRoaringIteratorWrapper{
+		r: ri,
+	}, nil
+}
+
+// containerIteratorRoaringIteratorWrapper wraps a RoaringIterator to
+// make it play like a ContainerIterator.
+type containerIteratorRoaringIteratorWrapper struct {
+	r        RoaringIterator
+	nextKey  uint64
+	nextCont *Container
+}
+
+func (c *containerIteratorRoaringIteratorWrapper) Next() bool {
+	c.nextKey, c.nextCont = c.r.NextContainer()
+	if c.nextCont == nil {
+		return false
+	}
+	return true
+}
+
+func (c *containerIteratorRoaringIteratorWrapper) Value() (uint64, *Container) {
+	return c.nextKey, c.nextCont
+}
+
+func (c *containerIteratorRoaringIteratorWrapper) Close() {}
+
 // RoaringIterator represents something which can iterate through a roaring
 // bitmap and yield information about containers, including type, size, and
 // the location of their data structures.
@@ -1732,6 +1831,7 @@ type RoaringIterator interface {
 	// allocate a Container from the output of its internal call to Next(),
 	// and return the key and container rc. If Next returns an error, then
 	// NextContainer will return 0, nil.
+	// TODO: have this reuse the *Container?
 	NextContainer() (key uint64, rc *Container)
 
 	// Data returns the underlying data, esp for the Ops log.
@@ -7425,11 +7525,23 @@ func differenceRunRunInPlace(c, other *Container) *Container {
 	return c
 }
 
+// Roaring encodes the bitmap in the Pilosa roaring
+// format. Convenience wrapper around WriteTo.
+func (b *Bitmap) Roaring() []byte {
+	buf := &bytes.Buffer{}
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err) // I don't believe this can happen when writing to a bytes.Buffer
+	}
+	return buf.Bytes()
+}
+
 //RBF exports to be reconsidered as we progress
 
 func (b *Bitmap) Put(key uint64, c *Container) {
 	b.Containers.Put(key, c)
 }
+
 func AsBitmap(c *Container) []uint64 {
 	return c.bitmap()
 }
@@ -7504,6 +7616,7 @@ func (c *Container) CountRange(start, end int32) (n int32) {
 // c or other. It may, or may not, modify c. The resulting container's
 // count, as returned by c.N(), may be incorrect; see (*Container).Repair().
 // Do not freeze a container produced by this operation before repairing it.
+// TODO(jaffee): why don't we just call Repair in here?!?!
 func (c *Container) UnionInPlace(other *Container) (r *Container) {
 	return c.unionInPlace(other)
 }
