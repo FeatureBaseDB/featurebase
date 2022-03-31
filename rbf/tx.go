@@ -1791,6 +1791,7 @@ func (s *containerFilter) ApplyRewriter() (err error) {
 			if err != nil {
 				return err
 			}
+			dirty = true
 		} else {
 			exact = true
 		}
@@ -1798,14 +1799,21 @@ func (s *containerFilter) ApplyRewriter() (err error) {
 			if exact {
 				err = s.cursor.deleteLeafCell(uint64(updateKey))
 				key = ^roaring.FilterKey(0)
+				// if we got here by a seek, we're already marked dirty,
+				// but if we're on a cell and delete it, we've invalidated
+				// our cursor position.
+				dirty = true
 			}
 			// if we don't delete, we aren't changing our situation at all
 		} else {
 			cell = ConvertToLeafArgs(uint64(updateKey), data)
 			err = s.cursor.putLeafCell(cell)
 			key = ^roaring.FilterKey(0)
+			// no dirty flag here; if we had to seek, the cursor became
+			// dirty (is no longer pointed at the key we thought it was
+			// pointed to, so the main loop would want to seek), and if
+			// we didn't seek, we're still where we used to be.
 		}
-		dirty = true
 		return err
 	}
 	for err := s.cursor.Next(); err == nil; err = s.cursor.Next() {
