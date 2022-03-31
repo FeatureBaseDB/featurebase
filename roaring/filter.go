@@ -890,8 +890,9 @@ func (b *BitmapMutexDupFilter) Report() map[uint64][]uint64 {
 // containers, even though the Trimmer won't have called RewriteData with those
 // keys.
 type BitmapBitmapTrimmer struct {
-	containers []*Container
-	callback   func(key FilterKey, raw, filter *Container, writeback ContainerWriteback) error
+	containers  []*Container
+	nextOffsets []uint64
+	callback    func(key FilterKey, raw, filter *Container, writeback ContainerWriteback) error
 }
 
 var _ BitmapRewriter = &BitmapBitmapTrimmer{}
@@ -902,8 +903,15 @@ func (b *BitmapBitmapTrimmer) SetCallback(cb func(FilterKey, *Container, *Contai
 
 func (b *BitmapBitmapTrimmer) ConsiderKey(key FilterKey, n int32) FilterResult {
 	pos := key & keyMask
+	// If a trimmer wants to do something for a key, it *must* have something in
+	// the filter slot for that key, otherwise we won't call it with the
+	// corresponding existing data. For the mutex case, this is covered -- every
+	// bit we have to write implies the corresponding filter bit being set.
+	//
+	// Note that, unlike BitmapBitmapFilter, we don't make assumptions about
+	// what you are *doing* with the filter.
 	if b.containers[pos] == nil || n == 0 {
-		return key.RejectOne()
+		return key.RejectUntilOffset(b.nextOffsets[pos])
 	}
 	return key.NeedData()
 }
@@ -915,7 +923,7 @@ func (b *BitmapBitmapTrimmer) RewriteData(key FilterKey, data *Container, writeb
 	if err != nil {
 		return key.Fail(err)
 	}
-	return key.MatchOne()
+	return key.MatchOneUntilOffset(b.nextOffsets[pos])
 }
 
 // NewBitmapBitmapTrimmer creates a filter which calls a callback on every
@@ -929,16 +937,39 @@ func (b *BitmapBitmapTrimmer) RewriteData(key FilterKey, data *Container, writeb
 // because offset-within-row is what we care about.
 func NewBitmapBitmapTrimmer(filter *Bitmap, callback func(FilterKey, *Container, *Container, ContainerWriteback) error) *BitmapBitmapTrimmer {
 	b := &BitmapBitmapTrimmer{
-		callback:   callback,
-		containers: make([]*Container, rowWidth),
+		callback:    callback,
+		containers:  make([]*Container, rowWidth),
+		nextOffsets: make([]uint64, rowWidth),
 	}
 	iter, _ := filter.Containers.Iterator(0)
+	last := uint64(0)
+	count := 0
 	for iter.Next() {
 		k, v := iter.Value()
 		// Coerce container key into the 0-rowWidth range we'll be
 		// using to compare against containers within each row.
 		k = k & keyMask
 		b.containers[k] = v
+		last = k
+		count++
+	}
+	// if there's only one container, we need to populate everything with
+	// its position.
+	if count == 1 {
+		for i := range b.containers {
+			b.nextOffsets[i] = last
+		}
+	} else {
+		// Point each container at the offset of the next valid container.
+		// With sparse bitmaps this will potentially make skipping faster.
+		for i := range b.containers {
+			if b.containers[i] != nil {
+				for int(last) != i {
+					b.nextOffsets[last] = uint64(i)
+					last = (last + 1) % rowWidth
+				}
+			}
+		}
 	}
 	return b
 }
