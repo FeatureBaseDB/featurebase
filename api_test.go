@@ -1475,7 +1475,6 @@ func makeUser(t *testing.T, groups []authn.Group, name, secret string) *authn.Us
 	if err != nil {
 		t.Fatalf("signing string %v", err)
 	}
-	validToken = "Bearer " + validToken
 
 	return &authn.UserInfo{
 		UserID:   "fake" + name,
@@ -1520,7 +1519,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			return
 		}
 		g := []authn.Group{}
-		switch token[0] {
+		switch strings.TrimPrefix(token[0], "Bearer ") {
 		case adminUser.Token:
 			g = adminUser.Groups
 		case readUser.Token:
