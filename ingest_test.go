@@ -146,6 +146,9 @@ func parseExpectedResults(data []byte) (ints []uint64, keys []string, err error)
 		return nil, nil, errors.New("expecting [] results")
 	}
 	words := bytes.Split(data[1:len(data)-1], []byte{','})
+	if len(words) == 1 && len(words[0]) == 0 {
+		return nil, nil, nil
+	}
 	for _, word := range words {
 		word = bytes.TrimSpace(word)
 		if len(word) == 0 {
