@@ -861,16 +861,31 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
+	// Find the node that can service the request.
 	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
 	nodes := snap.PartitionNodes(partition)
-	if nodes[0].ID != api.server.NodeID() {
+	var upNode *topology.Node
+	for _, node := range nodes {
+		if node.State == disco.NodeStateStarted {
+			upNode = node
+			break
+		}
+	}
+
+	// If there is no upNode, then we can't service the request.
+	if upNode == nil {
+		return nil, fmt.Errorf("can't get translate data, no nodes available for partition %d", partition)
+	}
+
+	// If we're not the upNode, we need to redirect to it.
+	if upNode.ID != api.server.NodeID() {
 		return nil, RedirectError{
-			HostPort: nodes[0].URI.HostPort(),
+			HostPort: upNode.URI.HostPort(),
 			error:    fmt.Sprintf("can't translate data, this node(%s) does not partition %d", api.server.uri, partition),
 		}
 	}
 
-	// Retrieve translatestore from holder.
+	// We are the upNode!
 	store := idx.TranslateStore(partition)
 	if store == nil {
 		return nil, ErrTranslateStoreNotFound
