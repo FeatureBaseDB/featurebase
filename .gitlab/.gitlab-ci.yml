@@ -1,7 +1,7 @@
-# include:
-#   - template: Security/SAST.gitlab-ci.yml
-#   - template: Security/License-Scanning.gitlab-ci.yml
-#   - template: Security/Dependency-Scanning.gitlab-ci.yml
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/License-Scanning.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
 
 variables:
   GOVERSION: "1.17.8"
@@ -16,35 +16,35 @@ stages:
   - post build
   - nonblocking
 
-#smoke build:
-#  image: golang:$GOVERSION
-#  stage: lint
-#  allow_failure: false
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Let's just see if it compiles... (sometimes the linter gives unclear errors if it doesn't)"
-#    - go build ./...
-#
-#golangci-lint:
-#  image: golangci/golangci-lint:v1.39.0
-#  stage: lint
-#  allow_failure: false
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Checking for issues in new code"
-#    - golangci-lint run
-#
-#go mod tidy:
-#  stage: lint
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
-#  script:
-#    - go mod tidy
-#    - git diff --exit-code -- go.mod go.sum
-#
+smoke build:
+  image: golang:$GOVERSION
+  stage: lint
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Let's just see if it compiles... (sometimes the linter gives unclear errors if it doesn't)"
+    - go build ./...
+
+golangci-lint:
+  image: golangci/golangci-lint:v1.39.0
+  stage: lint
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Checking for issues in new code"
+    - golangci-lint run
+
+go mod tidy:
+  stage: lint
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - go mod tidy
+    - git diff --exit-code -- go.mod go.sum
+
 build lattice:
   stage: test
   image: node:14
@@ -64,110 +64,110 @@ build lattice:
   artifacts:
     paths:
       - lattice.tar.gz
-#
-#run jest tests:
-#  stage: test
-#  image: node:14
-#  variables:
-#    CI: "true"
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Testing lattice..."
-#    - cd lattice
-#    - npm install --force
-#    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
-#  artifacts:
-#    paths:
-#      - lattice/coverage/lcov.info
-#
-#run go tests:
-#  stage: test
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  retry: 1
-#  script:
-#    - echo "Running featurebase unit tests..."
-#    - go test -timeout=30m ./...
-#  tags:
-#    - aws
-#
-#run go tests race:
-#  stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  retry: 1
-#  needs: [] # don't wait to start running this.
-#  script:
-#    - echo "Running featurebase race tests..."
-#    - go test -race -v -timeout=90m ./...
-#  tags:
-#    - aws
-#
-#run go tests shardwidth22:
-#  stage: test
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - echo "Running featurebase shardwidth22 tests..."
-#    - go test -timeout=30m -tags=shardwidth22 ./...
-#  tags:
-#    - aws
-#    
-## we do coverage reporting from the future tests because the json
-## output is very difficult to human-read. The alternative would be to
-## run the regular tests twice and also run the future tests.
-#run go tests future:
-#  stage: test
-#  image: golang:1.18
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  retry: 1
-#  script:
-#    - echo "Running featurebase unit tests..."
-#    - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
-#    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
-#  artifacts:
-#    paths:
-#      - coverage.out
-#      - test-report.out
-#  tags:
-#    - aws
-#
-#upload to sonarcloud:
-#  stage: integration
-#  image: sonarsource/sonar-scanner-cli:4.6
-#  variables:
-#    SONAR_TOKEN: $SONAR_TOKEN
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out,results/coverage*.out -Dsonar.go.tests.reportPaths=test-report.out,results/report*  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
-#  needs:
-#    - job: run go tests future
-#    - job: run jest tests 
-#    - job: clustertests
-#    
-#build for linux amd64:
-#  stage: build
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - rm -r lattice
-#    - tar -xvf lattice.tar.gz 
-#    - go get -v -u github.com/rakyll/statik 
-#    - /go/bin/statik -src=lattice
-#    - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
-#    - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
-#  artifacts:
-#    paths:
-#      - featurebase_linux_amd64
-#      - roaring-migrate_linux_amd64
-#
+
+run jest tests:
+  stage: test
+  image: node:14
+  variables:
+    CI: "true"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Testing lattice..."
+    - cd lattice
+    - npm install --force
+    - npm test -- --coverage --testResultsProcessor=jest-sonar-reporter
+  artifacts:
+    paths:
+      - lattice/coverage/lcov.info
+
+run go tests:
+  stage: test
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
+  script:
+    - echo "Running featurebase unit tests..."
+    - go test -timeout=30m ./...
+  tags:
+    - aws
+
+run go tests race:
+  stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
+  needs: [] # don't wait to start running this.
+  script:
+    - echo "Running featurebase race tests..."
+    - go test -race -v -timeout=90m ./...
+  tags:
+    - aws
+
+run go tests shardwidth22:
+  stage: test
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "Running featurebase shardwidth22 tests..."
+    - go test -timeout=30m -tags=shardwidth22 ./...
+  tags:
+    - aws
+    
+# we do coverage reporting from the future tests because the json
+# output is very difficult to human-read. The alternative would be to
+# run the regular tests twice and also run the future tests.
+run go tests future:
+  stage: test
+  image: golang:1.18
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  retry: 1
+  script:
+    - echo "Running featurebase unit tests..."
+    - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
+    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
+  artifacts:
+    paths:
+      - coverage.out
+      - test-report.out
+  tags:
+    - aws
+
+upload to sonarcloud:
+  stage: integration
+  image: sonarsource/sonar-scanner-cli:4.6
+  variables:
+    SONAR_TOKEN: $SONAR_TOKEN
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out,results/coverage*.out -Dsonar.go.tests.reportPaths=test-report.out,results/report*  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
+  needs:
+    - job: run go tests future
+    - job: run jest tests 
+    - job: clustertests
+    
+build for linux amd64:
+  stage: build
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - rm -r lattice
+    - tar -xvf lattice.tar.gz 
+    - go get -v -u github.com/rakyll/statik 
+    - /go/bin/statik -src=lattice
+    - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
+    - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
+  artifacts:
+    paths:
+      - featurebase_linux_amd64
+      - roaring-migrate_linux_amd64
+
 build for linux arm64:
   stage: build
   image: golang:$GOVERSION
@@ -184,278 +184,278 @@ build for linux arm64:
     paths:
       - featurebase_linux_arm64
       - roaring-migrate_linux_arm64
-#
-#build for darwin amd64:
-#  stage: build
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - rm -r lattice
-#    - tar -xvf lattice.tar.gz 
-#    - go get -v -u github.com/rakyll/statik 
-#    - /go/bin/statik -src=lattice
-#    - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
-#    - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
-#  artifacts:
-#    paths:
-#      - featurebase_darwin_amd64
-#      - roaring-migrate_darwin_amd64
-#
-#build for darwin arm64:
-#  stage: build
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - rm -r lattice
-#    - tar -xvf lattice.tar.gz 
-#    - go get -v -u github.com/rakyll/statik 
-#    - /go/bin/statik -src=lattice
-#    - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
-#    - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
-#  artifacts:
-#    paths:
-#      - featurebase_darwin_arm64
-#      - roaring-migrate_darwin_arm64
-#
-#package for linux amd64:
-#  stage: build
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  variables:
-#    GOOS: "linux"
-#    GOARCH: "amd64"
-#  script:
-#    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-#    - apt update && apt install nfpm=2.11.3
-#    - make package
-#  artifacts:
-#    paths:
-#      - "*.deb"
-#      - "*.rpm"
-#
-#package for linux arm64:
-#  stage: build
-#  image: golang:$GOVERSION
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  variables:
-#    GOOS: "linux"
-#    GOARCH: "arm64"
-#  script:
-#    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-#    - apt update && apt install nfpm=2.11.3
-#    - make package
-#  artifacts:
-#    paths:
-#      - "*.deb"
-#      - "*.rpm"
-#
-#build amd container fb:
-#  stage: build
-#  needs:
-#    - "build for linux amd64"
-#  tags:
-#    - shell
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  before_script:    
-#    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
-#  script:    
-#    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_SLUG}
-#    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 -t $tag -f .gitlab/Dockerfile .
-#    - docker push $tag
-#    - echo Created docker featurebase image with tag "$tag"
-#
-#build arm container fb:
-#  stage: build
-#  needs:
-#    - "build for linux arm64"
-#  tags:
-#    - shell
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  before_script:    
-#    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
-#  script:    
-#    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-arm64-${CI_COMMIT_REF_SLUG}
-#    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 -t $tag -f .gitlab/Dockerfile .
-#    - docker push $tag
-#    - echo Created docker featurebase image with tag "$tag"
-#
-#
-## clustertests doesn't run in docker, and requires several things to be set up on the runner to work:
-## 1. Install Go, make sure it's on the path
-## 2. Make sure "make" is installed
-## 3. make sure docker/docker-compose is installed
-## 4. make sure the git config is done `git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"`
-## 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
-#clustertests:
-#  variables:
-#    PROJECT: clustertests_${CI_CONCURRENT_ID}
-#  stage: integration
-#  tags:
-#    - shell
-#  retry: 1
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
-#    - make clustertests
-#    - mv internal/clustertests/results/ results/
-#  artifacts:
-#    paths:
-#      - results/coverage*.out
-#
-#authclustertests:
-#  variables:
-#    PROJECT: authclustertests_${CI_CONCURRENT_ID}
-#  stage: integration
-#  retry: 1
-#  tags:
-#    - shell
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-#  script:
-#    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
-#    - make authclustertests
-#    - rm -rf internal/clustertests/results
-#
-#
-#external lookup tests:
-#  stage: integration
-#  image: golang:$GOVERSION
-#  # TODO: no rules here, do we need to add the rules line?
-#  variables:
-#    POSTGRES_DB: $POSTGRES_DB
-#    POSTGRES_USER: $POSTGRES_USER
-#    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-#    POSTGRES_HOST_AUTH_METHOD: trust
-#  services:
-#    - postgres:13.5
-#  script:
-#    - apt-get update --allow-releaseinfo-change -y
-#    - apt-get install -y postgresql-client
-#    - go test . -run "^TestExternalLookup" -externalLookupDSN postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres/$POSTGRES_DB?sslmode=disable
-#
-#
-#smoke test:
-#  stage: integration
-#  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-#  variables:
-#    PROFILE: "service-terraform"
-#    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-#    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-#    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-#    TF_VAR_cluster_prefix: ""
-#  tags:
-#    - aws
-#    - docker
-#    - fbsmoke
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "push"'
-#  before_script:
-#    - apt-get update && apt-get install -y gnupg software-properties-common curl git
-#    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
-#    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-#    - apt-get update && apt-get install terraform
-#    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $PROFILE
-#    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
-#    - aws configure set region "us-east-2" --profile $PROFILE
-#    - aws configure set aws_profile $PROFILE
-#    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
-#    - chmod 400 gitlab-featurebase-ci.pem
-#    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-#    - eval $(ssh-agent -s)
-#    - mkdir -p ~/.ssh
-#    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
-#    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
-#    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
-#    - chmod 700 /root/.ssh
-#    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-#    - apt update && apt -y install jq wget
-#    - wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz
-#    - tar -C /usr/local -xzf go$GOVERSION.linux-amd64.tar.gz
-#    - export PATH=$PATH:/usr/local/go/bin
-#    - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
-#    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-#    # download datagen for FB-1270 repro test. TODO replace w/ locally built datagen once we merge IDK into FB
-#    - aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
-#    - chmod +x ./datagen_linux_arm64
-#  script:
-#    - ./qa/scripts/setupSmokeTest.sh
-#    - ./qa/scripts/testSmokeTest.sh
-#    - ./qa/scripts/bug_repro_tests.sh
-#  after_script:
-#    - ./qa/scripts/teardownSmokeTest.sh
-#  needs:
-#    - job: build for linux arm64
-#  artifacts:
-#    when: always
-#    paths:
-#      - report.xml
-#    reports:
-#      junit: report.xml
-#
-#
-#samsung-gauntlet:
-#  stage: gauntlet
-#  timeout: 4h
-#  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-#  variables:
-#    FBCI_PROFILE: "service-terraform"
-#    INFRA_PROFILE: "service-gitlab"
-#    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-#    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-#    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-#    ASG_NAME: "gitlab-runners"
-#    TF_VAR_cluster_prefix: ""
-#  tags:
-#    - aws
-#    - docker
-#    - fbsmoke
-#  rules:
-#    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
-#  before_script:
-#    - apt-get update && apt-get install -y gnupg software-properties-common curl git
-#    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
-#    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-#    - apt-get update && apt-get install terraform
-#    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $FBCI_PROFILE
-#    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $FBCI_PROFILE
-#    - aws configure set region "us-east-2" --profile $FBCI_PROFILE
-#    - aws configure set aws_profile $FBCI_PROFILE
-#    - aws configure set aws_access_key_id $AWS_INFRA_ACCESS_KEY_ID --profile $INFRA_PROFILE
-#    - aws configure set aws_secret_access_key $AWS_INFRA_SECRET_ACCESS_KEY --profile $INFRA_PROFILE
-#    - aws configure set region "us-east-2" --profile $INFRA_PROFILE
-#    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
-#    - chmod 400 gitlab-featurebase-ci.pem
-#    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-#    - eval $(ssh-agent -s)
-#    - mkdir -p ~/.ssh
-#    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
-#    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
-#    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
-#    - chmod 700 /root/.ssh
-#    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-#    - apt update && apt -y install jq wget
-#    - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
-#    - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
-#    - export PATH=$PATH:/usr/local/go/bin
-#    - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
-#    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-#    - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
-#    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
-#  script:
-#    - ./qa/scripts/setupSamsungGauntlet.sh
-#    - ./qa/scripts/testSamsungGauntlet.sh
-#  after_script:
-#    - ./qa/scripts/teardownSamsungGauntlet.sh || true # leaving dangling resources is better than dangling ASG instances that can't be terminated
-#    - export INSTANCE_ID=$(cat instance_id)
-#    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
-#
+ 
+build for darwin amd64:
+  stage: build
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - rm -r lattice
+    - tar -xvf lattice.tar.gz 
+    - go get -v -u github.com/rakyll/statik 
+    - /go/bin/statik -src=lattice
+    - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
+    - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
+  artifacts:
+    paths:
+      - featurebase_darwin_amd64
+      - roaring-migrate_darwin_amd64
+
+build for darwin arm64:
+  stage: build
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - rm -r lattice
+    - tar -xvf lattice.tar.gz 
+    - go get -v -u github.com/rakyll/statik 
+    - /go/bin/statik -src=lattice
+    - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
+    - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
+  artifacts:
+    paths:
+      - featurebase_darwin_arm64
+      - roaring-migrate_darwin_arm64
+
+package for linux amd64:
+  stage: build
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  variables:
+    GOOS: "linux"
+    GOARCH: "amd64"
+  script:
+    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
+    - apt update && apt install nfpm=2.11.3
+    - make package
+  artifacts:
+    paths:
+      - "*.deb"
+      - "*.rpm"
+
+package for linux arm64:
+  stage: build
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  variables:
+    GOOS: "linux"
+    GOARCH: "arm64"
+  script:
+    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
+    - apt update && apt install nfpm=2.11.3
+    - make package
+  artifacts:
+    paths:
+      - "*.deb"
+      - "*.rpm"
+
+build amd container fb:
+  stage: build
+  needs:
+    - "build for linux amd64"
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  before_script:    
+    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
+  script:    
+    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_SLUG}
+    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 -t $tag -f .gitlab/Dockerfile .
+    - docker push $tag
+    - echo Created docker featurebase image with tag "$tag"
+
+build arm container fb:
+  stage: build
+  needs:
+    - "build for linux arm64"
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  before_script:    
+    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
+  script:    
+    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-arm64-${CI_COMMIT_REF_SLUG}
+    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 -t $tag -f .gitlab/Dockerfile .
+    - docker push $tag
+    - echo Created docker featurebase image with tag "$tag"
+
+
+# clustertests doesn't run in docker, and requires several things to be set up on the runner to work:
+# 1. Install Go, make sure it's on the path
+# 2. Make sure "make" is installed
+# 3. make sure docker/docker-compose is installed
+# 4. make sure the git config is done `git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"`
+# 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
+clustertests:
+  variables:
+    PROJECT: clustertests_${CI_CONCURRENT_ID}
+  stage: integration
+  tags:
+    - shell
+  retry: 1
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
+    - make clustertests
+    - mv internal/clustertests/results/ results/
+  artifacts:
+    paths:
+      - results/coverage*.out
+
+authclustertests:
+  variables:
+    PROJECT: authclustertests_${CI_CONCURRENT_ID}
+  stage: integration
+  retry: 1
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
+    - make authclustertests
+    - rm -rf internal/clustertests/results
+
+
+external lookup tests:
+  stage: integration
+  image: golang:$GOVERSION
+  # TODO: no rules here, do we need to add the rules line?
+  variables:
+    POSTGRES_DB: $POSTGRES_DB
+    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_HOST_AUTH_METHOD: trust
+  services:
+    - postgres:13.5
+  script:
+    - apt-get update --allow-releaseinfo-change -y
+    - apt-get install -y postgresql-client
+    - go test . -run "^TestExternalLookup" -externalLookupDSN postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres/$POSTGRES_DB?sslmode=disable
+
+
+smoke test:
+  stage: integration
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    PROFILE: "service-terraform"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    TF_VAR_cluster_prefix: ""
+  tags:
+    - aws
+    - docker
+    - fbsmoke
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  before_script:
+    - apt-get update && apt-get install -y gnupg software-properties-common curl git
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    - apt-get update && apt-get install terraform
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $PROFILE
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
+    - aws configure set region "us-east-2" --profile $PROFILE
+    - aws configure set aws_profile $PROFILE
+    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+    - chmod 400 gitlab-featurebase-ci.pem
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
+    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
+    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+    - chmod 700 /root/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt update && apt -y install jq wget
+    - wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go$GOVERSION.linux-amd64.tar.gz
+    - export PATH=$PATH:/usr/local/go/bin
+    - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    # download datagen for FB-1270 repro test. TODO replace w/ locally built datagen once we merge IDK into FB
+    - aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
+    - chmod +x ./datagen_linux_arm64
+  script:
+    - ./qa/scripts/setupSmokeTest.sh
+    - ./qa/scripts/testSmokeTest.sh
+    - ./qa/scripts/bug_repro_tests.sh
+  after_script:
+    - ./qa/scripts/teardownSmokeTest.sh
+  needs:
+    - job: build for linux arm64
+  artifacts:
+    when: always
+    paths:
+      - report.xml
+    reports:
+      junit: report.xml
+
+
+samsung-gauntlet:
+  stage: gauntlet
+  timeout: 4h
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    FBCI_PROFILE: "service-terraform"
+    INFRA_PROFILE: "service-gitlab"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    ASG_NAME: "gitlab-runners"
+    TF_VAR_cluster_prefix: ""
+  tags:
+    - aws
+    - docker
+    - fbsmoke
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  before_script:
+    - apt-get update && apt-get install -y gnupg software-properties-common curl git
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    - apt-get update && apt-get install terraform
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $FBCI_PROFILE
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $FBCI_PROFILE
+    - aws configure set region "us-east-2" --profile $FBCI_PROFILE
+    - aws configure set aws_profile $FBCI_PROFILE
+    - aws configure set aws_access_key_id $AWS_INFRA_ACCESS_KEY_ID --profile $INFRA_PROFILE
+    - aws configure set aws_secret_access_key $AWS_INFRA_SECRET_ACCESS_KEY --profile $INFRA_PROFILE
+    - aws configure set region "us-east-2" --profile $INFRA_PROFILE
+    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+    - chmod 400 gitlab-featurebase-ci.pem
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
+    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
+    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+    - chmod 700 /root/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt update && apt -y install jq wget
+    - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
+    - export PATH=$PATH:/usr/local/go/bin
+    - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
+  script:
+    - ./qa/scripts/setupSamsungGauntlet.sh
+    - ./qa/scripts/testSamsungGauntlet.sh
+  after_script:
+    - ./qa/scripts/teardownSamsungGauntlet.sh || true # leaving dangling resources is better than dangling ASG instances that can't be terminated
+    - export INSTANCE_ID=$(cat instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
+
 backup-restore-gauntlet:
   stage: gauntlet
   timeout: 4h
@@ -468,6 +468,8 @@ backup-restore-gauntlet:
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     ASG_NAME: "gitlab-runners"
     TF_VAR_cluster_prefix: ""
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   tags:
     - aws
     - docker
@@ -511,149 +513,149 @@ backup-restore-gauntlet:
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
   needs:
     - build for linux arm64
-  
-#s3 dump:
-#  stage: post build
-#  variables:
-#    PROFILE: "service-fb-ci"
-#    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-#    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-#    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-#  tags:
-#    - shell
-#  rules:
-#    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
-#  script:
-#    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-#    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-#    - aws configure set region "us-east-2"
-#    - aws configure set aws_profile $PROFILE
-#    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_amd64
-#    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_amd64
-#    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_amd64
-#    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_amd64
-#    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_arm64
-#    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64
-#    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_arm64
-#    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_arm64
-#    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_amd64
-#    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_amd64
-#    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_amd64
-#    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_amd64
-#    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
-#    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
-#    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_arm64
-#    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_arm64
-#  needs:
-#    - job: build for darwin amd64
-#    - job: build for darwin arm64
-#    - job: build for linux amd64
-#    - job: build for linux arm64
-#
-#perf_able:
-#  stage: performance
-#  rules:
-#    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
-#  trigger:
-#    include: .gitlab/.perf-able-gitlab-ci.yml
-#  variables:
-#    PARENT_PIPELINE_ID: $CI_PIPELINE_ID
-#
-## only run on merge to master, the whole process takes about 10 minutes in total
-## (which is a long time)
-#perf_delete:
-#  stage: performance
-#  rules:
-#    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
-#  timeout: 2h
-#  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
-#  variables:
-#    PROFILE: "service-terraform"
-#    INFRA_PROFILE: "service-gitlab"
-#    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-#    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-#    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-#    ASG_NAME: "gitlab-runners"
-#    TF_VAR_cluster_prefix: ""
-#  tags:
-#    - aws
-#    - docker
-#    - fbsmoke
-#  before_script:
-#    - apt-get update && apt-get install -y gnupg software-properties-common curl git
-#    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
-#    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-#    - apt-get update && apt-get install terraform 
-#    - apt-get update && apt-get install python3.7
-#    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $PROFILE
-#    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
-#    - aws configure set region "us-east-2" --profile $PROFILE
-#    - aws configure set aws_profile $PROFILE
-#    - aws configure set aws_access_key_id $AWS_INFRA_ACCESS_KEY_ID --profile $INFRA_PROFILE
-#    - aws configure set aws_secret_access_key $AWS_INFRA_SECRET_ACCESS_KEY --profile $INFRA_PROFILE
-#    - aws configure set region "us-east-2" --profile $INFRA_PROFILE
-#    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
-#    - chmod 400 gitlab-featurebase-ci.pem
-#    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-#    - eval $(ssh-agent -s)
-#    - mkdir -p ~/.ssh
-#    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
-#    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
-#    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
-#    - chmod 700 /root/.ssh
-#    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-#    - apt update && apt -y install jq wget
-#    - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
-#    - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
-#    - export PATH=$PATH:/usr/local/go/bin
-#    - TF_VAR_cluster_prefix="delete-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
-#    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-#    - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
-#    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
-#  script:
-#    - ./qa/scripts/perf/delete/deleteSetup.sh
-#    - ./qa/scripts/perf/delete/deleteTest.sh
-#  after_script:
-#    - ./qa/scripts/perf/delete/deleteTeardown.sh || true
-#    - export INSTANCE_ID=$(cat instance_id)
-#    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
-#  needs:
-#    - job: build for linux arm64
-#
-#s3 dump tag:
-#  stage: post build
-#  variables:
-#    PROFILE: "service-fb-ci"
-#    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-#    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-#    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-#    LOCATION: molecula-artifact-storage/featurebase/_tags
-#  tags:
-#    - shell
-#  rules:
-#    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
-#  script:
-#    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-#    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-#    - aws configure set region "us-east-2"
-#    - aws configure set aws_profile $PROFILE
-#    - |
-#      for goos in "darwin" "linux"; do
-#        for goarch in "amd64" "arm64"; do
-#          dir=featurebase-${CI_COMMIT_TAG}-${goos}-${goarch}
-#          echo "Directory ${dir}"
-#          mkdir $dir
-#          mv featurebase_${goos}_${goarch} ${dir}/featurebase
-#          mv roaring-migrate_${goos}_${goarch} ${dir}/roaring-migrate
-#          cp NOTICE install/featurebase.conf install/featurebase.*.service ${dir}/
-#          tar cvzf ${dir}.tar.gz ${dir}
-#          aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
-#          aws s3 cp ${dir}.tar.gz s3://${LOCATION}/${CI_COMMIT_TAG}/
-#        done
-#      done
-#
-#  needs:
-#    - job: build for darwin amd64
-#    - job: build for darwin arm64
-#    - job: build for linux amd64
-#    - job: build for linux arm64
+ 
+s3 dump:
+  stage: post build
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_amd64
+    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_amd64
+    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_amd64
+    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_amd64
+    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_arm64
+    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64
+    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_arm64
+    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_arm64
+    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_amd64
+    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_amd64
+    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_amd64
+    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_amd64
+    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
+    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
+    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_arm64
+    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_arm64
+  needs:
+    - job: build for darwin amd64
+    - job: build for darwin arm64
+    - job: build for linux amd64
+    - job: build for linux arm64
+
+perf_able:
+  stage: performance
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  trigger:
+    include: .gitlab/.perf-able-gitlab-ci.yml
+  variables:
+    PARENT_PIPELINE_ID: $CI_PIPELINE_ID
+
+# only run on merge to master, the whole process takes about 10 minutes in total
+# (which is a long time)
+perf_delete:
+  stage: performance
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  timeout: 2h
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    PROFILE: "service-terraform"
+    INFRA_PROFILE: "service-gitlab"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    ASG_NAME: "gitlab-runners"
+    TF_VAR_cluster_prefix: ""
+  tags:
+    - aws
+    - docker
+    - fbsmoke
+  before_script:
+    - apt-get update && apt-get install -y gnupg software-properties-common curl git
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    - apt-get update && apt-get install terraform 
+    - apt-get update && apt-get install python3.7
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $PROFILE
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
+    - aws configure set region "us-east-2" --profile $PROFILE
+    - aws configure set aws_profile $PROFILE
+    - aws configure set aws_access_key_id $AWS_INFRA_ACCESS_KEY_ID --profile $INFRA_PROFILE
+    - aws configure set aws_secret_access_key $AWS_INFRA_SECRET_ACCESS_KEY --profile $INFRA_PROFILE
+    - aws configure set region "us-east-2" --profile $INFRA_PROFILE
+    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+    - chmod 400 gitlab-featurebase-ci.pem
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
+    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
+    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+    - chmod 700 /root/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt update && apt -y install jq wget
+    - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
+    - export PATH=$PATH:/usr/local/go/bin
+    - TF_VAR_cluster_prefix="delete-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
+    - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
+  script:
+    - ./qa/scripts/perf/delete/deleteSetup.sh
+    - ./qa/scripts/perf/delete/deleteTest.sh
+  after_script:
+    - ./qa/scripts/perf/delete/deleteTeardown.sh || true
+    - export INSTANCE_ID=$(cat instance_id)
+    - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
+  needs:
+    - job: build for linux arm64
+
+s3 dump tag:
+  stage: post build
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    LOCATION: molecula-artifact-storage/featurebase/_tags
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          dir=featurebase-${CI_COMMIT_TAG}-${goos}-${goarch}
+          echo "Directory ${dir}"
+          mkdir $dir
+          mv featurebase_${goos}_${goarch} ${dir}/featurebase
+          mv roaring-migrate_${goos}_${goarch} ${dir}/roaring-migrate
+          cp NOTICE install/featurebase.conf install/featurebase.*.service ${dir}/
+          tar cvzf ${dir}.tar.gz ${dir}
+          aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
+          aws s3 cp ${dir}.tar.gz s3://${LOCATION}/${CI_COMMIT_TAG}/
+        done
+      done
+
+  needs:
+    - job: build for darwin amd64
+    - job: build for darwin arm64
+    - job: build for linux amd64
+    - job: build for linux arm64
