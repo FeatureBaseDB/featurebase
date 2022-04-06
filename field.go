@@ -1992,14 +1992,18 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeTimestamp:
 		return json.Marshal(struct {
-			Type     string    `json:"type"`
-			Epoch    time.Time `json:"epoch"`
-			BitDepth uint64    `json:"bitDepth"`
-			TimeUnit string    `json:"timeUnit"`
+			Type     string      `json:"type"`
+			Epoch    time.Time   `json:"epoch"`
+			BitDepth uint64      `json:"bitDepth"`
+			Min      pql.Decimal `json:"min"`
+			Max      pql.Decimal `json:"max"`
+			TimeUnit string      `json:"timeUnit"`
 		}{
 			o.Type,
 			time.Unix(0, o.Base*TimeUnitNanos(o.TimeUnit)).UTC(),
 			o.BitDepth,
+			o.Min,
+			o.Max,
 			o.TimeUnit,
 		})
 	case FieldTypeTime:
