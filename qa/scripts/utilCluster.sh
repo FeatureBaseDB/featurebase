@@ -230,3 +230,55 @@ setupClusterNodes() {
     setupIngestNodes
 
 }
+
+installDatagen() {
+    INGESTNODE0=$1
+    # download datagen
+    aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen datagen
+    if (( $? != 0 ))
+    then
+        echo "datagen binary copy failed"
+        exit 1
+    fi
+
+    # make it executable
+    chmod +x datagen 
+    if (( $? != 0 ))
+    then
+        echo "couldn't make datagen executable"
+        exit 1
+    fi
+
+    # copy it over to the ingest node
+    scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./datagen ec2-user@${INGESTNODE0}:/data
+    if (( $? != 0 )) 
+    then 
+        echo "datagen copy failed"
+        exit 1
+    fi
+
+    # setup the yum repo needed for librdkafka onto the ingest node
+    scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/perf/delete/confluent ec2-user@${INGESTNODE0}:/data
+    if (( $? != 0 )) 
+    then 
+        echo "confluent repo setup copy failed"
+        exit 1
+    fi
+
+    echo "setting up confluent repo"
+    ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "sudo mv /data/confluent /etc/yum.repos.d" 
+    if (( $? != 0 ))
+    then 
+        echo "setting up confluent repo failed"
+        exit 1
+    fi
+
+
+    echo "installing librdkafka on ingest node"
+    ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "sudo rpm --import http://packages.confluent.io/rpm/3.1/archive.key && sudo yum clean all && sudo yum install librdkafka-devel -y"
+    if (( $? != 0 ))
+    then 
+        echo "librdkafka install failed"
+        exit 1
+    fi
+}

@@ -144,10 +144,15 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 	return ic
 }
 
+// AddAuthToken checks in a couple spots for our authorization token and adds it to
+// the Authorization Header in the request if it finds it.
 func AddAuthToken(ctx context.Context, req *http.Request) *http.Request {
-	token, ok := ctx.Value("token").(string)
-	if ok && token != "" {
+	if token, ok := ctx.Value("token").(string); ok && token != "" {
+		// the "token" value should be prefixed with "Bearer"
 		req.Header.Set("Authorization", token)
+	} else if uinfo := ctx.Value("userinfo"); uinfo != nil {
+		// UserInfo.Token is not prefixed with "Bearer"
+		req.Header.Set("Authorization", "Bearer "+uinfo.(*authn.UserInfo).Token)
 	}
 	return req
 }
@@ -604,12 +609,6 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")
-	}
-
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
-		token := uinfo.(*authn.UserInfo).Token
-		req.Header.Set("Authorization", token)
 	}
 
 	req = AddAuthToken(ctx, req)

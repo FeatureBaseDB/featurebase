@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	gohttp "net/http"
 	"reflect"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
@@ -1567,4 +1569,39 @@ func TestClient_ImportRoaringExists(t *testing.T) {
 		t.Fatalf("All unexpected columns: got %+v  expected: %+v", got, expected)
 	}
 
+}
+
+func TestAddAuthToken(t *testing.T) {
+	t.Run("none", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		pilosa.AddAuthToken(context.Background(), req)
+		if req.Header.Get("Authorization") != "" {
+			t.Fatalf("Authorization header set when it should be empty")
+		}
+	})
+	t.Run("userinfo", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		uinfo := &authn.UserInfo{Token: "ayo"}
+		pilosa.AddAuthToken(context.WithValue(context.Background(), "userinfo", uinfo), req)
+		if got := req.Header.Get("Authorization"); got != "Bearer "+uinfo.Token {
+			t.Fatalf("got '%v', expected 'Bearer %v'", got, uinfo.Token)
+		}
+	})
+	t.Run("token", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		tok := "Bearer thisisatoken"
+		pilosa.AddAuthToken(context.WithValue(context.Background(), "token", tok), req)
+		if got := req.Header.Get("Authorization"); got != tok {
+			t.Fatalf("got '%v', expected '%v'", got, tok)
+		}
+	})
 }

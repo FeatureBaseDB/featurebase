@@ -87,3 +87,13 @@ ingest-error:
     }
   }
 ]
+ingest:
+[
+  {
+    "action": "delete",
+    "record_ids": [ 1 ]
+  }
+]
+queries:
+Row(setkey="a")
+[]

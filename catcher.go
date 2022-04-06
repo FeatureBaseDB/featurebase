@@ -26,11 +26,6 @@ func init() {
 
 var _ Tx = (*catcherTx)(nil)
 
-func (c *catcherTx) RemoveChannel(index, field, view string, shard uint64, a chan uint64, resChan chan countResults) {
-	c.b.RemoveChannel(index, field, view, shard, a, resChan)
-	return
-}
-
 func (c *catcherTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	return c.b.NewTxIterator(index, field, view, shard)
 }
