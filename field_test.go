@@ -2,11 +2,14 @@
 package pilosa_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"math"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -270,4 +273,20 @@ func TestField_ClearValue(t *testing.T) {
 			t.Fatal("expected value to not exist")
 		}
 	})
+}
+
+func TestFieldInfoMarshal(t *testing.T) {
+	f := &pilosa.FieldInfo{Name: "timestamp", CreatedAt: 1649270079233541000,
+		Options: pilosa.FieldOptions{Base: 0, BitDepth: 0x0, Min: pql.Decimal{Value: -4294967296,
+			Scale: 0}, Max: pql.Decimal{Value: 4294967296, Scale: 0}, Scale: 0, Keys: false,
+			NoStandardView: false, CacheType: "", Type: "timestamp", TimeUnit: "s",
+			TimeQuantum: "", ForeignIndex: "", Ttl: 0}, Cardinality: (*uint64)(nil)}
+	a, err := json.Marshal(f)
+	if err != nil {
+		t.Fatalf("unexpected error marshalling index info,  %v", err)
+	}
+	expected := []byte(`{"name":"timestamp","createdAt":1649270079233541000,"options":{"type":"timestamp","epoch":"1970-01-01T00:00:00Z","bitDepth":0,"min":-4294967296,"max":4294967296,"timeUnit":"s"}}`)
+	if bytes.Compare(a, expected) != 0 {
+		t.Fatalf("expected %s, got %s", expected, a)
+	}
 }
