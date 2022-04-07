@@ -235,6 +235,7 @@ func (db *DB) openWAL() (err error) {
 			break
 		}
 	}
+
 	if fileSize != int64(pageN*PageSize) {
 		if err := db.walFile.Truncate(int64(pageN * PageSize)); err != nil {
 			return fmt.Errorf("wal truncate: %w", err)
@@ -310,6 +311,7 @@ func (db *DB) checkpoint() (err error) {
 	}()
 
 	// Copy the pages from the WAL back to the database outside of the lock.
+	var pageN uint32
 	if err := func() error {
 		db.mu.Unlock() // This is intentionally reversed so run w/o lock
 		defer db.mu.Lock()
@@ -367,6 +369,11 @@ func (db *DB) checkpoint() (err error) {
 				return fmt.Errorf("reading page %d [page number %d]: %v", walID, pgno, err)
 			}
 
+			// Determine new database size from the page size in meta page.
+			if pgno == 0 {
+				pageN = readMetaPageN(page)
+			}
+
 			// Write data to the data file.
 			if err = db.writeDBPage(pgno, page); err != nil {
 				return fmt.Errorf("writing page %d: %v", pgno, err)
@@ -404,6 +411,14 @@ func (db *DB) checkpoint() (err error) {
 			db.logger.Errorf("seek wal file: %w", err)
 		}
 
+		// Truncate data file if it has shrunk.
+		if fi, err := db.file.Stat(); err != nil {
+			db.logger.Errorf("stat db file: %w", err)
+		} else if sz := int64(pageN * PageSize); sz > 0 && fi.Size() > sz {
+			if err := db.file.Truncate(sz); err != nil {
+				db.logger.Errorf("truncate db file: %w", err)
+			}
+		}
 	})
 
 	return nil

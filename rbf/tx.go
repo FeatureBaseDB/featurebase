@@ -103,6 +103,11 @@ func (tx *Tx) Commit() error {
 		return ErrTxClosed
 	}
 
+	// Remove any free pages off the end of the file and update the size.
+	if err := tx.truncateFreelist(); err != nil {
+		return err
+	}
+
 	// If any pages have been written, ensure we write a new meta page with
 	// the commit flag to mark the end of the transaction.
 	if tx.dirty() {
@@ -132,6 +137,59 @@ func (tx *Tx) Commit() error {
 	defer tx.db.mu.Unlock()
 	// Disconnect transaction from DB.
 	return tx.db.removeTx(tx)
+}
+
+// truncateFreelist removes any free pages off the end of the file and updates
+// the size of the database. This allows the data file to be resized on checkpoint.
+func (tx *Tx) truncateFreelist() error {
+	for {
+		if truncated, err := tx.truncateLastFreePage(); err != nil {
+			return err
+		} else if !truncated {
+			return nil // no more free pages at end of file, exit
+		}
+	}
+}
+
+// truncateLastFreePage removes the last page from the file if it is a free page.
+// The page count is then decremented to move the high water mark to remove the page.
+// Returns true if a page was removed, otherwise returns false.
+func (tx *Tx) truncateLastFreePage() (truncated bool, outErr error) {
+	tx.modifyingFreelist = true
+	defer tx.freelistCleanup(&outErr)
+
+	c := tx.db.getFreelistCursor(tx)
+	if err := c.Last(); err == io.EOF {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	elem := &c.stack.elems[c.stack.top]
+	leafPage, _, err := c.tx.readPage(elem.pgno)
+	if err != nil {
+		return false, err
+	}
+	cell := readLeafCell(leafPage, elem.index)
+
+	// If page number is not the last page then exit.
+	pgno := uint32((cell.Key << 16) | uint64(cell.lastValue(tx)))
+	pageN := readMetaPageN(tx.meta[:])
+	if pgno < pageN-1 {
+		return false, nil
+	}
+
+	// Otherwise remove it from the freelist.
+	if changed, err := c.Remove(uint64(pgno)); err != nil {
+		return false, err
+	} else if !changed {
+		vprint.PanicOn(fmt.Sprintf("tx.Tx.truncateLastFreePage(): double alloc: %d", pgno))
+	}
+
+	// Decrement the page count in the database.
+	writeMetaPageN(tx.meta[:], pageN-1)
+
+	return true, nil
 }
 
 func (tx *Tx) Rollback() { tx.rollback(false) }

@@ -936,6 +936,88 @@ func setArray(tb testing.TB, key, num int, c *rbf.Cursor) {
 	}
 }
 
+// FB-1229: This test verifies that the database will be truncated as pages at
+// the end of the file are pushed to the freelist.
+func TestTx_ReclaimAfterDelete(t *testing.T) {
+	const containerN = 5000
+	const batchSize = 500
+
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+
+	keys := rand.New(rand.NewSource(0)).Perm(containerN)
+	inserted := make(map[uint64]struct{})
+
+	for i := 0; i < len(keys); i += batchSize {
+		func() {
+			tx := MustBegin(t, db, true)
+			defer tx.Rollback()
+
+			if err := tx.CreateBitmapIfNotExists("x"); err != nil {
+				t.Fatal(err)
+			}
+
+			// Insert a bunch of containers.
+			c := roaring.NewContainerArray(convenientPrepopulatedArray)
+			for j := 0; j < batchSize; j++ {
+				key := uint64(keys[i+j])
+				if err := tx.PutContainer("x", key, c); err != nil {
+					t.Fatal(err)
+				}
+				inserted[key] = struct{}{}
+			}
+
+			// Insert some already inserted containers.
+			var deleted int
+			for k := range inserted {
+				if err := tx.RemoveContainer("x", uint64(k)); err != nil {
+					t.Fatal(err)
+				}
+				delete(inserted, k)
+
+				if deleted++; deleted > 200 {
+					break
+				}
+			}
+
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+	}
+
+	fi, err := os.Stat(db.DataPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	origSize := fi.Size()
+
+	// Delete all containers.
+	func() {
+		tx := MustBegin(t, db, true)
+		defer tx.Rollback()
+
+		for _, key := range keys {
+			if err := tx.RemoveContainer("x", uint64(key)); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// Verify database has shrunk after checkpoint.
+	if err := db.Checkpoint(); err != nil {
+		t.Fatal(err)
+	} else if fi, err := os.Stat(db.DataPath()); err != nil {
+		t.Fatal(err)
+	} else if fi.Size() >= origSize {
+		t.Fatalf("size did not shrink: originally %d bytes, ended with %d bytes", fi.Size(), origSize)
+	}
+}
+
 func BenchmarkTx_Add(b *testing.B) {
 	for _, n := range []int{1, 10, 1000} {
 		b.Run(fmt.Sprint(n), func(b *testing.B) {
