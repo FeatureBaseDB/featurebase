@@ -17,6 +17,7 @@ import (
 
 	"github.com/golang-jwt/jwt"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/vprint"
 	"golang.org/x/oauth2"
 
 	"github.com/molecula/featurebase/v3/authz"
@@ -650,29 +651,29 @@ func TestChkAuthN(t *testing.T) {
 	}
 
 	cases := []struct {
-		name       string
-		endpoint   string
-		token      string
-		handler    http.HandlerFunc
-		statusCode int
+		name     string
+		endpoint string
+		token    string
+		handler  http.HandlerFunc
+		err      string
 	}{
 		{
-			name:       "Valid",
-			token:      validToken,
-			handler:    h.chkAuthN(testingHandler),
-			statusCode: http.StatusOK,
+			name:    "ValidToken-ButNotForMicrosoft",
+			token:   validToken,
+			handler: h.chkAuthN(testingHandler),
+			err:     "authenticating: getting groups: getting group membership info",
 		},
 		{
-			name:       "Invalid",
-			token:      invalidToken,
-			handler:    h.chkAuthN(testingHandler),
-			statusCode: http.StatusUnauthorized,
+			name:    "Invalid",
+			token:   invalidToken,
+			handler: h.chkAuthN(testingHandler),
+			err:     "authenticating: parsing bearer token",
 		},
 		{
-			name:       "Expired",
-			token:      expiredToken,
-			handler:    h.chkAuthN(testingHandler),
-			statusCode: http.StatusUnauthorized,
+			name:    "Expired",
+			token:   expiredToken,
+			handler: h.chkAuthN(testingHandler),
+			err:     "authenticating: token is expired",
 		},
 	}
 	for _, test := range cases {
@@ -682,8 +683,13 @@ func TestChkAuthN(t *testing.T) {
 			r.Header.Add("Authorization", test.token)
 			test.handler(w, r)
 			resp := w.Result()
-			if resp.StatusCode != test.statusCode {
-				t.Fatalf("expected %v, got %v", test.statusCode, resp.StatusCode)
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.HasPrefix(string(body), test.err) {
+				vprint.VV("body: %s", body)
+				t.Fatalf("expected error %s, got: %s", test.err, string(body))
 			}
 		})
 	}
