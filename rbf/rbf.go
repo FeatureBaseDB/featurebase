@@ -755,6 +755,13 @@ func (db *DB) fsync(f *os.File) error {
 	return f.Sync()
 }
 
+func (db *DB) fsyncWAL(f *os.File) error {
+	if !db.cfg.FsyncEnabled || !db.cfg.FsyncWALEnabled {
+		return nil // no sync if either fsync flag is disabled
+	}
+	return f.Sync()
+}
+
 // uint32Hasher implements Hasher for uint32 keys.
 type uint32Hasher struct{}
 
