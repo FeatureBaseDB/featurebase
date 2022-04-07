@@ -566,7 +566,7 @@ func (h *Handler) chkInternal(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.auth != nil {
 			secret, ok := r.Header["X-Feature-Key"]
-			secretString := ""
+			var secretString string
 			if ok {
 				secretString = secret[0]
 			}
