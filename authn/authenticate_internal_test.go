@@ -198,7 +198,7 @@ func TestAuthenticate(t *testing.T) {
 			refresh:      true,
 			errOnRefresh: true,
 			exp:          -17764800,
-			err:          fmt.Errorf("decoding refreshed token: invalid character 'b' looking for beginning of value"),
+			err:          fmt.Errorf("refreshing token: 500 Internal Server Error"),
 		},
 	}
 	for _, test := range cases {

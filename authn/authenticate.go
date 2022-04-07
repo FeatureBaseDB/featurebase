@@ -129,6 +129,9 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 		if err != nil {
 			return nil, errors.Wrap(err, "refreshing token")
 		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("refreshing token: %s", resp.Status)
+		}
 		defer resp.Body.Close()
 		var t oauth2.Token
 		if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
