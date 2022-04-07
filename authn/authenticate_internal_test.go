@@ -352,19 +352,36 @@ func TestGetGroups(t *testing.T) {
 			cacheTime: time.Now(),
 			groups: []Group{
 				{
-					GroupID:   "i feel it in the water",
-					GroupName: "i feel it in the earth",
+					GroupID:   "a han noston ned wilith",
+					GroupName: "I smell it in the air",
 				},
 			},
 		},
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srvNext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := json.Marshal(
 			Groups{
 				Groups: []Group{
 					{
-						GroupID:   "much that once was is lost",
-						GroupName: "for none now live who remember it",
+						GroupID:   "han mathon ne chae",
+						GroupName: "I feel it in the earth",
+					},
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error marshalling groups response: %v", err)
+		}
+		fmt.Fprintf(w, "%s", body)
+	}))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := json.Marshal(
+			Groups{
+				NextLink: srvNext.URL,
+				Groups: []Group{
+					{
+						GroupID:   "han mathon ne nen",
+						GroupName: "i feel it in the water",
 					},
 				},
 			},
@@ -384,8 +401,8 @@ func TestGetGroups(t *testing.T) {
 			token: "the world is changed",
 			groups: []Group{
 				{
-					GroupID:   "i feel it in the water",
-					GroupName: "i feel it in the earth",
+					GroupID:   "a han noston ned wilith",
+					GroupName: "I smell it in the air",
 				},
 			},
 		},
@@ -393,8 +410,12 @@ func TestGetGroups(t *testing.T) {
 			token: "i smell it in the air",
 			groups: []Group{
 				{
-					GroupID:   "much that once was is lost",
-					GroupName: "for none now live who remember it",
+					GroupID:   "han mathon ne nen",
+					GroupName: "i feel it in the water",
+				},
+				{
+					GroupID:   "han mathon ne chae",
+					GroupName: "I feel it in the earth",
 				},
 			},
 		},
