@@ -1587,6 +1587,34 @@ type DistinctTimestamp struct {
 	Name   string
 }
 
+var _ proto.ToRowser = DistinctTimestamp{}
+
+// ToRows implements the ToRowser interface.
+func (d DistinctTimestamp) ToRows(callback func(*proto.RowResponse) error) error {
+	for _, ts := range d.Values {
+		row := &proto.RowResponse{
+			Headers: []*proto.ColumnInfo{
+				{
+					Name:     d.Name,
+					Datatype: "timestamp",
+				},
+			},
+			Columns: []*proto.ColumnResponse{
+				{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: ts,
+					},
+				},
+			},
+		}
+		if err := callback(row); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+	}
+
+	return nil
+}
+
 // Union returns the union of the values of `d` and `other`
 func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
 	both := map[string]string{}
