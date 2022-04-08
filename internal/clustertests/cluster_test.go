@@ -97,7 +97,7 @@ func TestClusterStuff(t *testing.T) {
 		t.Fatalf("getting client: %v", err)
 	}
 	ctx := context.Background()
-	token := ""
+	var token string
 	// generate auth token and add to context
 	if auth {
 		token = GetAuthToken(t)
