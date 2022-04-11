@@ -2182,16 +2182,14 @@ func (e *executor) executeTopKShardTime(ctx context.Context, tx Tx, filter *Row,
 		return nil, newNotFoundError(ErrFieldNotFound, field)
 	}
 
-	// Check the time quantum.
-	quantum := f.TimeQuantum()
-	if quantum == "" {
-		// ????????
-		return nil, nil
+	views, err := f.viewsByTimeRange(from, to)
+	if err != nil {
+		return nil, err
 	}
 
 	// Fetch fragments.
 	var fragments []*fragment
-	for _, view := range viewsByTimeRange(viewStandard, from, to, quantum) {
+	for _, view := range views {
 		f := e.Holder.fragment(index, field, view, shard)
 		if f == nil {
 			continue
@@ -3746,48 +3744,9 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 				return nil, errors.Wrap(err, "parsing to time")
 			}
 		}
-
-		// Calculate the views for a range as long as some piece of the range
-		// (from/to) are specified, or if there's no standard view to represent
-		// all dates.
-		if !fromTime.IsZero() || !toTime.IsZero() || f.options.NoStandardView {
-			// If no quantum exists then return an empty result set.
-			q := f.TimeQuantum()
-			if q == "" {
-				return rowIDs, nil
-			}
-
-			// Get min/max based on existing views.
-			var vs []string
-			for _, v := range f.views() {
-				vs = append(vs, v.name)
-			}
-			min, max := minMaxViews(vs, q)
-
-			// If min/max are empty, there were no time views.
-			if min == "" || max == "" {
-				return rowIDs, nil
-			}
-
-			// Convert min/max from string to time.Time.
-			minTime, err := timeOfView(min, false)
-			if err != nil {
-				return rowIDs, errors.Wrapf(err, "getting min time from view: %s", min)
-			}
-			if fromTime.IsZero() || fromTime.Before(minTime) {
-				fromTime = minTime
-			}
-
-			maxTime, err := timeOfView(max, true)
-			if err != nil {
-				return rowIDs, errors.Wrapf(err, "getting max time from view: %s", max)
-			}
-			if toTime.IsZero() || toTime.After(maxTime) {
-				toTime = maxTime
-			}
-
-			// Determine the views based on the specified time range.
-			views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
+		views, err = f.viewsByTimeRange(fromTime, toTime)
+		if err != nil {
+			return nil, err
 		}
 	default:
 		return nil, errors.Errorf("%s fields not supported by Rows() query", f.Type())
@@ -4585,21 +4544,12 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 		return row, err
 	}
 
-	// If no quantum exists then return an empty bitmap.
-	q := f.TimeQuantum()
-	if q == "" {
-		return &Row{}, nil
-	}
-
-	// Set maximum "to" value if only "from" is set. We don't need to worry
-	// about setting the minimum "from" since it is the zero value if omitted.
-	if toTime.IsZero() {
-		// Set the end timestamp to current time + 1 day, in order to account for timezone differences.
-		toTime = time.Now().AddDate(0, 0, 1)
+	views, err := f.viewsByTimeRange(fromTime, toTime)
+	if err != nil {
+		return nil, err
 	}
 
 	// Union bitmaps across all time-based views.
-	views := viewsByTimeRange(viewStandard, fromTime, toTime, q)
 	rows := make([]*Row, 0, len(views))
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
 	defer finisher(&err0)
@@ -7856,14 +7806,14 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 	idx := holder.Index(index)
 
 	var (
-		fieldName   string
-		viewName    string
-		ok          bool
-		views       []string
-		isTimeField bool
+		fieldName string
+		viewName  string
+		ok        bool
+		views     []string
 	)
 	ignorePrev := false
 	for i, call := range children {
+		var isTimeField bool
 		if fieldName, ok = call.Args["_field"].(string); !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["_field"])
 		}
@@ -7907,7 +7857,12 @@ func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children 
 			}
 
 			if hasTo || hasFrom {
-				views = viewsByTimeRange(viewStandard, fromTime, toTime, field.TimeQuantum())
+				// Determine the views based on the specified time range.
+				var err error
+				views, err = field.viewsByTimeRange(fromTime, toTime)
+				if err != nil {
+					return nil, err
+				}
 				isTimeField = true
 			} else {
 				viewName = viewStandard

@@ -911,3 +911,70 @@ func TestField_SaveMeta(t *testing.T) {
 		t.Fatalf("expected value after reopen to be: %d, got: %d", val, rslt)
 	}
 }
+
+func TestFieldViewsByTimeRange(t *testing.T) {
+	f := OpenField(t, OptFieldTypeTime("YMD", "0", false))
+	for _, date := range []string{
+		// a handful of YMD parameters describing dates that we could have data for
+		"2021",
+		"202112",
+		"20211229",
+		"20211230",
+		"20211231",
+		"2022",
+		"202201",
+		"20220101",
+		"20220102",
+	} {
+		_, err := f.createViewIfNotExists(viewStandard + "_" + date)
+		if err != nil {
+			t.Fatalf("creating view for %s: %v", date, err)
+		}
+	}
+	var testCases = []struct {
+		from, to string
+		expected []string
+	}{
+		{"", "", []string{"standard"}},
+		{"2020-12-31T00:00", "2023-01-03T00:00", []string{"standard"}},
+		{"2021-01-01T00:00", "2022-01-01T00:00", []string{"standard_2021"}},
+		{"2021-01-01T00:00", "2022-01-02T00:00", []string{"standard_2021", "standard_20220101"}},
+		{"", "2022-01-02T00:00", []string{"standard_2021", "standard_20220101"}},
+		{"2021-12-01T00:00", "", []string{"standard_202112", "standard_2022"}},
+		{"2021-12-30T00:00", "2022-02-01T00:00", []string{"standard_20211230", "standard_20211231", "standard_202201"}},
+	}
+	for _, tc := range testCases {
+		t.Logf("checking %q to %q", tc.from, tc.to)
+		var fromTime, toTime time.Time
+		var err error
+		if tc.from != "" {
+			fromTime, err = time.Parse("2006-01-02T15:04", tc.from)
+			if err != nil {
+				t.Fatalf("invalid time %q: %v", tc.from, err)
+			}
+		}
+		if tc.to != "" {
+			toTime, err = time.Parse("2006-01-02T15:04", tc.to)
+			if err != nil {
+				t.Fatalf("invalid time %q: %v", tc.to, err)
+			}
+		}
+		views, err := f.viewsByTimeRange(fromTime, toTime)
+		if err != nil {
+			t.Fatalf("unexpected error getting views for %s-%s: %v", tc.from, tc.to, err)
+		}
+		for i, v := range tc.expected {
+			if len(views) <= i {
+				t.Fatalf("expected view %q, didn't get it", v)
+			} else {
+				if views[i] != v {
+					t.Fatalf("expected view %q, got %q", v, views[i])
+				}
+			}
+		}
+		if len(views) > len(tc.expected) {
+			t.Fatalf("unexpected view %q", views[len(tc.expected)])
+		}
+		t.Logf("views: %v", views)
+	}
+}
