@@ -374,6 +374,7 @@ func TestGetGroups(t *testing.T) {
 		}
 		fmt.Fprintf(w, "%s", body)
 	}))
+	defer srvNext.Close()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := json.Marshal(
 			Groups{
@@ -391,6 +392,7 @@ func TestGetGroups(t *testing.T) {
 		}
 		fmt.Fprintf(w, "%s", body)
 	}))
+	defer srv.Close()
 	a.groupEndpoint = srv.URL
 
 	for name, test := range map[string]struct {
