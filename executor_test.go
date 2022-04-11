@@ -8546,3 +8546,66 @@ func MinMaxTimestampNodeTester(t *testing.T, numNodes int) {
 		t.Fatalf("incorrect max timestamp val. expected: %v, got %v\n", expected, min)
 	}
 }
+
+// DistinctTimestamp ToRows should properly encode the timestamp
+func TestDistinctTimestampToRows(t *testing.T) {
+	d := pilosa.DistinctTimestamp{
+		Values: []string{
+			"2022-03-24T12:08:37Z",
+			"2022-03-24T12:08:47Z",
+			"2022-03-24T12:08:57Z",
+		},
+		Name: "timestamp",
+	}
+
+	expectedHeaders := []*proto.ColumnInfo{
+		{
+			Name:     d.Name,
+			Datatype: "timestamp",
+		},
+	}
+	expected := []*proto.RowResponse{
+		{
+			Headers: expectedHeaders,
+			Columns: []*proto.ColumnResponse{
+				{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: "2022-03-24T12:08:37Z",
+					},
+				},
+			},
+		},
+		{
+			Headers: expectedHeaders,
+			Columns: []*proto.ColumnResponse{
+				{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: "2022-03-24T12:08:47Z",
+					},
+				},
+			},
+		},
+		{
+			Headers: expectedHeaders,
+			Columns: []*proto.ColumnResponse{
+				{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: "2022-03-24T12:08:57Z",
+					},
+				},
+			},
+		},
+	}
+
+	rows := []*proto.RowResponse{}
+	d.ToRows(func(r *proto.RowResponse) error {
+		rows = append(rows, r)
+		return nil
+	})
+
+	for i, row := range rows {
+		if !reflect.DeepEqual(row, expected[i]) {
+			t.Errorf("expected %v, got %v", expected[i], row)
+		}
+	}
+}
