@@ -52,6 +52,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Etcd.APeerURL, "etcd.advertise-peer-address", srv.Config.Etcd.APeerURL, "Advertise peer address. If not provided, uses the listen peer address.")
 	flags.StringVar(&srv.Config.Etcd.ClusterURL, "etcd.cluster-url", srv.Config.Etcd.ClusterURL, "Cluster URL to join.")
 	flags.StringVar(&srv.Config.Etcd.InitCluster, "etcd.initial-cluster", srv.Config.Etcd.InitCluster, "Initial cluster name1=apurl1,name2=apurl2")
+	flags.Int64Var(&srv.Config.Etcd.HeartbeatTTL, "etcd.heartbeat-ttl", srv.Config.Etcd.HeartbeatTTL, "Timeout used to determine cluster status")
 
 	// External postgres database for ExternalLookup
 	flags.StringVar(&srv.Config.LookupDBDSN, "lookup-db-dsn", "", "external (postgres) database DSN to use for ExternalLookup calls")
