@@ -145,6 +145,10 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 		a.tokenCache[bearer] = cachedToken{time.Now(), &t}
 	}
 
+	if len(bearer) == 0 {
+		return nil, fmt.Errorf("bearer token is empty")
+	}
+
 	// NOTE: we are using ParseUnverified here because the IDP validates the
 	// token's signature when we get the user's groups, we just need to make
 	// sure it's not expired and is well-formed
