@@ -6896,7 +6896,7 @@ func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, re
 }
 
 // preTranslateMatrixSet translates the IDs of a set field in an extracted matrix.
-func (e *executor) preTranslateMatrixSet(mat ExtractedIDMatrix, fieldIdx uint, field *Field) (map[uint64]string, error) {
+func (e *executor) preTranslateMatrixSet(ctx context.Context, mat ExtractedIDMatrix, fieldIdx uint, field *Field) (map[uint64]string, error) {
 	ids := make(map[uint64]struct{}, len(mat.Columns))
 	for _, col := range mat.Columns {
 		for _, v := range col.Rows[fieldIdx] {
@@ -6904,7 +6904,7 @@ func (e *executor) preTranslateMatrixSet(mat ExtractedIDMatrix, fieldIdx uint, f
 		}
 	}
 
-	return e.Cluster.translateFieldIDs(field, ids)
+	return e.Cluster.translateFieldIDs(ctx, field, ids)
 }
 
 func (e *executor) translateResult(ctx context.Context, index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string, memoryAvailable *int64) (_ interface{}, err error) {
@@ -6924,7 +6924,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			}
 			return other, nil
 		case byRowField:
-			keys, err := e.Cluster.translateFieldListIDs(rowField, result.Columns())
+			keys, err := e.Cluster.translateFieldListIDs(ctx, rowField, result.Columns())
 			if err != nil {
 				return nil, errors.Wrap(err, "translating Row to field keys")
 			}
@@ -7026,7 +7026,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				for i := range result.Pairs {
 					ids[i] = result.Pairs[i].ID
 				}
-				keys, err := e.Cluster.translateFieldListIDs(field, ids)
+				keys, err := e.Cluster.translateFieldListIDs(ctx, field, ids)
 				if err != nil {
 					return nil, err
 				}
@@ -7078,7 +7078,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 
 		fieldTranslations := make(map[string]map[uint64]string)
 		for field, ids := range fieldIDs {
-			trans, err := e.Cluster.translateFieldIDs(field, ids)
+			trans, err := e.Cluster.translateFieldIDs(ctx, field, ids)
 			if err != nil {
 				return nil, errors.Wrapf(err, "translating IDs in field %q", field.Name())
 			}
@@ -7133,7 +7133,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 		if field := idx.Field(fieldName); field == nil {
 			return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 		} else if field.Keys() {
-			keys, err := e.Cluster.translateFieldListIDs(field, result)
+			keys, err := e.Cluster.translateFieldListIDs(ctx, field, result)
 			if err != nil {
 				return nil, errors.Wrap(err, "translating row IDs")
 			}
@@ -7180,7 +7180,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			case FieldTypeSet, FieldTypeTime:
 				if field.Keys() {
 					datatype = "[]string"
-					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
+					translations, err := e.preTranslateMatrixSet(ctx, result, uint(i), field)
 					if err != nil {
 						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
 					}
@@ -7203,7 +7203,7 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 			case FieldTypeMutex:
 				if field.Keys() {
 					datatype = "string"
-					translations, err := e.preTranslateMatrixSet(result, uint(i), field)
+					translations, err := e.preTranslateMatrixSet(ctx, result, uint(i), field)
 					if err != nil {
 						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
 					}
