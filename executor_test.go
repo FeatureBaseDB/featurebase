@@ -469,21 +469,17 @@ func TestExecutor(t *testing.T) {
 
 	t.Run("Range", func(t *testing.T) {
 		t.Run("RowIDColumnID", func(t *testing.T) {
-			// Create a timestamp just out of the current date + 1 day timestamp (default end timestamp).
-			nextDayExclusive := time.Now().AddDate(0, 0, 2)
-
-			writeQuery := fmt.Sprintf(`
+			writeQuery := `
 			Set(2, f=1, 1999-12-31T00:00)
 			Set(3, f=1, 2000-01-01T00:00)
 			Set(4, f=1, 2000-01-02T00:00)
 			Set(5, f=1, 2000-02-01T00:00)
 			Set(6, f=1, 2001-01-01T00:00)
 			Set(7, f=1, 2002-01-01T02:00)
-			Set(8, f=1, %s)
 
 			Set(2, f=1, 1999-12-30T00:00)
 			Set(2, f=1, 2002-02-01T00:00)
-			Set(2, f=10, 2001-01-01T00:00)`, nextDayExclusive.Format("2006-01-02T15:04"))
+			Set(2, f=10, 2001-01-01T00:00)`
 			readQueries := []string{
 				`Row(f=1, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
 				`Row(f=1, from=1999-12-31T00:00)`,
@@ -5766,6 +5762,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		defer c.Close()
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "sub")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "tq", pilosa.OptFieldTypeTime("YMDH", "0"))
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "v", pilosa.OptFieldTypeInt(0, 1000))
 		c.ImportBits(t, "i", "general", [][2]uint64{
 			{10, 0},
@@ -5786,6 +5783,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{110, 2},
 			{110, 0},
 		})
+
 		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(0, v=10)`}); err != nil {
 			t.Fatal(err)
 		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, v=100)`}); err != nil {
@@ -6196,6 +6194,38 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				},
 				results,
 			)
+
+		})
+		// Create some time-quantum data:
+		c.Query(t, "i", "Set(0, tq=1, 2022-01-01T01:01)")
+		c.Query(t, "i", "Set(1, tq=1, 2021-01-01T01:01)")
+		t.Run("GroupByWithTime", func(t *testing.T) {
+			expected := map[string][]pilosa.GroupCount{
+				// no time specified
+				"GroupBy(Rows(tq), Rows(general))": {
+					{Group: []pilosa.FieldRow{{Field: "tq", RowID: 1}, {Field: "general", RowID: 10}}, Count: 2},
+				},
+				// time specified but includes all data
+				"GroupBy(Rows(tq, from=2020-01-01T01:01), Rows(general))": {
+					{Group: []pilosa.FieldRow{{Field: "tq", RowID: 1}, {Field: "general", RowID: 10}}, Count: 2},
+				},
+				// same but in a different order
+				"GroupBy(Rows(general), Rows(tq, from=2020-01-01T01:01))": {
+					{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "tq", RowID: 1}}, Count: 2},
+				},
+				// time excludes any data
+				"GroupBy(Rows(general), Rows(tq, from=2022-01-01T01:01))": {
+					{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "tq", RowID: 1}}, Count: 1},
+				},
+				// limit excludes all data
+				"GroupBy(Rows(general), Rows(tq, from=2023-01-01T01:01))": {},
+			}
+
+			for query, want := range expected {
+				results := c.Query(t, "i", query).Results[0].(*pilosa.GroupCounts).Groups()
+				t.Logf("query %q", query)
+				test.CheckGroupBy(t, want, results)
+			}
 
 		})
 	}
@@ -8514,5 +8544,68 @@ func MinMaxTimestampNodeTester(t *testing.T, numNodes int) {
 	max := c.Query(t, index, "Max("+field+")").Results[0].(pilosa.ValCount).TimestampVal.Format(time.RFC3339Nano)
 	if max != expected {
 		t.Fatalf("incorrect max timestamp val. expected: %v, got %v\n", expected, min)
+	}
+}
+
+// DistinctTimestamp ToRows should properly encode the timestamp
+func TestDistinctTimestampToRows(t *testing.T) {
+	d := pilosa.DistinctTimestamp{
+		Values: []string{
+			"2022-03-24T12:08:37Z",
+			"2022-03-24T12:08:47Z",
+			"2022-03-24T12:08:57Z",
+		},
+		Name: "timestamp",
+	}
+
+	expectedHeaders := []*proto.ColumnInfo{
+		{
+			Name:     d.Name,
+			Datatype: "timestamp",
+		},
+	}
+	expected := []*proto.RowResponse{
+		{
+			Headers: expectedHeaders,
+			Columns: []*proto.ColumnResponse{
+				{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: "2022-03-24T12:08:37Z",
+					},
+				},
+			},
+		},
+		{
+			Headers: expectedHeaders,
+			Columns: []*proto.ColumnResponse{
+				{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: "2022-03-24T12:08:47Z",
+					},
+				},
+			},
+		},
+		{
+			Headers: expectedHeaders,
+			Columns: []*proto.ColumnResponse{
+				{
+					ColumnVal: &proto.ColumnResponse_TimestampVal{
+						TimestampVal: "2022-03-24T12:08:57Z",
+					},
+				},
+			},
+		},
+	}
+
+	rows := []*proto.RowResponse{}
+	d.ToRows(func(r *proto.RowResponse) error {
+		rows = append(rows, r)
+		return nil
+	})
+
+	for i, row := range rows {
+		if !reflect.DeepEqual(row, expected[i]) {
+			t.Errorf("expected %v, got %v", expected[i], row)
+		}
 	}
 }

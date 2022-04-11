@@ -198,7 +198,7 @@ func TestAuthenticate(t *testing.T) {
 			refresh:      true,
 			errOnRefresh: true,
 			exp:          -17764800,
-			err:          fmt.Errorf("decoding refreshed token: invalid character 'b' looking for beginning of value"),
+			err:          fmt.Errorf("refreshing token: 500 Internal Server Error"),
 		},
 	}
 	for _, test := range cases {
@@ -352,19 +352,19 @@ func TestGetGroups(t *testing.T) {
 			cacheTime: time.Now(),
 			groups: []Group{
 				{
-					GroupID:   "i feel it in the water",
-					GroupName: "i feel it in the earth",
+					GroupID:   "a han noston ned wilith",
+					GroupName: "I smell it in the air",
 				},
 			},
 		},
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srvNext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := json.Marshal(
 			Groups{
 				Groups: []Group{
 					{
-						GroupID:   "much that once was is lost",
-						GroupName: "for none now live who remember it",
+						GroupID:   "han mathon ne chae",
+						GroupName: "I feel it in the earth",
 					},
 				},
 			},
@@ -374,6 +374,25 @@ func TestGetGroups(t *testing.T) {
 		}
 		fmt.Fprintf(w, "%s", body)
 	}))
+	defer srvNext.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := json.Marshal(
+			Groups{
+				NextLink: srvNext.URL,
+				Groups: []Group{
+					{
+						GroupID:   "han mathon ne nen",
+						GroupName: "i feel it in the water",
+					},
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error marshalling groups response: %v", err)
+		}
+		fmt.Fprintf(w, "%s", body)
+	}))
+	defer srv.Close()
 	a.groupEndpoint = srv.URL
 
 	for name, test := range map[string]struct {
@@ -384,8 +403,8 @@ func TestGetGroups(t *testing.T) {
 			token: "the world is changed",
 			groups: []Group{
 				{
-					GroupID:   "i feel it in the water",
-					GroupName: "i feel it in the earth",
+					GroupID:   "a han noston ned wilith",
+					GroupName: "I smell it in the air",
 				},
 			},
 		},
@@ -393,8 +412,12 @@ func TestGetGroups(t *testing.T) {
 			token: "i smell it in the air",
 			groups: []Group{
 				{
-					GroupID:   "much that once was is lost",
-					GroupName: "for none now live who remember it",
+					GroupID:   "han mathon ne nen",
+					GroupName: "i feel it in the water",
+				},
+				{
+					GroupID:   "han mathon ne chae",
+					GroupName: "I feel it in the earth",
 				},
 			},
 		},

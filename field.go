@@ -968,6 +968,55 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	return f.options.TimeQuantum
 }
 
+// viewsByTimeRange is a wrapper on the non-method viewsByTimeRange, which
+// computes views for a specific field for a given time range. The difference
+// is that, as a Field operation, it can return "standard" for a view that
+// covers the whole time range, if the field supports a standard view, and
+// can automatically coerce from/to times to match the actual range present
+// in the field.
+func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error) {
+	// If we can't find time views at all, we'll yield "standard" regardless.
+	// It's the least-bad answer, I think.
+	q := f.TimeQuantum()
+	if q == "" {
+		return []string{viewStandard}, nil
+	}
+
+	// Get min/max based on existing views.
+	var vs []string
+	for _, v := range f.views() {
+		vs = append(vs, v.name)
+	}
+	min, max := minMaxViews(vs, q)
+
+	// If min/max are empty, there were no time views.
+	if min == "" || max == "" {
+		return []string{viewStandard}, nil
+	}
+
+	wasZero := from.IsZero() && to.IsZero()
+	// Convert min/max from string to time.Time.
+	minTime, err := timeOfView(min, false)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting min time from view: %s", min)
+	}
+	if from.IsZero() || from.Before(minTime) {
+		from = minTime
+	}
+
+	maxTime, err := timeOfView(max, true)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting max time from view: %s", max)
+	}
+	if to.IsZero() || to.After(maxTime) {
+		to = maxTime
+	}
+	if (wasZero || (from == minTime && to == maxTime)) && !f.Options().NoStandardView {
+		return []string{viewStandard}, nil
+	}
+	return viewsByTimeRange(viewStandard, from, to, q), nil
+}
+
 // RowTime gets the row at the particular time with the granularity specified by
 // the quantum.
 func (f *Field) RowTime(tx Tx, rowID uint64, time time.Time, quantum string) (*Row, error) {

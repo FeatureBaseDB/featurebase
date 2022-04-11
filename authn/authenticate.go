@@ -52,7 +52,8 @@ type Group struct {
 
 // Groups holds a slice of Group for marshalling from JSON
 type Groups struct {
-	Groups []Group `json:"value"`
+	NextLink string  `json:"@odata.nextLink"`
+	Groups   []Group `json:"value"`
 }
 
 // Auth holds state, configuration, and utilities needed for authentication.
@@ -127,6 +128,9 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "refreshing token")
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("refreshing token: %s", resp.Status)
 		}
 		defer resp.Body.Close()
 		var t oauth2.Token
@@ -240,25 +244,39 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 func (a *Auth) getGroups(token string) ([]Group, error) {
 	var groups Groups
 
-	g, ok := a.groupsCache[token]
-	if ok && (time.Now().Sub(g.cacheTime) < a.cacheTTL) {
-		return g.groups, nil
+	gc, ok := a.groupsCache[token]
+	if ok && (time.Now().Sub(gc.cacheTime) < a.cacheTTL) && len(gc.groups) > 0 {
+		return gc.groups, nil
 	}
 
-	req, err := http.NewRequest("GET", a.groupEndpoint, nil)
-	if err != nil {
-		return groups.Groups, errors.Wrap(err, "creating new request to group endpoint")
+	nextLink := a.groupEndpoint
+	for nextLink != "" {
+		req, err := http.NewRequest("GET", nextLink, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating new request to group endpoint")
+		}
+
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+		response, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting group membership info")
+		}
+		if response.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("getting group membership info: %s", response.Status)
+		}
+
+		var g Groups
+		if err = json.NewDecoder(response.Body).Decode(&g); err != nil {
+			return groups.Groups, errors.Wrap(err, "failed unmarshalling group membership response")
+		}
+
+		response.Body.Close()
+		groups.Groups = append(groups.Groups, g.Groups...)
+		nextLink = g.NextLink
 	}
 
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return groups.Groups, errors.Wrap(err, "getting group membership info")
-	}
-
-	defer response.Body.Close()
-	if err = json.NewDecoder(response.Body).Decode(&groups); err != nil {
-		return groups.Groups, errors.Wrap(err, "failed unmarshalling group membership response")
+	if len(groups.Groups) == 0 {
+		return nil, fmt.Errorf("no groups found")
 	}
 
 	a.groupsCache[token] = cachedGroups{

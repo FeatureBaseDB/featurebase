@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -190,12 +191,42 @@ func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 func TestAuthentication(t *testing.T) {
 	type evaluate func(w *httptest.ResponseRecorder, data []byte)
 	type endpoint func(w http.ResponseWriter, r *http.Request)
+
+	type Group struct {
+		GroupID   string `json:"id"`
+		GroupName string `json:"displayName"`
+	}
+
+	// Groups holds a slice of Group for marshalling from JSON
+	type Groups struct {
+		NextLink string  `json:"@odata.nextLink"`
+		Groups   []Group `json:"value"`
+	}
+
+	groupSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := json.Marshal(
+			Groups{
+				Groups: []Group{
+					{
+						GroupID:   "what are you?",
+						GroupName: "i am a carbon-based bipedal life form descended from an ape",
+					},
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error marshalling groups response: %v", err)
+		}
+		fmt.Fprintf(w, "%s", body)
+	}))
+	defer groupSrv.Close()
+
 	var (
 		ClientId         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
 		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
 		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
 		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
-		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+		GroupEndpointURL = groupSrv.URL
 		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
 		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
 		SecretKey        = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
@@ -650,29 +681,29 @@ func TestChkAuthN(t *testing.T) {
 	}
 
 	cases := []struct {
-		name       string
-		endpoint   string
-		token      string
-		handler    http.HandlerFunc
-		statusCode int
+		name     string
+		endpoint string
+		token    string
+		handler  http.HandlerFunc
+		err      string
 	}{
 		{
-			name:       "Valid",
-			token:      validToken,
-			handler:    h.chkAuthN(testingHandler),
-			statusCode: http.StatusOK,
+			name:    "ValidToken-ButNotForMicrosoft",
+			token:   validToken,
+			handler: h.chkAuthN(testingHandler),
+			err:     "authenticating: getting groups: getting group membership info",
 		},
 		{
-			name:       "Invalid",
-			token:      invalidToken,
-			handler:    h.chkAuthN(testingHandler),
-			statusCode: http.StatusUnauthorized,
+			name:    "Invalid",
+			token:   invalidToken,
+			handler: h.chkAuthN(testingHandler),
+			err:     "authenticating: parsing bearer token",
 		},
 		{
-			name:       "Expired",
-			token:      expiredToken,
-			handler:    h.chkAuthN(testingHandler),
-			statusCode: http.StatusUnauthorized,
+			name:    "Expired",
+			token:   expiredToken,
+			handler: h.chkAuthN(testingHandler),
+			err:     "authenticating: token is expired",
 		},
 	}
 	for _, test := range cases {
@@ -682,8 +713,13 @@ func TestChkAuthN(t *testing.T) {
 			r.Header.Add("Authorization", test.token)
 			test.handler(w, r)
 			resp := w.Result()
-			if resp.StatusCode != test.statusCode {
-				t.Fatalf("expected %v, got %v", test.statusCode, resp.StatusCode)
+			body, err := ioutil.ReadAll(resp.Body)
+			defer resp.Body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.HasPrefix(string(body), test.err) {
+				t.Fatalf("expected error %s, got: %s", test.err, string(body))
 			}
 		})
 	}
