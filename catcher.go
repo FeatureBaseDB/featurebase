@@ -234,6 +234,10 @@ func (c *catcherTx) ApplyFilter(index, field, view string, shard uint64, ckey ui
 	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
 }
 
+func (c *catcherTx) ApplyRewriter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapRewriter) (err error) {
+	return c.b.ApplyRewriter(index, field, view, shard, ckey, filter)
+}
+
 func (c *catcherTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
 	return c.b.GetSortedFieldViewList(idx, shard)
 }

@@ -2937,7 +2937,7 @@ func unionInPlaceWrapper(a, b *Container) *Container {
 
 func differenceInPlaceWrapper(a, b *Container) *Container {
 	a = a.Clone()
-	a = a.differenceInPlace(b)
+	a = a.DifferenceInPlace(b)
 	return a
 }
 

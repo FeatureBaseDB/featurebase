@@ -2025,7 +2025,8 @@ func clearExistenceColumns(tx Tx, index *Index, columnIDs []uint64, shard uint64
 	if f == nil {
 		return nil
 	}
-	return f.ClearRecords(tx, columnIDs)
+	_, err := f.ClearRecords(tx, columnIDs)
+	return err
 }
 
 // ShardDistribution returns an object representing the distribution of shards

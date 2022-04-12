@@ -2045,7 +2045,14 @@ func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64
 		}
 		f.stats.Count(MetricClearedN, int64(changedN), 1)
 	}
+	return f.updateCaching(tx, rowSet)
+}
 
+// updateCaching clears checksums for rows, and clears any existing TopN
+// cache for them, and marks the cache for needing updates. I'm not sure
+// that's correct. This was originally the tail end of importPositions, but
+// we want to be able to access the same logic from elsewhere.
+func (f *fragment) updateCaching(tx Tx, rowSet map[uint64]struct{}) error {
 	// Update cache counts for all affected rows.
 	for rowID := range rowSet {
 		// Invalidate block checksum.
@@ -2148,51 +2155,128 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64, options *I
 	if unsorted {
 		sort.Slice(toSet, func(i, j int) bool { return toSet[i] < toSet[j] })
 	}
-	// we'll reuse the row IDs as the values to clear, if any.
-	toClear := columnIDs[:0]
-	callback := func(pos uint64) error {
-		toClear = append(toClear, pos)
-		rowID := pos / ShardWidth
-		rowSet[rowID] = struct{}{}
+
+	nextKey := toSet[0] >> 16
+	scratchContainer := roaring.NewContainerArray([]uint16{})
+	rewriteExisting := roaring.NewBitmapBitmapTrimmer(columns, func(key roaring.FilterKey, data *roaring.Container, filter *roaring.Container, writeback roaring.ContainerWriteback) error {
+		var inserting []uint64
+		for roaring.FilterKey(nextKey) < key {
+			thisKey := roaring.FilterKey(nextKey)
+			inserting, toSet, nextKey = roaring.GetMatchingKeysFrom(toSet, nextKey)
+			scratchContainer = roaring.RemakeContainerFrom(scratchContainer, inserting)
+
+			err := writeback(thisKey, scratchContainer)
+			if err != nil {
+				return err
+			}
+		}
+		// we only wanted to insert the data we had before the end, there's
+		// no actual data here to modify.
+		if data == nil {
+			return nil
+		}
+		if roaring.FilterKey(nextKey) > key {
+			// simple path: we only have to remove things from the filter,
+			// if there are any.
+			if filter.N() == 0 {
+				return nil
+			}
+			existing := data.N()
+			data = data.DifferenceInPlace(filter)
+			if data.N() != existing {
+				rowSet[key.Row()] = struct{}{}
+				return writeback(key, data)
+			}
+			return nil
+		}
+		// nextKey has to be the same as key. we have values to insert, and
+		// necessarily have a filter to remove which matches them. so we're
+		// going to remove everything in the filter, then add all the values
+		// we have to insert. but! in the case where a bit is already set,
+		// and we remove it and re-add it, we don't want to count that.
+		inserting, toSet, nextKey = roaring.GetMatchingKeysFrom(toSet, nextKey)
+
+		existing := data.N()
+
+		// so, we want to remove anything that's in the filter, *but*, if a
+		// thing is in the filter, and we then add it back, that doesn't
+		// count. but if a thing is in the filter, but *wasn't originally
+		// there*, that counts. But we can't check that *after* we compute
+		// the difference, so...
+		reAdds := 0
+		for _, v := range inserting {
+			if filter.Contains(uint16(v)) && data.Contains(uint16(v)) {
+				reAdds++
+			}
+		}
+		data = data.DifferenceInPlace(filter)
+		removes := int(existing - data.N())
+		var changed bool
+		adds := 0
+		for _, v := range inserting {
+			data, changed = data.Add(uint16(v))
+			if changed {
+				adds++
+			}
+		}
+		// if we added more things than were being readded, or removed more
+		// things than were being readded, we changed something.
+		if adds > reAdds || removes > reAdds {
+			rowSet[key.Row()] = struct{}{}
+			return writeback(key, data)
+		}
 		return nil
-	}
-	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
-	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
+	})
+
+	err := tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriteExisting)
 	if err != nil {
-		return errors.Wrap(err, "finding existing positions")
+		return err
 	}
-	// if we're clearing things, anything being set that is being cleared
-	// should not be cleared
-	if len(toClear) > 0 {
-		toClear = sliceDifference(toClear, toSet)
-	}
-	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
+	return f.updateCaching(tx, rowSet)
 }
 
 // ClearRecords deletes all bits for the given records. It's basically
 // the remove-only part of setting a mutex.
-func (f *fragment) ClearRecords(tx Tx, recordIDs []uint64) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
+func (f *fragment) ClearRecords(tx Tx, recordIDs []uint64) (bool, error) {
 	// create a mask of columns we care about
 	columns := roaring.NewSliceBitmap(recordIDs...)
+	return f.clearRecordsByBitmap(tx, columns)
+}
 
-	// we now need to find existing rows for these bits.
+func (f *fragment) clearRecordsByBitmap(tx Tx, columns *roaring.Bitmap) (changed bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedClearRecordsByBitmap(tx, columns)
+}
+
+// clearRecordsByBitmap clears bits in a fragment that correspond to those
+// positions within the bitmap.
+func (f *fragment) unprotectedClearRecordsByBitmap(tx Tx, columns *roaring.Bitmap) (changed bool, err error) {
 	rowSet := make(map[uint64]struct{})
-	var toClear []uint64
-	callback := func(pos uint64) error {
-		toClear = append(toClear, pos)
-		rowID := pos / ShardWidth
-		rowSet[rowID] = struct{}{}
+	rewriteExisting := roaring.NewBitmapBitmapTrimmer(columns, func(key roaring.FilterKey, data *roaring.Container, filter *roaring.Container, writeback roaring.ContainerWriteback) error {
+		if filter.N() == 0 {
+			return nil
+		}
+		existing := data.N()
+		// nothing to delete. this can't happen normally, but the rewriter calls
+		// us with an empty data container when it's done.
+		if existing == 0 {
+			return nil
+		}
+		data = data.DifferenceInPlace(filter)
+		if data.N() != existing {
+			rowSet[key.Row()] = struct{}{}
+			changed = true
+			return writeback(key, data)
+		}
 		return nil
-	}
-	findExisting := roaring.NewBitmapBitmapFilter(columns, callback)
-	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, findExisting)
+	})
+
+	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriteExisting)
 	if err != nil {
-		return errors.Wrap(err, "finding existing positions")
+		return false, err
 	}
-	return errors.Wrap(f.importPositions(tx, nil, toClear, rowSet), "clearing records")
+	return changed, f.updateCaching(tx, rowSet)
 }
 
 // importValue bulk imports a set of range-encoded values.

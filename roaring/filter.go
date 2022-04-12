@@ -190,6 +190,30 @@ type BitmapFilter interface {
 	ConsiderData(key FilterKey, data *Container) FilterResult
 }
 
+// ContainerWriteback is the type for functions which can feed updated
+// containers back to things from filters.
+type ContainerWriteback func(key FilterKey, data *Container) error
+
+// A BitmapRewriter is like a bitmap filter, but can modify the bitmap
+// it's being called on during the iteration.
+//
+// After the last container is returned, ConsiderData will be called with
+// an unspecified key and a nil container pointer, so the rewriter can
+// write any trailing containers it has. A nil container passed to writeback
+// implies a delete operation on the container. Writeback should only be
+// called with keys greater than any previously given container key, and
+// less than or equal to the current key. So for instance, if
+// ConsiderData is called with key 3, and then with key 5, the call with
+// key 5 may call writeback with key 4, and then key 5, but may not call
+// it with keys 3 or lower, or 6 or higher. When the container provided to
+// the call is nil, any monotonically increasing keys greater than the
+// previous key are allowed. (If there was no previous key, 0 and higher
+// are allowed.)
+type BitmapRewriter interface {
+	ConsiderKey(key FilterKey, n int32) FilterResult
+	RewriteData(key FilterKey, data *Container, writeback ContainerWriteback) FilterResult
+}
+
 // BitmapColumnFilter is a BitmapFilter which checks for containers matching
 // a given column within a row; thus, only the one container per row which
 // matches the column needs to be evaluated, and it's evaluated as matching
@@ -601,7 +625,7 @@ func (b *BitmapBitmapFilter) ConsiderData(key FilterKey, data *Container) Filter
 	base := uint64(key << 16)
 	filter := b.containers[pos]
 	if filter == nil {
-		key.RejectUntilOffset(b.nextOffsets[pos])
+		return key.RejectUntilOffset(b.nextOffsets[pos])
 	}
 	var lastErr error
 	matched := false
@@ -849,6 +873,107 @@ func (b *BitmapMutexDupFilter) Report() map[uint64][]uint64 {
 	return b.extra
 }
 
+// BitmapBitmapTrimmer is like BitmapBitmapFilter, but instead of calling
+// a callback per bit found in the intersection, it calls a callback with the
+// original raw container and the corresponding filter container, and also
+// provides the writeback func it got from the bitmap. So for instance, to
+// implement a "subtract these bits" function, you would difference-in-place
+// the raw container with the filter container, then pass that to the writeback
+// function.
+//
+// It's called a Trimmer because it won't add containers; it won't *add*
+// containers. It calls the callback function for every container, whether or
+// not it matches the filter; this allows an intersect-like filter to work
+// too.
+//
+// Note, however, that the caller's ContainerWriteback function *may* create
+// containers, even though the Trimmer won't have called RewriteData with those
+// keys.
+type BitmapBitmapTrimmer struct {
+	containers  []*Container
+	nextOffsets []uint64
+	callback    func(key FilterKey, raw, filter *Container, writeback ContainerWriteback) error
+}
+
+var _ BitmapRewriter = &BitmapBitmapTrimmer{}
+
+func (b *BitmapBitmapTrimmer) SetCallback(cb func(FilterKey, *Container, *Container, ContainerWriteback) error) {
+	b.callback = cb
+}
+
+func (b *BitmapBitmapTrimmer) ConsiderKey(key FilterKey, n int32) FilterResult {
+	pos := key & keyMask
+	// If a trimmer wants to do something for a key, it *must* have something in
+	// the filter slot for that key, otherwise we won't call it with the
+	// corresponding existing data. For the mutex case, this is covered -- every
+	// bit we have to write implies the corresponding filter bit being set.
+	//
+	// Note that, unlike BitmapBitmapFilter, we don't make assumptions about
+	// what you are *doing* with the filter.
+	if b.containers[pos] == nil || n == 0 {
+		return key.RejectUntilOffset(b.nextOffsets[pos])
+	}
+	return key.NeedData()
+}
+
+func (b *BitmapBitmapTrimmer) RewriteData(key FilterKey, data *Container, writeback ContainerWriteback) FilterResult {
+	pos := key & keyMask
+	filter := b.containers[pos]
+	err := b.callback(key, data, filter, writeback)
+	if err != nil {
+		return key.Fail(err)
+	}
+	return key.MatchOneUntilOffset(b.nextOffsets[pos])
+}
+
+// NewBitmapBitmapTrimmer creates a filter which calls a callback on every
+// container in a bitmap, with corresponding elements from an initial filter
+// bitmap. It does not call its callback for cases where there's no container
+// in the original bitmap.
+//
+// The input filter is assumed to represent one "row" of a shard's data,
+// which is to say, a range of up to rowWidth consecutive containers starting
+// at some multiple of rowWidth. We coerce that to the 0..rowWidth range
+// because offset-within-row is what we care about.
+func NewBitmapBitmapTrimmer(filter *Bitmap, callback func(FilterKey, *Container, *Container, ContainerWriteback) error) *BitmapBitmapTrimmer {
+	b := &BitmapBitmapTrimmer{
+		callback:    callback,
+		containers:  make([]*Container, rowWidth),
+		nextOffsets: make([]uint64, rowWidth),
+	}
+	iter, _ := filter.Containers.Iterator(0)
+	last := uint64(0)
+	count := 0
+	for iter.Next() {
+		k, v := iter.Value()
+		// Coerce container key into the 0-rowWidth range we'll be
+		// using to compare against containers within each row.
+		k = k & keyMask
+		b.containers[k] = v
+		last = k
+		count++
+	}
+	// if there's only one container, we need to populate everything with
+	// its position.
+	if count == 1 {
+		for i := range b.containers {
+			b.nextOffsets[i] = last
+		}
+	} else {
+		// Point each container at the offset of the next valid container.
+		// With sparse bitmaps this will potentially make skipping faster.
+		for i := range b.containers {
+			if b.containers[i] != nil {
+				for int(last) != i {
+					b.nextOffsets[last] = uint64(i)
+					last = (last + 1) % rowWidth
+				}
+			}
+		}
+	}
+	return b
+}
+
 // ApplyFilterToIterator is a simplistic implementation that applies a bitmap
 // filter to a ContainerIterator, returning an error if it encounters an error.
 //
@@ -915,7 +1040,7 @@ func (b *BitmapBSICountFilter) ConsiderData(key FilterKey, data *Container) Filt
 	pos := key & keyMask
 	filter := b.containers[pos]
 	if filter == nil {
-		key.RejectUntilOffset(b.nextOffsets[pos])
+		return key.RejectUntilOffset(b.nextOffsets[pos])
 	}
 	row := uint64(key >> rowExponent) // row count within the fragment
 	// How do we translate the filter and existence bit into actionable things?

@@ -411,6 +411,10 @@ func (c *statTx) ApplyFilter(index, field, view string, shard uint64, ckey uint6
 	return GenericApplyFilter(c, index, field, view, shard, ckey, filter)
 }
 
+func (c *statTx) ApplyRewriter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapRewriter) (err error) {
+	return c.b.ApplyRewriter(index, field, view, shard, ckey, filter)
+}
+
 func (c *statTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
 	me := kForEach
 

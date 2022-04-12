@@ -7015,7 +7015,7 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 					// Note: This Thaw() may be unnecessary, but some of the
 					// differenceInPlace code may be assuming the container is
 					// always writable.
-					curContainer = curContainer.Thaw().differenceInPlace(iContainer)
+					curContainer = curContainer.Thaw().DifferenceInPlace(iContainer)
 					if curContainer.N() == 0 {
 						removeContainerKeys = append(removeContainerKeys, targetKey)
 						break
@@ -7035,7 +7035,7 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 	target.Containers.Repair()
 }
 
-func (c *Container) differenceInPlace(other *Container) *Container {
+func (c *Container) DifferenceInPlace(other *Container) *Container {
 	if other == nil {
 		return c
 	}
@@ -7078,10 +7078,11 @@ func differenceArrayArrayInPlace(c, other *Container) *Container {
 	for i, j := 0, 0; i < na; {
 		va := aa[i]
 		if j >= nb {
-			aa[n] = va
-			n++
-			i++
-			continue
+			// nothing more to subtract; copy the remainder, bump n accordingly,
+			// and be done.
+			copy(aa[n:], aa[i:])
+			n += len(aa) - i
+			break
 		}
 
 		vb := ab[j]

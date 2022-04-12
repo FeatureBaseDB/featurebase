@@ -75,6 +75,16 @@ type Tx interface {
 	// must copy it into some other memory.
 	ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error)
 
+	// ApplyRewriter applies a roaring.BitmapRewriter to a specified shard,
+	// starting at the given container key. The filter's ConsiderData
+	// method may be called with transient Container objects which *must
+	// not* be retained or referenced after that function exits. Similarly,
+	// their data must not be retained. If you need the data later, you
+	// must copy it into some other memory. However, it is safe to overwrite
+	// the returned container; for instance, you can DifferenceInPlace on
+	// it.
+	ApplyRewriter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapRewriter) (err error)
+
 	// RoaringBitmap retrieves the roaring.Bitmap for the entire shard.
 	RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error)
 

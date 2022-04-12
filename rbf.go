@@ -411,6 +411,10 @@ func (tx *RBFTx) ApplyFilter(index, field, view string, shard uint64, ckey uint6
 	return tx.tx.ApplyFilter(rbfName(index, field, view, shard), ckey, filter)
 }
 
+func (tx *RBFTx) ApplyRewriter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapRewriter) (err error) {
+	return tx.tx.ApplyRewriter(rbfName(index, field, view, shard), ckey, filter)
+}
+
 func (tx *RBFTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {
 	return tx.tx.GetSortedFieldViewList()
 }
