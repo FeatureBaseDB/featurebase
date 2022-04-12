@@ -47,10 +47,21 @@ func TestSelectHandler_MapSelect(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := api.CreateIndex(context.Background(), "j", pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	} else if _, err = api.CreateField(context.Background(), "j", "bytes", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
+		t.Fatal(err)
+	} else if _, err = api.CreateField(context.Background(), "j", "bsi", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64), pilosa.OptFieldForeignIndex("i")); err != nil {
+		t.Fatal(err)
+	} else if _, err = api.CreateField(context.Background(), "j", "timestamp", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds)); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, tt := range []struct {
-		name   string
-		input  string
-		output string
+		name          string
+		input         string
+		output        string
+		expectedError string
 	}{
 		{
 			name:   "WhereTimestamp",
@@ -63,6 +74,23 @@ func TestSelectHandler_MapSelect(t *testing.T) {
 			input:  `SELECT * FROM i WHERE timestamp > "2000-01-01T00:00:00Z"`,
 			output: `Extract(Row(timestamp>"2000-01-01T00:00:00Z"),Rows(bytes),Rows(duration_time),Rows(timestamp))`,
 		},
+		{
+			name:   "InnerJoin",
+			input:  `select count(*) from i INNER JOIN j ON i._id = j.bsi where i.bytes = 1 and j.bytes = 2`,
+			output: `Count(Intersect(Row(bytes=1),Distinct(Row(bytes=2),index='j',field='bsi')))`,
+		},
+		{
+			name:          "InnerJoinInvalidPrimary",
+			input:         `select count(*) from z INNER JOIN j ON z._id = j.bsi where z.bytes = 1 and j.bytes = 2`,
+			output:        "",
+			expectedError: `handling: nonexistent index "z"`,
+		},
+		{
+			name:          "InnerJoinInvalidSecondary",
+			input:         `select count(*) from i INNER JOIN z ON i._id = z.bsi where i.bytes = 1 and z.bytes = 2`,
+			output:        "",
+			expectedError: `handling: nonexistent index "z"`,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			query, err := sql.NewMapper().MapSQL(tt.input)
@@ -73,8 +101,17 @@ func TestSelectHandler_MapSelect(t *testing.T) {
 			h := sql.NewSelectHandler(api)
 			mr, err := h.MapSelect(context.Background(), query.Statement.(*sqlparser.Select), query.Mask)
 			if err != nil {
-				t.Fatal(err)
+				if err.Error() != tt.expectedError {
+					if tt.expectedError == "" {
+						t.Fatalf("unexpected error %q", err.Error())
+					} else {
+						t.Fatalf("expected error %q, got %q", tt.expectedError, err.Error())
+					}
+				}
 			} else if got, want := mr.Query, tt.output; got != want {
+				if tt.expectedError != "" {
+					t.Fatalf("expected error %q, got no error", tt.expectedError)
+				}
 				t.Fatalf("unexpected pql\npql:  %s\nwant: %s", got, want)
 			}
 		})
