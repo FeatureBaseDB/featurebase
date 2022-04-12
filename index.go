@@ -647,24 +647,33 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	if f := i.fields[name]; f != nil {
 		return f, nil
 	}
+	if opt != nil && (opt.Type == FieldTypeInt || opt.Type == FieldTypeTimestamp) {
+		min, max := pql.MinMax(0)
+		// ensure the provided bounds are valid
+		if opt.Max.Value == 0 {
+			opt.Max = max
+		} else if max.LessThan(opt.Max) {
+			opt.Max = max
+		}
+		if opt.Min.Value == 0 {
+			opt.Min = min
+		} else if min.GreaterThan(opt.Min) {
+			opt.Min = min
+		}
+	}
 	// added for backward compatablity with old schemas
 	if opt != nil && opt.Type == FieldTypeDecimal {
 		min, max := pql.MinMax(opt.Scale)
 		// ensure the provided bounds are valid
-		if max.LessThan(opt.Max) {
+		if opt.Max.Value == 0 {
+			opt.Max = max
+		} else if max.LessThan(opt.Max) {
 			opt.Max = max
 		}
-		if min.GreaterThan(opt.Min) {
+
+		if opt.Min.Value == 0 {
 			opt.Min = min
-		}
-	}
-	if opt != nil && opt.Type == FieldTypeDecimal {
-		min, max := pql.MinMax(0)
-		// ensure the provided bounds are valid
-		if max.LessThan(opt.Max) {
-			opt.Max = max
-		}
-		if min.GreaterThan(opt.Min) {
+		} else if min.GreaterThan(opt.Min) {
 			opt.Min = min
 		}
 	}
