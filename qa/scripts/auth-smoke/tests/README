@@ -1,0 +1,16 @@
+adding a test case to the auth-smoke directory??? no problem!!! its a snap!!!
+
+just make a shell script that does the test you want and name it some thing like:
+
+fb42069-test.sh
+
+this will get picked up by run-all.sh and get run automatically!!!
+
+# THINGS TO NOTE
+- the datanode0 ip will be passed to your script in $1 via qa/scripts/bug_repro_tests.sh
+
+# ENTHUSIASM
+WOW
+
+shout out to computers for making our lives easier! :) 👍
+

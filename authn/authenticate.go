@@ -168,10 +168,14 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 	}
 
 	userInfo := UserInfo{
-		UserID:   claims["oid"].(string),
-		UserName: claims["name"].(string),
-		Token:    bearer,
-		Groups:   []Group{},
+		Token:  bearer,
+		Groups: []Group{},
+	}
+	if uid, ok := claims["oid"].(string); ok {
+		userInfo.UserID = uid
+	}
+	if name, ok := claims["name"].(string); ok {
+		userInfo.UserName = name
 	}
 
 	if userInfo.Groups, err = a.getGroups(bearer); err != nil {
