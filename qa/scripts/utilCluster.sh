@@ -61,7 +61,9 @@ writeFeatureBaseNodeConfigFile() {
     echo "Writing featurebase.conf file...index: $1, ip:$2"
     NODEIDX=$1
     NODEIP=$2
-    cat << EOT > featurebase.conf
+    if (( AUTH_ENABLED = 1 )); then
+        echo "writing auth enabled featurebase.conf"
+        cat << EOT > featurebase.conf
 name = "p${NODEIDX}"
 bind = "0.0.0.0:10101"
 bind-grpc = "0.0.0.0:20101"
@@ -93,6 +95,40 @@ long-query-time = "10s"
 
     service = "prometheus"
 EOT
+    else 
+       cat << EOT > featurebase.conf
+name = "p${NODEIDX}"
+bind = "0.0.0.0:10101"
+bind-grpc = "0.0.0.0:20101"
+
+data-dir = "/data/featurebase"
+log-path = "/var/log/molecula/featurebase.log"
+
+max-file-count=900000
+max-map-count=900000
+
+long-query-time = "10s"
+
+[postgres]
+
+    bind = "localhost:55432"
+
+[cluster]
+
+    name = "${DEPLOYED_CLUSTER_PREFIX}"
+    replicas = ${DEPLOYED_CLUSTER_REPLICA_COUNT}
+
+[etcd]
+
+    listen-client-address = "http://${NODEIP}:10401"
+    listen-peer-address = "http://${NODEIP}:10301"
+    initial-cluster = "${INITIAL_CLUSTER}"
+
+[metric]
+
+    service = "prometheus"
+EOT
+    fi
 
     #echo "featurebase.conf >>"
     #cat featurebase.conf
@@ -201,15 +237,20 @@ setupIngestNodes() {
 }
 
 generateInitialClusterString() {
+    if (( AUTH_ENABLED = 1 )); then
+        scheme=https
+    else
+        scheme=http
+    fi
     IFS=$'\n'
     cnt=0
     for ip in $DEPLOYED_DATA_IPS
     do
         if (($cnt + 1 != $DEPLOYED_DATA_IPS_LEN)) 
         then
-            INITIAL_CLUSTER="${INITIAL_CLUSTER}p${cnt}=http://$ip:10301,"
+            INITIAL_CLUSTER="${INITIAL_CLUSTER}p${cnt}=${scheme}://$ip:10301,"
         else
-            INITIAL_CLUSTER="${INITIAL_CLUSTER}p${cnt}=http://$ip:10301"
+            INITIAL_CLUSTER="${INITIAL_CLUSTER}p${cnt}=${scheme}://$ip:10301"
         fi
         cnt=$((cnt+1))
     done
