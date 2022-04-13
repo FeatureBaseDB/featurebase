@@ -761,10 +761,16 @@ func (h handlerSelectJoin) Apply(stmt *sqlparser.Select, qm QueryMask, indexFunc
 
 	primaryIndexName := primary.name
 	primaryIndex := indexFunc(primaryIndexName)
+	if primaryIndex == nil {
+		return nil, fmt.Errorf("nonexistent index %q", primaryIndexName)
+	}
 	primaryField := primaryIndex.Field(primary.column.name)
 
 	secondaryIndexName := secondary.name
 	secondaryIndex := indexFunc(secondaryIndexName)
+	if secondaryIndex == nil {
+		return nil, fmt.Errorf("nonexistent index %q", secondaryIndexName)
+	}
 	secondaryField := secondaryIndex.Field(secondary.column.name)
 
 	var wheres tableWheres
