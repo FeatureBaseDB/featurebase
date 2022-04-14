@@ -139,6 +139,7 @@ func TestAuthenticate(t *testing.T) {
 		refresh      bool
 		errOnRefresh bool
 		malformed    bool
+		empty        bool
 		groups       []Group
 		err          error
 	}{
@@ -158,7 +159,11 @@ func TestAuthenticate(t *testing.T) {
 			malformed: true,
 			err:       fmt.Errorf("parsing bearer token: token contains an invalid number of segments"),
 		},
-
+		{
+			name:  "Empty",
+			empty: true,
+			err:   fmt.Errorf("bearer token is empty"),
+		},
 		{
 			name:  "ExpiredTokenNoRefresh",
 			uid:   "42",
@@ -207,7 +212,7 @@ func TestAuthenticate(t *testing.T) {
 			a := NewTestAuth(t)
 			token := ""
 			var err error
-			if !test.malformed {
+			if !test.malformed && !test.empty {
 				tkn := jwt.New(jwt.SigningMethodHS256)
 				claims := tkn.Claims.(jwt.MapClaims)
 				claims["oid"] = test.uid
@@ -219,7 +224,7 @@ func TestAuthenticate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("unexpected error when signing token %v", err)
 				}
-			} else {
+			} else if !test.empty {
 				token = "asdfasdfasdfasdF"
 			}
 			if len(test.groups) > 0 {

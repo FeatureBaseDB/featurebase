@@ -2332,7 +2332,7 @@ func (api *API) TranslateIDs(ctx context.Context, r io.Reader) (_ []byte, err er
 			if err != nil {
 				return nil, err
 			}
-		} else if keys, err = api.cluster.translateFieldListIDs(field, req.IDs); err != nil {
+		} else if keys, err = api.cluster.translateFieldListIDs(ctx, field, req.IDs); err != nil {
 			return nil, err
 		}
 	}
@@ -2883,7 +2883,7 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 			return nil, err
 		}
 		if useFieldKeys {
-			fieldKeyList, err := api.cluster.translateFieldListIDs(field, fieldIDs)
+			fieldKeyList, err := api.cluster.translateFieldListIDs(ctx, field, fieldIDs)
 			if err != nil {
 				return nil, errors.Wrap(err, "translating index keys")
 			}

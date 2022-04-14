@@ -684,14 +684,14 @@ func TestImport_AuthOn(t *testing.T) {
 			Field:        "field1",
 			CreateSchema: false,
 			Token:        invalidToken,
-			Err:          fmt.Errorf("token contains an invalid number of segments"),
+			Err:          fmt.Errorf("bearer token is empty"),
 		},
 		{
 			Index:        "test",
 			Field:        "field1",
 			CreateSchema: true,
 			Token:        invalidToken,
-			Err:          fmt.Errorf("token contains an invalid number of segments"),
+			Err:          fmt.Errorf("bearer token is empty"),
 		},
 	}
 

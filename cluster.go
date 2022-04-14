@@ -1480,7 +1480,7 @@ func (c *cluster) matchField(ctx context.Context, field *Field, like string) ([]
 	return c.InternalClient.MatchFieldKeysNode(ctx, &primary.URI, field.Index(), field.Name(), like)
 }
 
-func (c *cluster) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[uint64]string, error) {
+func (c *cluster) translateFieldIDs(ctx context.Context, field *Field, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, len(ids))
 	{
 		i := 0
@@ -1490,7 +1490,7 @@ func (c *cluster) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[
 		}
 	}
 
-	keyList, err := c.translateFieldListIDs(field, idList)
+	keyList, err := c.translateFieldListIDs(ctx, field, idList)
 	if err != nil {
 		return nil, err
 	}
@@ -1502,7 +1502,7 @@ func (c *cluster) translateFieldIDs(field *Field, ids map[uint64]struct{}) (map[
 	return mapped, nil
 }
 
-func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []string, err error) {
+func (c *cluster) translateFieldListIDs(ctx context.Context, field *Field, ids []uint64) (keys []string, err error) {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
 
@@ -1518,7 +1518,7 @@ func (c *cluster) translateFieldListIDs(field *Field, ids []uint64) (keys []stri
 		}
 		keys, err = field.TranslateStore().TranslateIDs(ids)
 	} else {
-		keys, err = c.InternalClient.TranslateIDsNode(context.Background(), &primary.URI, field.Index(), field.Name(), ids)
+		keys, err = c.InternalClient.TranslateIDsNode(ctx, &primary.URI, field.Index(), field.Name(), ids)
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "translating field(%s/%s) ids(%v)", field.Index(), field.Name(), ids)

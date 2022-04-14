@@ -145,6 +145,10 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 		a.tokenCache[bearer] = cachedToken{time.Now(), &t}
 	}
 
+	if len(bearer) == 0 {
+		return nil, fmt.Errorf("bearer token is empty")
+	}
+
 	// NOTE: we are using ParseUnverified here because the IDP validates the
 	// token's signature when we get the user's groups, we just need to make
 	// sure it's not expired and is well-formed
@@ -164,10 +168,14 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 	}
 
 	userInfo := UserInfo{
-		UserID:   claims["oid"].(string),
-		UserName: claims["name"].(string),
-		Token:    bearer,
-		Groups:   []Group{},
+		Token:  bearer,
+		Groups: []Group{},
+	}
+	if uid, ok := claims["oid"].(string); ok {
+		userInfo.UserID = uid
+	}
+	if name, ok := claims["name"].(string); ok {
+		userInfo.UserName = name
 	}
 
 	if userInfo.Groups, err = a.getGroups(bearer); err != nil {
