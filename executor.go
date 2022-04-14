@@ -1617,12 +1617,12 @@ func (d DistinctTimestamp) ToRows(callback func(*proto.RowResponse) error) error
 
 // Union returns the union of the values of `d` and `other`
 func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
-	both := map[string]string{}
+	both := map[string]struct{}{}
 	for _, val := range d.Values {
-		both[val] = val
+		both[val] = struct{}{}
 	}
 	for _, val := range other.Values {
-		both[val] = val
+		both[val] = struct{}{}
 	}
 	vals := []string{}
 	for key := range both {
