@@ -1,7 +1,7 @@
 name: "Row() Load Testing"
 
 main: "pilosa server --data-dir ~/pilosa.query.${STORAGE_BACKEND} --storage.backend ${STORAGE_BACKEND}"
-load: "pilosa-bench -type row -rate 100 -n 3000" 
+load: "pilosa-bench -type row -rate 100 -n 3000"
 
 health_url:    "http://localhost:10101/status"
 health_regexp: "NORMAL"

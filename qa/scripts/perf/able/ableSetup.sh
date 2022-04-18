@@ -3,11 +3,11 @@
 # To run script: ./ableSetup.sh
 export TF_IN_AUTOMATION=1
 
-if [ -z ${TF_VAR_cluster_prefix+x} ]; then 
+if [ -z ${TF_VAR_cluster_prefix+x} ]; then
     echo "TF_VAR_cluster_prefix is unset";
     exit 1
-else 
-    echo "TF_VAR_cluster_prefix is set to '$TF_VAR_cluster_prefix'"; 
+else
+    echo "TF_VAR_cluster_prefix is set to '$TF_VAR_cluster_prefix'";
 fi
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
@@ -52,11 +52,11 @@ DEPLOYED_INGEST_IPS_LEN=`echo "$DEPLOYED_INGEST_IPS" | wc -l`
 
 #wait until we can connect to one of the hosts
 for i in {0..24}
-do 
+do
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@${DATANODE0} "pwd"
     if [ $? -eq 0 ]
     then
-        echo "Cluster is up after ${i} tries." 
+        echo "Cluster is up after ${i} tries."
         break
     fi
     sleep 10
@@ -65,7 +65,7 @@ done
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@${DATANODE0} "pwd"
 if [ $? -ne 0 ]
 then
-    echo "Unable to connect to cluster - giving up" 
+    echo "Unable to connect to cluster - giving up"
     exit 1
 fi
 
@@ -74,8 +74,8 @@ setupClusterNodes
 # verify featurebase running
 echo "Verifying featurebase cluster running..."
 curl -s http://${DATANODE0}:10101/status
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "Featurebase cluster not running"
     exit 1
 fi

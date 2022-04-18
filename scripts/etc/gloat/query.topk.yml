@@ -1,7 +1,7 @@
 name: "Time-based TopK() Load Testing"
 
 main: "pilosa server --data-dir ~/pilosa.query.${STORAGE_BACKEND} --storage.backend ${STORAGE_BACKEND}"
-load: "pilosa-bench -type row-range -rate 10 -n 300 -from 2020-01-01T00:00:00Z -to 2020-01-31T23:00:00Z" 
+load: "pilosa-bench -type row-range -rate 10 -n 300 -from 2020-01-01T00:00:00Z -to 2020-01-31T23:00:00Z"
 
 health_url:    "http://localhost:10101/status"
 health_regexp: "NORMAL"

@@ -21,7 +21,7 @@ SHA=$(git -C $PILOSA_SRC rev-parse HEAD)
 # Format current date.
 DATE=$(date '+%Y%m%d')
 
-for FILENAME in gh.1m.yml gh.issues.keyed.yml gh.issues.unkeyed.yml gh.issues.autogenerate.yml 
+for FILENAME in gh.1m.yml gh.issues.keyed.yml gh.issues.unkeyed.yml gh.issues.autogenerate.yml
 do
 	WORKFLOW_PATH="${BASH_SOURCE%/*}/etc/gloat/${FILENAME}"
 	WORKFLOW_NAME="$(gloat workflow name $WORKFLOW_PATH)"

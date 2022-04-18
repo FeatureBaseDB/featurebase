@@ -21,7 +21,7 @@ SHA=$(git -C $PILOSA_SRC rev-parse HEAD)
 # Format current date.
 DATE=$(date '+%Y%m%d')
 
-for TYPE in row row-bsi row-range count count-keyed intersect union difference xor groupby topk 
+for TYPE in row row-bsi row-range count count-keyed intersect union difference xor groupby topk
 do
 	WORKFLOW_PATH="${BASH_SOURCE%/*}/etc/gloat/query.${TYPE}.yml"
 	WORKFLOW_NAME="$(gloat workflow name $WORKFLOW_PATH)"

@@ -19,30 +19,30 @@ mv config.py ./qa/testcases/smoketest/config.py
 
 echo "Copying tests to remote"
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/testcases/smoketest/*.py ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "Copy failed"
     exit 1
 fi
 
 # run smoke test
 echo "Running smoke test..."
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; ~/.local/bin/pytest --junitxml=report.xml" 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; ~/.local/bin/pytest --junitxml=report.xml"
 SMOKETESTRESULT=$?
 
 echo "Copying test report to local"
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ec2-user@${INGESTNODE0}:/data/report.xml report.xml
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "Copy failed"
     exit 1
 fi
 
-if (( $SMOKETESTRESULT != 0 )) 
-then 
+if (( $SMOKETESTRESULT != 0 ))
+then
     echo "Smoke test complete with test failures"
 else
     echo "Smoke test complete"
 fi
 
-exit $SMOKETESTRESULT 
+exit $SMOKETESTRESULT

@@ -2,7 +2,7 @@
 tests_failed=0
 
 # test validity of featurebase.service
-systemd-analyze verify /etc/systemd/system/featurebase.service 
+systemd-analyze verify /etc/systemd/system/featurebase.service
 exit_code=$?
 if [ $exit_code -ne 0 ]; then
     echo 'featurebase.redhat.service invalid'

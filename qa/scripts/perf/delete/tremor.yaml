@@ -25,7 +25,7 @@ fields:
     max_date: 2007-01-02T15:04:05.001Z # RFC3339Nano
     distribution: "increasing" # only "increasing" is supported right now
     min_step_duration: "10ns"
-    max_step_duration: "200ms" 
+    max_step_duration: "200ms"
   - name: "slice"
     type: "uint-set" # (default IDArrayField)
     min: 0

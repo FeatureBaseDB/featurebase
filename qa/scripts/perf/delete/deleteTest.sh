@@ -17,7 +17,7 @@ then
 fi
 
 # make it executable
-chmod +x datagen 
+chmod +x datagen
 if (( $? != 0 ))
 then
     echo "couldn't make datagen executable"
@@ -26,24 +26,24 @@ fi
 
 # copy it over to the ingest node
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./datagen ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "datagen copy failed"
     exit 1
 fi
 
 # setup the yum repo needed for librdkafka onto the ingest node
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/perf/delete/confluent ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "confluent repo setup copy failed"
     exit 1
 fi
 
 echo "setting up confluent repo"
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "sudo mv /data/confluent /etc/yum.repos.d" 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "sudo mv /data/confluent /etc/yum.repos.d"
 if (( $? != 0 ))
-then 
+then
     echo "setting up confluent repo failed"
     exit 1
 fi
@@ -52,23 +52,23 @@ fi
 echo "installing librdkafka on ingest node"
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "sudo rpm --import http://packages.confluent.io/rpm/3.1/archive.key && sudo yum clean all && sudo yum install librdkafka-devel -y"
 if (( $? != 0 ))
-then 
+then
     echo "librdkafka install failed"
     exit 1
 fi
 
 # copy tremor.yaml over to the ingest node
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/perf/delete/tremor.yaml ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "tremor.yaml copy failed"
     exit 1
 fi
 
 # copy the tests over to ingest node
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/perf/delete/test.py ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "test copy failed"
     exit 1
 fi
@@ -78,11 +78,11 @@ echo "running delete test"
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; python3 test.py ${DATANODE0}"
 TESTRESULT=$?
 
-if (( $TESTRESULT != 0 )) 
-then 
+if (( $TESTRESULT != 0 ))
+then
     echo "delete test failed"
 else
     echo "delete test complete"
 fi
 
-exit $TESTRESULT 
+exit $TESTRESULT

@@ -1,5 +1,5 @@
 version: '2'
-services: 
+services:
   pilosa1:
     build:
       context: ../..
@@ -48,5 +48,5 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
       - "go test -v -count=1 github.com/molecula/featurebase/internal/clustertests"
-networks: 
+networks:
   pilosanet:

@@ -1,7 +1,7 @@
 name: "Xor() Load Testing"
 
 main: "pilosa server --data-dir ~/pilosa.query.${STORAGE_BACKEND} --storage.backend ${STORAGE_BACKEND}"
-load: "pilosa-bench -type xor -rate 10 -n 300" 
+load: "pilosa-bench -type xor -rate 10 -n 300"
 
 health_url:    "http://localhost:10101/status"
 health_regexp: "NORMAL"

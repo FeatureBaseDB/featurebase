@@ -49,11 +49,11 @@ DEPLOYED_INGEST_IPS_LEN=`echo "$DEPLOYED_INGEST_IPS" | wc -l`
 
 #wait until we can connect to one of the hosts
 for i in {0..24}
-do 
+do
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@${DATANODE0} "pwd"
     if [ $? -eq 0 ]
     then
-        echo "Cluster is up after ${i} tries." 
+        echo "Cluster is up after ${i} tries."
         break
     fi
     sleep 10
@@ -62,7 +62,7 @@ done
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@${DATANODE0} "pwd"
 if [ $? -ne 0 ]
 then
-    echo "Unable to connect to cluster - giving up" 
+    echo "Unable to connect to cluster - giving up"
     exit 1
 fi
 
@@ -75,7 +75,7 @@ for i in {0..24}; do
     if [ $? -eq 0 ]; then
         echo "Cluster is up after ${i} tries"
         exit 0
-    fi 
+    fi
     sleep 1
 done
 exit $?

@@ -13,7 +13,7 @@ RUN chmod +x /pumba
 
 # add docker client to pause/unpause nodes
 RUN apt update
-RUN apt install -y docker.io 
+RUN apt install -y docker.io
 
 # add docker-compose so tests can use it for stuff
 ADD https://github.com/docker/compose/releases/latest/download/docker-compose-Linux-x86_64 /usr/local/bin/docker-compose

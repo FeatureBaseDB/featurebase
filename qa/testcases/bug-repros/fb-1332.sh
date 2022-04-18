@@ -20,7 +20,7 @@ if [[ $( curl -XDELETE $1/index/fb1332| jq '.error' ) != "null" ]]; then
     exit 1
 fi
 
-# fb restore 
+# fb restore
 featurebase restore --host=$1 -s=fb1332.bak
 if (( $? != 0 )); then
     echo "couldn't restore"

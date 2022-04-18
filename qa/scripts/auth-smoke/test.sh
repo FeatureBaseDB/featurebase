@@ -15,8 +15,8 @@ HOSTS=($( cat ./qa/tf/ci/auth-smoke/outputs.json | jq -r '.data_node_ips.value' 
 echo "Copying tests to remote"
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/auth-smoke/tests/ ec2-user@${INGESTNODE0}:/data
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./datagen_linux_arm64 ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "Copy failed"
     exit 1
 fi
@@ -27,11 +27,11 @@ ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-use
 SMOKETESTRESULT=$?
 
 
-if (( $SMOKETESTRESULT != 0 )) 
-then 
+if (( $SMOKETESTRESULT != 0 ))
+then
     echo "smoke tests complete with test failures"
 else
     echo "smoke tests complete"
 fi
 
-exit $SMOKETESTRESULT 
+exit $SMOKETESTRESULT

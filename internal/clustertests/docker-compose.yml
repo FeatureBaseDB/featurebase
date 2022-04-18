@@ -1,5 +1,5 @@
 version: '2'
-services: 
+services:
   pilosa1:
     build:
       context: ../..
@@ -16,7 +16,7 @@ services:
     networks:
       - pilosanet
     volumes:
-      - ./results:/results 
+      - ./results:/results
     command:
       - "cd /go/src/github.com/molecula/featurebase/cmd/featurebase && /featurebase -test.run=TestRunMain -test.coverprofile=/results/coverage-server1.out server --bind pilosa1:10101 ${CLUSTERTESTS_FB_ARGS}"
   pilosa2:
@@ -84,5 +84,5 @@ services:
       dockerfile: Dockerfile-fakeIDP
     networks:
       - pilosanet
-networks: 
+networks:
   pilosanet:

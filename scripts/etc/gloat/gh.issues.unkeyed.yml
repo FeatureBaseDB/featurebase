@@ -1,7 +1,7 @@
 name: "GitHub Issues Import Load Testing (1 month, unkeyed)"
 
 main: "pilosa server --data-dir ${TMPDIR} --storage.backend ${STORAGE_BACKEND}"
-load: "molecula-consumer-github -i issues -d id --record-type issue --batch-size=100000 --start-time 2020-01-01T00:00:00Z --end-time 2020-01-13T23:00:00Z --cache-dir ~/.githubarchive" 
+load: "molecula-consumer-github -i issues -d id --record-type issue --batch-size=100000 --start-time 2020-01-01T00:00:00Z --end-time 2020-01-13T23:00:00Z --cache-dir ~/.githubarchive"
 
 health_url: "http://localhost:10101/status"
 vars_urls:

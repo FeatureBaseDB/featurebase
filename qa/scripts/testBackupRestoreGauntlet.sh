@@ -22,16 +22,16 @@ installDatagen $INGESTNODE0
 
 # copy the tests over to ingest node
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/backupRestoreTest.sh ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "test copy failed"
     exit 1
 fi
 
 # copy the datagen over to ingest node
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/backup_test_datagen.yaml ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "test copy failed"
     exit 1
 fi
@@ -41,11 +41,11 @@ echo "running backup test with hosts: ${HOSTS[@]}"
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; ./backupRestoreTest.sh ${HOSTS[@]}"
 TESTRESULT=$?
 
-if (( $TESTRESULT != 0 )) 
-then 
+if (( $TESTRESULT != 0 ))
+then
     echo "backup test failed"
 else
     echo "backup test complete"
 fi
 
-exit $TESTRESULT 
+exit $TESTRESULT

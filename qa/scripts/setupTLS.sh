@@ -10,7 +10,7 @@ fi
 
 ifErr() {
     res=$?
-    if (( res != 0 )); then 
+    if (( res != 0 )); then
         echo "error: $1"
         exit $res
     fi

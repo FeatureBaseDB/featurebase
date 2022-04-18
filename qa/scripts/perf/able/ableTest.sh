@@ -16,35 +16,35 @@ echo "using DATANODE0 ${DATANODE0}"
 
 echo "Copying tests to remote"
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/perf/able/*.js ec2-user@${INGESTNODE0}:/data
-if (( $? != 0 )) 
-then 
+if (( $? != 0 ))
+then
     echo "Copy failed"
     exit 1
 fi
 
 # copy restore data to ingest node
 echo "Copying restore data from S3"
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "aws s3 cp s3://molecula-perf-storage/able/perf-able-seg.tar.xz /data/perf-able-seg.tar.xz --no-progress" 
-if (( $? != 0 )) 
-then 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "aws s3 cp s3://molecula-perf-storage/able/perf-able-seg.tar.xz /data/perf-able-seg.tar.xz --no-progress"
+if (( $? != 0 ))
+then
     echo "Copy failed"
     exit 1
 fi
 
 # untar data
 echo "Untarring data"
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; tar -xf perf-able-seg.tar.xz" 
-if (( $? != 0 )) 
-then 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; tar -xf perf-able-seg.tar.xz"
+if (( $? != 0 ))
+then
     echo "Untarring failed"
     exit 1
 fi
 
 # restore data
 echo "Restoring data"
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; featurebase restore --host http://${DATANODE0}:10101 -s /data/data/backup > restore.out" 
-if (( $? != 0 )) 
-then 
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; featurebase restore --host http://${DATANODE0}:10101 -s /data/data/backup > restore.out"
+if (( $? != 0 ))
+then
     echo "Restoring failed"
     exit 1
 fi
@@ -52,15 +52,15 @@ fi
 # run test
 echo "Running perf test"
 # leaving this here because K6 is timing out and need to work out why
-#ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "/home/ec2-user/bin/k6 run -e DATANODE0=test.k6.io /data/highcardinalitygroupby.js" 
-ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "curl ${DATANODE0}:10101/index/seg/query -X POST -o /data/response.json -d 'GroupBy(Rows(education_level), Rows(gender), Rows(domain), aggregate=Sum(field=age))'" 
+#ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "/home/ec2-user/bin/k6 run -e DATANODE0=test.k6.io /data/highcardinalitygroupby.js"
+ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "curl ${DATANODE0}:10101/index/seg/query -X POST -o /data/response.json -d 'GroupBy(Rows(education_level), Rows(gender), Rows(domain), aggregate=Sum(field=age))'"
 ABLETESTRESULT=$?
 
-if (( $ABLETESTRESULT != 0 )) 
-then 
+if (( $ABLETESTRESULT != 0 ))
+then
     echo "able perf test complete with failures"
 else
     echo "able test complete"
 fi
 
-exit $ABLETESTRESULT 
+exit $ABLETESTRESULT

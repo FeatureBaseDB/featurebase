@@ -16,7 +16,7 @@ generatePilosaHostsString() {
     cnt=0
     for ip in $DEPLOYED_DATA_IPS
     do
-        if (($cnt + 1 != $DEPLOYED_DATA_IPS_LEN)) 
+        if (($cnt + 1 != $DEPLOYED_DATA_IPS_LEN))
         then
             PILOSA_HOSTS="${PILOSA_HOSTS}p${cnt}=$ip:10101,"
         else

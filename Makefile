@@ -155,7 +155,7 @@ clustertests: vendor
 	PROJECT=$(PROJECT) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml run client1
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
-# Run the cluster tests with authentication enabled 
+# Run the cluster tests with authentication enabled
 AUTH_ARGS="-c /go/src/github.com/molecula/featurebase/internal/clustertests/testdata/featurebase.conf"
 authclustertests: vendor
 	CLUSTERTESTS_FB_ARGS=$(AUTH_ARGS) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down

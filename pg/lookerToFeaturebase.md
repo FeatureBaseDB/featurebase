@@ -536,7 +536,7 @@ server-->>213070643358498:-BIND COMPLETE
 server-->>213070643358498:-NO DATA
 server-->>213070643358498:-EMPTY QUERY RESPONSE
 server-->>213070643358498:-READY FOR QUERY type=<IDLE>
-213070643358498->>server:+PARSE name='', num_params=0, params_type=, query=SELECT 1 
+213070643358498->>server:+PARSE name='', num_params=0, params_type=, query=SELECT 1
 213070643358498->>server:+BIND portal='', name='', num_formats=0, formats=, num_params=0, params=
 213070643358498->>server:+DESCRIBE kind='P', name=''
 213070643358498->>server:+EXECUTE name='', nb_rows=0
