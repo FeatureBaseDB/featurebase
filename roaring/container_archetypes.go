@@ -122,7 +122,7 @@ func makeArchetypalContainer(rng *rand.Rand, name string) (*Container, error) {
 		}
 		c = NewContainerRun(runs)
 	case strings.HasPrefix(name, "BM"):
-		size, err := strconv.Atoi(name[2:])
+		size, err := strconv.ParseInt(name[2:], 10, 32)
 		if err != nil {
 			return nil, fmt.Errorf("can't parse bitmap size: %v", err)
 		}
