@@ -95,7 +95,7 @@ func (c *ClusterSnapshot) ShardNodes(index string, shard uint64) []*Node {
 
 // OwnsShard returns true if a host owns a fragment.
 func (c *ClusterSnapshot) OwnsShard(nodeID string, index string, shard uint64) (ret bool) {
-	idx := c.Hasher.Hash(uint64(c.ShardToShardPartition(index, shard)), len(c.Nodes))
+	idx := c.PrimaryNodeIndex(c.ShardToShardPartition(index, shard))
 	for i := 0; i < c.ReplicaN; i++ {
 		if c.Nodes[(idx+i)%len(c.Nodes)].ID == nodeID {
 			return true
@@ -160,7 +160,7 @@ func (c *ClusterSnapshot) IsPrimary(nodeID string, partition int) bool {
 // PrimaryNodeIndex returns the index (position in the cluster) of the primary
 // node for the given partition.
 func (c *ClusterSnapshot) PrimaryNodeIndex(partition int) int {
-	return c.Hasher.Hash(uint64(partition), len(c.Nodes))
+	return partition % len(c.Nodes)
 }
 
 // NonPrimaryReplicas returns the list of node IDs which are replicas for the
@@ -237,8 +237,8 @@ func (c *ClusterSnapshot) PrimaryForShardReplication(index string, shard uint64)
 	if n == 0 {
 		return -1
 	}
-	partition := uint64(ShardToShardPartition(index, shard, c.PartitionN))
-	nodeIndex := c.Hasher.Hash(partition, n)
+	partition := ShardToShardPartition(index, shard, c.PartitionN)
+	nodeIndex := c.PrimaryNodeIndex(partition)
 	return nodeIndex
 }
 
