@@ -225,7 +225,8 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 				cli = e.newClient(cli)
 				break
 			}
-			if !strings.Contains(msg, "etcdserver: request timed out") {
+			// check that the request hasn't timed out. this can happen with either of these errors
+			if !strings.Contains(msg, "etcdserver: request timed out") && !strings.Contains(msg, "context deadline exceeded") {
 				// not a known error, also not a wrapped timeout
 				return errors.Wrap(err, "non-retryable error")
 			}
