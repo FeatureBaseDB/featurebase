@@ -16,9 +16,15 @@ const (
 	BitmapN = (1 << 16) / 64
 )
 
+// Cursor represents an object for traversing forward and backward in the
+// keyspace. Users should initialize a cursor with either First(), Last(), or
+// Seek() and then move forward or backward using Next() or Prev(), respectively.
+//
+// If you mutate the b-tree that a cursor is attached to then you'll need to
+// re-initialize the cursor. This may be changed in the future though.
 type Cursor struct {
 	tx       *Tx
-	buffered bool
+	buffered bool // if true, Next() and Prev() do not move the cursor position
 
 	// buffers
 	array     [ArrayMaxSize + 1]uint16
@@ -30,7 +36,7 @@ type Cursor struct {
 }
 
 type searchStack struct {
-	top   int
+	top   int // current depth in elems
 	elems [32]stackElem
 }
 
@@ -118,6 +124,7 @@ func maybeConvertOversizedRunToBitmap(runs []roaring.Interval16, bitN int, key u
 }
 
 // Add sets a bit on the underlying bitmap.
+// If changed is true, this cursor will need to be reinitialized before use.
 func (c *Cursor) Add(v uint64) (changed bool, err error) {
 	hi, lo := highbits(v), lowbits(v)
 	// Move cursor to the key of the container.
@@ -188,6 +195,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 }
 
 // Remove unsets a bit on the underlying bitmap.
+// If changed is true, the cursor will need to be reinitialized before use.
 func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 	hi, lo := highbits(v), lowbits(v)
 
@@ -354,6 +362,21 @@ func toPgno(val []byte) uint32 {
 	return binary.LittleEndian.Uint32(val)
 }
 
+// putLeafCell inserts or updates a cell into the currently position leaf page
+// in the stack. If in.Key exists in the page, the cell is updated. Otherwise,
+// cell is inserted.
+//
+// This method has two paths. First, a fast path is used if we know the insert
+// will not cause the page to grow past the max page size. This path simply
+// shifts bytes around in the page to make room for the new cell. The second
+// path is the slow path where a page may split into two pages. This causes the
+// entire page to be deserialized so that pages can more easily be split.
+//
+// The slow path may cause a cascade of changes to parent pages as a page split
+// creates a new entry in the parent. If that entry overflows the parent then
+// the parent branch page will split which could cascade up to the root. If the
+// root page splits, a new branch page is created but retains the original root
+// page number so that the root records do not need to be updated.
 func (c *Cursor) putLeafCell(in leafCell) (err error) {
 	elem := &c.stack.elems[c.stack.top]
 	leafPage, isHeap, err := c.tx.readPage(elem.pgno) // the last read leaf page
@@ -610,6 +633,9 @@ func (c *Cursor) putLeafCellFast(in leafCell, isInsert bool) (err error) {
 }
 
 // deleteLeafCell removes a cell from the currently positioned page & index.
+// If the removal causes the leaf page to have no more elements then its entry
+// is removed from the parent. If the removal changes the first entry in the
+// leaf page then the entry will be updated in the parent branch page.
 func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	elem := &c.stack.elems[c.stack.top]
 	leafPage, _, err := c.tx.readPage(elem.pgno)
@@ -661,7 +687,9 @@ func (c *Cursor) deleteLeafCell(key uint64) (err error) {
 	return nil
 }
 
-// putBranchCells updates a branch page with one or more cells.
+// putBranchCells updates a branch page with one or more cells. If the cells
+// cause the branch page to split then a new entry will be created in the
+// parent page. If this branch page is a root then a new root will be created.
 func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err error) {
 	elem := &c.stack.elems[stackIndex]
 
@@ -725,8 +753,6 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 		}
 	}
 
-	// TODO(BBJ): Check if key on page changes and update parent if so.
-
 	// TODO(BBJ): Update page in buffer & cursor stack.
 
 	// If this is not a split, then exit now.
@@ -745,7 +771,8 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 	return c.putBranchCells(stackIndex-1, parents)
 }
 
-// updateBranchCell updates the key for cell in the branch.
+// updateBranchCell updates the key for cell in the branch. Branch elements
+// are fixed size so this cannot cause a page split.
 func (c *Cursor) updateBranchCell(stackIndex int, newKey uint64) (err error) {
 	elem := &c.stack.elems[stackIndex]
 
@@ -781,7 +808,10 @@ func (c *Cursor) updateBranchCell(stackIndex int, newKey uint64) (err error) {
 	return nil
 }
 
-// deleteBranchCell removes a cell from a branch page.
+// deleteBranchCell removes a cell from a branch page. If no more elements
+// exist in a branch page then it is removed. If an empty branch page is the
+// root page then it is converted to an empty leaf page as branch pages are not
+// allowed to be empty.
 func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 	elem := &c.stack.elems[stackIndex]
 
@@ -859,6 +889,8 @@ func (c *Cursor) deleteBranchCell(stackIndex int, key uint64) (err error) {
 }
 
 // writeRoot writes a new branch page at the root with the given cells.
+// The root of a b-tree should always stay the same, even in the case of a
+// split. This allows us to not rewrite the root record for the b-tree.
 func (c *Cursor) writeRoot(pgno uint32, cells []branchCell) error {
 	var buf [PageSize]byte
 	writePageNo(buf[:], pgno)
@@ -940,7 +972,9 @@ func pageKeyAt(page []byte, index int) uint64 {
 	return *(*uint64)(unsafe.Pointer(&page[offset]))
 }
 
-// First moves to the first element of the btree.
+// First moves to the first element of the btree. Returns io.EOF if no elements
+// exist. The first call to Next() will not move the position but subsequent
+// calls will move the position forward until it reaches the end and return io.EOF.
 func (c *Cursor) First() error {
 	c.buffered = true
 
@@ -980,7 +1014,10 @@ func (c *Cursor) First() error {
 	}
 }
 
-// Last moves to the last element of the btree.
+// Last moves to the last element of the btree. Returns io.EOF if there are no
+// elements. The first call to Prev() will not move the position but subsequent
+// calls will move the position backward until it reaches the beginning and
+// return io.EOF.
 func (c *Cursor) Last() error {
 	// c.stack.elems[0].pgno = c.root
 	c.buffered = true
@@ -1101,7 +1138,8 @@ func (c *Cursor) Next() error {
 	return c.goNextPage()
 }
 
-// Prev moves to the previous element of the btree.
+// Prev moves to the previous element of the btree. Returns io.EOF if at the
+// beginning of the b-tree.
 func (c *Cursor) Prev() error {
 	if c.buffered {
 		c.buffered = false
@@ -1211,6 +1249,9 @@ var _ = (&stackElem{}).clear
 var _ = (&stackElem{}).String
 var _ = (&stackElem{}).equal
 
+// goNextPage moves up the stack until an element has additional elements
+// available after the current position. It then traverses back down the stack
+// to position at the next leaf page element.
 func (c *Cursor) goNextPage() error {
 	for c.stack.top--; c.stack.top >= 0; c.stack.top-- {
 		elem := &c.stack.elems[c.stack.top]

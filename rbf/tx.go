@@ -19,7 +19,10 @@ import (
 
 var _ = txkey.ToString
 
-// Tx represents a transaction.
+// Tx represents an RBF transaction. Transactions provide guarantees such as
+// atomicity for all writes that occur as well as serializable isolation.
+// Transactions can be obtained by calling DB.Begin() and provide a snapshot
+// view at the point-in-time they are started.
 type Tx struct {
 	mu          sync.RWMutex
 	db          *DB                  // parent db
@@ -71,11 +74,13 @@ type Tx struct {
 	stack []byte
 }
 
+// DBPath returns the path to the directory that holds the parent database.
 func (tx *Tx) DBPath() string {
 	return tx.db.Path
 }
 
-// Writable returns true if the transaction can mutate data.
+// Writable returns true if the transaction can mutate data. Using transaction
+// methods that attempt to write will return ErrTxNotWritable.
 func (tx *Tx) Writable() bool {
 	return tx.writable
 }
@@ -95,7 +100,12 @@ func (tx *Tx) PageN() int {
 	return int(readMetaPageN(tx.meta[:]))
 }
 
-// Commit completes the transaction and persists data changes.
+// Commit completes the transaction and persists data changes. If this method
+// fails, changes may or may not have been persisted to disk. If no changes have
+// been made during the transaction, this functions the same as a rollback.
+//
+// Attempting to commit an already committed or rolled back transaction will
+// return an ErrTxClosed error.
 func (tx *Tx) Commit() error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -193,6 +203,9 @@ func (tx *Tx) truncateLastFreePage() (truncated bool, outErr error) {
 	return true, nil
 }
 
+// Rollback discards any changes that have been made by the transaction.
+// A commit or rollback must always be called after a transaction finishes.
+// If this is a writable transaction, the write lock will be released on the DB.
 func (tx *Tx) Rollback() { tx.rollback(false) }
 
 func (tx *Tx) rollback(hasDBLock bool) {
@@ -225,11 +238,13 @@ func (tx *Tx) Root(name string) (uint32, error) {
 }
 
 func (tx *Tx) root(name string) (uint32, error) {
+	// Fetch list of roots (or retrieve from cache).
 	records, err := tx.RootRecords()
 	if err != nil {
 		return 0, err
 	}
 
+	// Lookup record by bitmap name and return its root page.
 	pgno, ok := records.Get(name)
 	if !ok {
 		return 0, ErrBitmapNotFound
@@ -260,7 +275,7 @@ func (tx *Tx) BitmapNames() ([]string, error) {
 	return a, nil
 }
 
-// BitmapExist returns true if bitmap exists.
+// BitmapExist returns true if bitmap exists. Returns an error if name is empty.
 func (tx *Tx) BitmapExists(name string) (bool, error) {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
