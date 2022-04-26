@@ -81,11 +81,10 @@ func TestQuery_ExpandVars(t *testing.T) {
 			vars:   map[string]interface{}{"var1": []interface{}{"cat"}},
 		},
 		{
-			name:    "ExpandRowEQExterior-NoValues",
-			input:   `row(animal=$var1)`,
-			output:  ``,
-			vars:    map[string]interface{}{"var1": []interface{}{}},
-			wantErr: true,
+			name:   "ExpandRowEQExterior-NoValues",
+			input:  `row(animal=$var1)`,
+			output: `All()`,
+			vars:   map[string]interface{}{"var1": []interface{}{}},
 		},
 		{
 			name:   "ExpandRowGT",
@@ -184,7 +183,7 @@ func TestQuery_ExpandVars(t *testing.T) {
 		{
 			name:   "ExpandAsCSV-NoValues",
 			input:  `Intersect(ConstRow(columns=$var2), Row(animal=$var1))`,
-			output: `Intersect(ConstRow(columns=[]))`,
+			output: `Intersect(ConstRow(columns=[]), All())`,
 			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{}},
 		},
 		{
@@ -202,7 +201,7 @@ func TestQuery_ExpandVars(t *testing.T) {
 		{
 			name:   "Union-NoValues-1",
 			input:  `Count(Union(row(x=$var1), row(y=$var2)), limit=5)`,
-			output: `Count(Union(Union(Row(y="cat"), Row(y="dog"))), limit=5)`,
+			output: `Count(Union(All(), Union(Row(y="cat"), Row(y="dog"))), limit=5)`,
 			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{"cat", "dog"}},
 		},
 		{
@@ -229,6 +228,18 @@ func TestQuery_ExpandVars(t *testing.T) {
 			input:  `Extract(Limit(Row(animals=$var1), limit=1000), Rows($var2))`,
 			output: `Extract(Limit(All(), limit=1000), Rows(_field="a"), Rows(_field="b"))`,
 			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{"a", "b"}},
+		},
+		{
+			name:   "Extract-SomeValues-1",
+			input:  `Extract(Union(Row(x=$var1), Row(y=$var2)), Rows(a), Rows(b))`,
+			output: `Extract(Union(Union(Row(x="cat"), Row(x="dog")), All()), Rows(_field="a"), Rows(_field="b"))`,
+			vars:   map[string]interface{}{"var1": []interface{}{"cat", "dog"}, "var2": []interface{}{}},
+		},
+		{
+			name:   "GroupBy-SomeValues-1",
+			input:  `GroupBy(Rows(a), Rows(b), filter=Union(Row(x=$var1), Row(y=$var2)), limit=10)`,
+			output: `GroupBy(Rows(_field="a"), Rows(_field="b"), filter=Union(All(), Union(Row(y="cat"), Row(y="dog"))), limit=10)`,
+			vars:   map[string]interface{}{"var1": []interface{}{}, "var2": []interface{}{"cat", "dog"}},
 		},
 	}
 	for _, tt := range tests {

@@ -1014,7 +1014,6 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 				if err != nil {
 					return nil, err
 				}
-
 				switch len(newArg) {
 				case 0:
 					if call.Name == "Row" {
@@ -1051,7 +1050,8 @@ func (c *Call) expandVars(name string, values []interface{}) []*Call {
 	switch c.Name {
 	case "Row":
 		if len(values) == 0 {
-			return []*Call{}
+			cc := &Call{Name: "All"}
+			return []*Call{cc}
 		}
 		union := &Call{Name: "Union"}
 		for i := range values {
