@@ -106,6 +106,8 @@ type cluster struct { // nolint: maligned
 
 	confirmDownRetries int
 	confirmDownSleep   time.Duration
+
+	partitionAssigner string
 }
 
 // newCluster returns a new instance of Cluster with defaults.
@@ -168,7 +170,7 @@ func (c *cluster) primaryNode() *topology.Node {
 // unprotectedPrimaryNode returns the primary node.
 func (c *cluster) unprotectedPrimaryNode() *topology.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 	return snap.PrimaryFieldTranslationNode()
 }
 
@@ -759,7 +761,7 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 // for the given set of shards with data.
 func (c *cluster) fragCombos(idx string, availableShards *roaring.Bitmap, fieldViews viewsByField) fragsByHost {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	t := make(fragsByHost)
 	_ = availableShards.ForEach(func(i uint64) error {
@@ -926,8 +928,8 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	fSnap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
-	toSnap := topology.NewClusterSnapshot(to.noder, c.Hasher, to.ReplicaN)
+	fSnap := c.NewSnapshot()
+	toSnap := topology.NewClusterSnapshot(to.noder, c.Hasher, c.partitionAssigner, to.ReplicaN)
 
 	for pid := 0; pid < c.partitionN; pid++ {
 		fNodes := fSnap.PartitionNodes(pid)
@@ -990,7 +992,7 @@ func (c *cluster) shardDistributionByIndex(indexName string) map[string]map[stri
 	defer c.mu.RUnlock()
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	for _, shard := range available {
 		p := snap.ShardToShardPartition(indexName, shard)
@@ -1504,7 +1506,7 @@ func (c *cluster) translateFieldIDs(ctx context.Context, field *Field, ids map[u
 
 func (c *cluster) translateFieldListIDs(ctx context.Context, field *Field, ids []uint64) (keys []string, err error) {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	primary := snap.PrimaryFieldTranslationNode()
 	if primary == nil {
@@ -1628,7 +1630,7 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	// Split keys by partition.
 	keysByPartition := make(map[int][]string, c.partitionN)
@@ -1737,7 +1739,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	// Split keys by partition.
 	keysByPartition := make(map[int][]string, c.partitionN)
@@ -1858,7 +1860,7 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	// Split ids by partition.
 	idsByPartition := make(map[int][]uint64, c.partitionN)
@@ -1905,6 +1907,10 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 		return nil, err
 	}
 	return idMap, nil
+}
+
+func (c *cluster) NewSnapshot() *topology.ClusterSnapshot {
+	return topology.NewClusterSnapshot(c.noder, c.Hasher, c.partitionAssigner, c.ReplicaN)
 }
 
 // ClusterStatus describes the status of the cluster including its

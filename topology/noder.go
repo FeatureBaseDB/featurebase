@@ -60,7 +60,7 @@ func (n *localNoder) Nodes() []*Node {
 
 // PrimaryNodeID implements the Noder interface.
 func (n *localNoder) PrimaryNodeID(hasher Hasher) string {
-	snap := NewClusterSnapshot(NewLocalNoder(n.nodes), hasher, 1)
+	snap := NewClusterSnapshot(NewLocalNoder(n.nodes), hasher, "jmp-hash", 1)
 	primaryNode := snap.PrimaryFieldTranslationNode()
 	if primaryNode == nil {
 		return ""

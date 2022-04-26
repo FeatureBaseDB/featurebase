@@ -286,7 +286,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 		return errors.Wrap(err, "sending DeleteIndex message")
 	}
 	// Delete ids allocated for index if any present
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 	if snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
 		if err := api.holder.ida.reset(indexName); err != nil {
 			return errors.Wrap(err, "deleting id allocation for index")
@@ -529,7 +529,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	defer qcx.Abort()
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	nodes := snap.ShardNodes(indexName, shard)
 	errCh := make(chan error, len(nodes))
@@ -654,7 +654,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	// Validate that this handler owns the shard.
 	if !snap.OwnsShard(api.NodeID(), indexName, shard) {
@@ -740,7 +740,7 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	return snap.ShardNodes(indexName, shard), nil
 }
@@ -755,7 +755,7 @@ func (api *API) PartitionNodes(ctx context.Context, partitionID int) ([]*topolog
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	return snap.PartitionNodes(partitionID), nil
 }
@@ -862,7 +862,7 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	}
 
 	// Find the node that can service the request.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 	nodes := snap.PartitionNodes(partition)
 	var upNode *topology.Node
 	for _, node := range nodes {
@@ -944,7 +944,7 @@ func (api *API) NodeID() string {
 // PrimaryNode returns the primary node for the cluster.
 func (api *API) PrimaryNode() *topology.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 	return snap.PrimaryFieldTranslationNode()
 }
 
@@ -1867,7 +1867,7 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 		return errors.Wrap(err, "sharding input data")
 	}
 	// now that we have this, let's assign the shards to nodes
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 	// oh hey an easy case: we're presumably the only node
 	if len(snap.Nodes) == 1 {
 		return api.ingestNodeOperationsForFields(ctx, qcx, index, knownFields, sharded)
@@ -2095,7 +2095,7 @@ func (api *API) LongQueryTime() time.Duration {
 
 func (api *API) validateShardOwnership(indexName string, shard uint64) error {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 	// Validate that this handler owns the shard.
 	if !snap.OwnsShard(api.NodeID(), indexName, shard) {
 		api.server.logger.Errorf("node %s does not own shard %d of index %s", api.NodeID(), shard, indexName)
@@ -2389,7 +2389,7 @@ func (api *API) MatchField(ctx context.Context, index, field string, like string
 // PrimaryReplicaNodeURL returns the URL of the cluster's primary replica.
 func (api *API) PrimaryReplicaNodeURL() url.URL {
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	node := snap.PrimaryReplicaNode(api.NodeID())
 	if node == nil {
@@ -2500,7 +2500,7 @@ func (api *API) ReserveIDs(key IDAllocKey, session [32]byte, offset uint64, coun
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
 		return nil, errors.New("cannot reserve IDs on a non-primary node")
@@ -2515,7 +2515,7 @@ func (api *API) CommitIDs(key IDAllocKey, session [32]byte, count uint64) error 
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
 		return errors.New("cannot commit IDs on a non-primary node")
@@ -2530,7 +2530,7 @@ func (api *API) ResetIDAlloc(index string) error {
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 
 	if !snap.IsPrimaryFieldTranslationNode(api.NodeID()) {
 		return errors.New("cannot reset IDs on a non-primary node")
@@ -2588,7 +2588,7 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 
 // RestoreShard
 func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64, rd io.Reader) error {
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 	if !snap.OwnsShard(api.server.nodeID, indexName, shard) {
 		return ErrClusterDoesNotOwnShard // TODO (twg)really just node doesn't own shard but leave for now
 	}
@@ -2785,7 +2785,7 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 		return nil, errors.New("can only check mutex state for mutex fields")
 	}
 	// request data from other nodes as well
-	snap := topology.NewClusterSnapshot(api.cluster.noder, api.cluster.Hasher, api.cluster.ReplicaN)
+	snap := api.cluster.NewSnapshot()
 	eg, _ := errgroup.WithContext(ctx)
 	myID := api.NodeID()
 	results := make([]map[uint64]map[uint64][]uint64, len(snap.Nodes))

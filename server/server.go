@@ -485,6 +485,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
+		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
 		discoOpt,
 	}
 

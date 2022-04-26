@@ -1235,7 +1235,7 @@ func (s *holderSyncer) SyncHolder() error {
 	ti := time.Now()
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+	snap := s.Cluster.NewSnapshot()
 
 	schema, err := s.Holder.Schema()
 	if err != nil {
@@ -1351,7 +1351,7 @@ func (s *holderSyncer) resetTranslationSync() error {
 	}
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(s.Cluster.noder, s.Cluster.Hasher, s.Cluster.ReplicaN)
+	snap := s.Cluster.NewSnapshot()
 
 	// Set read-only flag for all translation stores.
 	s.setTranslateReadOnlyFlags(snap)

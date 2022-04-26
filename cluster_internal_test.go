@@ -369,7 +369,7 @@ func TestCluster_Owners(t *testing.T) {
 	cNodes := c.noder.Nodes()
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	// Verify nodes are distributed.
 	if a := snap.PartitionNodes(0); !reflect.DeepEqual(a, []*topology.Node{cNodes[0], cNodes[1]}) {
@@ -433,7 +433,7 @@ func TestCluster_ContainsShards(t *testing.T) {
 	cNodes := c.noder.Nodes()
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(c.noder, c.Hasher, c.ReplicaN)
+	snap := c.NewSnapshot()
 
 	shards := snap.ContainsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), cNodes[2])
 

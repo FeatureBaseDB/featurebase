@@ -31,10 +31,12 @@ type ClusterSnapshot struct {
 
 	// The number of replicas a partition has.
 	ReplicaN int
+
+	PartitionAssignment string
 }
 
 // NewClusterSnapshot returns a new instance of ClusterSnapshot.
-func NewClusterSnapshot(noder Noder, hasher Hasher, replicas int) *ClusterSnapshot {
+func NewClusterSnapshot(noder Noder, hasher Hasher, partitionAssignment string, replicas int) *ClusterSnapshot {
 	nodes := noder.Nodes()
 
 	// Make sure replica count doesn't exceed the number of nodes.
@@ -46,10 +48,11 @@ func NewClusterSnapshot(noder Noder, hasher Hasher, replicas int) *ClusterSnapsh
 	}
 
 	return &ClusterSnapshot{
-		Nodes:      nodes,
-		Hasher:     hasher,
-		PartitionN: DefaultPartitionN,
-		ReplicaN:   replicas,
+		Nodes:               nodes,
+		Hasher:              hasher,
+		PartitionN:          DefaultPartitionN,
+		ReplicaN:            replicas,
+		PartitionAssignment: partitionAssignment,
 	}
 }
 
@@ -160,7 +163,11 @@ func (c *ClusterSnapshot) IsPrimary(nodeID string, partition int) bool {
 // PrimaryNodeIndex returns the index (position in the cluster) of the primary
 // node for the given partition.
 func (c *ClusterSnapshot) PrimaryNodeIndex(partition int) int {
-	return partition % len(c.Nodes)
+	if c.PartitionAssignment == "modulus" {
+		return partition % len(c.Nodes)
+	} else {
+		return c.Hasher.Hash(uint64(partition), len(c.Nodes))
+	}
 }
 
 // NonPrimaryReplicas returns the list of node IDs which are replicas for the
@@ -277,7 +284,7 @@ func NodePositionByID(nodes []*Node, nodeID string) int {
 // and a hasher. The order of the node IDs provided does not matter because this
 // function will re-order them in a deterministic way.
 func PrimaryNodeID(nodeIDs []string, hasher Hasher) string {
-	snap := NewClusterSnapshot(NewIDNoder(nodeIDs), hasher, 1)
+	snap := NewClusterSnapshot(NewIDNoder(nodeIDs), hasher, "jmp-hash", 1)
 	primaryNode := snap.PrimaryFieldTranslationNode()
 	if primaryNode == nil {
 		return ""

@@ -37,6 +37,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVar(&srv.Config.Cluster.ReplicaN, "cluster.replicas", 1, "Number of hosts each piece of data should be stored on.")
 	flags.DurationVar((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", time.Duration(srv.Config.Cluster.LongQueryTime), "RENAMED TO 'long-query-time': Duration that will trigger log and stat messages for slow queries.") // negative duration indicates invalid value because 0 is meaningful
 	flags.StringVar(&srv.Config.Cluster.Name, "cluster.name", srv.Config.Cluster.Name, "Human-readable name for the cluster.")
+	flags.StringVar(&srv.Config.Cluster.PartitionToNodeAssignment, "cluster.partition-to-node-assignment", srv.Config.Cluster.PartitionToNodeAssignment, "How to assign partitions to nodes. jmp-hash or modulus")
 
 	// Translation
 	flags.StringVar(&srv.Config.Translation.PrimaryURL, "translation.primary-url", srv.Config.Translation.PrimaryURL, "DEPRECATED: URL for primary translation node for replication.")

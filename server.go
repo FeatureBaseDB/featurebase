@@ -427,6 +427,13 @@ func OptServerLookupDB(dsn string) ServerOption {
 	}
 }
 
+func OptServerPartitionAssigner(p string) ServerOption {
+	return func(s *Server) error {
+		s.cluster.partitionAssigner = p
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cluster := newCluster()
@@ -1295,7 +1302,7 @@ func (s *Server) monitorRuntime() {
 }
 
 func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := srv.cluster.NewSnapshot()
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotPrimary
@@ -1342,7 +1349,7 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 }
 
 func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := srv.cluster.NewSnapshot()
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotPrimary
@@ -1372,7 +1379,7 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 }
 
 func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := srv.cluster.NewSnapshot()
 	node := srv.node()
 	if !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotPrimary
@@ -1382,7 +1389,7 @@ func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, e
 }
 
 func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
-	snap := topology.NewClusterSnapshot(srv.cluster.noder, srv.cluster.Hasher, srv.cluster.partitionN)
+	snap := srv.cluster.NewSnapshot()
 
 	node := srv.node()
 	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {

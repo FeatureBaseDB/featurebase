@@ -5178,7 +5178,7 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 	shard := colID / ShardWidth
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+	snap := e.Cluster.NewSnapshot()
 
 	ret := false
 	for _, node := range snap.ShardNodes(index, shard) {
@@ -5539,7 +5539,7 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 	ret := false
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+	snap := e.Cluster.NewSnapshot()
 
 	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
@@ -5585,7 +5585,7 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 	ret := false
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+	snap := e.Cluster.NewSnapshot()
 
 	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
@@ -5632,7 +5632,7 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	ret := false
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := topology.NewClusterSnapshot(e.Cluster.noder, e.Cluster.Hasher, e.Cluster.ReplicaN)
+	snap := e.Cluster.NewSnapshot()
 
 	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
@@ -5699,7 +5699,7 @@ func (e *executor) shardsByNode(nodes []*topology.Node, index string, shards []u
 	// We use e.Cluster.Nodes() here instead of e.Cluster.noder because we need
 	// the node states in order to ensure that we don't include an unavailable
 	// node in the map of nodes to which we distribute the query.
-	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(e.Cluster.Nodes()), e.Cluster.Hasher, e.Cluster.ReplicaN)
+	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(e.Cluster.Nodes()), e.Cluster.Hasher, e.Cluster.partitionAssigner, e.Cluster.ReplicaN)
 
 loop:
 	for _, shard := range shards {

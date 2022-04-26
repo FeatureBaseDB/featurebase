@@ -129,7 +129,8 @@ type Config struct {
 		ReplicaN int    `toml:"replicas"`
 		Name     string `toml:"name"`
 		// This LongQueryTime is deprecated but still exists for backward compatibility
-		LongQueryTime toml.Duration `toml:"long-query-time"`
+		LongQueryTime             toml.Duration `toml:"long-query-time"`
+		PartitionToNodeAssignment string        `toml:"partition-to-node-assignment"`
 	} `toml:"cluster"`
 
 	// Etcd config is based on embedded etcd.
@@ -311,6 +312,11 @@ func (c *Config) validate() error {
 	return nil
 }
 
+const (
+	PartitionToNodeJmp     string = "jmp-hash"
+	PartitionToNodeModulus string = "modulus"
+)
+
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
@@ -345,6 +351,7 @@ func NewConfig() *Config {
 	c.Cluster.Name = "cluster0"
 	c.Cluster.ReplicaN = 1
 	c.Cluster.LongQueryTime = toml.Duration(-time.Minute) //TODO remove this once cluster.longQueryTime is fully deprecated
+	c.Cluster.PartitionToNodeAssignment = PartitionToNodeJmp
 
 	// AntiEntropy config.
 	c.AntiEntropy.Interval = toml.Duration(0)
