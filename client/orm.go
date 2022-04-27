@@ -752,8 +752,8 @@ func (fo FieldOptions) TimeQuantum() TimeQuantum {
 	return fo.timeQuantum
 }
 
-// Ttl returns the configured ttl for a time field.
-func (fo FieldOptions) Ttl() time.Duration {
+// TTL returns the configured ttl for a time field.
+func (fo FieldOptions) TTL() time.Duration {
 	return fo.ttl
 }
 
@@ -920,7 +920,7 @@ func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
 	}
 }
 
-func OptFieldTtl(dur time.Duration) FieldOption {
+func OptFieldTTL(dur time.Duration) FieldOption {
 	return func(options *FieldOptions) {
 		options.ttl = dur
 	}

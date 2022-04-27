@@ -303,7 +303,7 @@ func OptFieldTypeTime(timeQuantum TimeQuantum, ttl string, opt ...bool) FieldOpt
 		if err != nil {
 			return errors.Errorf("cannot parse ttl: %s", ttl)
 		}
-		fo.Ttl = ttlParsed
+		fo.TTL = ttlParsed
 		fo.NoStandardView = len(opt) >= 1 && opt[0]
 		return nil
 	}
@@ -685,9 +685,9 @@ func (f *Field) ForeignIndex() string {
 	return f.options.ForeignIndex
 }
 
-// Ttl returns the ttl of the field.
-func (f *Field) Ttl() time.Duration {
-	return f.options.Ttl
+// TTL returns the ttl of the field.
+func (f *Field) TTL() time.Duration {
+	return f.options.TTL
 }
 
 func (f *Field) bitDepth() (uint64, error) {
@@ -779,7 +779,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
-		f.options.Ttl = 0
+		f.options.TTL = 0
 		f.options.Keys = opt.Keys
 		f.options.ForeignIndex = opt.ForeignIndex
 	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
@@ -793,7 +793,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = opt.BitDepth
 		f.options.TimeUnit = opt.TimeUnit
 		f.options.TimeQuantum = ""
-		f.options.Ttl = 0
+		f.options.TTL = 0
 		f.options.Keys = opt.Keys
 		f.options.ForeignIndex = opt.ForeignIndex
 
@@ -827,7 +827,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			return ErrInvalidTimeQuantum
 		}
 		f.options.TimeQuantum = opt.TimeQuantum
-		f.options.Ttl = opt.Ttl
+		f.options.TTL = opt.TTL
 		f.options.ForeignIndex = opt.ForeignIndex
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
@@ -838,7 +838,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
-		f.options.Ttl = 0
+		f.options.TTL = 0
 		f.options.Keys = false
 		f.options.ForeignIndex = ""
 	default:
@@ -1943,7 +1943,7 @@ type FieldOptions struct {
 	TimeUnit       string        `json:"timeUnit,omitempty"`
 	TimeQuantum    TimeQuantum   `json:"timeQuantum,omitempty"`
 	ForeignIndex   string        `json:"foreignIndex"`
-	Ttl            time.Duration `json:"ttl,omitempty"`
+	TTL            time.Duration `json:"ttl,omitempty"`
 }
 
 // newFieldOptions returns a new instance of FieldOptions
@@ -2062,13 +2062,13 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			TimeQuantum    TimeQuantum   `json:"timeQuantum"`
 			Keys           bool          `json:"keys"`
 			NoStandardView bool          `json:"noStandardView"`
-			Ttl            time.Duration `json:"Ttl"`
+			TTL            time.Duration `json:"ttl"`
 		}{
 			o.Type,
 			o.TimeQuantum,
 			o.Keys,
 			o.NoStandardView,
-			o.Ttl,
+			o.TTL,
 		})
 	case FieldTypeMutex:
 		return json.Marshal(struct {

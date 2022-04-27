@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"net/http"
 	gohttp "net/http"
 	"reflect"
 	"strings"
@@ -1199,21 +1198,21 @@ func TestClient_CreateTimeField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting field: %v", err)
 	}
-	if fld.Ttl() != 0 {
-		t.Fatalf("expected Ttl to be 0, got: %+v", fld.Options().Ttl.String())
+	if fld.TTL() != 0 {
+		t.Fatalf("expected TTL to be 0, got: %+v", fld.Options().TTL.String())
 	}
 
-	fieldTtl := "field_ttl"
-	err = c.CreateFieldWithOptions(context.Background(), index, fieldTtl, pilosa.FieldOptions{Type: pilosa.FieldTypeTime, TimeQuantum: "YMDH", Ttl: time.Hour})
+	fieldTTL := "field_ttl"
+	err = c.CreateFieldWithOptions(context.Background(), index, fieldTTL, pilosa.FieldOptions{Type: pilosa.FieldTypeTime, TimeQuantum: "YMDH", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
-	fldTtl, err := cmd.API.Field(context.Background(), index, fieldTtl)
+	fldTTL, err := cmd.API.Field(context.Background(), index, fieldTTL)
 	if err != nil {
 		t.Fatalf("getting field: %v", err)
 	}
-	if fldTtl.Ttl() != time.Hour {
-		t.Fatalf("expected Ttl 1 hour, got: %+v", fldTtl.Ttl().String())
+	if fldTTL.TTL() != time.Hour {
+		t.Fatalf("expected TTL 1 hour, got: %+v", fldTTL.TTL().String())
 	}
 }
 
@@ -1573,7 +1572,7 @@ func TestClient_ImportRoaringExists(t *testing.T) {
 
 func TestAddAuthToken(t *testing.T) {
 	t.Run("none", func(t *testing.T) {
-		req, err := http.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
+		req, err := gohttp.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1583,7 +1582,7 @@ func TestAddAuthToken(t *testing.T) {
 		}
 	})
 	t.Run("userinfo", func(t *testing.T) {
-		req, err := http.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
+		req, err := gohttp.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1594,7 +1593,7 @@ func TestAddAuthToken(t *testing.T) {
 		}
 	})
 	t.Run("token", func(t *testing.T) {
-		req, err := http.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
+		req, err := gohttp.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

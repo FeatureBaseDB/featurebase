@@ -1671,7 +1671,7 @@ type SchemaOptions struct {
 	CacheType      string        `json:"cacheType"`
 	CacheSize      uint          `json:"cacheSize"`
 	TimeQuantum    string        `json:"timeQuantum"`
-	Ttl            time.Duration `json:"ttl"`
+	TTL            time.Duration `json:"ttl"`
 	Min            pql.Decimal   `json:"min"`
 	Max            pql.Decimal   `json:"max"`
 	Scale          int64         `json:"scale"`
@@ -1696,7 +1696,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		cacheSize:      int(so.CacheSize),
 		cacheType:      CacheType(so.CacheType),
 		timeQuantum:    TimeQuantum(so.TimeQuantum),
-		ttl:            so.Ttl,
+		ttl:            so.TTL,
 		min:            so.Min,
 		max:            so.Max,
 		scale:          so.Scale,

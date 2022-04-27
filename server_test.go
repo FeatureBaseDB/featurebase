@@ -13,7 +13,7 @@ import (
 	"github.com/molecula/featurebase/v3/test"
 )
 
-func TestTtlRemoval(t *testing.T) {
+func TestTTLRemoval(t *testing.T) {
 
 	cluster := test.MustRunCluster(t, 1)
 	node := cluster.GetNode(0)
@@ -28,7 +28,7 @@ func TestTtlRemoval(t *testing.T) {
 	// Create indexes and field with ttl lasting 24 hours
 	if err := client.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{TrackExistence: true}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatalf("creating index, err: %v", err)
-	} else if err := client.CreateFieldWithOptions(context.Background(), indexName, fieldName, pilosa.FieldOptions{Ttl: time.Hour * 24, Type: pilosa.FieldTypeTime, TimeQuantum: "YMDH"}); err != nil {
+	} else if err := client.CreateFieldWithOptions(context.Background(), indexName, fieldName, pilosa.FieldOptions{TTL: time.Hour * 24, Type: pilosa.FieldTypeTime, TimeQuantum: "YMDH"}); err != nil {
 		t.Fatalf("creating field, err: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestTtlRemoval(t *testing.T) {
 		t.Fatalf("setting sample data 3, err: %v", err)
 	}
 
-	node.Server.TtlRemoval(context.Background())
+	node.Server.TTLRemoval(context.Background())
 
 	// Get all the views for given index + field
 	views, err := node.API.Views(context.Background(), indexName, fieldName)

@@ -168,9 +168,9 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 	}
 }
 
-// OptServerTtlRemovalInterval is a functional option on Server
+// OptServerTTLRemovalInterval is a functional option on Server
 // used to set the ttl removal interval.
-func OptServerTtlRemovalInterval(interval time.Duration) ServerOption {
+func OptServerTTLRemovalInterval(interval time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.ttlRemovalInterval = interval
 		return nil
@@ -658,7 +658,7 @@ func (s *Server) Open() error {
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
-	go func() { defer s.wg.Done(); s.monitorTtl() }()
+	go func() { defer s.wg.Done(); s.monitorTTL() }()
 
 	toSend := func() []Message {
 		s.holder.startMsgsMu.Lock()
@@ -842,26 +842,26 @@ func (s *Server) monitorResetTranslationSync() {
 	}
 }
 
-func (s *Server) monitorTtl() {
+func (s *Server) monitorTTL() {
 	ctx := context.Background()
-	// Run TtlRemoval on server start
-	s.TtlRemoval(ctx)
+	// Run TTLRemoval on server start
+	s.TTLRemoval(ctx)
 	ticker := time.NewTicker(s.ttlRemovalInterval)
 	for {
 		select {
 		case <-s.closing:
 			return
 		case <-ticker.C:
-			s.TtlRemoval(ctx)
+			s.TTLRemoval(ctx)
 		}
 	}
 }
 
-func (s *Server) TtlRemoval(ctx context.Context) {
+func (s *Server) TTLRemoval(ctx context.Context) {
 	for _, index := range s.holder.Indexes() {
 		for _, field := range index.Fields() {
 			if field.Options().Type == "time" {
-				if field.Options().Ttl > 0 {
+				if field.Options().TTL > 0 {
 					for _, view := range field.views() {
 						viewNames := strings.Split(view.name, "_")
 						if len(viewNames) >= 2 {
@@ -872,7 +872,7 @@ func (s *Server) TtlRemoval(ctx context.Context) {
 							}
 							timeSince := time.Since(viewTime)
 
-							if timeSince >= field.Options().Ttl {
+							if timeSince >= field.Options().TTL {
 								for _, shard := range field.AvailableShards(true).Slice() {
 									s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
 								}

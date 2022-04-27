@@ -280,7 +280,7 @@ func TestFieldInfoMarshal(t *testing.T) {
 		Options: pilosa.FieldOptions{Base: 0, BitDepth: 0x0, Min: pql.Decimal{Value: -4294967296,
 			Scale: 0}, Max: pql.Decimal{Value: 4294967296, Scale: 0}, Scale: 0, Keys: false,
 			NoStandardView: false, CacheType: "", Type: "timestamp", TimeUnit: "s",
-			TimeQuantum: "", ForeignIndex: "", Ttl: 0}, Cardinality: (*uint64)(nil)}
+			TimeQuantum: "", ForeignIndex: "", TTL: 0}, Cardinality: (*uint64)(nil)}
 	a, err := json.Marshal(f)
 	if err != nil {
 		t.Fatalf("unexpected error marshalling index info,  %v", err)

@@ -1625,8 +1625,8 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 		}
 		fos = append(fos, OptFieldTypeTimestamp(opt.Epoch.UTC(), *opt.TimeUnit))
 	case FieldTypeTime:
-		if opt.Ttl != nil {
-			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, *opt.Ttl, opt.NoStandardView))
+		if opt.TTL != nil {
+			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, *opt.TTL, opt.NoStandardView))
 		} else {
 			fos = append(fos, OptFieldTypeTime(*opt.TimeQuantum, "0", opt.NoStandardView))
 		}
@@ -1755,7 +1755,7 @@ type fieldOptionSpec struct {
 	Epoch                  *time.Time `json:"epoch"`
 	Unit                   *string    `json:"unit"`
 	TimeQuantum            *string    `json:"time-quantum"`
-	Ttl                    *string    `json:"ttl"`
+	TTL                    *string    `json:"ttl"`
 }
 
 func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
@@ -1789,7 +1789,7 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 		timeQuantumVal := TimeQuantum(*fSpec.FieldOptions.TimeQuantum)
 		opt.TimeQuantum = &timeQuantumVal
 	}
-	opt.Ttl = fSpec.FieldOptions.Ttl
+	opt.TTL = fSpec.FieldOptions.TTL
 
 	return opt
 }
@@ -1886,7 +1886,7 @@ type fieldOptions struct {
 	Keys           *bool        `json:"keys,omitempty"`
 	NoStandardView bool         `json:"noStandardView,omitempty"`
 	ForeignIndex   *string      `json:"foreignIndex,omitempty"`
-	Ttl            *string      `json:"ttl,omitempty"`
+	TTL            *string      `json:"ttl,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -1914,7 +1914,7 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("max does not apply to field type set"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
-		} else if o.Ttl != nil {
+		} else if o.TTL != nil {
 			return NewBadRequestError(errors.New("ttl does not apply to field type set"))
 		}
 	case FieldTypeInt:
@@ -1924,7 +1924,7 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
-		} else if o.Ttl != nil {
+		} else if o.TTL != nil {
 			return NewBadRequestError(errors.New("ttl does not apply to field type int"))
 		}
 	case FieldTypeDecimal:
@@ -1936,7 +1936,7 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
-		} else if o.Ttl != nil {
+		} else if o.TTL != nil {
 			return NewBadRequestError(errors.New("ttl does not apply to field type int"))
 		} else if o.ForeignIndex != nil && o.Type == FieldTypeDecimal {
 			return NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
@@ -1952,7 +1952,7 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("cacheSize does not apply to field type timestamp"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type timestamp"))
-		} else if o.Ttl != nil {
+		} else if o.TTL != nil {
 			return NewBadRequestError(errors.New("ttl does not apply to field type timestamp"))
 		} else if o.ForeignIndex != nil {
 			return NewBadRequestError(errors.New("timestamp field cannot be a foreign key"))
@@ -1982,7 +1982,7 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("max does not apply to field type mutex"))
 		} else if o.TimeQuantum != nil {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
-		} else if o.Ttl != nil {
+		} else if o.TTL != nil {
 			return NewBadRequestError(errors.New("ttl does not apply to field type mutex"))
 		}
 	case FieldTypeBool:
@@ -1998,7 +1998,7 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("timeQuantum does not apply to field type bool"))
 		} else if o.Keys != nil {
 			return NewBadRequestError(errors.New("keys does not apply to field type bool"))
-		} else if o.Ttl != nil {
+		} else if o.TTL != nil {
 			return NewBadRequestError(errors.New("ttl does not apply to field type bool"))
 		} else if o.ForeignIndex != nil {
 			return NewBadRequestError(errors.New("bool field cannot be a foreign key"))

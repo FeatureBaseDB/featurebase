@@ -669,7 +669,7 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions 
 		Scale:        o.Scale,
 		BitDepth:     uint64(o.BitDepth),
 		TimeQuantum:  string(o.TimeQuantum),
-		Ttl:          o.Ttl.String(),
+		TTL:          o.TTL.String(),
 		TimeUnit:     string(o.TimeUnit),
 		Keys:         o.Keys,
 		ForeignIndex: o.ForeignIndex,
@@ -1073,11 +1073,11 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 	m.Scale = options.Scale
 	m.BitDepth = uint64(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
-	ttlValue, err := time.ParseDuration(options.Ttl)
+	ttlValue, err := time.ParseDuration(options.TTL)
 	if err != nil {
 		ttlValue = 0
 	}
-	m.Ttl = ttlValue
+	m.TTL = ttlValue
 	m.TimeUnit = options.TimeUnit
 	m.Keys = options.Keys
 	m.ForeignIndex = options.ForeignIndex

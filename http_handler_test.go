@@ -172,7 +172,7 @@ func TestIngestSchemaHandler(t *testing.T) {
 	}
 }
 
-func TestPostFieldWithTtl(t *testing.T) {
+func TestPostFieldWithTTL(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
@@ -191,33 +191,33 @@ func TestPostFieldWithTtl(t *testing.T) {
 		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 
-	postFieldTtlUrl := fmt.Sprintf("%s/index/example/field/with_ttl", m.URL())
+	postFieldTTLUrl := fmt.Sprintf("%s/index/example/field/with_ttl", m.URL())
 
 	// Create new field with ttl but in invalid format
-	fieldOptionInvalidTtl := `
+	fieldOptionInvalidTTL := `
  	{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24hour" }}
 	`
-	respField := test.Do(t, "POST", postFieldTtlUrl, string(fieldOptionInvalidTtl))
+	respField := test.Do(t, "POST", postFieldTTLUrl, string(fieldOptionInvalidTTL))
 	if (respField.StatusCode != gohttp.StatusBadRequest) &&
 		(respField.Body != "applying option: cannot parse ttl: 24hour") {
 		t.Errorf("expected ttl parse error, got status: %d, body=%s", respField.StatusCode, respField.Body)
 	}
 
 	// Create new field with ttl in invalid format
-	fieldOptionValidTtl := `
+	fieldOptionValidTTL := `
 	{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24h" }}
 	`
-	respField = test.Do(t, "POST", postFieldTtlUrl, string(fieldOptionValidTtl))
+	respField = test.Do(t, "POST", postFieldTTLUrl, string(fieldOptionValidTTL))
 	if resp.StatusCode != gohttp.StatusOK {
 		t.Errorf("creating field with ttl, got status: %d, body=%s", respField.StatusCode, respField.Body)
 	}
 
 	// Create new field without ttl
-	postFieldNoTtlUrl := fmt.Sprintf("%s/index/example/field/no_ttl", m.URL())
-	fieldOptionNoTtl := `
+	postFieldNoTTLUrl := fmt.Sprintf("%s/index/example/field/no_ttl", m.URL())
+	fieldOptionNoTTL := `
 	{ "options": {"timeQuantum":"YMDH","type":"time" }}
 	`
-	respField = test.Do(t, "POST", postFieldNoTtlUrl, string(fieldOptionNoTtl))
+	respField = test.Do(t, "POST", postFieldNoTTLUrl, string(fieldOptionNoTTL))
 	if resp.StatusCode != gohttp.StatusOK {
 		t.Errorf("creating field without ttl, status: %d, body=%s", respField.StatusCode, respField.Body)
 	}

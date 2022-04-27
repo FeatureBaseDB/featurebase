@@ -1026,8 +1026,8 @@ func TestORM(t *testing.T) {
 			0)
 	})
 
-	t.Run("TtlOptions", func(t *testing.T) {
-		field := sampleIndex.Field("ttl-field", OptFieldTypeTime(TimeQuantumDayHour, true), OptFieldTtl(0))
+	t.Run("TTLOptions", func(t *testing.T) {
+		field := sampleIndex.Field("ttl-field", OptFieldTypeTime(TimeQuantumDayHour, true), OptFieldTTL(0))
 		if true != field.Opts().NoStandardView() {
 			t.Fatalf("field noStandardView %v != %v", true, field.Opts().NoStandardView())
 		}
@@ -1222,8 +1222,8 @@ func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, 
 	if timeUnit != opts.TimeUnit() {
 		t.Fatalf("%s != %s", timeUnit, opts.TimeUnit())
 	}
-	if ttl != opts.Ttl() {
-		t.Fatalf("%s != %s", ttl, opts.Ttl())
+	if ttl != opts.TTL() {
+		t.Fatalf("%s != %s", ttl, opts.TTL())
 	}
 }
 
