@@ -543,7 +543,11 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		Query: fmt.Sprintf("Row(%s=1)", fieldName),
 	}
 
-	if _, err := cluster.GetPrimary().API.Query(context.Background(), qry); !strings.Contains(err.Error(), "shard unavailable") {
+	// check for connection refused... this used to check 'shard
+	// unavailable', but we since made a change to allow queries to
+	// nodes which the cluster *thinks* are down, but often are
+	// actually not.
+	if _, err := cluster.GetPrimary().API.Query(context.Background(), qry); !strings.Contains(err.Error(), "connection refused") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 }
@@ -636,7 +640,11 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	// the query to result in an error, we check that it's the error we expect.
 	resp, err := coord.API.Query(context.Background(), qry)
 	if err != nil {
-		if !strings.Contains(err.Error(), "shard unavailable") {
+		// check for connection refused... this used to check 'shard
+		// unavailable', but we since made a change to allow queries to
+		// nodes which the cluster *thinks* are down, but often are
+		// actually not.
+		if !strings.Contains(err.Error(), "connection refused") {
 			t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 		}
 	} else {
