@@ -866,7 +866,9 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	nodes := snap.PartitionNodes(partition)
 	var upNode *topology.Node
 	for _, node := range nodes {
-		if node.State == disco.NodeStateStarted {
+		// we all UNKNOWN state here because we often mistakenly think
+		// a node is not up under heavy load.
+		if node.State == disco.NodeStateStarted || node.State == disco.NodeStateUnknown {
 			upNode = node
 			break
 		}
