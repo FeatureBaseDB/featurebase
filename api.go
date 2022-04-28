@@ -867,10 +867,15 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	var upNode *topology.Node
 	for _, node := range nodes {
 		// we all UNKNOWN state here because we often mistakenly think
-		// a node is not up under heavy load.
-		if node.State == disco.NodeStateStarted || node.State == disco.NodeStateUnknown {
+		// a node is not up under heavy load, but prefer STARTED if we
+		// find one.
+		if node.State == disco.NodeStateStarted {
 			upNode = node
 			break
+		} else if node.State == disco.NodeStateUnknown {
+			if upNode != nil {
+				upNode = node
+			}
 		}
 	}
 
