@@ -58,7 +58,7 @@ type executor struct {
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
-	shutdown       bool
+	shutdown       chan struct{}
 	workers        *task.Pool
 	workerPoolSize int
 	work           chan job
@@ -113,6 +113,7 @@ func emptyResult(c *pql.Call) interface{} {
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
 		workerPoolSize: 2,
+		shutdown:       make(chan struct{}),
 	}
 	for _, opt := range opts {
 		err := opt(e)
@@ -131,14 +132,12 @@ func newExecutor(opts ...executorOption) *executor {
 }
 
 func (e *executor) Close() error {
-	if e.shutdown {
-		// otherwise close(e.work) can result in
-		// panic: close of closed channel.
-		// We don't comprehend: why we are called 2x though(?)
-		// But pilosa/server TestClusteringNodesReplica2 did.
+	select {
+	case <-e.shutdown:
 		return nil
+	default:
 	}
-	e.shutdown = true
+	close(e.shutdown)
 	_ = testhook.Closed(NewAuditor(), e, nil)
 	close(e.work)
 	e.workers.Close()
@@ -6043,8 +6042,10 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := ctx.Done()
-	if e.shutdown {
+	select {
+	case <-e.shutdown:
 		return nil, errShutdown
+	default:
 	}
 
 	ch := make(chan mapResponse, len(shards))
