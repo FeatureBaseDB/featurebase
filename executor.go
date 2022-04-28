@@ -5707,7 +5707,7 @@ loop:
 			// If the node being considered is in any state other than STARTED,
 			// then exclude it from the map. This way, one of that node's
 			// healthy replicas will be included instead.
-			if topology.Nodes(nodes).ContainsID(node.ID) && node.State == disco.NodeStateStarted {
+			if topology.Nodes(nodes).ContainsID(node.ID) && (node.State == disco.NodeStateStarted || node.State == disco.NodeStateUnknown) {
 				m[node] = append(m[node], shard)
 				continue loop
 			}
