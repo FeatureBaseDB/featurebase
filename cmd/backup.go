@@ -32,5 +32,6 @@ Backs up a FeatureBase server to a local, tar-formatted snapshot file.
 	flags.StringVar(&cmd.Pprof, "pprof", cmd.Pprof, "host:port to listen for profiling requests at /debug/pprof and /debug/fgprof.")
 	ctl.SetTLSConfig(flags, "", &cmd.TLS.CertificatePath, &cmd.TLS.CertificateKeyPath, &cmd.TLS.CACertPath, &cmd.TLS.SkipVerify, &cmd.TLS.EnableClientVerification)
 	flags.StringVar(&cmd.AuthToken, "auth-token", "", "Authentication token")
+	flags.StringVar(&cmd.HeaderTimeoutStr, "header-timeout", cmd.HeaderTimeoutStr, "Length of time to wait for initial HTTP response before giving up.")
 	return ccmd
 }

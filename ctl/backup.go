@@ -43,7 +43,8 @@ type BackupCommand struct { // nolint: maligned
 	RetryPeriod time.Duration `json:"retry-period"`
 
 	// Response Header Timeout for HTTP Requests
-	HeaderTimeout time.Duration `json:"header-timeout"`
+	HeaderTimeoutStr string
+	HeaderTimeout    time.Duration `json:"header-timeout"`
 
 	// Host:port on which to listen for pprof.
 	Pprof string `json:"pprof"`
@@ -84,6 +85,13 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("-o flag required")
 	} else if cmd.Concurrency <= 0 {
 		return fmt.Errorf("concurrency must be at least one")
+	}
+	if cmd.HeaderTimeoutStr != "" {
+		if dur, err := time.ParseDuration(cmd.HeaderTimeoutStr); err != nil {
+			return fmt.Errorf("could not parse '%s' as a duration: %v", cmd.HeaderTimeoutStr, err)
+		} else {
+			cmd.HeaderTimeout = dur
+		}
 	}
 
 	// Parse TLS configuration for node-specific clients.

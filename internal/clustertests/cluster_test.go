@@ -173,10 +173,13 @@ func TestClusterStuff(t *testing.T) {
 		var backupCmd *exec.Cmd
 		tmpdir := t.TempDir()
 
-		// collect code coverage while doing backup using an instrumented binary by calling
-		// a wrapper test (TestRunMain) for the main entrypoint of featurebase
+		// Collect code coverage while doing backup using an
+		// instrumented binary by calling a wrapper test (TestRunMain)
+		// for the main entrypoint of featurebase.  Note, we pass the
+		// "--header-timeout" option simply to ensure that it is
+		// accepted and properly parsed by the command.
 		args := []string{"-test.run=TestRunMain", "-test.coverprofile=/results/coverage-backup.out", "backup",
-			"--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest")}
+			"--host=pilosa1:10101", fmt.Sprintf("--output=%s", tmpdir+"/backuptest"), "--header-timeout=3s"}
 		if auth {
 			args = append(args, fmt.Sprintf("--auth-token=%s", token))
 		}
