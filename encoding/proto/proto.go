@@ -70,6 +70,14 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeCreateFieldMessage(msg, mt)
 		return nil
+	case *pilosa.UpdateFieldMessage:
+		msg := &pb.UpdateFieldMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling UpdateFieldMessage")
+		}
+		s.decodeUpdateFieldMessage(msg, mt)
+		return nil
 	case *pilosa.DeleteFieldMessage:
 		msg := &pb.DeleteFieldMessage{}
 		err := proto.Unmarshal(buf, msg)
@@ -339,6 +347,8 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeDeleteIndexMessage(mt)
 	case *pilosa.CreateFieldMessage:
 		return s.encodeCreateFieldMessage(mt)
+	case *pilosa.UpdateFieldMessage:
+		return s.encodeUpdateFieldMessage(mt)
 	case *pilosa.DeleteFieldMessage:
 		return s.encodeDeleteFieldMessage(mt)
 	case *pilosa.DeleteAvailableShardMessage:
@@ -751,6 +761,20 @@ func (s Serializer) encodeCreateFieldMessage(m *pilosa.CreateFieldMessage) *pb.C
 	}
 }
 
+func (s Serializer) encodeUpdateFieldMessage(m *pilosa.UpdateFieldMessage) *pb.UpdateFieldMessage {
+	return &pb.UpdateFieldMessage{
+		CreateFieldMessage: s.encodeCreateFieldMessage(&m.CreateFieldMessage),
+		Update:             s.encodeFieldUpdate(&m.Update),
+	}
+}
+
+func (s Serializer) encodeFieldUpdate(m *pilosa.FieldUpdate) *pb.FieldUpdate {
+	return &pb.FieldUpdate{
+		Option: m.Option,
+		Value:  m.Value,
+	}
+}
+
 func (s Serializer) encodeDeleteFieldMessage(m *pilosa.DeleteFieldMessage) *pb.DeleteFieldMessage {
 	return &pb.DeleteFieldMessage{
 		Index: m.Index,
@@ -1147,6 +1171,16 @@ func (s Serializer) decodeCreateFieldMessage(pb *pb.CreateFieldMessage, m *pilos
 	m.CreatedAt = pb.CreatedAt
 	m.Meta = &pilosa.FieldOptions{}
 	s.decodeFieldOptions(pb.Meta, m.Meta)
+}
+
+func (s Serializer) decodeUpdateFieldMessage(pb *pb.UpdateFieldMessage, m *pilosa.UpdateFieldMessage) {
+	s.decodeCreateFieldMessage(pb.CreateFieldMessage, &m.CreateFieldMessage)
+	s.decodeFieldUpdate(pb.Update, &m.Update)
+}
+
+func (s Serializer) decodeFieldUpdate(pb *pb.FieldUpdate, m *pilosa.FieldUpdate) {
+	m.Option = pb.Option
+	m.Value = pb.Value
 }
 
 func (s Serializer) decodeDeleteFieldMessage(pb *pb.DeleteFieldMessage, m *pilosa.DeleteFieldMessage) {

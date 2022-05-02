@@ -343,6 +343,38 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	return field, nil
 }
 
+// FieldUpdate represents a change to a field. The thinking is to only
+// support changing one field option at a time to keep the
+// implementation sane. At time of writing, only TTL is supported.
+type FieldUpdate struct {
+	Option string `json:"option"`
+	Value  string `json:"value"`
+}
+
+func (api *API) UpdateField(ctx context.Context, indexName, fieldName string, update FieldUpdate) error {
+	// Find index.
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	cfm, err := index.UpdateField(ctx, fieldName, update)
+	if err != nil {
+		return errors.Wrap(err, "updating field")
+	}
+
+	if err := index.UpdateFieldLocal(cfm, update); err != nil {
+		return errors.Wrap(err, "updating field locally")
+	}
+
+	// broadcast field update
+	err = api.holder.sendOrSpool(&UpdateFieldMessage{
+		CreateFieldMessage: *cfm,
+		Update:             update,
+	})
+	return errors.Wrap(err, "sending UpdateField message")
+}
+
 // Field retrieves the named field.
 func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Field")

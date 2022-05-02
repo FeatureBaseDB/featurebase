@@ -127,6 +127,7 @@ type Schemator interface {
 	DeleteIndex(ctx context.Context, name string) error
 	Field(ctx context.Context, index, field string) ([]byte, error)
 	CreateField(ctx context.Context, index, field string, val []byte) error
+	UpdateField(ctx context.Context, index, field string, val []byte) error
 	DeleteField(ctx context.Context, index, field string) error
 	View(ctx context.Context, index, field, view string) (bool, error)
 	CreateView(ctx context.Context, index, field, view string) error
@@ -285,6 +286,11 @@ func (*nopSchemator) CreateField(ctx context.Context, index, field string, val [
 	return nil
 }
 
+// UpdateField is a no-op implementation of the Schemator UpdateField method.
+func (*nopSchemator) UpdateField(ctx context.Context, index, field string, val []byte) error {
+	return nil
+}
+
 // DeleteField is a no-op implementation of the Schemator DeleteField method.
 func (*nopSchemator) DeleteField(ctx context.Context, index, field string) error { return nil }
 
@@ -399,6 +405,24 @@ func (s *inMemSchemator) CreateField(ctx context.Context, index, field string, v
 		Views: make(map[string]struct{}),
 	}
 	return nil
+}
+
+func (s *inMemSchemator) UpdateField(ctx context.Context, index, field string, val []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.schema[index]
+	if !ok {
+		return ErrIndexDoesNotExist
+	}
+	if fld, ok := idx.Fields[field]; ok {
+		// The current logic in pilosa doesn't allow us to return ErrFieldExists
+		// here, so for now we just update the Data value if the field already
+		// exists.
+		fld.Data = val
+		return nil
+	} else {
+		return ErrFieldDoesNotExist
+	}
 }
 
 // DeleteField is an in-memory implementation of the Schemator DeleteField method.

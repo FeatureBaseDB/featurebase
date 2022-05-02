@@ -76,6 +76,16 @@ message CreateFieldMessage {
 	int64 CreatedAt  = 4;
 }
 
+message UpdateFieldMessage {
+	CreateFieldMessage CreateFieldMessage = 1;
+	FieldUpdate Update = 2;
+}
+
+message FieldUpdate {
+	string Option = 1;
+	string Value = 2;
+}
+
 message DeleteFieldMessage {
 	string Index = 1;
 	string Field = 2;

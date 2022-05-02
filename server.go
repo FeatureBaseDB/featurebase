@@ -990,6 +990,11 @@ func (s *Server) receiveMessage(m Message) error {
 			return err
 		}
 
+	case *UpdateFieldMessage:
+		idx := s.holder.Index(obj.CreateFieldMessage.Index)
+		if err := idx.UpdateFieldLocal(&obj.CreateFieldMessage, obj.Update); err != nil {
+			return err
+		}
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {

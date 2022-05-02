@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/pql"
@@ -717,6 +718,78 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
 	}
 	return nil
+}
+
+func (i *Index) persistUpdateField(ctx context.Context, cfm *CreateFieldMessage) error {
+	if cfm.Index == "" {
+		return ErrIndexRequired
+	} else if cfm.Field == "" {
+		return ErrFieldRequired
+	}
+
+	if b, err := i.serializer.Marshal(cfm); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := i.Schemator.UpdateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldDoesNotExist {
+		return ErrFieldNotFound
+	} else if err != nil {
+		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
+	}
+	return nil
+}
+
+func (i *Index) UpdateField(ctx context.Context, name string, update FieldUpdate) (*CreateFieldMessage, error) {
+	// Get field from etcd
+	buf, err := i.Schemator.Field(ctx, i.name, name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting field '%s' from etcd", name)
+	}
+	cfm, err := decodeCreateFieldMessage(i.holder.serializer, buf)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+	} else if cfm == nil {
+		return nil, errors.New("got nil CreateFieldMessage when decoding")
+	}
+
+	// Handle the options we know how to update, or error.
+	switch update.Option {
+	case "TTL", "ttl":
+		if cfm.Meta.Type != FieldTypeTime {
+			return nil, NewBadRequestError(errors.Errorf("can only add TTL to a 'time' type field, not '%s'", cfm.Meta.Type))
+		}
+		dur, err := time.ParseDuration(update.Value)
+		if err != nil {
+			return nil, NewBadRequestError(errors.Wrap(err, "parsing duration"))
+		}
+		cfm.Meta.TTL = dur
+	default:
+		return nil, NewBadRequestError(errors.Errorf("updates for option '%s' are not supported", update.Option))
+	}
+
+	// Persist the updated field to etcd.
+	if err := i.persistUpdateField(ctx, cfm); err != nil {
+		return nil, errors.Wrap(err, "persisting updated field")
+	}
+
+	return cfm, nil
+}
+
+func (i *Index) UpdateFieldLocal(cfm *CreateFieldMessage, update FieldUpdate) error {
+	// Update local structures. This assumes we don't need to do
+	// anything else... which is fine for TTL specifically, but I'm
+	// not sure about other things, so be aware when adding new update
+	// abilities.
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	field := i.field(cfm.Field)
+	if field == nil {
+		return errors.Errorf("field '%s' not found locally", cfm.Field)
+	}
+	if err := field.applyOptions(*cfm.Meta); err != nil {
+		return errors.Wrap(err, "updating local field options")
+	}
+
+	return nil
+
 }
 
 // createFieldIfNotExists creates the field if it does not already exist in the

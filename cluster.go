@@ -1991,6 +1991,14 @@ type CreateFieldMessage struct {
 	Meta      *FieldOptions
 }
 
+// UpdateFieldMessage represents a change to an existing field. The
+// CreateFieldMessage holds the changed field, while the update shows
+// the change that was made.
+type UpdateFieldMessage struct {
+	CreateFieldMessage CreateFieldMessage
+	Update             FieldUpdate
+}
+
 // DeleteFieldMessage is an internal message indicating field deletion.
 type DeleteFieldMessage struct {
 	Index string

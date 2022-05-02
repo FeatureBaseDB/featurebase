@@ -906,6 +906,33 @@ func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, v
 	return nil
 }
 
+func (e *Etcd) UpdateField(ctx context.Context, indexName string, name string, val []byte) error {
+	key := schemaPrefix + indexName + "/" + name
+
+	// Set up Op to write field value as bytes.
+	op := clientv3.OpPut(key, "")
+	op.WithValueBytes(val)
+
+	// Check for key existence, and execute Op within a transaction.
+	var resp *clientv3.TxnResponse
+
+	err := e.retryClient(func(cli *clientv3.Client) (err error) {
+		resp, err = cli.Txn(ctx).
+			If(clientv3util.KeyExists(key)).
+			Then(op).
+			Commit()
+		return err
+	})
+	if err != nil {
+		return errors.Wrap(err, "executing transaction")
+	}
+
+	if !resp.Succeeded {
+		return disco.ErrFieldDoesNotExist
+	}
+	return nil
+}
+
 func (e *Etcd) DeleteField(ctx context.Context, indexname string, name string) (err error) {
 	key := schemaPrefix + indexname + "/" + name
 	// Deleting field and views in one transaction.

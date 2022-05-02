@@ -2,6 +2,7 @@
 package pilosa_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/encoding/proto"
@@ -77,6 +79,38 @@ func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
 			}
 			test.CompareTransactions(t, tst.tr.Transaction, mytr.Transaction)
 		})
+	}
+}
+
+func TestUpdateFieldTTL(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	c.CreateField(t, "ttltest", pilosa.IndexOptions{}, "timefield", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0"))
+
+	nodeURL := c.Nodes[0].URL() + "/index/ttltest/field/timefield"
+	fmt.Println(nodeURL)
+
+	req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(`{"option": "ttl", "value": "48h"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := gohttp.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("doing option request: %v", err)
+	} else if resp.StatusCode != 200 {
+		t.Fatalf("unexpected status updating TTL")
+	}
+
+	for _, node := range c.Nodes {
+		ii, err := node.API.Schema(context.Background(), false)
+		if err != nil {
+			t.Fatalf("getting schema: %v", err)
+		}
+		if ii[0].Fields[0].Options.TTL != time.Hour*48 {
+			t.Fatalf("unexpected TTL after update: %s", ii[0].Fields[0].Options.TTL)
+		}
 	}
 }
 

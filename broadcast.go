@@ -70,6 +70,7 @@ const (
 	messageTypeTransaction
 	messageTypeResizeNodeMessage
 	messageTypeResizeAbortMessage
+	messageTypeUpdateField
 )
 
 // MarshalInternalMessage serializes the pilosa message and adds pilosa internal
@@ -121,6 +122,8 @@ func getMessage(typ byte) Message {
 		return &ResizeNodeMessage{}
 	case messageTypeResizeAbortMessage:
 		return &ResizeAbortMessage{}
+	case messageTypeUpdateField:
+		return &UpdateFieldMessage{}
 	default:
 		panic(fmt.Sprintf("unknown message type %d", typ))
 	}
@@ -164,6 +167,8 @@ func getMessageType(m Message) byte {
 		return messageTypeResizeNodeMessage
 	case *ResizeAbortMessage:
 		return messageTypeResizeAbortMessage
+	case *UpdateFieldMessage:
+		return messageTypeUpdateField
 	default:
 		panic(fmt.Sprintf("don't have type for message %#v", m))
 	}

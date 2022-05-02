@@ -432,6 +432,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}/field/{field}/view", handler.chkAuthZ(handler.handleGetView, authz.Admin)).Methods("GET")
 	router.HandleFunc("/index/{index}/field/{field}/view/{view}", handler.chkAuthZ(handler.handleDeleteView, authz.Admin)).Methods("DELETE").Name("DeleteView")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handlePatchField, authz.Write)).Methods("PATCH").Name("PatchField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.chkAuthZ(handler.handleDeleteField, authz.Write)).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.chkAuthZ(handler.handlePostImport, authz.Write)).Methods("POST").Name("PostImport")
 	router.HandleFunc("/index/{index}/field/{field}/mutex-check", handler.chkAuthZ(handler.handleGetMutexCheck, authz.Read)).Methods("GET").Name("GetMutexCheck")
@@ -794,6 +795,7 @@ func (r *successResponse) check(err error) (statusCode int) {
 	case ConflictError:
 		statusCode = http.StatusConflict
 	case NotFoundError:
+		// TODO I think any error matches NotFoundError because it's a `type NotFoundError error`
 		statusCode = http.StatusNotFound
 	default:
 		statusCode = http.StatusInternalServerError
@@ -1696,6 +1698,41 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 			resp.CreatedAt = field.CreatedAt()
 		}
 	}
+	resp.write(w, err)
+}
+
+// handlePatchField handles updates to field schema at /index/{index}/field/{field}
+func (h *Handler) handlePatchField(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	fieldName, ok := mux.Vars(r)["field"]
+	if !ok {
+		http.Error(w, "field name is required", http.StatusBadRequest)
+		return
+	}
+
+	resp := successResponse{h: h, Name: fieldName}
+
+	// Decode request.
+	var req FieldUpdate
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&req)
+	if err != nil && err != io.EOF {
+		resp.write(w, err)
+		return
+	}
+
+	err = h.api.UpdateField(r.Context(), indexName, fieldName, req)
 	resp.write(w, err)
 }
 
