@@ -935,8 +935,8 @@ func TestFieldViewsByTimeRange(t *testing.T) {
 		from, to string
 		expected []string
 	}{
-		{"", "", []string{"standard"}},
-		{"2020-12-31T00:00", "2023-01-03T00:00", []string{"standard"}},
+		{"", "", []string{viewStandard}}, // this is interpreted as no time range being specified at all
+		{"2020-12-31T00:00", "2023-01-03T00:00", []string{"standard_2021", "standard_2022"}},
 		{"2021-01-01T00:00", "2022-01-01T00:00", []string{"standard_2021"}},
 		{"2021-01-01T00:00", "2022-01-02T00:00", []string{"standard_2021", "standard_20220101"}},
 		{"", "2022-01-02T00:00", []string{"standard_2021", "standard_20220101"}},

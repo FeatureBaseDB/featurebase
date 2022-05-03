@@ -968,17 +968,18 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	return f.options.TimeQuantum
 }
 
-// viewsByTimeRange is a wrapper on the non-method viewsByTimeRange, which
-// computes views for a specific field for a given time range. The difference
-// is that, as a Field operation, it can return "standard" for a view that
-// covers the whole time range, if the field supports a standard view, and
-// can automatically coerce from/to times to match the actual range present
-// in the field.
+// viewsByTimeRange is a wrapper on the non-method viewsByTimeRange,
+// which computes views for a specific field for a given time
+// range. The difference is that, it can return "standard" if from/to
+// are not set and can automatically coerce from/to times to match the
+// actual range present in the field.
 func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error) {
-	// If we can't find time views at all, we'll yield "standard" regardless.
-	// It's the least-bad answer, I think.
+	// If we can't find time views at all, we'll yield "standard"
+	// regardless.  It's the least-bad answer, I think.  Also yield
+	// "standard" if from and to were both not set and there is a
+	// standard view.
 	q := f.TimeQuantum()
-	if q == "" {
+	if q == "" || (from.IsZero() && to.IsZero() && !f.options.NoStandardView) {
 		return []string{viewStandard}, nil
 	}
 
@@ -991,10 +992,9 @@ func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error)
 
 	// If min/max are empty, there were no time views.
 	if min == "" || max == "" {
-		return []string{viewStandard}, nil
+		return []string{}, nil
 	}
 
-	wasZero := from.IsZero() && to.IsZero()
 	// Convert min/max from string to time.Time.
 	minTime, err := timeOfView(min, false)
 	if err != nil {
@@ -1010,9 +1010,6 @@ func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error)
 	}
 	if to.IsZero() || to.After(maxTime) {
 		to = maxTime
-	}
-	if (wasZero || (from == minTime && to == maxTime)) && !f.Options().NoStandardView {
-		return []string{viewStandard}, nil
 	}
 	return viewsByTimeRange(viewStandard, from, to, q), nil
 }

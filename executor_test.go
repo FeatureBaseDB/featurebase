@@ -1067,6 +1067,64 @@ func TestExecutor(t *testing.T) {
 			})
 		}
 	})
+
+	// This is a regression test which checks that queries over a time
+	// range that encompass all available time views do not default to
+	// using the standard view. This can be incorrect in the case
+	// where some time views have been deleted.
+	t.Run("TimeQueriesFullRange", func(t *testing.T) {
+		ts := func(t time.Time) int64 {
+			return t.Unix() * 1e+9
+		}
+		indexName := "tq_range"
+		c.CreateField(t, indexName, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "f1", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("D"), "0"))
+		c.ImportTimeQuantumKey(t, indexName, "f1", []test.TimeQuantumKey{
+			// from edge cases
+			{ColKey: "C1", RowKey: "R1", Ts: ts(time.Date(2022, 1, 10, 0, 0, 0, 0, time.UTC))},
+			{ColKey: "C2", RowKey: "R1", Ts: ts(time.Date(2022, 1, 11, 0, 0, 0, 0, time.UTC))},
+			{ColKey: "C3", RowKey: "R1", Ts: ts(time.Date(2022, 1, 12, 0, 0, 0, 0, time.UTC))},
+		})
+		c.ImportKeyKey(t, indexName, "f1", [][2]string{
+			{"R1", "C2"},
+			{"R1", "C3"},
+			{"R1", "C4"},
+			{"R1", "C5"},
+			{"R1", "C6"},
+		})
+
+		tr := c.QueryGRPC(t, indexName, "Row(f1=R1, from='2022-01-10', to='2022-01-13')")
+		csvString, err := tableResponseToCSVString(tr)
+		if err != nil {
+			t.Fatalf("converting to CSV: %v", err)
+		}
+		expected := `
+_id
+C1
+C3
+C2
+`[1:]
+		// check that an unqualified query does use the standard view
+		if csvString != expected {
+			t.Fatalf("expected:\n%s\ngot:\n%s\n", expected, csvString)
+		}
+		tr = c.QueryGRPC(t, indexName, "Row(f1=R1)")
+		csvString, err = tableResponseToCSVString(tr)
+		if err != nil {
+			t.Fatalf("converting to CSV: %v", err)
+		}
+		expected = `
+_id
+C1
+C3
+C2
+C5
+C4
+C6
+`[1:]
+		if csvString != expected {
+			t.Fatalf("expected:\n%s\ngot:\n%s\n", expected, csvString)
+		}
+	})
 }
 
 func runCallTest(c *test.Cluster, t *testing.T, writeQuery string, readQueries []string, indexOptions *pilosa.IndexOptions, fieldOption ...pilosa.FieldOption) []pilosa.QueryResponse {
@@ -5074,10 +5132,6 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	} else if rows.Keys != nil {
 		t.Fatalf("unexpected keys: %+v", rows.Keys)
 	}
-}
-
-func TestExecutor_Execute_RowsTime(t *testing.T) {
-
 }
 
 // Ensure that an empty time field returns empty Rows().
