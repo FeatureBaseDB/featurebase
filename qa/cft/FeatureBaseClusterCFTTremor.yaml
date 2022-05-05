@@ -1,0 +1,309 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: FeatureBase Cluster for testing
+
+Parameters:
+  # Network params
+  PrivateSubnetIds:
+    Type: String
+    Default: 'subnet-0319dde319380326f,subnet-0517ca9a646d80f88,subnet-05a7b685ed27eb1cf'
+    Description: private subnet provisioned for integration test.
+  PublicSubnetIds:
+    Type: String
+    Default: 'subnet-066b4b922b54e51a2,subnet-037b8884269a69025,subnet-08482631514426210'
+    Description: public subnet provisioned for integration test.
+  FeatureBasePort:
+    Type: Number
+    Default: 10101
+    Description: The port where FeatureBase is listening on.
+  # basic ec2 instance params
+  SecurityGroupID:
+    Type: String
+    Default: sg-000ac63a3e020c470
+    Description: security group id
+  KeyPairName:
+    Type: String
+    Default: smoke-0fjLX8lrTQpONO2-gitlab-ci
+    Description: key pair for ec2 instances
+  InstanceImageId:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: The ID of the AMI to use for the deployment EC2 instances.
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2  
+  # basic root device volume params
+  VolumeSize:
+    Type: Number
+    Default: 20
+    Description: The volume size in gigabytes for the root volume of deployment instances.
+  Iops:
+    Type: Number
+    Default: 3000
+    Description: The IOPS for the root EBS volume of deployment instances.
+  # FeatureBase Params
+  FBInstanceCount:
+    Type: Number
+    Default: 5
+    Description: The number of EC2 instances for the FeatureBase cluster  
+  FBInstanceSize:
+    Type: String
+    Default: m5ad.16xlarge
+    Description: Class of EC2 instance used to host the deployment.  
+  # note that we are using a producer, which is also the kafka host
+  # and the consumer uses the kafka-static binary for ingesting data
+  # to featurebase
+  # producer/consumer related params  
+  ProducerInstanceSize:
+    Type: String
+    Default: m4.16xlarge
+  ConsumerInstanceSize:
+    Type: String
+    Default: m4.16xlarge
+  ProducerInstanceCount:
+    Type: Number
+    Default: 1
+    Description: number of producer instances.
+  ConsumerInstanceCount:
+    Type: Number
+    Default: 1
+    Description: number of consumer instances.
+  # producer/consumer ebs volume params  
+  EBSVolumeSize:
+    Type: Number
+    Default: 1200    
+  EBSIops:
+    Type: Number
+    Default: 3000    
+  # test info
+  TestCommitSHA:
+    Type: String
+    Default: the-current-featurebase-commit-sha
+    Description: FeatureBase repo gitlab commit SHA. 
+  TestName:
+    Type: String
+    Default: some-test-name
+    Description: Test name (gitlab job name).
+  TestID:
+    Type: String
+    Default: some-test-id
+    Description: Test run id (gitlab CI job id).
+
+Resources:
+
+####################### For provisioning the Featurebase Cluster #########################
+# Autoscaling group. This launches the actual EC2 instances containing FeatureBase
+# we are not really auto scaling anything. this is just a way to launch multiple instances
+  DeploymentAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${AWS::StackName}-asg'
+      VPCZoneIdentifier:
+        !Split [ ",", !Ref PrivateSubnetIds ]
+      LaunchConfigurationName: !Ref 'DeploymentInstances'
+      MinSize: !Ref 'FBInstanceCount'
+      MaxSize: !Ref 'FBInstanceCount'
+      DesiredCapacity: !Ref 'FBInstanceCount'
+      HealthCheckGracePeriod: 120
+      Tags:      
+        - Key: TestCommitSHA
+          Value: !Ref TestCommitSHA
+          PropagateAtLaunch: "true"
+        - Key: TestName
+          Value: !Sub '${TestName}-featurebase-cluster'
+          PropagateAtLaunch: "true"
+        - Key: TestID
+          Value: !Ref TestID
+          PropagateAtLaunch: "true"        
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+
+# Metadata describing the EC2 instance
+  DeploymentInstances:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Sub '${AWS::StackName}-launch-cfg'
+      KeyName: !Ref KeyPairName
+      ImageId: !Ref InstanceImageId
+      SecurityGroups:
+      - !Ref SecurityGroupID
+      InstanceType: !Ref FBInstanceSize
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            Encrypted: true
+            VolumeSize: !Ref 'VolumeSize'
+            VolumeType: "gp3"
+            Iops: !Ref 'Iops'
+      IamInstanceProfile: !Ref DeploymentInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set +x
+          set -e
+          sudo mdadm --create --verbose /dev/md0 --level=0 --raid-devices=4 /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 /dev/nvme4n1
+          sudo mkfs.ext4 /dev/md0
+          sudo mkdir data
+          sudo mount /dev/md0 /data
+          sudo chown -R ec2-user:ec2-user /data
+
+####################### For provisioning the Producer Cluster #########################
+  ProducerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${AWS::StackName}-producer-asg'
+      VPCZoneIdentifier:
+        !Split [ ",", !Ref PrivateSubnetIds ]
+      LaunchConfigurationName: !Ref 'ProducerInstances'
+      MinSize: !Ref 'ProducerInstanceCount'
+      MaxSize: !Ref 'ProducerInstanceCount'
+      DesiredCapacity: !Ref 'ProducerInstanceCount'
+      HealthCheckGracePeriod: 120
+      Tags:      
+        - Key: TestCommitSHA
+          Value: !Ref TestCommitSHA
+          PropagateAtLaunch: "true"
+        - Key: TestName
+          Value: !Sub '${TestName}-ingest-producer'
+          PropagateAtLaunch: "true"
+        - Key: TestID
+          Value: !Ref TestID
+          PropagateAtLaunch: "true"        
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+
+# Metadata describing the EC2 instance
+  ProducerInstances:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Sub '${AWS::StackName}-producer-launch-cfg'
+      KeyName: !Ref KeyPairName
+      ImageId: !Ref InstanceImageId
+      SecurityGroups:
+      - !Ref SecurityGroupID
+      InstanceType: !Ref ProducerInstanceSize
+      BlockDeviceMappings:
+        # root device volume
+        - DeviceName: /dev/xvda
+          Ebs:
+            Encrypted: true
+            VolumeSize: !Ref 'VolumeSize'
+            VolumeType: "gp3"
+            Iops: !Ref 'Iops'
+        - DeviceName: /dev/sdb
+          Ebs:
+            Encrypted: true
+            VolumeSize: !Ref 'EBSVolumeSize'
+            VolumeType: "gp3"
+            Iops: !Ref 'EBSIops'
+      IamInstanceProfile: !Ref DeploymentInstanceProfile
+
+####################### For provisioning the Consumer Cluster #########################
+  ConsumerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${AWS::StackName}-consumer-asg'
+      VPCZoneIdentifier:
+        !Split [ ",", !Ref PrivateSubnetIds ]
+      LaunchConfigurationName: !Ref 'ConsumerInstances'
+      MinSize: !Ref 'ConsumerInstanceCount'
+      MaxSize: !Ref 'ConsumerInstanceCount'
+      DesiredCapacity: !Ref 'ConsumerInstanceCount'
+      HealthCheckGracePeriod: 120
+      Tags:      
+        - Key: TestCommitSHA
+          Value: !Ref TestCommitSHA
+          PropagateAtLaunch: "true"
+        - Key: TestName
+          Value: !Sub '${TestName}-ingest-consumer'
+          PropagateAtLaunch: "true"
+        - Key: TestID
+          Value: !Ref TestID
+          PropagateAtLaunch: "true"        
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+
+# Metadata describing the EC2 instance
+  ConsumerInstances:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: !Sub '${AWS::StackName}-consumer-launch-cfg'
+      KeyName: !Ref KeyPairName
+      ImageId: !Ref InstanceImageId
+      SecurityGroups:
+      - !Ref SecurityGroupID
+      InstanceType: !Ref ConsumerInstanceSize
+      BlockDeviceMappings:
+        # root device volume
+        - DeviceName: /dev/xvda
+          Ebs:
+            Encrypted: true
+            VolumeSize: !Ref 'VolumeSize'
+            VolumeType: "gp3"
+            Iops: !Ref 'Iops'
+        - DeviceName: /dev/sdb
+          Ebs:
+            Encrypted: true
+            VolumeSize: !Ref 'EBSVolumeSize'
+            VolumeType: "gp3"
+            Iops: !Ref 'EBSIops'
+      IamInstanceProfile: !Ref DeploymentInstanceProfile
+
+####################### IAM roles and policies #################################
+# Role for the deployment's EC2 hosts. Adds policies for SSM-based access and CloudWatchAgent.
+  DeploymentEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}'
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ec2.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+        - 'arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy'
+        - !Ref EC2InstanceS3PermissionsPolicy
+
+# Attach roles to the deployment instances
+  DeploymentInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${AWS::StackName}'
+      Path: /
+      Roles: [!Ref 'DeploymentEC2Role']
+
+  EC2InstanceS3PermissionsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'              
+              - 's3:PutObject*'
+            Resource:               
+              - !Sub 'arn:aws:s3:::*/*'
+          - Effect: Allow
+            Action: 's3:ListBucket'            
+            Resource: 
+              - !Sub 'arn:aws:s3:::*'
+
+# "Action": [
+#     "s3:PutObject",
+#     "s3:GetObject"
+# ],
+# "Resource": "arn:aws:s3:::tremor-data-backup/*"
+
+Outputs:
+  DeploymentAutoscalingGroupName:
+    Description: Deployment Auto Scaling Group
+    Value: !Ref DeploymentAutoScalingGroup
+  ProducerAutoscalingGroupName:
+    Description: Producer Auto Scaling Group
+    Value: !Ref ProducerAutoScalingGroup
+  ConsumerAutoscalingGroupName:
+    Description: Consumer Auto Scaling Group
+    Value: !Ref ConsumerAutoScalingGroup

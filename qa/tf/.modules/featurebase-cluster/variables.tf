@@ -112,3 +112,14 @@ variable "vpc_private_subnets" {
   description = "A private net underneath in the VPC in which we will build the cluster"
   type        = list(string)
 }
+
+variable "user_data" {
+  description = "Cloud init script"
+  type = string 
+}
+
+variable "ebs_volumes" {
+  type = list(string)
+  default = ["/dev/sdb"]
+}
+

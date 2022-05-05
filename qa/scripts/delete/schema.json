@@ -1,0 +1,44 @@
+[
+    {
+        "name": "uuid",
+        "path": [
+            "uuid"
+        ],
+        "type": "string"
+    },
+    {
+        "name": "type",
+        "path": [
+            "type"
+        ],
+        "type": "id"
+    },
+    {
+        "name": "segid",
+        "path": [
+            "slice"
+        ],
+        "type": "ids",
+        "config": {
+            "quantum": "D"
+        }
+    },
+    {
+        "name": "timestamp",
+        "path": [
+            "ts"
+        ],
+        "type": "recordTime",
+        "config": {
+            "granularity": "s",
+            "unit": "ms"
+        }
+    },
+    {
+        "name": "lastupdated",
+        "path": [
+            "lastupdated"
+        ],
+        "type": "id"
+    }
+ ]

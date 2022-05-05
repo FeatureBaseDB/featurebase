@@ -18,6 +18,12 @@ terraform apply -input=false -auto-approve
 terraform output -json > outputs.json
 popd
 
+# path for ebs device
+EBS_DEVICE_NAME=/dev/nvme1n1
+
+# featurebase architecture
+FB_BINARY=featurebase_linux_arm64
+
 # get the first ingest host
 INGESTNODE0=$(cat ./qa/tf/ci/auth-smoke/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
 echo "using INGESTNODE0 ${INGESTNODE0}"

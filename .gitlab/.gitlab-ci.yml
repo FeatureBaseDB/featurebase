@@ -455,7 +455,85 @@ smoke test:
       - report.xml
     reports:
       junit: report.xml
+  
 
+tremor-delete-test:
+  stage: integration
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  timeout: 6h
+  variables:
+    PROFILE: "service-terraform"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    STACK_PREFIX: $CI_JOB_NAME
+    FB_INSTANCE_COUNT: 5
+    REPLICA_COUNT: 1
+  tags:
+    - aws
+    - docker
+    - fbsmoke
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  before_script:
+    - apt-get update && apt-get install -y gnupg software-properties-common curl git
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+    - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+    - apt-get update && apt-get install terraform
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $PROFILE
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
+    - aws configure set region "us-east-2" --profile $PROFILE
+    - aws configure set aws_profile $PROFILE
+    - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
+    - chmod 400 gitlab-featurebase-ci.pem
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
+    - chmod 400 /root/.ssh/gitlab-featurebase-ci.pem
+    - echo "$AWS_FBCI_SSH_KEY" | ssh-add -
+    - chmod 700 /root/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - apt update && apt -y install jq wget
+    - wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go$GOVERSION.linux-amd64.tar.gz
+    - export PATH=$PATH:/usr/local/go/bin
+    - CF_STACK_NAME="${STACK_PREFIX}-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - echo "Cloudformation Stack Name --> $CF_STACK_NAME"
+    - echo $CF_STACK_NAME > /tmp/stackname-{$CI_JOB_ID}
+  script:
+    - echo "Start CloudFormation deploy..."
+    - >
+        aws cloudformation deploy 
+        --stack-name $CF_STACK_NAME 
+        --template-file ./qa/cft/FeatureBaseClusterCFTTremor.yaml
+        --parameter-overrides
+        FBInstanceCount=$FB_INSTANCE_COUNT 
+        EBSVolumeSize=1200 
+        TestName=$CI_JOB_NAME 
+        TestID=$CI_JOB_ID
+        TestCommitSHA=$CI_COMMIT_SHA
+        --capabilities CAPABILITY_NAMED_IAM
+        --profile $PROFILE
+    - echo "CloudFormation deploy done."
+    - echo "Start configuring and start featurebase..."
+    - ./qa/scripts/setupTremorDeleteCFT.sh $CF_STACK_NAME $PROFILE $REPLICA_COUNT $FB_INSTANCE_COUNT $CI_COMMIT_BRANCH
+    # producer.log, consumer.log, queries.log are generated when runTremorDeleteCFT.sh is ran
+    - ./qa/scripts/runTremorDeleteCFT.sh $CF_STACK_NAME $PROFILE > tremor-delete-test.log 2>&1
+    - echo "Featurebase configuration done."        
+    - echo "Start running tests..."    
+    - echo "Done with tests!"
+  artifacts:
+    when: always 
+    paths:
+      - tremor-delete-test.log 
+  after_script:
+    # note that we have to read the file to get the $CF_STACK_NAME
+    # because variables from the previous script & before_script do not get passed to after_script
+    - CF_STACK_NAME=$(cat /tmp/stackname-{$CI_JOB_ID})
+    - echo "Deleting stack after test, stack name = ${CF_STACK_NAME}"
+    - aws cloudformation delete-stack --stack-name $CF_STACK_NAME --profile $PROFILE
+    - echo "Delete stack complete!"
 
 samsung-gauntlet:
   stage: gauntlet

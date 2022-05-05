@@ -1,0 +1,65 @@
+fields:
+  - name: "uuid"
+    type: string
+    distribution: "shifting" # zipfian distruction and shifting the window over time.
+    step: 2 # step for "shifting" distribution means how often do we shift. Every time we generate a value, we'll add an amount to it, every <step> generations, we'll increase the amount by one. 
+    cardinality: 4000000000
+    max_len: 32
+    s: 1.0001
+    v: 1
+    null_chance: 0  
+  - name: "type"
+    type: "int" # (default IntField)
+    min: 0
+    max: 3
+    distribution: "zipfian"
+    s: 1.1
+    v: 5.1
+  - name: "ts"
+    type: "timestamp"
+    min_date: 2022-01-02T15:04:05.001Z # RFC3339Nano
+    max_date: 2022-02-02T15:04:05.001Z # RFC3339Nano
+    distribution: "increasing" # only "increasing" is supported right now
+    min_step_duration: "1ns"
+    max_step_duration: "2.50ms" 
+    time_format: "unix"
+    time_unit: "ms"
+  - name: "lastupdated"
+    type: "timestamp"
+    min_date: 2022-01-02T15:04:05.001Z # RFC3339Nano
+    max_date: 2022-02-02T15:04:05.001Z # RFC3339Nano
+    distribution: "increasing" # only "increasing" is supported right now
+    min_step_duration: "1ns"
+    max_step_duration: "2.50ms" 
+    time_format: "unix"
+    time_unit: "d"
+  - name: "slice"
+    type: "uint-set" # (default IDArrayField)
+    min: 0
+    max: 35000
+    distribution: "zipfian"
+    s: 1.1
+    v: 5.1
+    min_num: 1
+    max_num: 50
+
+# idk_params describe how data from "fields" should be ingested by IDK
+idk_params:
+  primary_key_config:
+    field: "uuid" # if this is a single field named "id" then we'll use uint IDs, if it's empty we'll autogen ids, and if it's anything else we'll do string keys... yes this is a bit hacky, needs to be cleaned up.
+  # fields is keyed by names of fields from top level "fields". It is
+  # not required that all fields appear here, those that don't will
+  # use the default ingestion.
+  fields:
+    lastupdated:
+      - type: "ID"
+    ts:
+      - type: "RecordTime"
+        unit: "ms"
+        name: "timestamp"
+    slice:
+      - type: "IDArray"
+        quantum: "D"
+        name: "segid"
+    type:
+      - type: "ID"

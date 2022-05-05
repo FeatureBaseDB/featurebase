@@ -20,6 +20,9 @@ echo "installing go"
 sudo yum install wget -y
 ifErr "installing wget"
 
+sudo yum install git -y
+ifErr "installing git"
+
 sudo wget -q https://go.dev/dl/go1.17.8.linux-arm64.tar.gz
 ifErr "downloading golang"
 

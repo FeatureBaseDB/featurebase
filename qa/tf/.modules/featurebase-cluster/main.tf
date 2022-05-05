@@ -27,18 +27,22 @@ resource "aws_instance" "fb_cluster_nodes" {
   subnet_id              = var.subnet != "" ? var.subnet : var.vpc_private_subnets[count.index % length(var.vpc_private_subnets)]
   availability_zone      = var.zone != "" ? var.zone : var.azs[count.index % length(var.azs)]
   iam_instance_profile   = "${aws_iam_instance_profile.fb_cluster_node_profile.name}"
-
+  user_data = var.user_data != "" ? file("${var.user_data}") : file("${path.module}/cloud-init.sh") 
+  
   root_block_device {
     volume_type = "gp3"
     volume_size = 20
   }
 
-  ebs_block_device {
-    device_name = "/dev/sdb"
-    volume_type = var.fb_data_disk_type
-    volume_size = var.fb_data_disk_size_gb
-    iops        = var.fb_data_disk_iops
-    encrypted   = true 
+  dynamic "ebs_block_device" {
+    for_each = var.ebs_volumes
+    content {
+      device_name = "/dev/sdb"
+      volume_type = var.fb_data_disk_type
+      volume_size = var.fb_data_disk_size_gb
+      iops        = var.fb_data_disk_iops
+      encrypted   = true 
+    }
   }
 
   tags = {
@@ -46,7 +50,6 @@ resource "aws_instance" "fb_cluster_nodes" {
     Name   = "${var.cluster_prefix}-featurebase-cluster-${count.index}"
     Role   = "cluster_node"
   }
-
 }
 
 resource "aws_instance" "fb_ingest" {
@@ -191,6 +194,14 @@ resource "aws_security_group" "ingest" {
     ipv6_cidr_blocks = ["::/0"]
   }
 
+  ingress {
+    description = "HTTP from Internal"
+    from_port   = 9092
+    to_port     = 9092
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/8", "172.31.0.0/16"]
+  }
+  
   ingress {
     description      = "SSH"
     from_port        = 22
