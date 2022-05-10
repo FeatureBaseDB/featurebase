@@ -1092,27 +1092,22 @@ func TestExecutor(t *testing.T) {
 			{"R1", "C6"},
 		})
 
-		tr := c.QueryGRPC(t, indexName, "Row(f1=R1, from='2022-01-10', to='2022-01-13')")
-		csvString, err := tableResponseToCSVString(tr)
-		if err != nil {
-			t.Fatalf("converting to CSV: %v", err)
-		}
-		expected := `
+		tests := []struct {
+			query    string
+			expected string
+		}{
+			{
+				query: "Row(f1=R1, from='2022-01-10', to='2022-01-13')",
+				expected: `
 _id
 C1
 C3
 C2
-`[1:]
-		// check that an unqualified query does use the standard view
-		if csvString != expected {
-			t.Fatalf("expected:\n%s\ngot:\n%s\n", expected, csvString)
-		}
-		tr = c.QueryGRPC(t, indexName, "Row(f1=R1)")
-		csvString, err = tableResponseToCSVString(tr)
-		if err != nil {
-			t.Fatalf("converting to CSV: %v", err)
-		}
-		expected = `
+`[1:],
+			},
+			{
+				query: "Row(f1=R1)",
+				expected: `
 _id
 C1
 C3
@@ -1120,9 +1115,24 @@ C2
 C5
 C4
 C6
-`[1:]
-		if csvString != expected {
-			t.Fatalf("expected:\n%s\ngot:\n%s\n", expected, csvString)
+`[1:],
+			},
+			{
+				query:    "Row(f1=R1, to='2022-01-09')",
+				expected: "\n",
+			},
+		}
+
+		for i, tst := range tests {
+			tr := c.QueryGRPC(t, indexName, tst.query)
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatalf("test: %d, converting to CSV: %v", i, err)
+			}
+			// check that an unqualified query does use the standard view
+			if csvString != tst.expected {
+				t.Fatalf("%d expected:\n'%s'\ngot:\n'%s'\n", i, tst.expected, csvString)
+			}
 		}
 	})
 }

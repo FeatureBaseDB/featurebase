@@ -940,6 +940,7 @@ func TestFieldViewsByTimeRange(t *testing.T) {
 		{"2021-01-01T00:00", "2022-01-01T00:00", []string{"standard_2021"}},
 		{"2021-01-01T00:00", "2022-01-02T00:00", []string{"standard_2021", "standard_20220101"}},
 		{"", "2022-01-02T00:00", []string{"standard_2021", "standard_20220101"}},
+		{"", "2020-01-02T00:00", []string{}},
 		{"2021-12-01T00:00", "", []string{"standard_202112", "standard_2022"}},
 		{"2021-12-30T00:00", "2022-02-01T00:00", []string{"standard_20211230", "standard_20211231", "standard_202201"}},
 	}
