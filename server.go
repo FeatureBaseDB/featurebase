@@ -870,11 +870,16 @@ func (s *Server) TTLRemoval(ctx context.Context) {
 			if field.Options().Type == "time" {
 				if field.Options().TTL > 0 {
 					for _, view := range field.views() {
-						viewNames := strings.Split(view.name, "_")
-						if len(viewNames) >= 2 {
-							viewTime, err := timeOfView(view.name, false)
+						// view names follow the format of "standard_(time_quantum)"
+						// to get view time, we split the view.name by "_"
+						// then grab the second value (the time quantum)
+						viewName := strings.Split(view.name, "_")
+						if len(viewName) == 2 {
+							// when getting the view time, we want to grab the end date
+							// because start date will aways be older
+							viewTime, err := timeOfView(view.name, true)
 							if err != nil {
-								s.logger.Printf("ttl parse view time: %s", err)
+								s.logger.Printf("view: %s; err: %s", viewName, err)
 								continue
 							}
 							timeSince := time.Since(viewTime)
@@ -886,7 +891,7 @@ func (s *Server) TTLRemoval(ctx context.Context) {
 
 								err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
 								if err != nil {
-									s.logger.Errorf("ttl delete view: %s", err)
+									s.logger.Errorf("view: %s, ttl delete view: %s", viewName, err)
 								}
 								s.logger.Infof("ttl deleted - index: %s, field: %s, view: %s ", index.name, field.name, view.name)
 							}
