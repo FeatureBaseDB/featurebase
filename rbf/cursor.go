@@ -22,6 +22,9 @@ const (
 //
 // If you mutate the b-tree that a cursor is attached to then you'll need to
 // re-initialize the cursor. This may be changed in the future though.
+//
+// Cursors can be reused in some cases; if you're keeping a cursor around,
+// be sure to nil out the tx, or it will hold a reference to it.
 type Cursor struct {
 	tx       *Tx
 	buffered bool // if true, Next() and Prev() do not move the cursor position
@@ -1464,9 +1467,20 @@ func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
 	return false, nil
 }
 
+// Close closes a cursor out, invalidating it for future use, and puts it
+// back in a pool to reduce allocations. Contrast with unpooledClose, which
+// you probably shouldn't use.
 func (c *Cursor) Close() {
 	assert(c != nil)
+	c.unpooledClose()
 	cursorSyncPool.Put(c)
+}
+
+// unpooledClose is the part of a close operation which does not put the
+// cursor back in the pool. It is useful only for cases where we're reusing
+// a cursor, such as a Db's freelistCursor.
+func (c *Cursor) unpooledClose() {
+	c.tx = nil
 }
 
 func keysFromParents(parents []branchCell) (ckeys []int) {

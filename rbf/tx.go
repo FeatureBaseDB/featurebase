@@ -170,6 +170,7 @@ func (tx *Tx) truncateLastFreePage() (truncated bool, outErr error) {
 	defer tx.freelistCleanup(&outErr)
 
 	c := tx.db.getFreelistCursor(tx)
+	defer c.unpooledClose()
 	if err := c.Last(); err == io.EOF {
 		return false, nil
 	} else if err != nil {
@@ -1121,6 +1122,7 @@ func (tx *Tx) freelistCleanup(outErr *error) {
 		return
 	}
 	c := tx.db.getFreelistCursor(tx)
+	defer c.unpooledClose()
 	for len(tx.pendingFreelistAdds) > 0 {
 		var pass []uint32
 		pass, tx.pendingFreelistAdds = tx.pendingFreelistAdds, nil
@@ -1157,6 +1159,7 @@ func (tx *Tx) allocatePgno() (_ uint32, outErr error) {
 	tx.modifyingFreelist = true
 	defer tx.freelistCleanup(&outErr)
 	c := tx.db.getFreelistCursor(tx)
+	defer c.unpooledClose()
 	if err := c.First(); err == io.EOF {
 		return tx.allocateNewPgno(), nil
 	} else if err != nil {
@@ -1200,6 +1203,7 @@ func (tx *Tx) freePgno(pgno uint32) (outErr error) {
 		return nil
 	}
 	c := tx.db.getFreelistCursor(tx)
+	defer c.unpooledClose()
 
 	tx.modifyingFreelist = true
 	defer tx.freelistCleanup(&outErr)
@@ -1750,8 +1754,13 @@ type containerFilter struct {
 }
 
 func (s *containerFilter) Close() {
+	// note that the cursor gets put back in the pool, but that cursor.Close
+	// zeroes out the cursor's tx for us.
 	s.cursor.Close()
 	s.cursor = nil
+	s.tx = nil
+	s.filter = nil
+	s.rewriter = nil
 	containerFilterPool.Put(s)
 }
 
@@ -2076,6 +2085,15 @@ func (tx *Tx) flush() error {
 		}
 		tx.pageMap = tx.pageMap.Set(pgno, walID)
 	}
+
+	// At this point, it is safe to nil out the dirtyPages and
+	// dirtyBitmapPages objects. We don't. The reason we don't is that
+	// we should never have a Tx lasting for long anyway -- even if we
+	// end up holding the write lock for a checkpoint, we don't keep the
+	// associated Tx around. If we nil those out, then a few stray Tx
+	// objects sticking around won't stick out in a heap profile. If we
+	// leave them alone, they'll stick out in a heap profile. I think on
+	// the whole that's better for further observability and debugging.
 
 	// Write meta page to WAL.
 	walID, err := tx.writeToWAL(w, tx.meta[:])
