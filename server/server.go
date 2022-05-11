@@ -677,10 +677,6 @@ func (m *Command) Close() error {
 			}
 		}
 
-		// prevent the closed sockets from being re-injected into etcd.
-		m.Config.Etcd.LPeerSocket = nil
-		m.Config.Etcd.LClientSocket = nil
-
 		err := eg.Wait()
 		_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
 		close(m.done)

@@ -9,8 +9,8 @@ import (
 
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/pkg/errors"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/clientv3util"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/clientv3util"
 )
 
 // leasedKV is an etcd key and value attached to a lease. It can be used to detect if a node went down.
@@ -99,6 +99,8 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 	for {
 		select {
+		case <-l.e.closeWatch:
+			return
 		case _, ok := <-ch:
 			if ok {
 				continue

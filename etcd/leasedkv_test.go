@@ -9,48 +9,28 @@ import (
 	"testing"
 	"time"
 
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
-	"go.etcd.io/etcd/embed"
-	"go.etcd.io/etcd/etcdserver/api/v3client"
+	"go.etcd.io/etcd/server/v3/embed"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
+
 	"go.etcd.io/etcd/pkg/types"
 )
 
 const initVal = "test"
 const newVal = "newValue"
 
-// listenerWithURL builds a TCP listener and corresponding http://localhost:%d
-// URL, and returns those. Identical to the copy in /test, except we can't
-// import that because it imports us.
-func listenerWithURL() (listener *net.TCPListener, url string, err error) {
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return listener, url, err
-	}
-	listener = l.(*net.TCPListener)
-	port := listener.Addr().(*net.TCPAddr).Port
-	url = fmt.Sprintf("http://localhost:%d", port)
-	return listener, url, err
-}
-
 func TestLeasedKv(t *testing.T) {
 	cfg := embed.NewConfig()
 
-	clientListener, clientURL, err := listenerWithURL()
-	if err != nil {
-		t.Fatal(errors.Wrap(err, "creating client listener"))
-	}
-	peerListener, peerURL, err := listenerWithURL()
-	if err != nil {
-		t.Fatal(errors.Wrap(err, "creating peer listener"))
-	}
+	clientURL := pilosa.EtcdUnixSocket(t)
+	peerURL := pilosa.EtcdUnixSocket(t)
 	cfg.LPUrls = types.MustNewURLs([]string{peerURL})
-	cfg.LPeerSocket = []*net.TCPListener{peerListener}
 	cfg.APUrls = types.MustNewURLs([]string{peerURL})
 	cfg.LCUrls = types.MustNewURLs([]string{clientURL})
-	cfg.LClientSocket = []*net.TCPListener{clientListener}
 	cfg.ACUrls = types.MustNewURLs([]string{clientURL})
 	cfg.InitialCluster = cfg.Name + "=" + peerURL
 
@@ -124,4 +104,17 @@ func TestLeasedKv(t *testing.T) {
 	if err == nil || !errors.Is(err, disco.ErrNoResults) {
 		t.Fatal("expected error:", disco.ErrNoResults, "obtained:", err)
 	}
+}
+
+// listenerWithURL builds a TCP listener and corresponding http://localhost:%d
+// URL, and returns those.
+func listenerWithURL() (listener *net.TCPListener, url string, err error) {
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return listener, url, err
+	}
+	listener = l.(*net.TCPListener)
+	port := listener.Addr().(*net.TCPAddr).Port
+	url = fmt.Sprintf("http://localhost:%d", port)
+	return listener, url, err
 }

@@ -2,7 +2,6 @@
 package pilosa
 
 // util.go: a place for generic, reusable utilities.
-
 import (
 	"fmt"
 	"os"
@@ -10,10 +9,15 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"testing"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/mem"
 )
+
+var clientPort = os.Getpid()
+var muClientPort = sync.Mutex{}
 
 // LeftShifted16MaxContainerKey is 0xffffffffffff0000. It is similar
 // to the roaring.maxContainerKey  0x0000ffffffffffff, but
@@ -101,4 +105,21 @@ func GetDiskUsage(path string) (DiskUsage, error) {
 		return err
 	})
 	return DiskUsage{size}, err
+}
+
+// EtcdUnixSocket returns a url for use in test etcd clusters.
+func EtcdUnixSocket(tb testing.TB) string {
+	muClientPort.Lock()
+	defer func() {
+		clientPort++
+		muClientPort.Unlock()
+	}()
+	addr := fmt.Sprintf("fake:%d", clientPort)
+	tb.Cleanup(func() {
+		err := os.Remove(addr)
+		if err != nil {
+			tb.Logf("could not remove '%s', %v", addr, err)
+		}
+	})
+	return fmt.Sprintf("unix://%s", addr)
 }

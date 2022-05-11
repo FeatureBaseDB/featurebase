@@ -18,14 +18,14 @@ import (
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/clientv3util"
-	"go.etcd.io/etcd/embed"
-	"go.etcd.io/etcd/etcdserver"
-	"go.etcd.io/etcd/etcdserver/api/v3client"
-	"go.etcd.io/etcd/mvcc/mvccpb"
-	"go.etcd.io/etcd/pkg/transport"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/client/pkg/v3/transport"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	clientv3util "go.etcd.io/etcd/client/v3/clientv3util"
 	"go.etcd.io/etcd/pkg/types"
+	"go.etcd.io/etcd/server/v3/embed"
+	"go.etcd.io/etcd/server/v3/etcdserver"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 )
 
 type Options struct {
@@ -49,8 +49,7 @@ type Options struct {
 	LPeerSocket   []*net.TCPListener
 	LClientSocket []*net.TCPListener
 
-	BootstrapTimeout time.Duration
-	UnsafeNoFsync    bool `toml:"no-fsync"`
+	UnsafeNoFsync bool `toml:"no-fsync"`
 }
 
 var (
@@ -74,7 +73,8 @@ const (
 )
 
 var (
-	etcdLeaderChanged = etcdserver.ErrLeaderChanged.Error()
+	etcdLeaderChanged   = etcdserver.ErrLeaderChanged.Error()
+	errEtcdShuttingDown = errors.New("etcd shutting down")
 )
 
 // nodeData is an internal tracker of the data we're keeping about
@@ -118,6 +118,7 @@ type Etcd struct {
 
 	// We have a watcher running. watchCancel() cancels its context.
 	watchCancel func()
+	closeWatch  chan struct{}
 
 	// knownNodes and sortedNodes get updated by data coming in from
 	// watchers. Any change to the contents of a *topology.Node here
@@ -151,6 +152,9 @@ func NewEtcd(opt Options, logger logger.Logger, replicas int) *Etcd {
 
 // Close implements io.Closer
 func (e *Etcd) Close() error {
+	if e.closeWatch != nil {
+		close(e.closeWatch)
+	}
 	if e.watchCancel != nil {
 		e.watchCancel()
 	}
@@ -226,7 +230,7 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 				break
 			}
 			// check that the request hasn't timed out. this can happen with either of these errors
-			if !strings.Contains(msg, "etcdserver: request timed out") && !strings.Contains(msg, "context deadline exceeded") {
+			if !strings.Contains(msg, "etcdserver: request timed out") && !strings.Contains(msg, "context deadline exceeded") && !strings.Contains(msg, errEtcdShuttingDown.Error()) {
 				// not a known error, also not a wrapped timeout
 				return errors.Wrap(err, "non-retryable error")
 			}
@@ -255,13 +259,11 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 
 func parseOptions(opt Options) *embed.Config {
 	cfg := embed.NewConfig()
-	cfg.Debug = false // true gives data races on grpc.EnableTracing in etcd
 	cfg.LogLevel = "error"
 	cfg.Logger = "zap"
 	cfg.Name = opt.Name
 	cfg.Dir = opt.Dir
 	cfg.InitialClusterToken = opt.ClusterName
-	cfg.BootstrapTimeout = opt.BootstrapTimeout
 	cfg.LCUrls = types.MustNewURLs([]string{opt.LClientURL})
 	cfg.UnsafeNoFsync = opt.UnsafeNoFsync
 	if opt.AClientURL != "" {
@@ -275,15 +277,6 @@ func parseOptions(opt Options) *embed.Config {
 	} else {
 		cfg.APUrls = cfg.LPUrls
 	}
-
-	lps := make([]*net.TCPListener, len(opt.LPeerSocket))
-	copy(lps, opt.LPeerSocket)
-	cfg.LPeerSocket = lps
-
-	lcs := make([]*net.TCPListener, len(opt.LPeerSocket))
-	copy(lcs, opt.LClientSocket)
-	cfg.LClientSocket = lcs
-
 	if opt.InitCluster != "" {
 		cfg.InitialCluster = opt.InitCluster
 		cfg.ClusterState = embed.ClusterStateFlagNew
@@ -293,7 +286,6 @@ func parseOptions(opt Options) *embed.Config {
 
 	if opt.ClusterURL != "" {
 		cfg.ClusterState = embed.ClusterStateFlagExisting
-
 		cli, err := clientv3.NewFromURL(opt.ClusterURL)
 		if err != nil {
 			panic(err)
@@ -377,6 +369,7 @@ func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err erro
 func (e *Etcd) startHeartbeatAndWatcher(ctx context.Context) error {
 	key := heartbeatPrefix + e.e.Server.ID().String()
 	e.heartbeatLeasedKV = newLeasedKV(e, key, e.options.HeartbeatTTL)
+	e.closeWatch = make(chan struct{})
 
 	if err := e.heartbeatLeasedKV.Start(string(disco.NodeStateStarting)); err != nil {
 		return errors.Wrap(err, "startHeartbeat: starting a new heartbeat")
@@ -678,34 +671,40 @@ func (e *Etcd) watchNodesOnce(ctx context.Context, cli *clientv3.Client) (err er
 	// currently seen, we don't want one equal to it.
 	minRev := e.nodeRev + 1
 	e.nodeMu.Unlock()
-	for resp := range cli.Watch(ctx, nodePrefix, clientv3.WithPrefix(), clientv3.WithRev(minRev)) {
-		if err := resp.Err(); err != nil {
-			return err
-		}
-		// lock the node mutex for this whole process of updating so
-		// we never see partial updates; everything that comes into the
-		// watcher as a single message will be processed atomically.
-		e.nodeMu.Lock()
-		for _, ev := range resp.Events {
-			switch ev.Type {
-			case mvccpb.PUT:
-				err := e.putNodeData(ev.Kv.Key, ev.Kv.Value, ev.Kv.ModRevision)
-				if err != nil {
-					e.logger.Printf("put event: %v", err)
-				}
-			case mvccpb.DELETE:
-				err := e.deleteNodeData(ev.Kv.Key, ev.Kv.ModRevision)
-				if err != nil {
-					e.logger.Printf("delete event: %v", err)
-				}
-			default:
-				e.logger.Printf("watchp %q: unknown event %#v", e.options.Name, ev)
-			}
-		}
-		e.nodeMu.Unlock()
+	watcher := cli.Watch(ctx, nodePrefix, clientv3.WithPrefix(), clientv3.WithRev(minRev))
+	for {
+		select {
 
+		case <-e.closeWatch:
+			return errEtcdShuttingDown
+		case resp := <-watcher:
+			if err := resp.Err(); err != nil {
+				return err
+			}
+			// lock the node mutex for this whole process of updating so
+			// we never see partial updates; everything that comes into the
+			// watcher as a single message will be processed atomically.
+			e.nodeMu.Lock()
+			for _, ev := range resp.Events {
+				switch ev.Type {
+				case mvccpb.PUT:
+					err := e.putNodeData(ev.Kv.Key, ev.Kv.Value, ev.Kv.ModRevision)
+					if err != nil {
+						e.logger.Printf("put event: %v", err)
+					}
+				case mvccpb.DELETE:
+					err := e.deleteNodeData(ev.Kv.Key, ev.Kv.ModRevision)
+					if err != nil {
+						e.logger.Printf("delete event: %v", err)
+					}
+				default:
+					e.logger.Printf("watchp %q: unknown event %#v", e.options.Name, ev)
+				}
+			}
+			e.nodeMu.Unlock()
+
+		}
 	}
-	return nil
 }
 
 // WatchNodes monitors changes to /heartbeat/, /resizing/, and /metadata/;

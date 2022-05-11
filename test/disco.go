@@ -6,8 +6,8 @@ import (
 	"net"
 	"strings"
 	"testing"
-	"time"
 
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/etcd"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -67,14 +67,6 @@ func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
 		if err != nil {
 			return errors.Wrap(err, "creating temp directory")
 		}
-		clientListener, clientURL, err := listenerWithURL()
-		if err != nil {
-			return errors.Wrap(err, "creating client listener")
-		}
-		peerListener, peerURL, err := listenerWithURL()
-		if err != nil {
-			return errors.Wrap(err, "creating peer listener")
-		}
 		grpcListener, grpcUrl, err := listenerWithURL()
 		if err != nil {
 			return errors.Wrap(err, "creating gRPC listener")
@@ -88,17 +80,16 @@ func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
 		config.Cluster.Name = clusterName
 		config.BindGRPC = grpcUrl
 		config.GRPCListener = grpcListener
+		clientURL := pilosa.EtcdUnixSocket(tb)
+		peerURL := pilosa.EtcdUnixSocket(tb)
 		config.Etcd = etcd.Options{
-			Dir:              discoDir,
-			LClientURL:       clientURL,
-			AClientURL:       clientURL,
-			LPeerURL:         peerURL,
-			APeerURL:         peerURL,
-			HeartbeatTTL:     60,
-			LPeerSocket:      []*net.TCPListener{peerListener},
-			LClientSocket:    []*net.TCPListener{clientListener},
-			BootstrapTimeout: 50 * time.Millisecond,
-			UnsafeNoFsync:    true,
+			Dir:           discoDir,
+			LClientURL:    clientURL,
+			AClientURL:    clientURL,
+			LPeerURL:      peerURL,
+			APeerURL:      peerURL,
+			HeartbeatTTL:  60,
+			UnsafeNoFsync: true,
 		}
 		peerUrls[i] = fmt.Sprintf("%s=%s", name, peerURL)
 	}
@@ -117,10 +108,8 @@ func GenPortsConfig(tb testing.TB, ports []Ports) []*server.Config {
 		name := fmt.Sprintf("server%d", i)
 		clusterName := "cluster-abc123"
 
-		lsnC, portC := ports[i].LsnC, ports[i].PortC
-		lClientURL := fmt.Sprintf("http://localhost:%d", portC)
-		lsnP, portP := ports[i].LsnP, ports[i].PortP
-		lPeerURL := fmt.Sprintf("http://localhost:%d", portP)
+		lClientURL := pilosa.EtcdUnixSocket(tb)
+		lPeerURL := pilosa.EtcdUnixSocket(tb)
 
 		discoDir := ""
 		if d, err := testhook.TempDir(tb, "disco."); err == nil {
@@ -132,16 +121,13 @@ func GenPortsConfig(tb testing.TB, ports []Ports) []*server.Config {
 			BindGRPC:     fmt.Sprintf(":%d", ports[i].Grpc),
 			GRPCListener: ports[i].LsnG,
 			Etcd: etcd.Options{
-				Dir:              discoDir,
-				LClientURL:       lClientURL,
-				AClientURL:       lClientURL,
-				LPeerURL:         lPeerURL,
-				APeerURL:         lPeerURL,
-				HeartbeatTTL:     5,
-				LPeerSocket:      []*net.TCPListener{lsnP},
-				LClientSocket:    []*net.TCPListener{lsnC},
-				BootstrapTimeout: 50 * time.Millisecond,
-				UnsafeNoFsync:    true,
+				Dir:           discoDir,
+				LClientURL:    lClientURL,
+				AClientURL:    lClientURL,
+				LPeerURL:      lPeerURL,
+				APeerURL:      lPeerURL,
+				HeartbeatTTL:  5,
+				UnsafeNoFsync: true,
 			},
 		}
 		cfgs[i].Cluster.Name = clusterName
