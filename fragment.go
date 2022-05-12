@@ -696,7 +696,6 @@ func (f *fragment) positionsForValue(columnID uint64, bitDepth uint64, value int
 func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint64, value int64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
 	tx := txOrig
 	if NilInside(tx) {
 		tx = f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})

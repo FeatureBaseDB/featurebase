@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
 // Server is global so that tests can control and verify it.
@@ -58,6 +59,37 @@ on the configured port.`,
 			// Start & run the server.
 			if err := Server.Start(); err != nil {
 				return errors.Wrap(err, "running server")
+			}
+			if Server.Config.DataDog.Enable {
+				opts := make([]profiler.ProfileType, 0)
+				if Server.Config.DataDog.CPUProfile {
+					opts = append(opts, profiler.CPUProfile)
+				}
+				if Server.Config.DataDog.HeapProfile {
+					opts = append(opts, profiler.HeapProfile)
+				}
+				if Server.Config.DataDog.BlockProfile {
+					opts = append(opts, profiler.BlockProfile)
+				}
+				if Server.Config.DataDog.GoroutineProfile {
+					opts = append(opts, profiler.GoroutineProfile)
+				}
+				if Server.Config.DataDog.MutexProfile {
+					opts = append(opts, profiler.MutexProfile)
+				}
+				err := profiler.Start(
+					profiler.WithService(Server.Config.DataDog.Service),
+					profiler.WithEnv(Server.Config.DataDog.Env),
+					profiler.WithVersion(Server.Config.DataDog.Version),
+					profiler.WithTags(Server.Config.DataDog.Tags),
+					profiler.WithProfileTypes(
+						opts...,
+					),
+				)
+				if err != nil {
+					return errors.Wrap(err, "starting datadog")
+				}
+				defer profiler.Stop()
 			}
 
 			if Server.Config.Tracing.SamplerType != "off" {

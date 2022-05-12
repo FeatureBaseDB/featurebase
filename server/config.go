@@ -223,6 +223,19 @@ type Config struct {
 		Rename bool `toml:"rename"`
 	} `toml:"future"`
 
+	DataDog struct {
+		Enable           bool   `toml:"enable"`
+		Service          string `toml:"service"`
+		Env              string `toml:"env"`
+		Version          string `toml:"version"`
+		Tags             string `toml:"tags"`
+		CPUProfile       bool   `toml:"cpu-profile"`
+		MutexProfile     bool   `toml:"mutex-profile"`
+		GoroutineProfile bool   `toml:"goroutine-profile"`
+		BlockProfile     bool   `toml:"block-profile"`
+		HeapProfile      bool   `toml:"heap-profile"`
+	} `toml:"datadog"`
+
 	Auth Auth
 }
 

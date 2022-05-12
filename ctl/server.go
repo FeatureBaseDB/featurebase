@@ -109,4 +109,14 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Auth.PermissionsFile, "auth.permissions", srv.Config.Auth.PermissionsFile, "Permissions' file with group authorization.")
 	flags.StringVar(&srv.Config.Auth.QueryLogPath, "auth.query-log-path", srv.Config.Auth.QueryLogPath, "Path to log user queries")
 
+	flags.BoolVar(&srv.Config.DataDog.Enable, "datadog.enable", false, "enable continuous profiling with DataDog cloud service, Note you must have DataDog agent installed")
+	flags.StringVar(&srv.Config.DataDog.Service, "datadog.service", "default-service", "The Datadog service name, for example my-web-app")
+	flags.StringVar(&srv.Config.DataDog.Env, "datadog.env", "default-env", "The Datadog environment name, for example, production")
+	flags.StringVar(&srv.Config.DataDog.Version, "datadog.version", "default-version", "The version of your application")
+	flags.StringVar(&srv.Config.DataDog.Tags, "datadog.tags", "molecula", "The tags to apply to an uploaded profile. Must be a list of in the format <KEY1>:<VALUE1>,<KEY2>:<VALUE2>")
+	flags.BoolVar(&srv.Config.DataDog.CPUProfile, "datadog.cpu-profile", true, "golang pprof cpu profile ")
+	flags.BoolVar(&srv.Config.DataDog.HeapProfile, "datadog.heap-profile", true, "golang pprof heap profile")
+	flags.BoolVar(&srv.Config.DataDog.MutexProfile, "datadog.mutex-profile", false, "golang pprof mutex profile")
+	flags.BoolVar(&srv.Config.DataDog.GoroutineProfile, "datadog.goroutine-profile", false, "golang pprof goroutine profile")
+	flags.BoolVar(&srv.Config.DataDog.BlockProfile, "datadog.block-profile", false, "golang pprof goroutine ")
 }

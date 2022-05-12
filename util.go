@@ -117,7 +117,8 @@ func EtcdUnixSocket(tb testing.TB) string {
 	addr := fmt.Sprintf("fake:%d", clientPort)
 	tb.Cleanup(func() {
 		err := os.Remove(addr)
-		if err != nil {
+
+		if err != nil && !os.IsNotExist(err) { //not an error if the socket is not present
 			tb.Logf("could not remove '%s', %v", addr, err)
 		}
 	})
