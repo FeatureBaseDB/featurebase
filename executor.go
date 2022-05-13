@@ -4483,9 +4483,8 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 
 			// Store the results back into the matrix.
 			for columnID, val := range data {
-				// Convert to two's complement.
-				val = uint64((2*(int64(val)>>63) + 1) * int64(val&^(1<<63)))
-
+				// Convert to two's complement and add base back to value.
+				val = uint64((2*(int64(val)>>63)+1)*int64(val&^(1<<63)) + bsig.Base)
 				m[mLookup[columnID]].Rows[i] = []uint64{val}
 			}
 		}

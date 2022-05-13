@@ -7182,6 +7182,7 @@ func TestVariousQueries(t *testing.T) {
 			variousQueriesOnTimeFields(t, c)
 			variousQueriesOnPercentiles(t, c)
 			variousQueriesCountDistinctTimestamp(t, c)
+			variousQueriesOnIntFields(t, c)
 			backupTest(t, c, "") // test backup/restore of all indexes
 		})
 	}
@@ -7552,6 +7553,92 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 
 			// TODO: add HTTP and Postgres and ability to convert
 			// those results to CSV to run through CSV verifier
+		})
+	}
+}
+
+// tests queries on IntFields with various options (min, max) and values
+// this is a test of the correctness of imported values
+// test of values outside of min/max is included in IDK:csv_test
+func variousQueriesOnIntFields(t *testing.T, c *test.Cluster) {
+	index := "int_test"
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "neg_neg", pilosa.OptFieldTypeInt(-10, -1))
+	c.ImportIntKey(t, index, "neg_neg", []test.IntKey{
+		{Val: -10, Key: "userB"},
+		{Val: -5, Key: "userC"},
+		{Val: -4, Key: "userD"},
+		{Val: -3, Key: "userE"},
+		{Val: -1, Key: "userG"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "neg_pos", pilosa.OptFieldTypeInt(-10, 10))
+	c.ImportIntKey(t, index, "neg_pos", []test.IntKey{
+		{Val: -10, Key: "userB"},
+		{Val: -5, Key: "userC"},
+		{Val: 0, Key: "userD"},
+		{Val: 5, Key: "userE"},
+		{Val: 10, Key: "userG"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "zero_pos", pilosa.OptFieldTypeInt(0, 10))
+	c.ImportIntKey(t, index, "zero_pos", []test.IntKey{
+		{Val: 0, Key: "userB"},
+		{Val: 2, Key: "userC"},
+		{Val: 3, Key: "userD"},
+		{Val: 4, Key: "userE"},
+		{Val: 10, Key: "userG"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "pos_pos", pilosa.OptFieldTypeInt(5, 10))
+	c.ImportIntKey(t, index, "pos_pos", []test.IntKey{
+		{Val: 5, Key: "userB"},
+		{Val: 6, Key: "userC"},
+		{Val: 7, Key: "userD"},
+		{Val: 9, Key: "userE"},
+		{Val: 10, Key: "userG"},
+	})
+
+	splitSortBackToCSV := func(csvStr string) string {
+		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
+		sort.Strings(ss)
+		return strings.Join(ss, "\n") + "\n"
+	}
+
+	type testCase struct {
+		query       string
+		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}
+
+	tests := []testCase{
+		{
+			query: "extract(All(), Rows(neg_neg), Rows(neg_pos), Rows(zero_pos), Rows(pos_pos))",
+			csvVerifier: `userB,-10,-10,0,5
+userC,-5,-5,2,6
+userD,-4,0,3,7
+userE,-3,5,4,9
+userG,-1,10,10,10
+`,
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			resp := c.Query(t, index, tst.query)
+			tr := c.QueryGRPC(t, index, tst.query)
+			if tst.qrVerifier != nil {
+				tst.qrVerifier(t, resp)
+			}
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := splitSortBackToCSV(csvString[strings.Index(csvString, "\n")+1:])
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
 		})
 	}
 }
