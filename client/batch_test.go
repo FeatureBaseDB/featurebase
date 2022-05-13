@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/test"
 
 	"github.com/pkg/errors"
@@ -27,7 +28,6 @@ func TestAgainstCluster(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	client := NewTestClient(t, c)
-
 	t.Run("string-slice-combos", func(t *testing.T) { testStringSliceCombos(t, c, client) })
 	t.Run("import-batch-ints", func(t *testing.T) { testImportBatchInts(t, c, client) })
 	t.Run("import-batch-sorting", func(t *testing.T) { testImportBatchSorting(t, c, client) })
@@ -39,6 +39,8 @@ func TestAgainstCluster(t *testing.T) {
 	t.Run("batches-strings-ids", func(t *testing.T) { testBatchesStringIDs(t, c, client) })
 	t.Run("test-batch-staleness", func(t *testing.T) { testBatchStaleness(t, c, client) })
 	t.Run("test-import-batch-multiple-ints", func(t *testing.T) { testImportBatchMultipleInts(t, c, client) })
+	t.Run("test-import-batch-sets-clears", func(t *testing.T) { testImportBatchSetsAndClears(t, c, client) })
+	t.Run("test-topn-cache-regression", func(t *testing.T) { testTopNCacheRegression(t, c, client) })
 }
 
 func testStringSliceCombos(t *testing.T, c *test.Cluster, client *Client) {
@@ -1386,4 +1388,135 @@ func testImportBatchMultipleInts(t *testing.T, c *test.Cluster, client *Client) 
 		t.Fatalf("unepxected result: %v", res)
 	}
 
+}
+
+func testImportBatchSetsAndClears(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-import-batch-set-and-clear")
+	field := idx.Field("aset", OptFieldTypeSet(featurebase.DefaultCacheType, featurebase.DefaultCacheSize))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 6, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	r := Row{
+		Values: make([]interface{}, 1),
+		Clears: make(map[int]interface{}),
+	}
+
+	vals := []uint64{1, 2, 3, 1, 5, 6}
+	clears := []interface{}{nil, uint64(1), uint64(3), nil, uint64(2), uint64(4)}
+	for i := uint64(0); i < 6; i++ {
+		r.ID = i%3 + 1
+		r.Values[0] = vals[i]
+		if clears[i] != nil {
+			r.Clears[0] = clears[i]
+		}
+		err := b.Add(r)
+		if err != nil && err != ErrBatchNowFull {
+			t.Fatalf("adding to batch: %v", err)
+		}
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	if resp, err := client.Query(field.TopN(6)); err != nil {
+		t.Fatalf("querying topn: %v", err)
+	} else if res := resp.Result().CountItems(); len(res) != 3 {
+		t.Fatalf("unexpected topn: %+v", res)
+	}
+
+	exp := [][]uint64{
+		{},
+		{1},
+		{},
+		{},
+		{},
+		{2},
+		{3},
+	}
+	for row := 0; row < 7; row++ {
+		resp, err := client.Query(field.Row(row))
+		if err != nil {
+			t.Fatalf("querying: %v", err)
+		}
+		res := resp.Results()[0].Row().Columns
+		if !reflect.DeepEqual(exp[row], res) && !(len(exp[row]) == 0 && len(res) == 0) {
+			t.Errorf("row: %d, exp: %v, got %v", row, exp[row], res)
+		}
+	}
+
+}
+
+// testTopNCacheRegression recreates an issue we saw in an IDK test
+// where if a value is completely removed (all bits unset from a row),
+// it didn't get removed from the cache beacuse a full recalculation
+// had no way to clear the cache, it would just reset existing
+// values. We added Clear on the cache interface to fix this.
+func testTopNCacheRegression(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-topn-cache-regression")
+	field := idx.Field("aset", OptFieldTypeSet(featurebase.DefaultCacheType, featurebase.DefaultCacheSize))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 3, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	records := []struct {
+		ID    uint64
+		Set   interface{}
+		Clear interface{}
+	}{
+		{0, 1, nil},
+		{featurebase.ShardWidth, 1, nil},
+		{featurebase.ShardWidth * 2, nil, 1},
+		{featurebase.ShardWidth * 2, nil, 1},
+		{0, nil, 1},
+		{featurebase.ShardWidth, nil, 1},
+		{featurebase.ShardWidth, 1, nil},
+		{featurebase.ShardWidth, nil, nil},
+	}
+
+	for _, rec := range records {
+		if rec.Set != nil {
+			rec.Set = uint64(rec.Set.(int))
+		}
+		row := Row{
+			ID:     rec.ID,
+			Values: []interface{}{rec.Set},
+		}
+		if rec.Clear != nil {
+			row.Clears = map[int]interface{}{0: uint64(rec.Clear.(int))}
+		}
+
+		err := b.Add(row)
+		if err == ErrBatchNowFull {
+			if err := b.Import(); err != nil {
+				t.Fatalf("importing: %v", err)
+			}
+		}
+	}
+	if err := b.Import(); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	if resp, err := client.Query(field.TopN(6)); err != nil {
+		t.Fatalf("querying topn: %v", err)
+	} else if res := resp.Result().CountItems(); len(res) != 1 {
+		t.Fatalf("unexpected topn: %+v", res)
+	} else if res[0].ID != 1 || res[0].Count != 1 {
+		t.Fatalf("unexpected topn result: %v", res)
+	}
 }

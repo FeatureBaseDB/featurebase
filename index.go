@@ -355,7 +355,7 @@ func (i *Index) openExistenceField() error {
 		Index:     i.name,
 		Field:     existenceFieldName,
 		CreatedAt: 0,
-		Meta:      &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0},
+		Meta:      &FieldOptions{Type: FieldTypeSet, CacheType: CacheTypeNone, CacheSize: 0},
 	}
 
 	// First try opening the existence field from disk. If it doesn't already

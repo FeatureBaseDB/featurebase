@@ -2401,7 +2401,19 @@ func (f *fragment) ImportRoaringClearAndSet(ctx context.Context, tx Tx, clear, s
 	}
 
 	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriter)
-	return errors.Wrap(err, "applying rewriter")
+	if err != nil {
+		errors.Wrap(err, "applying rewriter")
+	}
+	if f.CacheType != CacheTypeNone {
+		// TODO this may be quite a bit slower than the way
+		// importRoaring does it as it tracks the number of bits
+		// changed per row. We could do that, but I think it'd require
+		// significant changes to the Rewriter API.
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.rebuildRankCache(ctx, tx)
+	}
+	return nil
 }
 
 // ImportRoaringBSI interprets "clear" as a single row specifying
@@ -2539,17 +2551,13 @@ func (f *fragment) FlushCache() error {
 	defer f.mu.Unlock()
 	return f.flushCache()
 }
-func (f *fragment) RebuildRankCache(ctx context.Context) error {
+
+func (f *fragment) rebuildRankCache(ctx context.Context, tx Tx) error {
 	if f.CacheType != CacheTypeRanked {
-		return nil //only rebuild ranked caches
+		return nil // only rebuild ranked caches
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+
+	f.cache.Clear()
 	rows, err := f.unprotectedRows(ctx, tx, uint64(0))
 	if err != nil {
 		return err
@@ -2563,6 +2571,20 @@ func (f *fragment) RebuildRankCache(ctx context.Context) error {
 	}
 	f.cache.Invalidate()
 	return nil
+}
+
+func (f *fragment) RebuildRankCache(ctx context.Context) error {
+	if f.CacheType != CacheTypeRanked {
+		return nil //only rebuild ranked caches
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	tx, err := f.holder.BeginTx(false, f.idx, f.shard)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	return f.rebuildRankCache(ctx, tx)
 }
 
 func (f *fragment) flushCache() error {

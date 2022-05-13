@@ -42,21 +42,26 @@ type cache interface {
 
 	// SetStats defines the stats client used in the cache.
 	SetStats(s stats.StatsClient)
+
+	// Clear removes everything from the cache. If possible it should leave allocated structures in place to be reused.
+	Clear()
 }
 
 // lruCache represents a least recently used Cache implementation.
 type lruCache struct {
-	cache  *lru.Cache
-	counts map[uint64]uint64
-	stats  stats.StatsClient
+	cache      *lru.Cache
+	counts     map[uint64]uint64
+	stats      stats.StatsClient
+	maxEntries uint32
 }
 
 // newLRUCache returns a new instance of LRUCache.
 func newLRUCache(maxEntries uint32) *lruCache {
 	c := &lruCache{
-		cache:  lru.New(int(maxEntries)),
-		counts: make(map[uint64]uint64),
-		stats:  stats.NopStatsClient,
+		cache:      lru.New(int(maxEntries)),
+		counts:     make(map[uint64]uint64),
+		stats:      stats.NopStatsClient,
+		maxEntries: maxEntries,
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
@@ -118,6 +123,13 @@ func (c *lruCache) SetStats(s stats.StatsClient) {
 	c.stats = s
 }
 
+func (c *lruCache) Clear() {
+	for k := range c.counts {
+		delete(c.counts, k)
+	}
+	c.cache = lru.New(int(c.maxEntries))
+}
+
 func (c *lruCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
 
 // Ensure LRUCache implements Cache.
@@ -125,6 +137,7 @@ var _ cache = &lruCache{}
 
 // rankCache represents a cache with sorted entries.
 type rankCache struct {
+	// TODO why does this have a lock and lruCache doesn't?
 	mu           sync.Mutex
 	entries      map[uint64]uint64
 	rankings     bitmapPairs // cached, ordered list
@@ -155,6 +168,21 @@ func NewRankCache(maxEntries uint32) *rankCache {
 		entries:         make(map[uint64]uint64),
 		stats:           stats.NopStatsClient,
 	}
+}
+
+func (c *rankCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k := range c.entries {
+		delete(c.entries, k)
+	}
+	c.rankings = c.rankings[:0]
+	c.rankingsRead = false
+	c.dirty = false
+
+	c.updateN = 0
+	c.updateTime = time.Time{}
+	c.thresholdValue = 0
 }
 
 // Add adds a count to the cache.
@@ -594,6 +622,7 @@ func (c nopCache) Invalidate()                {}
 func (c nopCache) Len() int                   { return 0 }
 func (c nopCache) Recalculate()               {}
 func (c nopCache) SetStats(stats.StatsClient) {}
+func (c nopCache) Clear()                     {}
 
 func (c nopCache) Top() []bitmapPair {
 	return []bitmapPair{}
