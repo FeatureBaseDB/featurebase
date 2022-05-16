@@ -3764,7 +3764,7 @@ func getToken(r *http.Request) string {
 		}
 		return parts[1]
 	}
-	cookie, err := r.Cookie("molecula-chip")
+	cookie, err := r.Cookie(authn.CookieName)
 	if err != nil {
 		return ""
 	}

@@ -52,6 +52,71 @@ func NewTestAuth(t *testing.T) *Auth {
 	}
 	return a
 }
+
+func TestSetGRPCMetadata(t *testing.T) {
+	a := NewTestAuth(t)
+	for name, md := range map[string]metadata.MD{
+		"empty":        {},
+		"something":    {"cookie": []string{a.cookieName + "=something"}},
+		"otherCookies": {"cookie": []string{a.cookieName + "=something", "blah=blah"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ogCookies, _ := md["cookie"]
+			ctx := grpc.NewContextWithServerTransportStream(
+				metadata.NewIncomingContext(context.TODO(),
+					md,
+				),
+				NewServerTransportStream(),
+			)
+			md, ok := metadata.FromIncomingContext(ctx)
+			if !ok {
+				t.Fatalf("expected ok, got: %v", ok)
+			}
+			err := a.SetGRPCMetadata(ctx, md, "this is a token!")
+			if err != nil {
+				t.Fatalf("expected no errors, got: %v", err)
+			}
+			if err := grpc.SendHeader(ctx, md); err != nil {
+				t.Fatalf("expected no errors, got: %v", err)
+			}
+			md, ok = metadata.FromIncomingContext(ctx)
+			if !ok {
+				t.Fatalf("expected ok, got: %v", ok)
+			}
+			c, ok := md["cookie"]
+			if !ok {
+				t.Fatalf("expected ok, got: %v", ok)
+			}
+			var cookie string
+			for _, cookie = range c {
+				if strings.HasPrefix(cookie, a.cookieName) {
+					break
+				}
+			}
+			if exp, got := a.cookieName+"=this is a token!", cookie; got != exp {
+				t.Fatalf("expected '%v', got '%v'", exp, got)
+			}
+
+			for _, cookie = range c {
+				if strings.HasPrefix(cookie, a.cookieName) {
+					continue
+				}
+				found := false
+
+				for _, ogCookie := range ogCookies {
+					if cookie == ogCookie {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatal("SetGRPCMetadata did not maintain the previous cookie list")
+				}
+			}
+		})
+	}
+}
+
 func TestAuth(t *testing.T) {
 	a := NewTestAuth(t)
 	t.Run("SetCookie", func(t *testing.T) {
@@ -69,42 +134,7 @@ func TestAuth(t *testing.T) {
 			t.Fatalf("path=%s, want %s", got, want)
 		}
 	})
-	t.Run("SetGRPCMetadata", func(t *testing.T) {
-		md := metadata.MD{
-			"cookie": []string{a.cookieName + "=something"},
-		}
-		ctx := grpc.NewContextWithServerTransportStream(
-			metadata.NewIncomingContext(context.TODO(),
-				md,
-			),
-			NewServerTransportStream(),
-		)
-		md, ok := metadata.FromIncomingContext(ctx)
-		if !ok {
-			t.Fatalf("expected ok, got: %v", ok)
-		}
-		err := a.SetGRPCMetadata(ctx, md, "this is a token!")
-		if err != nil {
-			t.Fatalf("expected no errors, got: %v", err)
-		}
-		md, ok = metadata.FromIncomingContext(ctx)
-		if !ok {
-			t.Fatalf("expected ok, got: %v", ok)
-		}
-		c, ok := md["cookie"]
-		if !ok {
-			t.Fatalf("expected ok, got: %v", ok)
-		}
-		var cookie string
-		for _, cookie = range c {
-			if strings.HasPrefix(cookie, a.cookieName) {
-				break
-			}
-		}
-		if exp, got := a.cookieName+"=this is a token!", cookie; got != exp {
-			t.Fatalf("expected '%v', got '%v'", exp, got)
-		}
-	})
+
 	t.Run("KeyLength", func(t *testing.T) {
 		_, err := NewAuth(
 			logger.NewStandardLogger(os.Stdout),

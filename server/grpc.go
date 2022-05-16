@@ -1697,8 +1697,8 @@ func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
 		}
 		cookies := strings.Split(c[0], "; ")
 		for _, cookie := range cookies {
-			if strings.HasPrefix(cookie, "molecula-chip") {
-				authorization = strings.Split(cookie, "molecula-chip=")[1:]
+			if strings.HasPrefix(cookie, authn.CookieName) {
+				authorization = strings.Split(cookie, authn.CookieName+"=")[1:]
 				break
 			}
 		}

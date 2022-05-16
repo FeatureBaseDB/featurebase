@@ -23,6 +23,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// CookieName is the name of the cookie that holds the refreshed auth token.
+const CookieName = "molecula-chip"
+
 // cachedGroups is used to hold groups and when they were last cached
 type cachedGroups struct {
 	cacheTime time.Time
@@ -76,7 +79,7 @@ type Auth struct {
 func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenURL, groupEndpoint, logout, clientID, clientSecret, secretKey string) (auth *Auth, err error) {
 	auth = &Auth{
 		logger:         logger,
-		cookieName:     "molecula-chip",
+		cookieName:     CookieName,
 		groupEndpoint:  groupEndpoint,
 		logoutEndpoint: logout,
 		fbURL:          url,
@@ -316,6 +319,8 @@ func (a *Auth) SetGRPCMetadata(ctx context.Context, md metadata.MD, token string
 			}
 			cookies = append(cookies, cookie)
 		}
+	} else {
+		cookies = []string{a.cookieName + "=" + token}
 	}
 	md["cookie"] = cookies
 	return grpc.SetHeader(ctx, md)

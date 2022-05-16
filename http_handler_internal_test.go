@@ -285,7 +285,7 @@ func TestAuthentication(t *testing.T) {
 	expiredToken = "Bearer " + expiredToken
 
 	validCookie := &http.Cookie{
-		Name:     "molecula-chip",
+		Name:     authn.CookieName,
 		Value:    token.AccessToken,
 		Path:     "/",
 		Secure:   true,
