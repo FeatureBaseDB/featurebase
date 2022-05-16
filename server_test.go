@@ -150,8 +150,8 @@ func TestTTLRemoval(t *testing.T) {
 			- standard_2022			-> end date is 2023_01_01 T00:00, in future -> keep
 			- standard_202205		-> end date is 2022_06_01 T00:00, in future -> keep
 			- standard_20220511		-> end date is 2022_05_12 T00:00, in future -> keep
-			- standard_2022051123	-> end date is 2022_05_12 T00:00, in future-> keep
-			// */
+			- standard_2022051123	-> end date is 2022_05_12 T00:00, in future -> keep
+			*/
 		},
 	}
 	for _, test := range tests {

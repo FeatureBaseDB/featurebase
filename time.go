@@ -29,6 +29,9 @@ func (q TimeQuantum) HasDay() bool { return strings.ContainsRune(string(q), 'D')
 // HasHour returns true if the quantum contains a 'H' unit.
 func (q TimeQuantum) HasHour() bool { return strings.ContainsRune(string(q), 'H') }
 
+// IsEmpty returns true if the quantum is empty.
+func (q TimeQuantum) IsEmpty() bool { return string(q) == "" }
+
 func (q TimeQuantum) Granularity() rune {
 	var g rune
 	for _, g = range q {
@@ -410,6 +413,28 @@ func minMaxViews(views []string, q TimeQuantum) (min string, max string) {
 	// Sort the list of views.
 	sort.Strings(views)
 
+	// get the lowest granularity quantum available from the given views
+	lowestQuantumFromViews := getLowestGranularityQuantum(views)
+
+	/*
+		- lowestQuantumFromViews was added because of a unique case where the view for least precise quantum was somehow deleted:
+			- ex: q="YMDH" but views only have "DH" (ex: std_20220531, std_2022053123)
+			- without lowestQuantumFromViews, this function would return empty for min, max (as if there were no time views)
+				because it would look for "Y" views but cant find it since it was deleted
+			- with lowestQuantumFromViews, this function will look at the available quantum from views (ex: "DH")
+				grab the least precise quantum ("D")
+				and use D (day) view (ex: std_20220531)
+		- use lowestQuantumFromViews if
+		1. lowestQuantumFromViews is not empty
+		2. lowestQuantumFromViews is actually a substring of q
+		 - lowestQuantumFromViews has to be a substring of q because if q="Y" but views quantum="DH" (ex: std_20220531, std_2022053123),
+		 the "DH" quantum wont matter since originally q of "Y" didnt include "DH"
+	*/
+
+	if !(lowestQuantumFromViews.IsEmpty()) && strings.Contains(q.String(), lowestQuantumFromViews.String()) {
+		q = lowestQuantumFromViews
+	}
+
 	// Determine the least precise quantum and set that as the
 	// number of string characters to compare against.
 	var chars int
@@ -504,4 +529,58 @@ func viewTimePart(v string) string {
 		return ""
 	}
 	return parts[len(parts)-1]
+}
+
+// getLowestGranularityQuantum returns lowest granularity quantum from a list of views
+// e.g.
+//	[std_2001, std_200102, std_20010203, std_2001020304] - returns "Y" since year is the lowest granularity
+//	[std_2001020304, std_200102, std_20010203] - returns "M", the order of views should not affect lowest granularity
+func getLowestGranularityQuantum(views []string) TimeQuantum {
+
+	// Time quantum with the highest level of granularity we support
+	timeQuantum := "YMDH"
+
+	write_Y := false
+	write_M := false
+	write_D := false
+	write_H := false
+	for _, v := range views {
+		viewTime := viewTimePart(v)
+		if viewTime != "" {
+			if len(viewTime) == 4 {
+				if !write_Y {
+					write_Y = true
+				}
+			} else if len(viewTime) == 6 {
+				if !write_M {
+					write_M = true
+				}
+			} else if len(viewTime) == 8 {
+				if !write_D {
+					write_D = true
+				}
+			} else if len(viewTime) == 10 {
+				if !write_H {
+					write_H = true
+				}
+			}
+		}
+	}
+
+	lowestGranularity := ""
+	if write_Y {
+		// Y
+		lowestGranularity = timeQuantum[:1]
+	} else if !write_Y && write_M {
+		// M
+		lowestGranularity = timeQuantum[1:2]
+	} else if !write_Y && !write_M && write_D {
+		// D
+		lowestGranularity = timeQuantum[2:3]
+	} else if !write_Y && !write_M && !write_D && write_H {
+		// H
+		lowestGranularity = timeQuantum[3:4]
+	}
+
+	return TimeQuantum(lowestGranularity)
 }

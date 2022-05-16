@@ -205,6 +205,13 @@ func TestMinMaxViews(t *testing.T) {
 				"std_2022",
 			},
 			{
+				// unordered views should not affect the results
+				[]string{"std_202002", "std_2022073123", "std_2020", "std_202002", "std_2022", "std_2019", "std_2022063023"},
+				mustParseTimeQuantum("Y"),
+				"std_2019",
+				"std_2022",
+			},
+			{
 				[]string{"std_201902", "std_201901"},
 				mustParseTimeQuantum("M"),
 				"std_201901",
@@ -227,6 +234,27 @@ func TestMinMaxViews(t *testing.T) {
 				mustParseTimeQuantum("D"),
 				"",
 				"",
+			},
+			{
+				// quantum is YMDH, views only have "DH" views
+				[]string{"std_20220531", "std_2022063023", "std_20220731", "std_2022073123"},
+				mustParseTimeQuantum("YMDH"),
+				"std_20220531",
+				"std_20220731",
+			},
+			{
+				// quantum is Y, views have D,H but dont have Y views
+				[]string{"std_20220531", "std_2022053123"},
+				mustParseTimeQuantum("Y"),
+				"",
+				"",
+			},
+			{
+				// quantum is M, views ignore Y view, only look at M view
+				[]string{"std_2022", "std_202205", "std_20220531", "std_2022053123"},
+				mustParseTimeQuantum("M"),
+				"std_202205",
+				"std_202205",
 			},
 		}
 		for i, test := range tests {
@@ -408,5 +436,79 @@ func TestViewTimePart(t *testing.T) {
 		if got := viewTimePart(input); got != want {
 			t.Errorf("expected %v got %v", want, got)
 		}
+	}
+}
+
+func TestGetLowestGranularityQuantum(t *testing.T) {
+	tests := []struct {
+		name       string
+		views      []string
+		expQuantum TimeQuantum
+	}{
+		{
+			name:       "Y",
+			views:      []string{"std_2022", "std_202205", "std_20220531", "std_2022053123"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "empty",
+			views:      []string{},
+			expQuantum: TimeQuantum(""),
+		},
+		{
+			name:       "empty, not number",
+			views:      []string{"std_abc"},
+			expQuantum: TimeQuantum(""),
+		},
+		{
+			name:       "duplicate",
+			views:      []string{"std_2022", "std_202205", "std_20220531", "std_2022053123", "std_2022", "std_202205", "std_20220531", "std_2022053123"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "only Y",
+			views:      []string{"std_2022"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "only M",
+			views:      []string{"std_202205"},
+			expQuantum: TimeQuantum("M"),
+		},
+		{
+			name:       "only D",
+			views:      []string{"std_20220531"},
+			expQuantum: TimeQuantum("D"),
+		},
+		{
+			name:       "only H",
+			views:      []string{"std_2022053123"},
+			expQuantum: TimeQuantum("H"),
+		},
+		{
+			name:       "Y unordered",
+			views:      []string{"std_202205", "std_20220531", "std_2022053123", "std_2022"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "M unordered",
+			views:      []string{"std_2022053123", "std_202205", "std_20220531"},
+			expQuantum: TimeQuantum("M"),
+		},
+		{
+			name:       "D unordered",
+			views:      []string{"std_2022053123", "std_20220531"},
+			expQuantum: TimeQuantum("D"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			quantum := getLowestGranularityQuantum(test.views)
+
+			if quantum.String() != test.expQuantum.String() {
+				t.Errorf("expected field: '%v', got: '%v'", test.expQuantum.String(), quantum.String())
+			}
+		})
 	}
 }
