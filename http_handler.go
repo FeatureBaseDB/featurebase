@@ -1133,7 +1133,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	err, _ = qerr.(error)
-
 	if err != nil || !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		e := h.writeQueryResponse(w, r, &QueryResponse{Err: err})
@@ -2972,6 +2971,8 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 		switch errors.Cause(err) {
 		case ErrClusterDoesNotOwnShard, ErrPreconditionFailed:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		case ErrBSIGroupValueTooLow, ErrBSIGroupValueTooHigh, ErrDecimalOutOfRange:
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -3045,9 +3046,12 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			switch errors.Cause(err) {
 			case ErrClusterDoesNotOwnShard, ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
+			case ErrBSIGroupValueTooLow, ErrBSIGroupValueTooHigh, ErrDecimalOutOfRange:
+				http.Error(w, err.Error(), http.StatusBadRequest)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
+
 			return
 		}
 		err := qcx.Finish()
@@ -3071,6 +3075,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			switch errors.Cause(err) {
 			case ErrClusterDoesNotOwnShard, ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
+			case ErrBSIGroupValueTooLow, ErrBSIGroupValueTooHigh, ErrDecimalOutOfRange:
+				http.Error(w, err.Error(), http.StatusBadRequest)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -3626,6 +3632,7 @@ func (h *Handler) handleResetIDAlloc(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "index name is required", http.StatusBadRequest)
 		return
 	}
+
 	err := h.api.ResetIDAlloc(indexName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("resetting ID allocation: %v", err.Error()), http.StatusBadRequest)

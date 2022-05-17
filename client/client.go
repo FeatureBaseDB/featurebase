@@ -921,7 +921,6 @@ func (c *Client) doRequest(host *pnet.URI, method, path string, headers map[stri
 		if err != nil {
 			return resp.StatusCode, nil, errors.Wrap(err, "reading response body")
 		}
-
 		switch {
 		case resp.StatusCode >= 200 && resp.StatusCode < 300:
 			// [200, 300): OK
@@ -944,9 +943,8 @@ func (c *Client) doRequest(host *pnet.URI, method, path string, headers map[stri
 				sleepTime = time.Duration(1<<uint(retry))*time.Second + time.Duration(rand.Intn(1000))*time.Millisecond
 			}
 
-		case resp.StatusCode > 400 && resp.StatusCode < 500:
-			// Pilosa nodes sometimes return 400, we retry in that case.
-			// (400, 500): No need to retry in other 4xx cases.
+		case resp.StatusCode >= 400 && resp.StatusCode < 500:
+			// don't retry any 400 level errors
 			return resp.StatusCode, nil, errors.New(strings.TrimSpace(buf.String()))
 
 		case resp.StatusCode == 503:

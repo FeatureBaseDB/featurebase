@@ -1764,9 +1764,9 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard 
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
 		if value > bsig.Max {
-			return fmt.Errorf("%v, imported value = %v, columnID = %v", ErrBSIGroupValueTooHigh, value, columnID)
+			return errors.Wrap(ErrBSIGroupValueTooHigh, fmt.Sprintf("value = %v, columnID = %v", value, columnID))
 		} else if value < bsig.Min {
-			return fmt.Errorf("%v, imported value = %v, columnID = %v", ErrBSIGroupValueTooLow, value, columnID)
+			return errors.Wrap(ErrBSIGroupValueTooLow, fmt.Sprintf("value = %v, columnID = %v", value, columnID))
 		}
 		if value > max {
 			max = value

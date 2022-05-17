@@ -700,7 +700,9 @@ func (b *Batch) Import() error {
 		// import int data.
 		err = b.doImport(frags, clearFrags)
 		if err != nil {
-			return errors.Wrap(err, "doing import")
+			// doImport actually imports the ingested data. An error here, means an error with the value that is trying to be ingested.
+			// We log the error, so we can continue ingesting. Returning would stop the ingest.
+			b.log.Printf("error importing batch: %v", err)
 		}
 		b.log.Printf("importing fragments took %v", time.Since(makeTime))
 	}
