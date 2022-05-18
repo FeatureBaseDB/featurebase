@@ -99,7 +99,7 @@ run go tests race:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
-  needs: [] # don't wait to start running this.
+  needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
   script:
     - echo "Running featurebase race tests..."
     - go test -race -v -timeout=90m ./...
