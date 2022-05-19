@@ -116,7 +116,7 @@ run go tests shardwidth22:
     - go test -timeout=30m -tags=shardwidth22 ./...
   tags:
     - aws
-    
+
 # we do coverage reporting from the future tests because the json
 # output is very difficult to human-read. The alternative would be to
 # run the regular tests twice and also run the future tests.
@@ -148,9 +148,9 @@ upload to sonarcloud:
     - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage.out,results/coverage*.out -Dsonar.go.tests.reportPaths=test-report.out,results/report*  -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests future
-    - job: run jest tests 
+    - job: run jest tests
     - job: clustertests
-    
+
 build for linux amd64:
   stage: build
   image: golang:$GOVERSION
@@ -158,8 +158,8 @@ build for linux amd64:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
-    - tar -xvf lattice.tar.gz 
-    - go get -v -u github.com/rakyll/statik 
+    - tar -xvf lattice.tar.gz
+    - go get -v -u github.com/rakyll/statik
     - /go/bin/statik -src=lattice
     - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
     - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
@@ -175,8 +175,8 @@ build for linux arm64:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
-    - tar -xvf lattice.tar.gz 
-    - go get -v -u github.com/rakyll/statik 
+    - tar -xvf lattice.tar.gz
+    - go get -v -u github.com/rakyll/statik
     - /go/bin/statik -src=lattice
     - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
     - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
@@ -184,7 +184,7 @@ build for linux arm64:
     paths:
       - featurebase_linux_arm64
       - roaring-migrate_linux_arm64
- 
+
 build for darwin amd64:
   stage: build
   image: golang:$GOVERSION
@@ -192,8 +192,8 @@ build for darwin amd64:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
-    - tar -xvf lattice.tar.gz 
-    - go get -v -u github.com/rakyll/statik 
+    - tar -xvf lattice.tar.gz
+    - go get -v -u github.com/rakyll/statik
     - /go/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
     - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
@@ -209,8 +209,8 @@ build for darwin arm64:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
-    - tar -xvf lattice.tar.gz 
-    - go get -v -u github.com/rakyll/statik 
+    - tar -xvf lattice.tar.gz
+    - go get -v -u github.com/rakyll/statik
     - /go/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
     - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
@@ -261,9 +261,9 @@ build amd container fb:
     - shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  before_script:    
+  before_script:
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
-  script:    
+  script:
     - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_SLUG}
     - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
@@ -277,14 +277,13 @@ build arm container fb:
     - shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  before_script:    
+  before_script:
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
-  script:    
+  script:
     - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-arm64-${CI_COMMIT_REF_SLUG}
     - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
-
 
 # clustertests doesn't run in docker, and requires several things to be set up on the runner to work:
 # 1. Install Go, make sure it's on the path
@@ -322,7 +321,6 @@ authclustertests:
     - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
     - make authclustertests
     - rm -rf internal/clustertests/results
-
 
 external lookup tests:
   stage: integration
@@ -366,7 +364,7 @@ smoke test auth:
     - aws configure set aws_profile $PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
@@ -397,7 +395,6 @@ smoke test auth:
     reports:
       junit: report.xml
 
-
 smoke test:
   stage: integration
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
@@ -424,7 +421,7 @@ smoke test:
     - aws configure set aws_profile $PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
@@ -455,7 +452,6 @@ smoke test:
       - report.xml
     reports:
       junit: report.xml
-  
 
 tremor-delete-test:
   stage: integration
@@ -486,7 +482,7 @@ tremor-delete-test:
     - aws configure set aws_profile $PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
@@ -504,29 +500,29 @@ tremor-delete-test:
   script:
     - echo "Start CloudFormation deploy..."
     - >
-        aws cloudformation deploy 
-        --stack-name $CF_STACK_NAME 
-        --template-file ./qa/cft/FeatureBaseClusterCFTTremor.yaml
-        --parameter-overrides
-        FBInstanceCount=$FB_INSTANCE_COUNT 
-        EBSVolumeSize=1200 
-        TestName=$CI_JOB_NAME 
-        TestID=$CI_JOB_ID
-        TestCommitSHA=$CI_COMMIT_SHA
-        --capabilities CAPABILITY_NAMED_IAM
-        --profile $PROFILE
+      aws cloudformation deploy 
+      --stack-name $CF_STACK_NAME 
+      --template-file ./qa/cft/FeatureBaseClusterCFTTremor.yaml
+      --parameter-overrides
+      FBInstanceCount=$FB_INSTANCE_COUNT 
+      EBSVolumeSize=1200 
+      TestName=$CI_JOB_NAME 
+      TestID=$CI_JOB_ID
+      TestCommitSHA=$CI_COMMIT_SHA
+      --capabilities CAPABILITY_NAMED_IAM
+      --profile $PROFILE
     - echo "CloudFormation deploy done."
     - echo "Start configuring and start featurebase..."
     - ./qa/scripts/setupTremorDeleteCFT.sh $CF_STACK_NAME $PROFILE $REPLICA_COUNT $FB_INSTANCE_COUNT $CI_COMMIT_BRANCH
     # producer.log, consumer.log, queries.log are generated when runTremorDeleteCFT.sh is ran
     - ./qa/scripts/runTremorDeleteCFT.sh $CF_STACK_NAME $PROFILE > tremor-delete-test.log 2>&1
-    - echo "Featurebase configuration done."        
-    - echo "Start running tests..."    
+    - echo "Featurebase configuration done."
+    - echo "Start running tests..."
     - echo "Done with tests!"
   artifacts:
-    when: always 
+    when: always
     paths:
-      - tremor-delete-test.log 
+      - tremor-delete-test.log
   after_script:
     # note that we have to read the file to get the $CF_STACK_NAME
     # because variables from the previous script & before_script do not get passed to after_script
@@ -551,8 +547,9 @@ samsung-gauntlet:
     - aws
     - docker
     - fbsmoke
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  # rules:
+  #   - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  when: manual
   before_script:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
@@ -567,7 +564,7 @@ samsung-gauntlet:
     - aws configure set region "us-east-2" --profile $INFRA_PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
@@ -603,8 +600,9 @@ backup-restore-gauntlet:
     AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     ASG_NAME: "gitlab-runners"
     TF_VAR_cluster_prefix: ""
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  # rules:
+  #   - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  when: manual
   tags:
     - aws
     - docker
@@ -623,7 +621,7 @@ backup-restore-gauntlet:
     - aws configure set region "us-east-2" --profile $INFRA_PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
@@ -648,7 +646,7 @@ backup-restore-gauntlet:
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
   needs:
     - build for linux arm64
- 
+
 s3 dump:
   stage: post build
   variables:
@@ -700,8 +698,9 @@ perf_able:
 # (which is a long time)
 perf_delete:
   stage: performance
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  # rules:
+  #   - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"'
+  when: manual
   timeout: 2h
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
   variables:
@@ -720,7 +719,7 @@ perf_delete:
     - apt-get update && apt-get install -y gnupg software-properties-common curl git
     - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
     - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-    - apt-get update && apt-get install terraform 
+    - apt-get update && apt-get install terraform
     - apt-get update && apt-get install python3.7
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $PROFILE
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $PROFILE
@@ -731,7 +730,7 @@ perf_delete:
     - aws configure set region "us-east-2" --profile $INFRA_PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
