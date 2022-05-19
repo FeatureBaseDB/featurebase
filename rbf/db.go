@@ -807,18 +807,6 @@ func (db *DB) Check() error {
 	return tx.Check()
 }
 
-// Viz writes a graphiz(dot) formatted visualisation of the RBF tree
-// to w. At the time of writing this is very preliminary... feel free
-// to hack on it and make changes.
-func (db *DB) Viz(w io.Writer) error {
-	tx, err := db.Begin(false)
-	if err != nil {
-		return errors.Wrap(err, "beginning transaction")
-	}
-	defer tx.Rollback()
-	return tx.Viz(w)
-}
-
 // writeDBPage writes a page to the data file.
 func (db *DB) writeDBPage(pgno uint32, page []byte) error {
 	_, err := db.file.WriteAt(page, int64(pgno)*PageSize)

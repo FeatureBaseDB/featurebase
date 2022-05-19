@@ -43,8 +43,6 @@ const (
 
 const maxBranchCellsPerPage = int((PageSize - branchPageHeaderSize) / (branchCellIndexElemSize + unsafe.Sizeof(branchCell{})))
 
-type PageType uint32
-
 // Page types.
 const (
 	PageTypeRootRecord   = 1
@@ -53,24 +51,6 @@ const (
 	PageTypeBitmapHeader = 8  // Only used by the WAL for marking next page
 	PageTypeBitmap       = 16 // Only used internally when walking the b-tree
 )
-
-func (typ PageType) String() string {
-	switch typ {
-	case PageTypeRootRecord:
-		return "root-record"
-	case PageTypeLeaf:
-		return "leaf"
-	case PageTypeBranch:
-		return "branch"
-	case PageTypeBitmapHeader:
-		return "bitmap-header"
-	case PageTypeBitmap:
-		return "bitmap"
-	default:
-		return fmt.Sprintf("unknown<%d>", typ)
-	}
-
-}
 
 // Meta commit/rollback flags.
 const (
