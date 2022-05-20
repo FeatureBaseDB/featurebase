@@ -18,12 +18,15 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+// TODO(rdp): add refresh token to this as well
 
 // RestoreCommand represents a command for restoring a backup to
 type RestoreCommand struct {
@@ -92,7 +95,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	cmd.client = client
 
 	if cmd.AuthToken != "" {
-		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+cmd.AuthToken)
 	}
 
 	nodes, err := cmd.client.Nodes(ctx)
@@ -153,7 +156,7 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.
 		req = req.WithContext(ctx)
 		req.Header.Add("Accept", "application/json")
 
-		token, ok := ctx.Value("token").(string)
+		token, ok := ctx.Value(authn.ContextValueAccessToken).(string)
 		if ok && token != "" {
 			req.Header.Set("Authorization", token)
 		}
@@ -323,7 +326,7 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 		req = req.WithContext(ctx)
 		req.Header.Set("Content-Type", "application/octet-stream")
 
-		token, ok := ctx.Value("token").(string)
+		token, ok := ctx.Value(authn.ContextValueAccessToken).(string)
 		if ok && token != "" {
 			req.Header.Set("Authorization", token)
 		}

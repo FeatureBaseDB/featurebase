@@ -423,6 +423,9 @@ func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexReques
 	if err != nil {
 		return nil, errToStatusError(err)
 	}
+	if err := grpc.SendHeader(ctx, metadata.MD{}); err != nil {
+		return nil, errToStatusError(err)
+	}
 	return &pb.CreateIndexResponse{}, nil
 }
 
@@ -451,6 +454,9 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 		if req.Name == index.Name {
 			return &pb.GetIndexResponse{Index: &pb.Index{Name: index.Name}}, nil
 		}
+	}
+	if err := grpc.SendHeader(ctx, metadata.MD{}); err != nil {
+		return nil, errToStatusError(err)
 	}
 	return nil, status.Error(codes.NotFound, fmt.Sprintf("Index with name %s not found", req.Name))
 }
@@ -481,6 +487,11 @@ func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest)
 			indexes = append(indexes, &pb.Index{Name: index.Name})
 		}
 	}
+
+	if err := grpc.SendHeader(ctx, metadata.MD{}); err != nil {
+		return nil, errToStatusError(err)
+	}
+
 	return &pb.GetIndexesResponse{Indexes: indexes}, nil
 }
 
@@ -494,6 +505,9 @@ func (h *GRPCHandler) DeleteIndex(ctx context.Context, req *pb.DeleteIndexReques
 	}
 	err := h.api.DeleteIndex(ctx, req.Name)
 	if err != nil {
+		return nil, errToStatusError(err)
+	}
+	if err := grpc.SendHeader(ctx, metadata.MD{}); err != nil {
 		return nil, errToStatusError(err)
 	}
 	return &pb.DeleteIndexResponse{}, nil
@@ -1602,7 +1616,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 				// reset the molecula-chip cookie just in case the token was refreshed
 				md, ok := metadata.FromIncomingContext(ctx)
 				if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
-					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token)
+					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
 				}
 				return handler(ctx, req)
 			},
@@ -1616,7 +1630,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 				// reset the molecula-chip cookie just in case the token was refreshed
 				md, ok := metadata.FromIncomingContext(ctx)
 				if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
-					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token)
+					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
 				}
 				return handler(srv, &wrappedStream{ss, ctx})
 			},
@@ -1689,29 +1703,50 @@ func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
 		return ctx, status.Errorf(codes.InvalidArgument, "missing metadata")
 	}
 
-	authorization, ok := md["authorization"]
-	if !ok {
-		c, there := md["cookie"]
-		if !there {
-			return ctx, status.Errorf(codes.InvalidArgument, "missing authorization token")
-		}
-		cookies := strings.Split(c[0], "; ")
-		for _, cookie := range cookies {
-			if strings.HasPrefix(cookie, authn.CookieName) {
-				authorization = strings.Split(cookie, authn.CookieName+"=")[1:]
-				break
-			}
-		}
-	}
-	if len(authorization) == 0 {
+	access, refresh := getTokensFromMetadata(md)
+	if access == "" {
 		return ctx, status.Errorf(codes.InvalidArgument, "missing authorization token")
 	}
-
-	token := strings.TrimPrefix(authorization[0], "Bearer ")
-	uinfo, err := auth.Authenticate(ctx, token)
+	uinfo, err := auth.Authenticate(access, refresh)
 	if err != nil {
 		return ctx, status.Errorf(codes.Unauthenticated, err.Error())
 	}
 
 	return context.WithValue(ctx, "userinfo", uinfo), nil
+}
+
+func getTokensFromMetadata(md metadata.MD) (string, string) {
+	// We check lowercase and uppercase because some GRPC clients lowercase metadata
+	// names. This is the only place we get tokens from metadata in GRPC calls.
+	access, ok := md["authorization"]
+	if !ok {
+		access, ok = md["Authorization"]
+	}
+
+	refresh, ok2 := md[strings.ToLower(authn.RefreshHeaderName)]
+	if !ok2 {
+		refresh, ok2 = md[authn.RefreshHeaderName]
+	}
+
+	if !ok || !ok2 {
+		if cookies, there := md["cookie"]; there {
+			for _, cookie := range cookies {
+				if strings.HasPrefix(cookie, authn.AccessCookieName+"=") && len(access) == 0 {
+					access = strings.Split(cookie, authn.AccessCookieName+"=")[1:]
+				} else if strings.HasPrefix(cookie, authn.RefreshCookieName+"=") && len(refresh) == 0 {
+					refresh = strings.Split(cookie, authn.RefreshCookieName+"=")[1:]
+				}
+				if len(access) > 0 && len(refresh) > 0 {
+					break
+				}
+			}
+		}
+	}
+	if len(access) == 0 {
+		access = []string{""}
+	}
+	if len(refresh) == 0 {
+		refresh = []string{""}
+	}
+	return strings.TrimPrefix(access[0], "Bearer "), refresh[0]
 }

@@ -685,14 +685,14 @@ func TestImport_AuthOn(t *testing.T) {
 			Field:        "field1",
 			CreateSchema: false,
 			Token:        invalidToken,
-			Err:          fmt.Errorf("bearer token is empty"),
+			Err:          fmt.Errorf("auth token is empty"),
 		},
 		{
 			Index:        "test",
 			Field:        "field1",
 			CreateSchema: true,
 			Token:        invalidToken,
-			Err:          fmt.Errorf("bearer token is empty"),
+			Err:          fmt.Errorf("auth token is empty"),
 		},
 	}
 
@@ -723,7 +723,11 @@ func TestImport_AuthOn(t *testing.T) {
 			cm.Field = test.Field
 			cm.CreateSchema = test.CreateSchema
 			cm.Paths = []string{file.Name()}
-			ctx := context.WithValue(context.Background(), "token", test.Token)
+			ctx := context.WithValue(
+				context.Background(),
+				authn.ContextValueAccessToken,
+				test.Token,
+			)
 			err = cm.Run(ctx)
 			if test.Err != nil {
 				if !strings.Contains(err.Error(), test.Err.Error()) {

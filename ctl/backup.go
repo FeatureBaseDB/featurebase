@@ -13,12 +13,15 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+// TODO(rdp): add refresh token to this as well
 
 // BackupCommand represents a command for backing up a FeatureBase node.
 type BackupCommand struct { // nolint: maligned
@@ -108,7 +111,11 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	cmd.client = client
 
 	if cmd.AuthToken != "" {
-		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+		ctx = context.WithValue(
+			ctx,
+			authn.ContextValueAccessToken,
+			"Bearer "+cmd.AuthToken,
+		)
 	}
 
 	// Determine the field type in order to correctly handle the input data.

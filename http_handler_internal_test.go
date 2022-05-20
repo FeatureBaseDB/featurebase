@@ -275,7 +275,7 @@ func TestAuthentication(t *testing.T) {
 	expiredToken = "Bearer " + expiredToken
 
 	validCookie := &http.Cookie{
-		Name:     authn.CookieName,
+		Name:     authn.AccessCookieName,
 		Value:    token.AccessToken,
 		Path:     "/",
 		Secure:   true,
@@ -687,7 +687,7 @@ func TestChkAuthN(t *testing.T) {
 			name:    "Invalid",
 			token:   invalidToken,
 			handler: h.chkAuthN(testingHandler),
-			err:     "authenticating: parsing bearer token",
+			err:     "authenticating: parsing auth token",
 		},
 		{
 			name:    "Expired",

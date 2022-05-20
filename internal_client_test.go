@@ -1576,7 +1576,7 @@ func TestAddAuthToken(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		pilosa.AddAuthToken(context.Background(), req)
+		pilosa.AddAuthToken(context.Background(), &req.Header)
 		if req.Header.Get("Authorization") != "" {
 			t.Fatalf("Authorization header set when it should be empty")
 		}
@@ -1587,7 +1587,7 @@ func TestAddAuthToken(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		uinfo := &authn.UserInfo{Token: "ayo"}
-		pilosa.AddAuthToken(context.WithValue(context.Background(), "userinfo", uinfo), req)
+		pilosa.AddAuthToken(context.WithValue(context.Background(), "userinfo", uinfo), &req.Header)
 		if got := req.Header.Get("Authorization"); got != "Bearer "+uinfo.Token {
 			t.Fatalf("got '%v', expected 'Bearer %v'", got, uinfo.Token)
 		}
@@ -1598,7 +1598,13 @@ func TestAddAuthToken(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		tok := "Bearer thisisatoken"
-		pilosa.AddAuthToken(context.WithValue(context.Background(), "token", tok), req)
+		pilosa.AddAuthToken(
+			context.WithValue(context.Background(),
+				authn.ContextValueAccessToken,
+				tok,
+			),
+			&req.Header,
+		)
 		if got := req.Header.Get("Authorization"); got != tok {
 			t.Fatalf("got '%v', expected '%v'", got, tok)
 		}
@@ -1609,7 +1615,7 @@ func TestAddAuthToken(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		ogIP := "10.0.0.1"
-		pilosa.AddAuthToken(context.WithValue(context.Background(), pilosa.OriginalIPHeader, ogIP), req)
+		pilosa.AddAuthToken(context.WithValue(context.Background(), pilosa.OriginalIPHeader, ogIP), &req.Header)
 		if got := req.Header.Get(pilosa.OriginalIPHeader); got != ogIP {
 			t.Fatalf("got '%v', expected '%v'", got, ogIP)
 		}

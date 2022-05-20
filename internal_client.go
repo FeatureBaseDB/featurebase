@@ -144,23 +144,39 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 	return ic
 }
 
-// AddAuthToken checks in a couple spots for our authorization token and adds it to
-// the Authorization Header in the request if it finds it.
-func AddAuthToken(ctx context.Context, req *http.Request) *http.Request {
-	if token, ok := ctx.Value("token").(string); ok && token != "" {
-		// the "token" value should be prefixed with "Bearer"
-		req.Header.Set("Authorization", token)
-	} else if uinfo := ctx.Value("userinfo"); uinfo != nil {
-		// UserInfo.Token is not prefixed with "Bearer"
-		req.Header.Set("Authorization", "Bearer "+uinfo.(*authn.UserInfo).Token)
+// AddAuthToken checks in a couple spots for our authorization token and
+// adds it to the Authorization Header in the request if it finds it. It does the
+// same for refresh tokens as well.
+func AddAuthToken(ctx context.Context, header *http.Header) {
+	var access, refresh string
+	if token, ok := ctx.Value(authn.ContextValueAccessToken).(string); ok {
+		// the AccessToken value should be prefixed with "Bearer"
+		access = token
+	}
+	if token, ok := ctx.Value(authn.ContextValueRefreshToken).(string); ok {
+		refresh = token
+	}
+
+	// not combining these ifs so we don't call ctx.Value unless we have to
+	if access == "" || refresh == "" {
+		if uinfo := ctx.Value("userinfo"); uinfo != nil {
+			if access == "" {
+				// UserInfo.Token is not prefixed with "Bearer"
+				access = "Bearer " + uinfo.(*authn.UserInfo).Token
+			}
+			if refresh == "" {
+				refresh = uinfo.(*authn.UserInfo).RefreshToken
+			}
+		}
 	}
 
 	// set ogIP to request for remote calls
 	if ogIP, ok := ctx.Value(OriginalIPHeader).(string); ok && ogIP != "" {
-		req.Header.Set(OriginalIPHeader, ogIP)
+		header.Set(OriginalIPHeader, ogIP)
 	}
 
-	return req
+	header.Set("Authorization", access)
+	header.Set(authn.RefreshHeaderName, refresh)
 }
 
 // MaxShardByIndex returns the number of shards on a server by index.
@@ -183,7 +199,7 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -216,7 +232,7 @@ func (c *InternalClient) AvailableShards(ctx context.Context, indexName string) 
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -250,7 +266,7 @@ func (c *InternalClient) SchemaNode(ctx context.Context, uri *pnet.URI, views bo
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -282,7 +298,7 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*IndexInfo, error) {
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -319,7 +335,7 @@ func (c *InternalClient) IngestSchema(ctx context.Context, uri *pnet.URI, buf []
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -370,7 +386,7 @@ func (c *InternalClient) IngestOperations(ctx context.Context, uri *pnet.URI, in
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -403,7 +419,7 @@ func (c *InternalClient) IngestNodeOperations(ctx context.Context, uri *pnet.URI
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -432,7 +448,7 @@ func (c *InternalClient) MutexCheck(ctx context.Context, uri *pnet.URI, indexNam
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -463,7 +479,7 @@ func (c *InternalClient) PostSchema(ctx context.Context, uri *pnet.URI, s *Schem
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -510,7 +526,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt Inde
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -540,7 +556,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -572,7 +588,7 @@ func (c *InternalClient) Nodes(ctx context.Context) ([]*topology.Node, error) {
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -617,7 +633,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 		return nil, errors.Wrap(err, "creating request")
 	}
 
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -711,7 +727,7 @@ func (c *InternalClient) importNode(ctx context.Context, node *topology.Node, in
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -932,7 +948,7 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, index
 	httpReq.Header.Set("Accept", "application/x-protobuf")
 	httpReq.Header.Set("X-Pilosa-Row", "roaring")
 	httpReq.Header.Set("User-Agent", "pilosa/"+Version)
-	httpReq = AddAuthToken(ctx, httpReq)
+	AddAuthToken(ctx, &httpReq.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(httpReq.WithContext(ctx))
@@ -1007,7 +1023,7 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *topology.Node,
 	}
 	req.Header.Set("Accept", "text/csv")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1050,7 +1066,7 @@ func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field,
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1142,7 +1158,7 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1181,7 +1197,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pnet.URI, inde
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1231,7 +1247,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pnet.URI, index, fi
 	req.Header.Set("Accept", "application/protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -1313,7 +1329,7 @@ func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pnet.URI, i
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1368,7 +1384,7 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pnet.URI, in
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1400,7 +1416,7 @@ func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pnet.URI) ([]P
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1442,7 +1458,7 @@ func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pnet.URI, i
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1491,7 +1507,7 @@ func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pnet.URI, i
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1541,7 +1557,7 @@ func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pnet.URI,
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1594,7 +1610,7 @@ func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pnet.URI,
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1639,7 +1655,7 @@ func (c *InternalClient) MatchFieldKeysNode(ctx context.Context, uri *pnet.URI, 
 	req.Header.Set("Content-Length", strconv.Itoa(len(like)))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Send the request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1679,7 +1695,7 @@ func (c *InternalClient) Transactions(ctx context.Context) (map[string]*Transact
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
@@ -1718,7 +1734,7 @@ func (c *InternalClient) StartTransaction(ctx context.Context, id string, timeou
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -1753,7 +1769,7 @@ func (c *InternalClient) FinishTransaction(ctx context.Context, id string) (*Tra
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -1790,7 +1806,7 @@ func (c *InternalClient) GetTransaction(ctx context.Context, id string) (*Transa
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
 	if err != nil {
@@ -1856,7 +1872,9 @@ func (c *InternalClient) executeRetryableRequest(req *retryablehttp.Request, opt
 		rc.HTTPClient = &http.Client{
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) > 0 {
-					req.Header.Set("Authorization", "Bearer "+getToken(via[0]))
+					access, refresh := getTokens(via[0])
+					req.Header.Set("Authorization", "Bearer "+access)
+					req.Header.Set(authn.RefreshHeaderName, refresh)
 				}
 				return nil
 			},
@@ -2154,7 +2172,7 @@ func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, 
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2189,10 +2207,8 @@ func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, ind
 		return errors.Wrap(err, "creating request")
 	}
 	httpReq.Header.Set("User-Agent", "pilosa/"+Version)
-	token, ok := ctx.Value("token").(string)
-	if ok && token != "" {
-		httpReq.Header.Set("Authorization", token)
-	}
+
+	AddAuthToken(ctx, &httpReq.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRetryableRequest(httpReq.WithContext(ctx))
@@ -2226,10 +2242,7 @@ func (c *InternalClient) ImportFieldKeys(ctx context.Context, uri *pnet.URI, ind
 	}
 	httpReq.Header.Set("User-Agent", "pilosa/"+Version)
 
-	token, ok := ctx.Value("token").(string)
-	if ok && token != "" {
-		httpReq.Header.Set("Authorization", token)
-	}
+	AddAuthToken(ctx, &httpReq.Header)
 
 	// Execute request against the host.
 	resp, err := c.executeRetryableRequest(httpReq.WithContext(ctx))
@@ -2256,7 +2269,7 @@ func (c *InternalClient) ShardReader(ctx context.Context, index string, shard ui
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/octet-stream")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2279,7 +2292,7 @@ func (c *InternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, 
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/octet-stream")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2303,7 +2316,7 @@ func (c *InternalClient) IDAllocDataWriter(ctx context.Context, f io.Reader, pri
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/octet-stream")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	_, err = c.executeRequest(req.WithContext(ctx))
@@ -2330,7 +2343,7 @@ func (c *InternalClient) IndexTranslateDataReader(ctx context.Context, index str
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/octet-stream")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx), forwardAuthHeader(true))
@@ -2360,7 +2373,7 @@ func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, fi
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/octet-stream")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2389,7 +2402,7 @@ func (c *InternalClient) Status(ctx context.Context) (string, error) {
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -2421,7 +2434,7 @@ func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 	req.Header.Set("Accept", "application/json")
-	req = AddAuthToken(ctx, req)
+	AddAuthToken(ctx, &req.Header)
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))

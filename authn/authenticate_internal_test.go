@@ -18,7 +18,6 @@ import (
 
 	"github.com/golang-jwt/jwt"
 	"github.com/molecula/featurebase/v3/logger"
-	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -59,9 +58,13 @@ func NewTestAuth(t *testing.T) *Auth {
 func TestSetGRPCMetadata(t *testing.T) {
 	a := NewTestAuth(t)
 	for name, md := range map[string]metadata.MD{
-		"empty":        {},
-		"something":    {"cookie": []string{a.cookieName + "=something"}},
-		"otherCookies": {"cookie": []string{a.cookieName + "=something", "blah=blah"}},
+		"empty":     {},
+		"something": {"cookie": []string{a.accessCookieName + "=something"}},
+		"somethingElse": {"cookie": []string{
+			a.accessCookieName + "=something",
+			a.refreshCookieName + "=something",
+		}},
+		"otherCookies": {"cookie": []string{a.accessCookieName + "=something", "blah=blah"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ogCookies, _ := md["cookie"]
@@ -75,7 +78,7 @@ func TestSetGRPCMetadata(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected ok, got: %v", ok)
 			}
-			err := a.SetGRPCMetadata(ctx, md, "this is a token!")
+			err := a.SetGRPCMetadata(ctx, md, "accesstoken!", "refreshtoken!")
 			if err != nil {
 				t.Fatalf("expected no errors, got: %v", err)
 			}
@@ -90,18 +93,29 @@ func TestSetGRPCMetadata(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected ok, got: %v", ok)
 			}
-			var cookie string
-			for _, cookie = range c {
-				if strings.HasPrefix(cookie, a.cookieName) {
+			var accessCookie, refreshCookie string
+			for _, cookie := range c {
+				if strings.HasPrefix(cookie, a.accessCookieName) {
+					accessCookie = cookie
+				} else if strings.HasPrefix(cookie, a.refreshCookieName) {
+					refreshCookie = cookie
+				}
+				if refreshCookie != "" && accessCookie != "" {
 					break
 				}
 			}
-			if exp, got := a.cookieName+"=this is a token!", cookie; got != exp {
-				t.Fatalf("expected '%v', got '%v'", exp, got)
+
+			exp := a.accessCookieName + "=accesstoken!"
+			if accessCookie != exp {
+				t.Fatalf("expected '%v', got '%v'", exp, accessCookie)
+			}
+			exp = a.refreshCookieName + "=refreshtoken!"
+			if refreshCookie != exp {
+				t.Fatalf("expected '%v', got '%v'", exp, refreshCookie)
 			}
 
-			for _, cookie = range c {
-				if strings.HasPrefix(cookie, a.cookieName) {
+			for _, cookie := range c {
+				if strings.HasPrefix(cookie, a.accessCookieName) || strings.HasPrefix(cookie, a.refreshCookieName) {
 					continue
 				}
 				found := false
@@ -124,7 +138,7 @@ func TestAuth(t *testing.T) {
 	a := NewTestAuth(t)
 	t.Run("SetCookie", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		err := a.SetCookie(w, "a cookie value", time.Now().Add(time.Hour))
+		err := a.SetCookie(w, "access", "refresh", time.Now().Add(time.Hour))
 		if err != nil {
 			t.Fatalf("expected no errors, got: %v", err)
 		}
@@ -171,7 +185,7 @@ func TestAuthenticate(t *testing.T) {
 		uname        string
 		exp          int64
 		refresh      bool
-		errOnRefresh bool
+		refreshToken string
 		malformed    bool
 		empty        bool
 		groups       []Group
@@ -191,12 +205,12 @@ func TestAuthenticate(t *testing.T) {
 		{
 			name:      "Malformed",
 			malformed: true,
-			err:       fmt.Errorf("parsing bearer token: token contains an invalid number of segments"),
+			err:       fmt.Errorf("parsing auth token: token contains an invalid number of segments"),
 		},
 		{
 			name:  "Empty",
 			empty: true,
-			err:   fmt.Errorf("bearer token is empty"),
+			err:   fmt.Errorf("auth token is empty"),
 		},
 		{
 			name:  "ExpiredTokenNoRefresh",
@@ -209,7 +223,7 @@ func TestAuthenticate(t *testing.T) {
 				},
 			},
 			exp: -17764800,
-			err: fmt.Errorf("token is expired"),
+			err: fmt.Errorf("token is expired: refreshing token: 400 Bad Request"),
 		},
 		{
 			name:  "ExpiredTokenYesRefresh",
@@ -221,8 +235,9 @@ func TestAuthenticate(t *testing.T) {
 					GroupName: "adminGroup",
 				},
 			},
-			refresh: true,
-			exp:     -17764800,
+			refresh:      true,
+			refreshToken: "refreshToken",
+			exp:          -17764800,
 		},
 		{
 			name:  "ExpiredTokenYesRefreshButError",
@@ -235,9 +250,9 @@ func TestAuthenticate(t *testing.T) {
 				},
 			},
 			refresh:      true,
-			errOnRefresh: true,
+			refreshToken: "blah!!",
 			exp:          -17764800,
-			err:          fmt.Errorf("refreshing token: 500 Internal Server Error"),
+			err:          fmt.Errorf("token is expired: refreshing token: 403 Forbidden"),
 		},
 	}
 	for _, test := range cases {
@@ -266,41 +281,39 @@ func TestAuthenticate(t *testing.T) {
 			}
 			if test.refresh {
 				var srv *httptest.Server
-				if !test.errOnRefresh {
-					srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						tkn := jwt.New(jwt.SigningMethodHS256)
-						claims := tkn.Claims.(jwt.MapClaims)
-						claims["oid"] = test.uid
-						claims["name"] = test.uname
-						expiry := strconv.Itoa(int(time.Now().Add(2 * time.Hour).Unix()))
-						claims["exp"] = expiry
-						fresh, err := tkn.SignedString(a.SecretKey())
-						if err != nil {
-							t.Fatalf("unexpected error when signing token %v", err)
-						}
+				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if err := r.ParseForm(); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					refresh := r.Form.Get("refresh_token")
+					if refresh != test.refreshToken {
+						t.Fatalf("refresh token not passed properly, expected %v, got %v", test.refreshToken, refresh)
+						return
+					}
+					if refresh != "refreshToken" {
+						http.Error(w, "bad token", http.StatusForbidden)
+					}
 
-						a.groupsCache[fresh] = cachedGroups{time.Now(), test.groups}
-						fmt.Fprintf(w, `{"access_token": "`+fresh+`",  "refresh_token": "blah",  "token_type": "bearer",  "expires": `+expiry+` }`)
-					}))
-				} else {
-					srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						http.Error(w, "bad", http.StatusInternalServerError)
-					}))
-				}
+					tkn := jwt.New(jwt.SigningMethodHS256)
+					claims := tkn.Claims.(jwt.MapClaims)
+					claims["oid"] = test.uid
+					claims["name"] = test.uname
+					expiry := strconv.Itoa(int(time.Now().Add(2 * time.Hour).Unix()))
+					claims["exp"] = expiry
+					fresh, err := tkn.SignedString(a.SecretKey())
+					if err != nil {
+						t.Fatalf("unexpected error when signing token %v", err)
+					}
+
+					a.groupsCache[fresh] = cachedGroups{time.Now(), test.groups}
+					fmt.Fprintf(w, `{"access_token": "`+fresh+`",  "refresh_token": "blah",  "token_type": "bearer",  "expires": `+expiry+` }`)
+				}))
 				defer srv.Close()
 				a.oAuthConfig.Endpoint.TokenURL = srv.URL
-				a.tokenCache[token] = cachedToken{
-					time.Now(),
-					&oauth2.Token{
-						AccessToken:  token,
-						RefreshToken: "blah",
-						Expiry:       time.Unix(test.exp, 0),
-					},
-				}
 			}
 
 			// do the actual testing
-			uinfo, err := a.Authenticate(context.TODO(), token)
+			uinfo, err := a.Authenticate(token, test.refreshToken)
 			// okay this part kind of sucks bc we need to check errors and i
 			// dont want to write a whole new test for things that should have
 			// errors just to avoid this mess. errors.Is doesn't work either
@@ -334,11 +347,9 @@ func TestAuthenticate_CleanCache(t *testing.T) {
 		now := time.Now()
 		a.groupsCache["oldy"] = cachedGroups{now.Add(-24 * time.Hour), []Group{}}
 		a.groupsCache["goldy"] = cachedGroups{now.Add(-4 * time.Hour), []Group{}}
-		a.tokenCache["oldy"] = cachedToken{now.Add(-24 * time.Hour), &oauth2.Token{}}
-		a.tokenCache["goldy"] = cachedToken{now.Add(-4 * time.Hour), &oauth2.Token{}}
 		a.lastCacheClean = now.Add(-45 * time.Minute)
 
-		_, _ = a.Authenticate(context.TODO(), "this doesn't matter")
+		_, _ = a.Authenticate("this doesn't matter", "this doesn't matter?")
 		if a.lastCacheClean.Sub(now) <= time.Nanosecond {
 			t.Fatalf("cache should have been cleaned")
 		}
@@ -348,23 +359,15 @@ func TestAuthenticate_CleanCache(t *testing.T) {
 		if _, ok := a.groupsCache["goldy"]; !ok {
 			t.Errorf("goldy should not have been deleted")
 		}
-		if _, ok := a.tokenCache["oldy"]; ok {
-			t.Errorf("oldy should have been deleted")
-		}
-		if _, ok := a.tokenCache["goldy"]; !ok {
-			t.Errorf("goldy should not have been deleted")
-		}
 	})
 	t.Run("shouldn't clean", func(t *testing.T) {
 		a := NewTestAuth(t)
 		now := time.Now()
 		a.groupsCache["oldy"] = cachedGroups{now.Add(-24 * time.Hour), []Group{}}
 		a.groupsCache["goldy"] = cachedGroups{now.Add(-4 * time.Hour), []Group{}}
-		a.tokenCache["oldy"] = cachedToken{now.Add(-24 * time.Hour), &oauth2.Token{}}
-		a.tokenCache["goldy"] = cachedToken{now.Add(-4 * time.Hour), &oauth2.Token{}}
 		a.lastCacheClean = now
 
-		_, _ = a.Authenticate(context.TODO(), "this doesn't matter")
+		_, _ = a.Authenticate("this doesn't matter", "this doesn't matter?")
 		if a.lastCacheClean.Sub(now) >= time.Nanosecond {
 			t.Fatalf("cache should not have been cleaned")
 		}
@@ -372,12 +375,6 @@ func TestAuthenticate_CleanCache(t *testing.T) {
 			t.Errorf("oldy should not have been deleted")
 		}
 		if _, ok := a.groupsCache["goldy"]; !ok {
-			t.Errorf("goldy should not have been deleted")
-		}
-		if _, ok := a.tokenCache["oldy"]; !ok {
-			t.Errorf("oldy should not have been deleted")
-		}
-		if _, ok := a.tokenCache["goldy"]; !ok {
 			t.Errorf("goldy should not have been deleted")
 		}
 	})
@@ -517,7 +514,7 @@ func TestHandlers(t *testing.T) {
 		w := httptest.NewRecorder()
 		req.AddCookie(
 			&http.Cookie{
-				Name:     a.cookieName,
+				Name:     a.accessCookieName,
 				Value:    "test",
 				Path:     "/",
 				Secure:   true,
@@ -526,8 +523,20 @@ func TestHandlers(t *testing.T) {
 				Expires:  time.Unix(3000000, 0),
 			},
 		)
+
+		req.AddCookie(
+			&http.Cookie{
+				Name:     a.refreshCookieName,
+				Value:    "test",
+				Path:     "/",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+				Expires:  time.Unix(3000000, 0),
+			},
+		)
+
 		a.groupsCache["test"] = cachedGroups{}
-		a.tokenCache["test"] = cachedToken{time.Now(), &oauth2.Token{}}
 		a.Logout(w, req)
 		resp := w.Result()
 		if resp.StatusCode != http.StatusTemporaryRedirect {
@@ -538,7 +547,7 @@ func TestHandlers(t *testing.T) {
 			t.Fatalf("expected %v, got %v", redirect, got.Path)
 		}
 		for _, c := range resp.Cookies() {
-			if c.Name == a.cookieName {
+			if c.Name == a.accessCookieName || c.Name == a.refreshCookieName {
 				if c.Value != "" {
 					t.Fatalf("cookie not set to empty value!")
 				}
@@ -547,14 +556,10 @@ func TestHandlers(t *testing.T) {
 				if want != got {
 					t.Fatalf("expected %v, got %v", want, got)
 				}
-				break
 			}
 		}
 		if _, ok := a.groupsCache["test"]; ok {
 			t.Fatalf("groups not deleted!")
-		}
-		if _, ok := a.tokenCache["test"]; ok {
-			t.Fatalf("token not deleted!")
 		}
 	})
 	t.Run("redirectGood", func(t *testing.T) {
@@ -572,11 +577,6 @@ func TestHandlers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error when signing token %v", err)
 		}
-		freshToken := oauth2.Token{
-			AccessToken:  fresh,
-			RefreshToken: "blah",
-			Expiry:       exp,
-		}
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body := `{"access_token": "` + fresh + `", "refresh_token": "blah", "expires_in": "` + strconv.Itoa(int(expiresIn.Seconds())) + `"}`
@@ -593,15 +593,13 @@ func TestHandlers(t *testing.T) {
 		if got, err := resp.Location(); err != nil || got.String() != "/" {
 			t.Fatalf("expected %v, got %v", "/", got.Path)
 		}
-		cachedToken := a.tokenCache[fresh].token
-		if cachedToken.AccessToken != freshToken.AccessToken {
-			t.Fatalf("expected %v, got %v", freshToken.AccessToken, cachedToken.AccessToken)
-		}
-		if cachedToken.RefreshToken != freshToken.RefreshToken {
-			t.Fatalf("expected %v, got %v", freshToken.RefreshToken, cachedToken.RefreshToken)
-		}
-		if cachedToken.Expiry.Sub(freshToken.Expiry) > time.Second {
-			t.Fatalf("expected %v, got %v", freshToken.Expiry, cachedToken.Expiry)
+		cookies := resp.Cookies()
+		for _, c := range cookies {
+			if c.Name == a.accessCookieName && c.Value != fresh {
+				t.Fatalf("expected %v, got %v", exp, c.Value)
+			} else if c.Name == a.refreshCookieName && c.Value != "blah" {
+				t.Fatalf("expected %v, got %v", "blah", c.Value)
+			}
 		}
 	})
 

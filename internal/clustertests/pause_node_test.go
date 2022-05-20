@@ -15,6 +15,7 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	boltdb "github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
@@ -22,6 +23,8 @@ import (
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 )
+
+// TODO(rdp): add refresh token to this test
 
 func startCmd(cmd string, args ...string) (*exec.Cmd, error) {
 	pcmd := exec.Command(cmd, args...)
@@ -297,7 +300,11 @@ func TestPauseReplica(t *testing.T) {
 	ctx := context.Background()
 	if auth {
 		token := GetAuthToken(t)
-		ctx = context.WithValue(ctx, "token", "Bearer "+token)
+		ctx = context.WithValue(
+			ctx,
+			authn.ContextValueAccessToken,
+			"Bearer "+token,
+		)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

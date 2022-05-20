@@ -12,10 +12,13 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
 )
+
+// TODO(rdp): add refresh token to this as well
 
 // ImportCommand represents a command for bulk importing data.
 type ImportCommand struct { // nolint: maligned
@@ -87,7 +90,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	cmd.client = client
 
 	if cmd.AuthToken != "" {
-		ctx = context.WithValue(ctx, "token", "Bearer "+cmd.AuthToken)
+		ctx = context.WithValue(
+			ctx,
+			authn.ContextValueAccessToken,
+			"Bearer "+cmd.AuthToken,
+		)
 	}
 
 	if cmd.CreateSchema {

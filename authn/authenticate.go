@@ -24,8 +24,22 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// CookieName is the name of the cookie that holds the refreshed auth token.
-const CookieName = "molecula-chip"
+const (
+	// AccessCookieName is the name of the cookie that holds the access token.
+	AccessCookieName = "molecula-chip"
+
+	// RefreshCookieName is the name of the cookie that holds the refresh token.
+	RefreshCookieName = "refresh-molecula-chip"
+
+	// RefreshHeaderName is the name of the header that holds the refresh token.
+	RefreshHeaderName = "X-Molecula-Refresh-Token"
+
+	// ContextValueAccessToken is the key used to set AccessTokens in a ctx.
+	ContextValueAccessToken = "Access"
+
+	// ContextValueRefreshToken is the key used to set RefreshTokens in a ctx.
+	ContextValueRefreshToken = "Refresh"
+)
 
 // cachedGroups is used to hold groups and when they were last cached
 type cachedGroups struct {
@@ -33,19 +47,14 @@ type cachedGroups struct {
 	groups    []Group
 }
 
-// cacheToken is used to hold tokens and when they were added to the cache
-type cachedToken struct {
-	cacheTime time.Time
-	token     *oauth2.Token
-}
-
 // UserInfo holds the information about the user from the token
 type UserInfo struct {
-	UserID   string    `json:"userid"`
-	UserName string    `json:"username"`
-	Groups   []Group   `json:"groups"`
-	Expiry   time.Time `json:"expiry"`
-	Token    string    `json:"token"`
+	UserID       string    `json:"userid"`
+	UserName     string    `json:"username"`
+	Groups       []Group   `json:"groups"`
+	Expiry       time.Time `json:"expiry"`
+	Token        string    `json:"token"`
+	RefreshToken string    `json:"refreshtoken"`
 }
 
 // Group holds group information for an authenticated user
@@ -62,29 +71,29 @@ type Groups struct {
 
 // Auth holds state, configuration, and utilities needed for authentication.
 type Auth struct {
-	logger          logger.Logger
-	cookieName      string
-	secretKey       []byte
-	groupEndpoint   string
-	logoutEndpoint  string
-	fbURL           string // fbURL is the domain featurebase is hosted on, used for post logout redirection
-	oAuthConfig     *oauth2.Config
-	cacheTTL        time.Duration           // cacheTTL is used to determine if a cached item should be refreshed or not
-	tokenTTR        time.Duration           // tokenTTR (time to refresh) is used to determine if a token should be refreshed or not
-	tokenCache      map[string]cachedToken  // tokenCache is a map of accessToken -> *oauth2.Token which we can use to refresh the tokens
-	groupsCache     map[string]cachedGroups // groupsCache is a map of accessToken -> group memberships
-	lastCacheClean  time.Time               // last cache clean is the time that the cache was last cleaned
-	allowedNetworks []net.IPNet             // list of allowed networks for ingest
+	logger            logger.Logger
+	accessCookieName  string
+	refreshCookieName string
+	secretKey         []byte
+	groupEndpoint     string
+	logoutEndpoint    string
+	fbURL             string // fbURL is the domain featurebase is hosted on, used for post logout redirection
+	oAuthConfig       *oauth2.Config
+	cacheTTL          time.Duration           // cacheTTL is used to determine if a cached item should be refreshed or not
+	groupsCache       map[string]cachedGroups // groupsCache is a map of accessToken -> group memberships
+	lastCacheClean    time.Time               // last cache clean is the time that the cache was last cleaned
+	allowedNetworks   []net.IPNet             // list of allowed networks for ingest
 }
 
 // NewAuth instantiates and returns a new Auth struct
 func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenURL, groupEndpoint, logout, clientID, clientSecret, secretKey string, configuredIPs []string) (auth *Auth, err error) {
 	auth = &Auth{
-		logger:         logger,
-		cookieName:     CookieName,
-		groupEndpoint:  groupEndpoint,
-		logoutEndpoint: logout,
-		fbURL:          url,
+		logger:            logger,
+		accessCookieName:  AccessCookieName,
+		refreshCookieName: RefreshCookieName,
+		groupEndpoint:     groupEndpoint,
+		logoutEndpoint:    logout,
+		fbURL:             url,
 		oAuthConfig: &oauth2.Config{
 			RedirectURL:  fmt.Sprintf("%s/redirect", url),
 			ClientID:     clientID,
@@ -95,10 +104,8 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenUR
 				TokenURL: tokenURL,
 			},
 		},
-		tokenCache:     map[string]cachedToken{},
 		groupsCache:    map[string]cachedGroups{},
 		cacheTTL:       10 * time.Minute,
-		tokenTTR:       7 * time.Minute,
 		lastCacheClean: time.Now(),
 	}
 
@@ -120,54 +127,57 @@ func (a Auth) SecretKey() []byte {
 	return a.secretKey
 }
 
-// Authenticate takes in a bearer token `bearer` and returns UserInfo from that token
+// refreshToken refreshes a given access/refresh token pair
+func (a *Auth) refreshToken(access, refresh string) (string, string, error) {
+	resp, err := http.PostForm(a.oAuthConfig.Endpoint.TokenURL,
+		url.Values{
+			"grant_type":    {"refresh_token"},
+			"refresh_token": {refresh},
+			"client_id":     {a.oAuthConfig.ClientID},
+			"client_secret": {a.oAuthConfig.ClientSecret},
+		},
+	)
+
+	if err != nil {
+		return "", "", errors.Wrap(err, "refreshing token")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("refreshing token: %s", resp.Status)
+	}
+
+	defer resp.Body.Close()
+
+	var t oauth2.Token
+	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
+		return "", "", errors.Wrap(err, "decoding refreshed token")
+	}
+
+	// remove the old groups from the groups cache
+	delete(a.groupsCache, access)
+
+	return t.AccessToken, t.RefreshToken, nil
+}
+
+// Authenticate takes in a auth token `access` and returns UserInfo from that token
 // it is caller's responsibility to inform the user that the access token has been refreshed
-func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, error) {
+func (a *Auth) Authenticate(access, refresh string) (*UserInfo, error) {
 	// clean up the cache every 30 minutes or so
 	if time.Now().Sub(a.lastCacheClean) >= 30*time.Minute {
 		a.cleanCache()
 	}
 
-	if tkn, ok := a.tokenCache[bearer]; ok && (tkn.token.Expiry.Sub(time.Now()) <= a.tokenTTR || !tkn.token.Valid()) {
-		// refresh the token
-		resp, err := http.PostForm(a.oAuthConfig.Endpoint.TokenURL,
-			url.Values{
-				"grant_type":    {"refresh_token"},
-				"refresh_token": {tkn.token.RefreshToken},
-				"client_id":     {a.oAuthConfig.ClientID},
-				"client_secret": {a.oAuthConfig.ClientSecret},
-			},
-		)
-		if err != nil {
-			return nil, errors.Wrap(err, "refreshing token")
-		}
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("refreshing token: %s", resp.Status)
-		}
-		defer resp.Body.Close()
-		var t oauth2.Token
-		if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
-			return nil, errors.Wrap(err, "decoding refreshed token")
-		}
-
-		// update the cache
-		delete(a.tokenCache, bearer)
-		delete(a.groupsCache, bearer)
-		bearer = t.AccessToken
-		a.tokenCache[bearer] = cachedToken{time.Now(), &t}
-	}
-
-	if len(bearer) == 0 {
-		return nil, fmt.Errorf("bearer token is empty")
+	if len(access) == 0 {
+		return nil, fmt.Errorf("auth token is empty")
 	}
 
 	// NOTE: we are using ParseUnverified here because the IDP validates the
 	// token's signature when we get the user's groups, we just need to make
 	// sure it's not expired and is well-formed
-	token, _, err := new(jwt.Parser).ParseUnverified(bearer, &jwt.MapClaims{})
+	token, _, err := new(jwt.Parser).ParseUnverified(access, &jwt.MapClaims{})
 	// well-formed-ness check
 	if token == nil || token.Claims == nil || err != nil {
-		return nil, fmt.Errorf("parsing bearer token: %v", err)
+		return nil, fmt.Errorf("parsing auth token: %v", err)
 	}
 
 	claims := *token.Claims.(*jwt.MapClaims)
@@ -175,14 +185,19 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 	// expiry check
 	if exp, ok := claims["exp"].(string); ok {
 		if expiry, err := strconv.ParseInt(exp, 10, 64); err != nil || expiry < time.Now().UTC().Unix() {
-			return nil, fmt.Errorf("token is expired")
+			access, refresh, err = a.refreshToken(access, refresh)
+			if err != nil {
+				return nil, fmt.Errorf("token is expired: %w", err)
+			}
 		}
 	}
 
 	userInfo := UserInfo{
-		Token:  bearer,
-		Groups: []Group{},
+		Token:        access,
+		RefreshToken: refresh,
+		Groups:       []Group{},
 	}
+
 	if uid, ok := claims["oid"].(string); ok {
 		userInfo.UserID = uid
 	}
@@ -190,7 +205,7 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 		userInfo.UserName = name
 	}
 
-	if userInfo.Groups, err = a.getGroups(bearer); err != nil {
+	if userInfo.Groups, err = a.getGroups(access); err != nil {
 		return nil, errors.Wrap(err, "getting groups")
 	}
 
@@ -199,18 +214,11 @@ func (a *Auth) Authenticate(ctx context.Context, bearer string) (*UserInfo, erro
 
 // cleanCache removes old items from our cache
 func (a *Auth) cleanCache() {
-	for bearer, tkn := range a.tokenCache {
-		// if it's been more than 24 hours since the token was cached
-		if time.Now().Sub(tkn.cacheTime) >= 24*time.Hour {
-			// remove it from our cache
-			delete(a.tokenCache, bearer)
-		}
-	}
-	for bearer, tkn := range a.groupsCache {
+	for access, tkn := range a.groupsCache {
 		// if it's been more than 24 hours since the groups were cached
 		if time.Now().Sub(tkn.cacheTime) >= 24*time.Hour {
 			// remove it from our cache
-			delete(a.groupsCache, bearer)
+			delete(a.groupsCache, access)
 		}
 	}
 	a.lastCacheClean = time.Now()
@@ -225,14 +233,22 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 // Logout clears out the user's cookie, removes the token from our cache, and
 // redirects user to IdP's logout endpoint
 func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {
-	// remove the bearer token from a.tokenCache and a.groupsCache
-	if bearer, err := r.Cookie(a.cookieName); err == nil {
-		delete(a.tokenCache, bearer.Value)
-		delete(a.groupsCache, bearer.Value)
+	// remove the access token from a.groupsCache
+	if access, err := r.Cookie(a.accessCookieName); err == nil {
+		delete(a.groupsCache, access.Value)
 	}
 	// clear cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     a.cookieName,
+		Name:     a.accessCookieName,
+		Value:    "",
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Expires:  time.Unix(0, 0),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     a.refreshCookieName,
 		Value:    "",
 		Path:     "/",
 		Secure:   true,
@@ -254,9 +270,7 @@ func (a *Auth) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.tokenCache[token.AccessToken] = cachedToken{time.Now(), token}
-
-	a.SetCookie(w, token.AccessToken, token.Expiry)
+	a.SetCookie(w, token.AccessToken, token.RefreshToken, token.Expiry)
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
@@ -306,10 +320,20 @@ func (a *Auth) getGroups(token string) ([]Group, error) {
 	return groups.Groups, nil
 }
 
-func (a *Auth) SetCookie(w http.ResponseWriter, token string, expiry time.Time) error {
+func (a *Auth) SetCookie(w http.ResponseWriter, access, refresh string, expiry time.Time) error {
 	http.SetCookie(w, &http.Cookie{
-		Name:     a.cookieName,
-		Value:    token,
+		Name:     a.refreshCookieName,
+		Value:    refresh,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Expires:  expiry,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     a.accessCookieName,
+		Value:    access,
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
@@ -319,18 +343,23 @@ func (a *Auth) SetCookie(w http.ResponseWriter, token string, expiry time.Time) 
 	return nil
 }
 
-func (a *Auth) SetGRPCMetadata(ctx context.Context, md metadata.MD, token string) error {
-	cookies := []string{}
+func (a *Auth) SetGRPCMetadata(ctx context.Context, md metadata.MD, access, refresh string) error {
+	mCookies := map[string]string{}
 	if c, ok := md["cookie"]; ok {
 		for _, cookie := range c {
-			if strings.HasPrefix(cookie, a.cookieName) {
-				cookie = a.cookieName + "=" + token
-			}
-			cookies = append(cookies, cookie)
+			name, val := parseCookie(cookie)
+			mCookies[name] = val
 		}
-	} else {
-		cookies = []string{a.cookieName + "=" + token}
 	}
+
+	mCookies[a.accessCookieName] = access
+	mCookies[a.refreshCookieName] = refresh
+
+	cookies := []string{}
+	for name, val := range mCookies {
+		cookies = append(cookies, name+"="+val)
+	}
+
 	md["cookie"] = cookies
 	return grpc.SetHeader(ctx, md)
 }
@@ -380,4 +409,14 @@ func (a *Auth) CheckAllowedNetworks(clientIP string) bool {
 		}
 	}
 	return false
+}
+
+func parseCookie(cookie string) (name, data string) {
+	vals := strings.Split(cookie, "=")
+	if len(vals) == 0 {
+		vals = []string{"", ""}
+	} else if len(vals) < 2 {
+		vals = append(vals, "")
+	}
+	return vals[0], vals[1]
 }

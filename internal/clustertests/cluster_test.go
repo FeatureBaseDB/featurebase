@@ -102,7 +102,11 @@ func TestClusterStuff(t *testing.T) {
 	// generate auth token and add to context
 	if auth {
 		token = GetAuthToken(t)
-		ctx = context.WithValue(ctx, "token", "Bearer "+token)
+		ctx = context.WithValue(
+			ctx,
+			authn.ContextValueAccessToken,
+			"Bearer "+token,
+		)
 	}
 
 	if err := cli[0].CreateIndex(ctx, "testidx", pilosa.IndexOptions{}); err != nil {
@@ -325,7 +329,11 @@ func TestRetryLogic(t *testing.T) {
 	}
 	if auth {
 		token := GetAuthToken(t)
-		ctx = context.WithValue(ctx, "token", "Bearer "+token)
+		ctx = context.WithValue(
+			ctx,
+			authn.ContextValueAccessToken,
+			"Bearer "+token,
+		)
 	}
 
 	var addrs = []string{"pilosa1:10101", "pilosa2:10101", "pilosa3:10101"}

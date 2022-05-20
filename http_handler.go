@@ -625,14 +625,16 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 
-			uinfo, err := h.auth.Authenticate(ctx, getToken(r))
+			access, refresh := getTokens(r)
+			uinfo, err := h.auth.Authenticate(access, refresh)
 			if err != nil {
 				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusUnauthorized)
 				return
 			}
 			// just in case it got refreshed
-			h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
-			ctx = context.WithValue(ctx, "token", r.Header["Authorization"])
+			ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
+			ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
+			h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
 		}
 		handler.ServeHTTP(w, r.WithContext(ctx))
 	}
@@ -640,13 +642,13 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
 		// if auth isn't turned on, just serve the request
 		if h.auth == nil {
 			handler.ServeHTTP(w, r)
 			return
 		}
+
+		ctx := r.Context()
 
 		// check if IP is in allowed networks, if yes give it admin permissions
 		allowedNetwork, ctx := h.chkAllowedNetworks(r)
@@ -660,18 +662,24 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		lperm := perm
 
 		// check if the user is authenticated
-		uinfo, err := h.auth.Authenticate(ctx, getToken(r))
+		access, refresh := getTokens(r)
+
+		uinfo, err := h.auth.Authenticate(access, refresh)
+
+		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
+		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
+
 		if err != nil {
 			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
 			return
 		}
 		// just in case it got refreshed
-		h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
+		h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
 
-		// put the user's groups in the context
-		ctx = context.WithValue(ctx, contextKeyGroupMembership, uinfo.Groups)
-		ctx = context.WithValue(ctx, "token", "Bearer "+uinfo.Token)
-
+		// put the user's authN/Z info in the context
+		ctx = context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
+		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+uinfo.Token)
+		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, uinfo.RefreshToken)
 		// unlikely h.permissions will be nil, but we'll check to be safe
 		if h.permissions == nil {
 			h.logger.Errorf("authentication is turned on without authorization permissions set")
@@ -3795,14 +3803,15 @@ func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
+	access, refresh := getTokens(r)
+	uinfo, err := h.auth.Authenticate(access, refresh)
 	if uinfo == nil || err != nil {
 		w.Header().Add("Content-Type", "text/plain")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	// just in case it got refreshed
-	h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
+	h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
 
 	w.Header().Add("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
@@ -3818,14 +3827,16 @@ func (h *Handler) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusNoContent)
 		return
 	}
-	uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
+
+	access, refresh := getTokens(r)
+	uinfo, err := h.auth.Authenticate(access, refresh)
 	if err != nil {
 		h.logger.Errorf("error authenticating: %v", err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	// just in case it got refreshed
-	h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
+	h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
 
 	if err := json.NewEncoder(w).Encode(uinfo); err != nil {
 		h.logger.Errorf("writing user info: %s", err)
@@ -3840,19 +3851,36 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	h.auth.Logout(w, r)
 }
 
-// getToken gets the access token from the request, returning empty string on
-// error
-func getToken(r *http.Request) string {
+// getTokens gets the access and refresh tokens from the request,
+// returning empty strings if they aren't in the request.
+func getTokens(r *http.Request) (string, string) {
+	var access, refresh string
 	if token, ok := r.Header["Authorization"]; ok && len(token) > 0 {
 		parts := strings.Split(token[0], "Bearer ")
-		if len(parts) != 2 {
-			return ""
+		if len(parts) >= 2 {
+			access = parts[1]
 		}
-		return parts[1]
 	}
-	cookie, err := r.Cookie(authn.CookieName)
-	if err != nil {
-		return ""
+
+	if token, ok := r.Header[authn.RefreshHeaderName]; ok && len(token) > 0 {
+		refresh = token[0]
 	}
-	return cookie.Value
+
+	if access == "" {
+		accessCookie, err := r.Cookie(authn.AccessCookieName)
+		if err != nil {
+			return access, refresh
+		}
+		access = accessCookie.Value
+	}
+
+	if refresh == "" {
+		refreshCookie, err := r.Cookie(authn.RefreshCookieName)
+		if err != nil {
+			return access, refresh
+		}
+		refresh = refreshCookie.Value
+	}
+
+	return access, refresh
 }
