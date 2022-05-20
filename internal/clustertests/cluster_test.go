@@ -64,6 +64,7 @@ func GetAuthToken(t *testing.T) string {
 		ClientID,
 		ClientSecret,
 		Key,
+		[]string{},
 	)
 	if err != nil {
 		t.Fatalf("NewAuth: %v", err)

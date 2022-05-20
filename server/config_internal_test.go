@@ -281,6 +281,8 @@ func TestConfig_validateAuth(t *testing.T) {
 	errorMesgURL := "invalid URL"
 	errorMesgScope := "must provide scope"
 	errorMesgKey := "invalid key length"
+	errorMesgIP := "not a valid IP for auth.configured-ips"
+	errorMesgPort := "port is not allowed in IP"
 	validTestURL := "https://url.com/"
 	validClientID := "clientid"
 	validClientSecret := "clientSecret"
@@ -290,6 +292,10 @@ func TestConfig_validateAuth(t *testing.T) {
 	validStringSlice := []string{"https://graph.microsoft.com/.default", "offline_access"}
 	validString := "asdfqwer1234asdfzxcv"
 	var emptySlice []string
+	validIPList := []string{"10.0.0.1", "10.0.0.0", "10.0.0.0/32"}
+	invalidIPList := []string{"0.0.0.0", "localhost", "100.0.1", "100.0.0/32"}
+	emptyStringIP := []string{""}
+	portIP := []string{"10.0.0.1:10101"}
 
 	enable := true
 	disable := false
@@ -321,6 +327,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				LogoutURL:        emptyString,
 				Scopes:           validStringSlice,
 				SecretKey:        emptyString,
+				ConfiguredIPs:    emptySlice,
 			},
 		},
 		{
@@ -339,6 +346,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				LogoutURL:        validTestURL,
 				Scopes:           validStringSlice,
 				SecretKey:        validString,
+				ConfiguredIPs:    validIPList,
 			},
 		},
 		{
@@ -359,6 +367,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				LogoutURL:        invalidURL,
 				Scopes:           validStringSlice,
 				SecretKey:        validKey,
+				ConfiguredIPs:    validIPList,
 			},
 		},
 		{
@@ -377,6 +386,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				LogoutURL:        validTestURL,
 				Scopes:           emptySlice,
 				SecretKey:        validKey,
+				ConfiguredIPs:    validIPList,
 			},
 		},
 		{
@@ -394,6 +404,7 @@ func TestConfig_validateAuth(t *testing.T) {
 				Scopes:           validStringSlice,
 				SecretKey:        validKey,
 				QueryLogPath:     "thisIsAPAth",
+				ConfiguredIPs:    validIPList,
 			},
 		},
 		{
@@ -410,6 +421,67 @@ func TestConfig_validateAuth(t *testing.T) {
 				LogoutURL:        validTestURL,
 				Scopes:           validStringSlice,
 				SecretKey:        emptyString,
+				ConfiguredIPs:    emptySlice,
+			},
+		},
+		{
+			// Auth enabled, all configs are set properly except configuredIPs
+			[]string{
+				errorMesgIP,
+				errorMesgIP,
+				errorMesgIP,
+				errorMesgIP,
+			},
+			Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+				RedirectBaseURL:  validTestURL,
+				LogoutURL:        validTestURL,
+				Scopes:           validStringSlice,
+				SecretKey:        validKey,
+				ConfiguredIPs:    invalidIPList,
+			},
+		},
+		{
+			// Auth enabled, all configs are set properly except configuredIPs
+			[]string{
+				errorMesgEmpty,
+			},
+			Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+				RedirectBaseURL:  validTestURL,
+				LogoutURL:        validTestURL,
+				Scopes:           validStringSlice,
+				SecretKey:        validKey,
+				ConfiguredIPs:    emptyStringIP,
+			},
+		},
+		{
+			// Auth enabled, all configs are set properly except configuredIPs
+			[]string{
+				errorMesgPort,
+			},
+			Auth{
+				Enable:           enable,
+				ClientId:         validClientID,
+				ClientSecret:     validClientSecret,
+				AuthorizeURL:     validTestURL,
+				TokenURL:         validTestURL,
+				GroupEndpointURL: validTestURL,
+				RedirectBaseURL:  validTestURL,
+				LogoutURL:        validTestURL,
+				Scopes:           validStringSlice,
+				SecretKey:        validKey,
+				ConfiguredIPs:    portIP,
 			},
 		},
 	}

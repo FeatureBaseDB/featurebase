@@ -531,7 +531,7 @@ func (m *Command) SetupServer() error {
 		}
 
 		ac := m.Config.Auth
-		m.auth, err = authn.NewAuth(m.logger, ac.RedirectBaseURL, ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.SecretKey)
+		m.auth, err = authn.NewAuth(m.logger, ac.RedirectBaseURL, ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.SecretKey, ac.ConfiguredIPs)
 		if err != nil {
 			return errors.Wrap(err, "instantiating authN object")
 		}
@@ -544,6 +544,9 @@ func (m *Command) SetupServer() error {
 		m.queryLogger.Infof("Starting Featurebase...")
 		m.queryLogger.Infof("Group with admin level access: %v", p.Admin)
 		m.queryLogger.Infof("Permissions: %+v", p.Permissions)
+		if len(ac.ConfiguredIPs) > 0 {
+			m.queryLogger.Infof("Configured IPs for allowed networks: %v", ac.ConfiguredIPs)
+		}
 
 		// disable postgres binding if auth is enabled
 		m.Config.Postgres.Bind = ""

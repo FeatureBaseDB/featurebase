@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
 	gohttp "net/http"
+	"os"
+	"path"
 	"reflect"
 	"sort"
 	"strings"
@@ -466,6 +470,198 @@ func TestTranslationHandlers(t *testing.T) {
 		}
 		if len(results) != 3 {
 			t.Fatalf("finding keys before any were set: expected 3 results, got %d (%q)", len(results), results)
+		}
+	}
+}
+
+func TestAuthAllowedNetworks(t *testing.T) {
+	permissions1 := `
+"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee55906b":
+    "test": "read"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	tmpDir := t.TempDir()
+	permissionsPath := path.Join(tmpDir, "test-permissions.yaml")
+	err := ioutil.WriteFile(permissionsPath, []byte(permissions1), 0666)
+	if err != nil {
+		t.Fatalf("failed to write permissions file: %v", err)
+	}
+
+	queryLogPath := path.Join(tmpDir, "query.log")
+	_, err = os.Create(queryLogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	validIP := "10.0.0.2"
+
+	clusterSize := 3
+	commandOpts := make([][]server.CommandOption, clusterSize)
+	configs := make([]*server.Config, clusterSize)
+	for i := range configs {
+		conf := server.NewConfig()
+		configs[i] = conf
+		conf.TLS.CertificatePath = "./testdata/certs/localhost.crt"
+		conf.TLS.CertificateKeyPath = "./testdata/certs/localhost.key"
+		conf.Auth.Enable = true
+		conf.Auth.ClientId = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
+		conf.Auth.ClientSecret = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		conf.Auth.AuthorizeURL = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
+		conf.Auth.TokenURL = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
+		conf.Auth.GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+		conf.Auth.LogoutURL = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+		conf.Auth.RedirectBaseURL = "https://localhost:10101/"
+		conf.Auth.QueryLogPath = queryLogPath
+		conf.Auth.SecretKey = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		conf.Auth.PermissionsFile = permissionsPath
+		conf.Auth.Scopes = []string{"https://graph.microsoft.com/.default", "offline_access"}
+		conf.Auth.ConfiguredIPs = []string{validIP}
+		commandOpts[i] = append(commandOpts[i], server.OptCommandConfig(conf))
+	}
+
+	c := test.MustRunCluster(t, clusterSize, commandOpts...)
+	defer c.Close()
+
+	m := c.GetPrimary()
+	index := "allowed-networks-index"
+	keyedIndex := "allowed-networks-index-keyed"
+	field := "field1"
+
+	// needed for key translation
+	nameBytes, err := json.Marshal([]string{"a", "b", "c"})
+	if err != nil {
+		t.Fatalf("marshalling json: %v", err)
+	}
+	names := string(nameBytes)
+
+	schema := `
+	{
+	   "index-name": "allowed-networks-index-keyed",
+	   "primary-key-type": "string",
+	   "index-action": "create",
+	   "fields": [
+		   {
+			   "field-name": "stringset",
+			   "field-type": "string",
+			   "field-options": {
+					"cache-type": "ranked",
+					   "cache-size": 100000
+			   }
+		   }
+	   ]
+	}
+	`
+
+	IPTests := []struct {
+		TestName   string
+		ClientIP   string
+		StatusCode int
+	}{
+		{TestName: "ValidIP", ClientIP: validIP, StatusCode: http.StatusOK},
+		{TestName: "InvalidIP", ClientIP: "10.0.1.1", StatusCode: http.StatusForbidden},
+	}
+
+	tests := []struct {
+		testName string
+		method   string
+		url      string
+		body     string
+	}{
+		{
+			testName: "Post-Index",
+			method:   "POST",
+			url:      fmt.Sprintf("%s/index/%s", m.URL(), index),
+			body:     "",
+		},
+		{
+			testName: "Post-field",
+			method:   "POST",
+			url:      fmt.Sprintf("%s/index/%s/field/%s", m.URL(), index, field),
+			body:     "",
+		},
+		{
+			testName: "Get-Schema",
+			method:   "GET",
+			url:      fmt.Sprintf("%s/schema", m.URL()),
+			body:     "",
+		},
+		{
+			testName: "Post-Schema",
+			method:   "POST",
+			url:      fmt.Sprintf("%s/internal/schema", m.URL()),
+			body:     schema,
+		},
+		{
+			testName: "Get-Shards",
+			method:   "GET",
+			url:      fmt.Sprintf("%s/internal/index/%s/shards", m.URL(), keyedIndex),
+			body:     "",
+		},
+		{
+			testName: "Post-CreateKeys",
+			method:   "POST",
+			url:      fmt.Sprintf("%s/internal/translate/index/%s/keys/create", m.URL(), keyedIndex),
+			body:     names,
+		},
+		{
+			testName: "Get-MemoryUsage",
+			method:   "GET",
+			url:      fmt.Sprintf("%s/internal/mem-usage", m.URL()),
+			body:     "",
+		},
+		{
+			testName: "Get-Status",
+			method:   "GET",
+			url:      fmt.Sprintf("%s/status", m.URL()),
+			body:     "",
+		},
+	}
+
+	for _, ipTest := range IPTests {
+		for _, test := range tests {
+			t.Run(ipTest.TestName+"-"+test.testName, func(t *testing.T) {
+				var req *gohttp.Request
+				if test.body != "" {
+					req, err = gohttp.NewRequest(test.method, test.url, strings.NewReader(test.body))
+					if err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					req, err = gohttp.NewRequest(test.method, test.url, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("X-Forwarded-For", ipTest.ClientIP)
+				resp, err := gohttp.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("failed to send request: %v", err)
+				}
+				if resp.StatusCode != ipTest.StatusCode {
+					t.Fatalf("expected %v response code, got %v, body: %v", ipTest.StatusCode, resp.StatusCode, resp.Body)
+				}
+
+				if ipTest.StatusCode == 200 {
+					body, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						t.Fatalf("reading resp body :%v", err)
+					}
+
+					if test.testName == "Post-CreateKeys" {
+						var results map[string]uint64
+						err = json.Unmarshal([]byte(body), &results)
+						if err != nil {
+							t.Fatalf("unmarshalling result: %v", err)
+						}
+						if len(results) != 3 {
+							t.Fatalf("finding keys before any were set: expected 3 results, got %d (%q)", len(results), results)
+						}
+					}
+				}
+			})
 		}
 	}
 }

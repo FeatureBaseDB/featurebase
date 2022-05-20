@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -61,22 +62,23 @@ type Groups struct {
 
 // Auth holds state, configuration, and utilities needed for authentication.
 type Auth struct {
-	logger         logger.Logger
-	cookieName     string
-	secretKey      []byte
-	groupEndpoint  string
-	logoutEndpoint string
-	fbURL          string // fbURL is the domain featurebase is hosted on, used for post logout redirection
-	oAuthConfig    *oauth2.Config
-	cacheTTL       time.Duration           // cacheTTL is used to determine if a cached item should be refreshed or not
-	tokenTTR       time.Duration           // tokenTTR (time to refresh) is used to determine if a token should be refreshed or not
-	tokenCache     map[string]cachedToken  // tokenCache is a map of accessToken -> *oauth2.Token which we can use to refresh the tokens
-	groupsCache    map[string]cachedGroups // groupsCache is a map of accessToken -> group memberships
-	lastCacheClean time.Time               // last cache clean is the time that the cache was last cleaned
+	logger          logger.Logger
+	cookieName      string
+	secretKey       []byte
+	groupEndpoint   string
+	logoutEndpoint  string
+	fbURL           string // fbURL is the domain featurebase is hosted on, used for post logout redirection
+	oAuthConfig     *oauth2.Config
+	cacheTTL        time.Duration           // cacheTTL is used to determine if a cached item should be refreshed or not
+	tokenTTR        time.Duration           // tokenTTR (time to refresh) is used to determine if a token should be refreshed or not
+	tokenCache      map[string]cachedToken  // tokenCache is a map of accessToken -> *oauth2.Token which we can use to refresh the tokens
+	groupsCache     map[string]cachedGroups // groupsCache is a map of accessToken -> group memberships
+	lastCacheClean  time.Time               // last cache clean is the time that the cache was last cleaned
+	allowedNetworks []net.IPNet             // list of allowed networks for ingest
 }
 
 // NewAuth instantiates and returns a new Auth struct
-func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenURL, groupEndpoint, logout, clientID, clientSecret, secretKey string) (auth *Auth, err error) {
+func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenURL, groupEndpoint, logout, clientID, clientSecret, secretKey string, configuredIPs []string) (auth *Auth, err error) {
 	auth = &Auth{
 		logger:         logger,
 		cookieName:     CookieName,
@@ -103,6 +105,13 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenUR
 	if auth.secretKey, err = decodeHex(secretKey); err != nil {
 		return nil, errors.Wrap(err, "decoding secret key")
 	}
+
+	// convert IPs and add them to allowed networks
+	err = auth.convertIP(configuredIPs)
+	if err != nil {
+		return nil, err
+	}
+
 	return auth, nil
 }
 
@@ -335,4 +344,40 @@ func decodeHex(hexstr string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid key length")
 	}
 	return data, nil
+}
+
+func (a *Auth) convertIP(configuredIPs []string) error {
+	sz := len(configuredIPs)
+	nets := make([]net.IPNet, sz)
+	for i, ip := range configuredIPs {
+		// skip empty strings
+		if ip == "" {
+			sz--
+			continue
+		}
+		// for IPs passed without a subnet, append /32 to only allow 1 IP
+		// this step is needed because ParseCIDR method assumes a CIDR address
+		if !strings.Contains(ip, "/") {
+			ip = ip + "/32"
+		}
+		_, subnet, err := net.ParseCIDR(ip)
+		if err != nil {
+			return errors.Wrapf(err, "parsing CIDR for %v", ip)
+		}
+		nets[i] = *subnet
+	}
+	a.allowedNetworks = nets[:sz]
+	return nil
+}
+
+// if IP is in allowed networks, then return true to grant admin permissions
+func (a *Auth) CheckAllowedNetworks(clientIP string) bool {
+	clientIP = strings.Split(clientIP, ":")[0]
+	convertedIP := net.ParseIP(clientIP)
+	for _, network := range a.allowedNetworks {
+		if network.Contains(convertedIP) {
+			return true
+		}
+	}
+	return false
 }

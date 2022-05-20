@@ -16,9 +16,8 @@ done
 
 HOST=${HOSTS[2]}
 
-ADMIN_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiYWRtaW4ifQ.I1iCgk1VU7m6e-En4ACTHIs6V2dZpy_8j2blSSo7K3U"
 # ingest string key data to user index
-/data/datagen --source custom --custom-config /data/tests/sup218_datagen.yaml --pilosa.index=user --pilosa.hosts=https://$HOST:10101 --pilosa.batch-size=1000 --auth-token=$ADMIN_TOKEN
+/data/datagen --source custom --custom-config /data/tests/sup218_datagen.yaml --pilosa.index=user --pilosa.hosts=https://$HOST:10101 --pilosa.batch-size=1000
 ifErr "running datagen on $HOST"
 
 # install grpcurl

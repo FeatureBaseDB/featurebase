@@ -3,6 +3,7 @@ package pilosa
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -188,6 +189,19 @@ func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
+// common variables used for testing auth
+var (
+	ClientID         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
+	ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
+	TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
+	GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
+	LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+	Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
+	Key              = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+	ConfiguredIPs    = []string{}
+)
+
 func TestAuthentication(t *testing.T) {
 	type evaluate func(w *httptest.ResponseRecorder, data []byte)
 	type endpoint func(w http.ResponseWriter, r *http.Request)
@@ -221,34 +235,10 @@ func TestAuthentication(t *testing.T) {
 	}))
 	defer groupSrv.Close()
 
-	var (
-		ClientId         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
-		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
-		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
-		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
-		GroupEndpointURL = groupSrv.URL
-		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
-		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
-		SecretKey        = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
-	)
+	GroupEndpointURL = groupSrv.URL
+	secretKey, _ := hex.DecodeString(Key)
 
-	secretKey, _ := hex.DecodeString("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
-
-	a, err := authn.NewAuth(
-		logger.NewStandardLogger(os.Stdout),
-		"http://localhost:10101/",
-		Scopes,
-		AuthorizeURL,
-		TokenURL,
-		GroupEndpointURL,
-		LogoutURL,
-		ClientId,
-		ClientSecret,
-		SecretKey,
-	)
-	if err != nil {
-		t.Errorf("building auth object%s", err)
-	}
+	a := NewTestAuth(t)
 
 	h := Handler{
 		logger:      logger.NewStandardLogger(os.Stdout),
@@ -781,17 +771,6 @@ func TestChkInternal(t *testing.T) {
 
 func NewTestAuth(t *testing.T) *authn.Auth {
 	t.Helper()
-	var (
-		ClientID         = "e9088663-eb08-41d7-8f65-efb5f54bbb71"
-		ClientSecret     = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
-		AuthorizeURL     = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize"
-		TokenURL         = "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token"
-		GroupEndpointURL = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true"
-		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
-		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
-		Key              = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
-	)
-
 	a, err := authn.NewAuth(
 		logger.NewStandardLogger(os.Stdout),
 		"http://localhost:10101/",
@@ -803,6 +782,7 @@ func NewTestAuth(t *testing.T) *authn.Auth {
 		ClientID,
 		ClientSecret,
 		Key,
+		ConfiguredIPs,
 	)
 	if err != nil {
 		t.Fatalf("building auth object%s", err)
@@ -844,5 +824,174 @@ func TestHandleGetDiskUsage(t *testing.T) {
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected %v, got %v", http.StatusOK, resp.StatusCode)
+	}
+}
+
+func TestAuthzAllowedIPs(t *testing.T) {
+	tests := []struct {
+		configuredIPs []string
+		clientIP      string
+		statusCode    int
+		permission    authz.Permission
+	}{
+		// client IP is in configured IP list
+		{
+			configuredIPs: []string{"10.0.0.0", "10.0.0.1", "10.0.2.0/32"},
+			clientIP:      "10.0.0.0",
+			statusCode:    http.StatusOK,
+			permission:    authz.Admin,
+		},
+		// client IP is in configured IP list, testing with CIDR address
+		{
+			configuredIPs: []string{"10.0.0.0/30"},
+			clientIP:      "10.0.0.1",
+			statusCode:    http.StatusOK,
+			permission:    authz.Write,
+		},
+		// client IP has multiple IPs in X-Forwarded-For header
+		// originating IP is in configured IP list
+		{
+			configuredIPs: []string{"10.0.0.0", "10.0.0.1/32", "10.0.0.2"},
+			clientIP:      "10.0.0.2,10.0.0.255",
+			statusCode:    http.StatusOK,
+			permission:    authz.Read,
+		},
+		// client IP has multiple IPs in X-Forwarded-For header
+		// originating IP is not in configured IP list
+		{
+			configuredIPs: []string{"10.0.0.0/30"},
+			clientIP:      "10.0.0.255,10.0.0.2",
+			statusCode:    http.StatusForbidden,
+			permission:    authz.Read,
+		},
+		// client IP is not in configured IP list
+		{
+			configuredIPs: []string{"10.0.0.0", "10.0.0.1", "10.0.2.0/32"},
+			clientIP:      "10.0.0.3",
+			statusCode:    http.StatusForbidden,
+			permission:    authz.Write,
+		},
+		// client IP is not in configured IP list
+		// X-Forwarded-For header is an empty string
+		{
+			configuredIPs: []string{"10.0.0.0", "10.0.0.1", "10.0.2.0/32"},
+			clientIP:      "",
+			statusCode:    http.StatusForbidden,
+			permission:    authz.Write,
+		},
+	}
+
+	testingHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("good"))
+	}
+
+	permissions1 := `"user-groups":
+  "dca35310-ecda-4f23-86cd-876aee559900":
+    "test": "write"
+admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("ChkAuthz-%d", i), func(t *testing.T) {
+			ConfiguredIPs = test.configuredIPs
+			a := NewTestAuth(t)
+
+			h := Handler{
+				logger:      logger.NewStandardLogger(os.Stdout),
+				queryLogger: logger.NewStandardLogger(os.Stdout),
+				auth:        a,
+			}
+
+			var p authz.GroupPermissions
+			if err := p.ReadPermissionsFile(strings.NewReader(permissions1)); err != nil {
+				t.Errorf("Error: %s", err)
+			}
+			h.permissions = &p
+
+			r := httptest.NewRequest("GET", "/index/authz-abcd", nil)
+			r.Header.Set(ForwardedIPHeader, test.clientIP)
+			w := httptest.NewRecorder()
+
+			handler := h.chkAuthZ(testingHandler, authz.Read)
+			handler(w, r)
+			resp := w.Result()
+			if resp.StatusCode != test.statusCode {
+				t.Fatalf("expected %v, got %v", test.statusCode, resp.StatusCode)
+			}
+		})
+	}
+}
+
+func TestAuthnAllowedIPs(t *testing.T) {
+	IPList := []string{"10.0.0.0", "10.0.0.1", "10.0.0.2"}
+	ValidForwardedIP := "10.0.0.0, 10.0.0.3, 10.0.0.4"
+	InvalidForwardedIP := "10.0.0.3, 10.0.0.4"
+
+	tests := []struct {
+		configuredIPs []string
+		clientIP      string
+		statusCode    int
+		secretKey     string
+	}{
+		// test client IP was in configured IP list - happy path
+		{
+			configuredIPs: IPList,
+			clientIP:      IPList[0],
+			statusCode:    http.StatusOK,
+		},
+		// test empty configured IP list
+		{
+			configuredIPs: []string{""},
+			clientIP:      IPList[0],
+			statusCode:    http.StatusUnauthorized,
+		},
+		// test client IP is not in configured IP list
+		{
+			configuredIPs: IPList,
+			clientIP:      "10.0.0.4",
+			statusCode:    http.StatusUnauthorized,
+		},
+		// test multiple client IPs in X-forwarded-IP
+		// originating IP is in configured IP list
+		{
+			configuredIPs: IPList,
+			clientIP:      ValidForwardedIP,
+			statusCode:    http.StatusOK,
+		},
+		// test multiple client IPs in X-forwarded-IP
+		// originating IP is not in configured IP list
+		{
+			configuredIPs: IPList,
+			clientIP:      InvalidForwardedIP,
+			statusCode:    http.StatusUnauthorized,
+		},
+	}
+
+	testingHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("good"))
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("ChkAuthn-%d", i), func(t *testing.T) {
+			ConfiguredIPs = test.configuredIPs
+			a := NewTestAuth(t)
+
+			h := Handler{
+				logger:      logger.NewStandardLogger(os.Stdout),
+				queryLogger: logger.NewStandardLogger(os.Stdout),
+				auth:        a,
+			}
+
+			r := httptest.NewRequest("GET", "/index/authn-abcd", nil)
+			r.Header.Set(ForwardedIPHeader, test.clientIP)
+			r = r.WithContext(context.Background())
+			w := httptest.NewRecorder()
+
+			handler := h.chkAuthN(testingHandler)
+			handler(w, r)
+			resp := w.Result()
+			if resp.StatusCode != test.statusCode {
+				t.Fatalf("expected %v, got %v", test.statusCode, resp.StatusCode)
+			}
+		})
 	}
 }

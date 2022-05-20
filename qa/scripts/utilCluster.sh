@@ -128,6 +128,7 @@ long-query-time = "10s"
     secret-key = "98995f0530eeba96da1d0a04311073c0abb7b6abbfb0f5f4ef3629527ff88428"
     permissions = "/etc/permissions.yml"
     query-log-path = "/data/featurebase/query.log"
+    configured-ips = ["${DEPLOYED_INGEST_IPS}"]
 EOT
 
     echo "writing the permissions file"

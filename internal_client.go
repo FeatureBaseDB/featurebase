@@ -154,6 +154,12 @@ func AddAuthToken(ctx context.Context, req *http.Request) *http.Request {
 		// UserInfo.Token is not prefixed with "Bearer"
 		req.Header.Set("Authorization", "Bearer "+uinfo.(*authn.UserInfo).Token)
 	}
+
+	// set ogIP to request for remote calls
+	if ogIP, ok := ctx.Value(OriginalIPHeader).(string); ok && ogIP != "" {
+		req.Header.Set(OriginalIPHeader, ogIP)
+	}
+
 	return req
 }
 

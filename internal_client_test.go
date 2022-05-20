@@ -1603,4 +1603,15 @@ func TestAddAuthToken(t *testing.T) {
 			t.Fatalf("got '%v', expected '%v'", got, tok)
 		}
 	})
+	t.Run("originalIP", func(t *testing.T) {
+		req, err := gohttp.NewRequest("GET", "dontmatternone", strings.NewReader("this doesn't matter"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		ogIP := "10.0.0.1"
+		pilosa.AddAuthToken(context.WithValue(context.Background(), pilosa.OriginalIPHeader, ogIP), req)
+		if got := req.Header.Get(pilosa.OriginalIPHeader); got != ogIP {
+			t.Fatalf("got '%v', expected '%v'", got, ogIP)
+		}
+	})
 }

@@ -641,6 +641,7 @@ func TestImport_AuthOn(t *testing.T) {
 		auth.ClientId,
 		auth.ClientSecret,
 		auth.SecretKey,
+		[]string{},
 	)
 	if err != nil {
 		t.Fatal(err)

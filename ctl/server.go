@@ -108,6 +108,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.Auth.SecretKey, "auth.secret-key", srv.Config.Auth.SecretKey, "Secret key used for auth.")
 	flags.StringVar(&srv.Config.Auth.PermissionsFile, "auth.permissions", srv.Config.Auth.PermissionsFile, "Permissions' file with group authorization.")
 	flags.StringVar(&srv.Config.Auth.QueryLogPath, "auth.query-log-path", srv.Config.Auth.QueryLogPath, "Path to log user queries")
+	flags.StringSliceVar(&srv.Config.Auth.ConfiguredIPs, "auth.configured-ips", srv.Config.Auth.ConfiguredIPs, "List of configured IPs allowed for ingest")
 
 	flags.BoolVar(&srv.Config.DataDog.Enable, "datadog.enable", false, "enable continuous profiling with DataDog cloud service, Note you must have DataDog agent installed")
 	flags.StringVar(&srv.Config.DataDog.Service, "datadog.service", "default-service", "The Datadog service name, for example my-web-app")

@@ -254,6 +254,7 @@ type Auth struct {
 	SecretKey        string   `toml:"secret-key"`
 	PermissionsFile  string   `toml:"permissions"`
 	QueryLogPath     string   `toml:"query-log-path"`
+	ConfiguredIPs    []string `toml:"configured-ips"`
 }
 
 // Namespace returns the namespace to use based on the Future flag.
@@ -663,6 +664,39 @@ func (c *Config) ValidateAuth() (errors []error) {
 		errors = append(errors, fmt.Errorf("must provide scope for authentication with IdP - for access and refresh token"))
 	}
 
+	if len(c.Auth.ConfiguredIPs) > 0 {
+		for _, IP := range c.Auth.ConfiguredIPs {
+			if strings.Contains(IP, ":") {
+				errors = append(errors, fmt.Errorf("port is not allowed in IP %v for auth.configured-ips", IP))
+				continue
+			}
+			if IP == "" {
+				errors = append(errors, fmt.Errorf("empty string for auth.configured-ips"))
+				continue
+			}
+			if strings.Contains(IP, "localhost") {
+				errors = append(errors, fmt.Errorf("%v is not a valid IP for auth.configured-ips, DNS names are not allowed", IP))
+				continue
+			}
+			if strings.EqualFold(IP, "0.0.0.0") {
+				errors = append(errors, fmt.Errorf("%v is not a valid IP for auth.configured-ips", IP))
+				continue
+			}
+			// validate CIDR addresses
+			if strings.Contains(IP, "/") {
+				if _, _, err := net.ParseCIDR(IP); err != nil {
+					errors = append(errors, fmt.Errorf("%v is not a valid IP for auth.configured-ips: %v", IP, err))
+					continue
+				}
+				continue
+			}
+			// validate IP
+			if net.ParseIP(IP) == nil {
+				errors = append(errors, fmt.Errorf("%v is not a valid IP for auth.configured-ips", IP))
+				continue
+			}
+		}
+	}
 	return errors
 }
 

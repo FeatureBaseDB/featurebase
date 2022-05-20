@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -33,6 +34,7 @@ func NewTestAuth(t *testing.T) *Auth {
 		LogoutURL        = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
 		Scopes           = []string{"https://graph.microsoft.com/.default", "offline_access"}
 		Key              = "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"
+		configuredIPs    = []string{}
 	)
 
 	a, err := NewAuth(
@@ -46,6 +48,7 @@ func NewTestAuth(t *testing.T) *Auth {
 		ClientID,
 		ClientSecret,
 		Key,
+		configuredIPs,
 	)
 	if err != nil {
 		t.Fatalf("building auth object%s", err)
@@ -147,6 +150,7 @@ func TestAuth(t *testing.T) {
 			"e9088663-eb08-41d7-8f65-efb5f54bbb71",
 			"DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
 			"DEADBEEFD",
+			[]string{},
 		)
 		if err == nil || !strings.Contains(err.Error(), "decoding secret key") {
 			t.Fatalf("expected error decoding secret key got: %v", err)
@@ -647,4 +651,102 @@ func (s *ServerTransportStream) SendHeader(md metadata.MD) error {
 func (s *ServerTransportStream) SetTrailer(md metadata.MD) error {
 	_ = md
 	return nil
+}
+
+func TestCheckAllowedNetworks(t *testing.T) {
+
+	tests := []struct {
+		requestIP     string
+		configuredIPs []string
+		isAdmin       bool
+	}{
+		{
+			requestIP:     "10.0.0.1",
+			configuredIPs: []string{"10.0.0.1"},
+			isAdmin:       true,
+		},
+		{
+			requestIP:     "10.0.0.3",
+			configuredIPs: []string{"10.0.0.1", "10.0.0.2"},
+			isAdmin:       false,
+		},
+		{
+			requestIP:     "10.0.0.2",
+			configuredIPs: []string{"10.0.0.1/30"},
+			isAdmin:       true,
+		},
+		// it is possible for the client IP to have a port
+		{
+			requestIP:     "10.0.0.2:22",
+			configuredIPs: []string{"10.0.0.1/30"},
+			isAdmin:       true,
+		},
+		{
+			requestIP:     "10.1.0.3",
+			configuredIPs: []string{"10.0.0.1/32"},
+			isAdmin:       false,
+		},
+		{
+			requestIP:     "10.0.0.254",
+			configuredIPs: []string{"10.0.0.1/24"},
+			isAdmin:       true,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("network-%d", i), func(t *testing.T) {
+			a := NewTestAuth(t)
+			if err := a.convertIP(test.configuredIPs); err != nil {
+				t.Fatalf("failed to convert IPs from strings to net.IP: %v", err)
+			}
+			got := a.CheckAllowedNetworks(test.requestIP)
+			if got != test.isAdmin {
+				t.Fatalf("expected %v, got %v", test.isAdmin, got)
+			}
+		})
+	}
+}
+
+func TestConvertIP(t *testing.T) {
+
+	tests := []struct {
+		configuredIPs []string
+		convertedIPs  []net.IPNet
+	}{
+		{
+			configuredIPs: []string{"10.0.0.1"},
+			convertedIPs: []net.IPNet{
+				{IP: net.ParseIP("10.0.0.1"), Mask: net.CIDRMask(32, 32)},
+			},
+		},
+		{
+			configuredIPs: []string{"10.0.0.1/30"},
+			convertedIPs: []net.IPNet{
+				{IP: net.ParseIP("10.0.0.0"), Mask: net.CIDRMask(30, 32)},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("network-%d", i), func(t *testing.T) {
+			a := NewTestAuth(t)
+			if err := a.convertIP(test.configuredIPs); err != nil {
+				t.Fatalf("failed to convert IPs from strings to net.IP: %v", err)
+			}
+
+			if len(a.allowedNetworks) != len(test.convertedIPs) {
+				t.Fatalf("expected len of %v networks, got %v", len(test.convertedIPs), len(a.allowedNetworks))
+			}
+
+			for i := range a.allowedNetworks {
+				expected, got := test.convertedIPs[i], a.allowedNetworks[i]
+				if got.IP.String() != expected.IP.String() {
+					t.Fatalf("for IP, expected %v, got %v", expected.IP, got.IP)
+				}
+				if got.Mask.String() != expected.Mask.String() {
+					t.Fatalf("for mask, expected %v, got %v", expected.Mask.String(), got.Mask.String())
+				}
+			}
+		})
+	}
 }

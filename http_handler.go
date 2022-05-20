@@ -93,6 +93,23 @@ var externalPrefixFlag = map[string]bool{
 	"version": true,
 }
 
+const (
+	// OriginalIPHeader is the original IP for client
+	// It is used mainly for authenticating on remote nodes
+	// ForwardedIPHeader gets updated to the node's IP
+	// when requests are forward to other nodes in the cluster
+	OriginalIPHeader = "X-Molecula-Original-IP"
+
+	// ForwardedIPHeader is part of the standard header
+	// it is used to identify the originating IP of a client
+	ForwardedIPHeader = "X-Forwarded-For"
+
+	// AllowedNetworksGroupName is used for the admin group authorization
+	// when authentication is completed through checking the client IP
+	// against the allowed networks
+	AllowedNetworksGroupName = "allowed-networks"
+)
+
 type errorResponse struct {
 	Error string `json:"error"`
 }
@@ -581,27 +598,61 @@ func (h *Handler) chkInternal(handler http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func (h *Handler) chkAllowedNetworks(r *http.Request) (bool, context.Context) {
+	// for every request, get IP of the request and check against configured IPs
+	reqIP := GetIP(r)
+	if reqIP == "" {
+		return false, r.Context()
+	}
+
+	// if client IP is in allowed networks
+	// add it to the context for key X-Molecula-Original-IP
+	if h.auth.CheckAllowedNetworks(reqIP) {
+		ctx := context.WithValue(r.Context(), OriginalIPHeader, reqIP)
+		return true, ctx
+	}
+	return false, r.Context()
+}
+
 func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		if h.auth != nil {
-			uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
+			// if IP is in allowed networks, then serve the request
+			allowedNetwork, ctx := h.chkAllowedNetworks(r)
+			if allowedNetwork {
+				handler.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			uinfo, err := h.auth.Authenticate(ctx, getToken(r))
 			if err != nil {
 				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusUnauthorized)
 				return
 			}
 			// just in case it got refreshed
 			h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
+			ctx = context.WithValue(ctx, "token", r.Header["Authorization"])
 		}
-		ctx := context.WithValue(r.Context(), "token", r.Header["Authorization"])
 		handler.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
 func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
 		// if auth isn't turned on, just serve the request
 		if h.auth == nil {
 			handler.ServeHTTP(w, r)
+			return
+		}
+
+		// check if IP is in allowed networks, if yes give it admin permissions
+		allowedNetwork, ctx := h.chkAllowedNetworks(r)
+		if allowedNetwork {
+			ctx = context.WithValue(ctx, contextKeyGroupMembership, []string{AllowedNetworksGroupName, h.permissions.Admin})
+			handler.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -609,7 +660,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		lperm := perm
 
 		// check if the user is authenticated
-		uinfo, err := h.auth.Authenticate(r.Context(), getToken(r))
+		uinfo, err := h.auth.Authenticate(ctx, getToken(r))
 		if err != nil {
 			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
 			return
@@ -618,7 +669,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		h.auth.SetCookie(w, uinfo.Token, uinfo.Expiry)
 
 		// put the user's groups in the context
-		ctx := context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
+		ctx = context.WithValue(ctx, contextKeyGroupMembership, uinfo.Groups)
 		ctx = context.WithValue(ctx, "token", "Bearer "+uinfo.Token)
 
 		// unlikely h.permissions will be nil, but we'll check to be safe
@@ -630,7 +681,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 
 		// figure out what the user is querying for
 		queryString := ""
-		queryRequest := r.Context().Value(contextKeyQueryRequest)
+		queryRequest := ctx.Value(contextKeyQueryRequest)
 		if req, ok := queryRequest.(*QueryRequest); ok {
 			queryString = req.Query
 
@@ -701,10 +752,27 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 }
 
 func GetIP(r *http.Request) string {
-	forwarded := r.Header.Get("X-FORWARDED-FOR")
-	if forwarded != "" {
-		return forwarded
+	// check if original IP was set in the request
+	og := r.Header.Get(OriginalIPHeader)
+	if og != "" {
+		return og
 	}
+
+	// check if original IP is in the context
+	if ogIP, ok := r.Context().Value(OriginalIPHeader).(string); ok && ogIP != "" {
+		return ogIP
+	}
+
+	// X-Forwarded-For can have multiple IPs
+	// the first IP will always be the originating client IP
+	// the remaining IPs will be for any proxies the request went through
+	forwarded := r.Header.Get(ForwardedIPHeader)
+	forwardedList := strings.Split(forwarded, ",")
+	if forwardedList[0] != "" {
+		return forwardedList[0]
+
+	}
+
 	return r.RemoteAddr
 }
 
@@ -888,6 +956,40 @@ func headerAcceptRoaringRow(header http.Header) bool {
 	return false
 }
 
+func (h *Handler) filterSchema(schema []*IndexInfo, g []authn.Group) []*IndexInfo {
+	if !h.permissions.IsAdmin(g) {
+		var filtered []*IndexInfo
+		allowed := h.permissions.GetAuthorizedIndexList(g, authz.Read)
+		for _, s := range schema {
+			for _, index := range allowed {
+				if s.Name == index {
+					filtered = append(filtered, s)
+					break
+				}
+			}
+		}
+		schema = filtered
+	}
+	return schema
+}
+
+func (h *Handler) getGroupMembership(r *http.Request) (g []authn.Group) {
+	// if IP is in allowed networks, then give admin group membership
+	if h.auth.CheckAllowedNetworks(GetIP(r)) {
+		g = []authn.Group{
+			{
+				GroupID:   h.permissions.Admin,
+				GroupName: AllowedNetworksGroupName,
+			},
+		}
+		return g
+	}
+
+	// check if group membership was already set in request when auth token was obtained
+	g = r.Context().Value(contextKeyGroupMembership).([]authn.Group)
+	return g
+}
+
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
@@ -906,24 +1008,12 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 	// if auth is turned on, filter response to only include authorized indexes
 	if h.auth != nil {
-		g := r.Context().Value(contextKeyGroupMembership)
+		g := h.getGroupMembership(r)
 		if g == nil {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if !h.permissions.IsAdmin(g.([]authn.Group)) {
-			var filtered []*IndexInfo
-			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
-			for _, s := range schema {
-				for _, index := range allowed {
-					if s.Name == index {
-						filtered = append(filtered, s)
-						break
-					}
-				}
-			}
-			schema = filtered
-		}
+		schema = h.filterSchema(schema, g)
 	}
 
 	if err := json.NewEncoder(w).Encode(Schema{Indexes: schema}); err != nil {
@@ -952,25 +1042,14 @@ func (h *Handler) handleGetSchemaDetails(w http.ResponseWriter, r *http.Request)
 
 	// if auth is turned on, filter response to only include authorized indexes
 	if h.auth != nil {
-		g := r.Context().Value(contextKeyGroupMembership)
+		g := h.getGroupMembership(r)
 		if g == nil {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if !h.permissions.IsAdmin(g.([]authn.Group)) {
-			var filtered []*IndexInfo
-			allowed := h.permissions.GetAuthorizedIndexList(g.([]authn.Group), authz.Read)
-			for _, s := range schema {
-				for _, index := range allowed {
-					if s.Name == index {
-						filtered = append(filtered, s)
-						break
-					}
-				}
-			}
-			schema = filtered
-		}
+		schema = h.filterSchema(schema, g)
 	}
+
 	if err := json.NewEncoder(w).Encode(Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}
