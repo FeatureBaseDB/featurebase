@@ -1459,8 +1459,7 @@ type valsByIDsSortable struct {
 
 func (v *valsByIDsSortable) Len() int { return len(v.ids) }
 
-// comparing on shard rather than ID was twice as fast in informal tests
-func (v *valsByIDsSortable) Less(i, j int) bool { return v.ids[i]/v.width < v.ids[j]/v.width }
+func (v *valsByIDsSortable) Less(i, j int) bool { return v.ids[i] < v.ids[j] }
 func (v *valsByIDsSortable) Swap(i, j int) {
 	v.ids[i], v.ids[j] = v.ids[j], v.ids[i]
 	v.vals[i], v.vals[j] = v.vals[j], v.vals[i]
@@ -1550,7 +1549,6 @@ type rowsByIDsSortable struct {
 
 func (v *rowsByIDsSortable) Len() int { return len(v.ids) }
 
-// comparing on shard rather than ID was twice as fast in informal tests
 func (v *rowsByIDsSortable) Less(i, j int) bool { return v.ids[i] < v.ids[j] }
 func (v *rowsByIDsSortable) Swap(i, j int) {
 	v.ids[i], v.ids[j] = v.ids[j], v.ids[i]

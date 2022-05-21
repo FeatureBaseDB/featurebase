@@ -41,6 +41,7 @@ func TestAgainstCluster(t *testing.T) {
 	t.Run("test-import-batch-multiple-ints", func(t *testing.T) { testImportBatchMultipleInts(t, c, client) })
 	t.Run("test-import-batch-sets-clears", func(t *testing.T) { testImportBatchSetsAndClears(t, c, client) })
 	t.Run("test-topn-cache-regression", func(t *testing.T) { testTopNCacheRegression(t, c, client) })
+	t.Run("test-multiple-int-same-batch", func(t *testing.T) { testMultipleIntSameBatch(t, c, client) })
 }
 
 func testStringSliceCombos(t *testing.T, c *test.Cluster, client *Client) {
@@ -1518,5 +1519,50 @@ func testTopNCacheRegression(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("unexpected topn: %+v", res)
 	} else if res[0].ID != 1 || res[0].Count != 1 {
 		t.Fatalf("unexpected topn result: %v", res)
+	}
+}
+
+// testMultipleIntSameBatch checks that if the same ID is added multiple times with different values that only the last value is set and the bits aren't mixed together. It adds a different ID in between the two same ones which triggered a bug because we were sorting by shard rather than ID.
+func testMultipleIntSameBatch(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-multiple-int-same-batch")
+	field := idx.Field("age", OptFieldTypeInt(0, 10000))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 4, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	if err := b.Add(Row{
+		ID:     uint64(1),
+		Values: []interface{}{int64(1)},
+	}); err != nil {
+		t.Fatalf("adding to batch: %v", err)
+	}
+	if err := b.Add(Row{
+		ID:     uint64(2),
+		Values: []interface{}{int64(0)},
+	}); err != nil {
+		t.Fatalf("adding to batch: %v", err)
+	}
+	if err := b.Add(Row{
+		ID:     uint64(1),
+		Values: []interface{}{int64(2)},
+	}); err != nil {
+		t.Fatalf("adding to batch: %v", err)
+	}
+
+	if err := b.Import(); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	if resp, err := client.Query(field.Sum(nil)); err != nil {
+		t.Fatalf("querying sum: %v", err)
+	} else if res := resp.Result().Value(); res != 2 {
+		t.Errorf("unexpected sum: %+v", res)
 	}
 }
