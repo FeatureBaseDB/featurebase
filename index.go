@@ -760,6 +760,9 @@ func (i *Index) UpdateField(ctx context.Context, name string, update FieldUpdate
 		if err != nil {
 			return nil, NewBadRequestError(errors.Wrap(err, "parsing duration"))
 		}
+		if dur < 0 {
+			return nil, NewBadRequestError(errors.Errorf("ttl can't be negative: '%s'", update.Value))
+		}
 		cfm.Meta.TTL = dur
 	default:
 		return nil, NewBadRequestError(errors.Errorf("updates for option '%s' are not supported", update.Option))

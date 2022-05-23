@@ -303,6 +303,9 @@ func OptFieldTypeTime(timeQuantum TimeQuantum, ttl string, opt ...bool) FieldOpt
 		if err != nil {
 			return errors.Errorf("cannot parse ttl: %s", ttl)
 		}
+		if ttlParsed < 0 {
+			return errors.Errorf("ttl can't be negative: %s", ttl)
+		}
 		fo.TTL = ttlParsed
 		fo.NoStandardView = len(opt) >= 1 && opt[0]
 		return nil

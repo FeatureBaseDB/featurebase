@@ -90,32 +90,140 @@ func TestUpdateFieldTTL(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	c.CreateField(t, "ttltest", pilosa.IndexOptions{}, "timefield", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0"))
-
-	nodeURL := c.Nodes[0].URL() + "/index/ttltest/field/timefield"
-	fmt.Println(nodeURL)
-
-	req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(`{"option": "ttl", "value": "48h"}`))
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name      string
+		field     string
+		ttl       string
+		ttlOption string
+		expStatus int
+		expErr    string
+		expTTL    time.Duration
+	}{
+		{
+			// test update ttl: set initial ttl to 10s, then update ttl to 48h
+			name:      "t1_48h",
+			field:     "t1_48h",
+			ttl:       "10s",
+			ttlOption: `{"option": "ttl", "value": "48h"}`,
+			expStatus: 200,
+			expErr:    "",
+			expTTL:    time.Hour * 48,
+		},
+		{
+			// test unknown unit for ttl value
+			name:      "t2_unknown_unit",
+			field:     "t2_unknown_unit",
+			ttl:       "20s",
+			ttlOption: `{"option": "ttl", "value": "24abc"}`,
+			expStatus: 400,
+			expErr:    `unknown unit "abc"`,
+			expTTL:    time.Second * 20,
+		},
+		{
+			// test invalid ttl value
+			name:      "t3_invalid",
+			field:     "t3_invalid",
+			ttl:       "30s",
+			ttlOption: `{"option": "ttl", "value": "abcdef"}`,
+			expStatus: 400,
+			expErr:    `invalid duration "abcdef"`,
+			expTTL:    time.Second * 30,
+		},
+		{
+			// test empty ttl value
+			name:      "t4_invalid_empty",
+			field:     "t4_invalid_empty",
+			ttl:       "40s",
+			ttlOption: `{"option": "ttl", "value": ""}`,
+			expStatus: 400,
+			expErr:    `invalid duration ""`,
+			expTTL:    time.Second * 40,
+		},
+		{
+			// test non existent field name
+			name:      "t5_diff_field_name",
+			field:     "t5_diff_field",
+			ttl:       "50s",
+			ttlOption: `{"option": "ttl", "value": ""}`,
+			expStatus: 404,
+			expErr:    `key does not exist`,
+			expTTL:    time.Second * 50,
+		},
+		{
+			// test without field name
+			name:      "t6_empty_field_name",
+			field:     "",
+			ttl:       "60s",
+			ttlOption: `{"option": "ttl", "value": "12h"}`,
+			expStatus: 405,
+			expErr:    `405 Method Not Allowed`,
+			expTTL:    time.Second * 60,
+		},
+		{
+			// test negative value for ttl
+			name:      "t7_negative",
+			field:     "t7_negative",
+			ttl:       "70s",
+			ttlOption: `{"option": "ttl", "value": "-12h"}`,
+			expStatus: 400,
+			expErr:    `ttl can't be negative`,
+			expTTL:    time.Second * 70,
+		},
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := gohttp.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("doing option request: %v", err)
-	} else if resp.StatusCode != 200 {
-		t.Fatalf("unexpected status updating TTL")
+
+	for i, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c.CreateField(t, "ttltest", pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), test.ttl))
+			nodeURL := c.Nodes[0].URL() + "/index/ttltest/field/" + test.field
+			req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(test.ttlOption))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := gohttp.DefaultClient.Do(req)
+
+			if err != nil {
+				t.Fatalf("doing option request: %v", err)
+			}
+
+			if resp.StatusCode != test.expStatus {
+				t.Errorf("expected status: '%d', got: '%d'", test.expStatus, resp.StatusCode)
+			}
+
+			if resp.StatusCode == 400 || resp.StatusCode == 404 {
+				// unmarshal error message to check against expErr
+				var respBody map[string]interface{}
+				json.NewDecoder(resp.Body).Decode(&respBody)
+				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
+
+				if !strings.Contains(errMsg, test.expErr) {
+					t.Errorf("expected error: '%s', got: '%s'", test.expErr, errMsg)
+				}
+			} else if resp.StatusCode == 405 {
+				if !strings.Contains(resp.Status, test.expErr) {
+					t.Errorf("expected error: '%s', got: '%s'", test.expErr, resp.Status)
+				}
+			}
+
+			// find updated field and check its TTL
+			for _, node := range c.Nodes {
+				ii, err := node.API.Schema(context.Background(), false)
+				if err != nil {
+					t.Fatalf("getting schema: %v", err)
+				}
+				if ii[0].Fields[i].Name == test.name {
+					if ii[0].Fields[i].Options.TTL != test.expTTL {
+						t.Errorf("expected TTL: '%s', got: '%s'", test.expTTL, ii[0].Fields[i].Options.TTL)
+					}
+				} else {
+					t.Errorf("unexpected field: '%s', got: '%s'", test.name, ii[0].Fields[i].Name)
+				}
+			}
+
+		})
 	}
 
-	for _, node := range c.Nodes {
-		ii, err := node.API.Schema(context.Background(), false)
-		if err != nil {
-			t.Fatalf("getting schema: %v", err)
-		}
-		if ii[0].Fields[0].Options.TTL != time.Hour*48 {
-			t.Fatalf("unexpected TTL after update: %s", ii[0].Fields[0].Options.TTL)
-		}
-	}
 }
 
 func TestIngestSchemaHandler(t *testing.T) {
@@ -216,7 +324,7 @@ func TestPostFieldWithTTL(t *testing.T) {
 
 	schema := `
 	{
-		"index-name": "example",
+		"index-name": "ttl_test",
 		"primary-key-type": "string",
 		"index-action": "create",
 		"fields":[]
@@ -229,35 +337,83 @@ func TestPostFieldWithTTL(t *testing.T) {
 		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 
-	postFieldTTLUrl := fmt.Sprintf("%s/index/example/field/with_ttl", m.URL())
-
-	// Create new field with ttl but in invalid format
-	fieldOptionInvalidTTL := `
- 	{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24hour" }}
-	`
-	respField := test.Do(t, "POST", postFieldTTLUrl, string(fieldOptionInvalidTTL))
-	if (respField.StatusCode != gohttp.StatusBadRequest) &&
-		(respField.Body != "applying option: cannot parse ttl: 24hour") {
-		t.Errorf("expected ttl parse error, got status: %d, body=%s", respField.StatusCode, respField.Body)
+	tests := []struct {
+		name      string
+		url       string
+		option    string
+		expStatus int
+		expErr    string
+		expTTL    time.Duration
+	}{
+		{
+			name:      "t1_48h",
+			url:       fmt.Sprintf("%s/index/ttl_test/field/t1_48h", m.URL()),
+			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"48h" }}`,
+			expStatus: 200,
+			expErr:    `"success":true`,
+			expTTL:    time.Hour * 48,
+		},
+		{
+			name:      "t2_unknown_unit",
+			url:       fmt.Sprintf("%s/index/ttl_test/field/t2_unknown_unit", m.URL()),
+			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24abc" }}`,
+			expStatus: 400,
+			expErr:    "cannot parse ttl",
+		},
+		{
+			name:      "t3_invalid",
+			url:       fmt.Sprintf("%s/index/ttl_test/field/t3_invalid", m.URL()),
+			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"abcdef" }}`,
+			expStatus: 400,
+			expErr:    "cannot parse ttl",
+		},
+		{
+			name:      "t4_invalid_empty",
+			url:       fmt.Sprintf("%s/index/ttl_test/field/t4_invalid_empty", m.URL()),
+			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"" }}`,
+			expStatus: 400,
+			expErr:    "cannot parse ttl",
+		},
+		{
+			name:      "t5_negative",
+			url:       fmt.Sprintf("%s/index/ttl_test/field/t5_negative", m.URL()),
+			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"-24h" }}`,
+			expStatus: 400,
+			expErr:    "ttl can't be negative",
+		},
 	}
 
-	// Create new field with ttl in invalid format
-	fieldOptionValidTTL := `
-	{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24h" }}
-	`
-	respField = test.Do(t, "POST", postFieldTTLUrl, string(fieldOptionValidTTL))
-	if resp.StatusCode != gohttp.StatusOK {
-		t.Errorf("creating field with ttl, got status: %d, body=%s", respField.StatusCode, respField.Body)
-	}
+	for i, test_i := range tests {
+		t.Run(test_i.name, func(t *testing.T) {
+			respField := test.Do(t, "POST", test_i.url, test_i.option)
+			if respField.StatusCode != test_i.expStatus {
+				t.Errorf("expected status: '%d', got: '%d'", test_i.expStatus, respField.StatusCode)
+			}
 
-	// Create new field without ttl
-	postFieldNoTTLUrl := fmt.Sprintf("%s/index/example/field/no_ttl", m.URL())
-	fieldOptionNoTTL := `
-	{ "options": {"timeQuantum":"YMDH","type":"time" }}
-	`
-	respField = test.Do(t, "POST", postFieldNoTTLUrl, string(fieldOptionNoTTL))
-	if resp.StatusCode != gohttp.StatusOK {
-		t.Errorf("creating field without ttl, status: %d, body=%s", respField.StatusCode, respField.Body)
+			if !strings.Contains(respField.Body, test_i.expErr) {
+				t.Errorf("expected error: '%s', got: '%s'", test_i.expErr, respField.Body)
+			}
+
+			// find the created field and check its TTL
+			// since only first test (t1_48h) is successful in creating a field,
+			// dont find other fields from other test cases, it will cause index out of bound
+			if test_i.name == "t1_48h" {
+				for _, node := range c.Nodes {
+					ii, err := node.API.Schema(context.Background(), false)
+					if err != nil {
+						t.Fatalf("getting schema: %v", err)
+					}
+
+					if ii[0].Fields[i].Name == test_i.name {
+						if ii[0].Fields[i].Options.TTL != test_i.expTTL {
+							t.Errorf("expected TTL: '%s', got: '%s'", test_i.expTTL, ii[0].Fields[i].Options.TTL)
+						}
+					} else {
+						t.Errorf("unexpected field: '%s', got: '%s'", test_i.name, ii[0].Fields[i].Name)
+					}
+				}
+			}
+		})
 	}
 }
 
