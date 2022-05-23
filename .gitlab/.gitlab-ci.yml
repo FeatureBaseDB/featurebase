@@ -15,6 +15,7 @@ stages:
   - performance
   - post build
   - nonblocking
+  - cleanup_build
 
 smoke build:
   image: golang:$GOVERSION
@@ -376,7 +377,7 @@ smoke test auth:
     - wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz
     - tar -C /usr/local -xzf go$GOVERSION.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
-    - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-auth-smoke-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     # download datagen for FB-1270 repro test. TODO replace w/ locally built datagen once we merge IDK into FB
     - aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
@@ -433,7 +434,7 @@ smoke test:
     - wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz
     - tar -C /usr/local -xzf go$GOVERSION.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
-    - TF_VAR_cluster_prefix="smoke-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-smoke-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     # download datagen for FB-1270 repro test. TODO replace w/ locally built datagen once we merge IDK into FB
     - aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
@@ -465,6 +466,7 @@ tremor-delete-test:
     STACK_PREFIX: $CI_JOB_NAME
     FB_INSTANCE_COUNT: 5
     REPLICA_COUNT: 1
+    CF_VAR_cluster_prefix: ""
   tags:
     - aws
     - docker
@@ -495,23 +497,27 @@ tremor-delete-test:
     - wget -q https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz
     - tar -C /usr/local -xzf go$GOVERSION.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
-    - CF_STACK_NAME="${STACK_PREFIX}-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - CF_STACK_NAME="${STACK_PREFIX}-${CI_JOB_ID}"
     - echo "Cloudformation Stack Name --> $CF_STACK_NAME"
     - echo $CF_STACK_NAME > /tmp/stackname-{$CI_JOB_ID}
+    - CF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-delete-$CI_JOB_ID"
+    - echo "Cluster Prefix --> $CF_VAR_cluster_prefix"
   script:
     - echo "Start CloudFormation deploy..."
     - >
-      aws cloudformation deploy 
-      --stack-name $CF_STACK_NAME 
-      --template-file ./qa/cft/FeatureBaseClusterCFTTremor.yaml
-      --parameter-overrides
-      FBInstanceCount=$FB_INSTANCE_COUNT 
-      EBSVolumeSize=1200 
-      TestName=$CI_JOB_NAME 
-      TestID=$CI_JOB_ID
-      TestCommitSHA=$CI_COMMIT_SHA
-      --capabilities CAPABILITY_NAMED_IAM
-      --profile $PROFILE
+        aws cloudformation deploy 
+        --stack-name $CF_STACK_NAME 
+        --template-file ./qa/cft/FeatureBaseClusterCFTTremor.yaml
+        --parameter-overrides
+        FBInstanceCount=$FB_INSTANCE_COUNT 
+        EBSVolumeSize=1200 
+        TestName=$CI_JOB_NAME 
+        TestID=$CI_JOB_ID
+        Name=$CF_VAR_cluster_prefix
+        Prefix=$CF_VAR_cluster_prefix
+        TestCommitSHA=$CI_COMMIT_SHA
+        --capabilities CAPABILITY_NAMED_IAM
+        --profile $PROFILE
     - echo "CloudFormation deploy done."
     - echo "Start configuring and start featurebase..."
     - ./qa/scripts/setupTremorDeleteCFT.sh $CF_STACK_NAME $PROFILE $REPLICA_COUNT $FB_INSTANCE_COUNT $CI_COMMIT_BRANCH
@@ -529,7 +535,7 @@ tremor-delete-test:
     # because variables from the previous script & before_script do not get passed to after_script
     - CF_STACK_NAME=$(cat /tmp/stackname-{$CI_JOB_ID})
     - echo "Deleting stack after test, stack name = ${CF_STACK_NAME}"
-    - aws cloudformation delete-stack --stack-name $CF_STACK_NAME --profile $PROFILE
+    - aws cloudformation delete-stack --stack-name $CF_STACK_NAME --profile $PROFILE --retain-resources DeploymentEC2Role
     - echo "Delete stack complete!"
 
 samsung-gauntlet:
@@ -577,7 +583,7 @@ samsung-gauntlet:
     - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
     - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
-    - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-gauntlet-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
@@ -634,7 +640,7 @@ backup-restore-gauntlet:
     - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
     - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
-    - TF_VAR_cluster_prefix="gauntlet-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-gauntlet-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
@@ -744,7 +750,7 @@ perf_delete:
     - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
     - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
-    - TF_VAR_cluster_prefix="delete-$(openssl rand -base64 12 | tr -d /=+ | cut -c -16)"
+    - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-delete-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
@@ -795,3 +801,15 @@ s3 dump tag:
     - job: build for darwin arm64
     - job: build for linux amd64
     - job: build for linux arm64
+
+cleanup_build_job:
+  stage: cleanup_build
+  tags:
+    - shell
+  script:
+    - CLEANUP_EC2_IDS=$(aws ec2 describe-instances --region us-east-2 --filters Name=instance-state-name,Values=pending,running "Name=tag:Name,Values=pipeline-${CI_PIPELINE_ID}-*" --query 'Reservations[*].Instances[*].[InstanceId]' --output text | tr '\n' ' ')
+    - '[[ ! -z "$CLEANUP_EC2_IDS" ]] && aws ec2 terminate-instances --region us-east-2 --instance-ids $CLEANUP_IDS || echo "No instances to cleanup"'
+    - CLEANUP_CF_ID=$(aws cloudformation list-stacks --region us-east-2 --stack-status-filter CREATE_IN_PROGRESS CREATE_COMPLETE --query  "StackSummaries[?contains(StackName, \`pipeline-${CI_PIPELINE_ID}\`) == \`true\`].[StackName]" --output text )
+    - '[[ ! -z "$CLEANUP_CF_ID" ]] && aws cloudformation delete-stack --region us-east-2 --stack-name $CLEANUP_CF_ID --retain-resources DeploymentEC2Role || echo "No CF stack to cleanup"'
+  when: always
+

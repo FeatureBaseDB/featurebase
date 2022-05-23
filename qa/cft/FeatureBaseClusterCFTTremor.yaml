@@ -110,6 +110,12 @@ Resources:
           PropagateAtLaunch: "true"
         - Key: TestID
           Value: !Ref TestID
+          PropagateAtLaunch: "true"     
+        - Key: Name
+          Value: !Ref Name
+          PropagateAtLaunch: "true"   
+        - Key: Prefix
+          Value: !Ref Prefix
           PropagateAtLaunch: "true"        
     UpdatePolicy:
       AutoScalingRollingUpdate:
@@ -165,7 +171,13 @@ Resources:
           PropagateAtLaunch: "true"
         - Key: TestID
           Value: !Ref TestID
-          PropagateAtLaunch: "true"        
+          PropagateAtLaunch: "true"       
+        - Key: Name
+          Value: !Ref Name
+          PropagateAtLaunch: "true"   
+        - Key: Prefix
+          Value: !Ref Prefix
+          PropagateAtLaunch: "true"       
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MaxBatchSize: 1
@@ -218,6 +230,12 @@ Resources:
         - Key: TestID
           Value: !Ref TestID
           PropagateAtLaunch: "true"        
+        - Key: Name
+          Value: !Ref Name
+          PropagateAtLaunch: "true"   
+        - Key: Prefix
+          Value: !Ref Prefix
+          PropagateAtLaunch: "true"      
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MaxBatchSize: 1
@@ -265,6 +283,13 @@ Resources:
         - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
         - 'arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy'
         - !Ref EC2InstanceS3PermissionsPolicy
+      Tags:
+        - Key: Name
+          Value: !Ref Name
+          PropagateAtLaunch: "true"   
+        - Key: Prefix
+          Value: !Ref Prefix
+          PropagateAtLaunch: "true"    
 
 # Attach roles to the deployment instances
   DeploymentInstanceProfile:
