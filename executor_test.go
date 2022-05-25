@@ -5160,7 +5160,7 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 	}{
 		{
 			query: "GroupBy(Rows())",
-			error: "Rows call must have field",
+			error: "missing field in Rows call",
 		},
 		{
 			query: "GroupBy(Rows(\"true\"))",
@@ -5201,6 +5201,22 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 		{
 			query: `Row(keys=1)`,
 			error: `found integer ID 1 on keyed field "keys"`,
+		},
+		{
+			query: `Rows(keys, in=["a", "b"], column=3)`,
+			error: `Rows call with 'in' does not support other arguments`,
+		},
+		{
+			query: `GroupBy(Rows(keys, in=["a", "b"], column=3))`,
+			error: `Rows call with 'in' does not support other arguments`,
+		},
+		{
+			query: `Rows(keys, in=["a", "b"], like="%sd")`,
+			error: `Rows call with 'in' does not support other arguments`,
+		},
+		{
+			query: `GroupBy(Rows(keys, in=["a", "b"], like="%sd"))`,
+			error: `Rows call with 'in' does not support other arguments`,
 		},
 	}
 
@@ -8093,6 +8109,42 @@ leftovers,1
 			csvVerifier: `chinese,3
 pizza,2
 leftovers,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(places_visited, in=[nairobi, toronto]))",
+			csvVerifier: `nairobi,2
+toronto,6
+`,
+		},
+		{
+			query: "GroupBy(Rows(places_visited, in=[nairobi, toronto, neverland]))",
+			csvVerifier: `nairobi,2
+toronto,6
+`,
+		},
+		{
+			query: "Rows(places_visited, in=[nairobi, toronto])",
+			csvVerifier: `nairobi
+toronto
+`,
+		},
+		{
+			query: "Rows(places_visited, in=[nairobi, toronto, neverland])",
+			csvVerifier: `nairobi
+toronto
+`,
+		},
+		{
+			query: "Rows(likenums, in=[4, 5])",
+			csvVerifier: `4
+5
+`,
+		},
+		{
+			query: "GroupBy(Rows(likenums, in=[4, 5]))",
+			csvVerifier: `4,1
+5,1
 `,
 		},
 	}

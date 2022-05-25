@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // Query represents a PQL query.
@@ -469,6 +471,7 @@ var callInfoByFunc = map[string]callInfo{
 			"to":       nil,
 			"like":     "",
 			"valueidx": int64(0),
+			"in":       nil,
 		},
 	},
 	"Shift": {allowUnknown: false,
@@ -790,6 +793,18 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 		ret := make([]uint64, len(tval))
 		for i, v := range tval {
 			ret[i] = uint64(v)
+		}
+		return ret, true, nil
+	case []interface{}:
+		ret := make([]uint64, len(tval))
+		for i, v := range tval {
+			if uv, ok := v.(uint64); ok {
+				ret[i] = uv
+			} else if iv, ok := v.(int64); ok && iv >= 0 {
+				ret[i] = uint64(iv)
+			} else {
+				return nil, true, errors.Errorf("'%v' at position %d is %[1]T, but need positive integer", v, i)
+			}
 		}
 		return ret, true, nil
 	default:

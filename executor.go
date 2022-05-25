@@ -2944,6 +2944,10 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		if err != nil {
 			return nil, errors.Wrap(err, "getting like")
 		}
+		_, hasIn, err := child.UintSliceArg("in")
+		if err != nil {
+			return nil, errors.Wrap(err, "getting 'in'")
+		}
 		fieldName, ok := child.Args["_field"].(string)
 		if !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", child.Name, child.Args["_field"])
@@ -2957,17 +2961,20 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			bases[i] = f.bsiGroup(f.name).Base
 		}
 
-		if hasLimit || hasCol || hasLike { // we need to perform this query cluster-wide ahead of executeGroupByShard
+		if hasLimit || hasCol || hasLike || hasIn { // we need to perform this query cluster-wide ahead of executeGroupByShard
 			if idx, ok := child.Args["valueidx"].(int64); ok {
 				// The rows query was already completed on the initiating node.
 				childRows[i] = opt.EmbeddedData[idx].Columns()
 				continue
 			}
 
-			childRows[i], err = e.executeRows(ctx, qcx, index, child, shards, opt)
-			if err != nil {
-				return nil, errors.Wrap(err, "getting rows for ")
+			r, er := e.executeRows(ctx, qcx, index, child, shards, opt)
+			if er != nil {
+				return nil, errors.Wrap(er, "getting rows for ")
 			}
+			// need to sort because filters assume ordering
+			sort.Slice(r, func(x, y int) bool { return r[x] < r[y] })
+			childRows[i] = r
 			if len(childRows[i]) == 0 { // there are no results because this field has no values.
 				return &GroupCounts{}, nil
 			}
@@ -3673,6 +3680,19 @@ func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *p
 		shards = []uint64{columnID / ShardWidth}
 	}
 
+	// TODO, support "in" in conjunction w/ other args... or at least error if they're present together
+	if ids, found, err := c.UintSliceArg("in"); err != nil {
+		return nil, errors.Wrapf(err, "'in' argument of Rows must be a slice")
+	} else if found {
+		// "in" not supported with other args, so check here
+		for arg := range c.Args {
+			if arg != "field" && arg != "_field" && arg != "in" {
+				return nil, errors.Errorf("Rows call with 'in' does not support other arguments, but found '%s'", arg)
+			}
+		}
+		return ids, nil
+	}
+
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		return e.executeRowsShard(ctx, qcx, index, fieldName, c, shard)
@@ -3746,6 +3766,13 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 
 	// rowIDs is the result set.
 	var rowIDs RowIDs
+
+	// TODO, support "in" in conjunction w/ other args... or at least error if they're present together
+	if ids, found, err := c.UintSliceArg("in"); err != nil {
+		return nil, errors.Wrapf(err, "'in' argument of Rows must be a slice")
+	} else if found {
+		return ids, nil
+	}
 
 	// views contains the list of views to inspect (and merge)
 	// in order to represent `Rows` for the field.
@@ -6308,22 +6335,34 @@ func (e *executor) collectCallKeys(dst *keyCollector, c *pql.Call, index string)
 		}
 
 	case "Rows":
+		// Find the field.
+		var field string
+		if f, ok, err := c.StringArg("_field"); err != nil {
+			return errors.Wrap(err, "finding field for Rows previous translation")
+		} else if ok {
+			field = f
+		} else if f, ok, err := c.StringArg("field"); err != nil {
+			return errors.Wrap(err, "finding field for Rows previous translation")
+		} else if ok {
+			field = f
+		} else {
+			return errors.New("missing field in Rows call")
+		}
 		if prev, ok := c.Args["previous"].(string); ok {
-			// Find the field.
-			var field string
-			if f, ok, err := c.StringArg("_field"); err != nil {
-				return errors.Wrap(err, "finding field for Rows previous translation")
-			} else if ok {
-				field = f
-			} else if f, ok, err := c.StringArg("field"); err != nil {
-				return errors.Wrap(err, "finding field for Rows previous translation")
-			} else if ok {
-				field = f
-			} else {
-				return errors.New("missing field in Rows call")
-			}
-
 			dst.FindRows(index, field, prev)
+		}
+		if in, ok := c.Args["in"]; ok {
+			inIn, ok := in.([]interface{})
+			if !ok {
+				return errors.Errorf("unexpected type for argument 'in' %v of %[1]T", inIn)
+			}
+			inStrs := make([]string, 0)
+			for _, v := range inIn {
+				if vstr, ok := v.(string); ok {
+					inStrs = append(inStrs, vstr)
+				}
+			}
+			dst.FindRows(index, field, inStrs...)
 		}
 	}
 
@@ -6665,22 +6704,21 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 		}
 
 	case "Rows":
+		// Find the field.
+		var field string
+		if f, ok, err := c.StringArg("_field"); err != nil {
+			return nil, errors.Wrap(err, "finding field for Rows previous translation")
+		} else if ok {
+			field = f
+		} else if f, ok, err := c.StringArg("field"); err != nil {
+			return nil, errors.Wrap(err, "finding field for Rows previous translation")
+		} else if ok {
+			field = f
+		} else {
+			return nil, errors.New("missing field in Rows call")
+		}
 		// Translate the previous row key.
 		if prev, ok := c.Args["previous"]; ok {
-			// Find the field.
-			var field string
-			if f, ok, err := c.StringArg("_field"); err != nil {
-				return nil, errors.Wrap(err, "finding field for Rows previous translation")
-			} else if ok {
-				field = f
-			} else if f, ok, err := c.StringArg("field"); err != nil {
-				return nil, errors.Wrap(err, "finding field for Rows previous translation")
-			} else if ok {
-				field = f
-			} else {
-				return nil, errors.New("missing field in Rows call")
-			}
-
 			// Validate the type.
 			f := e.Holder.Field(index, field)
 			if f == nil {
@@ -6717,10 +6755,30 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 				return nil, fmt.Errorf("'%s' is not a set/mutex/time field with a string key", fieldName)
 			}
 		}
+
+		if in, ok := c.Args["in"]; ok {
+			inIn, ok := in.([]interface{})
+			if !ok {
+				return nil, errors.Errorf("unexpected type for argument 'in' %v of %[1]T", in)
+			}
+			inIDs := make([]interface{}, 0, len(inIn))
+			for _, inVal := range inIn {
+				if inStr, ok := inVal.(string); ok {
+					id, found := rowKeys[index][field][inStr]
+					if found {
+						inIDs = append(inIDs, id)
+					}
+				} else {
+					inIDs = append(inIDs, inVal)
+				}
+			}
+			c.Args["in"] = inIDs
+		}
 	}
 
 	// Translate child calls.
 	for i, child := range c.Children {
+		fmt.Printf("translating call: %s\n", child)
 		translated, err := e.translateCall(child, index, columnKeys, rowKeys)
 		if err != nil {
 			return nil, err
