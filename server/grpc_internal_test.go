@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -43,6 +44,16 @@ func TestGetTokensFromMetadata(t *testing.T) {
 				"cookie": []string{
 					"okay=okay",
 					"blah=blah",
+				},
+			},
+		},
+		"semiColonCookies": {
+			access:    "something",
+			refresh:   "somethingElse",
+			setCookie: false,
+			md: metadata.MD{
+				"cookie": []string{
+					fmt.Sprintf("%s=something; %s=somethingElse", authn.AccessCookieName, authn.RefreshCookieName),
 				},
 			},
 		},

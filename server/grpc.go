@@ -1730,14 +1730,17 @@ func getTokensFromMetadata(md metadata.MD) (string, string) {
 
 	if !ok || !ok2 {
 		if cookies, there := md["cookie"]; there {
-			for _, cookie := range cookies {
-				if strings.HasPrefix(cookie, authn.AccessCookieName+"=") && len(access) == 0 {
-					access = strings.Split(cookie, authn.AccessCookieName+"=")[1:]
-				} else if strings.HasPrefix(cookie, authn.RefreshCookieName+"=") && len(refresh) == 0 {
-					refresh = strings.Split(cookie, authn.RefreshCookieName+"=")[1:]
-				}
-				if len(access) > 0 && len(refresh) > 0 {
-					break
+			for _, c := range cookies {
+				for _, cookie := range strings.Split(c, ";") {
+					cookie = strings.TrimSpace(cookie)
+					if strings.HasPrefix(cookie, authn.AccessCookieName+"=") && len(access) == 0 {
+						access = strings.Split(cookie, authn.AccessCookieName+"=")[1:]
+					} else if strings.HasPrefix(cookie, authn.RefreshCookieName+"=") && len(refresh) == 0 {
+						refresh = strings.Split(cookie, authn.RefreshCookieName+"=")[1:]
+					}
+					if len(access) > 0 && len(refresh) > 0 {
+						break
+					}
 				}
 			}
 		}
