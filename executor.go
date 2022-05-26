@@ -6778,7 +6778,6 @@ func (e *executor) translateCall(c *pql.Call, index string, columnKeys map[strin
 
 	// Translate child calls.
 	for i, child := range c.Children {
-		fmt.Printf("translating call: %s\n", child)
 		translated, err := e.translateCall(child, index, columnKeys, rowKeys)
 		if err != nil {
 			return nil, err
