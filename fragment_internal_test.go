@@ -5283,3 +5283,51 @@ func TestSliceDifference(t *testing.T) {
 		compareSlices(t, name, tc.expected, result)
 	}
 }
+
+func TestImportRoaringSingleValued(t *testing.T) {
+	f, _, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
+	defer f.Clean(t)
+
+	clear := roaring.NewBitmap(0, 1, ShardWidth-1)
+	set := roaring.NewBitMatrix(ShardWidth, [][]uint64{
+		{},
+		{},
+		{0, 1, ShardWidth - 1},
+	}...)
+
+	err := f.ImportRoaringSingleValued(context.Background(), tx, clear.Roaring(), set.Roaring())
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	// try setting stuff before
+	set = roaring.NewBitMatrix(ShardWidth, [][]uint64{
+		{},
+		{0, 1, ShardWidth - 1},
+	}...)
+	if err := f.ImportRoaringSingleValued(context.Background(), tx, clear.Roaring(), set.Roaring()); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	// try setting stuff after
+	set = roaring.NewBitMatrix(ShardWidth, [][]uint64{
+		{},
+		{},
+		{},
+		{0, 1, ShardWidth - 1},
+	}...)
+
+	if err := f.ImportRoaringSingleValued(context.Background(), tx, clear.Roaring(), set.Roaring()); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	result, err := tx.RoaringBitmap("i", "f", viewStandard, 0)
+	if err != nil {
+		t.Fatalf("getting bitmap: %v", err)
+	}
+
+	if !reflect.DeepEqual(result.Slice(), []uint64{ShardWidth * 3, ShardWidth*3 + 1, ShardWidth*4 - 1}) {
+		t.Fatalf("unexpected result: %v", result.Slice())
+	}
+
+}

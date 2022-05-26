@@ -260,6 +260,22 @@ func NewBitmap(a ...uint64) *Bitmap {
 	return b
 }
 
+// NewBitMatrix is a convenience function which returns a new bitmap
+// which is the concatenation of all the rows, with each row shifted
+// by a shardwdith. For example, all values in the second row will
+// have shardWidth added to them before being added to the bitmap.
+// Modifies rows in place.
+func NewBitMatrix(shardWidth uint64, rows ...[]uint64) *Bitmap {
+	bm := NewBitmap()
+	for rowNum, row := range rows {
+		for i, col := range row {
+			row[i] = uint64(rowNum)*shardWidth + col
+		}
+		bm.AddN(row...)
+	}
+	return bm
+}
+
 // NewSliceBitmap makes a new bitmap, explicitly selecting the slice containers
 // type, which performs better in cases where we expect a contiguous block of
 // containers added in ascending order, such as when extracting a range from
