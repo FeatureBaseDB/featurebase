@@ -2664,7 +2664,12 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
 			}
 		})
-
+		t.Run("MinRowNonExistent", func(t *testing.T) {
+			_, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "MinRow(field=fake)"})
+			if got, exp := err.Error(), "executing: executeMinRow: mapping on primary node: field not found"; got != exp {
+				t.Fatalf("expected %v, got %v", exp, got)
+			}
+		})
 		t.Run("MaxRow", func(t *testing.T) {
 			result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "MaxRow(field=f)"})
 			if err != nil {
@@ -2676,6 +2681,12 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 			}
 			if !reflect.DeepEqual(target, result.Results[0]) {
 				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
+			}
+		})
+		t.Run("MaxRowNonExistent", func(t *testing.T) {
+			_, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "MaxRow(field=fake)"})
+			if got, exp := err.Error(), "executing: executeMaxRow: mapping on primary node: field not found"; got != exp {
+				t.Fatalf("expected %v, got %v", exp, got)
 			}
 		})
 	})
@@ -2825,6 +2836,13 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 					t.Fatalf("unexpected result: %s", spew.Sdump(result))
 				}
 			})
+		})
+
+		t.Run("SumNonExistent", func(t *testing.T) {
+			_, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(field=fake)`})
+			if err.Error() != "executing: executeSum: mapping on primary node: field not found" {
+				t.Fatal(err)
+			}
 		})
 
 		t.Run("Decimal", func(t *testing.T) {
@@ -6625,6 +6643,20 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
 				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
 			}
+		}
+	})
+	t.Run("MinNonExistent", func(t *testing.T) {
+		pql := `Min(field=fake)`
+		_, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql})
+		if err.Error() != "executing: executeMin: mapping on primary node: field not found" {
+			t.Fatal(err)
+		}
+	})
+	t.Run("MaxNonExistent", func(t *testing.T) {
+		pql := `Max(field=fake)`
+		_, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql})
+		if err.Error() != "executing: executeMax: mapping on primary node: field not found" {
+			t.Fatal(err)
 		}
 	})
 	t.Run("MinDec", func(t *testing.T) {

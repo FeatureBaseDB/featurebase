@@ -1861,7 +1861,7 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return ValCount{}, nil
+		return ValCount{}, ErrFieldNotFound
 	}
 
 	bsig := field.bsiGroup(fieldName)
@@ -1919,7 +1919,7 @@ func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, 
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return ValCount{}, nil
+		return ValCount{}, ErrFieldNotFound
 	}
 
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
@@ -1951,7 +1951,7 @@ func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, 
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return ValCount{}, nil
+		return ValCount{}, ErrFieldNotFound
 	}
 
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
@@ -1978,7 +1978,7 @@ func (e *executor) executeMinRowShard(ctx context.Context, qcx *Qcx, index strin
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return PairField{}, nil
+		return PairField{}, ErrFieldNotFound
 	}
 
 	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
@@ -2023,7 +2023,7 @@ func (e *executor) executeMaxRowShard(ctx context.Context, qcx *Qcx, index strin
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return PairField{}, nil
+		return PairField{}, ErrFieldNotFound
 	}
 
 	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
