@@ -1440,6 +1440,7 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			if shard != id/shardWidth {
 				shard = id / shardWidth
 				bitmap = frags.GetOrCreate(shard, field.Name(), "standard")
+				clearBM = clearFrags.GetOrCreate(shard, field.Name(), "standard")
 			}
 			fragmentColumn := id % shardWidth
 			clearBM.Add(fragmentColumn) // Will use this to clear columns.

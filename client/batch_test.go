@@ -42,6 +42,7 @@ func TestAgainstCluster(t *testing.T) {
 	t.Run("test-import-batch-sets-clears", func(t *testing.T) { testImportBatchSetsAndClears(t, c, client) })
 	t.Run("test-topn-cache-regression", func(t *testing.T) { testTopNCacheRegression(t, c, client) })
 	t.Run("test-multiple-int-same-batch", func(t *testing.T) { testMultipleIntSameBatch(t, c, client) })
+	t.Run("test-mutex-clearing-regression", func(t *testing.T) { mutexClearRegression(t, c, client) })
 }
 
 func testStringSliceCombos(t *testing.T, c *test.Cluster, client *Client) {
@@ -1564,5 +1565,66 @@ func testMultipleIntSameBatch(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("querying sum: %v", err)
 	} else if res := resp.Result().Value(); res != 2 {
 		t.Errorf("unexpected sum: %+v", res)
+	}
+}
+
+// mutexClearRegression checks for a bug where shards beyond the first
+// one in a batch did not get any bits set in their clear bitmap, and
+// in fact, all the bits were set in the clear bitmap for the first
+// shard.
+func mutexClearRegression(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-multiple-mut-same-batch")
+	field := idx.Field("mut", OptFieldTypeMutex(CacheTypeNone, 0))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 11, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	col := uint64(0)
+	row := uint64(1)
+	for i := uint64(0); i <= 21; i++ {
+		col = (i%2+1)*featurebase.ShardWidth + i%5
+		row = i % 3
+		if err := b.Add(Row{
+			ID:     col,
+			Values: []interface{}{row},
+		}); err == ErrBatchNowFull {
+			if err := b.Import(); err != nil {
+				t.Fatalf("importing: %v", err)
+			}
+			resp, err := client.Query(idx.GroupBy(field.Rows(), field.Rows()))
+			if err != nil {
+				t.Fatalf("querying groupby: %v", err)
+			}
+			groupCounts := resp.Result().GroupCounts()
+			for j, gc := range groupCounts {
+				if gc.Groups[0].RowID != gc.Groups[1].RowID {
+					t.Errorf("zmismatched group at after %d batch: %d, %v", j, i, gc)
+				}
+			}
+		} else if err != nil {
+			t.Fatalf("adding to batch: %v", err)
+		}
+
+	}
+	if err := b.Import(); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	resp, err := client.Query(idx.GroupBy(field.Rows(), field.Rows()))
+	if err != nil {
+		t.Fatalf("querying groupby: %v", err)
+	}
+	groupCounts := resp.Result().GroupCounts()
+	for i, gc := range groupCounts {
+		if gc.Groups[0].RowID != gc.Groups[1].RowID {
+			t.Fatalf("bmismatched group at %d, %v", i, gc)
+		}
 	}
 }
