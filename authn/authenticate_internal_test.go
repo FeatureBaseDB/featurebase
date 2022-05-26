@@ -651,6 +651,22 @@ func (s *ServerTransportStream) SetTrailer(md metadata.MD) error {
 	return nil
 }
 
+func TestCleanOAuthConfig(t *testing.T) {
+	a := NewTestAuth(t)
+	res := a.CleanOAuthConfig()
+	assertEqual("", res.ClientSecret, t)
+	assertEqual(a.oAuthConfig.ClientID, res.ClientID, t)
+	assertEqual(a.oAuthConfig.RedirectURL, res.RedirectURL, t)
+	assertEqual(a.oAuthConfig.Scopes, res.Scopes, t)
+	assertEqual(a.oAuthConfig.Endpoint, res.Endpoint, t)
+}
+
+func assertEqual(exp, got interface{}, t *testing.T) {
+	if !reflect.DeepEqual(exp, got) {
+		t.Fatalf("expected %v, got %v", exp, got)
+	}
+}
+
 func TestCheckAllowedNetworks(t *testing.T) {
 
 	tests := []struct {

@@ -122,6 +122,13 @@ func NewAuth(logger logger.Logger, url string, scopes []string, authURL, tokenUR
 	return auth, nil
 }
 
+// CleanOAuthConfig returns a's oauthConfig without the client secret
+func (a Auth) CleanOAuthConfig() oauth2.Config {
+	b := *a.oAuthConfig
+	b.ClientSecret = ""
+	return b
+}
+
 // SecretKey is a convenient function to get the SecretKey from an Auth struct
 func (a Auth) SecretKey() []byte {
 	return a.secretKey

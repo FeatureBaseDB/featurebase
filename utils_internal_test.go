@@ -106,3 +106,37 @@ func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN 
 		c.close()
 	}
 }
+
+func TestReplaceFirstFromBack(t *testing.T) {
+	for name, test := range map[string]struct {
+		input       string
+		exp         string
+		toReplace   string
+		replacement string
+	}{
+		"url": {
+			input:       "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
+			exp:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/devicecode",
+			toReplace:   "authorize",
+			replacement: "devicecode",
+		},
+		"unicode": {
+			input:       "那不是兽人号角",
+			exp:         "那是一只兽人号角",
+			toReplace:   "不是",
+			replacement: "是一只",
+		},
+		"multiple": {
+			input:       "cowscowscowscowscows",
+			exp:         "cowscowscowscowscats",
+			toReplace:   "cows",
+			replacement: "cats",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := ReplaceFirstFromBack(test.input, test.toReplace, test.replacement); got != test.exp {
+				t.Fatalf("expected %v, got %v", test.exp, got)
+			}
+		})
+	}
+}

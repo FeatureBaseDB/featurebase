@@ -27,6 +27,7 @@ import (
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
+	"golang.org/x/oauth2"
 )
 
 // InternalClient represents a client to the Pilosa cluster.
@@ -2452,4 +2453,27 @@ func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([
 
 func (c *InternalClient) SetInternalAPI(api *API) {
 	c.api = api
+}
+
+func (c *InternalClient) OAuthConfig() (rsp oauth2.Config, err error) {
+	u := uriPathToURL(c.defaultURI, "/internal/oauth-config")
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return rsp, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.executeRequest(req)
+	if err != nil {
+		return rsp, fmt.Errorf("getting config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return rsp, fmt.Errorf("json decode: %s", err)
+	}
+
+	return rsp, nil
 }

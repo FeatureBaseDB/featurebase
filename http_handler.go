@@ -533,6 +533,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/redirect", handler.handleRedirect).Methods("GET").Name("Redirect")
 	router.HandleFunc("/auth", handler.handleCheckAuthentication).Methods("GET").Name("CheckAuthentication")
 	router.HandleFunc("/userinfo", handler.handleUserInfo).Methods("GET").Name("UserInfo")
+	router.HandleFunc("/internal/oauth-config", handler.handleOAuthConfig).Methods("GET").Name("GetOAuthConfig")
 
 	// Endpoints to support lattice UI embedded via statik.
 	// The messiness here reflects the fact that assets live in a nontrivial
@@ -3791,6 +3792,26 @@ func (h *Handler) handleRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auth.Redirect(w, r)
+}
+
+// handleOAuthConfig handles requests for a cleaned version of our oAuthConfig. We
+// use this endpoint /internal/oauth-config in the `featurebase auth-token`
+// subcommand to create a RedirectURL on the fly.
+func (h *Handler) handleOAuthConfig(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	if h.auth == nil {
+		http.Error(w, "auth not enabled: no OAuthConfig", http.StatusNotFound)
+		return
+	}
+
+	config := h.auth.CleanOAuthConfig()
+	if err := json.NewEncoder(w).Encode(config); err != nil {
+		h.logger.Errorf("writing oauth-config info: %s", err)
+	}
 }
 
 func (h *Handler) handleCheckAuthentication(w http.ResponseWriter, r *http.Request) {

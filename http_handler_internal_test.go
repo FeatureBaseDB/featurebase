@@ -827,6 +827,37 @@ func TestHandleGetDiskUsage(t *testing.T) {
 	}
 }
 
+func TestHandleOAuthConfig(t *testing.T) {
+	h := Handler{
+		logger:      logger.NewStandardLogger(os.Stdout),
+		queryLogger: logger.NewStandardLogger(os.Stdout),
+		auth:        NewTestAuth(t),
+		api: &API{
+			server: &Server{
+				dataDir: t.TempDir(),
+			},
+		},
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/whatever", nil)
+
+	h.handleOAuthConfig(w, r)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected %v, got %v", http.StatusOK, resp.StatusCode)
+	}
+
+	defer resp.Body.Close()
+	var rsp oauth2.Config
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		t.Fatalf("unexpected error decoding body: %v", err)
+	}
+	if exp := h.auth.CleanOAuthConfig(); !reflect.DeepEqual(exp, rsp) {
+		t.Fatalf("expected %v, got %v", exp, rsp)
+	}
+}
+
 func TestAuthzAllowedIPs(t *testing.T) {
 	tests := []struct {
 		configuredIPs []string
