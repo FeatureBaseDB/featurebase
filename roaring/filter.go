@@ -1214,7 +1214,7 @@ func getFirstRowAsContainers(citer ContainerIterator) []containerWithKey {
 	citerContainers := make([]containerWithKey, 0)
 	for citer.Next() {
 		key, cont := citer.Value()
-		if key > 15 {
+		if key >= rowWidth {
 			continue
 		}
 		citerContainers = append(citerContainers, containerWithKey{Container: cont, key: FilterKey(key)})
