@@ -29,13 +29,14 @@ const (
 type FilterKey uint64
 
 // FilterResult represents the results of a BitmapFilter considering a
-// key, or data. The values are represented as exclusive upper bounds on
-// a series of matches followed by a series of rejections. So for instance,
-// if called on key 23, the result {YesKey: 23, NoKey: 24} indicates that
-// key 23 is a "no". (TODO what about key 24, presumably that's a no as well?)
-// This may seem confusing but it makes the math a lot
-// easier to write. It can also report an error, which indicates that the
-// entire operation should be stopped with that error.
+// key, or data. The values are represented as exclusive upper bounds
+// on a series of matches followed by a series of rejections. So for
+// instance, if called on key 23, the result {YesKey: 23, NoKey: 24}
+// indicates that key 23 is a "no" and 24 is unknown and will be the
+// next to be Consider()ed.  This may seem confusing but it makes the
+// math a lot easier to write. It can also report an error, which
+// indicates that the entire operation should be stopped with that
+// error.
 type FilterResult struct {
 	YesKey FilterKey // The lowest container key this filter is known NOT to match.
 	NoKey  FilterKey // The highest container key after YesKey that this filter is known to not match.

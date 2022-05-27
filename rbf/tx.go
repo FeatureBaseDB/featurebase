@@ -678,7 +678,7 @@ func (tx *Tx) Depth(name string) (int, error) {
 	}
 	defer c.Close()
 
-	if err := c.First(); err != nil { // TODO, EOF check?
+	if err := c.First(); err != nil {
 		return 0, err
 	}
 	return c.stack.top + 1, nil

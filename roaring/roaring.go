@@ -7628,11 +7628,13 @@ func (c *Container) CountRange(start, end int32) (n int32) {
 	return c.countRange(start, end)
 }
 
-// UnionInPlace yields a container containing all the bits set in either
-// c or other. It may, or may not, modify c. The resulting container's
-// count, as returned by c.N(), may be incorrect; see (*Container).Repair().
-// Do not freeze a container produced by this operation before repairing it.
-// TODO(jaffee): why don't we just call Repair in here?!?!
+// UnionInPlace yields a container containing all the bits set in
+// either c or other. It may, or may not, modify c. The resulting
+// container's count, as returned by c.N(), may be incorrect; see
+// (*Container).Repair().  Do not freeze a container produced by this
+// operation before repairing it.  We don't want this to call repair
+// immediately because it can be faster for Bitmap.UnionInPlace to do
+// it all at once after potentially many Container.UnionInPlace calls.
 func (c *Container) UnionInPlace(other *Container) (r *Container) {
 	return c.unionInPlace(other)
 }

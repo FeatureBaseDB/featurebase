@@ -49,9 +49,10 @@ type cache interface {
 
 // lruCache represents a least recently used Cache implementation.
 type lruCache struct {
-	cache      *lru.Cache
-	counts     map[uint64]uint64
-	stats      stats.StatsClient
+	cache  *lru.Cache
+	counts map[uint64]uint64
+	stats  stats.StatsClient
+	// maxEntries is saved to support Clear which recreates the cache.
 	maxEntries uint32
 }
 

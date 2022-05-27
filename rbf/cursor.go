@@ -1246,7 +1246,7 @@ func (se *stackElem) clear() {
 	se.key = 0
 }
 
-// TODO wtf does this do?
+// suppress unused warnings - these can be useful for debugging
 var _ = (&stackElem{}).clear
 var _ = (&stackElem{}).String
 var _ = (&stackElem{}).equal
