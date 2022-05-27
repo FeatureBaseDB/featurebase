@@ -1700,6 +1700,7 @@ type SchemaOptions struct {
 	NoStandardView bool          `json:"noStandardView"`
 	TrackExistence bool          `json:"trackExistence"`
 	TimeUnit       string        `json:"timeUnit"`
+	Base           int64         `json:"base"`
 }
 
 func (so SchemaOptions) asIndexOptions() *IndexOptions {
@@ -1724,6 +1725,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		keys:           so.Keys,
 		noStandardView: so.NoStandardView,
 		timeUnit:       so.TimeUnit,
+		base:           so.Base,
 	}
 }
 

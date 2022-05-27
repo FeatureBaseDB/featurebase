@@ -104,6 +104,26 @@ func TestClientAgainstCluster(t *testing.T) {
 				require.NotNil(t, resp, "Response should not be nil")
 			})
 
+			t.Run("IntBase", func(t *testing.T) {
+				setup(t, cli)
+				defer tearDown(t, cli)
+
+				testIndex.Field("intbase", OptFieldTypeInt(-10, -5))
+				testIndex.Field("intbaseplus", OptFieldTypeInt(5, 10))
+				err = cli.SyncIndex(testIndex)
+				require.NoError(t, err)
+
+				schema, err := cli.Schema()
+				require.NoError(t, err)
+
+				if base := schema.Index("test-index").Field("intbase").Options().base; base != -5 {
+					t.Fatalf("unexpected base is not -5: %d", base)
+				}
+				if base := schema.Index("test-index").Field("intbaseplus").Options().base; base != 5 {
+					t.Fatalf("unexpected base is not 5: %d", base)
+				}
+			})
+
 			t.Run("QueryWithShards", func(t *testing.T) {
 				setup(t, cli)
 				defer tearDown(t, cli)
