@@ -1603,6 +1603,10 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 	return errors.Wrap(err, "committing")
 }
 
+// ImportRoaringShard transactionally imports roaring-encoded data
+// across many fields in a single shard. It can both set and clear
+// bits and updates caches/bitDepth as appropriate, although only the
+// bitmap parts happen truly transactionally.
 func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard uint64, req *ImportRoaringShardRequest) error {
 	index, err := api.Index(ctx, indexName)
 	if err != nil {

@@ -349,6 +349,8 @@ type ImportRoaringRequest struct {
 	UpdateExistence bool
 }
 
+// ImportRoaringShardRequest is the request for the shard
+// transactional endpoint.
 type ImportRoaringShardRequest struct {
 	// Has this request already been forwarded to all replicas? If
 	// Remote=false, then the handling server is responsible for

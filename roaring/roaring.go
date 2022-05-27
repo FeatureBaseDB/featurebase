@@ -177,6 +177,7 @@ type unionContainerIterator struct {
 	cur   FilterKey
 }
 
+// NewUnionContainerIterator unions multiple container iterators to one.
 func NewUnionContainerIterator(iters ...ContainerIterator) ContainerIterator {
 	return &unionContainerIterator{
 		iters: iters,

@@ -211,6 +211,8 @@ func OptKeyTranslateBatchSize(v int) BatchOption {
 	}
 }
 
+// OptUseShardTransactionalEndpoint tells the batch to import using
+// the newer shard-transactional endpoint.
 func OptUseShardTransactionalEndpoint(use bool) BatchOption {
 	return func(b *Batch) error {
 		b.useShardTransactionalEndpoint = use

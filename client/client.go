@@ -647,6 +647,7 @@ func (c *Client) importData(uri *pnet.URI, path string, data []byte) error {
 	return nil
 }
 
+// ImportRoaringShard imports into the shard-transactional endpoint.
 func (c *Client) ImportRoaringShard(index string, shard uint64, request *pilosa.ImportRoaringShardRequest) error {
 	uris, err := c.getURIsForShard(index, shard)
 	if err != nil {
