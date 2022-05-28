@@ -1359,6 +1359,9 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 		}
 		field := b.headerMap[fieldName]
 		base := field.Options().base
+		if field.Options().Type() == FieldTypeTimestamp {
+			base = 0
+		}
 
 		shard := ids[0] / shardWidth
 		bitmap := frags.GetOrCreate(shard, fieldName, "bsig_"+fieldName) // TODO... grab bsig_ prefix from elsewhere
