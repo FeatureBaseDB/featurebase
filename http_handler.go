@@ -2012,6 +2012,7 @@ type fieldOptions struct {
 	NoStandardView bool         `json:"noStandardView,omitempty"`
 	ForeignIndex   *string      `json:"foreignIndex,omitempty"`
 	TTL            *string      `json:"ttl,omitempty"`
+	Base           *int64       `json:"base,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {

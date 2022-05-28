@@ -195,6 +195,10 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 // provide any respective configuration values.
 func OptFieldTypeTimestamp(epoch time.Time, timeUnit string) FieldOption {
 	return func(fo *FieldOptions) error {
+		// Check if the epoch will overflow when converted to nano.
+		if err := CheckUnixNanoOverflow(epoch); err != nil {
+			return err
+		}
 		epochValue := epoch.UnixNano() / TimeUnitNanos(timeUnit)
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
@@ -1406,6 +1410,7 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 
 	// Determine base value to store.
 	baseValue := int64(value - bsig.Base)
+
 	requiredBitDepth := bitDepthInt64(baseValue)
 
 	// Increase bit depth value if the unsigned value is greater.
@@ -1723,7 +1728,7 @@ func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64,
 	return f.importValue(qcx, columnIDs, ivalues, shard, options)
 }
 
-// importFloatValue imports timestamp values. In current usage, this
+// importTimestampValue imports timestamp values. In current usage, this
 // should only ever be called with data for a single shard; the API calls
 // around this are splitting it up per shard.
 func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time.Time, shard uint64, options *ImportOptions) error {
@@ -1777,6 +1782,18 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard 
 		if value < min {
 			min = value
 		}
+		if f.Type() == FieldTypeTimestamp {
+			scale := (TimeUnitNanos(f.options.TimeUnit))
+			offset := f.options.Base * scale
+			dur := value * scale
+			if offset > 0 {
+				if dur > math.MaxInt64-offset {
+					return errors.Wrap(ErrBSIGroupValueTooHigh, "value + epoch is too far from Unix epoch")
+				}
+			} else if dur < math.MinInt64-offset {
+				return errors.Wrap(ErrBSIGroupValueTooLow, "value + epoch is too far from Unix epoch")
+			}
+		}
 	}
 
 	// Determine the highest bit depth required by the min & max.
@@ -1811,7 +1828,13 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard 
 
 	if bsig.Base != 0 {
 		for i, v := range values {
-			values[i] = v - bsig.Base
+			// for Timestamps, values are already relative to their base (epoch)
+			// for other types (IntFields), values need to be subtracted from their base (either Min or Max)
+			if f.Type() == FieldTypeTimestamp {
+				values[i] = v
+			} else {
+				values[i] = v - bsig.Base
+			}
 		}
 	}
 
@@ -2306,4 +2329,15 @@ func TimeUnitNanos(unit string) int64 {
 	default:
 		return int64(time.Nanosecond)
 	}
+}
+
+func CheckUnixNanoOverflow(epoch time.Time) error {
+	if time.Unix(0, 0).After(epoch) {
+		if epoch.UnixNano() > 0 {
+			return errors.Errorf("custom epoch too far from Unix epoch: %s", epoch)
+		}
+	} else if epoch.UnixNano() < 0 {
+		return errors.Errorf("custom epoch too far from Unix epoch: %s", epoch)
+	}
+	return nil
 }

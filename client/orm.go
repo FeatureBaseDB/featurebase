@@ -739,6 +739,7 @@ type FieldOptions struct {
 	foreignIndex   string
 	timeUnit       string
 	base           int64
+	epoch          time.Time
 }
 
 // Type returns the type of the field. Currently "set", "int", or "time".
@@ -837,6 +838,8 @@ func (fo FieldOptions) String() string {
 		mopt["min"] = fo.min
 		mopt["max"] = fo.max
 		mopt["timeUnit"] = fo.timeUnit
+		mopt["base"] = fo.base
+		mopt["epoch"] = fo.epoch
 	}
 
 	if fo.fieldType != FieldTypeDefault {
@@ -956,6 +959,7 @@ func OptFieldTypeTimestamp(epoch time.Time, timeUnit string) FieldOption {
 		fo.min = pql.NewDecimal(MinTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
 		fo.max = pql.NewDecimal(MaxTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
 		fo.base = epochValue
+		fo.epoch = epoch
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	pilosa "github.com/molecula/featurebase/v3"
@@ -288,5 +289,41 @@ func TestFieldInfoMarshal(t *testing.T) {
 	expected := []byte(`{"name":"timestamp","createdAt":1649270079233541000,"options":{"type":"timestamp","epoch":"1970-01-01T00:00:00Z","bitDepth":0,"min":-4294967296,"max":4294967296,"timeUnit":"s"}}`)
 	if bytes.Compare(a, expected) != 0 {
 		t.Fatalf("expected %s, got %s", expected, a)
+	}
+}
+
+func TestCheckUnixNanoOverflow(t *testing.T) {
+	tests := []struct {
+		name    string
+		epoch   time.Time
+		wantErr bool
+	}{
+		{
+			name:    "too small",
+			epoch:   time.Unix(-1, math.MinInt64),
+			wantErr: true,
+		},
+		{
+			name:    "just right-1",
+			epoch:   time.Unix(0, math.MinInt64),
+			wantErr: false,
+		},
+		{
+			name:    "just right-2",
+			epoch:   time.Unix(0, math.MaxInt64),
+			wantErr: false,
+		},
+		{
+			name:    "too large",
+			epoch:   time.Unix(1, math.MaxInt64),
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := pilosa.CheckUnixNanoOverflow(tt.epoch); (err != nil) != tt.wantErr {
+				t.Errorf("checkUnixNanoOverflow() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }
