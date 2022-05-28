@@ -826,12 +826,12 @@ func (fo FieldOptions) String() string {
 	case FieldTypeInt:
 		mopt["min"] = fo.min
 		mopt["max"] = fo.max
-		// TODO add base
+		mopt["base"] = fo.base
 	case FieldTypeDecimal:
 		mopt["min"] = fo.min
 		mopt["max"] = fo.max
 		mopt["scale"] = fo.scale
-		// TODO add base?
+		mopt["base"] = fo.base
 	case FieldTypeTime:
 		mopt["timeQuantum"] = string(fo.timeQuantum)
 		mopt["noStandardView"] = fo.noStandardView
