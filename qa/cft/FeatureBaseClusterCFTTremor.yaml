@@ -291,13 +291,6 @@ Resources:
         - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
         - 'arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy'
         - !Ref EC2InstanceS3PermissionsPolicy
-      Tags:
-        - Key: Name
-          Value: !Ref Name
-          PropagateAtLaunch: "true"   
-        - Key: Prefix
-          Value: !Ref Prefix
-          PropagateAtLaunch: "true"    
 
 # Attach roles to the deployment instances
   DeploymentInstanceProfile:
