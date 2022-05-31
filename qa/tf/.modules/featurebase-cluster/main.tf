@@ -18,7 +18,7 @@ data "aws_ami" "amazon_linux_2" {
 }
 
 resource "aws_instance" "fb_cluster_nodes" {
-  count                  = var.fb_data_node_count
+  count                  = var.use_spot_instances ? 0 : var.fb_data_node_count
   ami                    = data.aws_ami.amazon_linux_2.id
   instance_type          = var.fb_data_node_type
   key_name               = aws_key_pair.gitlab-featurebase-ci.key_name
@@ -53,7 +53,7 @@ resource "aws_instance" "fb_cluster_nodes" {
 }
 
 resource "aws_instance" "fb_ingest" {
-  count                       = var.fb_ingest_node_count
+  count                       = var.use_spot_instances ? 0 : var.fb_ingest_node_count
   ami                         = data.aws_ami.amazon_linux_2.id
   key_name                    = aws_key_pair.gitlab-featurebase-ci.key_name
   vpc_security_group_ids      = [aws_security_group.ingest.id]
@@ -81,6 +81,83 @@ resource "aws_instance" "fb_ingest" {
     Prefix = "${var.cluster_prefix}"
     Name   = "${var.cluster_prefix}-featurebase-ingest-${count.index}"
     Role   = "ingest_node"
+  }
+
+}
+resource "aws_spot_instance_request" "fb_cluster_nodes" {
+  wait_for_fulfillment   = true
+  count                  = var.use_spot_instances ? var.fb_data_node_count : 0
+  ami                    = data.aws_ami.amazon_linux_2.id
+  instance_type          = var.fb_data_node_type
+  key_name               = aws_key_pair.gitlab-featurebase-ci.key_name
+  vpc_security_group_ids = [aws_security_group.featurebase.id]
+  monitoring             = true
+  subnet_id              = var.subnet != "" ? var.subnet : var.vpc_private_subnets[count.index % length(var.vpc_private_subnets)]
+  availability_zone      = var.zone != "" ? var.zone : var.azs[count.index % length(var.azs)]
+  iam_instance_profile   = "${aws_iam_instance_profile.fb_cluster_node_profile.name}"
+  user_data = var.user_data != "" ? file("${var.user_data}") : file("${path.module}/cloud-init.sh") 
+  
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 20
+  }
+
+  dynamic "ebs_block_device" {
+    for_each = var.ebs_volumes
+    content {
+      device_name = "/dev/sdb"
+      volume_type = var.fb_data_disk_type
+      volume_size = var.fb_data_disk_size_gb
+      iops        = var.fb_data_disk_iops
+      encrypted   = true 
+    }
+  }
+
+  tags = {
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-featurebase-cluster-${count.index}"
+    Role   = "cluster_node"
+  }
+
+  provisioner "local-exec" {
+    command = "aws ec2 create-tags --profile ${var.profile} --resources ${self.spot_instance_id} --tags Key=Prefix,Value='${var.cluster_prefix}' Key=Name,Value='${var.cluster_prefix}-featurebase-cluster-${count.index}' Key=Role,Value=cluster_node --region ${var.region}"
+  }
+
+}
+
+resource "aws_spot_instance_request" "fb_ingest" {
+  wait_for_fulfillment        = true
+  count                       = var.use_spot_instances ? var.fb_ingest_node_count : 0
+  ami                         = data.aws_ami.amazon_linux_2.id
+  key_name                    = aws_key_pair.gitlab-featurebase-ci.key_name
+  vpc_security_group_ids      = [aws_security_group.ingest.id]
+  instance_type               = var.fb_ingest_type
+  associate_public_ip_address = true
+  monitoring                  = true
+  subnet_id                   = var.subnet != "" ? var.subnet : var.vpc_public_subnets[count.index % length(var.vpc_public_subnets)]
+  availability_zone           = var.zone != "" ? var.zone : var.azs[count.index % length(var.azs)]
+  iam_instance_profile        = "${aws_iam_instance_profile.fb_cluster_node_profile.name}"
+
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 20
+  }
+
+  ebs_block_device {
+    device_name = "/dev/sdb"
+    volume_type = var.fb_ingest_disk_type
+    volume_size = var.fb_ingest_disk_size_gb
+    iops        = var.fb_ingest_disk_iops
+    encrypted   = true
+  }
+
+  tags = {
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-featurebase-ingest-${count.index}"
+    Role   = "ingest_node"
+  }
+  provisioner "local-exec" {
+    command = "aws ec2 create-tags --profile ${var.profile} --resources ${self.spot_instance_id} --tags Key=Prefix,Value='${var.cluster_prefix}' Key=Name,Value='${var.cluster_prefix}-featurebase-ingest-${count.index}' Key=Role,Value=ingest_node --region ${var.region}"
   }
 
 }

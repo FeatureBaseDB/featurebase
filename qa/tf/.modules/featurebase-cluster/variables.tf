@@ -123,3 +123,7 @@ variable "ebs_volumes" {
   default = ["/dev/sdb"]
 }
 
+variable "use_spot_instances" {
+  type = bool
+  default = false
+}
