@@ -84,6 +84,14 @@ Parameters:
     Type: String
     Default: some-test-id
     Description: Test run id (gitlab CI job id).
+  Name:
+    Type: String
+    Default: instance-name
+    Description: ec2 instance name.
+  Prefix:
+    Type: String
+    Default: instance-prefix
+    Description: ec2 prefix tag.
 
 Resources:
 
