@@ -628,6 +628,14 @@ func (b *Batch) Add(rec Row) error {
 			}
 		case uint64:
 			b.clearRowIDs[i][curPos] = val
+		case nil:
+			if field.Opts().Type() == FieldTypeMutex {
+				for len(b.rowIDs[i]) <= curPos {
+					b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+				}
+				b.rowIDs[i][len(b.rowIDs[i])-1] = clearSentinel
+			}
+
 		default:
 			return errors.Errorf("Clearing a value '%v' Type %[1]T is not currently supported (field '%s')", val, field.Name())
 		}
@@ -1203,6 +1211,10 @@ func (b *Batch) shardWidth() uint64 {
 // if needed though).
 var nilSentinel = ^uint64(0)
 
+// clearSentinel indicates that we're trying to clear all values for
+// this field of this record
+var clearSentinel = nilSentinel - 1
+
 func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments, error) {
 	shardWidth := b.shardWidth()
 	emptyClearRows := make(map[int]uint64)
@@ -1449,7 +1461,11 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			}
 			fragmentColumn := id % shardWidth
 			clearBM.Add(fragmentColumn) // Will use this to clear columns.
-			bitmap.Add(row*shardWidth + fragmentColumn)
+			if row != clearSentinel {
+				// clearSentinel is used for deletion
+				// so this value should only be added if its not clearSentinel
+				bitmap.Add(row*shardWidth + fragmentColumn)
+			}
 		}
 	}
 

@@ -43,6 +43,8 @@ func TestAgainstCluster(t *testing.T) {
 	t.Run("test-topn-cache-regression", func(t *testing.T) { testTopNCacheRegression(t, c, client) })
 	t.Run("test-multiple-int-same-batch", func(t *testing.T) { testMultipleIntSameBatch(t, c, client) })
 	t.Run("test-mutex-clearing-regression", func(t *testing.T) { mutexClearRegression(t, c, client) })
+	t.Run("test-mutex-nil-clear-id", func(t *testing.T) { mutexNilClearID(t, c, client) })
+	t.Run("test-mutex-nil-clear-key", func(t *testing.T) { mutexNilClearKey(t, c, client) })
 }
 
 func testStringSliceCombos(t *testing.T, c *test.Cluster, client *Client) {
@@ -1627,4 +1629,139 @@ func mutexClearRegression(t *testing.T, c *test.Cluster, client *Client) {
 			t.Fatalf("bmismatched group at %d, %v", i, gc)
 		}
 	}
+}
+
+// test clearing record with explict nil
+func mutexNilClearID(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-mut-nil-clear-id")
+	field := idx.Field("mut", OptFieldTypeMutex(CacheTypeNone, 0))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 11, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	col := uint64(0)
+	row := uint64(1)
+	// populate mutex with some data
+	for i := uint64(0); i < 11; i++ {
+		col = (i%2+1)*featurebase.ShardWidth + i%5
+		row = i % 3
+		if err := b.Add(Row{
+			ID:     col,
+			Values: []interface{}{row},
+		}); err == ErrBatchNowFull {
+			if err := b.Import(); err != nil {
+				t.Fatalf("importing: %v", err)
+			}
+		} else if err != nil {
+			t.Fatalf("adding to batch: %v", err)
+		}
+
+	}
+	// example data just copyied from test above
+	// confirm expected data
+	resp, err := client.Query(idx.RawQuery("Row(mut=0)"))
+	if err != nil {
+		t.Fatalf("Fetching data: %v", err)
+	}
+	items := resp.Result().Row().Columns
+	// delete item 0
+	b.Add(
+		Row{
+			ID:     items[0],
+			Values: []interface{}{nil},
+			Clears: map[int]interface{}{0: nil},
+		},
+	)
+	b.Import()
+	items = items[1:]
+	// confirm record removed
+	resp, err = client.Query(idx.RawQuery("Row(mut=0)"))
+	if err != nil {
+		t.Fatalf("Fetching data: %v", err)
+	}
+	errorIfNotEqual(t, resp.Result().Row().Columns, items)
+
+}
+
+// similar test to above but with string keys
+func mutexNilClearKey(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-mut-nil-clear-key", OptIndexKeys(true))
+	fields := make([]*Field, 1)
+	fields[0] = idx.Field("mut", OptFieldTypeMutex(CacheTypeNone, 0), OptFieldKeys(true))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	b, err := NewBatch(client, 3, idx, fields)
+	if err != nil {
+		t.Fatalf("getting new batch: %v", err)
+	}
+
+	r := Row{Values: make([]interface{}, 1)}
+
+	for i := 0; i < 3; i++ {
+		r.ID = strconv.Itoa(i)
+		if i%2 == 0 {
+			r.Values[0] = "a"
+		} else {
+			r.Values[0] = "x"
+		}
+		err := b.Add(r)
+		if err != nil && err != ErrBatchNowFull {
+			t.Fatalf("unexpected err adding record: %v", err)
+		}
+	}
+
+	if len(b.toTranslateID) != 3 {
+		t.Fatalf("id translation table unexpected size: %v", b.toTranslateID)
+	}
+	for i, k := range b.toTranslateID {
+		if ik, err := strconv.Atoi(k); err != nil || ik != i {
+			t.Errorf("unexpected toTranslateID key %s at index %d", k, i)
+		}
+	}
+
+	err = b.doTranslation()
+	if err != nil {
+		t.Fatalf("translating: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+	resp, err := client.Query(idx.RawQuery(`Row(mut="a")`))
+	errorIfNotEqual(t, resp.Result().Row().Keys, []string{"0", "2"})
+
+	r.ID = "2"
+	r.Values[0] = nil
+	r.Clears = map[int]interface{}{0: nil}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("unexpected err adding record: %v", err)
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+	resp, err = client.Query(idx.RawQuery(`Row(mut="a")`))
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+	errorIfNotEqual(t, resp.Result().Row().Keys, []string{"0"})
 }
