@@ -4,6 +4,7 @@ package pql
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -77,6 +78,40 @@ func MinMax(scale int64) (Decimal, Decimal) {
 	min := NewDecimal(math.MinInt64, scale)
 	max := NewDecimal(math.MaxInt64, scale)
 	return min, max
+}
+
+// AddDecimal adds a and b together and returns a new Decimal with the computed sum.
+//
+// If the Scale of a and b don't match, the returned Decimal will have the
+// smallest Scale needed to precisely represent the sum.
+func AddDecimal(a, b Decimal) (Decimal, bool) {
+	av, bv := big.NewInt(a.Value), big.NewInt(b.Value)
+
+	// if the scales dont match,
+	// we add zeros to the end of the one with the smaller scale until they match
+	// or we overflow
+	// then we add the values and return the decimal
+	as, bs := a.Scale, b.Scale
+	var ok bool
+	if a.Scale > b.Scale {
+		av, bv = bv, av
+		as, bs = bs, as
+	}
+
+	for as < bs {
+		av = av.Mul(av, big.NewInt(10))
+		as++
+	}
+
+	av = av.Add(av, bv)
+	ret, ok := av.Int64(), av.IsInt64()
+	if !ok {
+		return Decimal{}, ok
+	}
+	return Decimal{
+		Value: ret,
+		Scale: as,
+	}, ok
 }
 
 // LessThan returns true if d < d2.
@@ -388,7 +423,6 @@ func ParseDecimal(s string) (Decimal, error) {
 	} else {
 		return Decimal{}, errors.Errorf("value out of range: %s", mantissa)
 	}
-
 	// We have to use ParseUint here (as opposed to ParseInt) because
 	// math.MinInt64 is a valid value, but its absolute value is not.
 	// So this allows us to handle that one value without overflow, and

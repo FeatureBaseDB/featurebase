@@ -3,6 +3,7 @@ package pql_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -246,4 +247,87 @@ func TestDecimal(t *testing.T) {
 			}
 		})
 	})
+}
+
+type testAddDecimalCase struct {
+	a     pql.Decimal
+	b     pql.Decimal
+	exp   pql.Decimal
+	notOk bool
+}
+
+func TestAddDecimal(t *testing.T) {
+	toDecimal := func(a interface{}) pql.Decimal {
+		switch ac := a.(type) {
+		case string:
+			return mustParse(t, ac)
+		case pql.Decimal:
+			return ac
+		default:
+			t.Fatalf("cannot support type %T", ac)
+		}
+		return pql.Decimal{}
+	}
+
+	newTestAddDecimalCase := func(a, b, exp interface{}, notOk bool) testAddDecimalCase {
+		return testAddDecimalCase{
+			a:     toDecimal(a),
+			b:     toDecimal(b),
+			exp:   toDecimal(exp),
+			notOk: notOk,
+		}
+	}
+
+	tests := []testAddDecimalCase{
+		newTestAddDecimalCase("40.37", "40.37", "80.74", false),
+		newTestAddDecimalCase("18.5", "9.25", "27.75", false),
+		newTestAddDecimalCase("18.50", "9.25", "27.75", false),
+		newTestAddDecimalCase("-18.50", "-9.25", "-27.75", false),
+		newTestAddDecimalCase("-40.37", "40.37", "0", false),
+		newTestAddDecimalCase("-50.38", "-50.38", "-100.76", false),
+		newTestAddDecimalCase("-40.381", "-40.38", "-80.761", false),
+		newTestAddDecimalCase("-40.3700000000000000000001", "-50.38", "-90.7500000000000000000001", false),
+		newTestAddDecimalCase("10.37000000000000001", "-10", "0.37000000000000001", false),
+		// this is a weird one. because we reduce precision when we parse strings, we
+		// expect the value to be smaller than it really should be if you did
+		// the math yourself.
+		//
+		// there's not really a good way around this unless we use math/big.Int to represent
+		// our Value/Scale.
+		//
+		// but if we did this, to quote seebs: "i suspect that
+		// our performance would tank so badly by the time we were doing >63-bit
+		// numbers that there's no real-world benefit to us."
+		newTestAddDecimalCase("10.370000000000000001", "-10", "0.37", false),
+		newTestAddDecimalCase("-9223372036854775807", "-9223372036854775807", pql.Decimal{}, true),
+		newTestAddDecimalCase("9223372036854775807", "9223372036854775807", pql.Decimal{}, true),
+		newTestAddDecimalCase(pql.Decimal{Value: 0, Scale: 0}, pql.Decimal{Value: 1, Scale: 4}, pql.Decimal{Value: 1, Scale: 4}, false),
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			if got, ok := pql.AddDecimal(test.a, test.b); !got.EqualTo(test.exp) {
+				t.Logf("%#v + %#v, expected %#v, got %#v", test.a, test.b, test.exp, got)
+				t.Errorf("%v + %v, expected %v, got %v", test.a, test.b, test.exp, got)
+			} else if !ok != test.notOk {
+				t.Errorf("expected %v, got %v", test.notOk, ok)
+			}
+
+			if got, ok := pql.AddDecimal(test.b, test.a); !got.EqualTo(test.exp) {
+				t.Logf("%#v + %#v, expected %#v, got %#v", test.a, test.b, test.exp, got)
+				t.Errorf("%v + %v, expected %v, got %v", test.b, test.a, test.exp, got)
+			} else if !ok != test.notOk {
+				t.Errorf("expected %v, got %v", test.notOk, ok)
+			}
+		})
+	}
+}
+
+func mustParse(t *testing.T, num string) pql.Decimal {
+	t.Helper()
+	d, err := pql.ParseDecimal(num)
+	if err != nil {
+		t.Fatalf("unexpected error parsing %s to pql.Decimal: %v", num, err)
+	}
+	return d
 }
