@@ -1892,6 +1892,7 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 	}
 	if field.Type() == FieldTypeDecimal {
 		out.FloatVal = float64(int64(vsum)+(int64(vcount)*bsig.Base)) / math.Pow(10, float64(bsig.Scale))
+		out.DecimalVal = &pql.Decimal{Value: (int64(vsum) + (int64(vcount) * bsig.Base)), Scale: bsig.Scale}
 	}
 	return out, nil
 }
@@ -3000,7 +3001,11 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return mergeGroupCounts(other, findGroupCounts(v), limit)
+		merged, err := mergeGroupCounts(other, findGroupCounts(v), limit)
+		if err != nil {
+			return err
+		}
+		return merged
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -3115,7 +3120,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		}
 	}
 	for _, res := range results {
-		if res.DecimalAgg != 0 && aggType == "sum" {
+		if res.DecimalAgg != nil && aggType == "sum" {
 			aggType = "decimalSum"
 			break
 		}
@@ -3359,31 +3364,31 @@ func (g *GroupCounts) MarshalJSON() ([]byte, error) {
 
 // GroupCount represents a result item for a group by query.
 type GroupCount struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"-"`
-	DecimalAgg float64    `json:"-"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"-"`
+	DecimalAgg *pql.Decimal `json:"-"`
 }
 
 type groupCountSum struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"sum"`
-	DecimalAgg float64    `json:"-"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"sum"`
+	DecimalAgg *pql.Decimal `json:"-"`
 }
 
 type groupCountAggregate struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"aggregate"`
-	DecimalAgg float64    `json:"-"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"aggregate"`
+	DecimalAgg *pql.Decimal `json:"-"`
 }
 
 type groupCountDecimalSum struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"-"`
-	DecimalAgg float64    `json:"sum"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"-"`
+	DecimalAgg *pql.Decimal `json:"sum"`
 }
 
 var _ GroupCount = GroupCount(groupCountSum{})
@@ -3406,7 +3411,7 @@ func (g *GroupCount) Clone() (r *GroupCount) {
 // mergeGroupCounts merges two slices of GroupCounts throwing away any that go
 // beyond the limit. It assume that the two slices are sorted by the row ids in
 // the fields of the group counts. It may modify its arguments.
-func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
+func mergeGroupCounts(a, b []GroupCount, limit int) ([]GroupCount, error) {
 	if limit > len(a)+len(b) {
 		limit = len(a) + len(b)
 	}
@@ -3420,7 +3425,13 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 		case 0:
 			a[i].Count += b[j].Count
 			a[i].Agg += b[j].Agg
-			a[i].DecimalAgg += b[j].DecimalAgg
+			if a[i].DecimalAgg != nil && b[j].DecimalAgg != nil {
+				sum, ok := pql.AddDecimal(*a[i].DecimalAgg, *b[j].DecimalAgg)
+				if !ok {
+					return nil, fmt.Errorf("cannot add %s and %s, decimal overflow", a[i].DecimalAgg, b[j].DecimalAgg)
+				}
+				a[i].DecimalAgg = &sum
+			}
 			ret = append(ret, a[i])
 			i++
 			j++
@@ -3435,7 +3446,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 	for ; j < len(b) && len(ret) < limit; j++ {
 		ret = append(ret, b[j])
 	}
-	return ret
+	return ret, nil
 }
 
 // Compare is used in ordering two GroupCount objects.
@@ -8131,7 +8142,7 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 				}
 				ret.Count = uint64(result.Count)
 				ret.Agg = result.Val
-				ret.DecimalAgg = result.FloatVal
+				ret.DecimalAgg = result.DecimalVal
 			}
 		}
 		if ret.Count == 0 {

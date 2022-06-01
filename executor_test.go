@@ -5358,15 +5358,15 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		{
 			query: "GroupBy(Rows(generals), aggregate=Sum(field=dv))",
 			expected: []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 2775, DecimalAgg: 27.75},
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 3220, DecimalAgg: 32.20},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 2775, DecimalAgg: &pql.Decimal{Value: 2775, Scale: 2}},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 3220, DecimalAgg: &pql.Decimal{Value: 3220, Scale: 2}},
 			},
 		},
 		{
 			query: "GroupBy(Rows(generals), aggregate=Sum(field=ndv))",
 			expected: []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: -2775, DecimalAgg: -277.5},
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: -3220, DecimalAgg: -322.0},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: -2775, DecimalAgg: &pql.Decimal{Value: -2775, Scale: 1}},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: -3220, DecimalAgg: &pql.Decimal{Value: -3220, Scale: 1}},
 			},
 		},
 		{
@@ -5509,7 +5509,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	}
 
 	for i, tst := range tests {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s%d", tst.query, i), func(t *testing.T) {
 			r, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
 				Index: "istring",
 				Query: tst.query,
