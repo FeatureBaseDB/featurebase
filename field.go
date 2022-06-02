@@ -1403,9 +1403,9 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
 	} else if value < bsig.Min {
-		return false, ErrBSIGroupValueTooLow
+		return false, errors.Wrapf(ErrBSIGroupValueTooLow, "index = %v, field = %v, column ID = %v, value %v is smaller than min allowed %v", f.index, f.name, columnID, value, bsig.Min)
 	} else if value > bsig.Max {
-		return false, ErrBSIGroupValueTooHigh
+		return false, errors.Wrapf(ErrBSIGroupValueTooHigh, "index = %v, field = %v, column ID = %v, value %v is larger than max allowed %v", f.index, f.name, columnID, value, bsig.Max)
 	}
 
 	// Determine base value to store.
@@ -1772,9 +1772,9 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard 
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
 		if value > bsig.Max {
-			return errors.Wrap(ErrBSIGroupValueTooHigh, fmt.Sprintf("value = %v, columnID = %v", value, columnID))
+			return errors.Wrapf(ErrBSIGroupValueTooHigh, "index = %v, field = %v, column ID = %v, value %v is larger than max allowed %v", f.index, f.name, columnID, value, bsig.Max)
 		} else if value < bsig.Min {
-			return errors.Wrap(ErrBSIGroupValueTooLow, fmt.Sprintf("value = %v, columnID = %v", value, columnID))
+			return errors.Wrapf(ErrBSIGroupValueTooLow, "index = %v, field = %v, column ID = %v, value %v is smaller than min allowed %v", f.index, f.name, columnID, value, bsig.Min)
 		}
 		if value > max {
 			max = value

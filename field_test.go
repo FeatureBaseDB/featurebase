@@ -14,6 +14,7 @@ import (
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/pkg/errors"
 )
 
 // Ensure a field can set & read a bsiGroup value.
@@ -117,7 +118,7 @@ func TestField_SetValue(t *testing.T) {
 		var tx pilosa.Tx
 
 		// Set value.
-		if _, err := f.SetValue(tx, 100, 15); err != pilosa.ErrBSIGroupValueTooLow {
+		if _, err := f.SetValue(tx, 100, 15); !errors.Is(err, pilosa.ErrBSIGroupValueTooLow) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -134,7 +135,7 @@ func TestField_SetValue(t *testing.T) {
 		var tx pilosa.Tx
 
 		// Set value.
-		if _, err := f.SetValue(tx, 100, 31); err != pilosa.ErrBSIGroupValueTooHigh {
+		if _, err := f.SetValue(tx, 100, 31); !errors.Is(err, pilosa.ErrBSIGroupValueTooHigh) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
