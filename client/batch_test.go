@@ -3,6 +3,7 @@
 package client
 
 import (
+	"fmt"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -39,6 +40,7 @@ func TestAgainstCluster(t *testing.T) {
 	t.Run("batches-strings-ids", func(t *testing.T) { testBatchesStringIDs(t, c, client) })
 	t.Run("test-batch-staleness", func(t *testing.T) { testBatchStaleness(t, c, client) })
 	t.Run("test-import-batch-multiple-ints", func(t *testing.T) { testImportBatchMultipleInts(t, c, client) })
+	t.Run("test-import-batch-multiple-timestamps", func(t *testing.T) { testImportBatchMultipleTimestamps(t, c, client) })
 	t.Run("test-import-batch-sets-clears", func(t *testing.T) { testImportBatchSetsAndClears(t, c, client) })
 	t.Run("test-topn-cache-regression", func(t *testing.T) { testTopNCacheRegression(t, c, client) })
 	t.Run("test-multiple-int-same-batch", func(t *testing.T) { testMultipleIntSameBatch(t, c, client) })
@@ -1392,6 +1394,77 @@ func testImportBatchMultipleInts(t *testing.T, c *test.Cluster, client *Client) 
 		t.Fatalf("unepxected result: %v", res)
 	}
 
+}
+
+// testImportBatchMultipleTimestamps tests if nils are handles correctly for TS in batch imports
+func testImportBatchMultipleTimestamps(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-import-batch-multi-timestamp")
+	field := idx.Field("ts2", OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b1, err := NewBatch(client, 6, idx, []*Field{field})
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+	b2, err := NewBatch(client, 6, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+	batches := []*Batch{b1, b2}
+
+	for j := 0; j < 2; j++ {
+		t.Run(fmt.Sprintf("batch %d", j), func(t *testing.T) {
+			b := batches[j]
+			r := Row{Values: make([]interface{}, 1)}
+
+			rawVals := []interface{}{int64(16), int64(8), int64(32), nil, int64(2), int64(4)}
+			chkVals := []int64{16, 8, 32, 0, 2, 4}
+			chkImport := []interface{}{time.Unix(16, 0), time.Unix(8, 0), time.Unix(32, 0), nil, time.Unix(2, 0), time.Unix(4, 0)}
+			cols := []uint64{0, 1, 2, 3, 4, 5}
+			for i := range cols {
+				r.ID = cols[i]
+				r.Values[0] = rawVals[i]
+				err := b.Add(r)
+				if err != nil && err != ErrBatchNowFull {
+					t.Fatalf("adding to batch: %v", err)
+				}
+			}
+
+			if b.nullIndices[field.name][0] != 3 {
+				t.Fatalf("unexpected nulls, got/want: %v/%v", b.nullIndices[field.name], []uint64{3})
+			}
+			for i, val := range chkVals {
+				if b.values[field.name][i] != val {
+					t.Fatalf("unexpected value, got/want: %v/%v", b.values[field.name][i], val)
+				}
+				if b.ids[i] != cols[i] {
+					t.Fatalf("unexpected id, got/want: %v/%v", b.ids[i], cols[i])
+				}
+			}
+			err = b.Import()
+			if err != nil {
+				t.Fatalf("importing: %v", err)
+			}
+
+			qr := c.Query(t, idx.name, `Extract(All(), Rows(ts2))`)
+			results := qr.Results[0].(featurebase.ExtractedTable)
+			for k, res := range results.Columns {
+				if chkImport[k] != nil {
+					if res.Rows[0] != chkImport[k].(time.Time).UTC() {
+						t.Fatalf("unexpected result, got/want: %v/%v", res.Rows[0], chkImport[k].(time.Time).UTC())
+					}
+				} else {
+					if res.Rows[0] != nil {
+						t.Fatalf("unexpected result, got/want: %v/%v", res.Rows[0], nil)
+					}
+				}
+			}
+		})
+	}
 }
 
 func testImportBatchSetsAndClears(t *testing.T, c *test.Cluster, client *Client) {

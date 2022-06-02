@@ -578,7 +578,8 @@ func (b *Batch) Add(rec Row) error {
 			}
 			b.rowIDSets[field.Name()] = append(rowIDSets, val)
 		case nil:
-			if field.Opts().Type() == FieldTypeInt || field.Opts().Type() == FieldTypeDecimal {
+			t := field.Opts().Type()
+			if t == FieldTypeInt || t == FieldTypeDecimal || t == FieldTypeTimestamp {
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
 				nullIndices, ok := b.nullIndices[field.Name()]
 				if !ok {
