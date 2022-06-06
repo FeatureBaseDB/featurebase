@@ -33,6 +33,7 @@ import (
 	"github.com/molecula/featurebase/v3/authz"
 	"github.com/molecula/featurebase/v3/ingest"
 	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/monitor"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/rbf"
 	"github.com/molecula/featurebase/v3/storage"
@@ -418,6 +419,47 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 	})
 }
 
+func (h *Handler) monitorPerformance(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !monitor.IsOn {
+			next.ServeHTTP(w, r)
+			return
+		}
+		prefixes := make(map[string]struct{})
+		prefixes["index"] = struct{}{}
+		prefixes["info"] = struct{}{}
+		prefixes["schema"] = struct{}{}
+		prefixes["status"] = struct{}{}
+		prefixes["queries"] = struct{}{}
+		prefixes["query-history"] = struct{}{}
+
+		pathParts := strings.Split(r.URL.Path, "/")
+		if len(pathParts) > 1 {
+			if _, ok := prefixes[pathParts[1]]; ok {
+				path := scrubPath(pathParts)
+				txName := fmt.Sprintf("URL: %s, Method: %s", path, r.Method)
+				monitor.CapturePerformance(r.Context(), "http", txName, func() {
+					next.ServeHTTP(w, r)
+				})
+			}
+		}
+	})
+}
+
+func scrubPath(pathParts []string) string {
+	l := len(pathParts)
+	if l > 1 && pathParts[1] == "index" {
+		switch {
+		case l > 4:
+			pathParts[4] = "{field}"
+			fallthrough
+		case l > 2:
+			pathParts[2] = "{index}"
+		}
+	}
+	return strings.Join(pathParts, "/")
+}
+
 // latticeRoutes lists the frontend routes that do not directly correspond to
 // backend routes, and require special handling.
 var latticeRoutes = []string{"/tables", "/query", "/querybuilder", "/signin"} // TODO somehow pull this from some metadata in the lattice directory
@@ -552,6 +594,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.addQueryContext)
 	router.Use(handler.extractTracing)
+	router.Use(handler.monitorPerformance)
 	router.Use(handler.collectStats)
 	var h http.Handler = router
 	for _, middleware := range handler.middleware {

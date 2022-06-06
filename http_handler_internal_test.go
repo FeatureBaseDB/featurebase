@@ -1026,3 +1026,34 @@ func TestAuthnAllowedIPs(t *testing.T) {
 		})
 	}
 }
+
+func Test_scrubPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		pathParts []string
+		want      string
+	}{
+		{
+			name:      "happyPath",
+			pathParts: []string{"", "index", "iname", "field", "fname"},
+			want:      "/index/{index}/field/{field}",
+		},
+		{
+			name:      "kindaHappyPath",
+			pathParts: []string{"", "index", "iname", "field", "fname"},
+			want:      "/index/{index}/field/{field}",
+		},
+		{
+			name:      "sadPath",
+			pathParts: []string{"", "notindex", "iname", "field", "fname", "field2", "fname2"},
+			want:      "/notindex/iname/field/fname/field2/fname2",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := scrubPath(tt.pathParts); got != tt.want {
+				t.Errorf("scrubPath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

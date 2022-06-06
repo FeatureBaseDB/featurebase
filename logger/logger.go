@@ -9,6 +9,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/molecula/featurebase/v3/monitor"
 )
 
 const RFC3339UsecTz0 = "2006-01-02T15:04:05.000000Z07:00"
@@ -97,7 +99,10 @@ func (s *standardLogger) printf(level int, format string, v ...interface{}) {
 	if level > s.verbosity {
 		return
 	}
-
+	if monitor.IsOn {
+		// intercepts the log message and sends it to the monitor
+		monitor.CaptureException(level, format, v...)
+	}
 	s.logger.Printf(LevelPrefix(level)+format, v...)
 }
 
