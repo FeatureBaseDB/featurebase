@@ -2,7 +2,7 @@
 package pql
 
 import (
-	"fmt"
+	"encoding/binary"
 	"math"
 	"math/big"
 	"strconv"
@@ -52,22 +52,74 @@ func Pow10(p int64) int64 {
 // Precision is currently not considered; precision, for
 // our purposes is implied to be the complete, known value.
 type Decimal struct {
-	Value int64
+	value big.Int
 	Scale int64
 }
 
+func (d *Decimal) Value() big.Int {
+	val := big.NewInt(0)
+	val.Set(&d.value)
+	return *val
+}
+
+func (d *Decimal) SetValue(v int64) {
+	val := big.NewInt(v)
+	d.value = *val
+}
+
 func (d Decimal) Clone() (r *Decimal) {
+	val := big.NewInt(0)
+	val.Set(&d.value)
 	r = &Decimal{
-		Value: d.Value,
+		value: *val,
 		Scale: d.Scale,
 	}
 	return
 }
 
+func (d *Decimal) GobEncode() ([]byte, error) {
+	if d == nil {
+		return nil, nil
+	}
+	valBuf, err := d.value.GobEncode()
+	if err != nil {
+		return nil, err
+	}
+	valSz := len(valBuf)
+
+	// make a buffer the size of our Decimal, plus our 8 byte Scale,
+	// plus 1 byte for sign of scale
+	buf := make([]byte, valSz+8)
+	copy(buf[:valSz], valBuf)
+
+	binary.LittleEndian.PutUint64(buf[valSz:valSz+8], uint64(d.Scale))
+
+	return buf, nil
+}
+
+func (d *Decimal) GobDecode(buf []byte) error {
+	if len(buf) == 0 {
+		// they sent a nil or default value
+		*d = Decimal{}
+		return nil
+	}
+
+	valPart := len(buf) - 8
+	value := big.NewInt(0)
+	if err := value.GobDecode(buf[:valPart]); err != nil {
+		return err
+	}
+	d.value = *value
+
+	d.Scale = int64(binary.LittleEndian.Uint64(buf[valPart : valPart+8]))
+	return nil
+}
+
 // NewDecimal returns a Decimal based on the provided arguments.
 func NewDecimal(value, scale int64) Decimal {
+	v := big.NewInt(value)
 	return Decimal{
-		Value: value,
+		value: *v,
 		Scale: scale,
 	}
 }
@@ -84,34 +136,14 @@ func MinMax(scale int64) (Decimal, Decimal) {
 //
 // If the Scale of a and b don't match, the returned Decimal will have the
 // smallest Scale needed to precisely represent the sum.
-func AddDecimal(a, b Decimal) (Decimal, bool) {
-	av, bv := big.NewInt(a.Value), big.NewInt(b.Value)
-
-	// if the scales dont match,
-	// we add zeros to the end of the one with the smaller scale until they match
-	// or we overflow
-	// then we add the values and return the decimal
-	as, bs := a.Scale, b.Scale
-	var ok bool
-	if a.Scale > b.Scale {
-		av, bv = bv, av
-		as, bs = bs, as
-	}
-
-	for as < bs {
-		av = av.Mul(av, big.NewInt(10))
-		as++
-	}
-
-	av = av.Add(av, bv)
-	ret, ok := av.Int64(), av.IsInt64()
-	if !ok {
-		return Decimal{}, ok
-	}
+func AddDecimal(a, b Decimal) Decimal {
+	ac, bc := sameScalify(a, b)
+	apv, bpv := &ac.value, &bc.value
+	apv.Add(apv, bpv)
 	return Decimal{
-		Value: ret,
-		Scale: as,
-	}, ok
+		value: *apv,
+		Scale: ac.Scale,
+	}
 }
 
 // LessThan returns true if d < d2.
@@ -134,84 +166,56 @@ func (d Decimal) GreaterThanOrEqualTo(d2 Decimal) bool {
 	return d.greaterThan(d2, true)
 }
 
-// EqualTo returns true if d == d2.
-func (d Decimal) EqualTo(d2 Decimal) bool {
-	if d.Scale == d2.Scale {
-		return d.Value == d2.Value
+func (d *Decimal) withLargerScale(scale int64) *Decimal {
+	dc := d.Clone()
+	val := &dc.value
+	ten := big.NewInt(10)
+	for dc.Scale < scale {
+		val = val.Mul(val, ten)
+		dc.Scale++
 	}
 
-	quotientD := quotient(d)
-	quotientD2 := quotient(d2)
-	if quotientD != quotientD2 {
-		return false
+	return dc
+}
+
+func sameScalify(d, d2 Decimal) (*Decimal, *Decimal) {
+	dc := d.Clone()
+	d2c := d2.Clone()
+
+	if dc.Scale < d2c.Scale {
+		dc = dc.withLargerScale(d2c.Scale)
+	} else {
+		d2c = d2c.withLargerScale(dc.Scale)
 	}
-	remainderD, remainderD2 := remainder(d), remainder(d2)
-	if d.Scale < d2.Scale {
-		scaleDiff := d2.Scale - d.Scale
-		return (remainderD * pow10[scaleDiff]) == remainderD2
+
+	return dc, d2c
+}
+
+func (d Decimal) cmp(d2 Decimal) int {
+	if d.Scale == d2.Scale {
+		return (&d.value).Cmp(&d2.value)
 	}
-	scaleDiff := d.Scale - d2.Scale
-	return remainderD == (remainderD2 * pow10[scaleDiff])
+	dc, d2c := sameScalify(d, d2)
+	return (&dc.value).Cmp(&d2c.value)
+}
+
+// EqualTo returns true if d == d2.
+func (d Decimal) EqualTo(d2 Decimal) bool {
+	return d.cmp(d2) == 0
 }
 
 func (d Decimal) lessThan(d2 Decimal, eq bool) bool {
-	if d.Scale == d2.Scale {
-		if eq {
-			return d.Value <= d2.Value
-		}
-		return d.Value < d2.Value
+	if eq {
+		return d.cmp(d2) <= 0
 	}
-
-	quotientD, quotientD2 := quotient(d), quotient(d2)
-	if quotientD < quotientD2 {
-		return true
-	} else if quotientD == quotientD2 {
-		remainderD, remainderD2 := remainder(d), remainder(d2)
-		if d.Scale < d2.Scale {
-			scaleDiff := d2.Scale - d.Scale
-			if eq {
-				return (remainderD * pow10[scaleDiff]) <= remainderD2
-			}
-			return (remainderD * pow10[scaleDiff]) < remainderD2
-		}
-		scaleDiff := d.Scale - d2.Scale
-		if eq {
-			return remainderD <= (remainderD2 * pow10[scaleDiff])
-		}
-		return remainderD < (remainderD2 * pow10[scaleDiff])
-	}
-
-	return false
+	return d.cmp(d2) < 0
 }
 
 func (d Decimal) greaterThan(d2 Decimal, eq bool) bool {
-	if d.Scale == d2.Scale {
-		if eq {
-			return d.Value >= d2.Value
-		}
-		return d.Value > d2.Value
+	if eq {
+		return d.cmp(d2) >= 0
 	}
-
-	quotientD, quotientD2 := quotient(d), quotient(d2)
-	if quotientD > quotientD2 {
-		return true
-	} else if quotientD == quotientD2 {
-		remainderD, remainderD2 := remainder(d), remainder(d2)
-		if d.Scale < d2.Scale {
-			scaleDiff := d2.Scale - d.Scale
-			if eq {
-				return (remainderD * pow10[scaleDiff]) >= remainderD2
-			}
-			return (remainderD * pow10[scaleDiff]) > remainderD2
-		}
-		scaleDiff := d.Scale - d2.Scale
-		if eq {
-			return remainderD >= (remainderD2 * pow10[scaleDiff])
-		}
-		return remainderD > (remainderD2 * pow10[scaleDiff])
-	}
-
-	return false
+	return d.cmp(d2) > 0
 }
 
 // SupportedByScale returns true if d can be represented
@@ -240,16 +244,17 @@ func (d Decimal) IsValid() bool {
 }
 
 // ToInt64 returns d as an int64 adjusted to the
-// provided scale.
+// provided scale. If d.value cannot be represented
+// as an int64, results are undefined.
 func (d Decimal) ToInt64(scale int64) int64 {
 	var ret int64
 	scaleDiff := scale - d.Scale
 	if scaleDiff == 0 {
-		ret = d.Value
+		ret = d.value.Int64()
 	} else if scaleDiff < 0 {
-		ret = d.Value / Pow10(-1*scaleDiff)
+		ret = d.value.Int64() / Pow10(-1*scaleDiff)
 	} else {
-		ret = d.Value * Pow10(scaleDiff)
+		ret = d.value.Int64() * Pow10(scaleDiff)
 	}
 	return ret
 }
@@ -257,12 +262,14 @@ func (d Decimal) ToInt64(scale int64) int64 {
 // Float64 returns d as a float64.
 // TODO: this could potentially lose precision; we should audit
 // its use and protect against unexpected results.
+// If d.value cannot be represented as an int64,
+// results are undefined.
 func (d Decimal) Float64() float64 {
 	var ret float64
 	if d.Scale == 0 {
-		ret = float64(d.Value)
+		ret = float64(d.value.Int64())
 	} else {
-		ret = float64(d.Value) / math.Pow10(int(d.Scale))
+		ret = float64(d.value.Int64()) / math.Pow10(int(d.Scale))
 	}
 	return ret
 }
@@ -272,7 +279,10 @@ func (d Decimal) String() string {
 	var s string
 
 	var neg bool
-	sval := fmt.Sprintf("%d", d.Value)
+	sval := d.value.String()
+	if len(sval) == 0 {
+		return ""
+	}
 
 	// Strip the negative sign off for now, and
 	// re-apply it at the end.
@@ -441,8 +451,9 @@ func ParseDecimal(s string) (Decimal, error) {
 		value *= -1
 	}
 
+	bigVal := big.NewInt(value)
 	return Decimal{
-		Value: value,
+		value: *bigVal,
 		Scale: scale,
 	}, nil
 }
@@ -489,24 +500,6 @@ func reducePrecision(sign bool, mantissa []byte, scale int64) ([]byte, int64, bo
 	return reducePrecision(sign, mantissa[:len(mantissa)-1], scale-1)
 }
 
-func quotient(d Decimal) int64 {
-	if d.Scale == 0 {
-		return d.Value
-	} else if d.Scale > 0 && d.Scale < 19 {
-		return d.Value / pow10[d.Scale]
-	} else if d.Scale < 0 && d.Scale > -19 {
-		return d.Value * pow10[-1*d.Scale]
-	}
-	return 0
-}
-
-func remainder(d Decimal) int64 {
-	if d.Scale >= 0 && d.Scale < 19 {
-		return d.Value % pow10[d.Scale]
-	}
-	return 0
-}
-
 // UnmarshalJSON is a custom unmarshaller for the Decimal
 // type. The intention is to avoid the use of float64
 // anywhere, so this unmarhaller parses the decimal out
@@ -516,7 +509,7 @@ func (d *Decimal) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return errors.Wrapf(err, "parsing decimal: %s", string(data))
 	}
-	d.Value = o.Value
+	d.value = o.value
 	d.Scale = o.Scale
 
 	return nil
@@ -539,7 +532,7 @@ func (d *Decimal) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return errors.Wrapf(err, "parsing decimal: %s", data)
 	}
-	d.Value = o.Value
+	d.value = o.value
 	d.Scale = o.Scale
 
 	return nil

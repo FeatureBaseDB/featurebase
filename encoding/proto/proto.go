@@ -704,8 +704,8 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions 
 		Type:         o.Type,
 		CacheType:    o.CacheType,
 		CacheSize:    o.CacheSize,
-		Min:          &pb.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
-		Max:          &pb.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
+		Min:          s.encodeDecimal(&o.Min),
+		Max:          s.encodeDecimal(&o.Max),
 		Base:         o.Base,
 		Scale:        o.Scale,
 		BitDepth:     uint64(o.BitDepth),
@@ -1139,8 +1139,11 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 }
 
 func (s Serializer) decodeDecimal(d *pb.Decimal, m *pql.Decimal) {
-	m.Value = d.Value
-	m.Scale = d.Scale
+	// err should always be nil, unless there's a problem with the standard library
+	err := m.GobDecode(d.Gob)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (s Serializer) decodeNodes(a []*pb.Node, m []*topology.Node) {
@@ -1743,10 +1746,9 @@ func (s Serializer) decodeDecimalStruct(pb *pb.Decimal) *pql.Decimal {
 	if pb == nil {
 		return nil
 	}
-	return &pql.Decimal{
-		Value: pb.Value,
-		Scale: pb.Scale,
-	}
+	d := &pql.Decimal{}
+	s.decodeDecimal(pb, d)
+	return d
 }
 
 func (s Serializer) encodeSignedRow(r pilosa.SignedRow) *pb.SignedRow {
@@ -1962,9 +1964,9 @@ func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 	if p == nil {
 		return nil
 	}
+	gob, _ := p.GobEncode() // ignore err on purpose
 	return &pb.Decimal{
-		Value: p.Value,
-		Scale: p.Scale,
+		Gob: gob,
 	}
 }
 

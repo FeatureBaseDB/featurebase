@@ -2269,31 +2269,31 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			}{
 				{
 					2,
-					pql.Decimal{Value: 1, Scale: -1},
-					pql.Decimal{Value: 2, Scale: -1},
-					pql.Decimal{Value: 115, Scale: 1},
-					pql.Decimal{Value: 1150, Scale: 2},
+					pql.NewDecimal(1, -1),
+					pql.NewDecimal(2, -1),
+					pql.NewDecimal(115, 1),
+					pql.NewDecimal(1150, 2),
 				},
 				{
 					2,
-					pql.Decimal{Value: -1, Scale: -1},
-					pql.Decimal{Value: 2, Scale: -1},
-					pql.Decimal{Value: 115, Scale: 1},
-					pql.Decimal{Value: 1150, Scale: 2},
+					pql.NewDecimal(-1, -1),
+					pql.NewDecimal(2, -1),
+					pql.NewDecimal(115, 1),
+					pql.NewDecimal(1150, 2),
 				},
 				{
 					2,
-					pql.Decimal{Value: -1, Scale: -1},
-					pql.Decimal{Value: 2, Scale: -1},
-					pql.Decimal{Value: -95, Scale: 1},
-					pql.Decimal{Value: -950, Scale: 2},
+					pql.NewDecimal(-1, -1),
+					pql.NewDecimal(2, -1),
+					pql.NewDecimal(-95, 1),
+					pql.NewDecimal(-950, 2),
 				},
 				{
 					2,
-					pql.Decimal{Value: -2, Scale: -1},
-					pql.Decimal{Value: -1, Scale: -1},
-					pql.Decimal{Value: -115, Scale: 1},
-					pql.Decimal{Value: -1150, Scale: 2},
+					pql.NewDecimal(-2, -1),
+					pql.NewDecimal(-1, -1),
+					pql.NewDecimal(-115, 1),
+					pql.NewDecimal(-1150, 2),
 				},
 			}
 			// This extra field exists to make there be shards which are present,
@@ -2849,7 +2849,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Run("NoFilter", func(t *testing.T) {
 				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(field=dec)`}); err != nil {
 					t.Fatal(err)
-				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 700007, Scale: 3}, Count: 3}) {
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: pql.NewDecimal(700007, 3).Clone(), Count: 3}) {
 					t.Fatalf("unexpected result: %s", spew.Sdump(result))
 				}
 			})
@@ -2857,7 +2857,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Run("WithFilter", func(t *testing.T) {
 				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(Row(x=0), field=dec)`}); err != nil {
 					t.Fatal(err)
-				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 500005, Scale: 3}, Count: 2}) {
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: pql.NewDecimal(500005, 3).Clone(), Count: 2}) {
 					t.Fatalf("unexpected result: %s", spew.Sdump(result))
 				}
 			})
@@ -2865,7 +2865,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Run("NoFilter", func(t *testing.T) {
 				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(dec)`}); err != nil {
 					t.Fatal(err)
-				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 700007, Scale: 3}, Count: 3}) {
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: pql.NewDecimal(700007, 3).Clone(), Count: 3}) {
 					t.Fatalf("unexpected result: %s", spew.Sdump(result))
 				}
 			})
@@ -2873,7 +2873,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Run("WithFilter", func(t *testing.T) {
 				if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(dec, Row(x=0))`}); err != nil {
 					t.Fatal(err)
-				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 500005, Scale: 3}, Count: 2}) {
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: pql.NewDecimal(500005, 3).Clone(), Count: 2}) {
 					t.Fatalf("unexpected result: %s", spew.Sdump(result))
 				}
 			})
@@ -4036,7 +4036,7 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 			} else {
 				switch exp := test.expVal.(type) {
 				case pql.Decimal:
-					if *vc.DecimalVal != exp {
+					if !vc.DecimalVal.EqualTo(exp) {
 						t.Fatalf("test %d on node%d expected pql.Decimal(%s), but got: %s", i, n, exp, vc.DecimalVal)
 					}
 				case int64:
@@ -5358,15 +5358,15 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		{
 			query: "GroupBy(Rows(generals), aggregate=Sum(field=dv))",
 			expected: []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 2775, DecimalAgg: &pql.Decimal{Value: 2775, Scale: 2}},
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 3220, DecimalAgg: &pql.Decimal{Value: 3220, Scale: 2}},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: 2775, DecimalAgg: pql.NewDecimal(2775, 2).Clone()},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: 3220, DecimalAgg: pql.NewDecimal(3220, 2).Clone()},
 			},
 		},
 		{
 			query: "GroupBy(Rows(generals), aggregate=Sum(field=ndv))",
 			expected: []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: -2775, DecimalAgg: &pql.Decimal{Value: -2775, Scale: 1}},
-				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: -3220, DecimalAgg: &pql.Decimal{Value: -3220, Scale: 1}},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Agg: -2775, DecimalAgg: pql.NewDecimal(-2775, 1).Clone()},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Agg: -3220, DecimalAgg: pql.NewDecimal(-3220, 1).Clone()},
 			},
 		},
 		{
@@ -8663,7 +8663,7 @@ func TestToRows(t *testing.T) {
 	if e != nil {
 		t.Fatal("Shouldn't be err ", e)
 	}
-	v.DecimalVal = &pql.Decimal{Value: 1, Scale: 1}
+	v.DecimalVal = pql.NewDecimal(1, 1).Clone()
 	e = v.ToRows(func(*proto.RowResponse) error {
 		return nil
 	})

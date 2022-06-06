@@ -3,7 +3,6 @@ package pql_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,48 +18,48 @@ func TestDecimal(t *testing.T) {
 			exp    pql.Decimal
 			expErr string
 		}{
-			{"0", pql.Decimal{0, 0}, ""},
-			{"-0", pql.Decimal{0, 0}, ""},
-			{"0.0", pql.Decimal{0, 0}, ""},
-			{"0.", pql.Decimal{0, 0}, ""},
-			{"-0.00", pql.Decimal{0, 0}, ""},
-			{"123.4567", pql.Decimal{1234567, 4}, ""},
-			{"123.456700", pql.Decimal{1234567, 4}, ""},
-			{"00123.4567", pql.Decimal{1234567, 4}, ""},
-			{"+123.4567", pql.Decimal{1234567, 4}, ""},
-			{"-123.4567", pql.Decimal{-1234567, 4}, ""},
-			{"-00123.4567", pql.Decimal{-1234567, 4}, ""},
-			{"-12.25", pql.Decimal{-1225, 2}, ""},
+			{"0", pql.NewDecimal(0, 0), ""},
+			{"-0", pql.NewDecimal(0, 0), ""},
+			{"0.0", pql.NewDecimal(0, 0), ""},
+			{"0.", pql.NewDecimal(0, 0), ""},
+			{"-0.00", pql.NewDecimal(0, 0), ""},
+			{"123.4567", pql.NewDecimal(1234567, 4), ""},
+			{"123.456700", pql.NewDecimal(1234567, 4), ""},
+			{"00123.4567", pql.NewDecimal(1234567, 4), ""},
+			{"+123.4567", pql.NewDecimal(1234567, 4), ""},
+			{"-123.4567", pql.NewDecimal(-1234567, 4), ""},
+			{"-00123.4567", pql.NewDecimal(-1234567, 4), ""},
+			{"-12.25", pql.NewDecimal(-1225, 2), ""},
 
-			{"123", pql.Decimal{123, 0}, ""},
-			{"-12300", pql.Decimal{-123, -2}, ""},
-			{"+012300", pql.Decimal{123, -2}, ""},
-			{"12300", pql.Decimal{123, -2}, ""},
-			{"12300.", pql.Decimal{123, -2}, ""},
-			{"12300.0", pql.Decimal{123, -2}, ""},
-			{"123.0", pql.Decimal{123, 0}, ""},
+			{"123", pql.NewDecimal(123, 0), ""},
+			{"-12300", pql.NewDecimal(-123, -2), ""},
+			{"+012300", pql.NewDecimal(123, -2), ""},
+			{"12300", pql.NewDecimal(123, -2), ""},
+			{"12300.", pql.NewDecimal(123, -2), ""},
+			{"12300.0", pql.NewDecimal(123, -2), ""},
+			{"123.0", pql.NewDecimal(123, 0), ""},
 
-			{".123", pql.Decimal{123, 3}, ""},
-			{"0.123", pql.Decimal{123, 3}, ""},
-			{"0.001230", pql.Decimal{123, 5}, ""},
-			{"-0.001230", pql.Decimal{-123, 5}, ""},
+			{".123", pql.NewDecimal(123, 3), ""},
+			{"0.123", pql.NewDecimal(123, 3), ""},
+			{"0.001230", pql.NewDecimal(123, 5), ""},
+			{"-0.001230", pql.NewDecimal(-123, 5), ""},
 
 			// int64 edges.
-			{".000009223372036854775807", pql.Decimal{9223372036854775807, 24}, ""},
-			{"-.000009223372036854775808", pql.Decimal{-9223372036854775808, 24}, ""},
-			{"92233720368547.75807", pql.Decimal{9223372036854775807, 5}, ""},
-			{"-92233720368547.75807", pql.Decimal{-9223372036854775807, 5}, ""},
-			{"9223372036854775807000", pql.Decimal{9223372036854775807, -3}, ""},
-			{"-9223372036854775807000", pql.Decimal{-9223372036854775807, -3}, ""},
+			{".000009223372036854775807", pql.NewDecimal(9223372036854775807, 24), ""},
+			{"-.000009223372036854775808", pql.NewDecimal(-9223372036854775808, 24), ""},
+			{"92233720368547.75807", pql.NewDecimal(9223372036854775807, 5), ""},
+			{"-92233720368547.75807", pql.NewDecimal(-9223372036854775807, 5), ""},
+			{"9223372036854775807000", pql.NewDecimal(9223372036854775807, -3), ""},
+			{"-9223372036854775807000", pql.NewDecimal(-9223372036854775807, -3), ""},
 
 			// precision adjustment
-			{"2.666666666666666667", pql.Decimal{2666666666666666667, 18}, ""},
-			{"2.6666666666666666667", pql.Decimal{2666666666666666666, 18}, ""},
-			{"2.6666666666666666666667", pql.Decimal{2666666666666666666, 18}, ""},
-			{"-9.223372036854775808", pql.Decimal{-9223372036854775808, 18}, ""},
-			{"-9.223372036854775809", pql.Decimal{-922337203685477580, 17}, ""},
-			{"9.223372036854775807", pql.Decimal{9223372036854775807, 18}, ""},
-			{"9.223372036854775808", pql.Decimal{922337203685477580, 17}, ""},
+			{"2.666666666666666667", pql.NewDecimal(2666666666666666667, 18), ""},
+			{"2.6666666666666666667", pql.NewDecimal(2666666666666666666, 18), ""},
+			{"2.6666666666666666666667", pql.NewDecimal(2666666666666666666, 18), ""},
+			{"-9.223372036854775808", pql.NewDecimal(-9223372036854775808, 18), ""},
+			{"-9.223372036854775809", pql.NewDecimal(-922337203685477580, 17), ""},
+			{"9.223372036854775807", pql.NewDecimal(9223372036854775807, 18), ""},
+			{"9.223372036854775808", pql.NewDecimal(922337203685477580, 17), ""},
 
 			// Error cases.
 			{"", pql.Decimal{}, "decimal string is empty"},
@@ -88,7 +87,7 @@ func TestDecimal(t *testing.T) {
 				}
 			} else if err != nil {
 				t.Fatalf("test %d parsing string `%s`: %s", i, test.s, err)
-			} else if dec != test.exp {
+			} else if !dec.EqualTo(test.exp) {
 				t.Fatalf("test %d parsing string `%s`: expected: %v, but got: %v", i, test.s, test.exp, dec)
 			}
 		}
@@ -100,22 +99,22 @@ func TestDecimal(t *testing.T) {
 			scale int64
 			exp   int64
 		}{
-			{pql.Decimal{0, 0}, 0, 0},  // 0 : 0
-			{pql.Decimal{0, 0}, 1, 0},  // 0 : 0.0
-			{pql.Decimal{0, 0}, -1, 0}, // 0 : 0
+			{pql.NewDecimal(0, 0), 0, 0},  // 0 : 0
+			{pql.NewDecimal(0, 0), 1, 0},  // 0 : 0.0
+			{pql.NewDecimal(0, 0), -1, 0}, // 0 : 0
 
-			{pql.Decimal{1234567, 4}, 5, 12345670}, // 123.4567 : 123.45670
-			{pql.Decimal{1234567, 4}, 4, 1234567},  // 123.4567 : 123.4567
-			{pql.Decimal{1234567, 4}, 3, 123456},   // 123.4567 : 123.456
+			{pql.NewDecimal(1234567, 4), 5, 12345670}, // 123.4567 : 123.45670
+			{pql.NewDecimal(1234567, 4), 4, 1234567},  // 123.4567 : 123.4567
+			{pql.NewDecimal(1234567, 4), 3, 123456},   // 123.4567 : 123.456
 
-			{pql.Decimal{-1234567, 4}, 5, -12345670}, // -123.4567 : -123.45670
-			{pql.Decimal{-1234567, 4}, 4, -1234567},  // -123.4567 : -123.4567
-			{pql.Decimal{-1234567, 4}, 3, -123456},   // -123.4567 : -123.456
+			{pql.NewDecimal(-1234567, 4), 5, -12345670}, // -123.4567 : -123.45670
+			{pql.NewDecimal(-1234567, 4), 4, -1234567},  // -123.4567 : -123.4567
+			{pql.NewDecimal(-1234567, 4), 3, -123456},   // -123.4567 : -123.456
 
-			{pql.Decimal{123, -2}, 5, 1230000000}, // 12300 : 12300.00000
-			{pql.Decimal{123, -2}, -1, 1230},      // 12300 : 1230
-			{pql.Decimal{123, 1}, -1, 1},          // 12.3 : 1
-			{pql.Decimal{123, 1}, -2, 0},          // 12.3 : 0
+			{pql.NewDecimal(123, -2), 5, 1230000000}, // 12300 : 12300.00000
+			{pql.NewDecimal(123, -2), -1, 1230},      // 12300 : 1230
+			{pql.NewDecimal(123, 1), -1, 1},          // 12.3 : 1
+			{pql.NewDecimal(123, 1), -2, 0},          // 12.3 : 0
 		}
 		for i, test := range tests {
 			v := test.dec.ToInt64(test.scale)
@@ -247,87 +246,4 @@ func TestDecimal(t *testing.T) {
 			}
 		})
 	})
-}
-
-type testAddDecimalCase struct {
-	a     pql.Decimal
-	b     pql.Decimal
-	exp   pql.Decimal
-	notOk bool
-}
-
-func TestAddDecimal(t *testing.T) {
-	toDecimal := func(a interface{}) pql.Decimal {
-		switch ac := a.(type) {
-		case string:
-			return mustParse(t, ac)
-		case pql.Decimal:
-			return ac
-		default:
-			t.Fatalf("cannot support type %T", ac)
-		}
-		return pql.Decimal{}
-	}
-
-	newTestAddDecimalCase := func(a, b, exp interface{}, notOk bool) testAddDecimalCase {
-		return testAddDecimalCase{
-			a:     toDecimal(a),
-			b:     toDecimal(b),
-			exp:   toDecimal(exp),
-			notOk: notOk,
-		}
-	}
-
-	tests := []testAddDecimalCase{
-		newTestAddDecimalCase("40.37", "40.37", "80.74", false),
-		newTestAddDecimalCase("18.5", "9.25", "27.75", false),
-		newTestAddDecimalCase("18.50", "9.25", "27.75", false),
-		newTestAddDecimalCase("-18.50", "-9.25", "-27.75", false),
-		newTestAddDecimalCase("-40.37", "40.37", "0", false),
-		newTestAddDecimalCase("-50.38", "-50.38", "-100.76", false),
-		newTestAddDecimalCase("-40.381", "-40.38", "-80.761", false),
-		newTestAddDecimalCase("-40.3700000000000000000001", "-50.38", "-90.7500000000000000000001", false),
-		newTestAddDecimalCase("10.37000000000000001", "-10", "0.37000000000000001", false),
-		// this is a weird one. because we reduce precision when we parse strings, we
-		// expect the value to be smaller than it really should be if you did
-		// the math yourself.
-		//
-		// there's not really a good way around this unless we use math/big.Int to represent
-		// our Value/Scale.
-		//
-		// but if we did this, to quote seebs: "i suspect that
-		// our performance would tank so badly by the time we were doing >63-bit
-		// numbers that there's no real-world benefit to us."
-		newTestAddDecimalCase("10.370000000000000001", "-10", "0.37", false),
-		newTestAddDecimalCase("-9223372036854775807", "-9223372036854775807", pql.Decimal{}, true),
-		newTestAddDecimalCase("9223372036854775807", "9223372036854775807", pql.Decimal{}, true),
-		newTestAddDecimalCase(pql.Decimal{Value: 0, Scale: 0}, pql.Decimal{Value: 1, Scale: 4}, pql.Decimal{Value: 1, Scale: 4}, false),
-	}
-
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			if got, ok := pql.AddDecimal(test.a, test.b); !got.EqualTo(test.exp) {
-				t.Logf("%#v + %#v, expected %#v, got %#v", test.a, test.b, test.exp, got)
-				t.Errorf("%v + %v, expected %v, got %v", test.a, test.b, test.exp, got)
-			} else if !ok != test.notOk {
-				t.Errorf("expected %v, got %v", test.notOk, ok)
-			}
-
-			if got, ok := pql.AddDecimal(test.b, test.a); !got.EqualTo(test.exp) {
-				t.Logf("%#v + %#v, expected %#v, got %#v", test.a, test.b, test.exp, got)
-				t.Errorf("%v + %v, expected %v, got %v", test.b, test.a, test.exp, got)
-			} else if !ok != test.notOk {
-				t.Errorf("expected %v, got %v", test.notOk, ok)
-			}
-		})
-	}
-}
-
-func mustParse(t *testing.T, num string) pql.Decimal {
-	t.Helper()
-	d, err := pql.ParseDecimal(num)
-	if err != nil {
-		t.Fatalf("unexpected error parsing %s to pql.Decimal: %v", num, err)
-	}
-	return d
 }

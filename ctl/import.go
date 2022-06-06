@@ -102,7 +102,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 			// set the correct type for the field
 			if cmd.FieldOptions.TimeQuantum != "" {
 				cmd.FieldOptions.Type = pilosa.FieldTypeTime
-			} else if cmd.FieldOptions.Min != pql.NewDecimal(0, 0) || cmd.FieldOptions.Max != pql.NewDecimal(0, 0) {
+			} else if !cmd.FieldOptions.Min.EqualTo(pql.NewDecimal(0, 0)) || !cmd.FieldOptions.Max.EqualTo(pql.NewDecimal(0, 0)) {
 				cmd.FieldOptions.Type = pilosa.FieldTypeInt
 			} else {
 				cmd.FieldOptions.Type = pilosa.FieldTypeSet

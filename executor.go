@@ -928,9 +928,8 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, fie
 	if field.Type() == FieldTypeInt {
 		other.Val = value
 	} else if field.Type() == FieldTypeDecimal {
-		other.DecimalVal = &pql.Decimal{
-			Value: value,
-			Scale: field.Options().Scale}
+		dec := pql.NewDecimal(value, field.Options().Scale)
+		other.DecimalVal = &dec
 		other.FloatVal = 0
 		other.Val = 0
 	} else if field.Type() == FieldTypeTimestamp {
@@ -1076,9 +1075,8 @@ func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pq
 			return ValCount{}, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		if field.Type() == FieldTypeDecimal {
-			other.DecimalVal = &pql.Decimal{
-				Value: other.Val,
-				Scale: field.Options().Scale}
+			dec := pql.NewDecimal(other.Val, field.Options().Scale)
+			other.DecimalVal = &dec
 			other.FloatVal = 0
 			other.Val = 0
 		}
@@ -1892,7 +1890,8 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 	}
 	if field.Type() == FieldTypeDecimal {
 		out.FloatVal = float64(int64(vsum)+(int64(vcount)*bsig.Base)) / math.Pow(10, float64(bsig.Scale))
-		out.DecimalVal = &pql.Decimal{Value: (int64(vsum) + (int64(vcount) * bsig.Base)), Scale: bsig.Scale}
+		dec := pql.NewDecimal((int64(vsum) + (int64(vcount) * bsig.Base)), bsig.Scale)
+		out.DecimalVal = &dec
 	}
 	return out, nil
 }
@@ -3001,11 +3000,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		merged, err := mergeGroupCounts(other, findGroupCounts(v), limit)
-		if err != nil {
-			return err
-		}
-		return merged
+		return mergeGroupCounts(other, findGroupCounts(v), limit)
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -3411,7 +3406,7 @@ func (g *GroupCount) Clone() (r *GroupCount) {
 // mergeGroupCounts merges two slices of GroupCounts throwing away any that go
 // beyond the limit. It assume that the two slices are sorted by the row ids in
 // the fields of the group counts. It may modify its arguments.
-func mergeGroupCounts(a, b []GroupCount, limit int) ([]GroupCount, error) {
+func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 	if limit > len(a)+len(b) {
 		limit = len(a) + len(b)
 	}
@@ -3426,10 +3421,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) ([]GroupCount, error) {
 			a[i].Count += b[j].Count
 			a[i].Agg += b[j].Agg
 			if a[i].DecimalAgg != nil && b[j].DecimalAgg != nil {
-				sum, ok := pql.AddDecimal(*a[i].DecimalAgg, *b[j].DecimalAgg)
-				if !ok {
-					return nil, fmt.Errorf("cannot add %s and %s, decimal overflow", a[i].DecimalAgg, b[j].DecimalAgg)
-				}
+				sum := pql.AddDecimal(*a[i].DecimalAgg, *b[j].DecimalAgg)
 				a[i].DecimalAgg = &sum
 			}
 			ret = append(ret, a[i])
@@ -3446,7 +3438,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) ([]GroupCount, error) {
 	for ; j < len(b) && len(ret) < limit; j++ {
 		ret = append(ret, b[j])
 	}
-	return ret, nil
+	return ret
 }
 
 // Compare is used in ordering two GroupCount objects.
@@ -3981,10 +3973,12 @@ func (t ExtractedTable) ToRows(callback func(*proto.RowResponse) error) error {
 					},
 				}
 			case pql.Decimal:
+				rValue := r.Value()
+				rValuePtr := &rValue
 				col = &proto.ColumnResponse{
 					ColumnVal: &proto.ColumnResponse_DecimalVal{
 						DecimalVal: &proto.Decimal{
-							Value: r.Value,
+							Value: rValuePtr.Int64(),
 							Scale: r.Scale,
 						},
 					},
@@ -7670,10 +7664,12 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 			{Name: "value", Datatype: "decimal"},
 			{Name: "count", Datatype: "int64"},
 		}
+		vValue := v.DecimalVal.Value()
+		vValuePtr := &vValue
 		if err := callback(&proto.RowResponse{
 			Headers: ci,
 			Columns: []*proto.ColumnResponse{
-				{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}},
+				{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: vValuePtr.Int64(), Scale: v.DecimalVal.Scale}}},
 				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")

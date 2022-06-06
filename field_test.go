@@ -279,10 +279,23 @@ func TestField_ClearValue(t *testing.T) {
 
 func TestFieldInfoMarshal(t *testing.T) {
 	f := &pilosa.FieldInfo{Name: "timestamp", CreatedAt: 1649270079233541000,
-		Options: pilosa.FieldOptions{Base: 0, BitDepth: 0x0, Min: pql.Decimal{Value: -4294967296,
-			Scale: 0}, Max: pql.Decimal{Value: 4294967296, Scale: 0}, Scale: 0, Keys: false,
-			NoStandardView: false, CacheType: "", Type: "timestamp", TimeUnit: "s",
-			TimeQuantum: "", ForeignIndex: "", TTL: 0}, Cardinality: (*uint64)(nil)}
+		Options: pilosa.FieldOptions{
+			Base:           0,
+			BitDepth:       0x0,
+			Min:            pql.NewDecimal(-4294967296, 0),
+			Max:            pql.NewDecimal(4294967296, 0),
+			Scale:          0,
+			Keys:           false,
+			NoStandardView: false,
+			CacheType:      "",
+			Type:           "timestamp",
+			TimeUnit:       "s",
+			TimeQuantum:    "",
+			ForeignIndex:   "",
+			TTL:            0,
+		},
+		Cardinality: (*uint64)(nil),
+	}
 	a, err := json.Marshal(f)
 	if err != nil {
 		t.Fatalf("unexpected error marshalling index info,  %v", err)
