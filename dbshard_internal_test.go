@@ -2,7 +2,6 @@
 package pilosa
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,8 +87,8 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 		PanicOn(err)
 
 		for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
-			if !shards[shard] {
-				panic(fmt.Sprintf("missing shard=%v from shards='%#v'", shard, shards))
+			if _, ok := shards[shard]; !ok {
+				t.Fatalf("missing shard=%v from shards='%#v'", shard, shards)
 			}
 		}
 		for _, shard := range []uint64{93, 223, 221, 215, 219, 217} {
@@ -100,13 +99,13 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 			expect0 := txkey.FieldView{Field: "_exists", View: "standard"}
 			expect1 := txkey.FieldView{Field: "f", View: "standard"}
 			if len(fvs) != 2 {
-				panic(fmt.Sprintf("fvs should be len 2, got '%#v' (%s)", fvs, src))
+				t.Fatalf("fvs should be len 2, got '%#v' (%s)", fvs, src)
 			}
 			if fvs[0] != expect0 {
-				panic(fmt.Sprintf("expected fvs[0]='%#v', but got '%#v'", expect0, fvs[0]))
+				t.Fatalf("expected fvs[0]='%#v', but got '%#v'", expect0, fvs[0])
 			}
 			if fvs[1] != expect1 {
-				panic(fmt.Sprintf("expected fvs[1]='%#v', but got '%#v'", expect1, fvs[1]))
+				t.Fatalf("expected fvs[1]='%#v', but got '%#v'", expect1, fvs[1])
 			}
 			tx.Rollback()
 		}
@@ -170,7 +169,7 @@ func makeSampleRoaringDir(t *testing.T, root, index, backend string, minBytes in
 			// view2shards has them all anyway.
 			if !firstDone {
 				firstDone = true
-				makeTxTestDBWithViewsShards(h, idx, view2shards)
+				makeTxTestDBWithViewsShards(t, h, idx, view2shards)
 			}
 			continue
 		case "roaring":
@@ -225,7 +224,7 @@ func makeRBFtestDB(path string, h *Holder, shard uint64) {
 	PanicOn(err)
 }
 
-func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shards) {
+func makeTxTestDBWithViewsShards(tb testing.TB, holder *Holder, idx *Index, exp *FieldView2Shards) {
 
 	// TODO(jea): need date time quantum views!!
 	for field, viewmap := range exp.m {
@@ -240,7 +239,7 @@ func makeTxTestDBWithViewsShards(holder *Holder, idx *Index, exp *FieldView2Shar
 				changeCount, err := tx.Add(idx.name, field, view, shard, bits...)
 				PanicOn(err)
 				if changeCount != len(bits) {
-					panic(fmt.Sprintf("writing field '%v', view '%v' shard '%v', expected changeCount to equal len bits = %v but was %v", field, view, shard, len(bits), changeCount))
+					tb.Fatalf("writing field '%v', view '%v' shard '%v', expected changeCount to equal len bits = %v but was %v", field, view, shard, len(bits), changeCount)
 				}
 
 				PanicOn(tx.Commit())
@@ -285,7 +284,7 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	hrShardSet.add(7)
 	exp.addViewShardSet(txkey.FieldView{Field: field, View: "standard_2019092416"}, hrShardSet)
 
-	makeTxTestDBWithViewsShards(holder, idx, exp)
+	makeTxTestDBWithViewsShards(t, holder, idx, exp)
 
 	// setup is done
 	view2shard, err := holder.txf.GetFieldView2ShardsMapForIndex(idx)
@@ -293,6 +292,6 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 
 	// compare against setup
 	if !view2shard.equals(exp) {
-		panic(fmt.Sprintf("expected '%v' but got view2shard '%v'", exp, view2shard))
+		t.Fatalf("expected '%v' but got view2shard '%v'", exp, view2shard)
 	}
 }

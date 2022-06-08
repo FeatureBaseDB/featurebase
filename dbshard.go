@@ -153,12 +153,12 @@ func newIndex2Shards() (r map[string]*shardSet) {
 }
 
 type shardSet struct {
-	shardsMap map[uint64]bool
+	shardsMap map[uint64]struct{}
 	shardsVer int64 // increment with each change.
 
 	// give out readonly to repeated consumers if
 	// readonlyVer == shardsVer
-	readonly    map[uint64]bool
+	readonly    map[uint64]struct{}
 	readonlyVer int64
 }
 
@@ -203,7 +203,7 @@ func (ss *shardSet) String() (r string) {
 func (ss *shardSet) add(shard uint64) {
 	_, already := ss.shardsMap[shard]
 	if !already {
-		ss.shardsMap[shard] = true
+		ss.shardsMap[shard] = struct{}{}
 		ss.shardsVer++
 	}
 }
@@ -212,7 +212,7 @@ func (ss *shardSet) add(shard uint64) {
 // ss.shards that can be returned to multiple goroutine
 // reads as it will never change. A copy is only made
 // once for each change in the shard set.
-func (ss *shardSet) CloneMaybe() map[uint64]bool {
+func (ss *shardSet) CloneMaybe() map[uint64]struct{} {
 
 	if ss.readonlyVer == ss.shardsVer {
 		return ss.readonly
@@ -222,10 +222,10 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 	// readonly needs update. We cannot
 	// modify the readonly map in place;
 	// must make a fully new copy here.
-	ss.readonly = make(map[uint64]bool)
+	ss.readonly = make(map[uint64]struct{})
 
-	for k, v := range ss.shardsMap {
-		ss.readonly[k] = v
+	for k := range ss.shardsMap {
+		ss.readonly[k] = struct{}{}
 	}
 	ss.readonlyVer = ss.shardsVer
 	return ss.readonly
@@ -233,7 +233,7 @@ func (ss *shardSet) CloneMaybe() map[uint64]bool {
 
 func newShardSet() *shardSet {
 	return &shardSet{
-		shardsMap: make(map[uint64]bool),
+		shardsMap: make(map[uint64]struct{}),
 	}
 }
 
@@ -446,7 +446,7 @@ func (per *DBPerShard) Close() (err error) {
 // DBPerShardGetShardsForIndex returns the shards for idx.
 // If requireData, we open the database and see that it has a key, rather
 // than assume that the database file presence is enough.
-func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requireData bool) (map[uint64]bool, error) {
+func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requireData bool) (map[uint64]struct{}, error) {
 	return f.dbPerShard.TypedDBPerShardGetShardsForIndex(f.typ, idx, roaringViewPath, requireData)
 }
 
@@ -457,7 +457,7 @@ func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requir
 // when a new DBShard is made, we will update the list of shards then. Thus
 // the per.index2shard should always be up to date AFTER the first call here.
 //
-func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, roaringViewPath string, requireData bool) (shardMap map[uint64]bool, err error) {
+func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, roaringViewPath string, requireData bool) (shardMap map[uint64]struct{}, err error) {
 
 	// use the cache, always
 	per.Mu.Lock()
