@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/monitor"
 	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -257,36 +259,48 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 	return errors.Wrap(err, "exhausted all retries")
 }
 
-func parseOptions(opt Options) *embed.Config {
+func (e *Etcd) parseOptions() *embed.Config {
 	cfg := embed.NewConfig()
 	cfg.LogLevel = "error"
 	cfg.Logger = "zap"
-	cfg.Name = opt.Name
-	cfg.Dir = opt.Dir
-	cfg.InitialClusterToken = opt.ClusterName
-	cfg.LCUrls = types.MustNewURLs([]string{opt.LClientURL})
-	cfg.UnsafeNoFsync = opt.UnsafeNoFsync
-	if opt.AClientURL != "" {
-		cfg.ACUrls = types.MustNewURLs([]string{opt.AClientURL})
+	cfg.Name = e.options.Name
+	cfg.Dir = e.options.Dir
+	cfg.InitialClusterToken = e.options.ClusterName
+	cfg.LCUrls = types.MustNewURLs([]string{e.options.LClientURL})
+	cfg.UnsafeNoFsync = e.options.UnsafeNoFsync
+	if e.options.AClientURL != "" {
+		cfg.ACUrls = types.MustNewURLs([]string{e.options.AClientURL})
 	} else {
 		cfg.ACUrls = cfg.LCUrls
 	}
-	cfg.LPUrls = types.MustNewURLs([]string{opt.LPeerURL})
-	if opt.APeerURL != "" {
-		cfg.APUrls = types.MustNewURLs([]string{opt.APeerURL})
+	cfg.LPUrls = types.MustNewURLs([]string{e.options.LPeerURL})
+	if e.options.APeerURL != "" {
+		cfg.APUrls = types.MustNewURLs([]string{e.options.APeerURL})
 	} else {
 		cfg.APUrls = cfg.LPUrls
 	}
-	if opt.InitCluster != "" {
-		cfg.InitialCluster = opt.InitCluster
+	if e.options.InitCluster != "" {
+		// Checks if FB is running the single-node free version or the multi-node
+		// enterprise version. Sentry.io is enabled on single-node.
+		if AllowCluster() == false {
+			monitor.InitErrorMonitor()
+			e.logger.Infof("Initializing Monitor: Capturing usage metrics")
+			//check for multiple nodes in the cluster and error if present
+			nodes := strings.Split(e.options.InitCluster, ",")
+			if len(nodes) > 1 {
+				e.logger.Warnf("Multiple cluster nodes detected - this version of FeatureBase only supports single node. %+v", e.options.InitCluster)
+				os.Exit(1)
+			}
+		}
+		cfg.InitialCluster = e.options.InitCluster
 		cfg.ClusterState = embed.ClusterStateFlagNew
 	} else {
-		cfg.InitialCluster = cfg.Name + "=" + opt.APeerURL
+		cfg.InitialCluster = cfg.Name + "=" + e.options.APeerURL
 	}
 
-	if opt.ClusterURL != "" {
+	if e.options.ClusterURL != "" {
 		cfg.ClusterState = embed.ClusterStateFlagExisting
-		cli, err := clientv3.NewFromURL(opt.ClusterURL)
+		cli, err := clientv3.NewFromURL(e.options.ClusterURL)
 		if err != nil {
 			panic(err)
 		}
@@ -294,25 +308,26 @@ func parseOptions(opt Options) *embed.Config {
 
 		log.Println("Cluster Members:")
 		mIDs, mNames, mURLs := memberList(cli)
+
 		for i, id := range mIDs {
 			log.Printf("\tid: %d, name: %s, url: %s\n", id, mNames[i], mURLs[i])
 			cfg.InitialCluster += "," + mNames[i] + "=" + mURLs[i]
 		}
 
 		log.Println("Joining Cluster:")
-		id, name := memberAdd(cli, opt.APeerURL)
+		id, name := memberAdd(cli, e.options.APeerURL)
 		log.Printf("\tid: %d, name: %s\n", id, name)
 	}
 	// can only use tls if not using pre-configured listeners
 	cfg.ClientTLSInfo = transport.TLSInfo{
-		TrustedCAFile: opt.TrustedCAFile,
-		CertFile:      opt.ClientCertFile,
-		KeyFile:       opt.ClientKeyFile,
+		TrustedCAFile: e.options.TrustedCAFile,
+		CertFile:      e.options.ClientCertFile,
+		KeyFile:       e.options.ClientKeyFile,
 	}
 	cfg.PeerTLSInfo = transport.TLSInfo{
-		TrustedCAFile: opt.TrustedCAFile,
-		CertFile:      opt.PeerCertFile,
-		KeyFile:       opt.PeerKeyFile,
+		TrustedCAFile: e.options.TrustedCAFile,
+		CertFile:      e.options.PeerCertFile,
+		KeyFile:       e.options.PeerKeyFile,
 	}
 
 	return cfg
@@ -320,7 +335,7 @@ func parseOptions(opt Options) *embed.Config {
 
 // Start starts etcd and hearbeat
 func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err error) {
-	opts := parseOptions(e.options)
+	opts := e.parseOptions()
 	state := disco.InitialClusterState(opts.ClusterState)
 
 	e.e, err = embed.StartEtcd(opts)
