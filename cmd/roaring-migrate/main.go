@@ -171,7 +171,7 @@ func BuildSchema(dataDir string) ([]byte, error) {
 				}
 
 				field := t[2]
-				if field != "_exists" {
+				if field != "_exists" && field != "_keys" {
 					fi, err := pilosa.UnmarshalFieldOptions(field, CTimeNano(stat), content)
 					if err != nil {
 						return err
