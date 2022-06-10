@@ -287,7 +287,7 @@ build plg for linux amd64:
     - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
   artifacts:
     paths:
-      - featurebase_linux_amd64
+      - single_node_featurebase_linux_amd64
       - roaring-migrate_linux_amd64
 
 build plg for linux arm64:
@@ -304,7 +304,7 @@ build plg for linux arm64:
     - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
   artifacts:
     paths:
-      - featurebase_linux_arm64
+      - single_node_featurebase_linux_arm64
       - roaring-migrate_linux_arm64
 
 build plg for darwin amd64:
@@ -321,7 +321,7 @@ build plg for darwin amd64:
     - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
   artifacts:
     paths:
-      - featurebase_darwin_amd64
+      - single_node_featurebase_darwin_amd64
       - roaring-migrate_darwin_amd64
 
 build plg for darwin arm64:
@@ -338,7 +338,7 @@ build plg for darwin arm64:
     - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
   artifacts:
     paths:
-      - featurebase_darwin_arm64
+      - single_node_featurebase_darwin_arm64
       - roaring-migrate_darwin_arm64
 
 package plg for linux amd64:
