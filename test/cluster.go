@@ -13,6 +13,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/api/client"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/etcd"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/proto"
 	"github.com/molecula/featurebase/v3/server"
@@ -515,6 +516,9 @@ func (c *Cluster) AwaitState(expectedState disco.ClusterState, timeout time.Dura
 // If it is empty, default options are used. Otherwise, it must contain size
 // slices of command options, which are used with corresponding nodes.
 func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
+	if size > 1 && !etcd.AllowCluster() {
+		tb.Skip("Testing PLG which does not allow clustering")
+	}
 	tb.Helper()
 
 	// We want tests to default to using the in-memory translate store, so we

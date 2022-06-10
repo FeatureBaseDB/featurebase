@@ -283,14 +283,16 @@ func (e *Etcd) parseOptions() *embed.Config {
 		// Checks if FB is running the single-node free version or the multi-node
 		// enterprise version. Sentry.io is enabled on single-node.
 		if AllowCluster() == false {
+			// %% end sonarcloud ignore %%
 			monitor.InitErrorMonitor()
 			e.logger.Infof("Initializing Monitor: Capturing usage metrics")
 			//check for multiple nodes in the cluster and error if present
 			nodes := strings.Split(e.options.InitCluster, ",")
 			if len(nodes) > 1 {
-				e.logger.Warnf("Multiple cluster nodes detected - this version of FeatureBase only supports single node. %+v", e.options.InitCluster)
+				e.logger.Errorf("Multiple cluster nodes detected - this version of FeatureBase only supports single node. %+v", e.options.InitCluster)
 				os.Exit(1)
 			}
+			// %% end sonarcloud ignore %%
 		}
 		cfg.InitialCluster = e.options.InitCluster
 		cfg.ClusterState = embed.ClusterStateFlagNew

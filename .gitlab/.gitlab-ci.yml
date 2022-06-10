@@ -140,7 +140,6 @@ run go tests future:
 
 run go tests future plg:
   stage: test
-  allow_failure: true
   image: golang:1.18
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -148,7 +147,7 @@ run go tests future plg:
   script:
     - echo "Running featurebase plg-specific unit tests..."
     - PKG_LIST=$(go list ./... | grep -v internal/clustertests | paste -s -d, -)
-    - go test -tags=plg -timeout=30m -json -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report-plg.out
+    - go test -tags=plg -timeout=30m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report-plg.out
   artifacts:
     paths:
       - coverage-plg.out
