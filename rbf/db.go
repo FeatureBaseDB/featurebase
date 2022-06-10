@@ -815,7 +815,15 @@ func (db *DB) writeDBPage(pgno uint32, page []byte) error {
 
 func (db *DB) readDBPage(pgno uint32) ([]byte, error) {
 	offset := int64(pgno) * PageSize
-	return db.data[offset : offset+PageSize], nil
+
+	// FB-1381
+	// Verify page number requested is within the current size of database.
+	bound := offset + PageSize
+	if sz := int64(len(db.data)); bound >= sz {
+		return nil, fmt.Errorf("rbf: page read out of bounds, pgno=%d upper-bound=%d file-size=%d", pgno, bound, sz)
+	}
+
+	return db.data[offset:bound], nil
 }
 
 // readWALPageByID reads a WAL page by WAL ID.
