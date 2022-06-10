@@ -170,7 +170,7 @@ install:
 
 # Install the single-node PLG version of FeatureBase
 plg:
-	$(GO) install -tags='plg $(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
+	$(GO) build -tags='plg $(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
 
 install-bench:
 	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-bench
