@@ -816,7 +816,7 @@ s3 dump:
     - aws s3 cp single_node_featurebase_darwin_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_darwin_amd64
     - aws s3 cp single_node_featurebase_darwin_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_amd64
     - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_darwin_arm64
-    - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_arm64
+    - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_arm64  
   needs:
     - job: build for darwin amd64
     - job: build for darwin arm64
@@ -936,6 +936,44 @@ s3 dump tag:
     - job: build for darwin arm64
     - job: build for linux amd64
     - job: build for linux arm64
+
+s3 dump plg tag:
+  stage: post build
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    LOCATION: molecula-artifact-storage/single_node_featurebase/_tags
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          dir=featurebase-${CI_COMMIT_TAG}-${goos}-${goarch}
+          echo "Directory ${dir}"
+          mkdir $dir
+          mv featurebase_${goos}_${goarch} ${dir}/featurebase
+          mv roaring-migrate_${goos}_${goarch} ${dir}/roaring-migrate
+          cp NOTICE install/featurebase.conf install/featurebase.*.service ${dir}/
+          tar cvzf ${dir}.tar.gz ${dir}
+          aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
+          aws s3 cp ${dir}.tar.gz s3://${LOCATION}/${CI_COMMIT_TAG}/
+        done
+      done
+
+  needs:
+    - job: build plg for darwin amd64
+    - job: build plg for darwin arm64
+    - job: build plg for linux amd64
+    - job: build plg for linux arm64
 
 cleanup_build_job:
   stage: cleanup_build
