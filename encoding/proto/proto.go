@@ -119,22 +119,6 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeClusterStatus(msg, mt)
 		return nil
-	case *pilosa.ResizeInstruction:
-		msg := &pb.ResizeInstruction{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshaling ResizeInstruction")
-		}
-		s.decodeResizeInstruction(msg, mt)
-		return nil
-	case *pilosa.ResizeInstructionComplete:
-		msg := &pb.ResizeInstructionComplete{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshaling ResizeInstructionComplete")
-		}
-		s.decodeResizeInstructionComplete(msg, mt)
-		return nil
 	case *pilosa.NodeStateMessage:
 		msg := &pb.NodeStateMessage{}
 		err := proto.Unmarshal(buf, msg)
@@ -312,23 +296,6 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		*mt = s.decodeRowMatrix(msg)
 		return nil
 
-	case *pilosa.ResizeNodeMessage:
-		msg := &pb.ResizeNodeMessage{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshaling ResizeNodeMessage")
-		}
-		decodeResizeNodeMessage(msg, mt)
-		return nil
-
-	case *pilosa.ResizeAbortMessage:
-		msg := &pb.ResizeAbortMessage{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshaling ResizeAbortMessage")
-		}
-		decodeResizeAbortMessage(msg, mt)
-		return nil
 	case *ingest.ShardedRequest:
 		msg := &pb.ShardedIngestRequest{}
 		err := proto.Unmarshal(buf, msg)
@@ -368,10 +335,6 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeDeleteViewMessage(mt)
 	case *pilosa.ClusterStatus:
 		return s.encodeClusterStatus(mt)
-	case *pilosa.ResizeInstruction:
-		return s.encodeResizeInstruction(mt)
-	case *pilosa.ResizeInstructionComplete:
-		return s.encodeResizeInstructionComplete(mt)
 	case *pilosa.NodeStateMessage:
 		return s.encodeNodeStateMessage(mt)
 	case *pilosa.RecalculateCaches:
@@ -414,10 +377,6 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeTransactionMessage(mt)
 	case *pilosa.AtomicRecord:
 		return s.encodeAtomicRecord(mt)
-	case *pilosa.ResizeNodeMessage:
-		return s.encodeResizeNodeMessage(mt)
-	case *pilosa.ResizeAbortMessage:
-		return s.encodeResizeAbortMessage(mt)
 	case *ingest.ShardedRequest:
 		return s.encodeShardedIngestRequest(mt)
 	}
@@ -606,52 +565,6 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryRespon
 	return resp
 }
 
-func (s Serializer) encodeResizeInstruction(m *pilosa.ResizeInstruction) *pb.ResizeInstruction {
-	return &pb.ResizeInstruction{
-		JobID:              m.JobID,
-		Node:               s.encodeNode(m.Node),
-		Primary:            s.encodeNode(m.Primary),
-		Sources:            s.encodeResizeSources(m.Sources),
-		TranslationSources: s.encodeTranslationResizeSources(m.TranslationSources),
-		NodeStatus:         s.encodeNodeStatus(m.NodeStatus),
-		ClusterStatus:      s.encodeClusterStatus(m.ClusterStatus),
-	}
-}
-
-func (s Serializer) encodeResizeSources(srcs []*pilosa.ResizeSource) []*pb.ResizeSource {
-	new := make([]*pb.ResizeSource, 0, len(srcs))
-	for _, src := range srcs {
-		new = append(new, s.encodeResizeSource(src))
-	}
-	return new
-}
-
-func (s Serializer) encodeResizeSource(m *pilosa.ResizeSource) *pb.ResizeSource {
-	return &pb.ResizeSource{
-		Node:  s.encodeNode(m.Node),
-		Index: m.Index,
-		Field: m.Field,
-		View:  m.View,
-		Shard: m.Shard,
-	}
-}
-
-func (s Serializer) encodeTranslationResizeSources(srcs []*pilosa.TranslationResizeSource) []*pb.TranslationResizeSource {
-	new := make([]*pb.TranslationResizeSource, 0, len(srcs))
-	for _, src := range srcs {
-		new = append(new, s.encodeTranslationResizeSource(src))
-	}
-	return new
-}
-
-func (s Serializer) encodeTranslationResizeSource(m *pilosa.TranslationResizeSource) *pb.TranslationResizeSource {
-	return &pb.TranslationResizeSource{
-		Node:        s.encodeNode(m.Node),
-		Index:       m.Index,
-		PartitionID: int32(m.PartitionID),
-	}
-}
-
 func (s Serializer) encodeSchema(m *pilosa.Schema) *pb.Schema {
 	return &pb.Schema{
 		Indexes: s.encodeIndexInfos(m.Indexes),
@@ -835,14 +748,6 @@ func (s Serializer) encodeDeleteViewMessage(m *pilosa.DeleteViewMessage) *pb.Del
 		Index: m.Index,
 		Field: m.Field,
 		View:  m.View,
-	}
-}
-
-func (s Serializer) encodeResizeInstructionComplete(m *pilosa.ResizeInstructionComplete) *pb.ResizeInstructionComplete {
-	return &pb.ResizeInstructionComplete{
-		JobID: m.JobID,
-		Node:  s.encodeNode(m.Node),
-		Error: m.Error,
 	}
 }
 
@@ -1034,52 +939,6 @@ func (s Serializer) encodeShardIngestOperation(op *ingest.Operation) *pb.ShardIn
 	return out
 }
 
-func (s Serializer) decodeResizeInstruction(ri *pb.ResizeInstruction, m *pilosa.ResizeInstruction) {
-	m.JobID = ri.JobID
-	m.Node = &topology.Node{}
-	s.decodeNode(ri.Node, m.Node)
-	m.Primary = &topology.Node{}
-	s.decodeNode(ri.Primary, m.Primary)
-	m.Sources = make([]*pilosa.ResizeSource, len(ri.Sources))
-	s.decodeResizeSources(ri.Sources, m.Sources)
-	m.TranslationSources = make([]*pilosa.TranslationResizeSource, len(ri.TranslationSources))
-	s.decodeTranslationResizeSources(ri.TranslationSources, m.TranslationSources)
-	m.NodeStatus = &pilosa.NodeStatus{}
-	s.decodeNodeStatus(ri.NodeStatus, m.NodeStatus)
-	m.ClusterStatus = &pilosa.ClusterStatus{}
-	s.decodeClusterStatus(ri.ClusterStatus, m.ClusterStatus)
-}
-
-func (s Serializer) decodeResizeSources(srcs []*pb.ResizeSource, m []*pilosa.ResizeSource) {
-	for i := range srcs {
-		m[i] = &pilosa.ResizeSource{}
-		s.decodeResizeSource(srcs[i], m[i])
-	}
-}
-
-func (s Serializer) decodeResizeSource(rs *pb.ResizeSource, m *pilosa.ResizeSource) {
-	m.Node = &topology.Node{}
-	s.decodeNode(rs.Node, m.Node)
-	m.Index = rs.Index
-	m.Field = rs.Field
-	m.View = rs.View
-	m.Shard = rs.Shard
-}
-
-func (s Serializer) decodeTranslationResizeSources(srcs []*pb.TranslationResizeSource, m []*pilosa.TranslationResizeSource) {
-	for i := range srcs {
-		m[i] = &pilosa.TranslationResizeSource{}
-		s.decodeTranslationResizeSource(srcs[i], m[i])
-	}
-}
-
-func (s Serializer) decodeTranslationResizeSource(rs *pb.TranslationResizeSource, m *pilosa.TranslationResizeSource) {
-	m.Node = &topology.Node{}
-	s.decodeNode(rs.Node, m.Node)
-	m.Index = rs.Index
-	m.PartitionID = int(rs.PartitionID)
-}
-
 func (s Serializer) decodeSchema(sc *pb.Schema, m *pilosa.Schema) {
 	m.Indexes = make([]*pilosa.IndexInfo, len(sc.Indexes))
 	s.decodeIndexes(sc.Indexes, m.Indexes)
@@ -1250,13 +1109,6 @@ func (s Serializer) decodeDeleteViewMessage(pb *pb.DeleteViewMessage, m *pilosa.
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.View = pb.View
-}
-
-func (s Serializer) decodeResizeInstructionComplete(pb *pb.ResizeInstructionComplete, m *pilosa.ResizeInstructionComplete) {
-	m.JobID = pb.JobID
-	m.Node = &topology.Node{}
-	s.decodeNode(pb.Node, m.Node)
-	m.Error = pb.Error
 }
 
 func (s Serializer) decodeNodeStateMessage(pb *pb.NodeStateMessage, m *pilosa.NodeStateMessage) {
@@ -1984,26 +1836,6 @@ func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 		NewVersion: true,
 	}
 	return retval
-}
-
-func (s Serializer) encodeResizeNodeMessage(m *pilosa.ResizeNodeMessage) *pb.ResizeNodeMessage {
-	return &pb.ResizeNodeMessage{
-		NodeID: m.NodeID,
-		Action: m.Action,
-	}
-}
-
-func (s Serializer) encodeResizeAbortMessage(*pilosa.ResizeAbortMessage) *pb.ResizeAbortMessage {
-	return &pb.ResizeAbortMessage{}
-}
-
-func decodeResizeNodeMessage(pb *pb.ResizeNodeMessage, m *pilosa.ResizeNodeMessage) {
-	m.NodeID = pb.NodeID
-	m.Action = pb.Action
-}
-
-func decodeResizeAbortMessage(pb *pb.ResizeAbortMessage, m *pilosa.ResizeAbortMessage) {
-
 }
 
 func (s Serializer) decodeShardedIngestRequest(req *pb.ShardedIngestRequest) (*ingest.ShardedRequest, error) {

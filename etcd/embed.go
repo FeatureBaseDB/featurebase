@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -59,7 +57,6 @@ var (
 	_ disco.Schemator = &Etcd{}
 	_ disco.Stator    = &Etcd{}
 	_ disco.Metadator = &Etcd{}
-	_ disco.Resizer   = &Etcd{}
 	_ disco.Sharder   = &Etcd{}
 )
 
@@ -69,7 +66,6 @@ const (
 	nodePrefix      = "/node/"
 	heartbeatPrefix = nodePrefix + "heartbeat/"
 	schemaPrefix    = "/schema/"
-	resizePrefix    = nodePrefix + "resize/"
 	metadataPrefix  = nodePrefix + "metadata/"
 	shardPrefix     = "/shard/"
 )
@@ -93,15 +89,11 @@ var (
 // reach us out of order.
 type nodeData struct {
 	heartbeatState string
-	resizeState    string
 	metadata       []byte
 	topologyNode   *topology.Node
 }
 
 func (n *nodeData) computedState() disco.NodeState {
-	if n.resizeState != "" {
-		return disco.NodeStateResizing
-	}
 	if n.heartbeatState != "" {
 		return disco.NodeState(n.heartbeatState)
 	}
@@ -116,7 +108,7 @@ type Etcd struct {
 	cli   *clientv3.Client
 	cliMu sync.Mutex
 
-	heartbeatLeasedKV, resizeLeasedKV *leasedKV
+	heartbeatLeasedKV *leasedKV
 
 	// We have a watcher running. watchCancel() cancels its context.
 	watchCancel func()
@@ -164,10 +156,6 @@ func (e *Etcd) Close() error {
 		e.watchCancel()
 	}
 	if e.e != nil {
-		if e.resizeLeasedKV != nil {
-			e.resizeLeasedKV.Stop()
-			e.resizeLeasedKV = nil
-		}
 		if e.heartbeatLeasedKV != nil {
 			e.heartbeatLeasedKV.Stop()
 		}
@@ -262,7 +250,7 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 	return errors.Wrap(err, "exhausted all retries")
 }
 
-func (e *Etcd) parseOptions() *embed.Config {
+func (e *Etcd) parseOptions() (*embed.Config, error) {
 	cfg := embed.NewConfig()
 	cfg.LogLevel = "error"
 	cfg.Logger = "zap"
@@ -293,8 +281,7 @@ func (e *Etcd) parseOptions() *embed.Config {
 			//check for multiple nodes in the cluster and error if present
 			nodes := strings.Split(e.options.InitCluster, ",")
 			if len(nodes) > 1 {
-				e.logger.Errorf("Multiple cluster nodes detected - this version of FeatureBase only supports single node. %+v", e.options.InitCluster)
-				os.Exit(1)
+				return nil, fmt.Errorf("multiple cluster nodes detected - this version of FeatureBase only supports single node. %+v", e.options.InitCluster)
 			}
 			// %% end sonarcloud ignore %%
 		}
@@ -305,24 +292,7 @@ func (e *Etcd) parseOptions() *embed.Config {
 	}
 
 	if e.options.ClusterURL != "" {
-		cfg.ClusterState = embed.ClusterStateFlagExisting
-		cli, err := clientv3.NewFromURL(e.options.ClusterURL)
-		if err != nil {
-			panic(err)
-		}
-		defer cli.Close()
-
-		log.Println("Cluster Members:")
-		mIDs, mNames, mURLs := memberList(cli)
-
-		for i, id := range mIDs {
-			log.Printf("\tid: %d, name: %s, url: %s\n", id, mNames[i], mURLs[i])
-			cfg.InitialCluster += "," + mNames[i] + "=" + mURLs[i]
-		}
-
-		log.Println("Joining Cluster:")
-		id, name := memberAdd(cli, e.options.APeerURL)
-		log.Printf("\tid: %d, name: %s\n", id, name)
+		return nil, errors.New("joining an existing cluster is unsupported")
 	}
 	// can only use tls if not using pre-configured listeners
 	cfg.ClientTLSInfo = transport.TLSInfo{
@@ -336,12 +306,15 @@ func (e *Etcd) parseOptions() *embed.Config {
 		KeyFile:       e.options.PeerKeyFile,
 	}
 
-	return cfg
+	return cfg, nil
 }
 
 // Start starts etcd and hearbeat
 func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err error) {
-	opts := e.parseOptions()
+	opts, err := e.parseOptions()
+	if err != nil {
+		return disco.InitialClusterStateNew, err
+	}
 	state := disco.InitialClusterState(opts.ClusterState)
 
 	e.e, err = embed.StartEtcd(opts)
@@ -403,24 +376,6 @@ func (e *Etcd) startHeartbeatAndWatcher(ctx context.Context) error {
 	return nil
 }
 
-func (e *Etcd) NodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	return e.nodeState(ctx, peerID)
-}
-
-func (e *Etcd) nodeState(ctx context.Context, peerID string) (disco.NodeState, error) {
-	e.nodeMu.Lock()
-	defer e.nodeMu.Unlock()
-	err := e.populateNodeStates(ctx)
-	return e.nodeStates[peerID], err
-}
-
-func (e *Etcd) NodeStates(ctx context.Context) (map[string]disco.NodeState, error) {
-	e.nodeMu.Lock()
-	defer e.nodeMu.Unlock()
-	err := e.populateNodeStates(ctx)
-	return e.nodeStates, err
-}
-
 func (e *Etcd) Started(ctx context.Context) (err error) {
 	return e.heartbeatLeasedKV.Set(ctx, string(disco.NodeStateStarted))
 }
@@ -465,7 +420,6 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 
 	var (
 		heartbeats int = 0
-		resize     bool
 		starting   bool
 	)
 	e.nodeMu.Lock()
@@ -480,17 +434,11 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 		switch state {
 		case disco.NodeStateStarting:
 			starting = true
-		case disco.NodeStateResizing:
-			resize = true
 		case disco.NodeStateUnknown:
 			continue
 		}
 
 		heartbeats++
-	}
-
-	if resize {
-		return disco.ClusterStateResizing, nil
 	}
 
 	if starting {
@@ -506,57 +454,6 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 	}
 
 	return disco.ClusterStateNormal, nil
-}
-
-func (e *Etcd) Resize(ctx context.Context) (func([]byte) error, error) {
-	key := path.Join(resizePrefix, e.e.Server.ID().String())
-	if e.resizeLeasedKV == nil {
-		e.resizeLeasedKV = newLeasedKV(e, key, e.options.HeartbeatTTL)
-	}
-
-	if err := e.resizeLeasedKV.Start(""); err != nil {
-		return nil, errors.Wrap(err, "Resize: creates a new hearbeat")
-	}
-
-	return func(value []byte) error {
-		log.Println("Update progress:", key, string(value))
-		return e.putKey(ctx, key, string(value), clientv3.WithIgnoreLease())
-	}, nil
-}
-
-func (e *Etcd) DoneResize() error {
-	if e.resizeLeasedKV != nil {
-		e.resizeLeasedKV.Stop()
-	}
-
-	e.resizeLeasedKV = nil
-	return nil
-}
-
-func (e *Etcd) Watch(ctx context.Context, peerID string, onUpdate func([]byte) error) error {
-	key := path.Join(resizePrefix, peerID)
-	for resp := range e.cli.Watch(ctx, key) {
-		if err := resp.Err(); err != nil {
-			return errors.Wrapf(err, "Watch: key (%s) response", key)
-		}
-
-		for _, ev := range resp.Events {
-			switch ev.Type {
-			case mvccpb.PUT:
-				if onUpdate != nil && ev.Kv.Value != nil {
-					if err := onUpdate(ev.Kv.Value); err != nil {
-						return err
-					}
-				}
-
-			case mvccpb.DELETE:
-				// nothing to watch - key was deleted
-				return errors.WithMessagef(disco.ErrKeyDeleted, "Watch key %s", key)
-			}
-		}
-	}
-
-	return nil
 }
 
 // parseNodeKey reads heartbeatPrefix + "23" and yields (heartbeatPrefix, "23", nil).
@@ -596,12 +493,6 @@ func (e *Etcd) deleteNodeData(key []byte, revision int64) error {
 		e.knownNodes[peerID].metadata = nil
 		e.knownNodes[peerID].topologyNode = &topology.Node{}
 		e.nodeStatesDirty = true
-	case resizePrefix:
-		if e.knownNodes[peerID] == nil {
-			e.knownNodes[peerID] = &nodeData{}
-		}
-		e.knownNodes[peerID].resizeState = ""
-		e.nodeStatesDirty = true
 	default:
 		return fmt.Errorf("node watch: invalid prefix %q", prefix)
 	}
@@ -609,7 +500,7 @@ func (e *Etcd) deleteNodeData(key []byte, revision int64) error {
 }
 
 // putNodeData does the actual updating of the node state maps, etc,
-// given an incoming heartbeat, metadata, or resizing change. It requires
+// given an incoming heartbeat or metadata change. It requires
 // that you already hold the node mutex.
 func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error) {
 	prefix, peerID, err := parseNodeKey(key)
@@ -639,12 +530,6 @@ func (e *Etcd) putNodeData(key []byte, value []byte, revision int64) (err error)
 		e.knownNodes[peerID].topologyNode = &newNode
 		// This saves us one remake of the node later, probably.
 		e.knownNodes[peerID].topologyNode.State = e.knownNodes[peerID].computedState()
-		e.nodeStatesDirty = true
-	case resizePrefix:
-		if e.knownNodes[peerID] == nil {
-			e.knownNodes[peerID] = &nodeData{}
-		}
-		e.knownNodes[peerID].resizeState = string(value)
 		e.nodeStatesDirty = true
 	default:
 		return fmt.Errorf("node watch: invalid prefix %q", prefix)
@@ -728,7 +613,7 @@ func (e *Etcd) watchNodesOnce(ctx context.Context, cli *clientv3.Client) (err er
 	}
 }
 
-// WatchNodes monitors changes to /heartbeat/, /resizing/, and /metadata/;
+// WatchNodes monitors changes to /heartbeat/ and /metadata/;
 // basically, it catches changes to cluster state, but ignores the schema.
 func (e *Etcd) WatchNodes() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1169,18 +1054,4 @@ func (e *Etcd) NodeIDs() []string {
 		ids[i] = peer.ID
 	}
 	return ids
-}
-
-// SetNodes implements the Noder interface as NOP
-// (because we can't force to set nodes for etcd).
-func (e *Etcd) SetNodes(nodes []*topology.Node) {}
-
-// AppendNode implements the Noder interface as NOP
-// (because resizer is responsible for adding new nodes).
-func (e *Etcd) AppendNode(node *topology.Node) {}
-
-// RemoveNode implements the Noder interface as NOP
-// (because resizer is responsible for removing existing nodes)
-func (e *Etcd) RemoveNode(nodeID string) bool {
-	return false
 }

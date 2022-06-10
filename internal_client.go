@@ -2387,7 +2387,7 @@ func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, fi
 	return resp.Body, nil
 }
 
-// Status returns pilosa cluster state as a string ("NORMAL", "DEGRADED", "DOWN", "RESIZING", ...)
+// Status returns pilosa cluster state as a string ("NORMAL", "DEGRADED", "DOWN", ...)
 func (c *InternalClient) Status(ctx context.Context) (string, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Status")
 	defer span.Finish()

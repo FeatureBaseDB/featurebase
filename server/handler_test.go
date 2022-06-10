@@ -526,16 +526,6 @@ func TestHandler_Endpoints(t *testing.T) {
 		mustJSONDecode(t, w.Body)
 	})
 
-	t.Run("Abort no resize job", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/cluster/resize/abort", nil))
-		if w.Code != gohttp.StatusInternalServerError {
-			bod, err := ioutil.ReadAll(w.Body)
-			t.Fatalf("unexpected status code: %d, bod: %s, readerr: %v", w.Code, bod, err)
-		}
-		// TODO need to test aborting a cluster resize job. this may not be the right place
-	})
-
 	hldr.SetBit("i0", "f0", 30, (1*pilosa.ShardWidth)+1)
 	hldr.SetBit("i0", "f0", 30, (1*pilosa.ShardWidth)+2)
 	hldr.SetBit("i0", "f0", 30, (3*pilosa.ShardWidth)+4)

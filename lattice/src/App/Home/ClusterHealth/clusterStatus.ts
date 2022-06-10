@@ -1,4 +1,4 @@
-type clusterStatuses = 'NORMAL' | 'DEGRADED' | 'STARTING' | 'RESIZING' | 'DOWN' | 'UNKNOWN';
+type clusterStatuses = 'NORMAL' | 'DEGRADED' | 'STARTING' | 'DOWN' | 'UNKNOWN';
 
 export const CLUSTER_STATUS: {
   [key in clusterStatuses]: { label: string; status: string };
@@ -15,11 +15,6 @@ export const CLUSTER_STATUS: {
   STARTING: {
     label: 'Some nodes are up, but not enough to answer queries.',
     status: 'error'
-  },
-  RESIZING: {
-    label:
-      'Cluster is resizing. Most endpoints are unavailable until the resize completes.',
-    status: 'info'
   },
   DOWN: {
     label: 'Cluster is unable to serve queries.',

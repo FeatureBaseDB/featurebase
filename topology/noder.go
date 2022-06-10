@@ -10,9 +10,6 @@ import (
 type Noder interface {
 	Nodes() []*Node // Remember: this has to be sorted correctly!!
 	PrimaryNodeID(hasher Hasher) string
-	SetNodes([]*Node)
-	AppendNode(*Node)
-	RemoveNode(nodeID string) bool
 }
 
 // localNoder is a simple implementation of the Noder interface
@@ -66,31 +63,4 @@ func (n *localNoder) PrimaryNodeID(hasher Hasher) string {
 		return ""
 	}
 	return primaryNode.ID
-}
-
-// SetNodes implements the Noder interface.
-func (n *localNoder) SetNodes(nodes []*Node) {
-	n.nodes = nodes
-}
-
-// AppendNode implements the Noder interface.
-func (n *localNoder) AppendNode(node *Node) {
-	n.nodes = append(n.nodes, node)
-
-	// All hosts must be merged in the same order on all nodes in the cluster.
-	sort.Sort(ByID(n.nodes))
-}
-
-// RemoveNode implements the Noder interface.
-func (n *localNoder) RemoveNode(nodeID string) bool {
-	i := NodePositionByID(n.nodes, nodeID)
-	if i < 0 {
-		return false
-	}
-
-	copy(n.nodes[i:], n.nodes[i+1:])
-	n.nodes[len(n.nodes)-1] = nil
-	n.nodes = n.nodes[:len(n.nodes)-1]
-
-	return true
 }

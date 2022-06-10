@@ -125,7 +125,6 @@ var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
 	// has on a node under load, this is set to effectively allow all requests
 	// in a DEGRADED state.
 	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsNormal),
-	disco.ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
 	// Ideally, this would be just `methodsCommon`, but in an attempt to reduce
 	// the influence that state (determined by etcd) has on a node under load,
 	// this is set to effectively allow all requests in a DOWN state.
@@ -2272,40 +2271,8 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	return index, field, nil
 }
 
-// RemoveNode puts the cluster into the "RESIZING" state and begins the job of
-// removing the given node.
-func (api *API) RemoveNode(id string) (*topology.Node, error) {
-	if err := api.validate(apiRemoveNode); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	if api.cluster.disCo.ID() == id {
-		return nil, errors.Wrapf(ErrPreconditionFailed, "cannot issue node removal request to the node being removed, id=%s", id)
-	}
-
-	removeNode := api.cluster.nodeByID(id)
-	if removeNode == nil {
-		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
-	}
-
-	if err := api.cluster.removeNode(id); err != nil {
-		return nil, errors.Wrapf(err, "removing node %s", id)
-	}
-
-	return removeNode, nil
-}
-
-// ResizeAbort stops the current resize job.
-func (api *API) ResizeAbort() error {
-	if err := api.validate(apiResizeAbort); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	return api.cluster.resizeAbortAndBroadcast()
-}
-
 // State returns the cluster state which is usually "NORMAL", but could be
-// "STARTING", "RESIZING", or potentially others. See disco.go for more
+// "STARTING", or potentially others. See disco.go for more
 // details.
 func (api *API) State() (disco.ClusterState, error) {
 	if err := api.validate(apiState); err != nil {
@@ -3257,8 +3224,6 @@ const (
 	//apiMaxShards // not implemented
 	apiQuery
 	apiRecalculateCaches
-	apiRemoveNode
-	apiResizeAbort
 	apiSchema
 	apiShardNodes
 	apiState
@@ -3284,14 +3249,6 @@ const (
 var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage: {},
 	apiState:          {},
-}
-
-var methodsResizing = map[apiMethod]struct{}{
-	apiFragmentData:       {},
-	apiTranslateData:      {},
-	apiFieldTranslateData: {},
-	apiResizeAbort:        {},
-	apiSchema:             {},
 }
 
 // var methodsDegraded = map[apiMethod]struct{}{
@@ -3330,7 +3287,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiIndex:                {},
 	apiQuery:                {},
 	apiRecalculateCaches:    {},
-	apiRemoveNode:           {},
 	apiShardNodes:           {},
 	apiSchema:               {},
 	apiViews:                {},

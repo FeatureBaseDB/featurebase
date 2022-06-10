@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/molecula/featurebase/v3/etcd"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/molecula/featurebase/v3/topology"
@@ -15,6 +16,9 @@ import (
 
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewTestCluster(tb testing.TB, n int) *cluster {
+	if n > 1 && etcd.AllowCluster() {
+		tb.Skipf("cluster size %d not supported in unclustered mode", n)
+	}
 	path, err := testhook.TempDir(tb, "pilosa-cluster-")
 	if err != nil {
 		panic(err)
@@ -26,12 +30,15 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	c.Hasher = NewTestModHasher()
 	c.Path = path
 
+	nodes := make([]*topology.Node, 0, n)
+
 	for i := 0; i < n; i++ {
-		c.noder.AppendNode(&topology.Node{
+		nodes = append(nodes, &topology.Node{
 			ID:  fmt.Sprintf("node%d", i),
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
+	c.noder = topology.NewLocalNoder(nodes)
 
 	cNodes := c.noder.Nodes()
 
@@ -64,48 +71,6 @@ func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
 func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
 
 func (*TestModHasher) Name() string { return "mod" }
-
-var _ = NewTestClusterWithReplication // happy linter
-
-func NewTestClusterWithReplication(tb testing.TB, nNodes, nReplicas, partitionN int) (c *cluster, cleaner func()) {
-	path, err := testhook.TempDir(tb, "pilosa-cluster-")
-	if err != nil {
-		panic(err)
-	}
-
-	// holder
-	h := NewHolder(path, mustHolderConfig())
-
-	// cluster
-	availableShardFileFlushDuration.Set(100 * time.Millisecond)
-	c = newCluster()
-	c.holder = h
-	c.ReplicaN = nReplicas
-	c.Hasher = &topology.Jmphasher{}
-	c.Path = path
-	c.partitionN = partitionN
-
-	for i := 0; i < nNodes; i++ {
-		nodeID := fmt.Sprintf("node%d", i)
-		c.noder.AppendNode(&topology.Node{
-			ID:  nodeID,
-			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
-		})
-	}
-
-	cNodes := c.noder.Nodes()
-
-	c.Node = cNodes[0]
-
-	if err := c.holder.Open(); err != nil {
-		panic(err)
-	}
-
-	return c, func() {
-		c.holder.Close()
-		c.close()
-	}
-}
 
 func TestReplaceFirstFromBack(t *testing.T) {
 	for name, test := range map[string]struct {

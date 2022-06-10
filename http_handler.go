@@ -279,8 +279,6 @@ func (h *Handler) Close() error {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["PostClusterResizeAbort"] = queryValidationSpecRequired()
-	h.validators["PostClusterResizeRemoveNode"] = queryValidationSpecRequired()
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["GetIndexes"] = queryValidationSpecRequired()
 	h.validators["GetIndex"] = queryValidationSpecRequired()
@@ -479,8 +477,6 @@ var latticeRoutes = []string{"/tables", "/query", "/querybuilder", "/signin"} //
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) http.Handler {
 	router := mux.NewRouter()
-	router.HandleFunc("/cluster/resize/abort", handler.chkAuthZ(handler.handlePostClusterResizeAbort, authz.Admin)).Methods("POST").Name("PostClusterResizeAbort")
-	router.HandleFunc("/cluster/resize/remove-node", handler.chkAuthZ(handler.handlePostClusterResizeRemoveNode, authz.Admin)).Methods("POST").Name("PostClusterResizeRemoveNode")
 
 	// TODO: figure out how to protect these if needed
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
@@ -2828,82 +2824,6 @@ func parseUint64Slice(s string) ([]uint64, error) {
 		a = append(a, num)
 	}
 	return a, nil
-}
-
-// handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
-func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-
-	// Decode request.
-	var req removeNodeRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	removeNode, err := h.api.RemoveNode(req.ID)
-	if err != nil {
-		if errors.Cause(err) == ErrNodeIDNotExists {
-			http.Error(w, "removing node: "+err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, "removing node: "+err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(removeNodeResponse{
-		Remove: removeNode,
-	}); err != nil {
-		h.logger.Errorf("response encoding error: %s", err)
-	}
-}
-
-type removeNodeRequest struct {
-	ID string `json:"id"`
-}
-
-type removeNodeResponse struct {
-	Remove *topology.Node `json:"remove"`
-}
-
-// handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
-func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
-
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-	err := h.api.ResizeAbort()
-	var msg string
-	if err != nil {
-		switch errors.Cause(err) {
-		case ErrNodeNotPrimary:
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		case ErrResizeNotRunning:
-			msg = err.Error()
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-	// Encode response.
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(clusterResizeAbortResponse{
-		Info: msg,
-	}); err != nil {
-		h.logger.Errorf("response encoding error: %s", err)
-	}
-}
-
-type clusterResizeAbortResponse struct {
-	Info string `json:"info"`
 }
 
 func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request) {

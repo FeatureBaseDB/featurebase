@@ -57,7 +57,6 @@ const (
 	ClusterStateStarting ClusterState = "STARTING" // cluster is starting and some internal services are not ready yet.
 	ClusterStateDegraded ClusterState = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN. Only read queries are allowed.
 	ClusterStateNormal   ClusterState = "NORMAL"   // cluster is up and running.
-	ClusterStateResizing ClusterState = "RESIZING" // cluster is replicating data to other nodes.
 	ClusterStateDown     ClusterState = "DOWN"     // cluster is unable to serve queries.
 )
 
@@ -67,11 +66,9 @@ const (
 	NodeStateUnknown  NodeState = "UNKNOWN"
 	NodeStateStarting NodeState = "STARTING"
 	NodeStateStarted  NodeState = "STARTED"
-	NodeStateResizing NodeState = "RESIZING"
 )
 
 type Stator interface {
-
 	// Started will mark the actual node as already started.
 	// It must be called after all initialization processes
 	// are up and running.
@@ -83,15 +80,7 @@ type Stator interface {
 	// - If all nodes are up and running: "NORMAL"
 	// - If number of DOWN nodes is lower than number of replicas: "DEGRADED"
 	// - If number of unresponsive nodes is greater than (or equal to) the number of replicas: "DOWN"
-	// - If any of the nodes started a resize operation, or a new
-	// node was specifically added or removed from the cluster: "RESIZING"
 	ClusterState(context.Context) (ClusterState, error)
-
-	// NodeState returns the specific state of a node given its ID.
-	NodeState(context.Context, string) (NodeState, error)
-
-	// NodeStates will return all the states by node ID of the actual nodes in the cluster.
-	NodeStates(context.Context) (map[string]NodeState, error)
 }
 
 // Schema is a map of all indexes, each of those being a map of fields, then
@@ -139,21 +128,6 @@ type Schemator interface {
 type Metadator interface {
 	Metadata(ctx context.Context, peerID string) ([]byte, error)
 	SetMetadata(ctx context.Context, metadata []byte) error
-}
-
-// Resizer triggers resizing the node and changes cluster state into RESIZING.
-// We can also return some kind of handler from Resize function (e.g. key-value)
-type Resizer interface {
-	// Resize will trigger a resize event. Node state will change to RESIZE state.
-	// The returned function can be used to send info about the resize process to other nodes.
-	Resize(ctx context.Context) (func([]byte) error, error)
-
-	// DoneResize will mark the resize event as done. This will be called when all the resize actions are done.
-	DoneResize() error
-
-	// Watch will give information about a resize event in another node, using its peerID.
-	// onUpdate function will be called per each event sent by the node in RESIZE state.
-	Watch(ctx context.Context, peerID string, onUpdate func([]byte) error) error
 }
 
 // Sharder is an interface used to maintain the set of availableShards bitmaps
@@ -217,14 +191,6 @@ func (n *nopStator) Started(ctx context.Context) error {
 	return nil
 }
 
-func (n *nopStator) NodeState(context.Context, string) (NodeState, error) {
-	return NodeStateUnknown, nil
-}
-
-func (n *nopStator) NodeStates(context.Context) (map[string]NodeState, error) {
-	return nil, nil
-}
-
 // NopMetadator represents a Metadator that doesn't do anything.
 var NopMetadator Metadator = &nopMetadator{}
 
@@ -236,15 +202,6 @@ func (*nopMetadator) Metadata(context.Context, string) ([]byte, error) {
 func (*nopMetadator) SetMetadata(context.Context, []byte) error {
 	return nil
 }
-
-// NopResizer represents a Resizer that doesn't do anything.
-var NopResizer Resizer = &nopResizer{}
-
-type nopResizer struct{}
-
-func (*nopResizer) Resize(context.Context) (func([]byte) error, error)      { return nil, nil }
-func (*nopResizer) DoneResize() error                                       { return nil }
-func (*nopResizer) Watch(context.Context, string, func([]byte) error) error { return nil }
 
 // NopSharder represents a Sharder that doesn't do anything.
 var NopSharder Sharder = &nopSharder{}

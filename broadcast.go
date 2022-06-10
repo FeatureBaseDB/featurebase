@@ -60,16 +60,16 @@ const (
 	messageTypeCreateView
 	messageTypeDeleteView
 	messageTypeClusterStatus
-	messageTypeResizeInstruction
-	messageTypeResizeInstructionComplete
+	messageTypeUNUSED0 // used to be ResizeInstruction
+	messageTypeUNUSED1 // used to be ResizeInstructionComplete
 	messageTypeNodeState
 	messageTypeRecalculateCaches
 	messageTypeLoadSchemaMessage
 	messageTypeNodeEvent
 	messageTypeNodeStatus
 	messageTypeTransaction
-	messageTypeResizeNodeMessage
-	messageTypeResizeAbortMessage
+	messageTypeUNUSED2 // used to be ResizeNodeMessage
+	messageTypeUNUSED3 // used to be ResizeAbortMessage
 	messageTypeUpdateField
 )
 
@@ -102,10 +102,6 @@ func getMessage(typ byte) Message {
 		return &DeleteViewMessage{}
 	case messageTypeClusterStatus:
 		return &ClusterStatus{}
-	case messageTypeResizeInstruction:
-		return &ResizeInstruction{}
-	case messageTypeResizeInstructionComplete:
-		return &ResizeInstructionComplete{}
 	case messageTypeNodeState:
 		return &NodeStateMessage{}
 	case messageTypeRecalculateCaches:
@@ -118,10 +114,6 @@ func getMessage(typ byte) Message {
 		return &NodeStatus{}
 	case messageTypeTransaction:
 		return &TransactionMessage{}
-	case messageTypeResizeNodeMessage:
-		return &ResizeNodeMessage{}
-	case messageTypeResizeAbortMessage:
-		return &ResizeAbortMessage{}
 	case messageTypeUpdateField:
 		return &UpdateFieldMessage{}
 	default:
@@ -147,10 +139,6 @@ func getMessageType(m Message) byte {
 		return messageTypeDeleteView
 	case *ClusterStatus:
 		return messageTypeClusterStatus
-	case *ResizeInstruction:
-		return messageTypeResizeInstruction
-	case *ResizeInstructionComplete:
-		return messageTypeResizeInstructionComplete
 	case *NodeStateMessage:
 		return messageTypeNodeState
 	case *RecalculateCaches:
@@ -163,10 +151,6 @@ func getMessageType(m Message) byte {
 		return messageTypeNodeStatus
 	case *TransactionMessage:
 		return messageTypeTransaction
-	case *ResizeNodeMessage:
-		return messageTypeResizeNodeMessage
-	case *ResizeAbortMessage:
-		return messageTypeResizeAbortMessage
 	case *UpdateFieldMessage:
 		return messageTypeUpdateField
 	default:

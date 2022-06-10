@@ -59,7 +59,6 @@ type Server struct { // nolint: maligned
 	disCo     disco.DisCo
 	stator    disco.Stator
 	metadator disco.Metadator
-	resizer   disco.Resizer
 	noder     topology.Noder
 	sharder   disco.Sharder
 	schemator disco.Schemator
@@ -402,7 +401,6 @@ func OptServerMaxQueryMemory(v int64) ServerOption {
 func OptServerDisCo(disCo disco.DisCo,
 	stator disco.Stator,
 	metadator disco.Metadator,
-	resizer disco.Resizer,
 	noder topology.Noder,
 	sharder disco.Sharder,
 	schemator disco.Schemator) ServerOption {
@@ -411,7 +409,6 @@ func OptServerDisCo(disCo disco.DisCo,
 		s.disCo = disCo
 		s.stator = stator
 		s.metadator = metadator
-		s.resizer = resizer
 		s.noder = noder
 		s.sharder = sharder
 		s.schemator = schemator
@@ -455,7 +452,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		disCo:      disco.NopDisCo,
 		stator:     disco.NopStator,
 		metadator:  disco.NopMetadator,
-		resizer:    disco.NopResizer,
 		noder:      topology.NewEmptyLocalNoder(),
 		sharder:    disco.NopSharder,
 		schemator:  disco.NopSchemator,
@@ -525,7 +521,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.holder = s.holder
 	s.cluster.disCo = s.disCo
 	s.cluster.stator = s.stator
-	s.cluster.resizer = s.resizer
 	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
 
@@ -596,6 +591,11 @@ func (s *Server) Open() error {
 	if err != nil {
 		return errors.Wrap(err, "starting DisCo")
 	}
+	// I'm pretty sure this can't happen, because the path that would have led to it
+	// happening now generates an error already, but let's be careful.
+	if initState == disco.InitialClusterStateExisting {
+		return errors.New("disco reports existing cluster, but this is not supported")
+	}
 
 	// Set node ID.
 	s.nodeID = s.disCo.ID()
@@ -648,12 +648,6 @@ func (s *Server) Open() error {
 	}
 	// bring up the background tasks for the holder.
 	s.holder.Activate()
-	// if we joined existing cluster then broadcast "resize on add" message
-	if initState == disco.InitialClusterStateExisting {
-		if err := s.cluster.addNode(s.nodeID); err != nil {
-			return errors.Wrap(err, "adding a node to the existing cluster")
-		}
-	}
 
 	if err := s.stator.Started(context.Background()); err != nil {
 		return errors.Wrap(err, "setting nodeState")
@@ -904,6 +898,9 @@ func (s *Server) TTLRemoval(ctx context.Context) {
 }
 
 func (s *Server) monitorAntiEntropy() {
+	// %% begin sonarcloud ignore %%
+	// This code isn't really used anymore because of problems with the design,
+	// but we haven't taken it out yet. But there's no code coverage of it.
 	if s.antiEntropyInterval == 0 || s.cluster.ReplicaN <= 1 {
 		return // anti entropy disabled
 	}
@@ -920,23 +917,21 @@ func (s *Server) monitorAntiEntropy() {
 		select {
 		case <-s.closing:
 			return
-		case <-s.cluster.abortAntiEntropyCh: // receive here so we don't block resizing
+		case <-s.cluster.abortAntiEntropyCh:
+			// receive here so we don't block resizing
+			// ... note that resizing is gone now, but I don't know whether we still need this.
 			continue
 		case <-ticker.C:
 			s.holder.Stats.Count(MetricAntiEntropy, 1, 1.0)
 		}
 		t := time.Now()
 
-		state, err := s.cluster.State()
+		// We used to check for resizing before doing anti-entropy, but resizing is out
+		// so we don't otherwise care about state.
+		_, err := s.cluster.State()
 		if err != nil {
 			s.logger.Printf("cluster state error: err=%s", err)
 			continue
-		}
-
-		if state == disco.ClusterStateResizing {
-			continue // don't launch anti-entropy during resize.
-			// the cluster sets its state to resizing and *then* sends to
-			// abortAntiEntropyCh before starting to resize
 		}
 
 		// Sync holders.
@@ -966,6 +961,7 @@ func (s *Server) monitorAntiEntropy() {
 			break
 		}
 	}
+	// %% end sonarcloud ignore %%
 }
 
 // receiveMessage represents an implementation of BroadcastHandler.
@@ -1023,34 +1019,6 @@ func (s *Server) receiveMessage(m Message) error {
 			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
 		err := f.deleteView(obj.View)
-		if err != nil {
-			return err
-		}
-
-	case *ResizeNodeMessage:
-		switch obj.Action {
-		case resizeJobActionRemove:
-			if err := s.cluster.resizeNodeOnRemove(obj.NodeID); err != nil {
-				return errors.Wrapf(err, "resizing node %s on remove %s", s.cluster.disCo.ID(), obj.NodeID)
-			}
-
-		case resizeJobActionAdd:
-			if err := s.cluster.resizeNodeOnAdd(obj.NodeID); err != nil {
-				return errors.Wrapf(err, "resizing node %s on remove %s", s.cluster.disCo.ID(), obj.NodeID)
-			}
-
-		default:
-			return fmt.Errorf("incorrect resizing node action: %s", obj.Action)
-		}
-
-	case *ResizeInstruction:
-		err := s.cluster.followResizeInstruction(context.Background(), obj)
-		if err != nil {
-			return err
-		}
-
-	case *ResizeAbortMessage:
-		err := s.cluster.resizeAbort()
 		if err != nil {
 			return err
 		}
