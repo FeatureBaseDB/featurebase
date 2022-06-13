@@ -772,6 +772,9 @@ func (h handlerSelectJoin) Apply(stmt *sqlparser.Select, qm QueryMask, indexFunc
 		return nil, fmt.Errorf("nonexistent index %q", secondaryIndexName)
 	}
 	secondaryField := secondaryIndex.Field(secondary.column.name)
+	if secondaryField == nil {
+		return nil, errors.Wrap(pilosa.ErrFieldNotFound, fmt.Sprintf("non-existent field %s for index %s", secondary.column.name, secondaryIndexName))
+	}
 
 	var wheres tableWheres
 	if qm.HasWhere() {
