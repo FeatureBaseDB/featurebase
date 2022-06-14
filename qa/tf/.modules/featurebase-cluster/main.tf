@@ -86,6 +86,7 @@ resource "aws_instance" "fb_ingest" {
 }
 resource "aws_spot_instance_request" "fb_cluster_nodes" {
   wait_for_fulfillment   = true
+  spot_type              = "one-time"
   count                  = var.use_spot_instances ? var.fb_data_node_count : 0
   ami                    = data.aws_ami.amazon_linux_2.id
   instance_type          = var.fb_data_node_type
@@ -127,6 +128,7 @@ resource "aws_spot_instance_request" "fb_cluster_nodes" {
 
 resource "aws_spot_instance_request" "fb_ingest" {
   wait_for_fulfillment        = true
+  spot_type                   = "one-time"
   count                       = var.use_spot_instances ? var.fb_ingest_node_count : 0
   ami                         = data.aws_ami.amazon_linux_2.id
   key_name                    = aws_key_pair.gitlab-featurebase-ci.key_name

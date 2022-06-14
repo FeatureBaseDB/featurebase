@@ -975,12 +975,20 @@ s3 dump plg tag:
 
 cleanup_build_job:
   stage: cleanup_build
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    FBCI_PROFILE: "service-terraform"
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
   tags:
-    - shell
+    - aws
+    - docker
+    - fbsmoke
   script:
-    - CLEANUP_EC2_IDS=$(aws ec2 describe-instances --region us-east-2 --filters Name=instance-state-name,Values=pending,running "Name=tag:Name,Values=pipeline-${CI_PIPELINE_ID}-*" --query 'Reservations[*].Instances[*].[InstanceId]' --output text | tr '\n' ' ')
-    - '[[ ! -z "$CLEANUP_EC2_IDS" ]] && aws ec2 terminate-instances --region us-east-2 --instance-ids $CLEANUP_IDS || echo "No instances to cleanup"'
-    - CLEANUP_CF_ID=$(aws cloudformation list-stacks --region us-east-2 --stack-status-filter CREATE_IN_PROGRESS CREATE_COMPLETE --query  "StackSummaries[?contains(StackName, \`pipeline-${CI_PIPELINE_ID}\`) == \`true\`].[StackName]" --output text )
-    - '[[ ! -z "$CLEANUP_CF_ID" ]] && aws cloudformation delete-stack --region us-east-2 --stack-name $CLEANUP_CF_ID --retain-resources DeploymentEC2Role || echo "No CF stack to cleanup"'
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID --profile $FBCI_PROFILE
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY --profile $FBCI_PROFILE
+    - aws configure set region "us-east-2" --profile $FBCI_PROFILE
+    - aws configure set aws_profile $FBCI_PROFILE
+    - ./qa/scripts/gitlabCleanupBuild.sh
   when: always
 
