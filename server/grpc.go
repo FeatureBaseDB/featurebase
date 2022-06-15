@@ -17,6 +17,7 @@ import (
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
 	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/monitor"
 	"github.com/molecula/featurebase/v3/pql"
 	pb "github.com/molecula/featurebase/v3/proto"
 	vdsm_pb "github.com/molecula/featurebase/v3/proto/vdsm"
@@ -191,9 +192,13 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 		LogQuery(ctx, "QuerySQL", req, h.queryLogger)
 	}
 
+	span := monitor.StartSpan(ctx, "GRPC", "/pilosa.Pilosa/QuerySQL")
+
+	span.SetTag("SQL Query", req.Sql)
 	start := time.Now()
 	results, err := h.execSQL(ctx, req.Sql)
 	duration := time.Since(start)
+	monitor.Finish(span)
 	if err != nil {
 		return err
 	}
@@ -302,9 +307,13 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 		}
 		LogQuery(ctx, "QueryPQL", req, h.queryLogger)
 	}
+	span := monitor.StartSpan(ctx, "GRPC", "/pilosa.Pilosa/QueryPQL")
+	span.SetTag("PQL Query", req.Pql)
+	span.SetTag("Index", req.Index)
 	t := time.Now()
 	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
+	monitor.Finish(span)
 
 	if err != nil {
 		return errToStatusError(err)
@@ -1605,39 +1614,46 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 		creds := credentials.NewTLS(server.tlsConfig)
 		gopts = append(gopts, grpc.Creds(creds))
 	}
-	//if auth enabled
-	if server.auth != nil {
-		gopts = append(gopts, grpc.UnaryInterceptor(
-			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-				ctx, err := Valid(ctx, server.auth)
-				if err != nil {
-					return nil, err
-				}
-				LogQuery(ctx, info.FullMethod, req, server.logger)
 
-				// reset the molecula-chip cookie just in case the token was refreshed
-				md, ok := metadata.FromIncomingContext(ctx)
-				if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
-					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
-				}
-				return handler(ctx, req)
-			},
-		))
-		gopts = append(gopts, grpc.StreamInterceptor(
-			func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-				ctx, err := Valid(ss.Context(), server.auth)
-				if err != nil {
-					return err
-				}
-				// reset the molecula-chip cookie just in case the token was refreshed
-				md, ok := metadata.FromIncomingContext(ctx)
-				if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
-					server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
-				}
-				return handler(srv, &wrappedStream{ss, ctx})
-			},
-		))
+	// gRPC doesn’t allow multiple interceptors so they have to be manually chained.
+	var unaryInterceptors []grpc.UnaryServerInterceptor
+	var streamInterceptors []grpc.StreamServerInterceptor
+
+	if server.auth != nil {
+		unaryInterceptors = append(unaryInterceptors, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			ctx, err := Valid(ctx, server.auth)
+			if err != nil {
+				return nil, err
+			}
+			LogQuery(ctx, info.FullMethod, req, server.logger)
+
+			// reset the molecula-chip cookie just in case the token was refreshed
+			md, ok := metadata.FromIncomingContext(ctx)
+			if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
+				server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
+			}
+			return handler(ctx, req)
+		})
+		streamInterceptors = append(streamInterceptors, func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			ctx, err := Valid(ss.Context(), server.auth)
+			if err != nil {
+				return err
+			}
+			// reset the molecula-chip cookie just in case the token was refreshed
+			md, ok := metadata.FromIncomingContext(ctx)
+			if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
+				server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
+			}
+			return handler(srv, &wrappedStream{ss, ctx})
+		})
 	}
+
+	if monitor.IsOn() {
+		unaryInterceptors = append(unaryInterceptors, monitorUnaryInterceptor)
+	}
+
+	gopts = append(gopts, grpc.UnaryInterceptor(ChainUnaryInterceptor(unaryInterceptors...)))
+	gopts = append(gopts, grpc.StreamInterceptor(ChainStreamInterceptors(streamInterceptors...)))
 
 	// create grpc server
 	server.grpcServer = grpc.NewServer(gopts...)
@@ -1754,4 +1770,55 @@ func getTokensFromMetadata(md metadata.MD) (string, string) {
 		refresh = []string{""}
 	}
 	return strings.TrimPrefix(access[0], "Bearer "), refresh[0]
+}
+
+func monitorUnaryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if !monitor.IsOn() {
+		return handler(ctx, req)
+	}
+
+	span := monitor.StartSpan(ctx, "GRPC", info.FullMethod)
+	switch r := req.(type) {
+	case *pb.QueryPQLRequest:
+		span.SetTag("PQL Query", r.Pql)
+		span.SetTag("Index", r.Index)
+	case *pb.QuerySQLRequest:
+		span.SetTag("SQL Query", r.Sql)
+	}
+	resp, err := handler(ctx, req)
+	monitor.Finish(span)
+	return resp, err
+}
+
+// Chains together multiple unary interceptors.
+func ChainUnaryInterceptor(interceptors ...grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
+	chain := func(interceptor grpc.UnaryServerInterceptor, unaryHandler grpc.UnaryHandler, info *grpc.UnaryServerInfo) grpc.UnaryHandler {
+		return func(ctx context.Context, req interface{}) (interface{}, error) {
+			return interceptor(ctx, req, info, unaryHandler)
+		}
+	}
+
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		chained := handler
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			chained = chain(interceptors[i], chained, info)
+		}
+		return chained(ctx, req)
+	}
+}
+
+// Chains together multiple stream interceptors.
+func ChainStreamInterceptors(interceptors ...grpc.StreamServerInterceptor) grpc.StreamServerInterceptor {
+	chain := func(interceptor grpc.StreamServerInterceptor, streamHandler grpc.StreamHandler, info *grpc.StreamServerInfo) grpc.StreamHandler {
+		return func(srv interface{}, stream grpc.ServerStream) error {
+			return interceptor(srv, stream, info, streamHandler)
+		}
+	}
+	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+		chained := handler
+		for i := len(interceptors) - 1; i >= 0; i-- {
+			chained = chain(interceptors[i], chained, info)
+		}
+		return chained(srv, stream)
+	}
 }

@@ -435,11 +435,19 @@ func (h *Handler) monitorPerformance(next http.Handler) http.Handler {
 		prefixes["query-history"] = struct{}{}
 
 		pathParts := strings.Split(r.URL.Path, "/")
-		if len(pathParts) > 1 {
+		// checks < 5 to exclude import endpoints for now from sentry transactions as
+		// there could potentially be many of them. Pricing is per transaction.
+		if len(pathParts) > 1 && len(pathParts) < 5 {
 			if _, ok := prefixes[pathParts[1]]; ok {
 				path := scrubPath(pathParts)
-				txName := fmt.Sprintf("URL: %s, Method: %s", path, r.Method)
-				span := monitor.StartSpan(r.Context(), "http", txName)
+				span := monitor.StartSpan(r.Context(), "HTTP", path)
+				qreq := r.Context().Value(contextKeyQueryRequest)
+				req, ok := qreq.(*QueryRequest)
+				if ok && req != nil {
+					span.SetTag("PQL Query", req.Query)
+					span.SetTag("SQL Query", req.SQLQuery)
+					span.SetTag("Index", mux.Vars(r)["index"])
+				}
 				next.ServeHTTP(w, r)
 				span.Finish()
 				return

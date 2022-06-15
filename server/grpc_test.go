@@ -25,6 +25,7 @@ import (
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/sql"
 	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1858,4 +1859,153 @@ func writeTestFile(t *testing.T, filename, content string) string {
 	io.WriteString(f, content)
 	defer f.Close()
 	return fname
+}
+
+func Test_ChainUnaryInterceptor(t *testing.T) {
+
+	salt := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		r := req.(*pb.QueryPQLRequest)
+		r.Pql = fmt.Sprintf("%s, add salt", r.Pql)
+		return handler(ctx, r)
+
+	}
+	pepper := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		r := req.(*pb.QueryPQLRequest)
+		r.Pql = fmt.Sprintf("%s, add pepper", r.Pql)
+		return handler(ctx, r)
+
+	}
+
+	interceptors0 := []grpc.UnaryServerInterceptor{}
+	interceptors1 := []grpc.UnaryServerInterceptor{salt}
+	interceptors2 := []grpc.UnaryServerInterceptor{salt, pepper}
+	// interceptors5 := []grpc.UnaryServerInterceptor{interceptor, interceptor, interceptor, interceptor, interceptor}
+
+	type args struct {
+		interceptors []grpc.UnaryServerInterceptor
+	}
+	tests := []struct {
+		name         string
+		interceptors []grpc.UnaryServerInterceptor
+		want         string
+	}{
+		{"0", interceptors0, "Soup"},
+		{"1", interceptors1, "Soup, add salt"},
+		{"2", interceptors2, "Soup, add salt, add pepper"},
+	}
+	for _, tt := range tests {
+		ctx := context.Background()
+		req := &pb.QueryPQLRequest{
+			Pql: "Soup",
+		}
+		info := &grpc.UnaryServerInfo{}
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			r := req.(*pb.QueryPQLRequest)
+			return r.Pql, nil
+		}
+		t.Run(tt.name, func(t *testing.T) {
+			r := req
+			chained := server.ChainUnaryInterceptor(tt.interceptors...)
+			resp, err := chained(ctx, r, info, handler)
+			vprint.VV("resp: %+v", resp)
+
+			if err != nil {
+				t.Errorf("ChainUnaryInterceptor() error = %v", err)
+			}
+			if resp != tt.want {
+				t.Errorf("ChainUnaryInterceptor() = %v, want %v", resp, tt.want)
+			}
+
+		})
+	}
+}
+
+// Testing object that implements the ServerStream interface
+type MockStream struct {
+	context context.Context
+}
+
+func (ms MockStream) SetHeader(md metadata.MD) error {
+	ms.context = context.WithValue(context.Background(), "metadata", md)
+	return nil
+}
+
+func (ms MockStream) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (ms MockStream) SetTrailer(metadata.MD) {}
+
+func (ms MockStream) Context() context.Context {
+	if ms.context == nil {
+		md := metadata.New(map[string]string{})
+		ms.context = context.WithValue(context.Background(), "metadata", md)
+	}
+	return ms.context
+}
+
+func (ms MockStream) SendMsg(m interface{}) error {
+	return nil
+}
+
+func (ms MockStream) RecvMsg(m interface{}) error {
+	return nil
+}
+
+func fromIncomingContext(ctx context.Context) metadata.MD {
+	return ctx.Value("metadata").(metadata.MD)
+}
+
+func Test_ChainStreamInterceptor(t *testing.T) {
+
+	salt := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		md := fromIncomingContext(ss.Context())
+		md.Append("ingredient", "with salt")
+		ss.SetHeader(md)
+		return handler(srv, ss)
+	}
+	pepper := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		md := fromIncomingContext(ss.Context())
+		md.Append("ingredient", "and pepper")
+		ss.SetHeader(md)
+		return handler(srv, ss)
+	}
+
+	interceptors0 := []grpc.StreamServerInterceptor{}
+	interceptors1 := []grpc.StreamServerInterceptor{salt}
+	interceptors2 := []grpc.StreamServerInterceptor{salt, pepper}
+
+	type args struct {
+		interceptors []grpc.StreamServerInterceptor
+	}
+	tests := []struct {
+		name         string
+		interceptors []grpc.StreamServerInterceptor
+		want         []string
+	}{
+		{"0", interceptors0, []string{"Soup"}},
+		{"1", interceptors1, []string{"Soup", "with salt"}},
+		{"2", interceptors2, []string{"Soup", "with salt", "and pepper"}},
+	}
+	for _, tt := range tests {
+		result := make([]string, 0)
+		srv := "asdf"
+		md := metadata.New(map[string]string{})
+		ss := MockStream{context: context.WithValue(context.Background(), "metadata", md)}
+		info := &grpc.StreamServerInfo{}
+		handler := func(srv interface{}, stream grpc.ServerStream) error {
+			md := fromIncomingContext(stream.Context())
+			vals := md.Get("ingredient")
+			result = append(result, "Soup")
+			result = append(result, vals...)
+			return nil
+		}
+		t.Run(tt.name, func(t *testing.T) {
+			chained := server.ChainStreamInterceptors(tt.interceptors...)
+			chained(srv, ss, info, handler)
+			if !reflect.DeepEqual(result, tt.want) {
+				t.Errorf("ChainStreamInterceptor() = %v, want %v", result, tt.want)
+			}
+		})
+	}
 }
