@@ -3,44 +3,14 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"strconv"
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/ctl"
-	"github.com/molecula/featurebase/v3/pql"
 	"github.com/spf13/cobra"
 )
 
 var Importer *ctl.ImportCommand
-
-// DecimalFlagValue is used to set the unexported value field in a decimal. It also
-// fulfills the flag.Value interface.
-type DecimalFlagValue struct {
-	dec *pql.Decimal
-}
-
-func (dfv *DecimalFlagValue) String() string {
-	return fmt.Sprintf("%v", dfv.dec.Value())
-}
-
-func (dfv *DecimalFlagValue) Set(s string) error {
-	i, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return err
-	}
-	if dfv.dec == nil {
-		d := pql.NewDecimal(0, 0)
-		dfv.dec = &d
-	}
-	dfv.dec.SetValue(i)
-	return nil
-}
-
-func (dfv *DecimalFlagValue) Type() string {
-	return fmt.Sprintf("%T", int64(0))
-}
 
 // newImportCommand runs the FeatureBase import subcommand for ingesting bulk data.
 func newImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
@@ -64,8 +34,6 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 		},
 	}
 
-	fieldMin := DecimalFlagValue{dec: &Importer.FieldOptions.Min}
-	fieldMax := DecimalFlagValue{dec: &Importer.FieldOptions.Max}
 	flags := importCmd.Flags()
 	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of FeatureBase.")
 	flags.StringVarP(&Importer.Index, "index", "i", "", "FeatureBase index to import into.")
@@ -73,8 +41,8 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.BoolVar(&Importer.IndexOptions.Keys, "index-keys", false, "Specify keys=true when creating an index")
 	flags.BoolVar(&Importer.FieldOptions.Keys, "field-keys", false, "Specify keys=true when creating a field")
 	flags.StringVar(&Importer.FieldOptions.Type, "field-type", "", "Specify the field type when creating a field. One of: set, int, decimal, time, bool, mutex")
-	flags.Var(&fieldMin, "field-min", "Specify the minimum for an int field on creation") // TODO: noting that decimal field min/max are not supported here.
-	flags.Var(&fieldMax, "field-max", "Specify the maximum for an int field on creation")
+	flags.Int64Var(&Importer.FieldOptions.Min.Value, "field-min", 0, "Specify the minimum for an int field on creation") // TODO: noting that decimal field min/max are not supported here.
+	flags.Int64Var(&Importer.FieldOptions.Max.Value, "field-max", 0, "Specify the maximum for an int field on creation")
 	flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Specify the cache type for a set field on creation. One of: none, lru, ranked")
 	flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Specify the cache size for a set field on creation")
 	flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Specify the time quantum for a time field on creation. One of: D, DH, H, M, MD, MDH, Y, YM, YMD, YMDH")

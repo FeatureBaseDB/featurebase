@@ -263,7 +263,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	}
 
-	f, err = i2.CreateFieldIfNotExists("f2", pilosa.OptFieldTypeDecimal(1, pql.NewDecimal(-10, 0), pql.NewDecimal(10, 0)))
+	f, err = i2.CreateFieldIfNotExists("f2", pilosa.OptFieldTypeDecimal(1, pql.Decimal{Value: -10}, pql.Decimal{Value: 10}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -744,10 +744,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		if field != nil { // happy linter
 			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
-				t.Fatalf("field min %v != %v", int64(math.MinInt64), field.Options.Min)
+				t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
 			}
 			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
-				t.Fatalf("field max %v != %v", int64(math.MaxInt64), field.Options.Max)
+				t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
 			}
 		}
 	})
@@ -775,10 +775,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		if field != nil { // happy linter
 			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
-				t.Fatalf("field min %v != %v", int64(math.MinInt64), field.Options.Min)
+				t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
 			}
 			if !reflect.DeepEqual(pql.NewDecimal(1, -1), field.Options.Max) {
-				t.Fatalf("field max %v != %v", 10, field.Options.Max)
+				t.Fatalf("field max %d != %d", 10, field.Options.Max)
 			}
 		}
 	})
@@ -806,10 +806,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		if field != nil { // happy linter
 			if !reflect.DeepEqual(pql.NewDecimal(-1, -1), field.Options.Min) {
-				t.Fatalf("field min %v != %v", 10, field.Options.Min)
+				t.Fatalf("field min %d != %d", 10, field.Options.Min)
 			}
 			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
-				t.Fatalf("field max %v != %v", int64(math.MaxInt64), field.Options.Max)
+				t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
 			}
 		}
 	})
@@ -847,10 +847,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		if field != nil { // happy linter
 			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
-				t.Fatalf("field min %v != %v", int64(math.MinInt64), field.Options.Min)
+				t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
 			}
 			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
-				t.Fatalf("field max %v != %v", int64(math.MaxInt64), field.Options.Max)
+				t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
 			}
 		}
 	})
@@ -879,10 +879,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		if field != nil { // happy linter
 			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 1), field.Options.Min) {
-				t.Fatalf("field min %v != %v", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
+				t.Fatalf("field min %d != %d", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
 			}
 			if !reflect.DeepEqual(pql.NewDecimal(105, 1), field.Options.Max) {
-				t.Fatalf("field max %v != %v", pql.NewDecimal(105, 1), field.Options.Max)
+				t.Fatalf("field max %s != %d", pql.NewDecimal(105, 1), field.Options.Max)
 			}
 		}
 	})
@@ -910,10 +910,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		if field != nil { // happy linter
 			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 2), field.Options.Min) {
-				t.Fatalf("field min %v != %v", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
+				t.Fatalf("field min %d != %d", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
 			}
 			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 2), field.Options.Max) {
-				t.Fatalf("field min %v != %v", pql.NewDecimal(math.MaxInt64, 2), field.Options.Max)
+				t.Fatalf("field min %d != %d", pql.NewDecimal(math.MaxInt64, 2), field.Options.Max)
 			}
 		}
 	})

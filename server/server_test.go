@@ -197,8 +197,8 @@ func TestMain_MinMaxFloat(t *testing.T) {
 	}
 
 	// Query row.
-	exp0 := pilosa.ValCount{DecimalVal: pql.NewDecimal(4440, 3).Clone(), Count: 1}
-	exp1 := pilosa.ValCount{DecimalVal: pql.NewDecimal(1320, 3).Clone(), Count: 1}
+	exp0 := pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 4440, Scale: 3}, Count: 1}
+	exp1 := pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 1320, Scale: 3}, Count: 1}
 	if res, err := m.QueryProtobuf("i", `Max(field=dec) Min(field=dec)`); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(res.Results[0], exp0) || !reflect.DeepEqual(res.Results[1], exp1) {

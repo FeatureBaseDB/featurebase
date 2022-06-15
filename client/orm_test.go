@@ -1210,11 +1210,11 @@ func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, 
 	if cacheSize != opts.CacheSize() {
 		t.Fatalf("%d != %d", cacheSize, opts.CacheSize())
 	}
-	if !min.EqualTo(opts.Min()) {
-		t.Fatalf("%v != %v", min, opts.Min())
+	if min != opts.Min() {
+		t.Fatalf("%d != %d", min, opts.Min())
 	}
-	if !max.EqualTo(opts.Max()) {
-		t.Fatalf("%v != %v", max, opts.Max())
+	if max != opts.Max() {
+		t.Fatalf("%d != %d", max, opts.Max())
 	}
 	if foreignIndex != opts.ForeignIndex() {
 		t.Fatalf("%s != %s", foreignIndex, opts.ForeignIndex())

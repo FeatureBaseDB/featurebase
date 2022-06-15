@@ -40,7 +40,7 @@ func TestCondition_StringWithSubj(t *testing.T) {
 	}{
 		{pql.BETWEEN, []interface{}{int64(4), int64(8)}, "4<=subj<=8"},
 		{pql.BETWEEN, []interface{}{uint64(5), uint64(9)}, "5<=subj<=9"},
-		{pql.BETWEEN, []interface{}{pql.NewDecimal(-401, 2), pql.NewDecimal(802, 1)}, "-4.01<=subj<=80.2"},
+		{pql.BETWEEN, []interface{}{pql.Decimal{Value: -401, Scale: 2}, pql.Decimal{Value: 802, Scale: 1}}, "-4.01<=subj<=80.2"},
 		{pql.EQ, nil, "subj==null"},
 		{pql.NEQ, nil, "subj!=null"},
 	} {
