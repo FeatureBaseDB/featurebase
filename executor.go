@@ -1490,6 +1490,8 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, qcx *Qcx, index s
 		return e.executeIntersectShard(ctx, qcx, index, c, shard)
 	case "Union":
 		return e.executeUnionShard(ctx, qcx, index, c, shard)
+	case "InnerUnionRows":
+		return e.executeInnerUnionRowsShard(ctx, qcx, index, c, shard)
 	case "Xor":
 		return e.executeXorShard(ctx, qcx, index, c, shard)
 	case "Not":
@@ -4856,6 +4858,116 @@ func (e *executor) executeUnionShard(ctx context.Context, qcx *Qcx, index string
 	return rows[0].Union(rows[1:]...), nil
 }
 
+// executeInnerUnionRowsShard executes a special magical call which is actually
+// more like Row() than Union(), and takes a call plus a []uint64 of rows, and
+// generates the union of the rows in the []uint64.
+func (e *executor) executeInnerUnionRowsShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (out *Row, err0 error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeInnerUnionRowsShard")
+	defer span.Finish()
+
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, index)
+	}
+
+	fieldName, ok, err := c.StringArg("_field")
+	if err != nil {
+		return nil, errors.Wrap(err, "finding field")
+	}
+	if !ok {
+		return nil, errors.New("InnerUnionRows requires _field")
+	}
+
+	f := idx.Field(fieldName)
+	if f == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
+	}
+
+	// Parse "from" time, if set.
+	var fromTime time.Time
+	if v, ok := c.Args["from"]; ok {
+		if fromTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "parsing from time")
+		}
+	}
+
+	// Parse "to" time, if set.
+	var toTime time.Time
+	if v, ok := c.Args["to"]; ok {
+		if toTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "parsing to time")
+		}
+	}
+
+	rowIDs, rowOK, err := c.UintSliceArg("rows")
+	if err != nil {
+		return nil, fmt.Errorf("extracting rows argument: %v", err)
+	}
+	if !rowOK {
+		return nil, fmt.Errorf("InnerUnionRows() must specify rows")
+	}
+
+	// Simply return row if times are not set.
+	timeNotSet := fromTime.IsZero() && toTime.IsZero()
+	if timeNotSet {
+		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
+		if frag == nil {
+			return NewRow(), nil
+		}
+
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Fragment: frag, Index: idx, Shard: shard})
+		if err != nil {
+			return nil, err
+		}
+		defer finisher(&err0)
+		row, err := frag.unionRows(ctx, tx, rowIDs)
+		if qcx.write && err == nil {
+			row = row.Clone()
+		}
+		return row, err
+	}
+
+	views, err := f.viewsByTimeRange(fromTime, toTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Union bitmaps across all time-based views.
+	rows := make([]*Row, 0, len(views))
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	defer finisher(&err0)
+	for _, view := range views {
+		f := e.Holder.fragment(index, fieldName, view, shard)
+		if f == nil {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		row, err := f.unionRows(ctx, tx, rowIDs)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		return &Row{}, nil
+	} else if len(rows) == 1 {
+		if qcx.write {
+			return rows[0].Clone(), nil
+		}
+		return rows[0], nil
+	}
+	row := rows[0].Union(rows[1:]...)
+	if qcx.write {
+		row = row.Clone()
+	}
+	return row, nil
+
+}
+
 // executeXorShard executes a xor() call for a local shard.
 func (e *executor) executeXorShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeXorShard")
@@ -4981,6 +5093,8 @@ func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string,
 		switch rowsResult := rowsResult.(type) {
 		case *PairsField:
 			// Translate pairs into rows calls.
+			// TODO: This should probably also be adjusted to use InnerUnionRows,
+			// but we can't do that for the string key case.
 			for _, p := range rowsResult.Pairs {
 				var val interface{}
 				switch {
@@ -4997,15 +5111,14 @@ func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string,
 				})
 			}
 		case RowIDs:
-			// Translate Row IDs into Row calls.
-			for _, id := range rowsResult {
-				resultRows = append(resultRows, &pql.Call{
-					Name: "Row",
-					Args: map[string]interface{}{
-						child.Args["_field"].(string): id,
-					},
-				})
-			}
+			// Make a single InnerUnionRows from this
+			resultRows = append(resultRows, &pql.Call{
+				Name: "InnerUnionRows",
+				Args: map[string]interface{}{
+					"_field": child.Args["_field"],
+					"rows":   []uint64(rowsResult),
+				},
+			})
 		default:
 			return nil, errors.Errorf("unexpected Rows type %T", rowsResult)
 		}

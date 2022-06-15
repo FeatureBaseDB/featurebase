@@ -2820,6 +2820,32 @@ func (f *fragment) unprotectedRows(ctx context.Context, tx Tx, start uint64, fil
 	}
 }
 
+// unionRows yields the union of the given rows in this fragment
+func (f *fragment) unionRows(ctx context.Context, tx Tx, rows []uint64) (*Row, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.unprotectedUnionRows(ctx, tx, rows)
+}
+
+// unprotectedRows calls rows without grabbing the mutex.
+func (f *fragment) unprotectedUnionRows(ctx context.Context, tx Tx, rows []uint64) (*Row, error) {
+	filter := roaring.NewBitmapRowsUnion(rows)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, filter)
+	if err != nil {
+		return nil, err
+	} else {
+		row := &Row{
+			segments: []rowSegment{{
+				data:     filter.Results(f.shard),
+				shard:    f.shard,
+				writable: true,
+			}},
+		}
+		row.invalidateCount()
+		return row, nil
+	}
+}
+
 // blockToRoaringData converts a fragment block into a roaring.Bitmap
 // which represents a portion of the data within a single shard.
 // TODO: it seems like we should be able to get the

@@ -113,6 +113,20 @@ func TestRowsFilter(t *testing.T) {
 	compareSlices(t, "limit", expected[:1], rows)
 }
 
+func TestRowsUnion(t *testing.T) {
+	requireSampleData(t)
+	rowSet := []uint64{7, 11}
+	expected := []uint64{1<<16 + 1, 7<<16 + 7, 11<<16 + 11}
+	u := NewBitmapRowsUnion(rowSet)
+	iter, _ := filterSampleData.Containers.Iterator(0)
+	err := ApplyFilterToIterator(u, iter)
+	if err != nil {
+		t.Fatalf("unexpected filter error: %v", err)
+	}
+	out := u.Results(0)
+	compareSlices(t, "sevenEleven", out.Slice(), expected)
+}
+
 func TestBitmapFilter(t *testing.T) {
 	requireSampleData(t)
 	bm := NewBitmap()

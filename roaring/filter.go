@@ -290,6 +290,81 @@ func NewBitmapRowsFilter(rows []uint64) BitmapFilter {
 	return &BitmapRowsFilter{rows: rows, i: 0}
 }
 
+// BitmapRowsUnion is a BitmapFilter which produces a union of all the
+// rows listed in a []uint64.
+type BitmapRowsUnion struct {
+	c    []*Container
+	rows []uint64
+	i    int
+}
+
+func (f *BitmapRowsUnion) ConsiderKey(key FilterKey, n int32) FilterResult {
+	if f.i == -1 {
+		return key.Done()
+	}
+	if n == 0 {
+		return key.RejectOne()
+	}
+	row := uint64(key) >> rowExponent
+	for f.rows[f.i] < row {
+		f.i++
+		if f.i >= len(f.rows) {
+			f.i = -1
+			return key.Done()
+		}
+	}
+	if f.rows[f.i] > row {
+		return key.RejectUntilRow(f.rows[f.i])
+	}
+	// If we ran out of rows, we said we were done. If we're
+	// waiting for a later row, we said to reject until then.
+	// Therefore, we're on the current row, and need the data because
+	// we're going to union it.
+	return key.NeedData()
+}
+
+func (f *BitmapRowsUnion) ConsiderData(key FilterKey, data *Container) FilterResult {
+	idx := key & keyMask
+	f.c[idx] = f.c[idx].UnionInPlace(data)
+	// UnionInPlace with nil will reuse the container. We don't want to reuse
+	// the container, because ApplyFilter will overwrite it.
+	if f.c[idx] == data {
+		f.c[idx] = data.Clone()
+	}
+	return key.MatchOne()
+}
+
+// Yield the bitmap containing our results, adjusted for a particular shard
+// if necessary (because we expect the results to correspond to our shard
+// ID).
+func (f *BitmapRowsUnion) Results(shard uint64) *Bitmap {
+	shard <<= shardwidth.Exponent
+	b := NewSliceBitmap()
+	for i, c := range f.c {
+		// UnionInPlace might not have fixed count
+		c.Repair()
+		b.Containers.Put(uint64(i)+shard, c)
+	}
+	return b
+}
+
+// Reset the internal container buffer. You must use this before reusing a
+// filter.
+func (f *BitmapRowsUnion) Reset() {
+	for i := range f.c {
+		f.c[i] = nil
+	}
+}
+
+// NewBitmapRowsUnion yields a BitmapRowsUnion which can give you the union
+// of all containers matching a given row.
+func NewBitmapRowsUnion(rows []uint64) *BitmapRowsUnion {
+	if len(rows) == 0 {
+		return &BitmapRowsUnion{rows: rows, i: -1, c: make([]*Container, rowWidth)}
+	}
+	return &BitmapRowsUnion{rows: rows, i: 0, c: make([]*Container, rowWidth)}
+}
+
 // BitmapRowFilterBase is a generic form of a row-aware wrapper; it
 // handles making decisions about keys once you tell it a yesKey and noKey
 // that it should be using, and makes callbacks per row.

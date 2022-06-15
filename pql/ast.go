@@ -474,6 +474,16 @@ var callInfoByFunc = map[string]callInfo{
 			"in":       nil,
 		},
 	},
+	"InnerUnionRows": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"_field": stringOrVariable,
+			"field":  stringOrVariable,
+			"from":   nil,
+			"to":     nil,
+			"rows":   nil,
+		},
+	},
 	"Shift": {allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"n": int64(0),
