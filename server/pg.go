@@ -467,10 +467,10 @@ func pgWriteRowser(w pg.QueryResultWriter, result pb.ToRowser) error {
 			case *pb.ColumnResponse_BoolVal:
 				v = strconv.FormatBool(col.BoolVal)
 			case *pb.ColumnResponse_DecimalVal:
-				v = pql.Decimal{
-					Value: col.DecimalVal.Value,
-					Scale: col.DecimalVal.Scale,
-				}.String()
+				v = pql.NewDecimal(
+					col.DecimalVal.Value,
+					col.DecimalVal.Scale,
+				).String()
 			case *pb.ColumnResponse_Float64Val:
 				v = strconv.FormatFloat(col.Float64Val, 'g', -1, 64)
 			case *pb.ColumnResponse_Int64Val:

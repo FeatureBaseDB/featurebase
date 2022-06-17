@@ -1053,8 +1053,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 					if len(resp.Results) > 0 {
 						valCount, ok := resp.Results[0].(pilosa.ValCount)
 						if ok && valCount.Count == 1 {
+							valVal := valCount.DecimalVal.Value()
 							rowResp.Columns = append(rowResp.Columns,
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: (&valVal).Int64(), Scale: valCount.DecimalVal.Scale}}})
 							colAdded++
 						} else {
 							rowResp.Columns = append(rowResp.Columns,
@@ -1380,8 +1381,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 					if len(resp.Results) > 0 {
 						valCount, ok := resp.Results[0].(pilosa.ValCount)
 						if ok && valCount.Count == 1 {
+							valVal := valCount.DecimalVal.Value()
 							rowResp.Columns = append(rowResp.Columns,
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: (&valVal).Int64(), Scale: valCount.DecimalVal.Scale}}})
 							colAdded++
 						} else {
 							rowResp.Columns = append(rowResp.Columns,

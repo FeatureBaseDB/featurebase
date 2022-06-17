@@ -928,9 +928,8 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, fie
 	if field.Type() == FieldTypeInt {
 		other.Val = value
 	} else if field.Type() == FieldTypeDecimal {
-		other.DecimalVal = &pql.Decimal{
-			Value: value,
-			Scale: field.Options().Scale}
+		dec := pql.NewDecimal(value, field.Options().Scale)
+		other.DecimalVal = &dec
 		other.FloatVal = 0
 		other.Val = 0
 	} else if field.Type() == FieldTypeTimestamp {
@@ -1076,9 +1075,8 @@ func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pq
 			return ValCount{}, newNotFoundError(ErrFieldNotFound, fieldName)
 		}
 		if field.Type() == FieldTypeDecimal {
-			other.DecimalVal = &pql.Decimal{
-				Value: other.Val,
-				Scale: field.Options().Scale}
+			dec := pql.NewDecimal(other.Val, field.Options().Scale)
+			other.DecimalVal = &dec
 			other.FloatVal = 0
 			other.Val = 0
 		}
@@ -1894,6 +1892,8 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 	}
 	if field.Type() == FieldTypeDecimal {
 		out.FloatVal = float64(int64(vsum)+(int64(vcount)*bsig.Base)) / math.Pow(10, float64(bsig.Scale))
+		dec := pql.NewDecimal((int64(vsum) + (int64(vcount) * bsig.Base)), bsig.Scale)
+		out.DecimalVal = &dec
 	}
 	return out, nil
 }
@@ -3117,7 +3117,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		}
 	}
 	for _, res := range results {
-		if res.DecimalAgg != 0 && aggType == "sum" {
+		if res.DecimalAgg != nil && aggType == "sum" {
 			aggType = "decimalSum"
 			break
 		}
@@ -3361,31 +3361,31 @@ func (g *GroupCounts) MarshalJSON() ([]byte, error) {
 
 // GroupCount represents a result item for a group by query.
 type GroupCount struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"-"`
-	DecimalAgg float64    `json:"-"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"-"`
+	DecimalAgg *pql.Decimal `json:"-"`
 }
 
 type groupCountSum struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"sum"`
-	DecimalAgg float64    `json:"-"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"sum"`
+	DecimalAgg *pql.Decimal `json:"-"`
 }
 
 type groupCountAggregate struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"aggregate"`
-	DecimalAgg float64    `json:"-"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"aggregate"`
+	DecimalAgg *pql.Decimal `json:"-"`
 }
 
 type groupCountDecimalSum struct {
-	Group      []FieldRow `json:"group"`
-	Count      uint64     `json:"count"`
-	Agg        int64      `json:"-"`
-	DecimalAgg float64    `json:"sum"`
+	Group      []FieldRow   `json:"group"`
+	Count      uint64       `json:"count"`
+	Agg        int64        `json:"-"`
+	DecimalAgg *pql.Decimal `json:"sum"`
 }
 
 var _ GroupCount = GroupCount(groupCountSum{})
@@ -3422,7 +3422,10 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 		case 0:
 			a[i].Count += b[j].Count
 			a[i].Agg += b[j].Agg
-			a[i].DecimalAgg += b[j].DecimalAgg
+			if a[i].DecimalAgg != nil && b[j].DecimalAgg != nil {
+				sum := pql.AddDecimal(*a[i].DecimalAgg, *b[j].DecimalAgg)
+				a[i].DecimalAgg = &sum
+			}
 			ret = append(ret, a[i])
 			i++
 			j++
@@ -3972,10 +3975,12 @@ func (t ExtractedTable) ToRows(callback func(*proto.RowResponse) error) error {
 					},
 				}
 			case pql.Decimal:
+				rValue := r.Value()
+				rValuePtr := &rValue
 				col = &proto.ColumnResponse{
 					ColumnVal: &proto.ColumnResponse_DecimalVal{
 						DecimalVal: &proto.Decimal{
-							Value: r.Value,
+							Value: rValuePtr.Int64(),
 							Scale: r.Scale,
 						},
 					},
@@ -7772,10 +7777,12 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 			{Name: "value", Datatype: "decimal"},
 			{Name: "count", Datatype: "int64"},
 		}
+		vValue := v.DecimalVal.Value()
+		vValuePtr := &vValue
 		if err := callback(&proto.RowResponse{
 			Headers: ci,
 			Columns: []*proto.ColumnResponse{
-				{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}},
+				{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: vValuePtr.Int64(), Scale: v.DecimalVal.Scale}}},
 				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
 			}}); err != nil {
 			return errors.Wrap(err, "calling callback")
@@ -8244,7 +8251,7 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 				}
 				ret.Count = uint64(result.Count)
 				ret.Agg = result.Val
-				ret.DecimalAgg = result.FloatVal
+				ret.DecimalAgg = result.DecimalVal
 			}
 		}
 		if ret.Count == 0 {

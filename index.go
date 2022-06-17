@@ -4,6 +4,7 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"sort"
@@ -651,12 +652,15 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	if opt != nil && (opt.Type == FieldTypeInt || opt.Type == FieldTypeTimestamp) {
 		min, max := pql.MinMax(0)
 		// ensure the provided bounds are valid
-		if opt.Max.Value == 0 {
+		zero := big.NewInt(0)
+		maxv := opt.Max.Value()
+		if maxv.Cmp(zero) == 0 {
 			opt.Max = max
 		} else if max.LessThan(opt.Max) {
 			opt.Max = max
 		}
-		if opt.Min.Value == 0 {
+		minv := opt.Min.Value()
+		if minv.Cmp(zero) == 0 {
 			opt.Min = min
 		} else if min.GreaterThan(opt.Min) {
 			opt.Min = min
@@ -665,14 +669,18 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 	// added for backward compatablity with old schemas
 	if opt != nil && opt.Type == FieldTypeDecimal {
 		min, max := pql.MinMax(opt.Scale)
+		zero := big.NewInt(0)
+
 		// ensure the provided bounds are valid
-		if opt.Max.Value == 0 {
+		maxv := opt.Max.Value()
+		if maxv.Cmp(zero) == 0 {
 			opt.Max = max
 		} else if max.LessThan(opt.Max) {
 			opt.Max = max
 		}
 
-		if opt.Min.Value == 0 {
+		minv := opt.Min.Value()
+		if minv.Cmp(zero) == 0 {
 			opt.Min = min
 		} else if min.GreaterThan(opt.Min) {
 			opt.Min = min
