@@ -1149,7 +1149,9 @@ func (s Serializer) decodeDecimal(d *pb.Decimal, m *pql.Decimal) {
 		// set the absolute value
 		val.SetBytes(d.ValAbs)
 		// convert to the correct sign
-		val.Mul(val, big.NewInt(d.ValSign))
+		if d.ValNeg {
+			val.Mul(val, big.NewInt(-1))
+		}
 		// set it on the retval
 		m.SetBigIntValue(val)
 	}
@@ -1978,7 +1980,7 @@ func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 	retval := &pb.Decimal{
 		Scale:      p.Scale,
 		ValAbs:     val.Bytes(),
-		ValSign:    int64(val.Sign()),
+		ValNeg:     val.Sign() < 0,
 		NewVersion: true,
 	}
 	return retval

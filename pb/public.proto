@@ -117,7 +117,7 @@ message Decimal {
     int64 Scale = 2;
     bool NewVersion = 3;
     bytes ValAbs = 4;
-    int64 ValSign = 5;
+    bool ValNeg = 5;
 }
 
 message DistinctTimestamp {
