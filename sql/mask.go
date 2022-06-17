@@ -380,6 +380,8 @@ func generateWhereMask(e sqlparser.Expr) []wherePart {
 		wp = append(wp, generateWhereMask(expr.Expr)...)
 	case *sqlparser.IsExpr:
 		wp = append(wp, WherePartFieldCondition)
+	case *sqlparser.ParenExpr:
+		wp = append(wp, generateWhereMask(expr.Expr)...)
 	}
 
 	return wp

@@ -499,9 +499,10 @@ func TestQuerySQL(t *testing.T) {
 	defer tearDownFunc()
 
 	tests := []struct {
-		sql string
-		exp tableResponse
-		eq  func(tableResponse, tableResponse) error
+		sql     string
+		exp     tableResponse
+		eq      func(tableResponse, tableResponse) error
+		wantErr string
 	}{
 		{
 			// Extract(Limit(All(), limit=100, offset=0),Rows(age))
@@ -886,6 +887,26 @@ func TestQuerySQL(t *testing.T) {
 			eq: equalUnordered,
 		},
 		{
+			//Extract(Intersect(Row(timestamp>"2017-09-02T12:32:00Z"),Row(timestamp<"2019-09-02T12:32:00Z")),Rows(age), Rows(height))
+			//Testing the parenthesis around where clause
+			sql: "select age, height from grouper where (timestamp > '2017-09-02T12:32:00Z' and timestamp < '2019-09-02T12:32:00Z')",
+			exp: tableResponse{
+				headers: []columnInfo{
+					{"age", "int64"},
+					{"height", "int64"},
+				},
+				rows: []row{
+					{[]columnResponse{int64(31), int64(110)}},
+				},
+			},
+			eq: equalUnordered,
+		},
+		{
+			//Testing empty parenthesis around where clause
+			sql:     "select age, height from grouper where ()",
+			wantErr: "parsing sql",
+		},
+		{
 			//Distinct(Row(timestamp>"2019-09-02T12:32:00Z"), index='grouper',field='age')
 			sql: "select distinct age from grouper where timestamp > '2019-09-02T12:32:00Z'",
 			exp: tableResponse{
@@ -997,6 +1018,14 @@ func TestQuerySQL(t *testing.T) {
 	for i, test := range tests {
 		t.Run("test-"+strconv.Itoa(i), func(t *testing.T) {
 			resp, err := gh.QuerySQLUnary(ctx, &pb.QuerySQLRequest{Sql: test.sql})
+			if test.wantErr != "" {
+				if err == nil {
+					t.Errorf("expected error %q, got nil", test.wantErr)
+				} else if !strings.Contains(err.Error(), test.wantErr) {
+					t.Errorf("expected error %q, got %q", test.wantErr, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("sql: %s, error: %v", test.sql, err)
 			} else {
@@ -1020,6 +1049,14 @@ func TestQuerySQL(t *testing.T) {
 			}
 			mock := &mockPilosa_QuerySQLServer{ctx: context.Background()}
 			err := gh.QuerySQL(&pb.QuerySQLRequest{Sql: test.sql}, mock)
+			if test.wantErr != "" {
+				if err == nil {
+					t.Errorf("expected error %q, got nil", test.wantErr)
+				} else if !strings.Contains(err.Error(), test.wantErr) {
+					t.Errorf("expected error %q, got %q", test.wantErr, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("sql: %s, error: %v", test.sql, err)
 			} else {
