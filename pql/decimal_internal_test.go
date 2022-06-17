@@ -2,9 +2,7 @@ package pql
 
 import (
 	"fmt"
-	"math"
 	"math/big"
-	"reflect"
 	"testing"
 )
 
@@ -89,45 +87,4 @@ func mustParse(t *testing.T, num string) Decimal {
 		d.value = *v
 	}
 	return d
-}
-
-func TestGobEncodeDecode(t *testing.T) {
-	for i := int64(-10); i < 10; i++ {
-		for j := int64(-10); j < 10; j++ {
-			decimal := &Decimal{value: *(big.NewInt(i)), Scale: j}
-			t.Run(fmt.Sprintf("v%ds%d", i, j), func(t *testing.T) {
-				encoded, err := decimal.GobEncode()
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				decoded := &Decimal{}
-				err = decoded.GobDecode(encoded)
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				if !reflect.DeepEqual(decimal, decoded) {
-					t.Errorf("%v != %v", decimal, encoded)
-				}
-			})
-		}
-	}
-
-	i := int64(math.MaxInt64)
-	j := int64(math.MinInt64)
-	decimal := &Decimal{value: *(big.NewInt(i)), Scale: j}
-	t.Run(fmt.Sprintf("v%ds%d", i, j), func(t *testing.T) {
-		encoded, err := decimal.GobEncode()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		decoded := &Decimal{}
-		err = decoded.GobDecode(encoded)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !reflect.DeepEqual(decimal, decoded) {
-			t.Errorf("%v != %v", decimal, encoded)
-		}
-	})
-
 }

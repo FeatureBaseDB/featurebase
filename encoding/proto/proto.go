@@ -3,6 +3,7 @@ package proto
 
 import (
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -1139,11 +1140,20 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 }
 
 func (s Serializer) decodeDecimal(d *pb.Decimal, m *pql.Decimal) {
-	// err should always be nil, unless there's a problem with the standard library
-	err := m.GobDecode(d.Gob)
-	if err != nil {
-		panic(err)
+	if !d.NewVersion {
+		// backwards compatibility
+		m.SetValue(d.Value)
+	} else {
+		// forwards compatibility
+		val := big.NewInt(0)
+		// set the absolute value
+		val.SetBytes(d.ValAbs)
+		// convert to the correct sign
+		val.Mul(val, big.NewInt(d.ValSign))
+		// set it on the retval
+		m.SetBigIntValue(val)
 	}
+	m.Scale = d.Scale
 }
 
 func (s Serializer) decodeNodes(a []*pb.Node, m []*topology.Node) {
@@ -1964,10 +1974,14 @@ func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 	if p == nil {
 		return nil
 	}
-	gob, _ := p.GobEncode() // ignore err on purpose
-	return &pb.Decimal{
-		Gob: gob,
+	val := p.Value()
+	retval := &pb.Decimal{
+		Scale:      p.Scale,
+		ValAbs:     val.Bytes(),
+		ValSign:    int64(val.Sign()),
+		NewVersion: true,
 	}
+	return retval
 }
 
 func (s Serializer) encodeResizeNodeMessage(m *pilosa.ResizeNodeMessage) *pb.ResizeNodeMessage {

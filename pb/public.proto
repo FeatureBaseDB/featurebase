@@ -113,7 +113,11 @@ message ValCount {
 }
 
 message Decimal {
-    bytes Gob = 1;
+    int64 Value = 1;
+    int64 Scale = 2;
+    bool NewVersion = 3;
+    bytes ValAbs = 4;
+    int64 ValSign = 5;
 }
 
 message DistinctTimestamp {

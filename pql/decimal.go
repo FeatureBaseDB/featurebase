@@ -2,7 +2,6 @@
 package pql
 
 import (
-	"encoding/binary"
 	"math"
 	"math/big"
 	"strconv"
@@ -67,6 +66,10 @@ func (d *Decimal) SetValue(v int64) {
 	d.value = *val
 }
 
+func (d *Decimal) SetBigIntValue(v *big.Int) {
+	d.value.Set(v)
+}
+
 func (d Decimal) Clone() (r *Decimal) {
 	val := big.NewInt(0)
 	val.Set(&d.value)
@@ -75,44 +78,6 @@ func (d Decimal) Clone() (r *Decimal) {
 		Scale: d.Scale,
 	}
 	return
-}
-
-func (d *Decimal) GobEncode() ([]byte, error) {
-	if d == nil {
-		return nil, nil
-	}
-	valBuf, err := d.value.GobEncode()
-	if err != nil {
-		return nil, err
-	}
-	valSz := len(valBuf)
-
-	// make a buffer the size of our Decimal, plus our 8 byte Scale,
-	// plus 1 byte for sign of scale
-	buf := make([]byte, valSz+8)
-	copy(buf[:valSz], valBuf)
-
-	binary.LittleEndian.PutUint64(buf[valSz:valSz+8], uint64(d.Scale))
-
-	return buf, nil
-}
-
-func (d *Decimal) GobDecode(buf []byte) error {
-	if len(buf) == 0 {
-		// they sent a nil or default value
-		*d = Decimal{}
-		return nil
-	}
-
-	valPart := len(buf) - 8
-	value := big.NewInt(0)
-	if err := value.GobDecode(buf[:valPart]); err != nil {
-		return err
-	}
-	d.value = *value
-
-	d.Scale = int64(binary.LittleEndian.Uint64(buf[valPart : valPart+8]))
-	return nil
 }
 
 // NewDecimal returns a Decimal based on the provided arguments.
