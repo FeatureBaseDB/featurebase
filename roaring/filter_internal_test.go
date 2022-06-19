@@ -125,6 +125,15 @@ func TestRowsUnion(t *testing.T) {
 	}
 	out := u.Results(0)
 	compareSlices(t, "sevenEleven", out.Slice(), expected)
+
+	// regression check (FB-1497)... make sure we're getting the
+	// expected bits in a higher shard as well
+	expected2 := make([]uint64, len(expected))
+	for i, exp := range expected {
+		expected2[i] = exp + 2*1<<shardwidth.Exponent
+	}
+	out2 := u.Results(2)
+	compareSlices(t, "sevenEleven2", out2.Slice(), expected2)
 }
 
 func TestBitmapFilter(t *testing.T) {

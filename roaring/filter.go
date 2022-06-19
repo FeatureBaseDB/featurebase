@@ -338,12 +338,11 @@ func (f *BitmapRowsUnion) ConsiderData(key FilterKey, data *Container) FilterRes
 // if necessary (because we expect the results to correspond to our shard
 // ID).
 func (f *BitmapRowsUnion) Results(shard uint64) *Bitmap {
-	shard <<= shardwidth.Exponent
 	b := NewSliceBitmap()
 	for i, c := range f.c {
 		// UnionInPlace might not have fixed count
 		c.Repair()
-		b.Containers.Put(uint64(i)+shard, c)
+		b.Containers.Put(uint64(i)+shard*rowWidth, c)
 	}
 	return b
 }
