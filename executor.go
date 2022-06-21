@@ -63,6 +63,10 @@ type executor struct {
 	workerPoolSize int
 	work           chan job
 
+	// track active mapperLocal tasks so we can ensure we don't close
+	// e.work while they're still waiting to send
+	activeMappers uint64
+
 	// Maximum per-request memory usage (Extract() only)
 	maxMemory int64
 }
@@ -139,6 +143,10 @@ func (e *executor) Close() error {
 	}
 	close(e.shutdown)
 	_ = testhook.Closed(NewAuditor(), e, nil)
+	// can't close e.work while a mapper is active.
+	for atomic.LoadUint64(&e.activeMappers) > 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 	close(e.work)
 	e.workers.Close()
 	return nil
@@ -6186,6 +6194,13 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := ctx.Done()
+	// the close process needs to know whether any mappers are currently active.
+	// note that we bump this BEFORE checking e.shutdown. if we check shutdown
+	// first, then we can check shutdown, after which the close process closes
+	// shutdown and checks the count of active mappers, after which we try to
+	// bump that count.
+	atomic.AddUint64(&e.activeMappers, 1)
+	defer atomic.AddUint64(&e.activeMappers, ^uint64(0))
 	select {
 	case <-e.shutdown:
 		return nil, errShutdown
@@ -6205,7 +6220,9 @@ shardLoop:
 			memoryAvailable: &memoryAvailable,
 		}
 		select {
-		case <-done:
+		case <-done: // this request's context terminated
+			break shardLoop
+		case <-e.shutdown: // whole executor shutting down
 			break shardLoop
 		case e.work <- j:
 			expected++
@@ -6214,6 +6231,10 @@ shardLoop:
 	// we *absolutely must* get responses for everything we successfully
 	// transmitted to the work queue, or there could be ongoing access to
 	// the parent Qcx's stuff.
+	//
+	// Even if our context is done, or the executor is shutting down,
+	// we still have to wait for responses, because the responders are
+	// going to send them and block waiting for us to receive them.
 
 	// Reduce results
 	var result interface{}
