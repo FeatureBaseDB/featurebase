@@ -22,13 +22,14 @@ const (
 var isOn bool
 
 // Initialiazing Sentry with particular settings
-func InitErrorMonitor() {
+func InitErrorMonitor(version string) {
 	isOn = true
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:              getDSN(),
 		AttachStacktrace: true,
 		Debug:            false,
 		TracesSampleRate: 1,
+		Release:          version,
 	})
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetUser(sentry.User{IPAddress: "{{auto}}"})

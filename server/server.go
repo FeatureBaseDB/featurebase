@@ -335,7 +335,8 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "setting up logger")
 	}
 
-	m.logger.Infof("%s", pilosa.VersionInfo(m.Config.Future.Rename))
+	version := pilosa.VersionInfo(m.Config.Future.Rename)
+	m.logger.Infof("%s", version)
 
 	handleTrialDeadline(m.logger)
 
@@ -457,7 +458,7 @@ func (m *Command) SetupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
-	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN)
+	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
 	discoOpt := pilosa.OptServerDisCo(e, e, e, e, e, e, e)
 
 	serverOptions := []pilosa.ServerOption{

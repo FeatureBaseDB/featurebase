@@ -133,17 +133,20 @@ type Etcd struct {
 	nodeStates      map[string]disco.NodeState
 	nodeStatesDirty bool // do we need to remake the nodeStates map to use it?
 
+	version string
+
 	// we want to inherit parent's logging functionality
 	logger logger.Logger
 }
 
-func NewEtcd(opt Options, logger logger.Logger, replicas int) *Etcd {
+func NewEtcd(opt Options, logger logger.Logger, replicas int, version string) *Etcd {
 	e := &Etcd{
 		options:    opt,
 		logger:     logger,
 		replicas:   replicas,
 		knownNodes: make(map[string]*nodeData),
 		nodeStates: make(map[string]disco.NodeState),
+		version:    version,
 	}
 
 	if e.options.HeartbeatTTL == 0 {
@@ -284,7 +287,8 @@ func (e *Etcd) parseOptions() *embed.Config {
 		// enterprise version. Sentry.io is enabled on single-node.
 		if AllowCluster() == false {
 			// %% end sonarcloud ignore %%
-			monitor.InitErrorMonitor()
+
+			monitor.InitErrorMonitor(e.version)
 			e.logger.Infof("Initializing Monitor: Capturing usage metrics")
 			//check for multiple nodes in the cluster and error if present
 			nodes := strings.Split(e.options.InitCluster, ",")
