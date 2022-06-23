@@ -1056,6 +1056,11 @@ func (h *Holder) DeleteIndex(name string) error {
 		return newNotFoundError(ErrIndexNotFound, name)
 	}
 
+	// Delete the index from etcd as the system of record.
+	if err := h.schemator.DeleteIndex(context.TODO(), name); err != nil {
+		return errors.Wrapf(err, "deleting index from etcd: %s", name)
+	}
+
 	// Close index.
 	if err := index.Close(); err != nil {
 		return errors.Wrap(err, "closing")
@@ -1082,11 +1087,6 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// Remove reference.
 	h.deleteIndex(name)
-
-	// Delete the index from etcd as the system of record.
-	if err := h.schemator.DeleteIndex(context.TODO(), name); err != nil {
-		return errors.Wrapf(err, "deleting index from etcd: %s", name)
-	}
 
 	// I'm not sure if calling Reset() here is necessary
 	// since closing the index stops its translation

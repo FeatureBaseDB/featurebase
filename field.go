@@ -1147,6 +1147,11 @@ func (f *Field) deleteView(name string) error {
 		return ErrInvalidView
 	}
 
+	// Delete the view from etcd as the system of record.
+	if err := f.schemator.DeleteView(context.TODO(), f.index, f.name, name); err != nil {
+		return errors.Wrapf(err, "deleting view from etcd: %s/%s/%s", f.index, f.name, name)
+	}
+
 	// Close data files before deletion.
 	if err := view.close(); err != nil {
 		return errors.Wrap(err, "closing view")
@@ -1158,11 +1163,6 @@ func (f *Field) deleteView(name string) error {
 	}
 
 	delete(f.viewMap, name)
-
-	// Delete the view from etcd as the system of record.
-	if err := f.schemator.DeleteView(context.TODO(), f.index, f.name, name); err != nil {
-		return errors.Wrapf(err, "deleting view from etcd: %s/%s/%s", f.index, f.name, name)
-	}
 
 	return nil
 }

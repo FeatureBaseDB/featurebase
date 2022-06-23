@@ -897,6 +897,11 @@ func (i *Index) DeleteField(name string) error {
 		return newNotFoundError(ErrFieldNotFound, name)
 	}
 
+	// Delete the field from etcd as the system of record.
+	if err := i.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
+		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
+	}
+
 	// Close field.
 	if err := f.Close(); err != nil {
 		return errors.Wrap(err, "closing")
@@ -911,12 +916,6 @@ func (i *Index) DeleteField(name string) error {
 
 	// remove shard metadata for field
 	i.fieldView2shard.removeField(name)
-
-	// Delete the field from etcd as the system of record.
-	if err := i.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
-		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
-	}
-
 	return i.translationSyncer.Reset()
 }
 
