@@ -459,7 +459,6 @@ func (m *Command) SetupServer() error {
 	}
 
 	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
-	discoOpt := pilosa.OptServerDisCo(e, e, e, e, e, e)
 
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
@@ -487,7 +486,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
-		discoOpt,
+		pilosa.OptServerDisCo(e, e, e, e),
 	}
 
 	if m.Config.LookupDBDSN != "" {

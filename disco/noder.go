@@ -1,7 +1,8 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package topology
+package disco
 
 import (
+	"context"
 	"sort"
 )
 
@@ -10,6 +11,20 @@ import (
 type Noder interface {
 	Nodes() []*Node // Remember: this has to be sorted correctly!!
 	PrimaryNodeID(hasher Hasher) string
+
+	// SetMetadata records the local node's metadata.
+	SetMetadata(ctx context.Context, node *Node) error
+
+	// SetState changes a node to a given state.
+	SetState(ctx context.Context, state NodeState) error
+
+	// ClusterState considers the state of all nodes and gives
+	// a general cluster state. The output calculation is as follows:
+	// - If any of the nodes are still starting: "STARTING"
+	// - If all nodes are up and running: "NORMAL"
+	// - If number of DOWN nodes is lower than number of replicas: "DEGRADED"
+	// - If number of unresponsive nodes is greater than (or equal to) the number of replicas: "DOWN"
+	ClusterState(context.Context) (ClusterState, error)
 }
 
 // localNoder is a simple implementation of the Noder interface
@@ -63,4 +78,18 @@ func (n *localNoder) PrimaryNodeID(hasher Hasher) string {
 		return ""
 	}
 	return primaryNode.ID
+}
+
+// ClusterState is a no-op implementation of the Stator ClusterState method.
+func (n *localNoder) ClusterState(context.Context) (ClusterState, error) {
+	return ClusterStateUnknown, nil
+}
+
+func (n *localNoder) SetState(ctx context.Context, state NodeState) error {
+	return nil
+}
+
+// localNoder doesn't really implement metadata support.
+func (*localNoder) SetMetadata(context.Context, *Node) error {
+	return nil
 }

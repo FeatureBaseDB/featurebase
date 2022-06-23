@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/etcd"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/topology"
 )
 
 // utilities used by tests
@@ -30,15 +30,15 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	c.Hasher = NewTestModHasher()
 	c.Path = path
 
-	nodes := make([]*topology.Node, 0, n)
+	nodes := make([]*disco.Node, 0, n)
 
 	for i := 0; i < n; i++ {
-		nodes = append(nodes, &topology.Node{
+		nodes = append(nodes, &disco.Node{
 			ID:  fmt.Sprintf("node%d", i),
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
-	c.noder = topology.NewLocalNoder(nodes)
+	c.noder = disco.NewLocalNoder(nodes)
 
 	cNodes := c.noder.Nodes()
 

@@ -14,7 +14,6 @@ import (
 	"github.com/molecula/featurebase/v3/pb"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 )
 
@@ -159,7 +158,7 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		s.decodeNodeStatus(msg, mt)
 		return nil
-	case *topology.Node:
+	case *disco.Node:
 		msg := &pb.Node{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
@@ -345,7 +344,7 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeNodeEventMessage(mt)
 	case *pilosa.NodeStatus:
 		return s.encodeNodeStatus(mt)
-	case *topology.Node:
+	case *disco.Node:
 		return s.encodeNode(mt)
 	case *pilosa.QueryRequest:
 		return s.encodeQueryRequest(mt)
@@ -633,7 +632,7 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions 
 }
 
 // s.encodeNodes converts a slice of Nodes into its pb.representation.
-func (s Serializer) encodeNodes(a []*topology.Node) []*pb.Node {
+func (s Serializer) encodeNodes(a []*disco.Node) []*pb.Node {
 	other := make([]*pb.Node, len(a))
 	for i := range a {
 		other[i] = s.encodeNode(a[i])
@@ -642,7 +641,7 @@ func (s Serializer) encodeNodes(a []*topology.Node) []*pb.Node {
 }
 
 // s.encodeNode converts a Node into its pb.representation.
-func (s Serializer) encodeNode(m *topology.Node) *pb.Node {
+func (s Serializer) encodeNode(m *disco.Node) *pb.Node {
 	n := m.Clone()
 	return &pb.Node{
 		ID:      n.ID,
@@ -1019,9 +1018,9 @@ func (s Serializer) decodeDecimal(d *pb.Decimal, m *pql.Decimal) {
 	m.Scale = d.Scale
 }
 
-func (s Serializer) decodeNodes(a []*pb.Node, m []*topology.Node) {
+func (s Serializer) decodeNodes(a []*pb.Node, m []*disco.Node) {
 	for i := range a {
-		m[i] = &topology.Node{}
+		m[i] = &disco.Node{}
 		s.decodeNode(a[i], m[i])
 	}
 }
@@ -1029,13 +1028,13 @@ func (s Serializer) decodeNodes(a []*pb.Node, m []*topology.Node) {
 func (s Serializer) decodeClusterStatus(cs *pb.ClusterStatus, m *pilosa.ClusterStatus) {
 	m.State = cs.State
 	m.ClusterID = cs.ClusterID
-	m.Nodes = make([]*topology.Node, len(cs.Nodes))
+	m.Nodes = make([]*disco.Node, len(cs.Nodes))
 	s.decodeNodes(cs.Nodes, m.Nodes)
 	m.Schema = &pilosa.Schema{}
 	s.decodeSchema(cs.Schema, m.Schema)
 }
 
-func (s Serializer) decodeNode(node *pb.Node, m *topology.Node) {
+func (s Serializer) decodeNode(node *pb.Node, m *disco.Node) {
 	m.ID = node.ID
 	s.decodeURI(node.URI, &m.URI)
 	s.decodeURI(node.GRPCURI, &m.GRPCURI)
@@ -1120,12 +1119,12 @@ func (s Serializer) decodeNodeStateMessage(pb *pb.NodeStateMessage, m *pilosa.No
 
 func (s Serializer) decodeNodeEventMessage(pb *pb.NodeEventMessage, m *pilosa.NodeEvent) {
 	m.Event = pilosa.NodeEventType(pb.Event)
-	m.Node = &topology.Node{}
+	m.Node = &disco.Node{}
 	s.decodeNode(pb.Node, m.Node)
 }
 
 func (s Serializer) decodeNodeStatus(pb *pb.NodeStatus, m *pilosa.NodeStatus) {
-	m.Node = &topology.Node{}
+	m.Node = &disco.Node{}
 	m.Indexes = s.decodeIndexStatuses(pb.Indexes)
 	m.Schema = &pilosa.Schema{}
 	s.decodeSchema(pb.Schema, m.Schema)

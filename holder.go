@@ -19,7 +19,6 @@ import (
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -211,7 +210,7 @@ type HolderConfig struct {
 
 func DefaultHolderConfig() *HolderConfig {
 	return &HolderConfig{
-		PartitionN:           topology.DefaultPartitionN,
+		PartitionN:           disco.DefaultPartitionN,
 		OpenTranslateStore:   OpenInMemTranslateStore,
 		OpenTranslateReader:  nil,
 		OpenTransactionStore: OpenInMemTransactionStore,
@@ -1197,7 +1196,7 @@ type holderSyncer struct {
 
 	Holder *Holder
 
-	Node    *topology.Node
+	Node    *disco.Node
 	Cluster *cluster
 
 	// Translation sync handling.
@@ -1447,7 +1446,7 @@ func (s *holderSyncer) stopTranslationSync() error {
 // setTranslateReadOnlyFlags updates all translation stores to enable or disable
 // writing new translation keys. Index stores are writable if the node owns the
 // partition. Field stores are writable if the node is the primary.
-func (s *holderSyncer) setTranslateReadOnlyFlags(snap *topology.ClusterSnapshot) {
+func (s *holderSyncer) setTranslateReadOnlyFlags(snap *disco.ClusterSnapshot) {
 	s.Cluster.mu.RLock()
 	isPrimaryFieldTranslator := snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID)
 
@@ -1490,7 +1489,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags(snap *topology.ClusterSnapshot)
 // any key translation, whether that's field keys (every node replicates these
 // from the primary) or index keys (only the replica nodes for each partition
 // replicate these from whichever node is primary for that partition).
-func (s *holderSyncer) initializeReplication(snap *topology.ClusterSnapshot) error {
+func (s *holderSyncer) initializeReplication(snap *disco.ClusterSnapshot) error {
 	nodeMaps := make(map[string]TranslateOffsetMap)
 	if snap.ReplicaN > 1 {
 		if err := s.populateIndexReplication(nodeMaps, snap); err != nil {
@@ -1502,7 +1501,7 @@ func (s *holderSyncer) initializeReplication(snap *topology.ClusterSnapshot) err
 	}
 
 	// filter out empty nodes
-	nodes := make(map[*topology.Node]bool)
+	nodes := make(map[*disco.Node]bool)
 	for _, node := range snap.Nodes {
 		m := nodeMaps[node.ID]
 		if !m.Empty() {
@@ -1599,7 +1598,7 @@ func (s *holderSyncer) initializeReplication(snap *topology.ClusterSnapshot) err
 // populateFieldReplication populates a map from node IDs to TranslateOffsetMaps
 // to record that we need to translate fields which have key translation
 // from the primary node.
-func (s *holderSyncer) populateFieldReplication(nodeMaps map[string]TranslateOffsetMap, snap *topology.ClusterSnapshot) error {
+func (s *holderSyncer) populateFieldReplication(nodeMaps map[string]TranslateOffsetMap, snap *disco.ClusterSnapshot) error {
 	// Set up field translation
 	if !snap.IsPrimaryFieldTranslationNode(s.Cluster.Node.ID) {
 		primaryID := snap.PrimaryFieldTranslationNode().ID
@@ -1633,7 +1632,7 @@ func (s *holderSyncer) populateFieldReplication(nodeMaps map[string]TranslateOff
 // to record which nodes we need to replicate index key translation for.
 // That means nodes which are the primary for a partition that we're a
 // non-primary replica for.
-func (s *holderSyncer) populateIndexReplication(nodeMaps map[string]TranslateOffsetMap, snap *topology.ClusterSnapshot) error {
+func (s *holderSyncer) populateIndexReplication(nodeMaps map[string]TranslateOffsetMap, snap *disco.ClusterSnapshot) error {
 	for _, node := range snap.Nodes {
 		if node.ID == s.Node.ID {
 			continue
@@ -1647,8 +1646,8 @@ func (s *holderSyncer) populateIndexReplication(nodeMaps map[string]TranslateOff
 			}
 			for partitionID := 0; partitionID < snap.PartitionN; partitionID++ {
 				partitionNodes := snap.PartitionNodes(partitionID)
-				isPrimary := partitionNodes[0].ID == node.ID                          // remote is primary?
-				isReplica := topology.Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
+				isPrimary := partitionNodes[0].ID == node.ID                       // remote is primary?
+				isReplica := disco.Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
 				if !isPrimary || !isReplica {
 					continue
 				}
@@ -1677,7 +1676,7 @@ func (s *holderSyncer) populateIndexReplication(nodeMaps map[string]TranslateOff
 // readBothTranslateReader reads key translation for field keys or
 // index keys from a remote node. Both field and index keys may be sent,
 // the distinction is that field keys have a non-empty field name.
-func (s *holderSyncer) readBothTranslateReader(rd TranslateEntryReader, snap *topology.ClusterSnapshot) {
+func (s *holderSyncer) readBothTranslateReader(rd TranslateEntryReader, snap *disco.ClusterSnapshot) {
 	for {
 		var entry TranslateEntry
 		if err := rd.ReadEntry(&entry); err != nil {

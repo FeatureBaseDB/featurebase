@@ -21,10 +21,10 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/ingest"
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
@@ -541,7 +541,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt Inde
 }
 
 // FragmentNodes returns a list of nodes that own a shard.
-func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*topology.Node, error) {
+func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*disco.Node, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FragmentNodes")
 	defer span.Finish()
 
@@ -566,7 +566,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 	}
 	defer resp.Body.Close()
 
-	var a []*topology.Node
+	var a []*disco.Node
 	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
@@ -574,7 +574,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 }
 
 // Nodes returns a list of all nodes.
-func (c *InternalClient) Nodes(ctx context.Context) ([]*topology.Node, error) {
+func (c *InternalClient) Nodes(ctx context.Context) ([]*disco.Node, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Nodes")
 	defer span.Finish()
 
@@ -598,7 +598,7 @@ func (c *InternalClient) Nodes(ctx context.Context) ([]*topology.Node, error) {
 	}
 	defer resp.Body.Close()
 
-	var a []*topology.Node
+	var a []*disco.Node
 	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
@@ -665,7 +665,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 	return qresp, nil
 }
 
-func getPrimaryNode(nodes []*topology.Node) *topology.Node {
+func getPrimaryNode(nodes []*disco.Node) *disco.Node {
 	for _, node := range nodes {
 		if node.IsPrimary {
 			return node
@@ -702,7 +702,7 @@ func (c *InternalClient) EnsureFieldWithOptions(ctx context.Context, indexName s
 }
 
 // importNode sends a pre-marshaled import request to a node.
-func (c *InternalClient) importNode(ctx context.Context, node *topology.Node, index, field string, buf []byte, opts *ImportOptions) error {
+func (c *InternalClient) importNode(ctx context.Context, node *disco.Node, index, field string, buf []byte, opts *ImportOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.importNode")
 	defer span.Finish()
 
@@ -765,7 +765,7 @@ func (c *InternalClient) importHelper(ctx context.Context, req Message, process 
 	// If we don't actually know what shards we're sending to, and we have
 	// a local API and a qcx, we'll have a process function that uses the local
 	// API. Otherwise, even if we have an API
-	var nodes []*topology.Node
+	var nodes []*disco.Node
 	var err error
 	if shard != ^uint64(0) {
 		// we need a list of nodes specific to this shard.
@@ -795,8 +795,8 @@ func (c *InternalClient) importHelper(ctx context.Context, req Message, process 
 	// "us" is a usable local node if any, "them" is every node that we need
 	// to process which isn't that node. We start out with us == nil and
 	// them = the whole set of nodes.
-	var us *topology.Node
-	var them []*topology.Node = nodes
+	var us *disco.Node
+	var them []*disco.Node = nodes
 
 	// If we have an API, we know what node we are. Even if we don't have
 	// a Qcx, we still care, because looping back to the local node will
@@ -1005,7 +1005,7 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sha
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *InternalClient) exportNodeCSV(ctx context.Context, node *topology.Node, index, field string, shard uint64, w io.Writer) error {
+func (c *InternalClient) exportNodeCSV(ctx context.Context, node *disco.Node, index, field string, shard uint64, w io.Writer) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.exportNodeCSV")
 	defer span.Finish()
 
@@ -1048,7 +1048,7 @@ func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field,
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveShardFromURI")
 	defer span.Finish()
 
-	node := &topology.Node{
+	node := &disco.Node{
 		URI: uri,
 	}
 
@@ -2141,7 +2141,7 @@ func uriPathToURL(uri *pnet.URI, path string) url.URL {
 	}
 }
 
-func nodePathToURL(node *topology.Node, path string) url.URL {
+func nodePathToURL(node *disco.Node, path string) url.URL {
 	return url.URL{
 		Scheme: node.URI.Scheme,
 		Host:   node.URI.HostPort(),
@@ -2156,7 +2156,7 @@ func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, 
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveTranslatePartitionFromURI")
 	defer span.Finish()
 
-	node := &topology.Node{
+	node := &disco.Node{
 		URI: uri,
 	}
 
@@ -2303,7 +2303,7 @@ func (c *InternalClient) IDAllocDataReader(ctx context.Context) (io.ReadCloser, 
 	return resp.Body, nil
 }
 
-func (c *InternalClient) IDAllocDataWriter(ctx context.Context, f io.Reader, primary *topology.Node) error {
+func (c *InternalClient) IDAllocDataWriter(ctx context.Context, f io.Reader, primary *disco.Node) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.IDAllocDataWriter")
 	defer span.Finish()
 
@@ -2419,7 +2419,7 @@ func (c *InternalClient) Status(ctx context.Context) (string, error) {
 	return rsp.State, nil
 }
 
-func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([]*topology.Node, error) {
+func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([]*disco.Node, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.PartitionNodes")
 	defer span.Finish()
 
@@ -2444,7 +2444,7 @@ func (c *InternalClient) PartitionNodes(ctx context.Context, partitionID int) ([
 	}
 	defer resp.Body.Close()
 
-	var a []*topology.Node
+	var a []*disco.Node
 	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/gogo/protobuf/proto"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/pb"
@@ -31,7 +32,6 @@ import (
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
@@ -3162,7 +3162,7 @@ func (h *blockHasher) WriteValue(v uint64) {
 type fragmentSyncer struct {
 	Fragment *fragment
 
-	Node    *topology.Node
+	Node    *disco.Node
 	Cluster *cluster
 
 	// FieldType helps determine which method of syncing to use.

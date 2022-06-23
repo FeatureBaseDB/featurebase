@@ -12,9 +12,9 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/topology"
 )
 
 //var vv = pilosa.VV
@@ -382,7 +382,7 @@ func MustNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
 		panic(err)
 	}
 
-	s := boltdb.NewTranslateStore("I", "F", 0, topology.DefaultPartitionN, false)
+	s := boltdb.NewTranslateStore("I", "F", 0, disco.DefaultPartitionN, false)
 	s.Path = f.Name()
 	return s
 }

@@ -3,13 +3,10 @@ package etcd
 
 import (
 	"context"
-	"fmt"
-	"net"
 	"os"
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -23,11 +20,46 @@ import (
 const initVal = "test"
 const newVal = "newValue"
 
+func TestClusterKv(t *testing.T) {
+	if !AllowCluster() {
+		t.Skip("only testing clusters when clustering is allowed")
+	}
+	c := NewFakeCluster(t, 3, 2)
+	err := c.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	c.MustAwaitClusterState(disco.ClusterStateDown)
+	err = c.BringUp()
+	if err != nil {
+		t.Fatalf("bringing up cluster: %v", err)
+	}
+	c.MustAwaitClusterState(disco.ClusterStateNormal)
+	_, err = c.Elect()
+	if err != nil {
+		t.Fatalf("trying to cause election: %v", err)
+	}
+	ctx := context.TODO()
+	c.nodes[0].SetState(ctx, disco.NodeStateStarting)
+	c.nodes[1].SetState(ctx, disco.NodeStateStarting)
+	c.MustAwaitClusterState(disco.ClusterStateStarting)
+	c.nodes[0].SetState(ctx, disco.NodeStateStarted)
+	c.nodes[1].SetState(ctx, disco.NodeStateStarted)
+	// Two of three nodes are up, one is down, we have 2 replicas, so
+	// we should be able to handle reads but not writes, so we're in
+	// a Degraded state.
+	c.MustAwaitClusterState(disco.ClusterStateDegraded)
+	err = c.Stop()
+	if err != nil {
+		t.Fatalf("stopping cluster: %v", err)
+	}
+}
+
 func TestLeasedKv(t *testing.T) {
 	cfg := embed.NewConfig()
 
-	clientURL := pilosa.EtcdUnixSocket(t)
-	peerURL := pilosa.EtcdUnixSocket(t)
+	clientURL := unixSocket(t)
+	peerURL := unixSocket(t)
 	cfg.LPUrls = types.MustNewURLs([]string{peerURL})
 	cfg.APUrls = types.MustNewURLs([]string{peerURL})
 	cfg.LCUrls = types.MustNewURLs([]string{clientURL})
@@ -53,7 +85,7 @@ func TestLeasedKv(t *testing.T) {
 	}()
 	wrapper := &Etcd{e: etcd, cli: cli, logger: logger.NewLogfLogger(t)}
 
-	lkv := newLeasedKV(wrapper, "/test", 1)
+	lkv := newLeasedKV(wrapper, context.TODO(), "/test", 1)
 
 	ctx := context.Background()
 
@@ -104,17 +136,4 @@ func TestLeasedKv(t *testing.T) {
 	if err == nil || !errors.Is(err, disco.ErrNoResults) {
 		t.Fatal("expected error:", disco.ErrNoResults, "obtained:", err)
 	}
-}
-
-// listenerWithURL builds a TCP listener and corresponding http://localhost:%d
-// URL, and returns those.
-func listenerWithURL() (listener *net.TCPListener, url string, err error) {
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return listener, url, err
-	}
-	listener = l.(*net.TCPListener)
-	port := listener.Addr().(*net.TCPAddr).Port
-	url = fmt.Sprintf("http://localhost:%d", port)
-	return listener, url, err
 }

@@ -19,9 +19,9 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -103,7 +103,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 		return err
 	}
 
-	var primary *topology.Node
+	var primary *disco.Node
 	for _, node := range nodes {
 		if node.IsPrimary {
 			primary = node
@@ -138,7 +138,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	return nil
 }
 
-func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *topology.Node) error {
+func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *disco.Node) error {
 	f, err := os.Open(filepath.Join(cmd.Path, "schema"))
 	if err != nil {
 		return err
@@ -235,7 +235,7 @@ func (cmd *RestoreCommand) newClient() *retryablehttp.Client {
 	return client
 }
 
-func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *topology.Node) error {
+func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *disco.Node) error {
 	logger := cmd.Logger()
 
 	f, err := os.Open(filepath.Join(cmd.Path, "idalloc"))
@@ -411,7 +411,7 @@ func (cmd *RestoreCommand) restoreIndexTranslationFile(ctx context.Context, file
 	return nil
 }
 
-func (cmd *RestoreCommand) restoreFieldTranslation(ctx context.Context, nodes []*topology.Node) error {
+func (cmd *RestoreCommand) restoreFieldTranslation(ctx context.Context, nodes []*disco.Node) error {
 	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "fields", "*", "translate"))
 	if err != nil {
 		return err
@@ -443,7 +443,7 @@ func (cmd *RestoreCommand) restoreFieldTranslation(ctx context.Context, nodes []
 	return g.Wait()
 }
 
-func (cmd *RestoreCommand) restoreFieldTranslationFile(ctx context.Context, nodes []*topology.Node, filename string) error {
+func (cmd *RestoreCommand) restoreFieldTranslationFile(ctx context.Context, nodes []*disco.Node, filename string) error {
 	logger := cmd.Logger()
 
 	rel, err := filepath.Rel(cmd.Path, filename)

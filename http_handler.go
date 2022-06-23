@@ -31,13 +31,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/ingest"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/monitor"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/rbf"
 	"github.com/molecula/featurebase/v3/storage"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -1227,10 +1227,10 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State       string           `json:"state"`
-	Nodes       []*topology.Node `json:"nodes"`
-	LocalID     string           `json:"localID"`
-	ClusterName string           `json:"clusterName"`
+	State       string        `json:"state"`
+	Nodes       []*disco.Node `json:"nodes"`
+	LocalID     string        `json:"localID"`
+	ClusterName string        `json:"clusterName"`
 }
 
 func httpHash(s string) string {

@@ -16,11 +16,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 )
 
@@ -285,7 +285,7 @@ func TestClient_Export(t *testing.T) {
 		bw := bufio.NewWriter(buf)
 
 		// Send export request for every partition.
-		for i := 0; i < topology.DefaultPartitionN; i++ {
+		for i := 0; i < disco.DefaultPartitionN; i++ {
 			if err := c.ExportCSV(context.Background(), "keyed", "unkeyedf", uint64(i), bw); err != nil {
 				t.Fatal(err)
 			}
@@ -326,7 +326,7 @@ func TestClient_Export(t *testing.T) {
 		bw := bufio.NewWriter(buf)
 
 		// Send export request.
-		for i := 0; i < topology.DefaultPartitionN; i++ {
+		for i := 0; i < disco.DefaultPartitionN; i++ {
 			if err := c.ExportCSV(context.Background(), "keyed", "keyedf", uint64(i), bw); err != nil {
 				t.Fatal(err)
 			}

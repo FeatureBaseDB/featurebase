@@ -11,7 +11,6 @@ import (
 	"github.com/molecula/featurebase/v3/ingest"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -23,13 +22,13 @@ const (
 
 // cluster represents a collection of nodes.
 type cluster struct { // nolint: maligned
-	noder topology.Noder
+	noder disco.Noder
 
 	id   string
-	Node *topology.Node
+	Node *disco.Node
 
 	// Hashing algorithm used to assign partitions to nodes.
-	Hasher topology.Hasher
+	Hasher disco.Hasher
 
 	// The number of partitions in the cluster.
 	partitionN int
@@ -48,7 +47,6 @@ type cluster struct { // nolint: maligned
 
 	// Distributed Consensus
 	disCo   disco.DisCo
-	stator  disco.Stator
 	sharder disco.Sharder
 
 	holder      *Holder
@@ -78,8 +76,8 @@ type cluster struct { // nolint: maligned
 // newCluster returns a new instance of Cluster with defaults.
 func newCluster() *cluster {
 	return &cluster{
-		Hasher:     &topology.Jmphasher{},
-		partitionN: topology.DefaultPartitionN,
+		Hasher:     &disco.Jmphasher{},
+		partitionN: disco.DefaultPartitionN,
 		ReplicaN:   1,
 
 		closing: make(chan struct{}),
@@ -93,9 +91,8 @@ func newCluster() *cluster {
 		confirmDownRetries: defaultConfirmDownRetries,
 		confirmDownSleep:   defaultConfirmDownSleep,
 
-		disCo:  disco.NopDisCo,
-		noder:  topology.NewEmptyLocalNoder(),
-		stator: disco.NopStator,
+		disCo: disco.NopDisCo,
+		noder: disco.NewEmptyLocalNoder(),
 	}
 }
 
@@ -126,12 +123,12 @@ func (c *cluster) abortAntiEntropy() {
 	}
 }
 
-func (c *cluster) primaryNode() *topology.Node {
+func (c *cluster) primaryNode() *disco.Node {
 	return c.unprotectedPrimaryNode()
 }
 
 // unprotectedPrimaryNode returns the primary node.
-func (c *cluster) unprotectedPrimaryNode() *topology.Node {
+func (c *cluster) unprotectedPrimaryNode() *disco.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := c.NewSnapshot()
 	return snap.PrimaryFieldTranslationNode()
@@ -161,7 +158,7 @@ func (c *cluster) applySchemaWithNewShards(schema *Schema) error {
 
 // unprotectedStatus returns the the cluster's status including what nodes it contains, its ID, and current state.
 func (c *cluster) unprotectedStatus() (*ClusterStatus, error) {
-	state, err := c.stator.ClusterState(context.Background())
+	state, err := c.noder.ClusterState(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -196,21 +193,21 @@ func (c *cluster) remoteSchema() (*Schema, error) {
 
 // nodeIDs returns the list of IDs in the cluster.
 func (c *cluster) nodeIDs() []string {
-	return topology.Nodes(c.Nodes()).IDs()
+	return disco.Nodes(c.Nodes()).IDs()
 }
 
 func (c *cluster) State() (disco.ClusterState, error) {
-	return c.stator.ClusterState(context.Background())
+	return c.noder.ClusterState(context.Background())
 }
 
-func (c *cluster) nodeByID(id string) *topology.Node {
+func (c *cluster) nodeByID(id string) *disco.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.unprotectedNodeByID(id)
 }
 
 // unprotectedNodeByID returns a node reference by ID.
-func (c *cluster) unprotectedNodeByID(id string) *topology.Node {
+func (c *cluster) unprotectedNodeByID(id string) *disco.Node {
 	for _, n := range c.noder.Nodes() {
 		if n.ID == id {
 			return n
@@ -231,13 +228,13 @@ func (c *cluster) nodePositionByID(nodeID string) int {
 
 // Nodes returns a copy of the slice of nodes in the cluster. Safe for
 // concurrent use, result may be modified.
-func (c *cluster) Nodes() []*topology.Node {
+func (c *cluster) Nodes() []*disco.Node {
 	nodes := c.noder.Nodes()
 	// duplicate the nodes since we're going to be altering them
-	copiedNodes := make([]topology.Node, len(nodes))
-	result := make([]*topology.Node, len(nodes))
+	copiedNodes := make([]disco.Node, len(nodes))
+	result := make([]*disco.Node, len(nodes))
 
-	primary := topology.PrimaryNode(nodes, c.Hasher)
+	primary := disco.PrimaryNode(nodes, c.Hasher)
 
 	// Set node states and IsPrimary.
 	for i, node := range nodes {
@@ -293,13 +290,13 @@ func (c *cluster) close() error {
 
 // PrimaryReplicaNode returns the node listed before the current node in c.Nodes.
 // This is different than "previous node" as the first node always returns nil.
-func (c *cluster) PrimaryReplicaNode() *topology.Node {
+func (c *cluster) PrimaryReplicaNode() *disco.Node {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.unprotectedPrimaryReplicaNode()
 }
 
-func (c *cluster) unprotectedPrimaryReplicaNode() *topology.Node {
+func (c *cluster) unprotectedPrimaryReplicaNode() *disco.Node {
 	pos := c.nodePositionByID(c.Node.ID)
 	if pos <= 0 {
 		return nil
@@ -642,7 +639,7 @@ func (c *cluster) findIndexKeys(ctx context.Context, indexName string, keys ...s
 	// TODO: use local replicas to short-circuit network traffic
 
 	// Group keys by node.
-	keysByNode := make(map[*topology.Node][]string)
+	keysByNode := make(map[*disco.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
 		primary := snap.PrimaryPartitionNode(partitionID)
@@ -752,7 +749,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 
 	// Group keys by node.
 	// Delete remote keys from the by-partition map so that it can be used for local translation.
-	keysByNode := make(map[*topology.Node][]string)
+	keysByNode := make(map[*disco.Node][]string)
 	for partitionID, keys := range keysByPartition {
 		// Find the primary node for this partition.
 		primary := snap.PrimaryPartitionNode(partitionID)
@@ -909,8 +906,8 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 	return idMap, nil
 }
 
-func (c *cluster) NewSnapshot() *topology.ClusterSnapshot {
-	return topology.NewClusterSnapshot(c.noder, c.Hasher, c.partitionAssigner, c.ReplicaN)
+func (c *cluster) NewSnapshot() *disco.ClusterSnapshot {
+	return disco.NewClusterSnapshot(c.noder, c.Hasher, c.partitionAssigner, c.ReplicaN)
 }
 
 // ClusterStatus describes the status of the cluster including its
@@ -918,7 +915,7 @@ func (c *cluster) NewSnapshot() *topology.ClusterSnapshot {
 type ClusterStatus struct {
 	ClusterID string
 	State     string
-	Nodes     []*topology.Node
+	Nodes     []*disco.Node
 	Schema    *Schema
 }
 
@@ -997,7 +994,7 @@ type NodeStateMessage struct {
 
 // NodeStatus is an internal message representing the contents of a node.
 type NodeStatus struct {
-	Node    *topology.Node
+	Node    *disco.Node
 	Indexes []*IndexStatus
 	Schema  *Schema
 }

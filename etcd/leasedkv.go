@@ -17,10 +17,11 @@ import (
 // It will try to renew the lease at any cost after losing it.
 // It will recreate the previous existing value for the key again.
 type leasedKV struct {
-	e       *Etcd
-	cancel  context.CancelFunc
-	done    <-chan struct{}
-	leaseID clientv3.LeaseID
+	e             *Etcd
+	parentContext context.Context
+	cancel        context.CancelFunc
+	done          <-chan struct{}
+	leaseID       clientv3.LeaseID
 
 	key        string
 	ttlSeconds int64
@@ -30,11 +31,12 @@ type leasedKV struct {
 	stopped bool   // protected by mu
 }
 
-func newLeasedKV(e *Etcd, key string, ttlSeconds int64) *leasedKV {
+func newLeasedKV(e *Etcd, ctx context.Context, key string, ttlSeconds int64) *leasedKV {
 	return &leasedKV{
-		e:          e,
-		key:        key,
-		ttlSeconds: ttlSeconds,
+		e:             e,
+		parentContext: ctx,
+		key:           key,
+		ttlSeconds:    ttlSeconds,
 	}
 }
 
@@ -53,8 +55,12 @@ func (l *leasedKV) Start(initValue string) error {
 	return nil
 }
 
+// create creates the lease and yields a KeepAlive channel. It also stashes a cancel
+// function for our local context that we use in case of internal issues, and the
+// done channel for the internal context, which will be readable as soon as either
+// our context or the parent context is done.
 func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResponse, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(l.parentContext)
 
 	if l.cancel != nil {
 		l.cancel()
@@ -99,8 +105,6 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
 	for {
 		select {
-		case <-l.e.closeWatch:
-			return
 		case _, ok := <-ch:
 			if ok {
 				continue
@@ -146,7 +150,9 @@ func (l *leasedKV) Stop() {
 		l.cancel()
 	}
 	// low-effort attempt to cancel existing lease. if the cluster is
-	// shutting down, we don't want this to take long.
+	// shutting down, we don't want this to take long. Note that we don't
+	// use the parent context for this -- if we got cancelled, we still
+	// want this attempt to run.
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	err := l.e.retryClient(func(cli *clientv3.Client) (err error) {
 		_, err = cli.Revoke(ctx, l.leaseID)
@@ -213,6 +219,13 @@ func (l *leasedKV) Get(ctx context.Context) (string, error) {
 	return l.value, nil
 }
 
+// retry retries a function at a given interval until it succeeds, or until it
+// returns context.DeadlineExceeded, at which point we return the last other
+// error it returned, or DeadlineExceeded if we didn't have another previous
+// error. So other errors (connection failures, etcetera) get retried, but
+// DeadlineExceeded means we're done trying. But, if we failed due to a
+// connection error, then got a DeadlineExceeded on a retry, we want to report
+// the connection error, which is a lot more informative.
 func retry(desc string, sleep time.Duration, f func() error) (err error) {
 	for {
 		lastErr := f()

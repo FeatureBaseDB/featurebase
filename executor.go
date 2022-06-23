@@ -24,7 +24,6 @@ import (
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/task"
 	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -49,7 +48,7 @@ type executor struct {
 	Holder *Holder
 
 	// Local hostname & cluster configuration.
-	Node    *topology.Node
+	Node    *disco.Node
 	Cluster *cluster
 
 	// Client used for remote requests.
@@ -5921,7 +5920,7 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 }
 
 // remoteExec executes a PQL query remotely for a set of shards on a node.
-func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index string, q *pql.Query, shards []uint64, embed []*Row, maxMemory int64) (results []interface{}, err error) { // nolint: interfacer
+func (e *executor) remoteExec(ctx context.Context, node *disco.Node, index string, q *pql.Query, shards []uint64, embed []*Row, maxMemory int64) (results []interface{}, err error) { // nolint: interfacer
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeExec")
 	defer span.Finish()
 
@@ -5944,14 +5943,14 @@ func (e *executor) remoteExec(ctx context.Context, node *topology.Node, index st
 
 // shardsByNode returns a mapping of nodes to shards.
 // Returns errShardUnavailable if a shard cannot be allocated to a node.
-func (e *executor) shardsByNode(nodes []*topology.Node, index string, shards []uint64) (map[*topology.Node][]uint64, error) {
-	m := make(map[*topology.Node][]uint64)
+func (e *executor) shardsByNode(nodes []*disco.Node, index string, shards []uint64) (map[*disco.Node][]uint64, error) {
+	m := make(map[*disco.Node][]uint64)
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	// We use e.Cluster.Nodes() here instead of e.Cluster.noder because we need
 	// the node states in order to ensure that we don't include an unavailable
 	// node in the map of nodes to which we distribute the query.
-	snap := topology.NewClusterSnapshot(topology.NewLocalNoder(e.Cluster.Nodes()), e.Cluster.Hasher, e.Cluster.partitionAssigner, e.Cluster.ReplicaN)
+	snap := disco.NewClusterSnapshot(disco.NewLocalNoder(e.Cluster.Nodes()), e.Cluster.Hasher, e.Cluster.partitionAssigner, e.Cluster.ReplicaN)
 
 loop:
 	for _, shard := range shards {
@@ -5959,7 +5958,7 @@ loop:
 			// If the node being considered is in any state other than STARTED,
 			// then exclude it from the map. This way, one of that node's
 			// healthy replicas will be included instead.
-			if topology.Nodes(nodes).ContainsID(node.ID) && (node.State == disco.NodeStateStarted || node.State == disco.NodeStateUnknown) {
+			if disco.Nodes(nodes).ContainsID(node.ID) && (node.State == disco.NodeStateStarted || node.State == disco.NodeStateUnknown) {
 				m[node] = append(m[node], shard)
 				continue loop
 			}
@@ -6003,11 +6002,11 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	//
 	// However, if this request is being sent from the primary then all
 	// processing should be done locally so we start with just the local node.
-	var nodes []*topology.Node
+	var nodes []*disco.Node
 	if !opt.Remote {
-		nodes = topology.Nodes(e.Cluster.Nodes()).Clone()
+		nodes = disco.Nodes(e.Cluster.Nodes()).Clone()
 	} else {
-		nodes = []*topology.Node{e.Cluster.nodeByID(e.Node.ID)}
+		nodes = []*disco.Node{e.Cluster.nodeByID(e.Node.ID)}
 	}
 
 	// Start mapping across all primary owners.
@@ -6033,7 +6032,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 			// the error from the healthy node and return that immediately.
 			if resp.err != nil && strings.Contains(resp.err.Error(), errConnectionRefused) {
 				// Filter out unavailable nodes.
-				nodes = topology.Nodes(nodes).FilterID(resp.node.ID)
+				nodes = disco.Nodes(nodes).FilterID(resp.node.ID)
 
 				// Begin mapper against secondary nodes.
 				if err := e.mapper(ctx, eg, ch, nodes, index, resp.shards, c, opt, true, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
@@ -6107,7 +6106,7 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*topology.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) (reterr error) {
+func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*disco.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) (reterr error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
 
@@ -7702,7 +7701,7 @@ type mapOptions struct {
 type reduceFunc func(ctx context.Context, prev, v interface{}) interface{}
 
 type mapResponse struct {
-	node   *topology.Node
+	node   *disco.Node
 	shards []uint64
 
 	result interface{}
@@ -8774,7 +8773,7 @@ func (c *NopCommitor) Commit() error {
 
 func deleteKeyTranslation(ctx context.Context, idx *Index, shard uint64, records *roaring.Bitmap) (Commitor, error) {
 	// ShardToShardParition ...
-	paritionID := topology.ShardToShardPartition(idx.name, shard, idx.holder.partitionN)
+	paritionID := disco.ShardToShardPartition(idx.name, shard, idx.holder.partitionN)
 
 	return idx.TranslateStore(paritionID).Delete(records)
 }

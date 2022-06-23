@@ -1,20 +1,19 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package topology
+package disco
 
 import (
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/net"
 )
 
 // Node represents a node in the cluster.
 type Node struct {
-	ID        string          `json:"id"`
-	URI       net.URI         `json:"uri"`
-	GRPCURI   net.URI         `json:"grpc-uri"`
-	IsPrimary bool            `json:"isPrimary"`
-	State     disco.NodeState `json:"state"`
+	ID        string    `json:"id"`
+	URI       net.URI   `json:"uri"`
+	GRPCURI   net.URI   `json:"grpc-uri"`
+	IsPrimary bool      `json:"isPrimary"`
+	State     NodeState `json:"state"`
 }
 
 func (n *Node) Clone() *Node {

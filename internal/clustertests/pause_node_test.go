@@ -20,7 +20,6 @@ import (
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 )
 
@@ -136,7 +135,7 @@ func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, 
 	}
 
 	// in case of error, close any translateStore that has been opened
-	rollback := make([]pilosa.TranslateStore, 0, topology.DefaultPartitionN)
+	rollback := make([]pilosa.TranslateStore, 0, disco.DefaultPartitionN)
 	defer func() {
 		for _, ts := range rollback {
 			_ = ts.Close()
@@ -162,7 +161,7 @@ func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, 
 			return nil, err
 		}
 		// open bolt db
-		ts, err := boltdb.OpenTranslateStore(filePath, index, "", partition, topology.DefaultPartitionN, false)
+		ts, err := boltdb.OpenTranslateStore(filePath, index, "", partition, disco.DefaultPartitionN, false)
 		ts.SetReadOnly(true)
 		if err != nil {
 			return nil, err
@@ -193,7 +192,7 @@ func verifyNodeHasGivenKeys(ctx context.Context, node, index, dirPath string, ke
 	}
 
 	// read in all the translate stores for each partition
-	for partition := 0; partition < topology.DefaultPartitionN; partition++ {
+	for partition := 0; partition < disco.DefaultPartitionN; partition++ {
 		err := readIndexTranslateData(ctx, client, nodeDirPath, index, partition)
 		if err != nil {
 			return err
@@ -325,8 +324,8 @@ func TestPauseReplica(t *testing.T) {
 	}
 
 	// generate mapping from partition to primary node
-	partitionToNode := make([]string, topology.DefaultPartitionN)
-	for partition := 0; partition < topology.DefaultPartitionN; partition++ {
+	partitionToNode := make([]string, disco.DefaultPartitionN)
+	for partition := 0; partition < disco.DefaultPartitionN; partition++ {
 		nodes, err := cli.PartitionNodes(ctx, partition)
 		if err != nil {
 			t.Fatal(err)
@@ -345,7 +344,7 @@ func TestPauseReplica(t *testing.T) {
 		h := fnv.New64a()
 		_, _ = h.Write([]byte(index))
 		_, _ = h.Write([]byte(key))
-		partition := int(h.Sum64() % uint64(topology.DefaultPartitionN))
+		partition := int(h.Sum64() % uint64(disco.DefaultPartitionN))
 		// get node for this partition
 		return partitionToNode[partition]
 	}

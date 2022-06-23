@@ -68,21 +68,6 @@ const (
 	NodeStateStarted  NodeState = "STARTED"
 )
 
-type Stator interface {
-	// Started will mark the actual node as already started.
-	// It must be called after all initialization processes
-	// are up and running.
-	Started(ctx context.Context) error
-
-	// ClusterState considers the state of all nodes and gives
-	// a general cluster state. The output calculation is as follows:
-	// - If any of the nodes are still starting: "STARTING"
-	// - If all nodes are up and running: "NORMAL"
-	// - If number of DOWN nodes is lower than number of replicas: "DEGRADED"
-	// - If number of unresponsive nodes is greater than (or equal to) the number of replicas: "DOWN"
-	ClusterState(context.Context) (ClusterState, error)
-}
-
 // Schema is a map of all indexes, each of those being a map of fields, then
 // views.
 type Schema map[string]*Index
@@ -121,13 +106,6 @@ type Schemator interface {
 	View(ctx context.Context, index, field, view string) (bool, error)
 	CreateView(ctx context.Context, index, field, view string) error
 	DeleteView(ctx context.Context, index, field, view string) error
-}
-
-// Metadator is in charge of storing specific metadata per node.
-// This metadata can be retrieved by any node using the specific peerID.
-type Metadator interface {
-	Metadata(ctx context.Context, peerID string) ([]byte, error)
-	SetMetadata(ctx context.Context, metadata []byte) error
 }
 
 // Sharder is an interface used to maintain the set of availableShards bitmaps
@@ -174,32 +152,6 @@ func (n *nopDisCo) Peers() []*Peer {
 
 // DeleteNode a no-op implementation of the DisCo DeleteNode method.
 func (n *nopDisCo) DeleteNode(context.Context, string) error {
-	return nil
-}
-
-// NopStator represents a Stator that doesn't do anything.
-var NopStator Stator = &nopStator{}
-
-type nopStator struct{}
-
-// ClusterState is a no-op implementation of the Stator ClusterState method.
-func (n *nopStator) ClusterState(context.Context) (ClusterState, error) {
-	return ClusterStateUnknown, nil
-}
-
-func (n *nopStator) Started(ctx context.Context) error {
-	return nil
-}
-
-// NopMetadator represents a Metadator that doesn't do anything.
-var NopMetadator Metadator = &nopMetadator{}
-
-type nopMetadator struct{}
-
-func (*nopMetadator) Metadata(context.Context, string) ([]byte, error) {
-	return nil, nil
-}
-func (*nopMetadator) SetMetadata(context.Context, []byte) error {
 	return nil
 }
 

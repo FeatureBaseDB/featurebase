@@ -14,9 +14,9 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -300,7 +300,7 @@ func (cmd *BackupCommand) backupShard(ctx context.Context, indexName string, sha
 }
 
 // backupShardNode backs up a single shard from a single index on a specific node.
-func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string, shard uint64, node *topology.Node) error {
+func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string, shard uint64, node *disco.Node) error {
 	logger := cmd.Logger()
 	logger.Printf("backing up shard: index=%q id=%d", indexName, shard)
 
@@ -334,7 +334,7 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 }
 
 func (cmd *BackupCommand) backupIndexTranslateData(ctx context.Context, name string) error {
-	partitionN := topology.DefaultPartitionN
+	partitionN := disco.DefaultPartitionN
 
 	ch := make(chan int, partitionN)
 	for partitionID := 0; partitionID < partitionN; partitionID++ {

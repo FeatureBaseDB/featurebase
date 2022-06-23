@@ -13,16 +13,16 @@ import (
 	"github.com/google/go-cmp/cmp"
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/mock"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestInMemTranslateStore_TranslateID(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, disco.DefaultPartitionN)
 
 	// Setup initial keys.
 	if _, err := s.CreateKeys("foo"); err != nil {
@@ -272,7 +272,7 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 }
 
 func TestInMemTranslateStore_ReadKey(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, topology.DefaultPartitionN)
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, disco.DefaultPartitionN)
 
 	ids, err := s.FindKeys("foo")
 	if err != nil {

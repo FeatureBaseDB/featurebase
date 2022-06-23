@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -15,10 +14,14 @@ import (
 func TestRestartEtcd(t *testing.T) {
 	cfg := embed.NewConfig()
 	cfg.Dir = "default.etcd"
-	curl, _ := url.Parse(pilosa.EtcdUnixSocket(t))
-	cfg.LPUrls = append(cfg.LPUrls, *curl)
-	curl, _ = url.Parse(pilosa.EtcdUnixSocket(t))
-	cfg.LCUrls = append(cfg.LCUrls, *curl)
+	curl, _ := url.Parse(unixSocket(t))
+	// append-in-place to replace any existing URLs with our new URL
+	cfg.LPUrls = append(cfg.LPUrls[:0], *curl)
+	cfg.APUrls = cfg.LPUrls
+	cfg.InitialCluster = "default=" + cfg.LPUrls[0].String()
+	curl, _ = url.Parse(unixSocket(t))
+	cfg.LCUrls = append(cfg.LCUrls[:0], *curl)
+	cfg.ACUrls = cfg.LCUrls
 	e, err := embed.StartEtcd(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -49,13 +52,19 @@ func TestRestartEtcd(t *testing.T) {
 
 func TestParseOptions(t *testing.T) {
 	var e = &Etcd{options: Options{ClusterURL: "http://foo"}, logger: logger.NewLogfLogger(t)}
-	curl, _ := url.Parse(pilosa.EtcdUnixSocket(t))
+	curl, _ := url.Parse(unixSocket(t))
 	e.options.LClientURL = curl.String()
-	curl, _ = url.Parse(pilosa.EtcdUnixSocket(t))
+
+	e.options.LPeerURL = "i'm a teapot"
+	_, err := e.parseOptions()
+	if err == nil {
+		t.Fatalf("invalid peer URL should be rejected")
+	}
+	curl, _ = url.Parse(unixSocket(t))
 	e.options.LPeerURL = curl.String()
 
 	e.options.ClusterURL = "http://foo"
-	_, err := e.parseOptions()
+	_, err = e.parseOptions()
 	if err == nil {
 		t.Fatalf("cluster URL should be rejected")
 	}

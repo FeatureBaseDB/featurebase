@@ -3,7 +3,6 @@ package pilosa
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -25,7 +24,6 @@ import (
 	"github.com/molecula/featurebase/v3/sql2"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/storage"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
@@ -57,9 +55,7 @@ type Server struct { // nolint: maligned
 
 	// Distributed Consensus
 	disCo     disco.DisCo
-	stator    disco.Stator
-	metadator disco.Metadator
-	noder     topology.Noder
+	noder     disco.Noder
 	sharder   disco.Sharder
 	schemator disco.Schemator
 
@@ -322,7 +318,7 @@ func OptServerNodeID(nodeID string) ServerOption {
 // OptServerClusterHasher is a functional option on Server
 // used to specify the consistent hash algorithm for data
 // location within the cluster.
-func OptServerClusterHasher(h topology.Hasher) ServerOption {
+func OptServerClusterHasher(h disco.Hasher) ServerOption {
 	return func(s *Server) error {
 		s.cluster.Hasher = h
 		return nil
@@ -399,16 +395,12 @@ func OptServerMaxQueryMemory(v int64) ServerOption {
 // OptServerDisCo is a functional option on Server
 // used to set the Distributed Consensus implementation.
 func OptServerDisCo(disCo disco.DisCo,
-	stator disco.Stator,
-	metadator disco.Metadator,
-	noder topology.Noder,
+	noder disco.Noder,
 	sharder disco.Sharder,
 	schemator disco.Schemator) ServerOption {
 
 	return func(s *Server) error {
 		s.disCo = disCo
-		s.stator = stator
-		s.metadator = metadator
 		s.noder = noder
 		s.sharder = sharder
 		s.schemator = schemator
@@ -450,9 +442,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		viewsRemovalInterval: time.Hour,
 
 		disCo:      disco.NopDisCo,
-		stator:     disco.NopStator,
-		metadator:  disco.NopMetadator,
-		noder:      topology.NewEmptyLocalNoder(),
+		noder:      disco.NewEmptyLocalNoder(),
 		sharder:    disco.NopSharder,
 		schemator:  disco.NopSchemator,
 		serializer: NopSerializer,
@@ -520,7 +510,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.logger = s.logger
 	s.cluster.holder = s.holder
 	s.cluster.disCo = s.disCo
-	s.cluster.stator = s.stator
 	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
 
@@ -600,7 +589,7 @@ func (s *Server) Open() error {
 	// Set node ID.
 	s.nodeID = s.disCo.ID()
 
-	node := &topology.Node{
+	node := &disco.Node{
 		ID:        s.nodeID,
 		URI:       s.uri,
 		GRPCURI:   s.grpcURI,
@@ -608,12 +597,7 @@ func (s *Server) Open() error {
 		IsPrimary: s.IsPrimary(),
 	}
 
-	// Set metadata for this node.
-	data, err := json.Marshal(node)
-	if err != nil {
-		return errors.Wrap(err, "marshaling json metadata")
-	}
-	if err := s.metadator.SetMetadata(context.Background(), data); err != nil {
+	if err := s.noder.SetMetadata(context.Background(), node); err != nil {
 		return errors.Wrap(err, "setting metadata")
 	}
 
@@ -649,7 +633,7 @@ func (s *Server) Open() error {
 	// bring up the background tasks for the holder.
 	s.holder.Activate()
 
-	if err := s.stator.Started(context.Background()); err != nil {
+	if err := s.noder.SetState(context.Background(), disco.NodeStateStarted); err != nil {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
@@ -697,7 +681,7 @@ func (s *Server) Open() error {
 			<-timer.C
 		}
 		for {
-			state, err := s.stator.ClusterState(ctx)
+			state, err := s.noder.ClusterState(ctx)
 			if err != nil {
 				s.logger.Printf("failed to check cluster state: %v", err)
 				timer.Reset(time.Second)
@@ -1126,7 +1110,7 @@ func (s *Server) SendAsync(m Message) error {
 }
 
 // SendTo represents an implementation of Broadcaster.
-func (s *Server) SendTo(node *topology.Node, m Message) error {
+func (s *Server) SendTo(node *disco.Node, m Message) error {
 	msg, err := s.serializer.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
@@ -1140,7 +1124,7 @@ func (s *Server) SendTo(node *topology.Node, m Message) error {
 
 // node returns the pilosa.node object. It is used by membership protocols to
 // get this node's name(ID), location(URI), and primary status.
-func (s *Server) node() *topology.Node {
+func (s *Server) node() *disco.Node {
 	return s.cluster.Node.Clone()
 }
 

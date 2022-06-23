@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/molecula/featurebase/v3/disco"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/topology"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
@@ -57,7 +57,7 @@ func newIndexWithTempPath(tb testing.TB, name string) *Index {
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
 	c := cluster{
-		noder: topology.NewLocalNoder([]*topology.Node{
+		noder: disco.NewLocalNoder([]*disco.Node{
 			{URI: NewTestURIFromHostPort("serverA", 1000)},
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
@@ -72,12 +72,12 @@ func TestCluster_Owners(t *testing.T) {
 	snap := c.NewSnapshot()
 
 	// Verify nodes are distributed.
-	if a := snap.PartitionNodes(0); !reflect.DeepEqual(a, []*topology.Node{cNodes[0], cNodes[1]}) {
+	if a := snap.PartitionNodes(0); !reflect.DeepEqual(a, []*disco.Node{cNodes[0], cNodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := snap.PartitionNodes(2); !reflect.DeepEqual(a, []*topology.Node{cNodes[2], cNodes[0]}) {
+	if a := snap.PartitionNodes(2); !reflect.DeepEqual(a, []*disco.Node{cNodes[2], cNodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 }
@@ -88,7 +88,7 @@ func TestCluster_Partition(t *testing.T) {
 		c := newCluster()
 		c.partitionN = partitionN
 
-		partitionID := topology.ShardToShardPartition(index, shard, partitionN)
+		partitionID := disco.ShardToShardPartition(index, shard, partitionN)
 		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: shard=%d, p=%d, n=%d", shard, partitionID, partitionN)
 		}
@@ -118,7 +118,7 @@ func TestHasher(t *testing.T) {
 		{0x0ddc0ffeebadf00d, []int{0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15}},
 	} {
 		for i, v := range tt.bucket {
-			hasher := &topology.Jmphasher{}
+			hasher := &disco.Jmphasher{}
 			if got := hasher.Hash(tt.key, i+1); got != v {
 				t.Errorf("hash(%v,%v)=%v, want %v", tt.key, i+1, got, v)
 			}
@@ -150,15 +150,15 @@ func TestCluster_Nodes(t *testing.T) {
 		uris = append(uris, NewTestURIFromHostPort(fmt.Sprintf("node%d", i), uint16(arbitraryPorts[i])))
 	}
 
-	node0 := &topology.Node{ID: "node0", URI: uris[0]}
-	node1 := &topology.Node{ID: "node1", URI: uris[1]}
-	node2 := &topology.Node{ID: "node2", URI: uris[2]}
-	node3 := &topology.Node{ID: "node3", URI: uris[3]}
+	node0 := &disco.Node{ID: "node0", URI: uris[0]}
+	node1 := &disco.Node{ID: "node1", URI: uris[1]}
+	node2 := &disco.Node{ID: "node2", URI: uris[2]}
+	node3 := &disco.Node{ID: "node3", URI: uris[3]}
 
-	nodes := []*topology.Node{node0, node1, node2}
+	nodes := []*disco.Node{node0, node1, node2}
 
 	t.Run("NodeIDs", func(t *testing.T) {
-		actual := topology.Nodes(nodes).IDs()
+		actual := disco.Nodes(nodes).IDs()
 		expected := []string{node0.ID, node1.ID, node2.ID}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
@@ -166,7 +166,7 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Filter", func(t *testing.T) {
-		actual := topology.Nodes(topology.Nodes(nodes).Filter(nodes[1])).URIs()
+		actual := disco.Nodes(disco.Nodes(nodes).Filter(nodes[1])).URIs()
 		expected := []pnet.URI{uris[0], uris[2]}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
@@ -174,7 +174,7 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("FilterURI", func(t *testing.T) {
-		actual := topology.Nodes(topology.Nodes(nodes).FilterURI(uris[1])).URIs()
+		actual := disco.Nodes(disco.Nodes(nodes).FilterURI(uris[1])).URIs()
 		expected := []pnet.URI{uris[0], uris[2]}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
@@ -182,8 +182,8 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Contains", func(t *testing.T) {
-		actualTrue := topology.Nodes(nodes).Contains(node1)
-		actualFalse := topology.Nodes(nodes).Contains(node3)
+		actualTrue := disco.Nodes(nodes).Contains(node1)
+		actualFalse := disco.Nodes(nodes).Contains(node3)
 		if !reflect.DeepEqual(actualTrue, true) {
 			t.Errorf("expected: %v, but got: %v", true, actualTrue)
 		}
@@ -193,8 +193,8 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Clone", func(t *testing.T) {
-		clone := topology.Nodes(nodes).Clone()
-		actual := topology.Nodes(clone).URIs()
+		clone := disco.Nodes(nodes).Clone()
+		actual := disco.Nodes(clone).URIs()
 		expected := []pnet.URI{uris[0], uris[1], uris[2]}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)

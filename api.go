@@ -30,7 +30,6 @@ import (
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
-	"github.com/molecula/featurebase/v3/topology"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -763,7 +762,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 }
 
 // ShardNodes returns the node and all replicas which should contain a shard's data.
-func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*topology.Node, error) {
+func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*disco.Node, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ShardNodes")
 	defer span.Finish()
 
@@ -778,7 +777,7 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 }
 
 // PartitionNodes returns the node and all replicas which should contain a partition key data.
-func (api *API) PartitionNodes(ctx context.Context, partitionID int) ([]*topology.Node, error) {
+func (api *API) PartitionNodes(ctx context.Context, partitionID int) ([]*disco.Node, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.PartitionNodes")
 	defer span.Finish()
 
@@ -896,7 +895,7 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 	// Find the node that can service the request.
 	snap := api.cluster.NewSnapshot()
 	nodes := snap.PartitionNodes(partition)
-	var upNode *topology.Node
+	var upNode *disco.Node
 	for _, node := range nodes {
 		// we all UNKNOWN state here because we often mistakenly think
 		// a node is not up under heavy load, but prefer STARTED if we
@@ -963,14 +962,14 @@ func (api *API) FieldTranslateData(ctx context.Context, indexName, fieldName str
 
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the primary.
-func (api *API) Hosts(ctx context.Context) []*topology.Node {
+func (api *API) Hosts(ctx context.Context) []*disco.Node {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Hosts")
 	defer span.Finish()
 	return api.cluster.Nodes()
 }
 
 // Node gets the ID, URI and primary status for this particular node.
-func (api *API) Node() *topology.Node {
+func (api *API) Node() *disco.Node {
 	return api.server.node()
 }
 
@@ -981,7 +980,7 @@ func (api *API) NodeID() string {
 }
 
 // PrimaryNode returns the primary node for the cluster.
-func (api *API) PrimaryNode() *topology.Node {
+func (api *API) PrimaryNode() *disco.Node {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := api.cluster.NewSnapshot()
 	return snap.PrimaryFieldTranslationNode()
