@@ -422,53 +422,55 @@ func TestAPI_ImportValue(t *testing.T) {
 		}
 	})
 
-	t.Run("ValTimestampField", func(t *testing.T) {
-		t.Skip() // skipping due to change partitioning strategy
-		ctx := context.Background()
-		index := "valts"
-		field := "fts"
+	// Needs to be updated with new min max timestamp values
 
-		_, err := m1.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
-		if err != nil {
-			t.Fatalf("creating index: %v", err)
-		}
-		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
-		if err != nil {
-			t.Fatalf("creating field: %v", err)
-		}
+	// t.Run("ValTimestampField", func(t *testing.T) {
+	// 	t.Skip() // skipping due to change partitioning strategy
+	// 	ctx := context.Background()
+	// 	index := "valts"
+	// 	field := "fts"
 
-		// Generate some records.
-		values := []time.Time{}
-		colIDs := []uint64{}
-		for i := 0; i < 10; i++ {
-			values = append(values, pilosa.MinTimestamp.Add(time.Duration(i)*time.Second))
-			colIDs = append(colIDs, uint64(i))
-		}
+	// 	_, err := m1.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+	// 	if err != nil {
+	// 		t.Fatalf("creating index: %v", err)
+	// 	}
+	// 	_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
+	// 	if err != nil {
+	// 		t.Fatalf("creating field: %v", err)
+	// 	}
 
-		// Import data with keys to node1 and verify that it gets translated and
-		// forwarded to the owner of shard 0 (node0; because of offsetModHasher)
-		req := &pilosa.ImportValueRequest{
-			Index:           index,
-			Field:           field,
-			ColumnIDs:       colIDs,
-			TimestampValues: values,
-		}
+	// 	// Generate some records.
+	// 	values := []time.Time{}
+	// 	colIDs := []uint64{}
+	// 	for i := 0; i < 10; i++ {
+	// 		values = append(values, pilosa.MinTimestamp.Add(time.Duration(i)*time.Second))
+	// 		colIDs = append(colIDs, uint64(i))
+	// 	}
 
-		qcx := m2.API.Txf().NewQcx()
-		if err := m2.API.ImportValue(ctx, qcx, req); err != nil {
-			t.Fatal(err)
-		}
-		PanicOn(qcx.Finish())
+	// 	// Import data with keys to node1 and verify that it gets translated and
+	// 	// forwarded to the owner of shard 0 (node0; because of offsetModHasher)
+	// 	req := &pilosa.ImportValueRequest{
+	// 		Index:           index,
+	// 		Field:           field,
+	// 		ColumnIDs:       colIDs,
+	// 		TimestampValues: values,
+	// 	}
 
-		query := fmt.Sprintf("Row(%s>='1833-11-24T17:31:50Z')", field) // 6s after MinTimestamp
+	// 	qcx := m2.API.Txf().NewQcx()
+	// 	if err := m2.API.ImportValue(ctx, qcx, req); err != nil {
+	// 		t.Fatal(err)
+	// 	}
+	// 	PanicOn(qcx.Finish())
 
-		// Query node0.
-		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
-			t.Fatal(err)
-		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
-			t.Fatalf("unexpected column keys: observerd %+v;  expected '%+v'", ids, colIDs[6:])
-		}
-	})
+	// 	query := fmt.Sprintf("Row(%s>='1833-11-24T17:31:50Z')", field) // 6s after MinTimestamp
+
+	// 	// Query node0.
+	// 	if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
+	// 		t.Fatal(err)
+	// 	} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
+	// 		t.Fatalf("unexpected column keys: observerd %+v;  expected '%+v'", ids, colIDs[6:])
+	// 	}
+	// })
 
 	t.Run("ValStringField", func(t *testing.T) {
 		t.Skip() // skipping due to change partitioning strategy

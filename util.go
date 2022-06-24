@@ -62,9 +62,9 @@ func GetLoopProgress(start time.Time, now time.Time, iteration uint, total uint)
 
 // FormatTimestampNano returns the string representation of a timestamp given:
 // an epoch value, base, and time unit
-func FormatTimestampNano(value, base int64, timeUnit string) string {
-	return time.Unix(0, (value+base)*TimeUnitNanos(timeUnit)).UTC().Format(time.RFC3339Nano)
-}
+// func FormatTimestampNano(value, base int64, timeUnit string) string {
+// 	return time.Unix(0, (value+base)*TimeUnitNanos(timeUnit)).UTC().Format(time.RFC3339Nano)  // TODO: Samir Should be Dead Code Now
+// }
 
 type MemoryUsage struct {
 	Capacity uint64 `json:"capacity"`
