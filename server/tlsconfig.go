@@ -36,6 +36,7 @@ package server
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -104,11 +105,27 @@ func (kpr *keypairReloader) GetClientCertificateFunc() func(*tls.CertificateRequ
 }
 
 func GetTLSConfig(tlsConfig *TLSConfig, logger logger.Logger) (TLSConfig *tls.Config, err error) {
-	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
+	if tlsConfig == nil {
+		return nil, fmt.Errorf("cannot parse nil tls config")
+	}
+
+	hasCA := len(tlsConfig.CACertPath) > 0
+	hasCert := len(tlsConfig.CertificatePath) > 0 && len(tlsConfig.CertificateKeyPath) > 0
+
+	if hasCA && tlsConfig.SkipVerify {
+		return nil, fmt.Errorf("cannot specify root certificate and disable server certificate verification")
+	}
+
+	if hasCert && tlsConfig.SkipVerify {
+		return nil, fmt.Errorf("cannot specify TLS certificate and disable server certificate verification")
+	}
+
+	if hasCert {
 		kpr, err := NewKeypairReloader(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath, logger)
 		if err != nil {
 			return nil, errors.Wrap(err, "loading keypair")
 		}
+
 		TLSConfig = &tls.Config{
 			InsecureSkipVerify:       tlsConfig.SkipVerify,
 			PreferServerCipherSuites: true,
@@ -116,7 +133,8 @@ func GetTLSConfig(tlsConfig *TLSConfig, logger logger.Logger) (TLSConfig *tls.Co
 			GetCertificate:           kpr.GetCertificateFunc(),
 			GetClientCertificate:     kpr.GetClientCertificateFunc(),
 		}
-		if tlsConfig.CACertPath != "" {
+
+		if hasCA {
 			b, err := ioutil.ReadFile(tlsConfig.CACertPath)
 			if err != nil {
 				return nil, errors.Wrap(err, "loading tls ca key")
@@ -130,6 +148,7 @@ func GetTLSConfig(tlsConfig *TLSConfig, logger logger.Logger) (TLSConfig *tls.Co
 			TLSConfig.ClientCAs = certPool
 			TLSConfig.RootCAs = certPool
 		}
+
 		if tlsConfig.EnableClientVerification {
 			TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
 		}
