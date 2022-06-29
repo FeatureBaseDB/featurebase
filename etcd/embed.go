@@ -274,7 +274,7 @@ func (e *Etcd) parseOptions() (*embed.Config, error) {
 		// Checks if FB is running the single-node free version or the multi-node
 		// enterprise version. Sentry.io is enabled on single-node.
 		if AllowCluster() == false {
-			// %% end sonarcloud ignore %%
+			// %% begin sonarcloud ignore %%
 
 			monitor.InitErrorMonitor(e.version)
 			e.logger.Infof("Initializing Monitor: Capturing usage metrics")
