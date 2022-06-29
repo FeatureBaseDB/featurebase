@@ -880,7 +880,10 @@ func (s *Server) TTLRemoval(ctx context.Context) {
 
 							if timeSince >= field.Options().TTL {
 								for _, shard := range field.AvailableShards(true).Slice() {
-									s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
+									err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
+									if err != nil {
+										s.logger.Errorf("view: %s, shard: %d, ttl delete fragment: %s", shard, viewName, err)
+									}
 								}
 
 								err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
