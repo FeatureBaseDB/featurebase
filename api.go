@@ -15,6 +15,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1556,11 +1557,15 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 		options.IgnoreKeyCheck = true
 
 		var eg errgroup.Group
+		guard := make(chan struct{}, runtime.NumCPU()) // only run as many goroutines as CPUs available
 		for _, subReq := range reqs {
 			// TODO: if local node owns this shard we don't need to go through the client
+			guard <- struct{}{} // would block if guard channel is already filled
 			subReq := subReq
 			eg.Go(func() error {
-				return api.server.defaultClient.Import(ctx, qcx, subReq, options)
+				err := api.server.defaultClient.Import(ctx, qcx, subReq, options)
+				<-guard
+				return err
 			})
 		}
 		return eg.Wait()
@@ -1851,7 +1856,8 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	options.IgnoreKeyCheck = true
 	start := 0
 	shard := req.ColumnIDs[0] / ShardWidth
-	var eg errgroup.Group // TODO make this a pooled errgroup
+	var eg errgroup.Group
+	guard := make(chan struct{}, runtime.NumCPU()) // only run as many goroutines as CPUs available
 	for i, colID := range req.ColumnIDs {
 		if colID/ShardWidth != shard {
 			subreq := &ImportValueRequest{
@@ -1865,9 +1871,11 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 			} else if req.FloatValues != nil {
 				subreq.FloatValues = req.FloatValues[start:i]
 			}
-
+			guard <- struct{}{} // would block if guard channel is already filled
 			eg.Go(func() error {
-				return api.server.defaultClient.ImportValue(ctx, qcx, subreq, options)
+				err := api.server.defaultClient.ImportValue(ctx, qcx, subreq, options)
+				<-guard
+				return err
 			})
 			start = i
 			shard = colID / ShardWidth
