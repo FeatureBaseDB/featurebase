@@ -659,7 +659,7 @@ func (s *Server) Open() error {
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
-	go func() { defer s.wg.Done(); s.monitorTTL() }()
+	go func() { defer s.wg.Done(); s.monitorViewsRemoval() }()
 
 	toSend := func() []Message {
 		s.holder.startMsgsMu.Lock()
@@ -843,7 +843,7 @@ func (s *Server) monitorResetTranslationSync() {
 	}
 }
 
-func (s *Server) monitorTTL() {
+func (s *Server) monitorViewsRemoval() {
 	ctx := context.Background()
 	// Run ViewsRemoval on server start
 	s.ViewsRemoval(ctx)
