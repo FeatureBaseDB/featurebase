@@ -898,8 +898,8 @@ func (s *Server) ViewsRemoval(ctx context.Context) {
 						}
 					}
 				}
-				if field.Options().NoStandardView {
-					// delete view "standard" if NoStandardView is true
+				if field.Options().NoStandardView && field.view(viewStandard) != nil {
+					// delete view "standard" if NoStandardView is true and view "standard" exists
 					for _, shard := range field.AvailableShards(true).Slice() {
 						err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), viewStandard, shard, nil)
 						if err != nil {
