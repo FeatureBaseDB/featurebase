@@ -1040,7 +1040,9 @@ func (s *Server) receiveMessage(m Message) error {
 			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
 		err := f.deleteView(obj.View)
-		if err != nil {
+		if errors.Cause(err) == ErrInvalidView {
+			s.logger.Infof("got intra-cluster message requesting delete of view: %s, but it did not exist (this is usually fine). Index: %s, field: %s ", obj.View, obj.Index, obj.Field)
+		} else if err != nil {
 			return err
 		}
 
