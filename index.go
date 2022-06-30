@@ -772,6 +772,15 @@ func (i *Index) UpdateField(ctx context.Context, name string, update FieldUpdate
 			return nil, NewBadRequestError(errors.Errorf("ttl can't be negative: '%s'", update.Value))
 		}
 		cfm.Meta.TTL = dur
+	case "noStandardView":
+		if cfm.Meta.Type != FieldTypeTime {
+			return nil, NewBadRequestError(errors.Errorf("can only update 'noStandardView' on a 'time' type field, not '%s'", cfm.Meta.Type))
+		}
+		boolValue, err := strconv.ParseBool(update.Value)
+		if err != nil {
+			return nil, NewBadRequestError(errors.Errorf("invalid value for noStandardView: '%s'", update.Value))
+		}
+		cfm.Meta.NoStandardView = boolValue
 	default:
 		return nil, NewBadRequestError(errors.Errorf("updates for option '%s' are not supported", update.Option))
 	}

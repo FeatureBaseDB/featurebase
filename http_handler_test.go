@@ -86,7 +86,7 @@ func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
 	}
 }
 
-func TestUpdateFieldTTL(t *testing.T) {
+func TestUpdateField_TTL(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
@@ -224,6 +224,106 @@ func TestUpdateFieldTTL(t *testing.T) {
 		})
 	}
 
+}
+
+func TestUpdateField_NoStandardView(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	tests := []struct {
+		name              string
+		field             string
+		fieldOption       string
+		expStatus         int
+		expErr            string
+		expNoStandardView bool
+	}{
+		{
+			// test update noStandardView to true
+			name:              "t1_true",
+			field:             "t1_true",
+			fieldOption:       `{"option": "noStandardView", "value": "true"}`,
+			expStatus:         200,
+			expErr:            "",
+			expNoStandardView: true,
+		},
+		{
+			// test update noStandardView to false
+			name:              "t2_false",
+			field:             "t2_false",
+			fieldOption:       `{"option": "noStandardView", "value": "false"}`,
+			expStatus:         200,
+			expErr:            "",
+			expNoStandardView: false,
+		},
+		{
+			// test update noStandardView with invalid value
+			name:              "t3_invalid",
+			field:             "t3_invalid",
+			fieldOption:       `{"option": "noStandardView", "value": "123"}`,
+			expStatus:         400,
+			expErr:            `invalid value for noStandardView: '123'`,
+			expNoStandardView: false,
+		},
+		{
+			// test udpate noStandardView with empty value
+			name:              "t4_empty",
+			field:             "t4_empty",
+			fieldOption:       `{"option": "noStandardView", "value": ""}`,
+			expStatus:         400,
+			expErr:            `invalid value for noStandardView: ''`,
+			expNoStandardView: false,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c.CreateField(t, "ttltest", pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0"))
+			nodeURL := c.Nodes[0].URL() + "/index/ttltest/field/" + test.field
+			req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(test.fieldOption))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := gohttp.DefaultClient.Do(req)
+
+			if err != nil {
+				t.Fatalf("doing option request: %v", err)
+			}
+
+			if resp.StatusCode != test.expStatus {
+				t.Errorf("expected status: '%d', got: '%d'", test.expStatus, resp.StatusCode)
+			}
+
+			if resp.StatusCode == 400 {
+				// unmarshal error message to check against expErr
+				var respBody map[string]interface{}
+				json.NewDecoder(resp.Body).Decode(&respBody)
+				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
+
+				if !strings.Contains(errMsg, test.expErr) {
+					t.Errorf("expected error: '%s', got: '%s'", test.expErr, errMsg)
+				}
+			}
+
+			// find updated field and check its noStandardView
+			for _, node := range c.Nodes {
+				ii, err := node.API.Schema(context.Background(), false)
+				if err != nil {
+					t.Fatalf("getting schema: %v", err)
+				}
+				if ii[0].Fields[i].Name == test.name {
+					if ii[0].Fields[i].Options.NoStandardView != test.expNoStandardView {
+						t.Errorf("expected noStandardView value: '%t', got: '%t'", test.expNoStandardView, ii[0].Fields[i].Options.NoStandardView)
+					}
+				} else {
+					t.Errorf("unexpected field: '%s', got: '%s'", test.name, ii[0].Fields[i].Name)
+				}
+			}
+
+		})
+	}
 }
 
 func TestIngestSchemaHandler(t *testing.T) {

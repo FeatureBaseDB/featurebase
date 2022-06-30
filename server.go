@@ -895,6 +895,21 @@ func (s *Server) TTLRemoval(ctx context.Context) {
 						}
 					}
 				}
+				if field.Options().NoStandardView {
+					// delete view "standard" if NoStandardView is true
+					for _, shard := range field.AvailableShards(true).Slice() {
+						err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), viewStandard, shard, nil)
+						if err != nil {
+							s.logger.Errorf("delete view %s from shard %d: %s", viewStandard, shard, err)
+						}
+					}
+
+					err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), viewStandard)
+					if err != nil {
+						s.logger.Errorf("view: %s, delete view: %s", viewStandard, err)
+					}
+					s.logger.Infof("view %s deleted - index: %s, field: %s ", viewStandard, index.name, field.name)
+				}
 			}
 		}
 	}

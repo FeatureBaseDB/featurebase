@@ -615,19 +615,20 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions 
 		return nil
 	}
 	return &pb.FieldOptions{
-		Type:         o.Type,
-		CacheType:    o.CacheType,
-		CacheSize:    o.CacheSize,
-		Min:          s.encodeDecimal(&o.Min),
-		Max:          s.encodeDecimal(&o.Max),
-		Base:         o.Base,
-		Scale:        o.Scale,
-		BitDepth:     uint64(o.BitDepth),
-		TimeQuantum:  string(o.TimeQuantum),
-		TTL:          o.TTL.String(),
-		TimeUnit:     string(o.TimeUnit),
-		Keys:         o.Keys,
-		ForeignIndex: o.ForeignIndex,
+		Type:           o.Type,
+		CacheType:      o.CacheType,
+		CacheSize:      o.CacheSize,
+		Min:            s.encodeDecimal(&o.Min),
+		Max:            s.encodeDecimal(&o.Max),
+		Base:           o.Base,
+		Scale:          o.Scale,
+		BitDepth:       uint64(o.BitDepth),
+		TimeQuantum:    string(o.TimeQuantum),
+		TTL:            o.TTL.String(),
+		TimeUnit:       string(o.TimeUnit),
+		Keys:           o.Keys,
+		ForeignIndex:   o.ForeignIndex,
+		NoStandardView: o.NoStandardView,
 	}
 }
 
@@ -996,6 +997,7 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 	m.TimeUnit = options.TimeUnit
 	m.Keys = options.Keys
 	m.ForeignIndex = options.ForeignIndex
+	m.NoStandardView = options.NoStandardView
 }
 
 func (s Serializer) decodeDecimal(d *pb.Decimal, m *pql.Decimal) {

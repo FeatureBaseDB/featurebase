@@ -13,7 +13,7 @@ import (
 	"github.com/molecula/featurebase/v3/test"
 )
 
-func TestTTLRemoval(t *testing.T) {
+func TestTTLRemoval_TTL(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	node := cluster.GetNode(0)
 	defer cluster.Close()
@@ -180,6 +180,97 @@ func TestTTLRemoval(t *testing.T) {
 			}
 			sort.Strings(viewNames)
 
+			if !reflect.DeepEqual(test.expViews, viewNames) {
+				t.Fatalf("after ttl removal, expected %v, but got %v", test.expViews, viewNames)
+			}
+		})
+	}
+}
+
+func TestTTLRemoval_StandardView(t *testing.T) {
+	cluster := test.MustRunCluster(t, 1)
+	node := cluster.GetNode(0)
+	defer cluster.Close()
+
+	// Create a client
+	client := node.Client()
+
+	indexName := "i"
+
+	// Create indexes and field with ttl lasting 24 hours
+	if err := client.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{TrackExistence: true}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatalf("creating index, err: %v", err)
+	}
+
+	var tests = []struct {
+		name           string
+		date           string
+		noStandardView string
+		expViews       []string
+	}{
+		{
+			name:           "t1_delete_standard",
+			date:           "2001-02-03T04:05",
+			noStandardView: "true",
+			expViews:       nil,
+			/* date 2001-02-03T04:05, this will create these views:
+			- standard
+			- standard_2001
+			- standard_200102
+			- standard_20010203
+			- standard_2001020304
+			Since the sample date here is over 20 years, all views with dates should get deleted
+			Since noStandardView is true, 'standard' view should get deleted
+			*/
+		},
+		{
+			name:           "t2_keep_standard",
+			date:           "2001-02-03T04:05",
+			noStandardView: "false",
+			expViews:       []string{"standard"},
+			/* date 2001-02-03T04:05, this will create these views:
+			- standard
+			- standard_2001
+			- standard_200102
+			- standard_20010203
+			- standard_2001020304
+			Since the sample date here is over 20 years, all views with dates should get deleted
+			Since noStandardView is false, 'standard' view should NOT get deleted
+			*/
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := client.CreateFieldWithOptions(context.Background(), indexName, test.name, pilosa.FieldOptions{TTL: time.Hour * 24, Type: pilosa.FieldTypeTime, TimeQuantum: "YMDH"}); err != nil {
+				t.Fatalf("creating field, err: %v", err)
+			}
+
+			// set data
+			_, err := client.Query(context.Background(), indexName, &pilosa.QueryRequest{Index: indexName, Query: "Set(1, " + test.name + "=1, " + test.date + ")"})
+			if err != nil {
+				t.Fatalf("setting sample data, err: %v", err)
+			}
+
+			// update noStandardView value
+			err = node.API.UpdateField(context.Background(), indexName, test.name, pilosa.FieldUpdate{Option: "noStandardView", Value: test.noStandardView})
+			if err != nil {
+				t.Fatalf("updating noStandardView, err: %v", err)
+			}
+
+			// run TTLRemoval
+			node.Server.TTLRemoval(context.Background())
+
+			// get all the views for given index + field
+			views, err := node.API.Views(context.Background(), indexName, test.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var viewNames []string
+			for _, view := range views {
+				viewNames = append(viewNames, view.Name())
+			}
+			sort.Strings(viewNames)
 			if !reflect.DeepEqual(test.expViews, viewNames) {
 				t.Fatalf("after ttl removal, expected %v, but got %v", test.expViews, viewNames)
 			}
