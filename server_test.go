@@ -13,7 +13,7 @@ import (
 	"github.com/molecula/featurebase/v3/test"
 )
 
-func TestTTLRemoval_TTL(t *testing.T) {
+func TestViewsRemovalTTL(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	node := cluster.GetNode(0)
 	defer cluster.Close()
@@ -166,8 +166,8 @@ func TestTTLRemoval_TTL(t *testing.T) {
 				t.Fatalf("setting sample data, err: %v", err)
 			}
 
-			// run TTLRemoval
-			node.Server.TTLRemoval(context.Background())
+			// run ViewsRemoval
+			node.Server.ViewsRemoval(context.Background())
 
 			// Get all the views for given index + field
 			views, err := node.API.Views(context.Background(), indexName, test.name)
@@ -187,7 +187,7 @@ func TestTTLRemoval_TTL(t *testing.T) {
 	}
 }
 
-func TestTTLRemoval_StandardView(t *testing.T) {
+func TestViewsRemovalStandard(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	node := cluster.GetNode(0)
 	defer cluster.Close()
@@ -258,8 +258,8 @@ func TestTTLRemoval_StandardView(t *testing.T) {
 				t.Fatalf("updating noStandardView, err: %v", err)
 			}
 
-			// run TTLRemoval
-			node.Server.TTLRemoval(context.Background())
+			// run ViewsRemoval
+			node.Server.ViewsRemoval(context.Background())
 
 			// get all the views for given index + field
 			views, err := node.API.Views(context.Background(), indexName, test.name)

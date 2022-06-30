@@ -69,18 +69,18 @@ type Server struct { // nolint: maligned
 	logger      logger.Logger
 	queryLogger logger.Logger
 
-	nodeID              string
-	uri                 pnet.URI
-	grpcURI             pnet.URI
-	antiEntropyInterval time.Duration
-	metricInterval      time.Duration
-	diagnosticInterval  time.Duration
-	ttlRemovalInterval  time.Duration
-	maxWritesPerRequest int
-	confirmDownSleep    time.Duration
-	confirmDownRetries  int
-	syncer              holderSyncer
-	maxQueryMemory      int64
+	nodeID               string
+	uri                  pnet.URI
+	grpcURI              pnet.URI
+	antiEntropyInterval  time.Duration
+	metricInterval       time.Duration
+	diagnosticInterval   time.Duration
+	viewsRemovalInterval time.Duration
+	maxWritesPerRequest  int
+	confirmDownSleep     time.Duration
+	confirmDownRetries   int
+	syncer               holderSyncer
+	maxQueryMemory       int64
 
 	translationSyncer      TranslationSyncer
 	resetTranslationSyncCh chan struct{}
@@ -167,11 +167,11 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 	}
 }
 
-// OptServerTTLRemovalInterval is a functional option on Server
+// OptServerViewsRemovalInterval is a functional option on Server
 // used to set the ttl removal interval.
-func OptServerTTLRemovalInterval(interval time.Duration) ServerOption {
+func OptServerViewsRemovalInterval(interval time.Duration) ServerOption {
 	return func(s *Server) error {
-		s.ttlRemovalInterval = interval
+		s.viewsRemovalInterval = interval
 		return nil
 	}
 }
@@ -444,10 +444,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		gcNotifier: NopGCNotifier,
 
-		antiEntropyInterval: 0,
-		metricInterval:      0,
-		diagnosticInterval:  0,
-		ttlRemovalInterval:  time.Hour,
+		antiEntropyInterval:  0,
+		metricInterval:       0,
+		diagnosticInterval:   0,
+		viewsRemovalInterval: time.Hour,
 
 		disCo:      disco.NopDisCo,
 		stator:     disco.NopStator,
@@ -845,20 +845,23 @@ func (s *Server) monitorResetTranslationSync() {
 
 func (s *Server) monitorTTL() {
 	ctx := context.Background()
-	// Run TTLRemoval on server start
-	s.TTLRemoval(ctx)
-	ticker := time.NewTicker(s.ttlRemovalInterval)
+	// Run ViewsRemoval on server start
+	s.ViewsRemoval(ctx)
+	ticker := time.NewTicker(s.viewsRemovalInterval)
 	for {
 		select {
 		case <-s.closing:
 			return
 		case <-ticker.C:
-			s.TTLRemoval(ctx)
+			s.ViewsRemoval(ctx)
 		}
 	}
 }
 
-func (s *Server) TTLRemoval(ctx context.Context) {
+// Remove views based on these criterias:
+// 1. views that are older than specified TTL
+// 2. "standard" view of a field if its "noStandardView" option is set to true
+func (s *Server) ViewsRemoval(ctx context.Context) {
 	for _, index := range s.holder.Indexes() {
 		for _, field := range index.Fields() {
 			if field.Options().Type == "time" {

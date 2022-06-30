@@ -86,7 +86,7 @@ func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
 	}
 }
 
-func TestUpdateField_TTL(t *testing.T) {
+func TestUpdateFieldTTL(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
@@ -226,7 +226,7 @@ func TestUpdateField_TTL(t *testing.T) {
 
 }
 
-func TestUpdateField_NoStandardView(t *testing.T) {
+func TestUpdateFieldNoStandardView(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
