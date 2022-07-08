@@ -40,6 +40,10 @@ type InternalClient struct {
 	// The client to use for HTTP communication.
 	httpClient      *http.Client
 	retryableClient *retryablehttp.Client
+	// nearly-identical clients, except they have a CheckRedirect that tries to forward
+	// authentication
+	authHttpClient      *http.Client
+	authRetryableClient *retryablehttp.Client
 	// the local node's API, used for operations that we can short-circuit that way
 	api *API
 
@@ -113,11 +117,64 @@ func noRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, e
 	return false, nil
 }
 
-// retryWith400Policy wraps retryablehttp's default retry policy to
-// also retry on 4XX errors which *should* be client errors and
-// therefore useless to retry, but we have some incorrect status codes.
-// TODO: fix the incorrect status codes so we can get rid of this.
+type statusAndError struct {
+	statusCode int
+	msg        string
+	err        error
+}
+
+type statusesAndErrors struct {
+	errs []statusAndError
+}
+
+// recordEvent figures out how it wants to display a given
+// error or response-without-error that is nonetheless possibly
+// error-shaped (such as a 4xx or 5xx status), and appends it
+// to the list. It may read from resp.Body, so it may be destructive,
+// and it does not close resp.Body.
+func (s *statusesAndErrors) recordEvent(resp *http.Response, err error) {
+	var message string = "[no response, yielding 500 error]"
+	statusCode := http.StatusInternalServerError
+	if resp != nil {
+		// grab an initial chunk of response body -- not too long
+		// because we don't know whether it's sensical -- in case it's a
+		// legible error message
+		msg := make([]byte, 128)
+		n, err := resp.Body.Read(msg)
+		if err != nil {
+			message = fmt.Sprintf("[error reading resp body: %v]", err)
+		} else {
+			message = string(msg[:n])
+		}
+		statusCode = resp.StatusCode
+	}
+	s.errs = append(s.errs, statusAndError{statusCode: statusCode, msg: message, err: err})
+}
+
+type statusContextKey struct{}
+
+func newStatusTrackingContext(ctx context.Context) (*statusesAndErrors, context.Context) {
+	statuses := &statusesAndErrors{}
+	if ctx == nil {
+		ctx = context.TODO()
+	}
+	return statuses, context.WithValue(ctx, statusContextKey{}, statuses)
+}
+
+// retryWith400Policy is a retry policy for retryable http, which retries
+// on 4xx status codes, but also logs the status codes and errors handed to it in
+// the slice you provide a pointer to, so you can display them later. We do this
+// because we have spurious 4xx errors that we need to fix.
 func retryWith400Policy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if err != nil || resp.StatusCode >= 300 {
+		statuses := ctx.Value(statusContextKey{})
+		if statuses != nil {
+			errs, ok := statuses.(*statusesAndErrors)
+			if ok {
+				errs.recordEvent(resp, err)
+			}
+		}
+	}
 	if resp != nil && resp.StatusCode >= 400 {
 		return true, nil
 	}
@@ -142,6 +199,26 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 		rc.Logger = logger.NopLogger
 		ic.retryableClient = rc
 	}
+
+	// and now, we duplicate the clients for auth forwarding:
+	authClient := *ic.httpClient
+	authClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) > 0 {
+			access, refresh := getTokens(via[0])
+			req.Header.Set("Authorization", "Bearer "+access)
+			req.Header.Set(authn.RefreshHeaderName, refresh)
+		}
+		return nil
+	}
+
+	rc := retryablehttp.NewClient()
+	rc.HTTPClient = &authClient
+	rc.RetryWaitMin = ic.retryableClient.RetryWaitMin
+	rc.RetryMax = ic.retryableClient.RetryMax
+	rc.CheckRetry = retryWith400Policy
+	rc.Logger = logger.NopLogger
+	ic.authRetryableClient = rc
+	ic.authHttpClient = &authClient
 	return ic
 }
 
@@ -1866,26 +1943,38 @@ func (c *InternalClient) executeRetryableRequest(req *retryablehttp.Request, opt
 		opt(eo)
 	}
 
+	// Wrap any existing context with a context with an associated error-tracker
+	errs, ctx := newStatusTrackingContext(req.Context())
+	req = req.WithContext(ctx)
+
 	var resp *http.Response
 	var err error
 	if eo.forwardAuthHeader {
-		rc := retryablehttp.NewClient()
-		rc.HTTPClient = &http.Client{
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) > 0 {
-					access, refresh := getTokens(via[0])
-					req.Header.Set("Authorization", "Bearer "+access)
-					req.Header.Set(authn.RefreshHeaderName, refresh)
-				}
-				return nil
-			},
-		}
-		rc.CheckRetry = retryWith400Policy
-		rc.Logger = logger.NopLogger
-
-		resp, err = rc.Do(req)
+		// use the shared retryableClient that uses CheckRedirect to fixup auth
+		resp, err = c.authRetryableClient.Do(req)
 	} else {
+		// use the existing shared retryableClient
 		resp, err = c.retryableClient.Do(req)
+	}
+
+	if len(errs.errs) > 0 {
+		var logfn func(string, ...interface{})
+		if err != nil {
+			logfn = c.log.Errorf
+		} else {
+			logfn = c.log.Infof
+		}
+
+		logfn("executeRetryableRequest: %d retried errors:", len(errs.errs))
+		for _, e := range errs.errs {
+			if e.err != nil {
+				// display error if the request reported an error
+				logfn("  %d: %v", e.statusCode, e.err)
+			} else {
+				// attempt to display message body or some part thereof
+				logfn("  %d: %q", e.statusCode, e.msg)
+			}
+		}
 	}
 
 	return c.handleResponse(req.Request, eo, resp, err)

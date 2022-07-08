@@ -1210,6 +1210,26 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	}
 }
 
+// Try to request translation data which won't exist.
+func TestClient_IndexTranslateDataReader(t *testing.T) {
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster.GetNode(0)
+
+	holder := cmd.Server.Holder()
+	hldr := test.Holder{Holder: holder}
+
+	hldr.SetBit("i", "f", 0, 1)
+	c := MustNewClient(cmd.URL(), pilosa.GetHTTPClient(nil))
+	reader, err := c.IndexTranslateDataReader(context.Background(), "i", 0)
+	if reader != nil {
+		reader.Close()
+	}
+	if err == nil {
+		t.Fatalf("expected to get an error reading translation data that shouldn't exist")
+	}
+}
+
 func TestClient_CreateTimeField(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
