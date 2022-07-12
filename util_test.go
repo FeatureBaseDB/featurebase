@@ -72,24 +72,6 @@ func TestGetLoopProgress(t *testing.T) {
 	}
 }
 
-// func TestFormatTimestampNano(t *testing.T) {
-// 	if FormatTimestampNano(0, 69, "s") != "1970-01-01T00:01:09Z" {
-// 		t.Fatal("Timestamp not formatted properly")
-// 	}
-// 	if FormatTimestampNano(0, 420, "ms") != "1970-01-01T00:00:00.42Z" {
-// 		t.Fatal("Timestamp not formatted properly")
-// 	}
-// 	if FormatTimestampNano(420, 0, "μs") != "1970-01-01T00:00:00.00000042Z" {
-// 		t.Fatal("Timestamp not formatted properly")
-// 	}
-// 	if FormatTimestampNano(420, 69, "us") != "1970-01-01T00:00:00.000489Z" {
-// 		t.Fatal("Timestamp not formatted properly")
-// 	}
-// 	if FormatTimestampNano(69, 420, "ns") != "1970-01-01T00:00:00.000000489Z" {
-// 		t.Fatal("Timestamp not formatted properly")
-// 	}
-// }
-
 func TestGetMemoryUsage(t *testing.T) {
 	if _, err := GetMemoryUsage(); err != nil {
 		t.Fatalf("unexpected error getting memory usage: %v", err)

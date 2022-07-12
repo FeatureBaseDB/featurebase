@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	pilosa "github.com/molecula/featurebase/v3"
@@ -305,38 +306,40 @@ func TestFieldInfoMarshal(t *testing.T) {
 	}
 }
 
-// func TestCheckUnixNanoOverflow(t *testing.T) {
-// 	tests := []struct {
-// 		name    string
-// 		epoch   time.Time
-// 		wantErr bool
-// 	}{
-// 		{
-// 			name:    "too small",
-// 			epoch:   time.Unix(-1, math.MinInt64),
-// 			wantErr: true,
-// 		},
-// 		{
-// 			name:    "just right-1",
-// 			epoch:   time.Unix(0, math.MinInt64),
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name:    "just right-2",
-// 			epoch:   time.Unix(0, math.MaxInt64),
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name:    "too large",
-// 			epoch:   time.Unix(1, math.MaxInt64),
-// 			wantErr: true,
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			if err := pilosa.CheckEpochNanoOverflow(tt.epoch); (err != nil) != tt.wantErr {
-// 				t.Errorf("checkUnixNanoOverflow() error = %v, wantErr %v", err, tt.wantErr)
-// 			}
-// 		})
-// 	}
-// }
+func TestCheckUnixNanoOverflow(t *testing.T) {
+	minNano = pilosa.MinTimestampNano.UnixNano()
+	maxNano = pilosa.MaxTimestampNano.UnixNano()
+	tests := []struct {
+		name    string
+		epoch   time.Time
+		wantErr bool
+	}{
+		{
+			name:    "too small",
+			epoch:   time.Unix(-1, minNano),
+			wantErr: true,
+		},
+		{
+			name:    "just right-1",
+			epoch:   time.Unix(0, minNano),
+			wantErr: false,
+		},
+		{
+			name:    "just right-2",
+			epoch:   time.Unix(0, maxNano),
+			wantErr: false,
+		},
+		{
+			name:    "too large",
+			epoch:   time.Unix(1, maxNano),
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := pilosa.CheckEpochOutOfRange(tt.epoch, pilosa.MinTimestampNano, pilosa.MaxTimestampNano); (err != nil) != tt.wantErr {
+				t.Errorf("checkUnixNanoOverflow() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
