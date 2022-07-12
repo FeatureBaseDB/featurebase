@@ -1250,7 +1250,15 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 		var curBM *roaring.Bitmap
 		var clearBM *roaring.Bitmap
 		for j := range b.ids {
-			col, row := b.ids[j], rowIDs[j]
+			col := b.ids[j]
+			row := nilSentinel
+			if len(rowIDs) > j {
+				// this is to protect against what i believe is a bug in the idk.DeleteSentinel logic in handling nil entries
+				// this will prevent a crash by assuming missing entries are nil entries which i think is ok
+				// TODO (twg) find where the nil entry was not added on the idk side ~ingest.go batchFromSchema method
+				row = rowIDs[j]
+			}
+
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
 				curBM = frags.GetOrCreate(curShard, field.Name(), "")
