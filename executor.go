@@ -770,7 +770,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		res, err := e.executePercentile(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executePercentile")
 	case "Delete":
-		statFn() //TODO(twg) need this?
+		statFn() // TODO(twg) need this?
 		res, err := e.executeDeleteRecords(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeDelete")
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
@@ -814,7 +814,6 @@ func (e *executor) executeOptionsCall(ctx context.Context, qcx *Qcx, index strin
 				} else {
 					return nil, errors.New("Query(): shards must be a list of unsigned integers")
 				}
-
 			}
 		} else {
 			return nil, errors.New("Query(): shards must be a list of unsigned integers")
@@ -914,7 +913,6 @@ func (e *executor) executeFieldValueCall(ctx context.Context, qcx *Qcx, index st
 }
 
 func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, field *Field, col uint64, shard uint64) (_ ValCount, err0 error) {
-
 	idx := e.Holder.Index(field.index)
 	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
 	if err != nil {
@@ -1029,7 +1027,6 @@ func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string,
 
 // executeIncludesColumnCallShard
 func (e *executor) executeIncludesColumnCallShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, column uint64) (_ bool, err error) {
-
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIncludesColumnCallShard")
 	defer span.Finish()
 
@@ -1346,7 +1343,6 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 	}
 
 	return field.valCountize(min, 1, nil)
-
 }
 
 // executeMinRow executes a MinRow() call.
@@ -1441,7 +1437,6 @@ func (e *executor) executePrecomputedCall(ctx context.Context, qcx *Qcx, index s
 
 // executeBitmapCall executes a call that returns a bitmap.
 func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ *Row, err error) {
-
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
 	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()
@@ -1651,8 +1646,10 @@ func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
 	return DistinctTimestamp{Name: d.Name, Values: vals}
 }
 
-const ViewNotFound = Error("view not found")
-const FragmentNotFound = Error("fragment not found")
+const (
+	ViewNotFound     = Error("view not found")
+	FragmentNotFound = Error("fragment not found")
+)
 
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
 	index := idx.Name()
@@ -1955,7 +1952,6 @@ func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, 
 
 // executeMaxShard calculates the max for bsiGroups on a shard.
 func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ ValCount, err0 error) {
-
 	idx := e.Holder.Index(index)
 
 	var filter *Row
@@ -2033,7 +2029,6 @@ func (e *executor) executeMinRowShard(ctx context.Context, qcx *Qcx, index strin
 
 // executeMaxRowShard returns the maximum row ID for a shard.
 func (e *executor) executeMaxRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ PairField, err0 error) {
-
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, qcx, index, c.Children[0], shard)
@@ -2738,7 +2733,8 @@ func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 				Headers: ci,
 				Columns: []*proto.ColumnResponse{
 					{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: key}},
-				}}); err != nil {
+				},
+			}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
 			ci = nil
@@ -2750,7 +2746,8 @@ func (r RowIdentifiers) ToRows(callback func(*proto.RowResponse) error) error {
 				Headers: ci,
 				Columns: []*proto.ColumnResponse{
 					{ColumnVal: &proto.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
-				}}); err != nil {
+				},
+			}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
 			ci = nil
@@ -3412,9 +3409,11 @@ type groupCountDecimalSum struct {
 	DecimalAgg *pql.Decimal `json:"sum"`
 }
 
-var _ GroupCount = GroupCount(groupCountSum{})
-var _ GroupCount = GroupCount(groupCountAggregate{})
-var _ GroupCount = GroupCount(groupCountDecimalSum{})
+var (
+	_ GroupCount = GroupCount(groupCountSum{})
+	_ GroupCount = GroupCount(groupCountAggregate{})
+	_ GroupCount = GroupCount(groupCountDecimalSum{})
+)
 
 func (g *GroupCount) Clone() (r *GroupCount) {
 	r = &GroupCount{
@@ -3805,7 +3804,7 @@ func (e *executor) executeRowsShard(ctx context.Context, qcx *Qcx, index string,
 
 	// views contains the list of views to inspect (and merge)
 	// in order to represent `Rows` for the field.
-	var views = []string{viewStandard}
+	views := []string{viewStandard}
 
 	switch f.Type() {
 	case FieldTypeSet, FieldTypeMutex:
@@ -4304,6 +4303,11 @@ func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index st
 	}, nil
 }
 
+type TimeArgs struct {
+	From time.Time
+	To   time.Time
+}
+
 func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (ExtractedIDMatrix, error) {
 	// Extract the column filter call.
 	if len(c.Children) < 1 {
@@ -4313,17 +4317,31 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 
 	// Extract fields from rows calls.
 	fields := make([]string, len(c.Children)-1)
+	timeArgs := make([]TimeArgs, len(c.Children)-1)
 	for i, rows := range c.Children[1:] {
 		if rows.Name != "Rows" {
 			return ExtractedIDMatrix{}, errors.Errorf("child call of Extract is %q but expected Rows", rows.Name)
 		}
 		var fieldName string
 		var ok bool
+		var timeArg TimeArgs
 		for k, v := range rows.Args {
 			switch k {
 			case "field", "_field":
 				fieldName = v.(string)
 				ok = true
+			case "from":
+				fromTime, err := parseTime(v)
+				if err != nil {
+					return ExtractedIDMatrix{}, errors.Wrap(err, "parsing from time")
+				}
+				timeArg.From = fromTime
+			case "to":
+				toTime, err := parseTime(v)
+				if err != nil {
+					return ExtractedIDMatrix{}, errors.Wrap(err, "parsing from time")
+				}
+				timeArg.To = toTime
 			default:
 				return ExtractedIDMatrix{}, errors.Errorf("unsupported Rows argument for Extract: %q", k)
 			}
@@ -4332,11 +4350,12 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 			return ExtractedIDMatrix{}, errors.New("missing field specification in Rows")
 		}
 		fields[i] = fieldName
+		timeArgs[i] = timeArg
 	}
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
-		return e.executeExtractShard(ctx, qcx, index, fields, filter, shard, mopt)
+		return e.executeExtractShard(ctx, qcx, index, fields, filter, shard, mopt, timeArgs)
 	}
 
 	// Merge returned results at coordinating node.
@@ -4367,11 +4386,12 @@ func mergeBits(bits *Row, mask uint64, out map[uint64]uint64) {
 	}
 }
 
-var trueRowFakeID = []uint64{1}
-var falseRowFakeID = []uint64{0}
+var (
+	trueRowFakeID  = []uint64{1}
+	falseRowFakeID = []uint64{0}
+)
 
-func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index string, fields []string, filter *pql.Call, shard uint64, mopt *mapOptions) (_ ExtractedIDMatrix, err0 error) {
-
+func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index string, fields []string, filter *pql.Call, shard uint64, mopt *mapOptions, timeArgs []TimeArgs) (_ ExtractedIDMatrix, err0 error) {
 	// Execute filter.
 	colsBitmap, err := e.executeBitmapCallShard(ctx, qcx, index, filter, shard)
 	if err != nil {
@@ -4424,8 +4444,8 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 		}
 
 		switch field.Type() {
-		case FieldTypeSet, FieldTypeMutex, FieldTypeTime:
-			// Handle a set field by listing the rows and then intersecting them with the filter.
+		case FieldTypeSet, FieldTypeMutex:
+			// Handle a set field by listing the rows and then intersecting them with the filter.
 
 			// Extract the standard view fragment.
 			fragment := e.Holder.fragment(index, name, viewStandard, shard)
@@ -4455,6 +4475,70 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 				for _, columnID := range row.Columns() {
 					fieldSlot := &m[mLookup[columnID]].Rows[i]
 					*fieldSlot = append(*fieldSlot, rowID)
+				}
+			}
+		case FieldTypeTime:
+			// Handle a set field by listing the rows and then intersecting them with the filter.
+			timeArg := timeArgs[i]
+			var views []string
+			if timeArg.From.IsZero() && timeArg.To.IsZero() {
+				views = []string{viewStandard}
+			} else {
+				views, err = field.viewsByTimeRange(timeArg.From, timeArg.To)
+				if err != nil {
+					return ExtractedIDMatrix{}, errors.Wrap(err, "problem with from/to")
+				}
+			}
+
+			dedup := make(map[uint64]map[uint64]struct{})
+			for _, view := range views {
+				fragment := e.Holder.fragment(index, name, view, shard)
+				if fragment == nil {
+					// There is nothing here.
+					continue
+				}
+
+				rows, err := fragment.rows(ctx, tx, 0)
+				if err != nil {
+					return ExtractedIDMatrix{}, errors.Wrap(err, "listing rows in set field")
+				}
+
+				// Loop over each row and scan the intersection with the filter.
+				for _, rowID := range rows {
+					// Load row from fragment.
+					row, err := fragment.row(tx, rowID)
+					if err != nil {
+						return ExtractedIDMatrix{}, errors.Wrap(err, "loading row from fragment")
+					}
+
+					// Apply column filter to row.
+					row = row.Intersect(colsBitmap)
+					if len(views) == 1 {
+						for _, columnID := range row.Columns() {
+							fieldSlot := &m[mLookup[columnID]].Rows[i]
+							*fieldSlot = append(*fieldSlot, rowID)
+						}
+					} else {
+						// Rotate vector into the matrix.
+						for _, columnID := range row.Columns() {
+							if _m, ok := dedup[columnID]; ok {
+								_m[rowID] = struct{}{}
+								dedup[columnID] = _m
+							} else {
+								dedup[columnID] = map[uint64]struct{}{rowID: {}}
+							}
+						}
+					}
+				}
+			}
+			if len(views) > 1 {
+				for columnID, rowsMap := range dedup {
+					rowids := make([]uint64, 0, len(rowsMap))
+					for k := range rowsMap {
+						rowids = append(rowids, k)
+					}
+					sort.Slice(rowids, func(i, j int) bool { return rowids[i] < rowids[j] })
+					m[mLookup[columnID]].Rows[i] = rowids
 				}
 			}
 		case FieldTypeBool:
@@ -4665,7 +4749,6 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 		row = row.Clone()
 	}
 	return row, nil
-
 }
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
@@ -4989,7 +5072,6 @@ func (e *executor) executeInnerUnionRowsShard(ctx context.Context, qcx *Qcx, ind
 		row = row.Clone()
 	}
 	return row, nil
-
 }
 
 // executeXorShard executes a xor() call for a local shard.
@@ -5180,7 +5262,6 @@ func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string,
 
 // executeAllCallShard executes an All() call for a local shard.
 func (e *executor) executeAllCallShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (res *Row, err0 error) {
-
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeAllCallShard")
 	defer span.Finish()
 
@@ -5537,7 +5618,6 @@ func (e *executor) executeSetRow(ctx context.Context, qcx *Qcx, indexName string
 
 // executeSetRowShard executes a SetRow() call for a single shard.
 func (e *executor) executeSetRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ bool, err0 error) {
-
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Store() argument required: field")
@@ -7607,7 +7687,6 @@ func TimestampToVal(unit string, ts time.Time) int64 {
 		return ts.UnixNano()
 	}
 	return 0
-
 }
 
 // detectRangeCall returns true if the call or one of its children contains a Range call
@@ -7723,7 +7802,6 @@ func (s SignedRow) ToTable() (*proto.TableResponse, error) {
 
 // ToRows implements the ToRowser interface.
 func (s SignedRow) ToRows(callback func(*proto.RowResponse) error) error {
-
 	ci := []*proto.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
 	if s.Neg != nil {
 		negs := s.Neg.Columns()
@@ -7858,7 +7936,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 			Columns: []*proto.ColumnResponse{
 				{ColumnVal: &proto.ColumnResponse_DecimalVal{DecimalVal: &proto.Decimal{Value: vValuePtr.Int64(), Scale: v.DecimalVal.Scale}}},
 				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
-			}}); err != nil {
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 	} else if v.FloatVal != 0 {
@@ -7871,7 +7950,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 			Columns: []*proto.ColumnResponse{
 				{ColumnVal: &proto.ColumnResponse_Float64Val{Float64Val: v.FloatVal}},
 				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
-			}}); err != nil {
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 	} else if !v.TimestampVal.IsZero() {
@@ -7884,7 +7964,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 			Columns: []*proto.ColumnResponse{
 				{ColumnVal: &proto.ColumnResponse_StringVal{StringVal: v.TimestampVal.Format(time.RFC3339Nano)}},
 				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
-			}}); err != nil {
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 	} else {
@@ -7897,7 +7978,8 @@ func (v ValCount) ToRows(callback func(*proto.RowResponse) error) error {
 			Columns: []*proto.ColumnResponse{
 				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Val}},
 				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: v.Count}},
-			}}); err != nil {
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 	}
@@ -8118,7 +8200,6 @@ type groupByIterator struct {
 
 // newGroupByIterator initializes a new groupByIterator.
 func newGroupByIterator(executor *executor, qcx *Qcx, rowIDs []RowIDs, children []*pql.Call, aggregate *pql.Call, filter *Row, index string, shard uint64, holder *Holder) (_ *groupByIterator, err0 error) {
-
 	gbi := &groupByIterator{
 		executor: executor,
 		qcx:      qcx,
@@ -8527,7 +8608,7 @@ func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index str
 		return false, errors.New("Delete() only accepts a single bitmap input")
 	}
 	qcx.Abort()
-	qcx.Reset() //release the qcx to allow for rbf checkpoint
+	qcx.Reset() // release the qcx to allow for rbf checkpoint
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
@@ -8565,6 +8646,7 @@ func transactExistRow(ctx context.Context, idx *Index, shard uint64, frag *fragm
 	}
 	return rowID, tx.Commit()
 }
+
 func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index string, bmCall *pql.Call, shard uint64) (changed bool, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeDeleteRecordFromShard")
 	defer span.Finish()
@@ -8575,7 +8657,7 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index strin
 		return
 	}
 	qcx := idx.Txf().NewQcx()
-	//bmCall is a bitmap
+	// bmCall is a bitmap
 	row, err := e.executeBitmapCallShard(ctx, qcx, index, bmCall, shard)
 	qcx.Abort()
 	if err != nil {
@@ -8600,11 +8682,11 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 	var existenceFragment *fragment
 	var deletedRowID uint64
 	var commitor Commitor = &NopCommitor{}
-	var err error   //store columns in exits field ToBeDelete row commited
+	var err error   // store columns in exits field ToBeDelete row commited
 	if normalFlow { // normalFlow is the standard path, "not normal" is recoverory
 		existenceFragment = idx.Holder().fragment(idx.Name(), existenceFieldName, viewStandard, shard)
 		if existenceFragment == nil {
-			//no exists field
+			// no exists field
 			return false, errors.New("can't bulk delete without existence field")
 		}
 		src := NewRowFromBitmap(columns)
@@ -8624,7 +8706,7 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 	defer writeTx.Rollback()
 	changed := false
 	defer func() {
-		//if there is an error on the bit clearing rollback the keys
+		// if there is an error on the bit clearing rollback the keys
 		if err != nil {
 			changed = false
 			commitor.Rollback()
@@ -8644,7 +8726,6 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 		if err != nil {
 			idx.Holder().Logger.Errorf("problems committing delete in rbf %v shard %v", err, shard)
 		}
-
 	}()
 
 	for _, field := range idx.Fields() {
@@ -8662,7 +8743,7 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 			}
 		}
 	}
-	if existenceFragment != nil { //a string keys have been deleted and the deleteRow was created
+	if existenceFragment != nil { // a string keys have been deleted and the deleteRow was created
 		if normalFlow {
 			existenceFragment.clearRow(writeTx, deletedRowID)
 		} else {
@@ -8712,7 +8793,7 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 
 		}
 	}
-	if existenceFragment == nil { //a string keys have been deleted and the deleteRow was created
+	if existenceFragment == nil { // a string keys have been deleted and the deleteRow was created
 		return changed, nil
 	}
 
@@ -8733,10 +8814,10 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 }
 
 func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64, normalFlow bool) (change bool, err error) {
-	if len(src.segments) == 0 { //nothing to remove
+	if len(src.segments) == 0 { // nothing to remove
 		return false, nil
 	}
-	columns := src.segments[0].data //should only be one segment
+	columns := src.segments[0].data // should only be one segment
 	if columns.Count() == 0 {
 		return false, nil
 	}
@@ -8760,19 +8841,17 @@ func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64,
 		}
 	}
 	return change, err
-
 }
 
 type Commitor interface {
 	Rollback()
 	Commit() error
 }
-type NopCommitor struct {
-}
+type NopCommitor struct{}
 
 func (c *NopCommitor) Rollback() {
-
 }
+
 func (c *NopCommitor) Commit() error {
 	return nil
 }

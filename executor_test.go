@@ -4199,6 +4199,7 @@ func TestExecutor_Execute_Limit(t *testing.T) {
 			t.Errorf("expected %v but got %v", expect, got)
 		}
 	})
+
 }
 
 // Ensure an all query can be executed.
@@ -9440,4 +9441,119 @@ func TestDistinctTimestampToRows(t *testing.T) {
 			t.Errorf("expected %v, got %v", expected[i], row)
 		}
 	}
+}
+
+func TestExecutor_Execute_ExtractWithTime(t *testing.T) {
+	ts := func(t time.Time) int64 {
+		return t.Unix() * 1e+9
+	}
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	c.CreateField(t, "i", pilosa.IndexOptions{Keys: true, TrackExistence: true}, "segment", pilosa.OptFieldKeys(), pilosa.OptFieldTypeTime(pilosa.TimeQuantum("D"), "0"))
+	c.ImportTimeQuantumKey(t, "i", "segment", []test.TimeQuantumKey{
+		// from edge cases
+		{ColKey: "C1", RowKey: "R1", Ts: ts(time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC))},
+		{ColKey: "C2", RowKey: "R1", Ts: ts(time.Date(2022, 7, 3, 0, 0, 0, 0, time.UTC))},
+	})
+
+	t.Run("Extract With From Time", func(t *testing.T) {
+		resp := c.Query(t, "i", "Extract(All(), Rows(segment,from=2022-07-03T00:00))")
+		//resp := c.Query(t, "i", "Extract(All(), Rows(segment, from=))")
+		if len(resp.Results) != 1 {
+			t.Fatalf("expected 1 result but got %d", len(resp.Results))
+		}
+		got, ok := resp.Results[0].(pilosa.ExtractedTable)
+		if !ok {
+			t.Fatalf("expected a table result but got %T", resp.Results[0])
+		}
+		expect := pilosa.ExtractedTable{
+			Fields: []pilosa.ExtractedTableField{{Name: "segment", Type: "[]string"}},
+			Columns: []pilosa.ExtractedTableColumn{
+				{
+					Column: pilosa.KeyOrID{
+						Key:   "C1",
+						Keyed: true,
+					},
+					Rows: []interface{}{[]string{}},
+				},
+				{
+					Column: pilosa.KeyOrID{
+						Key:   "C2",
+						Keyed: true,
+					},
+					Rows: []interface{}{[]string{"R1"}},
+				},
+			},
+		}
+		if !reflect.DeepEqual(expect, got) {
+			t.Errorf("expected %v but got %v", expect, got)
+		}
+	})
+	t.Run("Extract With Time No Opt", func(t *testing.T) {
+		resp := c.Query(t, "i", "Extract(All(), Rows(segment))")
+		//resp := c.Query(t, "i", "Extract(All(), Rows(segment, from=))")
+		if len(resp.Results) != 1 {
+			t.Fatalf("expected 1 result but got %d", len(resp.Results))
+		}
+		got, ok := resp.Results[0].(pilosa.ExtractedTable)
+		if !ok {
+			t.Fatalf("expected a table result but got %T", resp.Results[0])
+		}
+		expect := pilosa.ExtractedTable{
+			Fields: []pilosa.ExtractedTableField{{Name: "segment", Type: "[]string"}},
+			Columns: []pilosa.ExtractedTableColumn{
+				{
+					Column: pilosa.KeyOrID{
+						Key:   "C1",
+						Keyed: true,
+					},
+					Rows: []interface{}{[]string{"R1"}},
+				},
+				{
+					Column: pilosa.KeyOrID{
+						Key:   "C2",
+						Keyed: true,
+					},
+					Rows: []interface{}{[]string{"R1"}},
+				},
+			},
+		}
+		if !reflect.DeepEqual(expect, got) {
+			t.Errorf("expected %v but got %v", expect, got)
+		}
+	})
+
+	t.Run("Extract With ToTime ", func(t *testing.T) {
+		resp := c.Query(t, "i", "Extract(All(), Rows(segment,to=2022-07-02T00:00))")
+		//resp := c.Query(t, "i", "Extract(All(), Rows(segment, from=))")
+		if len(resp.Results) != 1 {
+			t.Fatalf("expected 1 result but got %d", len(resp.Results))
+		}
+		got, ok := resp.Results[0].(pilosa.ExtractedTable)
+		if !ok {
+			t.Fatalf("expected a table result but got %T", resp.Results[0])
+		}
+		expect := pilosa.ExtractedTable{
+			Fields: []pilosa.ExtractedTableField{{Name: "segment", Type: "[]string"}},
+			Columns: []pilosa.ExtractedTableColumn{
+				{
+					Column: pilosa.KeyOrID{
+						Key:   "C1",
+						Keyed: true,
+					},
+					Rows: []interface{}{[]string{"R1"}},
+				},
+				{
+					Column: pilosa.KeyOrID{
+						Key:   "C2",
+						Keyed: true,
+					},
+					Rows: []interface{}{[]string{}},
+				},
+			},
+		}
+		if !reflect.DeepEqual(expect, got) {
+			t.Errorf("expected %v but got %v", expect, got)
+		}
+	})
 }
