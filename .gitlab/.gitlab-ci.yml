@@ -518,6 +518,7 @@ smoke test auth:
       - report.xml
     reports:
       junit: report.xml
+  allow_failure: true
 
 smoke test:
   stage: integration
@@ -576,6 +577,7 @@ smoke test:
       - report.xml
     reports:
       junit: report.xml
+  allow_failure: true
 
 tremor-delete-test:
   stage: integration
