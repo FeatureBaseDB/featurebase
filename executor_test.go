@@ -7493,7 +7493,7 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 	}
 }
 
-func toCSV(s string) string {
+func lineBreaker(s string) string {
 	return strings.Join(strings.Split(s, " "), "\n") + "\n"
 }
 
@@ -7553,44 +7553,44 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 		// Rows
 		{
 			query:       `Rows(f1, from='2019-08-04T14:36', to='2019-08-04T16:00')`,
-			csvVerifier: toCSV("R4 R5"),
+			csvVerifier: lineBreaker("R4 R5"),
 		},
 		{
 			query:       `Rows(f1, from='2019-08-04T14', to='2019-08-04T17:00')`,
-			csvVerifier: toCSV("R4 R5 R6"),
+			csvVerifier: lineBreaker("R4 R5 R6"),
 		},
 		{
 			query:       `Rows(f1, from='2019-08-04', to='2019-08-05')`,
-			csvVerifier: toCSV("R3 R4 R5 R6"),
+			csvVerifier: lineBreaker("R3 R4 R5 R6"),
 		},
 		{
 			query:       `Rows(f1, from='2019-08', to='2019-12')`,
-			csvVerifier: toCSV("R2 R3 R4 R5 R6 R7"),
+			csvVerifier: lineBreaker("R2 R3 R4 R5 R6 R7"),
 		},
 		{
 			query:       `Rows(f1, from='2019', to='2020')`,
-			csvVerifier: toCSV("R1 R2 R3 R4 R5 R6 R7 R8"),
+			csvVerifier: lineBreaker("R1 R2 R3 R4 R5 R6 R7 R8"),
 		},
 		// Row
 		{
 			query:       `Row(f2='R', from='2019-08-04T14:36', to='2019-08-04T16:00')`,
-			csvVerifier: toCSV("C4 C5"),
+			csvVerifier: lineBreaker("C4 C5"),
 		},
 		{
 			query:       `Row(f2='R', from='2019-08-04T14', to='2019-08-04T17:00')`,
-			csvVerifier: toCSV("C4 C5 C6"),
+			csvVerifier: lineBreaker("C4 C5 C6"),
 		},
 		{
 			query:       `Row(f2='R', from='2019-08-04', to='2019-08-05')`,
-			csvVerifier: toCSV("C3 C4 C5 C6"),
+			csvVerifier: lineBreaker("C3 C4 C5 C6"),
 		},
 		{
 			query:       `Row(f2='R', from='2019-08', to='2019-12')`,
-			csvVerifier: toCSV("C2 C3 C4 C5 C6 C7"),
+			csvVerifier: lineBreaker("C2 C3 C4 C5 C6 C7"),
 		},
 		{
 			query:       `Row(f2='R', from='2019', to='2020')`,
-			csvVerifier: toCSV("C1 C2 C3 C4 C5 C6 C7 C8"),
+			csvVerifier: lineBreaker("C1 C2 C3 C4 C5 C6 C7 C8"),
 		},
 	}
 
@@ -7862,39 +7862,39 @@ userB
 		},
 		{
 			query:       `Row(unix_sec="0001-01-01T00:00:01Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_sec="9999-12-31T23:59:59Z")`,
-			csvVerifier: toCSV("userB"),
+			csvVerifier: lineBreaker("userB"),
 		},
 		{
 			query:       `Row(unix_milli="0001-01-01T00:00:01Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_milli="9999-12-31T23:59:59Z")`,
-			csvVerifier: toCSV("userB"),
+			csvVerifier: lineBreaker("userB"),
 		},
 		{
 			query:       `Row(unix_micro="0001-01-01T00:00:01Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_micro="9999-12-31T23:59:59Z")`,
-			csvVerifier: toCSV("userB"),
+			csvVerifier: lineBreaker("userB"),
 		},
 		{
 			query:       `Row(unix_nano="1833-11-24T17:31:44Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_nano="2106-02-07T06:28:16Z")`,
-			csvVerifier: toCSV("userB"),
+			csvVerifier: lineBreaker("userB"),
 		},
 		{
 			query:       `Union(Row(unix_nano="2106-02-07T06:28:16Z"), Row(unix_micro="0001-01-01T00:00:01Z"))`,
-			csvVerifier: toCSV("userA\nuserB"),
+			csvVerifier: lineBreaker("userA\nuserB"),
 		},
 		{
 			query: `Set("userA", unix_milli="2000-12-31T23:59:59.999Z")`,
@@ -8155,59 +8155,59 @@ userC
 		},
 		{
 			query:       `Row(unix_sec_min="0001-01-01T00:00:01Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_sec_max="0001-01-01T00:00:01Z")`,
-			csvVerifier: toCSV("userC"),
+			csvVerifier: lineBreaker("userC"),
 		},
 		{
 			query:       `Row(unix_sec_max="9999-12-31T23:59:59Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_milli_min="0001-01-01T00:00:01Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_milli_min="9999-12-31T23:59:59Z")`,
-			csvVerifier: toCSV("userC"),
+			csvVerifier: lineBreaker("userC"),
 		},
 		{
 			query:       `Row(unix_micro_max="0001-01-01T00:00:01Z")`,
-			csvVerifier: toCSV("userC"),
+			csvVerifier: lineBreaker("userC"),
 		},
 		{
 			query:       `Row(unix_micro_max="9999-12-31T23:59:59Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_nano_min="1833-11-24T17:31:44Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_nano_min="1969-12-31T23:59:59.999999999Z")`,
-			csvVerifier: toCSV("userB"),
+			csvVerifier: lineBreaker("userB"),
 		},
 		{
 			query:       `Row(unix_nano_min="1970-01-01T00:00:00Z")`,
-			csvVerifier: toCSV("userC"),
+			csvVerifier: lineBreaker("userC"),
 		},
 		{
 			query:       `Row(unix_nano_max="2106-02-07T06:28:16Z")`,
-			csvVerifier: toCSV("userA"),
+			csvVerifier: lineBreaker("userA"),
 		},
 		{
 			query:       `Row(unix_nano_max="1970-01-01T00:00:00.000000001Z")`,
-			csvVerifier: toCSV("userB"),
+			csvVerifier: lineBreaker("userB"),
 		},
 		{
 			query:       `Row(unix_nano_max="1970-01-01T00:00:00Z")`,
-			csvVerifier: toCSV("userC"),
+			csvVerifier: lineBreaker("userC"),
 		},
 		{
 			query:       `Union(Row(unix_nano_max="2106-02-07T06:28:16Z"), Row(unix_micro_max="0001-01-01T00:00:01Z"))`,
-			csvVerifier: toCSV("userA\nuserC"),
+			csvVerifier: lineBreaker("userA\nuserC"),
 		},
 		{
 			query: `Set("userA", unix_sec_min="2000-12-31T23:59:59.999Z")`,

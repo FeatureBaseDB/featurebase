@@ -1590,8 +1590,6 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 				return nil, errors.Wrap(err, "translating value to timestamp")
 			}
 			results[i] = t.Format(time.RFC3339Nano)
-
-			// results[i] = FormatTimestampNano(int64(val), bsig.Base, field.options.TimeUnit)
 		}
 		result = DistinctTimestamp{Name: fieldName, Values: results}
 		return result, nil
@@ -7919,7 +7917,7 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 		return vc.decimalSmaller(other)
 	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
 		return vc.floatSmaller(other)
-	} else if !vc.TimestampVal.Equal(time.Time{}) || !other.TimestampVal.Equal(time.Time{}) {
+	} else if !vc.TimestampVal.IsZero() || !other.TimestampVal.IsZero() {
 		return vc.timestampSmaller(other)
 	}
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
@@ -7938,6 +7936,8 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 	}
 }
 
+// timestampSmaller returns the smaller of the two (vc or other), while merging the count
+// if they are equal.
 func (vc *ValCount) timestampSmaller(other ValCount) ValCount {
 	if other.TimestampVal.Equal(time.Time{}) {
 		return *vc
@@ -7956,6 +7956,8 @@ func (vc *ValCount) timestampSmaller(other ValCount) ValCount {
 	}
 }
 
+// decimalSmaller returns the smaller of the two (vc or other), while merging the count
+// if they are equal.
 func (vc *ValCount) decimalSmaller(other ValCount) ValCount {
 	if other.DecimalVal == nil {
 		return *vc
@@ -7973,6 +7975,8 @@ func (vc *ValCount) decimalSmaller(other ValCount) ValCount {
 	}
 }
 
+// floatSmaller returns the smaller of the two (vc or other), while merging the count
+// if they are equal.
 func (vc *ValCount) floatSmaller(other ValCount) ValCount {
 	if vc.Count == 0 || (other.FloatVal < vc.FloatVal && other.Count > 0) {
 		return other
@@ -8012,6 +8016,8 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 	}
 }
 
+// timestampLarger returns the larger of the two (vc or other), while merging the count
+// if they are equal.
 func (vc *ValCount) timestampLarger(other ValCount) ValCount {
 	if other.TimestampVal.Equal(time.Time{}) {
 		return *vc
@@ -8030,6 +8036,8 @@ func (vc *ValCount) timestampLarger(other ValCount) ValCount {
 	}
 }
 
+// decimalLarger returns the larger of the two (vc or other), while merging the count
+// if they are equal.
 func (vc *ValCount) decimalLarger(other ValCount) ValCount {
 	if other.DecimalVal == nil {
 		return *vc
@@ -8047,6 +8055,8 @@ func (vc *ValCount) decimalLarger(other ValCount) ValCount {
 	}
 }
 
+// floatLarger returns the larger of the two (vc or other), while merging the count
+// if they are equal.
 func (vc *ValCount) floatLarger(other ValCount) ValCount {
 	if vc.Count == 0 || (other.FloatVal > vc.FloatVal && other.Count > 0) {
 		return other

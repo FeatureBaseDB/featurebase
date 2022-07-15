@@ -1833,7 +1833,7 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard 
 	// of timestamps are already relative to the epoch (base).
 	// So a user may set an epoch to 2022-03-01 as the start of a race
 	// and import finishing times in seconds.
-	// Timestamps ingested as timestamps are of coure absolute, but by the time
+	// Timestamps ingested as timestamps are of course absolute, but by the time
 	// we get here it would be a relative integer.
 	if f.Type() != FieldTypeTimestamp {
 		min -= bsig.Base
