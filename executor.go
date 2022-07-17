@@ -939,11 +939,7 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, fie
 		other.FloatVal = 0
 		other.Val = 0
 	} else if field.Type() == FieldTypeTimestamp {
-		ts, err := ValToTimestamp(field.Options().TimeUnit, value)
-		if err != nil {
-			return ValCount{}, err
-		}
-		other.TimestampVal = ts
+		other.TimestampVal = time.Unix(0, value*int64(TimeUnitNanos(field.Options().TimeUnit)))
 	}
 
 	return other, nil
@@ -1580,11 +1576,7 @@ func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index str
 		cols := r.Pos.Columns()
 		results := make([]string, len(cols))
 		for i, val := range cols {
-			t, err := ValToTimestamp(field.options.TimeUnit, int64(val)+bsig.Base)
-			if err != nil {
-				return nil, errors.Wrap(err, "translating value to timestamp")
-			}
-			results[i] = t.Format(time.RFC3339Nano)
+			results[i] = FormatTimestampNano(int64(val), bsig.Base, field.options.TimeUnit)
 		}
 		result = DistinctTimestamp{Name: fieldName, Values: results}
 		return result, nil
@@ -1623,11 +1615,6 @@ func (d DistinctTimestamp) ToRows(callback func(*proto.RowResponse) error) error
 	}
 
 	return nil
-}
-
-// ToTable implements the ToTabler interface for DistinctTimestamp
-func (d DistinctTimestamp) ToTable() (*proto.TableResponse, error) {
-	return proto.RowsToTable(&d, len(d.Values))
 }
 
 // Union returns the union of the values of `d` and `other`
@@ -3197,16 +3184,13 @@ func (fr *FieldRow) Clone() (clone *FieldRow) {
 func (fr FieldRow) MarshalJSON() ([]byte, error) {
 	if fr.Value != nil {
 		if fr.FieldOptions.Type == FieldTypeTimestamp {
-			ts, err := ValToTimestamp(fr.FieldOptions.TimeUnit, int64(*fr.Value)+fr.FieldOptions.Base)
-			if err != nil {
-				return nil, errors.Wrap(err, "translating value to timestamp")
-			}
+			ts := FormatTimestampNano(int64(*fr.Value), fr.FieldOptions.Base, fr.FieldOptions.TimeUnit)
 			return json.Marshal(struct {
 				Field string `json:"field"`
 				Value string `json:"value"`
 			}{
 				Field: fr.Field,
-				Value: ts.Format(time.RFC3339Nano),
+				Value: ts,
 			})
 		} else {
 			return json.Marshal(struct {
@@ -7587,17 +7571,12 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				}
 			case FieldTypeTimestamp:
 				datatype = "timestamp"
-				unit := field.Options().TimeUnit
 				mapper = func(ids []uint64) (_ interface{}, err error) {
 					switch len(ids) {
 					case 0:
 						return nil, nil
 					case 1:
-						ts, err := ValToTimestamp(unit, int64(ids[0]))
-						if err != nil {
-							return nil, err
-						}
-						return ts, nil
+						return time.Unix(0, int64(ids[0])*int64(TimeUnitNanos(field.Options().TimeUnit))).UTC(), nil
 					default:
 						return nil, errors.Errorf("BSI field %q has too many values: %v", field.Name(), ids)
 					}
@@ -7656,37 +7635,6 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 	}
 
 	return result, nil
-}
-
-// ValToTimestamp takes a timeunit and an integer value and converts it to time.Time
-func ValToTimestamp(unit string, val int64) (time.Time, error) {
-	switch unit {
-	case TimeUnitSeconds:
-		return time.Unix(val, 0).UTC(), nil
-	case TimeUnitMilliseconds:
-		return time.UnixMilli(val).UTC(), nil
-	case TimeUnitMicroseconds, TimeUnitUSeconds:
-		return time.UnixMicro(val).UTC(), nil
-	case TimeUnitNanoseconds:
-		return time.Unix(0, val).UTC(), nil
-	default:
-		return time.Time{}, errors.Errorf("Unknown time unit: '%v'", unit)
-	}
-}
-
-// TimestampToVal takes a time unit and a time.Time and converts it to an integer value
-func TimestampToVal(unit string, ts time.Time) int64 {
-	switch unit {
-	case TimeUnitSeconds:
-		return ts.Unix()
-	case TimeUnitMilliseconds:
-		return ts.UnixMilli()
-	case TimeUnitMicroseconds, TimeUnitUSeconds:
-		return ts.UnixMicro()
-	case TimeUnitNanoseconds:
-		return ts.UnixNano()
-	}
-	return 0
 }
 
 // detectRangeCall returns true if the call or one of its children contains a Range call
@@ -7999,8 +7947,6 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 		return vc.decimalSmaller(other)
 	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
 		return vc.floatSmaller(other)
-	} else if !vc.TimestampVal.IsZero() || !other.TimestampVal.IsZero() {
-		return vc.timestampSmaller(other)
 	}
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
 		return other
@@ -8018,28 +7964,6 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 	}
 }
 
-// timestampSmaller returns the smaller of the two (vc or other), while merging the count
-// if they are equal.
-func (vc *ValCount) timestampSmaller(other ValCount) ValCount {
-	if other.TimestampVal.Equal(time.Time{}) {
-		return *vc
-	}
-	if vc.Count == 0 || vc.TimestampVal.Equal(time.Time{}) || (other.TimestampVal.Before(vc.TimestampVal) && other.Count > 0) {
-		return other
-	}
-	extra := int64(0)
-	if vc.TimestampVal.Equal(other.TimestampVal) {
-		extra += other.Count
-	}
-	return ValCount{
-		Val:          vc.Val,
-		TimestampVal: vc.TimestampVal,
-		Count:        vc.Count + extra,
-	}
-}
-
-// decimalSmaller returns the smaller of the two (vc or other), while merging the count
-// if they are equal.
 func (vc *ValCount) decimalSmaller(other ValCount) ValCount {
 	if other.DecimalVal == nil {
 		return *vc
@@ -8057,8 +7981,6 @@ func (vc *ValCount) decimalSmaller(other ValCount) ValCount {
 	}
 }
 
-// floatSmaller returns the smaller of the two (vc or other), while merging the count
-// if they are equal.
 func (vc *ValCount) floatSmaller(other ValCount) ValCount {
 	if vc.Count == 0 || (other.FloatVal < vc.FloatVal && other.Count > 0) {
 		return other
@@ -8079,8 +8001,6 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 		return vc.decimalLarger(other)
 	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
 		return vc.floatLarger(other)
-	} else if !vc.TimestampVal.Equal(time.Time{}) || !other.TimestampVal.Equal(time.Time{}) {
-		return vc.timestampLarger(other)
 	}
 	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
 		return other
@@ -8098,28 +8018,6 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 	}
 }
 
-// timestampLarger returns the larger of the two (vc or other), while merging the count
-// if they are equal.
-func (vc *ValCount) timestampLarger(other ValCount) ValCount {
-	if other.TimestampVal.Equal(time.Time{}) {
-		return *vc
-	}
-	if vc.Count == 0 || vc.TimestampVal.Equal(time.Time{}) || (other.TimestampVal.After(vc.TimestampVal) && other.Count > 0) {
-		return other
-	}
-	extra := int64(0)
-	if vc.TimestampVal.Equal(other.TimestampVal) {
-		extra += other.Count
-	}
-	return ValCount{
-		Val:          vc.Val,
-		TimestampVal: vc.TimestampVal,
-		Count:        vc.Count + extra,
-	}
-}
-
-// decimalLarger returns the larger of the two (vc or other), while merging the count
-// if they are equal.
 func (vc *ValCount) decimalLarger(other ValCount) ValCount {
 	if other.DecimalVal == nil {
 		return *vc
@@ -8137,8 +8035,6 @@ func (vc *ValCount) decimalLarger(other ValCount) ValCount {
 	}
 }
 
-// floatLarger returns the larger of the two (vc or other), while merging the count
-// if they are equal.
 func (vc *ValCount) floatLarger(other ValCount) ValCount {
 	if vc.Count == 0 || (other.FloatVal > vc.FloatVal && other.Count > 0) {
 		return other
@@ -8556,8 +8452,7 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 	} else if opt.Type == FieldTypeTimestamp {
 		switch tv := v.(type) {
 		case time.Time:
-			v := TimestampToVal(f.options.TimeUnit, tv)
-			value = v
+			value = tv.UnixNano() / TimeUnitNanos(f.options.TimeUnit)
 		case int64:
 			value = tv
 		default:

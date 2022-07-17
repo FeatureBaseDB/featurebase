@@ -307,8 +307,6 @@ func TestFieldInfoMarshal(t *testing.T) {
 }
 
 func TestCheckUnixNanoOverflow(t *testing.T) {
-	minNano = pilosa.MinTimestampNano.UnixNano()
-	maxNano = pilosa.MaxTimestampNano.UnixNano()
 	tests := []struct {
 		name    string
 		epoch   time.Time
@@ -316,28 +314,28 @@ func TestCheckUnixNanoOverflow(t *testing.T) {
 	}{
 		{
 			name:    "too small",
-			epoch:   time.Unix(-1, minNano),
+			epoch:   time.Unix(-1, math.MinInt64),
 			wantErr: true,
 		},
 		{
 			name:    "just right-1",
-			epoch:   time.Unix(0, minNano),
+			epoch:   time.Unix(0, math.MinInt64),
 			wantErr: false,
 		},
 		{
 			name:    "just right-2",
-			epoch:   time.Unix(0, maxNano),
+			epoch:   time.Unix(0, math.MaxInt64),
 			wantErr: false,
 		},
 		{
 			name:    "too large",
-			epoch:   time.Unix(1, maxNano),
+			epoch:   time.Unix(1, math.MaxInt64),
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := pilosa.CheckEpochOutOfRange(tt.epoch, pilosa.MinTimestampNano, pilosa.MaxTimestampNano); (err != nil) != tt.wantErr {
+			if err := pilosa.CheckUnixNanoOverflow(tt.epoch); (err != nil) != tt.wantErr {
 				t.Errorf("checkUnixNanoOverflow() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

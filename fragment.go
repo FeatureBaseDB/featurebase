@@ -828,7 +828,6 @@ func (f *fragment) min(tx Tx, filter *Row, bitDepth uint64) (min int64, count ui
 
 // minUnsigned the lowest value without considering the sign bit. Filter is required.
 func (f *fragment) minUnsigned(tx Tx, filter *Row, bitDepth uint64) (min int64, count uint64, err error) {
-	count = filter.Count()
 	for i := int(bitDepth - 1); i >= 0; i-- {
 		row, err := f.row(tx, uint64(bsiOffsetBit+i))
 		if err != nil {
@@ -880,7 +879,6 @@ func (f *fragment) max(tx Tx, filter *Row, bitDepth uint64) (max int64, count ui
 
 // maxUnsigned the highest value without considering the sign bit. Filter is required.
 func (f *fragment) maxUnsigned(tx Tx, filter *Row, bitDepth uint64) (max int64, count uint64, err error) {
-	count = filter.Count()
 	for i := int(bitDepth - 1); i >= 0; i-- {
 		row, err := f.row(tx, uint64(bsiOffsetBit+i))
 		if err != nil {

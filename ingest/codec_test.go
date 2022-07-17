@@ -58,7 +58,7 @@ func TestEncode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("can't parse sample epoch time: %v", err)
 	}
-	_ = codec.AddTimestampField("ts", "ms", epoch.Unix()*1000)
+	_ = codec.AddTimestampField("ts", time.Millisecond, epoch.Unix()*1000)
 	_ = codec.AddDecimalField("dec", 2)
 	_ = codec.AddBoolField("bool")
 
@@ -74,7 +74,7 @@ func TestEncode(t *testing.T) {
 	_ = codec.AddTimeQuantumField("tqkeys", newStableTranslator())
 	_ = codec.AddIntField("int", nil)
 	_ = codec.AddIntField("intkeys", newStableTranslator())
-	_ = codec.AddTimestampField("ts", "ms", epoch.Unix()*1000)
+	_ = codec.AddTimestampField("ts", time.Millisecond, epoch.Unix()*1000)
 	_ = codec.AddDecimalField("dec", 2)
 	_ = codec.AddBoolField("bool")
 
@@ -291,7 +291,7 @@ func TestCodecErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("can't parse sample epoch time: %v", err)
 	}
-	_ = codec.AddTimestampField("ts", "ms", epoch.Unix()*1000)
+	_ = codec.AddTimestampField("ts", time.Millisecond, epoch.Unix()*1000)
 	_ = codec.AddDecimalField("dec", 2)
 	_ = codec.AddBoolField("bool")
 
@@ -475,7 +475,7 @@ func TestSimpleCodec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("can't parse sample epoch time: %v", err)
 	}
-	_ = codec.AddTimestampField("ts", "ms", epoch.Unix()*1000)
+	_ = codec.AddTimestampField("ts", time.Millisecond, epoch.Unix()*1000)
 	_ = codec.AddDecimalField("dec", 2)
 	_ = codec.AddBoolField("bool")
 	var nextShard = uint64(1<<shardwidth.Exponent) + 5

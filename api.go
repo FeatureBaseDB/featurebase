@@ -2006,7 +2006,8 @@ func (api *API) IngestOperations(ctx context.Context, qcx *Qcx, indexName string
 				return fmt.Errorf("adding decimal field to codec: %w", err)
 			}
 		case "timestamp":
-			if err = codec.AddTimestampField(field.name, field.options.TimeUnit, field.options.Base); err != nil {
+			nanos := TimeUnitNanos(field.options.TimeUnit)
+			if err = codec.AddTimestampField(field.name, time.Duration(nanos), field.options.Base); err != nil {
 				return fmt.Errorf("adding timestamp field to codec: %w", err)
 			}
 		default:

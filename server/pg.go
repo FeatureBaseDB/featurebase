@@ -319,13 +319,7 @@ func pgWriteGroupCount(w pg.QueryResultWriter, counts *pilosa.GroupCounts) error
 			switch {
 			case g.Value != nil:
 				if g.FieldOptions.Type == pilosa.FieldTypeTimestamp {
-					ts, err := pilosa.ValToTimestamp(g.FieldOptions.TimeUnit, int64(*g.Value)+g.FieldOptions.Base)
-					if err != nil {
-						return errors.Wrap(err, "translating val to timestamp")
-					}
-
-					v = ts.Format(time.RFC3339Nano)
-					// v = pilosa.FormatTimestampNano(int64(*g.Value), g.FieldOptions.Base, g.FieldOptions.TimeUnit)
+					v = pilosa.FormatTimestampNano(int64(*g.Value), g.FieldOptions.Base, g.FieldOptions.TimeUnit)
 				} else {
 					v = strconv.FormatInt(*g.Value, 10)
 				}

@@ -44,7 +44,7 @@ type Codec interface {
 	AddBoolField(name string) error
 	AddIntField(name string, keys KeyTranslator) error
 	AddDecimalField(name string, scale int64) error
-	AddTimestampField(name string, scale string, epoch int64) error
+	AddTimestampField(name string, scale time.Duration, epoch int64) error
 
 	// Parse data from a reader into the vectors.
 	// This must only be called once on a codec.
@@ -70,14 +70,14 @@ type fieldCodec struct {
 	currentOp *FieldOperation
 	decode    jsonDecFn
 	encode    jsonEncFn
+	// For timestamp: scale-in-nanoseconds; for instance, if scaleUnit is
+	// 1,000,000,000, we are storing numbers-of-seconds since the Unix epoch.
+	// The actual value recorded in BSI will be offset by the field's
+	// epoch, but we don't need to know that.
 	// For decimal: Decimal digits of precision. So for instance, with
 	// scale 2, scaleUnit is 100, "1" is stored as 100 and "1.2" is stored as
 	// 120.
 	scaleUnit int64
-	// For timestamp: we use timeUnit to determine the scale at which
-	// to store a timestamp. For example if the timeUnit is milliseconds
-	// we store the number of milliseconds from the given epoch.
-	timeUnit  string
 	scale     int64
 	epoch     int64    // used only by Timestamp fields
 	scratch   []uint64 // reusable scratch space for sets of values
@@ -282,10 +282,10 @@ func (codec *JSONCodec) AddBoolField(name string) error {
 // passed to this function should be the offset from the Unix epoch to the
 // desired epoch, in the same scale. (So if the scale is milliseconds,
 // it should be the Unix timestamp in seconds, times 1000.)
-func (codec *JSONCodec) AddTimestampField(name string, timeScale string, epoch int64) error {
+func (codec *JSONCodec) AddTimestampField(name string, timeScale time.Duration, epoch int64) error {
 	fieldCodec := &fieldCodec{
 		fieldType: FieldTypeTimeStamp,
-		timeUnit:  timeScale,
+		scaleUnit: int64(timeScale),
 		epoch:     epoch,
 	}
 	fieldCodec.decode = fieldCodec.DecodeTimeValue
@@ -590,7 +590,7 @@ func (j *fieldCodec) DecodeTimeValue(recID uint64, dataType jsonparser.ValueType
 		if err != nil {
 			return fmt.Errorf("parsing timestamp: %w", err)
 		}
-		j.currentOp.AddSignedPair(recID, TimestampToVal(j.timeUnit, stamp)-j.epoch)
+		j.currentOp.AddSignedPair(recID, (stamp.UnixNano()/j.scaleUnit)-j.epoch)
 	case jsonparser.Number:
 		// We could in theory convert this to a time, then convert it
 		// back, by multiplying by scaleUnit, then dividing. Or... not.
@@ -609,11 +609,7 @@ func (j *fieldCodec) EncodeTimeValue(dst *jsonBuffer, values []uint64, signed []
 	if len(signed) == 0 {
 		return errors.New("encoding time value: no value provided")
 	}
-	t, err := ValToTimestamp(j.timeUnit, signed[0]+j.epoch)
-	if err != nil {
-		return errors.Wrap(err, "translating value to timestamp")
-	}
-	dst.EncodeTime(t)
+	dst.EncodeTime(time.Unix(0, (signed[0]+j.epoch)*j.scaleUnit).UTC())
 	return nil
 }
 
@@ -1135,36 +1131,4 @@ type errFieldNotFound struct {
 
 func (err errFieldNotFound) Error() string {
 	return fmt.Sprintf("field not found: %q", err.field)
-}
-
-// TimestampToVal takes a time unit and a time.Time and converts it to an integer value
-func TimestampToVal(unit string, ts time.Time) int64 {
-	switch unit {
-	case "s":
-		return ts.Unix()
-	case "ms":
-		return ts.UnixMilli()
-	case "us":
-		return ts.UnixMicro()
-	case "ns":
-		return ts.UnixNano()
-	}
-	return 0
-
-}
-
-// ValToTimestamp takes a timeunit and an integer value and converts it to time.Time
-func ValToTimestamp(unit string, val int64) (time.Time, error) {
-	switch unit {
-	case "s":
-		return time.Unix(val, 0).UTC(), nil
-	case "ms":
-		return time.UnixMilli(val).UTC(), nil
-	case "us", "μs":
-		return time.UnixMicro(val).UTC(), nil
-	case "ns":
-		return time.Unix(0, val).UTC(), nil
-	default:
-		return time.Time{}, errors.Errorf("Unknown time unit: '%v'", unit)
-	}
 }
