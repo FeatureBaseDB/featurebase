@@ -4464,14 +4464,10 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 		case FieldTypeTime:
 			// Handle a set field by listing the rows and then intersecting them with the filter.
 			timeArg := timeArgs[i]
-			var views []string
-			if timeArg.From.IsZero() && timeArg.To.IsZero() {
-				views = []string{viewStandard}
-			} else {
-				views, err = field.viewsByTimeRange(timeArg.From, timeArg.To)
-				if err != nil {
-					return ExtractedIDMatrix{}, errors.Wrap(err, "problem with from/to")
-				}
+
+			views, err := field.viewsByTimeRange(timeArg.From, timeArg.To)
+			if err != nil {
+				return ExtractedIDMatrix{}, errors.Wrap(err, "problem with from/to")
 			}
 
 			dedup := make(map[uint64]map[uint64]struct{})
