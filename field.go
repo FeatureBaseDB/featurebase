@@ -1110,7 +1110,7 @@ func (f *Field) createViewIfNotExistsBase(cvm *CreateViewMessage) (*view, bool, 
 
 	// If we already have this view, we can probably assume etcd already
 	// has it.
-	if view := f.viewMap[cvm.View]; view != nil {
+	if view := f.viewMap[cvm.View]; view != nil && !view.isClosing() {
 		return view, false, nil
 	}
 
@@ -1142,6 +1142,8 @@ func (f *Field) newView(path, name string) *view {
 
 // deleteView removes the view from the field.
 func (f *Field) deleteView(name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	view := f.viewMap[name]
 	if view == nil {
 		return ErrInvalidView

@@ -331,10 +331,23 @@ func (v *view) Name() string {
 	return v.name
 }
 
+func (v *view) isClosing() bool {
+	select {
+	case <-v.closing:
+		return true
+	default:
+		return false
+	}
+}
+
 // CreateFragmentIfNotExists returns a fragment in the view by shard.
 func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+
+	if v.isClosing() {
+		return nil, fmt.Errorf("cannot create fragment, view is closed")
+	}
 
 	// Find fragment in cache first.
 	if frag := v.fragments[shard]; frag != nil {

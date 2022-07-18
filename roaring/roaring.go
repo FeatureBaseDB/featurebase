@@ -444,6 +444,9 @@ func (b *Bitmap) DirectAdd(v uint64) bool {
 
 // Contains returns true if v is in the bitmap.
 func (b *Bitmap) Contains(v uint64) bool {
+	if b == nil {
+		return false
+	}
 	c := b.Containers.Get(highbits(v))
 	if c == nil {
 		return false
