@@ -796,6 +796,26 @@ func (e *executor) validateCallArgs(c *pql.Call) error {
 			return fmt.Errorf("invalid call.Args[ids]: %s", v)
 		}
 	}
+
+	return nil
+}
+
+// if call args include time args ("from"/"to")
+// check if field is a time field
+func (e *executor) validateTimeCallArgs(c *pql.Call, indexName string) error {
+	f, err := c.FieldArg()
+	if err != nil {
+		return err
+	}
+	_, from := c.Args["from"]
+	_, to := c.Args["to"]
+	field := e.Holder.Field(indexName, f)
+	tq := field.TimeQuantum()
+	if (from || to) && tq == "" {
+		return fmt.Errorf("field %s is not a time-field, 'from' and 'to' are not valid options for this field type", f)
+
+	}
+
 	return nil
 }
 
@@ -4649,6 +4669,11 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
 	}
 
+	err = e.validateTimeCallArgs(c, index)
+	if err != nil {
+		return nil, err
+	}
+
 	// Parse "from" time, if set.
 	var fromTime time.Time
 	if v, ok := c.Args["from"]; ok {
@@ -4672,9 +4697,9 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
-	// Simply return row if times are not set.
+	// Return row if times are not set and standard view exists.
 	timeNotSet := fromTime.IsZero() && toTime.IsZero()
-	if c.Name == "Row" && timeNotSet {
+	if c.Name == "Row" && timeNotSet && !f.options.NoStandardView {
 		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil {
 			return NewRow(), nil

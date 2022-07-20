@@ -1163,8 +1163,8 @@ func runCallTest(c *test.Cluster, t *testing.T, writeQuery string, readQueries [
 		}
 	}
 
-	responses := []pilosa.QueryResponse{}
-	for _, query := range readQueries {
+	responses := make([]pilosa.QueryResponse, len(readQueries))
+	for i, query := range readQueries {
 		res, err := c.GetNode(0).API.Query(context.Background(),
 			&pilosa.QueryRequest{
 				Index: indexName,
@@ -1173,7 +1173,7 @@ func runCallTest(c *test.Cluster, t *testing.T, writeQuery string, readQueries [
 		if err != nil {
 			t.Fatal(err)
 		}
-		responses = append(responses, res)
+		responses[i] = res
 	}
 
 	return responses
@@ -1794,9 +1794,13 @@ func TestExecutor_Execute_TopK_Time(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	// Load some test data into a time field.
-	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f", pilosa.OptFieldTypeTime("YMD", "0", true))
-	c.Query(t, "i", `
+	isStandardEnabled := []bool{true, false}
+
+	for i, enabled := range isStandardEnabled {
+		// Load some test data into a time field.
+		idx := fmt.Sprintf("i%d", i)
+		c.CreateField(t, idx, pilosa.IndexOptions{TrackExistence: true}, "f", pilosa.OptFieldTypeTime("YMD", "0", enabled))
+		c.Query(t, idx, `
 		Set(0, f=0, 2016-01-02T00:00)
 		Set(0, f=1, 2016-01-02T00:00)
 		Set(0, f=0, 2016-01-03T00:00)
@@ -1805,17 +1809,18 @@ func TestExecutor_Execute_TopK_Time(t *testing.T) {
 		Set(200000000, f=3, 2015-01-02T00:00)
 	`)
 
-	// Execute query.
-	if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopK(f, k=3, from=2016-01-01T00:00, to=2016-01-11T00:00)`}); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
-		Pairs: []pilosa.Pair{
-			{ID: 0, Count: 2},
-			{ID: 1, Count: 1},
-		},
-		Field: "f",
-	}}) {
-		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		// Execute query.
+		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: idx, Query: `TopK(f, k=3, from=2016-01-01T00:00, to=2016-01-11T00:00)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{ID: 0, Count: 2},
+				{ID: 1, Count: 1},
+			},
+			Field: "f",
+		}}) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
 	}
 }
 
@@ -8959,4 +8964,122 @@ func TestExecutor_Execute_ExtractWithTime(t *testing.T) {
 			t.Errorf("expected %v but got %v", expect, got)
 		}
 	})
+}
+
+func TestExecutorTimeRange(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer func() {
+		t.Logf("TestTimeRange: closing cluster")
+		c.Close()
+	}()
+
+	// test error path - field is a not a time field, from/to options not allowed in query
+	t.Run("Field not a time field", func(t *testing.T) {
+		writeQuery := `
+		Set(1, f=1)
+		Set(2, f=1)`
+		readQueries := []string{
+			`Row(f=1, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
+			`Row(f=1, from=1999-12-31T00:00)`,
+			`Row(f=1, to=2002-01-01T02:00)`,
+		}
+		indexName := fmt.Sprintf("i_%x", md5.Sum([]byte(t.Name())))
+		hldr := c.GetHolder(0)
+		index, err := hldr.CreateIndex(indexName, pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = index.CreateField("f")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: indexName,
+			Query: writeQuery,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, query := range readQueries {
+			_, err := c.GetNode(0).API.Query(context.Background(),
+				&pilosa.QueryRequest{
+					Index: indexName,
+					Query: query,
+				})
+			if !strings.Contains(err.Error(), "not a time-field, 'from' and 'to' are not valid options for this field type") {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	// test standard view disabled
+	// if from/to in query, return union of views
+	// if from/to not in query, return union of all views
+	t.Run("Standard View Disabled", func(t *testing.T) {
+		writeQuery := `
+			Set(2, f=1, 1999-12-31T00:00)
+			Set(3, f=2, 2000-01-01T00:00)
+			Set(4, f=3, 2000-01-02T00:00)
+			Set(5, f=1, 2001-01-01T00:00)
+			Set(6, f=1, 2006-01-01T00:00)`
+		readQueries := []string{
+			`Row(f=1, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
+			`Row(f=1, from=1999-12-31T00:00)`,
+			`Row(f=1, to=2002-01-01T02:00)`,
+			`Row(f=1)`,
+		}
+
+		expResp := [][]uint64{
+			{2, 5},
+			{2, 5, 6},
+			{2, 5},
+			{2, 5, 6},
+		}
+		responses := runCallTest(c, t, writeQuery, readQueries,
+			nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0", true))
+
+		for i, exp := range expResp {
+			if columns := responses[i].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, exp) {
+				t.Fatalf("unexpected columns: %+v for query: %+v", columns, readQueries[i])
+			}
+		}
+
+	})
+
+	// test standard view enabled
+	// if from/to in query, return union of views
+	// if from/to not in query, return union of all views
+	t.Run("Standard View Enabled", func(t *testing.T) {
+		writeQuery := `
+				Set(2, f=1, 1999-12-31T00:00)
+				Set(3, f=2, 2000-01-01T00:00)
+				Set(4, f=3, 2000-01-02T00:00)
+				Set(5, f=1, 2001-01-01T00:00)
+				Set(6, f=1, 2006-01-01T00:00)
+				Set(7, f=1, 2010-01-01T00:00)`
+		readQueries := []string{
+			`Row(f=1, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
+			`Row(f=1, from=1999-12-31T00:00)`,
+			`Row(f=1, to=2002-01-01T02:00)`,
+			`Row(f=1)`,
+		}
+
+		expectedResponse := [][]uint64{
+			{2, 5},
+			{2, 5, 6, 7},
+			{2, 5},
+			{2, 5, 6, 7},
+		}
+		responses := runCallTest(c, t, writeQuery, readQueries,
+			nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0", false))
+
+		for i, exp := range expectedResponse {
+			if columns := responses[i].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, exp) {
+				t.Fatalf("unexpected columns: %+v for query: %+v", columns, readQueries[i])
+			}
+		}
+	})
+
 }

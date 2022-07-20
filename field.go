@@ -981,12 +981,19 @@ func (f *Field) TimeQuantum() TimeQuantum {
 // are not set and can automatically coerce from/to times to match the
 // actual range present in the field.
 func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error) {
-	// If we can't find time views at all, we'll yield "standard"
-	// regardless.  It's the least-bad answer, I think.  Also yield
-	// "standard" if from and to were both not set and there is a
+	// if field is not a time field, return an error
+	// If we can't find time views at all, and standard view is available,
+	// yield standard view
+	// if we can't find time views, and standard view is disabled,
+	// yield union of all views
+	// yield "standard" if from and to were both not set and there is a
 	// standard view.
 	q := f.TimeQuantum()
-	if q == "" || (from.IsZero() && to.IsZero() && !f.options.NoStandardView) {
+	if q == "" {
+		return nil, fmt.Errorf("field %s is not a time-field, 'from' and 'to' are not valid options for this field type", f.name)
+	}
+
+	if from.IsZero() && to.IsZero() && !f.options.NoStandardView {
 		return []string{viewStandard}, nil
 	}
 
