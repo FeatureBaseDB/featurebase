@@ -24,6 +24,10 @@ func RegisterPostTestHook(fn Callback) {
 	mu.Lock()
 	defer mu.Unlock()
 	postHooks = append(postHooks, fn)
+	// ... but put it at the beginning of the list, so they're LIFO,
+	// so test hook pairs nest cleanly.
+	copy(postHooks[1:], postHooks)
+	postHooks[0] = fn
 }
 
 // RegisterPreTestHook registers a function to be called after tests
@@ -54,16 +58,27 @@ func RunTestsWithHooks(m *testing.M) {
 		fmt.Fprint(os.Stderr, "pre-hooks failed, aborting.\n")
 		os.Exit(ret)
 	}
-	ret = m.Run()
-	mu.Lock()
-	defer mu.Unlock()
-	for _, fn := range postHooks {
-		err := fn()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "post-hook failure: %v\n", err)
-			ret = 1
-		}
-	}
+
+	// This inner function lets us get a deferred run of our post-test
+	// hooks which necessarily succeeds, but can trap an error even
+	// from those and set the return value. You can't do this with a
+	// direct os.Exit() wrapper because defers don't run after os.Exit.
+	// Don't ask how many tries it took me to figure that out, I'll
+	// just cry.
+	func() {
+		defer func() {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, fn := range postHooks {
+				err := fn()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "post-hook failure: %v\n", err)
+					ret = 1
+				}
+			}
+		}()
+		ret = m.Run()
+	}()
 	os.Exit(ret)
 }
 
