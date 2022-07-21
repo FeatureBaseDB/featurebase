@@ -164,7 +164,7 @@ func TestHolder_HasData(t *testing.T) {
 		}
 
 		// Create an index directory to indicate data exists.
-		if err := os.Mkdir(h.IndexPath("test"), 0777); err != nil {
+		if err := os.Mkdir(h.IndexPath("test"), 0750); err != nil {
 			t.Fatal(err)
 		}
 

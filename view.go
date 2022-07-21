@@ -203,11 +203,11 @@ func (v *view) openEmpty() error {
 	if err := func() error {
 		// Ensure the view's path exists.
 		v.holder.Logger.Debugf("ensure view path exists: %s", v.path)
-		err := os.MkdirAll(v.path, 0777)
+		err := os.MkdirAll(v.path, 0750)
 		if err != nil {
 			return errors.Wrap(err, "creating view directory")
 		}
-		err = os.MkdirAll(filepath.Join(v.path, "fragments"), 0777)
+		err = os.MkdirAll(filepath.Join(v.path, "fragments"), 0750)
 		if err != nil {
 			return errors.Wrap(err, "creating fragments directory")
 		}

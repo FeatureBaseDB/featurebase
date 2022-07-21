@@ -110,9 +110,9 @@ func (s *TranslateStore) Open() (err error) {
 		}
 	}()
 
-	if err := os.MkdirAll(filepath.Dir(s.Path), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0750); err != nil {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(s.Path))
-	} else if s.db, err = bolt.Open(s.Path, 0666, &bolt.Options{Timeout: 1 * time.Second, NoSync: !s.fsyncEnabled}); err != nil {
+	} else if s.db, err = bolt.Open(s.Path, 0600, &bolt.Options{Timeout: 1 * time.Second, NoSync: !s.fsyncEnabled}); err != nil {
 		return errors.Wrapf(err, "open file: %s", err)
 	}
 

@@ -27,7 +27,7 @@ func TestIDAlloc(t *testing.T) {
 	}()
 
 	// Open bolt.
-	db, err := bolt.Open(f.Name(), 0666, &bolt.Options{Timeout: 1 * time.Second, NoSync: true})
+	db, err := bolt.Open(f.Name(), 0600, &bolt.Options{Timeout: 1 * time.Second, NoSync: true})
 	if err != nil {
 		t.Errorf("opening bolt: %v", err)
 		return

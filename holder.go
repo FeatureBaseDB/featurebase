@@ -376,7 +376,7 @@ func (h *Holder) Open() error {
 	h.closing = make(chan struct{})
 
 	h.Logger.Printf("open holder path: %s", h.path)
-	if err := os.MkdirAll(h.IndexesPath(), 0777); err != nil {
+	if err := os.MkdirAll(h.IndexesPath(), 0750); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 
@@ -1171,7 +1171,7 @@ func (h *Holder) logStartup() error {
 	time := time.Now().Format(RFC3339NanoFixedWidth)
 	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
 
-	if err := os.MkdirAll(h.path, 0777); err != nil {
+	if err := os.MkdirAll(h.path, 0750); err != nil {
 		return errors.Wrap(err, "creating data directory")
 	}
 

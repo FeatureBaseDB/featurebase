@@ -3178,7 +3178,7 @@ func mustOpenFragmentFlags(tb testing.TB, index, field, view string, shard uint6
 	idx := fragTestMustOpenIndex(index, th, IndexOptions{})
 
 	fragDir := fmt.Sprintf("%v/%v/views/%v/fragments/", idx.path, field, view)
-	PanicOn(os.MkdirAll(fragDir, 0777))
+	PanicOn(os.MkdirAll(fragDir, 0750))
 	fragPath := fragDir + fmt.Sprintf("%v", shard)
 	f := newFragment(th, makeTestFragSpec(fragPath, index, field, view), shard, flags)
 

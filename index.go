@@ -189,7 +189,7 @@ func (i *Index) open(idx *disco.Index) (err error) {
 	defer i.mu.Unlock()
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.FieldsPath())
-	if err := os.MkdirAll(i.FieldsPath(), 0777); err != nil {
+	if err := os.MkdirAll(i.FieldsPath(), 0750); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 	i.closing = make(chan struct{})

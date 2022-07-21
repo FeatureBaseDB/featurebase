@@ -239,7 +239,7 @@ func (d *rbfFile) Close() error {
 		exists, sz := fileExists(d.last)
 		src := filepath.Join(d.temp, "data")
 		if !exists {
-			err := os.MkdirAll(filepath.Dir(d.last), 0777)
+			err := os.MkdirAll(filepath.Dir(d.last), 0750)
 			if err != nil {
 				return err
 			}
@@ -280,7 +280,7 @@ func copyFile(src, dest string) error {
 func Migrate(dataDir, backupPath string, verbose bool) error {
 	dataDir = strings.TrimSuffix(dataDir, "/")
 
-	err := os.MkdirAll(backupPath, 0777)
+	err := os.MkdirAll(backupPath, 0750)
 	if err != nil {
 		return err
 	}
@@ -389,7 +389,7 @@ func Migrate(dataDir, backupPath string, verbose bool) error {
 
 func writeIfBigger(dst string, srcFile string) error {
 	if stats, err := os.Stat(dst); os.IsNotExist(err) {
-		err = os.MkdirAll(filepath.Dir(dst), 0777)
+		err = os.MkdirAll(filepath.Dir(dst), 0750)
 		if err != nil {
 			return err
 		}

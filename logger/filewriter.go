@@ -90,7 +90,7 @@ func (f *FileWriter) Fd() uintptr {
 // it is a ReopenWriteCloser...
 func NewFileWriter(name string) (*FileWriter, error) {
 	// Standard default mode
-	return NewFileWriterMode(name, 0666)
+	return NewFileWriterMode(name, 0600)
 }
 
 // NewFileWriterMode opens a Reopener file with a specific permission

@@ -47,7 +47,7 @@ type idAllocator struct {
 type OpenIDAllocatorFunc func(path string, enableFsync bool) (*idAllocator, error) // whyyyyyyyyy
 
 func OpenIDAllocator(path string, enableFsync bool) (*idAllocator, error) {
-	db, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 1 * time.Second, NoSync: !enableFsync})
+	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second, NoSync: !enableFsync})
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (ida *idAllocator) Replace(reader io.Reader) error {
 	} else {
 		_ = os.Remove(liveFile + ".sav")
 	}
-	db, err := bolt.Open(liveFile, 0666, &bolt.Options{Timeout: 1 * time.Second, NoSync: !ida.fsyncEnabled})
+	db, err := bolt.Open(liveFile, 0600, &bolt.Options{Timeout: 1 * time.Second, NoSync: !ida.fsyncEnabled})
 	ida.db = db
 	return err
 }

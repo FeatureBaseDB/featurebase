@@ -1311,7 +1311,7 @@ func mustReadPage(tb testing.TB, path string, pgno uint32) []byte {
 
 func mustWritePage(tb testing.TB, path string, pgno uint32, buf []byte) {
 	tb.Helper()
-	f, err := os.OpenFile(path, os.O_WRONLY, 0666)
+	f, err := os.OpenFile(path, os.O_WRONLY, 0600)
 	if err != nil {
 		tb.Fatal(err)
 	}

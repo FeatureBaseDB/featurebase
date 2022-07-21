@@ -131,12 +131,12 @@ func (db *DB) Open() (err error) {
 
 	if err := os.MkdirAll(db.Path, 0755); err != nil {
 		return err
-	} else if db.file, err = os.OpenFile(db.DataPath(), os.O_WRONLY|os.O_CREATE, 0666); err != nil {
+	} else if db.file, err = os.OpenFile(db.DataPath(), os.O_WRONLY|os.O_CREATE, 0600); err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
 
 	// Open read-only database mmap.
-	if f, err := os.OpenFile(db.DataPath(), os.O_RDONLY, 0666); err != nil {
+	if f, err := os.OpenFile(db.DataPath(), os.O_RDONLY, 0600); err != nil {
 		return fmt.Errorf("open mmap file: %w", err)
 	} else if db.data, err = syswrap.Mmap(int(f.Fd()), 0, int(db.cfg.MaxSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		f.Close()
@@ -174,12 +174,12 @@ func (db *DB) Open() (err error) {
 
 func (db *DB) openWAL() (err error) {
 	// Open WAL file writer.
-	if db.walFile, err = os.OpenFile(db.WALPath(), os.O_WRONLY|os.O_CREATE, 0666); err != nil {
+	if db.walFile, err = os.OpenFile(db.WALPath(), os.O_WRONLY|os.O_CREATE, 0600); err != nil {
 		return fmt.Errorf("open wal file: %w", err)
 	}
 
 	// Open read-only mmap.
-	if f, err := os.OpenFile(db.WALPath(), os.O_RDONLY, 0666); err != nil {
+	if f, err := os.OpenFile(db.WALPath(), os.O_RDONLY, 0600); err != nil {
 		return fmt.Errorf("open wal mmap file: %w", err)
 	} else if db.wal, err = syswrap.Mmap(int(f.Fd()), 0, int(db.cfg.MaxWALSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		f.Close()

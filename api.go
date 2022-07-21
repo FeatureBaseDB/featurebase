@@ -2725,7 +2725,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	db := dbs.W
 	finalPath := db.Path() + "/data"
 	tempPath := finalPath + ".tmp"
-	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}

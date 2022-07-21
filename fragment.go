@@ -2605,11 +2605,11 @@ func (f *fragment) flushCache() error {
 		return errors.Wrap(err, "marshalling")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(f.cachePath()), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(f.cachePath()), 0750); err != nil {
 		return errors.Wrap(err, "mkdir")
 	}
 	// Write to disk.
-	if err := ioutil.WriteFile(f.cachePath(), buf, 0666); err != nil {
+	if err := ioutil.WriteFile(f.cachePath(), buf, 0600); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 
@@ -2771,7 +2771,7 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	buf, err := ioutil.ReadAll(r)
 	if err != nil {
 		return errors.Wrap(err, "reading")
-	} else if err := ioutil.WriteFile(f.cachePath(), buf, 0666); err != nil {
+	} else if err := ioutil.WriteFile(f.cachePath(), buf, 0600); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 

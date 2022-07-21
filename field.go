@@ -543,7 +543,7 @@ func (f *Field) Open() error {
 	if err := func() (err error) {
 		// Ensure the field's path exists.
 		f.holder.Logger.Debugf("ensure field path exists: %s", f.path)
-		if err := os.MkdirAll(f.path, 0777); err != nil {
+		if err := os.MkdirAll(f.path, 0750); err != nil {
 			return errors.Wrap(err, "creating field dir")
 		}
 
