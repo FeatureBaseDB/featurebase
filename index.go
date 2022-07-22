@@ -265,12 +265,6 @@ var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
 func (i *Index) openFields(idx *disco.Index) error {
-	f, err := os.Open(i.FieldsPath())
-	if err != nil {
-		return errors.Wrap(err, "opening fields directory")
-	}
-	defer f.Close()
-
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
@@ -308,7 +302,7 @@ fileLoop:
 		}
 	}
 
-	err = eg.Wait()
+	err := eg.Wait()
 	if err != nil {
 		// Close any fields which got opened, since the overall
 		// index won't be open.

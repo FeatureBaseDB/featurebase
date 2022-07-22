@@ -399,13 +399,6 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "getting schema")
 	}
 
-	// Open path to read all index directories.
-	f, err := os.Open(h.IndexesPath())
-	if err != nil {
-		return errors.Wrap(err, "opening directory")
-	}
-	defer f.Close()
-
 	for idxKey, idx := range schema {
 		// decode the CreateIndexMessage from the schema data in order to
 		// get its metadata, such as CreateAt.
