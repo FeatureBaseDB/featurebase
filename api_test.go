@@ -1785,6 +1785,8 @@ func writeTestFile(t *testing.T, filename, content string) string {
 	if err != nil {
 		t.Fatalf("could not write string %v", err)
 	}
-	defer f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatalf("could not close file %v", err)
+	}
 	return fname
 }

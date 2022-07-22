@@ -1315,9 +1315,10 @@ func mustWritePage(tb testing.TB, path string, pgno uint32, buf []byte) {
 	if err != nil {
 		tb.Fatal(err)
 	}
-	defer f.Close()
 
 	if _, err := f.WriteAt(buf, int64(pgno)*rbf.PageSize); err != nil {
+		tb.Fatal(err)
+	} else if err := f.Close(); err != nil {
 		tb.Fatal(err)
 	}
 }

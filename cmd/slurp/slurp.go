@@ -137,7 +137,6 @@ func (r *stateMachine) Upload() error {
 }
 
 func UploadTar(srcFile string, client *pilosa.InternalClient, profile, host string) error {
-
 	f, err := os.Open(srcFile)
 	if err != nil {
 		return (err)

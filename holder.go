@@ -1180,13 +1180,11 @@ func (h *Holder) logStartup() error {
 		return errors.Wrap(err, "opening startup log")
 	}
 
-	defer f.Close()
-
 	if _, err = f.WriteString(logLine); err != nil {
 		return errors.Wrap(err, "writing startup log")
 	}
 
-	return nil
+	return f.Close()
 }
 
 // holderSyncer is an active anti-entropy tool that compares the local holder

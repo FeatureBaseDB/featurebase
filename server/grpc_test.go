@@ -1891,10 +1891,12 @@ func writeTestFile(t *testing.T, filename, content string) string {
 	fname := filepath.Join(t.TempDir(), filename)
 	f, err := os.Create(fname)
 	if err != nil {
-		panic(filename)
+		t.Fatal(err)
 	}
 	io.WriteString(f, content)
-	defer f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return fname
 }
 
