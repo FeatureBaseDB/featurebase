@@ -7169,14 +7169,12 @@ func TestMissingKeyRegression(t *testing.T) {
 			query:    `Difference(All(), Row(f="garbage"))`,
 			expected: []interface{}{[]string{"a"}},
 		},
-		/*{
-			// Key translation works here, but it seems the actual count query is processing stale data.
-			// Uncomment it when the bug has been fixed.
+		{
 			name: "SetAndCount",
-			query: `Set("a", f="example")` + "\n" +
-				`Count(Row(f="example"))`,
+			query: `Set("b", f="boo")` + "\n" +
+				`Count(Row(f="boo"))`,
 			expected: []interface{}{true, uint64(1)},
-		},*/
+		},
 		{
 			name:     "CountNothing",
 			query:    `Count(Row(f="garbage"))`,

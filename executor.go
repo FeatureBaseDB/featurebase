@@ -222,7 +222,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	}
 
 	// Can't do NewTx() this high up, because we need a specific shard.
-	// So start a ccx with a TxGroup and pass it down.
+	// So start a qcx with a TxGroup and pass it down.
 	qcx := idx.holder.txf.NewQcx()
 	qcx.write = needWriteTxn
 	defer qcx.Abort()
@@ -474,12 +474,17 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		colTranslations, rowTranslations = cols, rows
 	}
 
-	// Don't bother calculating shards for query types that don't require it.
-	needsShards := needsShards(q.Calls)
+	needShards := false
+	if len(shards) == 0 {
+		for _, call := range q.Calls {
+			if needsShards(call) {
+				needShards = true
+				break
+			}
+		}
+	}
 
-	// If shards are specified, then use that value for shards. If shards aren't
-	// specified, then include all of them.
-	if len(shards) == 0 && needsShards {
+	if needShards {
 		// Round up the number of shards.
 		idx := e.Holder.Index(index)
 		if idx == nil {
@@ -491,9 +496,23 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		}
 	}
 
+	lastWasWrite := false
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for i, call := range q.Calls {
+		if lastWasWrite && needsShards(call) && needShards {
+			// Round up the number of shards.
+			idx := e.Holder.Index(index)
+			if idx == nil {
+				return nil, newNotFoundError(ErrIndexNotFound, index)
+			}
+			shards = idx.AvailableShards(includeRemote).Slice()
+			if len(shards) == 0 {
+				shards = []uint64{0}
+			}
+		}
+
+		lastWasWrite = call.IsWrite()
 
 		if err := validateQueryContext(ctx); err != nil {
 			return nil, err
@@ -655,7 +674,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 
 	// If shards are specified, then use that value for shards. If shards aren't
 	// specified, then include all of them.
-	if shards == nil && needsShards([]*pql.Call{c}) {
+	if shards == nil && needsShards(c) {
 		// Round up the number of shards.
 		idx := e.Holder.Index(index)
 		if idx == nil {
@@ -7717,22 +7736,18 @@ type execOptions struct {
 	MaxMemory     int64
 }
 
-func needsShards(calls []*pql.Call) bool {
-	if len(calls) == 0 {
+func needsShards(call *pql.Call) bool {
+	if call == nil {
 		return false
 	}
-	for _, call := range calls {
-		switch call.Name {
-		case "Clear", "Set":
-			continue
-		case "Count", "TopN", "Rows":
-			return true
-		// default catches Bitmap calls
-		default:
-			return true
-		}
+	switch call.Name {
+	case "Clear", "Set":
+		return false
+	case "Count", "TopN", "Rows":
+		return true
 	}
-	return false
+	// default catches Bitmap calls
+	return true
 }
 
 // SignedRow represents a signed *Row with two (neg/pos) *Rows.

@@ -378,6 +378,18 @@ func (c *Call) HasCall(name string) bool {
 	return false
 }
 
+// IsWrite returns whether the call is a mutating call.
+func (c *Call) IsWrite() bool {
+	if c == nil {
+		return false
+	}
+	switch c.Name {
+	case "Set", "Clear", "ClearRow", "Store", "SetBit":
+		return true
+	}
+	return false
+}
+
 // callInfo defines the arguments allowed for a particular PQL call, and
 // possibly things about its semantics. If allowUnknown is true, unfamiliar
 // non-reserved names are allowed on the assumption that they're field names.
