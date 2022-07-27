@@ -433,7 +433,12 @@ func (f *Field) AvailableShards(localOnly bool) *roaring.Bitmap {
 	} else {
 		b = f.remoteAvailableShards.Clone()
 	}
-	for _, view := range f.viewMap {
+	for viewname, view := range f.viewMap {
+		availableShards := view.availableShards()
+		if availableShards == nil || availableShards.Containers == nil {
+			f.holder.Logger.Warnf("empty available shards for view: %s on field %s available shards: %v", viewname, f.name, availableShards)
+			continue
+		}
 		b.UnionInPlace(view.availableShards())
 	}
 	return b
