@@ -36,7 +36,8 @@ default: test build
 # Remove build directories
 clean:
 	rm -rf vendor build
-
+	rm -f *.rpm *.deb
+	
 # Set up vendor directory using `go mod vendor`
 vendor: go.mod
 	$(GO) mod vendor
@@ -134,10 +135,9 @@ release-sans-ui: check-clean
 
 package:
 	go build -o featurebase ./cmd/featurebase
-	nfpm package --packager deb --target featurebase_$(VERSION_ID).deb
-	nfpm package --packager rpm --target featurebase_$(VERSION_ID).rpm
-
-
+	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager deb --target featurebase.$(VERSION).$(GOARCH).deb
+	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager rpm --target featurebase.$(VERSION).$(GOARCH).rpm
+	
 # We allow setting a custom docker-compose "project". Multiple of the
 # same docker-compose environment can exist simultaneously as long as
 # they use different projects (the project name is prepended to

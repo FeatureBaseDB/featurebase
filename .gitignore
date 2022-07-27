@@ -22,3 +22,4 @@ report.xml
 outputs.json
 builds/
 *.tfstate.backup
+.vscode

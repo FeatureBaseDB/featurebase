@@ -1,12 +1,18 @@
 [Unit]
-Description="Service for FeatureBase"
+After=network.target
+Description=Service for FeatureBase
+Documentation=https://docs.molecula.cloud/
+DefaultDependencies=no
+ConditionPathExists=/etc/featurebase/featurebase.conf
 
 [Service]
-RestartSec=30
-Restart=on-failure
+User=featurebase
+Group=featurebase
+WorkingDirectory=/var/lib/featurebase
 EnvironmentFile=
-User=molecula
-ExecStart=/usr/local/bin/featurebase server -c /etc/featurebase.conf
+ExecStart=/usr/bin/featurebase server -c /etc/featurebase/featurebase.conf
+Restart=on-failure
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target
