@@ -27,18 +27,24 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// It is okay to pass in a nil tx. f.SetValue will lazily instantiate Tx.
-		var tx pilosa.Tx
+		qcx := idx.Txf().NewWritableQcx()
+		defer qcx.Abort()
+		// You're going to note the lack of any commits here. That's
+		// because, when you have a writable Qcx, *every individual
+		// sub-transaction commits immediately*. In theory, we ought
+		// to be doing provisional writes and the entire set of writes
+		// ought to be able to be reverted. Actually no. We're just committing
+		// everything as we go anyway.
 
 		// Set value on field.
-		if changed, err := f.SetValue(tx, 100, 21); err != nil {
+		if changed, err := f.SetValue(qcx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(tx, 100); err != nil {
+		if value, exists, err := f.Value(qcx, 100); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -47,7 +53,7 @@ func TestField_SetValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetValue(tx, 100, 21); err != nil {
+		if changed, err := f.SetValue(qcx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -62,25 +68,25 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// It is okay to pass in a nil tx. f.SetValue will lazily instantiate Tx.
-		var tx pilosa.Tx
+		qcx := idx.Txf().NewWritableQcx()
+		defer qcx.Abort()
 
 		// Set value.
-		if changed, err := f.SetValue(tx, 100, 21); err != nil {
+		if changed, err := f.SetValue(qcx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Set different value.
-		if changed, err := f.SetValue(tx, 100, 23); err != nil {
+		if changed, err := f.SetValue(qcx, 100, 23); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(tx, 100); err != nil {
+		if value, exists, err := f.Value(qcx, 100); err != nil {
 			t.Fatal(err)
 		} else if value != 23 {
 			t.Fatalf("unexpected value: %d", value)
@@ -97,11 +103,11 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// It is okay to pass in a nil tx. f.SetValue will lazily instantiate Tx.
-		var tx pilosa.Tx
+		qcx := idx.Txf().NewWritableQcx()
+		defer qcx.Abort()
 
 		// Set value.
-		if _, err := f.SetValue(tx, 100, 21); err != pilosa.ErrBSIGroupNotFound {
+		if _, err := f.SetValue(qcx, 100, 21); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -113,12 +119,10 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// It is okay to pass in a nil tx. f.SetValue will lazily instantiate Tx.
-		var tx pilosa.Tx
-
+		qcx := idx.Txf().NewWritableQcx()
+		defer qcx.Abort()
 		// Set value.
-		if _, err := f.SetValue(tx, 100, 15); !errors.Is(err, pilosa.ErrBSIGroupValueTooLow) {
+		if _, err := f.SetValue(qcx, 100, 15); !errors.Is(err, pilosa.ErrBSIGroupValueTooLow) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -131,11 +135,11 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// It is okay to pass in a nil tx. f.SetValue will lazily instantiate Tx.
-		var tx pilosa.Tx
+		qcx := idx.Txf().NewWritableQcx()
+		defer qcx.Abort()
 
 		// Set value.
-		if _, err := f.SetValue(tx, 100, 31); !errors.Is(err, pilosa.ErrBSIGroupValueTooHigh) {
+		if _, err := f.SetValue(qcx, 100, 31); !errors.Is(err, pilosa.ErrBSIGroupValueTooHigh) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -203,13 +207,13 @@ func TestField_AvailableShards(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// It is okay to pass in a nil tx. f.SetBit will lazily instantiate Tx.
-	var tx pilosa.Tx
+	qcx := idx.Txf().NewWritableQcx()
+	defer qcx.Abort()
 
 	// Set values on shards 0 & 2, and verify.
-	if _, err := f.SetBit(tx, 0, 100, nil); err != nil {
+	if _, err := f.SetBit(qcx, 0, 100, nil); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx, 0, ShardWidth*2, nil); err != nil {
+	} else if _, err := f.SetBit(qcx, 0, ShardWidth*2, nil); err != nil {
 		t.Fatal(err)
 	} else if diff := cmp.Diff(f.AvailableShards(includeRemote).Slice(), []uint64{0, 2}); diff != "" {
 		t.Fatal(diff)
@@ -243,18 +247,18 @@ func TestField_ClearValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// It is okay to pass in a nil tx. f.SetValue will lazily instantiate Tx.
-		var tx pilosa.Tx
+		qcx := idx.Txf().NewWritableQcx()
+		defer qcx.Abort()
 
 		// Set value on field.
-		if changed, err := f.SetValue(tx, 100, 21); err != nil {
+		if changed, err := f.SetValue(qcx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(tx, 100); err != nil {
+		if value, exists, err := f.Value(qcx, 100); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -262,14 +266,14 @@ func TestField_ClearValue(t *testing.T) {
 			t.Fatal("expected value to exist")
 		}
 
-		if changed, err := f.ClearValue(tx, 100); err != nil {
+		if changed, err := f.ClearValue(qcx, 100); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal(err)
 		}
 
 		// Read value.
-		if _, exists, err := f.Value(tx, 100); err != nil {
+		if _, exists, err := f.Value(qcx, 100); err != nil {
 			t.Fatal(err)
 		} else if exists {
 			t.Fatal("expected value to not exist")

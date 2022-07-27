@@ -751,8 +751,8 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 		return errToStatusError(err)
 	}
 
-	// It is okay to pass a nil Tx to field.StringValue(). It will lazily create it.
-	var tx pilosa.Tx
+	qcx := index.Txf().NewQcx()
+	defer qcx.Abort()
 
 	var fields []*pilosa.Field
 	for _, field := range index.Fields() {
@@ -997,7 +997,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								}
 							}
 						} else {
-							value, exists, err = field.StringValue(tx, col)
+							value, exists, err = field.StringValue(qcx, col)
 							if err != nil {
 								return errors.Wrap(err, "getting string field value for column")
 							}
@@ -1325,7 +1325,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 									&pb.ColumnResponse{ColumnVal: nil})
 							}
 						} else {
-							value, exists, err = field.StringValue(tx, id)
+							value, exists, err = field.StringValue(qcx, id)
 							if err != nil {
 								return errors.Wrap(err, "getting string field value for column")
 							}

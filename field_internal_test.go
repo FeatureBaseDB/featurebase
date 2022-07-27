@@ -299,15 +299,15 @@ func (f *TestField) Reopen() error {
 	return nil
 }
 
-func (f *TestField) MustSetBit(tx Tx, row, col uint64, ts ...time.Time) {
+func (f *TestField) MustSetBit(qcx *Qcx, row, col uint64, ts ...time.Time) {
 	if len(ts) == 0 {
-		_, err := f.Field.SetBit(tx, row, col, nil)
+		_, err := f.Field.SetBit(qcx, row, col, nil)
 		if err != nil {
 			panic(err)
 		}
 	}
 	for _, t := range ts {
-		_, err := f.Field.SetBit(tx, row, col, &t)
+		_, err := f.Field.SetBit(qcx, row, col, &t)
 		if err != nil {
 			panic(err)
 		}
@@ -359,46 +359,51 @@ func TestField_RowTime(t *testing.T) {
 	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
 
 	// Obtain transaction.
-	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
-	defer tx.Rollback()
+	qcx := f.idx.Txf().NewWritableQcx()
+	defer qcx.Abort()
 
-	f.MustSetBit(tx, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(tx, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(tx, 1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(tx, 1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(tx, 1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
+	f.MustSetBit(qcx, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(qcx, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(qcx, 1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(qcx, 1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(qcx, 1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
 
-	PanicOn(tx.Commit())
+	// Warning: Right now this is misleading, and doesn't really do anything. We
+	// already committed each change as we got there. SOME DAY we will fix this.
+	PanicOn(qcx.Finish())
+
+	qcx = f.idx.Txf().NewQcx()
+	defer qcx.Abort()
 
 	// obtain 2nd transaction to read it back.
-	tx = f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: 0})
-	defer tx.Rollback()
+	qcx = f.idx.Txf().NewQcx()
+	defer qcx.Abort()
 
-	if r, err := f.RowTime(tx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
+	if r, err := f.RowTime(qcx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{1, 3, 4, 5}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(tx, 1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "YM"); err != nil {
+	if r, err := f.RowTime(qcx, 1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "YM"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{3}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(tx, 1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "M"); err != nil {
+	if r, err := f.RowTime(qcx, 1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "M"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{3}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(tx, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC), "MD"); err != nil {
+	if r, err := f.RowTime(qcx, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC), "MD"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{1, 5}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(tx, 1, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC), "MDH"); err != nil {
+	if r, err := f.RowTime(qcx, 1, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC), "MDH"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{5}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
@@ -628,10 +633,9 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 			qcx.Reset()
 
 			shard := uint64(0)
-			tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
 			// Rollback below manually, because we are in a loop.
 
-			maxvc, err := f.MaxForShard(tx, shard, nil)
+			maxvc, err := f.MaxForShard(qcx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
 			}
@@ -639,14 +643,13 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
 			}
 
-			minvc, err := f.MinForShard(tx, shard, nil)
+			minvc, err := f.MinForShard(qcx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting min for shard: %v", err)
 			}
 			if minvc != test.expMin {
 				t.Fatalf("min expected:\n%+v\ngot:\n%+v", test.expMin, minvc)
 			}
-			tx.Rollback()
 		})
 	}
 }
@@ -785,10 +788,8 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 			}
 
 			shard := uint64(0)
-			tx := f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field, Shard: shard})
-			defer tx.Rollback()
 
-			maxvc, err := f.MaxForShard(tx, shard, nil)
+			maxvc, err := f.MaxForShard(qcx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
 			}
@@ -796,7 +797,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
 			}
 
-			minvc, err := f.MinForShard(tx, shard, nil)
+			minvc, err := f.MinForShard(qcx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting min for shard: %v", err)
 			}
@@ -867,24 +868,20 @@ func TestField_SaveMeta(t *testing.T) {
 	expBitDepth := uint64(7)
 
 	// Obtain transaction.
-	tx := f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field, Shard: 0})
-	defer tx.Rollback()
+	qcx := f.idx.Txf().NewWritableQcx()
+	defer qcx.Abort()
 
-	if changed, err := f.SetValue(tx, colID, val); err != nil {
+	if changed, err := f.SetValue(qcx, colID, val); err != nil {
 		t.Fatal(err)
 	} else if !changed {
 		t.Fatal("expected SetValue to return changed = true")
-	} else if err := tx.Commit(); err != nil {
-		t.Fatal(err)
 	}
 
 	if f.options.BitDepth != expBitDepth {
 		t.Fatalf("expected BitDepth after set to be: %d, got: %d", expBitDepth, f.options.BitDepth)
 	}
 
-	tx2 := f.idx.holder.txf.NewTx(Txo{Index: f.idx, Field: f.Field, Shard: 0})
-	defer tx2.Rollback()
-	if rslt, ok, err := f.Value(tx2, colID); err != nil {
+	if rslt, ok, err := f.Value(qcx, colID); err != nil {
 		t.Fatal(err)
 	} else if !ok {
 		t.Fatal("expected Value() to return exists = true")
@@ -892,18 +889,23 @@ func TestField_SaveMeta(t *testing.T) {
 		t.Fatalf("expected value to be: %d, got: %d", val, rslt)
 	}
 
+	if err := qcx.Finish(); err != nil {
+		t.Fatalf("error finishing qcx: %v", err)
+	}
+
 	// Reload field and verify that it is persisted.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	}
 
+	qcx = f.idx.Txf().NewQcx()
+	defer qcx.Abort()
+
 	if f.options.BitDepth != expBitDepth {
 		t.Fatalf("expected BitDepth after reopen to be: %d, got: %d", expBitDepth, f.options.BitDepth)
 	}
 
-	tx3 := f.idx.holder.txf.NewTx(Txo{Index: f.idx, Field: f.Field, Shard: 0})
-	defer tx3.Rollback()
-	if rslt, ok, err := f.Value(tx3, colID); err != nil {
+	if rslt, ok, err := f.Value(qcx, colID); err != nil {
 		t.Fatal(err)
 	} else if !ok {
 		t.Fatal("expected Value() after reopen to return exists = true")
