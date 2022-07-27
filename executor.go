@@ -228,8 +228,13 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	// Can't do NewTx() this high up, because we need a specific shard.
 	// So start a qcx with a TxGroup and pass it down.
-	qcx := idx.holder.txf.NewQcx()
-	qcx.write = needWriteTxn
+	var qcx *Qcx
+	if needWriteTxn {
+		qcx = idx.holder.txf.NewWritableQcx()
+	} else {
+		qcx = idx.holder.txf.NewQcx()
+
+	}
 	defer qcx.Abort()
 
 	results, err := e.execute(ctx, qcx, index, q, shards, opt)
@@ -961,14 +966,7 @@ func (e *executor) executeFieldValueCall(ctx context.Context, qcx *Qcx, index st
 }
 
 func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, field *Field, col uint64, shard uint64) (_ ValCount, err0 error) {
-	idx := e.Holder.Index(field.index)
-	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	if err != nil {
-		return ValCount{}, err
-	}
-	defer finisher(&err0)
-
-	value, exists, err := field.Value(tx, col)
+	value, exists, err := field.Value(qcx, col)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "getting field value")
 	} else if !exists {
@@ -1969,8 +1967,6 @@ func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, 
 	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeMinShard")
 	defer span.Finish()
 
-	idx := e.Holder.Index(index)
-
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, qcx, index, c.Children[0], shard)
@@ -1989,18 +1985,13 @@ func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, 
 	if field == nil {
 		return ValCount{}, ErrFieldNotFound
 	}
-
-	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	if err != nil {
-		return ValCount{}, err
-	}
-	defer finisher(&err0)
-	return field.MinForShard(tx, shard, filter)
+	return field.MinForShard(qcx, shard, filter)
 }
 
 // executeMaxShard calculates the max for bsiGroups on a shard.
 func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ ValCount, err0 error) {
-	idx := e.Holder.Index(index)
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxShard")
+	defer span.Finish()
 
 	var filter *Row
 	if len(c.Children) == 1 {
@@ -2020,14 +2011,7 @@ func (e *executor) executeMaxShard(ctx context.Context, qcx *Qcx, index string, 
 	if field == nil {
 		return ValCount{}, ErrFieldNotFound
 	}
-
-	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	if err != nil {
-		return ValCount{}, err
-	}
-
-	defer finisher(&err0)
-	return field.MaxForShard(tx, shard, filter)
+	return field.MaxForShard(qcx, shard, filter)
 }
 
 // executeMinRowShard returns the minimum row ID for a shard.
@@ -5554,16 +5538,7 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-
-			idx := e.Holder.Index(index)
-			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-			if err != nil {
-				return false, err
-			}
-
-			defer finisher(&err0)
-
-			val, err := f.ClearBit(tx, rowID, colID)
+			val, err := f.ClearBit(qcx, rowID, colID)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -5822,8 +5797,6 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 		return false, ErrIndexNotFound
 	}
 
-	shard := colID / ShardWidth
-
 	// Read field name.
 	fieldName, err := c.FieldArg()
 	if err != nil {
@@ -5838,18 +5811,9 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 
 	// Set column on existence field.
 	if ef := idx.existenceField(); ef != nil {
-		// we create tx here, rather than just above, to avoid creating an extra empty shard.
-		tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Field: ef, Shard: shard})
-		if err != nil {
-			return false, err
-		}
-
-		defer finisher(&err0)
-
-		if _, err := ef.SetBit(tx, 0, colID, nil); err != nil {
+		if _, err := ef.SetBit(qcx, 0, colID, nil); err != nil {
 			return false, errors.Wrap(err, "setting existence column")
 		}
-		finisher(nil) // commit to free of the write lock needed inside executeSetBitField
 	}
 
 	switch f.Type() {
@@ -5913,15 +5877,7 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-
-			idx := e.Holder.Index(index)
-			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-			if err != nil {
-				return false, err
-			}
-			defer finisher(&err0)
-
-			val, err := f.SetBit(tx, rowID, colID, timestamp)
+			val, err := f.SetBit(qcx, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -5959,16 +5915,7 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-
-			idx := e.Holder.Index(index)
-			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-			if err != nil {
-				return false, err
-			}
-
-			defer finisher(&err0)
-
-			val, err := f.SetValue(tx, colID, value)
+			val, err := f.SetValue(qcx, colID, value)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -6006,14 +5953,7 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 	for _, node := range snap.ShardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			idx := e.Holder.Index(index)
-			tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: idx, Shard: shard})
-			if err != nil {
-				return false, err
-			}
-			defer finisher(&err0)
-
-			val, err := f.ClearValue(tx, colID)
+			val, err := f.ClearValue(qcx, colID)
 			if err != nil {
 				return false, err
 			} else if val {

@@ -167,9 +167,9 @@ func (q *Qcx) unprotected_reset() {
 	q.done = false
 }
 
-// NewQcxWithGroup allocates a freshly allocated and empty Grp.
-// The top-level executor will set qcx.write = true manually
-// if the overall query is a write.
+// NewQcx allocates a freshly allocated and empty Grp.
+// The top-level Qcx is not marked writable. Non-writable
+// Qcx should not be used to request write Tx.
 func (f *TxFactory) NewQcx() (qcx *Qcx) {
 	qcx = &Qcx{
 		Grp: f.NewTxGroup(),
@@ -182,6 +182,24 @@ func (f *TxFactory) NewQcx() (qcx *Qcx) {
 		qcx.isRoaring = true
 	}
 	_ = testhook.Opened(f.holder.Auditor, qcx, nil)
+	return
+}
+
+// NewWritableQcx allocates a freshly allocated and empty Grp.
+// The resulting Qcx is marked writable.
+func (f *TxFactory) NewWritableQcx() (qcx *Qcx) {
+	qcx = &Qcx{
+		Grp: f.NewTxGroup(),
+		Txf: f,
+	}
+	if f.holder != nil && f.holder.executor != nil {
+		qcx.workers = f.holder.executor.workers
+	}
+	if f.typeOfTx == "roaring" {
+		qcx.isRoaring = true
+	}
+	_ = testhook.Opened(f.holder.Auditor, qcx, nil)
+	qcx.write = true
 	return
 }
 

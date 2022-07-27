@@ -1634,12 +1634,11 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 		// Obtain transaction.
 		idx := index.Index
-		shard := uint64(0)
-		tx := idx.Txf().NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
-		defer tx.Rollback()
+		qcx := idx.Txf().NewQcx()
+		defer qcx.Abort()
 
 		f := hldr.Field("i", "f")
-		if value, exists, err := f.Value(tx, 10); err != nil {
+		if value, exists, err := f.Value(qcx, 10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -1647,7 +1646,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.Value(tx, 100); err != nil {
+		if value, exists, err := f.Value(qcx, 100); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -1707,12 +1706,11 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 		// Obtain transaction.
 		idx := index.Index
-		shard := uint64(0)
-		tx := idx.Txf().NewTx(pilosa.Txo{Write: !writable, Index: idx, Shard: shard})
-		defer tx.Rollback()
+		qcx := idx.Txf().NewQcx()
+		defer qcx.Abort()
 
 		f := hldr.Field("i", "f")
-		if value, exists, err := f.Value(tx, 10); err != nil {
+		if value, exists, err := f.Value(qcx, 10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -1720,7 +1718,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.Value(tx, 100); err != nil {
+		if value, exists, err := f.Value(qcx, 100); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")

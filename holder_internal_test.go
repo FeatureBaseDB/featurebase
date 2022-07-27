@@ -30,22 +30,22 @@ func setupTest(t *testing.T, h *Holder, rowCol []rowCols, indexName string) (*In
 	}
 	existencefield := idx.existenceFld
 
-	shard := uint64(0)
-	tx := idx.Txf().NewTx(Txo{Write: true, Index: idx, Shard: shard})
-	defer tx.Rollback()
+	qcx := idx.Txf().NewWritableQcx()
+	defer qcx.Abort()
+
 	for _, r := range rowCol {
-		_, err = f.SetBit(tx, r.row, r.col, nil)
+		_, err = f.SetBit(qcx, r.row, r.col, nil)
 		if err != nil {
 			t.Fatalf("failed to set bit in index %v: %v", indexName, err)
 		}
 
-		_, err = existencefield.SetBit(tx, r.row, r.col, nil)
+		_, err = existencefield.SetBit(qcx, r.row, r.col, nil)
 		if err != nil {
 			t.Fatalf("failed to set bit in index %v: %v", indexName, err)
 		}
 	}
 
-	if err = tx.Commit(); err != nil {
+	if err = qcx.Finish(); err != nil {
 		t.Fatalf("failed to commit tx for index %v: %v", indexName, err)
 	}
 
@@ -97,14 +97,14 @@ func TestHolder_ProcessDeleteInflight(t *testing.T) {
 	for _, test := range tests {
 		func() {
 			idx, f := test.idx, test.f
-			tx := idx.Txf().NewTx(Txo{Write: false, Index: idx1, Shard: uint64(0)})
-			defer tx.Rollback()
+			qcx := idx.Txf().NewQcx()
+			defer qcx.Abort()
 			for _, r := range rowCol {
-				row, err := f.Row(tx, r.row)
+				row, err := f.Row(qcx, r.row)
 				if err != nil {
 					t.Fatalf("failed to get row: %v", err)
 				}
-				existenceRow, err := idx.existenceFld.Row(tx, r.row)
+				existenceRow, err := idx.existenceFld.Row(qcx, r.row)
 				if err != nil {
 					t.Fatalf("failed to get row: %v", err)
 				}

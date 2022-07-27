@@ -34,9 +34,8 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 		t.Fatalf("creating index: %v", err)
 	}
 
-	shard := uint64(0)
-	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer tx.Rollback()
+	qcx := idx.Txf().NewWritableQcx()
+	defer qcx.Abort()
 
 	fb, errb := idx.CreateField("b", OptFieldTypeBool())
 	_, errbk := idx.CreateField("bk", OptFieldTypeBool(), OptFieldKeys())
@@ -44,15 +43,11 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 		t.Fatalf("creating fields %v, %v", errb, errbk)
 	}
 
-	_, err1 := fb.SetBit(tx, 1, 1, nil)
-	_, err2 := fb.SetBit(tx, 2, 2, nil)
-	_, err3 := fb.SetBit(tx, 3, 3, nil)
+	_, err1 := fb.SetBit(qcx, 1, 1, nil)
+	_, err2 := fb.SetBit(qcx, 2, 2, nil)
+	_, err3 := fb.SetBit(qcx, 3, 3, nil)
 	if err1 != nil || err2 != nil || err3 != nil {
 		t.Fatalf("setting bit %v, %v, %v", err1, err2, err3)
-	}
-
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
 	}
 
 	tests := []struct {
@@ -566,34 +561,25 @@ func TestExecutor_DeleteRows(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
-	shard := uint64(0)
-	tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard})
-	defer tx.Rollback()
-
-	if _, err = f.SetBit(tx, 1, 1, nil); err != nil {
+	qcx := idx.Txf().NewWritableQcx()
+	defer qcx.Abort()
+	if _, err = f.SetBit(qcx, 1, 1, nil); err != nil {
 		t.Fatalf("setting bit: %v", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("failed to commit transaction: %v", err)
-	}
-
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Shard: shard})
-	defer tx.Rollback()
-
-	row, err := f.Row(tx, 1)
+	// We rely here on the fact that write Qcx autocommit constantly.
+	row, err := f.Row(qcx, 1)
 	if err != nil {
 		t.Fatalf("failed to read row: %v", err)
 	}
 
 	ctx := context.Background()
-	changed, err := DeleteRows(ctx, row, idx, shard)
+	changed, err := DeleteRows(ctx, row, idx, 0)
 	if !changed || err != nil {
 		t.Fatalf("failed to delete row: %v", err)
 	}
 
-	changed, err = DeleteRows(ctx, row, idx, shard)
-	assert.NoError(t, err)
+	changed, err = DeleteRows(ctx, row, idx, 0)
 	if changed {
 		t.Fatalf("expected delete to not clear bit but it did")
 	}

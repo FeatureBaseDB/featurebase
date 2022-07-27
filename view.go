@@ -449,16 +449,14 @@ func (v *view) deleteFragment(shard uint64) error {
 }
 
 // row returns a row for a shard of the view.
-func (v *view) row(txOrig Tx, rowID uint64) (*Row, error) {
+func (v *view) row(qcx *Qcx, rowID uint64) (*Row, error) {
 	row := NewRow()
 	for _, frag := range v.allFragments() {
-
-		tx := txOrig
-		if NilInside(tx) {
-			tx = v.idx.holder.txf.NewTx(Txo{Write: !writable, Index: v.idx, Fragment: frag, Shard: frag.shard})
-			defer tx.Rollback()
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: v.idx, Fragment: frag, Shard: frag.shard})
+		if err != nil {
+			return nil, err
 		}
-
+		defer finisher(&err)
 		fr, err := frag.row(tx, rowID)
 		if err != nil {
 			return nil, err
@@ -527,7 +525,7 @@ func (v *view) mutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int
 }
 
 // setBit sets a bit within the view.
-func (v *view) setBit(txOrig Tx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	var frag *fragment
 	frag, err = v.CreateFragmentIfNotExists(shard)
@@ -535,102 +533,50 @@ func (v *view) setBit(txOrig Tx, rowID, columnID uint64) (changed bool, err erro
 		return changed, err
 	}
 
-	tx := txOrig
-	if NilInside(tx) {
-		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
-		defer func() {
-			if err == nil {
-				vprint.PanicOn(tx.Commit())
-			} else {
-				tx.Rollback()
-			}
-		}()
-	}
 	return frag.setBit(tx, rowID, columnID)
 }
 
 // clearBit clears a bit within the view.
-func (v *view) clearBit(txOrig Tx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
-	}
-
-	tx := txOrig
-	if NilInside(tx) {
-		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
-		defer func() {
-			if err == nil {
-				vprint.PanicOn(tx.Commit())
-			} else {
-				tx.Rollback()
-			}
-		}()
 	}
 
 	return frag.clearBit(tx, rowID, columnID)
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(txOrig Tx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
+func (v *view) value(tx Tx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return value, exists, err
 	}
 
-	tx := txOrig
-	if NilInside(tx) {
-		tx = frag.idx.holder.txf.NewTx(Txo{Write: !writable, Index: frag.idx, Fragment: frag, Shard: frag.shard})
-		defer tx.Rollback()
-	}
-
 	return frag.value(tx, columnID, bitDepth)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(txOrig Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
+func (v *view) setValue(tx Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
 
-	tx := txOrig
-	if NilInside(tx) {
-		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
-		defer func() {
-			if err == nil {
-				vprint.PanicOn(tx.Commit())
-			} else {
-				tx.Rollback()
-			}
-		}()
-	}
-
 	return frag.setValue(tx, columnID, bitDepth, value)
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(txOrig Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
+func (v *view) clearValue(tx Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
 
-	tx := txOrig
-	if NilInside(tx) {
-		tx = v.idx.holder.txf.NewTx(Txo{Write: writable, Index: v.idx, Fragment: frag, Shard: shard})
-		defer func() {
-			if err == nil {
-				vprint.PanicOn(tx.Commit())
-			} else {
-				tx.Rollback()
-			}
-		}()
-	}
 	return frag.clearValue(tx, columnID, bitDepth, value)
 }
 

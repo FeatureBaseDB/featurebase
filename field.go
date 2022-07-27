@@ -1069,7 +1069,7 @@ func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error)
 
 // RowTime gets the row at the particular time with the granularity specified by
 // the quantum.
-func (f *Field) RowTime(tx Tx, rowID uint64, time time.Time, quantum string) (*Row, error) {
+func (f *Field) RowTime(qcx *Qcx, rowID uint64, time time.Time, quantum string) (*Row, error) {
 	if !TimeQuantum(quantum).Valid() {
 		return nil, ErrInvalidTimeQuantum
 	}
@@ -1079,7 +1079,7 @@ func (f *Field) RowTime(tx Tx, rowID uint64, time time.Time, quantum string) (*R
 		return nil, errors.Errorf("view with quantum %v not found.", quantum)
 	}
 
-	return view.row(tx, rowID)
+	return view.row(qcx, rowID)
 }
 
 // viewPath returns the path to a view in the field.
@@ -1220,14 +1220,14 @@ func (f *Field) deleteView(name string) error {
 // package, and the fact that it's only allowed on
 // `set`,`mutex`, and `bool` fields is odd. This may
 // be considered for deprecation in a future version.
-func (f *Field) Row(tx Tx, rowID uint64) (*Row, error) {
+func (f *Field) Row(qcx *Qcx, rowID uint64) (*Row, error) {
 	switch f.Type() {
 	case FieldTypeSet, FieldTypeMutex, FieldTypeBool:
 		view := f.view(viewStandard)
 		if view == nil {
 			return nil, ErrInvalidView
 		}
-		return view.row(tx, rowID)
+		return view.row(qcx, rowID)
 	default:
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
 	}
@@ -1257,7 +1257,9 @@ func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx, details bool, limit in
 }
 
 // SetBit sets a bit on a view within the field.
-func (f *Field) SetBit(tx Tx, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: colID / ShardWidth})
+	defer finisher(&err)
 	viewName := viewStandard
 	if !f.options.NoStandardView {
 		// Retrieve view. Exit if it doesn't exist.
@@ -1297,7 +1299,9 @@ func (f *Field) SetBit(tx Tx, rowID, colID uint64, t *time.Time) (changed bool, 
 }
 
 // ClearBit clears a bit within the field.
-func (f *Field) ClearBit(tx Tx, rowID, colID uint64) (changed bool, err error) {
+func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error) {
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: colID / ShardWidth})
+	defer finisher(&err)
 	viewName := viewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
@@ -1409,13 +1413,13 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 
 // StringValue reads an integer field value for a column, and converts
 // it to a string based on a foreign index string key.
-func (f *Field) StringValue(tx Tx, columnID uint64) (value string, exists bool, err error) {
+func (f *Field) StringValue(qcx *Qcx, columnID uint64) (value string, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return value, false, ErrBSIGroupNotFound
 	}
 
-	val, exists, err := f.Value(tx, columnID)
+	val, exists, err := f.Value(qcx, columnID)
 	if exists {
 		value, err = f.translateStore.TranslateID(uint64(val))
 	}
@@ -1423,7 +1427,9 @@ func (f *Field) StringValue(tx Tx, columnID uint64) (value string, exists bool, 
 }
 
 // Value reads a field value for a column.
-func (f *Field) Value(tx Tx, columnID uint64) (value int64, exists bool, err error) {
+func (f *Field) Value(qcx *Qcx, columnID uint64) (value int64, exists bool, err error) {
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: columnID / ShardWidth})
+	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return 0, false, ErrBSIGroupNotFound
@@ -1445,7 +1451,9 @@ func (f *Field) Value(tx Tx, columnID uint64) (value int64, exists bool, err err
 }
 
 // SetValue sets a field value for a column.
-func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err error) {
+func (f *Field) SetValue(qcx *Qcx, columnID uint64, value int64) (changed bool, err error) {
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: columnID / ShardWidth})
+	defer finisher(&err)
 	// Fetch bsiGroup & validate min/max.
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1497,7 +1505,9 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 }
 
 // ClearValue removes a field value for a column.
-func (f *Field) ClearValue(tx Tx, columnID uint64) (changed bool, err error) {
+func (f *Field) ClearValue(qcx *Qcx, columnID uint64) (changed bool, err error) {
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: columnID / ShardWidth})
+	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
@@ -1517,7 +1527,9 @@ func (f *Field) ClearValue(tx Tx, columnID uint64) (changed bool, err error) {
 	return false, nil
 }
 
-func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) {
+func (f *Field) MaxForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, error) {
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
+	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return ValCount{}, ErrBSIGroupNotFound
@@ -1546,13 +1558,16 @@ func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		return ValCount{}, errors.Wrap(err, "calling fragment.max")
 	}
 
-	return f.valCountize(max, cnt, bsig)
+	v, err := f.valCountize(max, cnt, bsig)
+	return v, err
 }
 
 // MinForShard returns the minimum value which appears in this shard
 // (this field must be an Int or Decimal field). It also returns the
 // number of times the minimum value appears.
-func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) {
+func (f *Field) MinForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, error) {
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
+	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return ValCount{}, ErrBSIGroupNotFound
@@ -1581,7 +1596,8 @@ func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) 
 		return ValCount{}, errors.Wrap(err, "calling fragment.min")
 	}
 
-	return f.valCountize(min, cnt, bsig)
+	v, err := f.valCountize(min, cnt, bsig)
+	return v, err
 }
 
 // valCountize takes the "raw" value and count we get from the
