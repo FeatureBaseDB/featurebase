@@ -18,6 +18,7 @@ import (
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
+	"github.com/ricochet2200/go-disk-usage/du"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -143,6 +144,11 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 		return fmt.Errorf("output directory already exists")
 	} else if err := os.MkdirAll(cmd.OutputDir, 0750); err != nil {
 		return err
+	}
+
+	// Ensure there is enough free space
+	if err := cmd.checkFreeSpace(ctx); err != nil {
+		return fmt.Errorf("not enough disk space available: %w", err)
 	}
 
 	// Backup schema.
@@ -280,6 +286,25 @@ func (cmd *BackupCommand) backupIndexData(ctx context.Context, ii *pilosa.IndexI
 	return g.Wait()
 }
 
+// checkFreeSpace checks if there is enough space in the output directory to backup data
+func (cmd *BackupCommand) checkFreeSpace(ctx context.Context) (err error) {
+	freeSpace := du.NewDiskUsage(cmd.OutputDir).Free()
+	var usage pilosa.DiskUsage
+	if cmd.Index == "" {
+		usage, err = cmd.client.GetDiskUsage(ctx)
+	} else {
+		usage, err = cmd.client.GetIndexUsage(ctx, cmd.Index)
+	}
+	if err != nil {
+		return fmt.Errorf("getting size of data to be backed up: %s", err)
+	}
+
+	if freeSpace < uint64(usage.Usage) {
+		return fmt.Errorf("not enough disk space available, free: %v, index usage: %v", freeSpace, usage.Usage)
+	}
+	return nil
+}
+
 // backupShard backs up a single shard from a single index.
 func (cmd *BackupCommand) backupShard(ctx context.Context, indexName string, shard uint64) (err error) {
 	nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
@@ -309,6 +334,7 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 		pilosa.WithClientRetryPeriod(cmd.RetryPeriod),
 		pilosa.WithSerializer(proto.Serializer{}))
 	rc, err := client.ShardReader(ctx, indexName, shard)
+
 	if err != nil {
 		return fmt.Errorf("fetching shard reader: %w", err)
 	}

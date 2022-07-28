@@ -2477,3 +2477,59 @@ func (c *InternalClient) OAuthConfig() (rsp oauth2.Config, err error) {
 
 	return rsp, nil
 }
+
+// GetDiskUsage gets the size of data directory across all nodes.
+func (c *InternalClient) GetDiskUsage(ctx context.Context) (DiskUsage, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.GetDiskUsage")
+	defer span.Finish()
+	return c.getDiskUsage(ctx, "")
+}
+
+// GetIndexUsage gets the size of an index across all nodes.
+func (c *InternalClient) GetIndexUsage(ctx context.Context, index string) (DiskUsage, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.GetIndexUsage")
+	defer span.Finish()
+	return c.getDiskUsage(ctx, index)
+}
+
+// getDiskUsage returns size of data directory if index is zero value.
+func (c *InternalClient) getDiskUsage(ctx context.Context, index string) (DiskUsage, error) {
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return DiskUsage{}, fmt.Errorf("getting nodes: %s", err)
+	}
+
+	var sum DiskUsage
+	for _, node := range nodes {
+		path := "/internal/disk-usage"
+		if index != "" {
+			path = path + "/" + index
+		}
+		u := uriPathToURL(&node.URI, path)
+
+		req, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			return DiskUsage{}, errors.Wrap(err, "creating request")
+		}
+
+		req.Header.Set("User-Agent", "pilosa/"+Version)
+		req.Header.Set("Accept", "application/json")
+		AddAuthToken(ctx, &req.Header)
+
+		// Execute request.
+		resp, err := c.executeRequest(req.WithContext(ctx))
+		if err != nil {
+			return DiskUsage{}, err
+		}
+		defer resp.Body.Close()
+
+		var rsp DiskUsage
+		if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+			return DiskUsage{}, fmt.Errorf("json decode: %s", err)
+		}
+
+		sum.Usage += rsp.Usage
+	}
+
+	return sum, nil
+}

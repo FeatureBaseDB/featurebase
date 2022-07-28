@@ -21,7 +21,9 @@ import (
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
+	"github.com/ricochet2200/go-disk-usage/du"
 )
 
 // Test distributed TopN Row count across 3 nodes.
@@ -1029,6 +1031,16 @@ func TestClient_ImportValue(t *testing.T) {
 		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=40, cnt=1", vc.Val, vc.Count)
 	}
 
+	// Calculate Data Usage before Import
+	preDUsage, err := c.GetDiskUsage(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	preIUsage, err := c.GetIndexUsage(context.Background(), "i")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Send import request.
 	req = &pilosa.ImportValueRequest{
 		Index:     "i",
@@ -1038,6 +1050,28 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 	if err := c.ImportValue(context.Background(), nil, req, &pilosa.ImportOptions{Clear: true}); err != nil {
 		t.Fatal(err)
+	}
+
+	// Check Equivalent growth in data directory and index
+	postDUsage, err := c.GetDiskUsage(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	postIUsage, err := c.GetIndexUsage(context.Background(), "i")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	freeSpace := du.NewDiskUsage("/dev/disk1s5").Free()
+	vprint.VV("freespace: %+v", freeSpace)
+
+	if (postDUsage.Usage - preDUsage.Usage) != (postIUsage.Usage - preIUsage.Usage) {
+		t.Errorf("expected size of data directory to grow the same amount as size of index: Before Import: disk usage: %v, index usage: %v, After Import: disk usage: %v, index usage: %v", preDUsage.Usage, preIUsage.Usage, postDUsage.Usage, preIUsage.Usage)
+		return
+	}
+	if postDUsage.Usage <= postIUsage.Usage {
+		t.Errorf("expected disk usage to be greater than index usage")
+		return
 	}
 
 	// Verify Sum.

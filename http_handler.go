@@ -538,6 +538,7 @@ func newRouter(handler *Handler) http.Handler {
 	// other ones
 	router.HandleFunc("/internal/mem-usage", handler.chkAuthZ(handler.handleGetMemUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/internal/disk-usage", handler.chkAuthZ(handler.handleGetDiskUsage, authz.Read)).Methods("GET").Name("GetUsage")
+	router.HandleFunc("/internal/disk-usage/{index}", handler.chkAuthZ(handler.handleGetDiskUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.chkAuthN(handler.handleGetFragmentBlocks)).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/data", handler.chkAuthN(handler.handleGetFragmentData)).Methods("GET").Name("GetFragmentData")
@@ -1163,7 +1164,13 @@ func (h *Handler) handleGetDiskUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	use, err := GetDiskUsage(h.api.server.dataDir)
+	u := h.api.server.dataDir
+	indexName, ok := mux.Vars(r)["index"]
+	if ok {
+		u = fmt.Sprintf("%s/indexes/%s", u, indexName)
+	}
+
+	use, err := GetDiskUsage(u)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

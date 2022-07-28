@@ -40,6 +40,7 @@ require (
 	github.com/prometheus/prom2json v1.3.1
 	github.com/rakyll/statik v0.1.7
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
+	github.com/ricochet2200/go-disk-usage/du v0.0.0-20210707232629-ac9918953285
 	github.com/satori/go.uuid v1.2.0
 	github.com/segmentio/kafka-go v0.4.29
 	github.com/shirou/gopsutil/v3 v3.22.5
