@@ -1,0 +1,30 @@
+{
+    "namespace": "org.test",
+    "type": "record",
+    "name": "deletes",
+    "doc": "",
+    "fields": [
+        {
+            "name": "abc",
+            "doc": "The ABC",
+            "type": "string"
+        },
+        {
+            "name": "db",
+            "doc": "TE DB Number",
+            "type": "string"
+        },
+        {
+            "name": "user_id",
+            "doc": "User ID",
+            "type": "int"
+        },
+        {
+            "name": "fields",
+            "type": {
+                    "type": "array",
+                    "items": "string"
+                }
+        }
+    ]
+}

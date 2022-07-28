@@ -23,3 +23,46 @@ outputs.json
 builds/
 *.tfstate.backup
 .vscode
+
+# copy of .gitignore from archived idk repo
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+
+# Folders
+_obj
+_test
+
+# Architecture specific extensions/prefixes
+*.[568vq]
+[568vq].out
+
+*.cgo1.go
+*.cgo2.c
+_cgo_defun.c
+_cgo_gotypes.go
+_cgo_export.*
+
+_testmain.go
+
+*.exe
+*.test
+*.prof
+
+vendor
+
+.terraform
+terraform.tfstate*
+
+bin
+build
+testenv
+.pulled
+
+pilosa-sec-data-idk
+
+.idea/
+tags.dot
+*.log
+*.swp

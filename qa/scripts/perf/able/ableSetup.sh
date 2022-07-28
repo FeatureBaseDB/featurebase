@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# To run script: ./ableSetup.sh
+# To run script: ./ableSetup.sh <BRANCH_NAME>
 export TF_IN_AUTOMATION=1
+
+BRANCH_NAME=$1
+shift
 
 if [ -z ${TF_VAR_cluster_prefix+x} ]; then
     echo "TF_VAR_cluster_prefix is unset";

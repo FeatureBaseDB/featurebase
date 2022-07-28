@@ -1,0 +1,119 @@
+fields:
+  - name: "an_id"
+    type: "uint" # (default IDField (non-mutex))
+    distribution: "sequential"
+    min: 0
+    max: 1000000
+    repeat: false # if false, data generation stops when we hit >= max. only available with sequential
+    step: 1
+  - name: "an_int"
+    type: "int" # (default IntField)
+    distribution: "uniform" # uniform or zipfian
+    min: 0
+    max: 5
+    null_chance: 0.01
+  - name: "a_zipf_int"
+    type: "int" # (default IntField)
+    distribution: "zipfian"
+    min: 0
+    max: 100
+    s: 1.1
+    v: 5.1
+  - name: "a_string_from_file"
+    type: "string" # (default StringField (non-mutex))
+    source_file: "testdata/file_with_line_delimited_values" # this will be used if not empty
+    distribution: "zipfian" # uniform or zipfian
+    s: 1.1 # s and v are used for zipfian
+    v: 5.1
+  - name: "a_random_string"
+    type: "string" # (default StringField (non-mutex))
+    generator_type: "random-string" # used to generate random strings rather than pulling from known set
+    min_len: 8
+    max_len: 12
+    charset: "AB" # set of possible characters to pull from when generating random string
+  - name: "a_string_set"
+    type: "string-set" # (default StringArrayField)
+    generator_type: "random-string" # used to generate random strings rather than pulling from known. "distribution" is ignored.
+    min_len: 4
+    max_len: 4
+    charset: "0123456789ABCDEF"
+    min_num: 0 # minimum number of strings in each value (default 0)
+    max_num: 10 # max number of strings (default to cardinality of source)
+  - name: "a_string_set_from_file"
+    type: "string-set" # (default StringArrayField)
+    source_file: "testdata/file_with_line_delimited_values" # this will be used if not empty
+    generator_type: "random-string" # used to generate random strings rather than pulling from known 
+    min_num: 0 # minimum number of strings in each value (default 0)
+    max_num: 10 # max number of strings (default to cardinality of source)
+  - name: "an_id_set"
+    type: "uint-set" # (default IDArrayField)
+    min: 0
+    max: 1000
+    distribution: "uniform"
+    min_num: 1
+    max_num: 3
+  - name: "a_timestamp_field"
+    type: "timestamp" # (default TimestampField)
+    min_date: 2006-01-02T15:04:05.001Z # RFC3339Nano
+    max_date: 2010-01-02T15:04:05.001Z # RFC3339Nano
+    distribution: "increasing" # only "increasing" is supported right now
+    min_step_duration: "1s"
+    max_step_duration: "1h" # generated values will add randomly between 1s and 1h to previous value starting at min_date.
+    repeat: false # stop at > max_date unless repeat=true... then go back to min.
+  - name: "a_decimal_field"
+    type: "float" # use idk_params to choose a scale
+    min_float: 0.2
+    max_float: 1.5
+    distribution: "uniform" # only supported value
+  - name: "gender"
+    type: string
+    source_file: "testdata/gender.txt"
+    distribution: "fixed"
+  - name: "shifting_key"
+    type: string
+    # The shifting distribution is meant to simulate a set of strings
+    # that evolves over time. We always generate a number in a
+    # particular range defined by the cardinality, but we always add
+    # an amount to that number which starts at 0 and increases over
+    # time. In this way, some numbers will fall out and never be
+    # generated again, and new numbers will come in. We map each
+    # number to a string by formatting it and padding with zeros to
+    # get the desired length.
+    distribution: "shifting"
+    step: 10 # step for "shifting" distribution means how often do we shift. Every time we generate a value, we'll add an amount to it, every <step> generations, we'll increase the amount by one. 
+    cardinality: 123123123
+    max_len: 32
+    s: 1.01
+    v: 200
+    null_chance: 0
+
+# idk_params describe how data from "fields" should be ingested by IDK
+idk_params:
+  primary_key_config:
+    field: "id" # if this is a single field named "id" then we'll use uint IDs, if it's empty we'll autogen ids, and if it's anything else we'll do string keys... yes this is a bit hacky, needs to be cleaned up.
+  # fields is keyed by names of fields from top level "fields". It is
+  # not required that all fields appear here, those that don't will
+  # use the default ingestion.
+  fields:
+    an_id:
+      - type: "ID"
+        mutex: false
+        name: "id"
+    a_decimal_field:
+      - type: "Decimal"
+        scale: 4
+    a_timestamp_field:
+      - type: "RecordTime"
+        layout: "2006-01-02T15:04:05Z"
+        epoch: 1970-01-01T00:00:00.0Z
+        name: "na"
+      - type: "Timestamp"
+        name: "a_timestamp_field"
+    # a_string:
+    #   - type: "StringField"
+    #     keyed: true
+    #     mutex: true
+    a_string_set:
+      - type: "StringArray"
+        time_quantum: "YMD"
+        ttl: "0s"

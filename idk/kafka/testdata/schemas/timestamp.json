@@ -1,0 +1,8 @@
+{
+    "type": "record",
+    "namespace": "com.example",
+    "name": "TimeName",
+    "fields": [
+        { "name": "time_samir", "type": "bytes", "logicalType":"timestamp", "fieldType": "timestamp", "granularity": "s", "unit":"ms"}
+   ]
+}

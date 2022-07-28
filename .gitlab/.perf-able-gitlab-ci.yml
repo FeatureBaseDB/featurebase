@@ -1,6 +1,6 @@
 variables:
   GOVERSION: "1.17.8"
-  
+
 stages:
   - performance
 
@@ -34,7 +34,7 @@ perf_able:
     - aws configure set region "us-east-2" --profile $INFRA_PROFILE
     - echo $AWS_FBCI_SSH_KEY > gitlab-featurebase-ci.pem
     - chmod 400 gitlab-featurebase-ci.pem
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
     - eval $(ssh-agent -s)
     - mkdir -p ~/.ssh
     - echo $AWS_FBCI_SSH_KEY > /root/.ssh/gitlab-featurebase-ci.pem
@@ -50,8 +50,10 @@ perf_able:
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
+    - aws s3 cp s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64 ./
+    - chmod +x ./featurebase_linux_arm64
   script:
-    - ./qa/scripts/perf/able/ableSetup.sh
+    - ./qa/scripts/perf/able/ableSetup.sh $CI_COMMIT_BRANCH
     - ./qa/scripts/perf/able/ableTest.sh
   after_script:
     - ./qa/scripts/perf/able/ableTeardown.sh || true

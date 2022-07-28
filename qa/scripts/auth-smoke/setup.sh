@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# To run script: ./setup.sh
+# To run script: ./setup.sh <BRANCH_NAME>
+BRANCH_NAME=$1
+
+echo "Running tests for branch ${BRANCH_NAME}"
+
 ADMIN_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiYWRtaW4ifQ.I1iCgk1VU7m6e-En4ACTHIs6V2dZpy_8j2blSSo7K3U
 READER_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoicmVhZGVyIn0.QcHy_W6oAYFgdBWy1CqLr55HcOyymn5zAXPJUKCvQE4
 WRITER_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoid3JpdGVyIn0.aEk-12xP9RJeXog4MHO8LhuQFEjNNG2BcWDcMzSX_HI
@@ -72,7 +76,7 @@ then
     exit 1
 fi
 
-setupClusterNodes
+setupClusterNodes $BRANCH_NAME
 
 # verify featurebase running
 echo "Verifying featurebase cluster running..."

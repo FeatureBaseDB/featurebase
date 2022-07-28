@@ -14,6 +14,8 @@ DEPLOYED_CLUSTER_REPLICA_COUNT=$3
 DEPLOYED_CLUSTER_INSTANCE_COUNT=$4
 BRANCH_NAME=$5
 
+echo "Running tests for branch ${BRANCH_NAME}"
+
 # update ebs device name for ingest nodes 
 EBS_DEVICE_NAME="/dev/sdb"
 
@@ -21,13 +23,13 @@ EBS_DEVICE_NAME="/dev/sdb"
 PRODUCER_IPS=$($SCRIPT_DIR/getASGInstanceIPs.sh ${STACK_NAME}-producer-asg ${AWS_PROFILE})
 PRODUCER0=$(echo $PRODUCER_IPS | head -n1 | cut -d " " -f1)
 echo "setting up producer node, producer_ip: $PRODUCER0, EBS device: $EBS_DEVICE_NAME"
-setupProducerNode $PRODUCER0
+setupProducerNode $PRODUCER0 $BRANCH_NAME
 
 # setup consumer
 CONSUMER_IPS=$($SCRIPT_DIR/getASGInstanceIPs.sh ${STACK_NAME}-consumer-asg ${AWS_PROFILE})
 CONSUMER0=$(echo $CONSUMER_IPS | head -n1 | cut -d " " -f1)
 echo "setting up consumer node, consumer_ip: $CONSUMER0, EBS device: $EBS_DEVICE_NAME"
-setupConsumerNode $CONSUMER0
+setupConsumerNode $CONSUMER0 $BRANCH_NAME
 
 # no ebs device, using nvme instead, we can skip ebs mount in executeGeneralNodeConfigCommands()
 # nvme is used for data nodes
@@ -99,7 +101,7 @@ fi
 
 #setup data nodes
 generateInitialClusterString
-setupDataNodes
+setupDataNodes $BRANCH_NAME
 startDataNodes
 
 # copy script for test 

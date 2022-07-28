@@ -1,0 +1,8 @@
+{
+     "type": "record",
+     "namespace": "com.example",
+     "name": "Decimal",
+     "fields": [
+	 { "name": "somenum", "type": "bytes", "logicalType": "decimal", "scale": 2, "precision": 5 }
+     ]
+}

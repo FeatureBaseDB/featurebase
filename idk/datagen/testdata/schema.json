@@ -1,0 +1,37 @@
+[
+    {
+        "name": "uuid",
+        "path": [
+            "uuid"
+        ],
+        "type": "string"
+    },
+    {
+        "name": "type",
+        "path": [
+            "type"
+        ],
+        "type": "id"
+    },
+    {
+        "name": "segid",
+        "path": [
+            "slice"
+        ],
+        "type": "ids"
+    },
+    {
+        "name": "timestamp",
+        "path": [
+            "ts"
+        ],
+        "type": "recordTime"
+    },
+    {
+        "name": "lastupdated",
+        "path": [
+            "lastupdated"
+        ],
+        "type": "timestamp"
+    }
+]

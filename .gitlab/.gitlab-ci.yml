@@ -3,19 +3,62 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
+gosec-sast:
+  before_script:
+    - export GOPRIVATE=github.com/molecula/*
+    - apk add openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$FB_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"
+    - ssh-keygen -F github.com || echo "$SSH_KNOWN_HOSTS_HASHED" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+
 variables:
   GOVERSION: "1.17.8"
 
 stages:
   - lint
+  - pretest # run FB linux amd 64 because it is a dependency for idk tests
   - test
   - build
+  - post build
   - integration
   - gauntlet
   - performance
-  - post build
   - nonblocking
   - cleanup_build
+
+.setup_ssh:
+  before_script:
+    - export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+    - export GOPRIVATE=github.com/molecula/*
+
+    ## Install ssh-agent if not already installed, it is required by Docker.
+    ## (change apt-get to yum if you use an RPM-based image)
+    - "command -v ssh-agent >/dev/null || ( apt-get update -y && apt-get install openssh-client -y )"
+
+    ## Run ssh-agent (inside the build environment)
+    - eval $(ssh-agent -s)
+
+    ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
+    ## We're using tr to fix line endings which makes ed25519 keys work
+    ## without extra base64 encoding.
+    ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
+    - echo "$FB_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+
+    ## Create the SSH directory and give it the right permissions
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+
+    - git config --global --get url."ssh://git@github.com/".insteadOf || git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/" || true
+    ## Set up known_hosts so we don't get prompted when there's no
+    ## human to answer the prompt (resulting in cryptic failures).
+    ## ssh-keygen -F checks whether github.com is in known_hosts and
+    ## handles HashKnownHosts appropriately.
+    - ssh-keygen -F github.com || echo "$SSH_KNOWN_HOSTS_HASHED" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
 
 smoke build:
   image: golang:$GOVERSION
@@ -35,7 +78,7 @@ golangci-lint:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Checking for issues in new code"
-    - golangci-lint run
+    - golangci-lint run -v --timeout=8m
 
 go mod tidy:
   stage: lint
@@ -46,8 +89,10 @@ go mod tidy:
     - go mod tidy
     - git diff --exit-code -- go.mod go.sum
 
+### lattice, build for linux amd64 and build amd fb container are needed for IDK unit testing
+### running them at an earlier stage allows for decreasing run time.
 build lattice:
-  stage: test
+  stage: pretest
   image: node:14
   variables:
     CI: "false"
@@ -65,6 +110,41 @@ build lattice:
   artifacts:
     paths:
       - lattice.tar.gz
+
+build for linux amd64:
+  stage: pretest
+  image: golang:$GOVERSION
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - rm -r lattice
+    - tar -xvf lattice.tar.gz
+    - go get -v -u github.com/rakyll/statik
+    - /go/bin/statik -src=lattice
+    - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
+    - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
+  artifacts:
+    paths:
+      - featurebase_linux_amd64
+      - roaring-migrate_linux_amd64
+  needs:
+    - job: build lattice
+
+build amd container fb:
+  stage: pretest
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  before_script:
+    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
+  script:
+    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_SLUG}
+    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 -t $tag -f .gitlab/Dockerfile .
+    - docker push $tag
+    - echo Created docker featurebase image with tag "$tag"
+  needs:
+    - job: build for linux amd64
 
 run jest tests:
   stage: test
@@ -90,7 +170,7 @@ run go tests:
   retry: 1
   script:
     - echo "Running featurebase unit tests..."
-    - go test -timeout=30m ./...
+    - go test -v -timeout=30m $(go list ./... | grep -Ev idk)
   tags:
     - aws
 
@@ -103,7 +183,7 @@ run go tests race:
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
   script:
     - echo "Running featurebase race tests..."
-    - go test -race -v -timeout=90m ./...
+    - go test -race -v -timeout=90m $(go list ./... | grep -Ev idk)
   tags:
     - aws
 
@@ -114,7 +194,7 @@ run go tests shardwidth22:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase shardwidth22 tests..."
-    - go test -timeout=30m -tags=shardwidth22 ./...
+    - go test -timeout=30m -tags=shardwidth22 -v $(go list ./... | grep -Ev idk)
   tags:
     - aws
 
@@ -129,8 +209,8 @@ run go tests future:
   retry: 1
   script:
     - echo "Running featurebase unit tests..."
-    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | paste -s -d, -)
-    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report.out
+    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev 'idk' | paste -s -d, -)
+    - go test -timeout=30m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev idk) | tee test-report.out
   artifacts:
     paths:
       - coverage.out
@@ -146,14 +226,135 @@ run go tests future plg:
   retry: 1
   script:
     - echo "Running featurebase plg-specific unit tests..."
-    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | paste -s -d, -)
-    - go test -tags=plg -timeout=30m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} ./... | tee test-report-plg.out
+    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev 'idk' | paste -s -d, -)
+    - go test -tags=plg -timeout=30m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev idk) | tee test-report-plg.out
   artifacts:
     paths:
       - coverage-plg.out
       - test-report-plg.out
   tags:
     - aws
+
+# idk tests
+run go tests idk race:
+  extends:
+    - .setup_ssh
+  variables:
+    USERNAME: fb-idk-access
+    PROJECT: race_${CI_CONCURRENT_ID}
+  stage: test
+  retry: 1
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - echo "Running test-all-race"
+    - cd ./idk/
+    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
+    - echo $PROJECT
+    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
+    - BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all-race
+  after_script:
+    - make save-pilosa-logs
+    - make shutdown
+  artifacts:
+    paths:
+      - ./idk/testdata/*_coverage.out
+      - ./idk/testdata/*_report.out
+  tags:
+    - shell
+    - aws
+  needs:
+    - job: build amd container fb
+
+run go tests idk shard transactional:
+  extends:
+    - .setup_ssh
+  variables:
+    IDK_DEFAULT_SHARD_TRANSACTIONAL: 1
+    USERNAME: fb-idk-access
+    PROJECT: shardttrans_${CI_CONCURRENT_ID}
+  stage: test
+  retry: 1
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - echo "Running shard transactional tests"
+    - cd ./idk/
+    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
+    - echo $PROJECT
+    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
+    - BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all
+  after_script:
+    - make save-pilosa-logs
+    - make shutdown
+  artifacts:
+    paths:
+      - ./idk/testdata/*_coverage.out
+      - ./idk/testdata/*_report.out
+      - ./idk/testdata/*_logs.txt
+  tags:
+    - shell
+    - aws
+  needs:
+    - job: build amd container fb
+
+run go tests idk 533:
+  extends:
+    - .setup_ssh
+  variables:
+    USERNAME: fb-idk-access
+    PROJECT: test533_${CI_CONCURRENT_ID}
+  stage: test
+  retry: 1
+  script:
+    - echo "Running confluent 5.3.3 test-all"
+    - cd ./idk/
+    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
+    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
+    - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all
+  after_script:
+    - make save-pilosa-logs
+    - make shutdown
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  tags:
+    - shell
+    - aws
+  artifacts:
+    paths:
+      - ./idk/testdata/*_coverage.out
+      - ./idk/testdata/*_report.out
+  needs:
+    - job: build amd container fb
+
+run go tests idk sasl:
+  extends:
+    - .setup_ssh
+  variables:
+    USERNAME: fb-idk-access
+    PROJECT: sasl_${CI_CONCURRENT_ID}
+  stage: test
+  retry: 1
+  script:
+    - echo "Running test-all-kafka-sasl"
+    - cd ./idk/
+    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
+    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
+    - BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all-kafka-sasl
+  after_script:
+    - make save-pilosa-logs
+    - make shutdown
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  tags:
+    - shell
+    - aws
+  artifacts:
+    paths:
+      - ./idk/testdata/*_coverage.out
+      - ./idk/testdata/*_report.out
+  needs:
+    - job: build amd container fb
 
 upload to sonarcloud:
   stage: integration
@@ -164,28 +365,17 @@ upload to sonarcloud:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out -Dsonar.go.tests.reportPaths=test-report*.out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
+    - cd ./idk
+    - ls ./testdata
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=testdata/*coverage.out -Dsonar.go.tests.reportPaths=testdata/*report.out -Dsonar.coverage.exclusions=**/*_test.go -Dsonar.cpd.exclusions=**/*_test.go
   needs:
     - job: run go tests future plg
     - job: run go tests future
     - job: run jest tests
     - job: clustertests
-
-build for linux amd64:
-  stage: build
-  image: golang:$GOVERSION
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
-    - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
-    - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - featurebase_linux_amd64
-      - roaring-migrate_linux_amd64
+    - job: run go tests idk race
+    - job: run go tests idk sasl
+    - job: run go tests idk 533
 
 build for linux arm64:
   stage: build
@@ -377,22 +567,6 @@ package plg for linux arm64:
 
 # end PLG
 
-build amd container fb:
-  stage: build
-  needs:
-    - "build for linux amd64"
-  tags:
-    - shell
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  before_script:
-    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
-  script:
-    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_SLUG}
-    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 -t $tag -f .gitlab/Dockerfile .
-    - docker push $tag
-    - echo Created docker featurebase image with tag "$tag"
-
 build arm container fb:
   stage: build
   needs:
@@ -408,6 +582,128 @@ build arm container fb:
     - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
+
+### start idk builds ###
+# building them all serially because otherwise you get container name conflicts.
+idk build_all:
+  stage: build
+  variables:
+    BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
+  extends:
+    - .setup_ssh
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - cd ./idk/
+    - make docker-build GOOS="linux" GOARCH="amd64" BUILD_CGO=1
+    - make docker-build GOOS="darwin" GOARCH="amd64"
+    - make docker-build GOOS="darwin" GOARCH="arm64"
+  artifacts:
+    paths:
+      - ./idk/build/*
+
+idk build_linux_arm64:
+  stage: build
+  extends:
+    - .setup_ssh
+  tags:
+    - shell-arm64
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - cd ./idk/
+    - make docker-build GOOS="linux" GOARCH="arm64" BUILD_CGO=1 BUILD_NAME="linux-arm64"
+  artifacts:
+    paths:
+      - ./idk/build/*
+
+# building them all serially because otherwise you get container name conflicts.
+# only do containers on default branch
+idk package_docker_all:
+  stage: build
+  extends:
+    - .setup_ssh
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - cd ./idk/
+    - make docker GOOS="linux" GOARCH="amd64"
+    - make docker GOOS="linux" GOARCH="arm64"
+    - make docker GOOS="darwin" GOARCH="amd64"
+    - make docker GOOS="darwin" GOARCH="arm64"
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - make docker-tag-push GOOS="linux" GOARCH="amd64"
+    - make docker-tag-push GOOS="linux" GOARCH="arm64"
+    - make docker-tag-push GOOS="darwin" GOARCH="amd64"
+    - make docker-tag-push GOOS="darwin" GOARCH="arm64"
+  needs:
+    - job: idk build_all
+    - job: idk build_linux_arm64
+
+idk s3 dump:
+  stage: post build
+  extends:
+    - .setup_ssh
+  allow_failure: false
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - aws s3 cp ./idk/build/ s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/ --recursive
+    - aws s3 cp ./idk/build/ s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/_latest/ --recursive
+  needs:
+    - job: idk build_all
+    - job: idk build_linux_arm64
+
+idk s3 dump tag:
+  stage: post build
+  extends:
+    - .setup_ssh
+  variables:
+    PROFILE: "service-fb-ci"
+    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    LOCATION: molecula-artifact-storage/idk/_tags
+  tags:
+    - shell
+  rules:
+    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  script:
+    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $PROFILE
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          dir=idk-${CI_COMMIT_TAG}-${goos}-${goarch}
+          echo "Directory ${dir}"
+          mkdir ${dir}
+          mv ./idk/build/idk-${goos}-${goarch}/molecula-consumer-* ${dir}/
+          tar cvzf ${dir}.tar.gz ${dir}
+          aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
+          aws s3 cp ${dir}.tar.gz s3://${LOCATION}/${CI_COMMIT_TAG}/
+        done
+      done
+  needs:
+    - job: idk build_all
+    - job: idk build_linux_arm64
+### end idk builds ###
 
 # clustertests doesn't run in docker, and requires several things to be set up on the runner to work:
 # 1. Install Go, make sure it's on the path
@@ -502,16 +798,18 @@ smoke test auth:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-auth-smoke-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-    # download datagen for FB-1270 repro test. TODO replace w/ locally built datagen once we merge IDK into FB
-    - aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
-    - chmod +x ./datagen_linux_arm64
+    # download datagen for FB-1270 repro test.
+    - aws s3 cp s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
+    - aws s3 cp s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64 ./
+    - chmod +x ./datagen_linux_arm64 ./featurebase_linux_arm64
   script:
-    - ./qa/scripts/auth-smoke/setup.sh
+    - ./qa/scripts/auth-smoke/setup.sh $CI_COMMIT_BRANCH
     - ./qa/scripts/auth-smoke/test.sh
   after_script:
     - ./qa/scripts/auth-smoke/teardown.sh
   needs:
-    - job: build for linux arm64
+    - job: s3 dump
+    - job: idk s3 dump
   artifacts:
     when: always
     paths:
@@ -559,17 +857,19 @@ smoke test:
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-smoke-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
-    # download datagen for FB-1270 repro test. TODO replace w/ locally built datagen once we merge IDK into FB
-    - aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
-    - chmod +x ./datagen_linux_arm64
+    # download datagen for FB-1270 repro test.
+    - aws s3 cp s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/_latest/idk-linux-arm64/datagen ./datagen_linux_arm64
+    - aws s3 cp s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64 ./
+    - chmod +x ./datagen_linux_arm64 ./featurebase_linux_arm64
   script:
-    - ./qa/scripts/setupSmokeTest.sh
+    - ./qa/scripts/setupSmokeTest.sh $CI_COMMIT_BRANCH
     - ./qa/scripts/testSmokeTest.sh
     - ./qa/scripts/bug_repro_tests.sh
   after_script:
     - ./qa/scripts/teardownSmokeTest.sh
   needs:
-    - job: build for linux arm64
+    - job: s3 dump
+    - job: idk s3 dump
   artifacts:
     when: always
     paths:
@@ -628,19 +928,19 @@ tremor-delete-test:
   script:
     - echo "Start CloudFormation deploy..."
     - >
-        aws cloudformation deploy 
-        --stack-name $CF_STACK_NAME 
-        --template-file ./qa/cft/FeatureBaseClusterCFTTremor.yaml
-        --parameter-overrides
-        FBInstanceCount=$FB_INSTANCE_COUNT 
-        EBSVolumeSize=1200 
-        TestName=$CI_JOB_NAME 
-        TestID=$CI_JOB_ID
-        Name=$CF_VAR_cluster_prefix
-        Prefix=$CF_VAR_cluster_prefix
-        TestCommitSHA=$CI_COMMIT_SHA
-        --capabilities CAPABILITY_NAMED_IAM
-        --profile $PROFILE
+      aws cloudformation deploy 
+      --stack-name $CF_STACK_NAME 
+      --template-file ./qa/cft/FeatureBaseClusterCFTTremor.yaml
+      --parameter-overrides
+      FBInstanceCount=$FB_INSTANCE_COUNT 
+      EBSVolumeSize=1200 
+      TestName=$CI_JOB_NAME 
+      TestID=$CI_JOB_ID
+      Name=$CF_VAR_cluster_prefix
+      Prefix=$CF_VAR_cluster_prefix
+      TestCommitSHA=$CI_COMMIT_SHA
+      --capabilities CAPABILITY_NAMED_IAM
+      --profile $PROFILE
     - echo "CloudFormation deploy done."
     - echo "Start configuring and start featurebase..."
     - ./qa/scripts/setupTremorDeleteCFT.sh $CF_STACK_NAME $PROFILE $REPLICA_COUNT $FB_INSTANCE_COUNT $CI_COMMIT_BRANCH
@@ -660,6 +960,9 @@ tremor-delete-test:
     - echo "Deleting stack after test, stack name = ${CF_STACK_NAME}"
     - aws cloudformation delete-stack --stack-name $CF_STACK_NAME --profile $PROFILE --retain-resources DeploymentEC2Role
     - echo "Delete stack complete!"
+  needs:
+    - job: s3 dump
+    - job: idk s3 dump
 
 samsung-gauntlet:
   stage: gauntlet
@@ -710,13 +1013,18 @@ samsung-gauntlet:
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
+    - aws s3 cp s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64 ./
+    - chmod +x ./featurebase_linux_arm64
   script:
-    - ./qa/scripts/setupSamsungGauntlet.sh
+    - ./qa/scripts/setupSamsungGauntlet.sh $CI_COMMIT_BRANCH
     - ./qa/scripts/testSamsungGauntlet.sh
   after_script:
     - ./qa/scripts/teardownSamsungGauntlet.sh || true # leaving dangling resources is better than dangling ASG instances that can't be terminated
     - export INSTANCE_ID=$(cat instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
+  needs:
+    - job: s3 dump
+    - job: idk s3 dump
 
 backup-restore-gauntlet:
   stage: gauntlet
@@ -767,15 +1075,18 @@ backup-restore-gauntlet:
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
+    - aws s3 cp s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64 ./
+    - chmod +x ./featurebase_linux_arm64
   script:
-    - ./qa/scripts/setupBackupRestoreGauntlet.sh
-    - ./qa/scripts/testBackupRestoreGauntlet.sh
+    - ./qa/scripts/setupBackupRestoreGauntlet.sh $CI_COMMIT_BRANCH
+    - ./qa/scripts/testBackupRestoreGauntlet.sh $CI_COMMIT_BRANCH
   after_script:
     - ./qa/scripts/teardownBackupRestoreGauntlet.sh || true # leaving dangling resources is better than dangling ASG instances that can't be terminated
     - export INSTANCE_ID=$(cat instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
   needs:
-    - build for linux arm64
+    - job: s3 dump
+    - job: idk s3 dump
 
 s3 dump:
   stage: post build
@@ -808,7 +1119,7 @@ s3 dump:
     - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
     - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
     - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_arm64
-    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_arm64        
+    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_arm64
     - aws s3 cp single_node_featurebase_linux_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_linux_amd64
     - aws s3 cp single_node_featurebase_linux_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_linux_amd64
     - aws s3 cp single_node_featurebase_linux_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_linux_arm64
@@ -816,7 +1127,7 @@ s3 dump:
     - aws s3 cp single_node_featurebase_darwin_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_darwin_amd64
     - aws s3 cp single_node_featurebase_darwin_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_amd64
     - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_darwin_arm64
-    - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_arm64  
+    - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_arm64
   needs:
     - job: build for darwin amd64
     - job: build for darwin arm64
@@ -889,15 +1200,18 @@ perf_delete:
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
     - export INSTANCE_ID=$(curl --silent --fail "http://169.254.169.254/latest/meta-data/instance-id" | tee instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --protected-from-scale-in --profile $INFRA_PROFILE
+    - aws s3 cp s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64 ./
+    - chmod +x ./featurebase_linux_arm64
   script:
-    - ./qa/scripts/perf/delete/deleteSetup.sh
-    - ./qa/scripts/perf/delete/deleteTest.sh
+    - ./qa/scripts/perf/delete/deleteSetup.sh $CI_COMMIT_BRANCH
+    - ./qa/scripts/perf/delete/deleteTest.sh $CI_COMMIT_BRANCH
   after_script:
     - ./qa/scripts/perf/delete/deleteTeardown.sh || true
     - export INSTANCE_ID=$(cat instance_id)
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
   needs:
-    - job: build for linux arm64
+    - job: s3 dump
+    - job: idk s3 dump
 
 s3 dump tag:
   stage: post build
@@ -992,4 +1306,6 @@ cleanup_build_job:
     - aws configure set aws_profile $FBCI_PROFILE
     - ./qa/scripts/gitlabCleanupBuild.sh
   when: always
-
+  needs:
+    - job: smoke test
+    - job: smoke test auth

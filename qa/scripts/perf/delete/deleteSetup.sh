@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# To run script: ./deleteSetup.sh
+# To run script: ./deleteSetup.sh <BRANCH_NAME>
 export TF_IN_AUTOMATION=1
+
+BRANCH_NAME=$1
+
+echo "Running tests for branch ${BRANCH_NAME}"
 
 if [ -z ${TF_VAR_cluster_prefix+x} ]; then
     echo "TF_VAR_cluster_prefix is unset";
@@ -75,7 +79,7 @@ then
     exit 1
 fi
 
-setupClusterNodes
+setupClusterNodes $BRANCH_NAME
 
 # verify featurebase running
 echo "Verifying featurebase cluster running..."

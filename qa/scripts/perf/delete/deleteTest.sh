@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# run ./deleteTest.sh <CI_COMMIT_BRANCH_NAME>
+
+CI_COMMIT_BRANCH=$1
+
 # get the first ingest host
 INGESTNODE0=$(cat ./qa/tf/perf/delete/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
 echo "using INGESTNODE0 ${INGESTNODE0}"
@@ -9,7 +13,7 @@ DATANODE0=$(cat ./qa/tf/perf/delete/outputs.json | jq -r '[.data_node_ips][0]["v
 echo "using DATANODE0 ${DATANODE0}"
 
 # download datagen
-aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen datagen
+aws s3 cp s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/_latest/idk-linux-arm64/datagen datagen
 if (( $? != 0 ))
 then
     echo "datagen binary copy failed"

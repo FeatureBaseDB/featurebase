@@ -1,0 +1,16 @@
+[
+    {
+        "name": "int",
+        "path": [
+            "int"
+        ],
+        "type": "int"
+    },
+    {
+        "name": "text",
+        "path": [
+            "text"
+        ],
+        "type": "lookupText"
+    }
+]

@@ -28,9 +28,6 @@ EBS_DEVICE_NAME=""
 # featurebase binary
 FB_BINARY=""
 
-# branch name
-BRANCH_NAME=""
-
 # AWS Profile
 AWS_PROFILE=""
 ifErr() {
@@ -316,6 +313,7 @@ setupIngestNode() {
     echo "setting up ingest node $1 at $2"
     NODEIDX=$1
     NODEIP=$2
+    BRANCH_NAME=$3
 
     executeGeneralNodeConfigCommands $1 $2
 
@@ -323,26 +321,28 @@ setupIngestNode() {
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "pip3 install -U requests"
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "pip3 install -U json"
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${NODEIP} "sudo yum install -y jq"
-    installDatagen $NODEIP
+    installDatagen $NODEIP $BRANCH_NAME
 }
 
 setupDataNodes() {
+    BRANCH_NAME=$1
     cnt=0
     for ip in ${DEPLOYED_DATA_IPS[@]}
     do
         setupDataNode $cnt $ip
-        setupDatadog $ip "featurebase"
+        setupDatadog $ip "featurebase" $BRANCH_NAME
         cnt=$((cnt+1))
     done
 }
 
 setupIngestNodes() {
+    BRANCH_NAME=$1
     cnt=0
     echo "setupIngestNodes: " ${DEPLOYED_INGEST_IPS[@]}
     for ip in ${DEPLOYED_INGEST_IPS[@]}
     do
-        setupIngestNode $cnt $ip
-        setupDatadog $ip "ingest"
+        setupIngestNode $cnt $ip $BRANCH_NAME
+        setupDatadog $ip "ingest" $BRANCH_NAME
         cnt=$((cnt+1))
     done
 }
@@ -365,6 +365,7 @@ generateInitialClusterString() {
 }
 
 setupClusterNodes() {
+    BRANCH_NAME=$1
 
     #data nodes
     generateInitialClusterString
@@ -373,12 +374,12 @@ setupClusterNodes() {
         setupMkCertCA
     fi
 
-    setupDataNodes
+    setupDataNodes $BRANCH_NAME
 
     startDataNodes
 
     #ingest nodes
-    setupIngestNodes
+    setupIngestNodes $BRANCH_NAME
 
 }
 
@@ -453,6 +454,8 @@ EOF
 }
 
 writeDatadogConfigForIngest() {
+    BRANCH_NAME=$1
+
     # general datadog config 
     cat << EOT > datadog.yaml
 api_key: 6ab706d12de9cb46db25a0aabab6a004
@@ -478,6 +481,8 @@ EOT
 }
 
 writeDatadogConfigForFeaturebase() {
+    BRANCH_NAME=$1
+
     # general datadog config 
     cat << EOT > datadog.yaml
 api_key: 6ab706d12de9cb46db25a0aabab6a004
@@ -511,6 +516,7 @@ EOT
 setupDatadog() {
     NODEIP=$1
     NODE_TYPE=$2
+    BRANCH_NAME=$3
 cat << 'EOF' > runDatadog.sh 
 DD_AGENT_MAJOR_VERSION=7 DD_API_KEY=6ab706d12de9cb46db25a0aabab6a004 DD_SITE="datadoghq.com" bash -c "$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script.sh)"
 EOF
@@ -518,10 +524,10 @@ EOF
     if [[ "$NODE_TYPE" == "featurebase" ]]
     then
         echo "writing datadog config for featurebase node: $NODEIP, $NODE_TYPE, $BRANCH_NAME"
-        writeDatadogConfigForFeaturebase
+        writeDatadogConfigForFeaturebase $BRANCH_NAME
     else
         echo "writing datadog config for ingest node: $NODEIP, $NODE_TYPE, $BRANCH_NAME"
-        writeDatadogConfigForIngest
+        writeDatadogConfigForIngest $BRANCH_NAME
     fi 
 
     echo "setting up datadog for $NODE_TYPE node: $NODEIP"
@@ -544,8 +550,9 @@ EOF
 
 installDatagen() {
     INGESTNODE0=$1
+    BRANCH_NAME=$2
     # download datagen
-    aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-arm64/datagen datagen
+    aws s3 cp s3://molecula-artifact-storage/idk/${BRANCH_NAME}/_latest/idk-linux-arm64/datagen datagen
     if (( $? != 0 ))
     then
         echo "datagen binary copy failed"
@@ -597,11 +604,12 @@ installDatagen() {
 # copy datagen to ingest nodes 
 setupProducerNode(){
     IP=$1
+    BRANCH_NAME=$2
 
     # download producer(datagen binary) from S3 
     DATAGEN_BINARY=datagen
     echo "Downloading Datagen binary"
-    aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-amd64/datagen $DATAGEN_BINARY --profile $AWS_PROFILE
+    aws s3 cp s3://molecula-artifact-storage/idk/${BRANCH_NAME}/_latest/idk-linux-amd64/datagen $DATAGEN_BINARY --profile $AWS_PROFILE
 
     mountEBSVolume $IP
     scp -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ${DATAGEN_BINARY} ec2-user@${IP}:
@@ -609,16 +617,17 @@ setupProducerNode(){
     scp -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ./qa/scripts/delete/tremor_keys.yaml ./qa/scripts/delete/runProducer.sh ec2-user@${IP}:
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${IP} "sudo yum install jq htop tmux -y"
     setupKafkaServer ${IP}
-    setupDatadog $IP "ingest"
+    setupDatadog $IP "ingest" $BRANCH_NAME
 }
 
 setupConsumerNode(){
     IP=$1
+    BRANCH_NAME=$2
 
     # download consumer(kafka-static binary) from S3
     KAFKA_STATIC=molecula-consumer-kafka-static
     echo "Downloading Molecular Consumer Kafka Static binary"
-    aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-amd64/molecula-consumer-kafka-static ./$KAFKA_STATIC --profile $AWS_PROFILE
+    aws s3 cp s3://molecula-artifact-storage/idk/${BRANCH_NAME}/_latest/idk-linux-amd64/molecula-consumer-kafka-static ./$KAFKA_STATIC --profile $AWS_PROFILE
 
     mountEBSVolume $IP
     
@@ -627,5 +636,5 @@ setupConsumerNode(){
     scp -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ${KAFKA_STATIC} ec2-user@${IP}:
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${IP} "chmod ugo+x /home/ec2-user/${KAFKA_STATIC}"
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${IP} "sudo yum install jq htop tmux nc -y"
-    setupDatadog $IP "ingest"
+    setupDatadog $IP "ingest" $BRANCH_NAME
 }

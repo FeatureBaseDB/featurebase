@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# To run script: ./setupBackupRestoreGauntlet.sh
+# To run script: ./setupBackupRestoreGauntlet.sh <BRANCH_NAME>
 export TF_IN_AUTOMATION=1
+
+BRANCH_NAME=$1
+
+echo "Running tests for branch ${BRANCH_NAME}"
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $SCRIPT_DIR/utilCluster.sh
@@ -68,7 +72,7 @@ then
     exit 1
 fi
 
-setupClusterNodes
+setupClusterNodes $BRANCH_NAME
 
 # verify featurebase running
 echo "Verifying featurebase cluster running..."

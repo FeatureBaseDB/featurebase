@@ -1,0 +1,4 @@
+PROFILE    = <replace with local AWS profile name>
+AWS_REGION = <replace with region where image should live>
+ECR_URL    = <replace with ECR URL for the account>
+ECR_REPO   = <replace with ECR repo name>

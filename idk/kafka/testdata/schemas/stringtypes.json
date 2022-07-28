@@ -1,0 +1,10 @@
+{
+     "type": "record",
+     "namespace": "com.example",
+     "name": "FullName",
+     "fields": [
+	 { "name": "first", "type": {"name": "firsts", "type": "enum", "symbols": ["blah", "bleh"]} },
+	 { "name": "last", "type": "bytes" },
+	 {"name": "middle", "type": {"type": "fixed", "name": "middlefixed", "size": 9}}
+     ]
+}

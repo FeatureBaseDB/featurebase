@@ -1,6 +1,11 @@
 #!/bin/bash
 
-source ./qa/scripts/utilCluster.sh
+BRANCH_NAME=$1 
+
+echo "Running tests for branch ${BRANCH_NAME}"
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source $SCRIPT_DIR/utilCluster.sh
 
 # get the first ingest host
 INGESTNODE0=$(cat ./qa/tf/gauntlet/backuprestore/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
@@ -18,7 +23,7 @@ for host in ${HOSTS[@]}; do
     echo $host;
 done
 
-installDatagen $INGESTNODE0
+installDatagen $INGESTNODE0 $BRANCH_NAME
 
 # copy the tests over to ingest node
 scp -r -i ~/.ssh/gitlab-featurebase-ci.pem ./qa/scripts/backupRestoreTest.sh ec2-user@${INGESTNODE0}:/data

@@ -2,8 +2,13 @@
 set -e 
 set +x 
 
-# To run script: ./setupTremorDeleteTest.sh
+# To run script: ./setupTremorDeleteTest.sh $BRANCH_NAME
 export TF_IN_AUTOMATION=1
+
+# branch name
+BRANCH_NAME=$1
+
+echo "Running tests for branch ${BRANCH_NAME}"
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $SCRIPT_DIR/utilCluster.sh
@@ -14,16 +19,16 @@ EBS_DEVICE_NAME=nvme
 # featurebase architecture
 FB_BINARY=featurebase_linux_amd64
 echo "Downloading FeatureBase binary"
-aws s3 cp s3://molecula-artifact-storage/featurebase/master/_latest/featurebase_linux_amd64 ./ --profile=$TF_VAR_profile
+aws s3 cp s3://molecula-artifact-storage/featurebase/${BRANCH_NAME}/_latest/featurebase_linux_amd64 ./ --profile=$TF_VAR_profile
 
 # datagen binary
 DATAGEN_BINARY=datagen
 echo "Downloading Datagen binary"
-aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-amd64/datagen $DATAGEN_BINARY --profile=$TF_VAR_profile
+aws s3 cp s3://molecula-artifact-storage/idk/${BRANCH_NAME}/_latest/idk-linux-amd64/datagen $DATAGEN_BINARY --profile=$TF_VAR_profile
 
 KAFKA_STATIC=molecula-consumer-kafka-static
 echo "Downloading Molecular Consumer Kafka Static binary"
-aws s3 cp s3://molecula-artifact-storage/idk/master/_latest/idk-linux-amd64/molecula-consumer-kafka-static ./$KAFKA_STATIC --profile=$TF_VAR_profile
+aws s3 cp s3://molecula-artifact-storage/idk/${BRANCH_NAME}/_latest/idk-linux-amd64/molecula-consumer-kafka-static ./$KAFKA_STATIC --profile=$TF_VAR_profile
 
 # get the first ingest host
 INGESTNODE0=$(cat ./qa/tf/ci/deletetest/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
@@ -73,7 +78,7 @@ then
     exit 1
 fi
 
-setupClusterNodes
+setupClusterNodes $BRANCH_NAME
 rm $FB_BINARY
 
 # verify featurebase running
