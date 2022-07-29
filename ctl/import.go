@@ -41,6 +41,9 @@ type ImportCommand struct { // nolint: maligned
 	// Clear clears the import data as opposed to setting it.
 	Clear bool
 
+	// RowColMode indicates whether to read csv values as row id, col id or use default behavior.
+	RowColMode bool
+
 	// Filenames to import from.
 	Paths []string `json:"paths"`
 
@@ -331,26 +334,33 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys, parse
 			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
+		var rowIdx, colIdx uint32
+		if cmd.RowColMode {
+			colIdx = 1
+		} else {
+			rowIdx = 1
+		}
+
 		// Parse column id.
 		if useColumnKeys {
-			req.ColumnKeys = append(req.ColumnKeys, record[0])
-		} else if columnID, err := strconv.ParseUint(record[0], 10, 64); err == nil {
+			req.ColumnKeys = append(req.ColumnKeys, record[colIdx])
+		} else if columnID, err := strconv.ParseUint(record[colIdx], 10, 64); err == nil {
 			req.ColumnIDs = append(req.ColumnIDs, columnID)
 		} else {
-			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[0])
+			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[colIdx])
 		}
 
 		// Parse value.
 		if parseAsFloat {
-			value, err := strconv.ParseFloat(record[1], 64)
+			value, err := strconv.ParseFloat(record[rowIdx], 64)
 			if err != nil {
-				return errors.Wrapf(err, "parseing value '%s' as float", record[1])
+				return errors.Wrapf(err, "parsing value '%s' as float", record[rowIdx])
 			}
 			req.FloatValues = append(req.FloatValues, value)
 		} else {
-			value, err := strconv.ParseInt(record[1], 10, 64)
+			value, err := strconv.ParseInt(record[rowIdx], 10, 64)
 			if err != nil {
-				return errors.Wrapf(err, "invalid value on row %d: %q", rnum, record[1])
+				return errors.Wrapf(err, "invalid value on row %d: %q", rnum, record[rowIdx])
 			}
 			req.Values = append(req.Values, value)
 		}

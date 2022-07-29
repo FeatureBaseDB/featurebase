@@ -71,6 +71,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.StringVarP(&Importer.Index, "index", "i", "", "FeatureBase index to import into.")
 	flags.StringVarP(&Importer.Field, "field", "f", "", "Field to import into.")
 	flags.BoolVar(&Importer.IndexOptions.Keys, "index-keys", false, "Specify keys=true when creating an index")
+	flags.BoolVar(&Importer.RowColMode, "row-col-mode", false, "Specify row-col-mode=true to read csv files as <row id>,<col id>")
 	flags.BoolVar(&Importer.FieldOptions.Keys, "field-keys", false, "Specify keys=true when creating a field")
 	flags.StringVar(&Importer.FieldOptions.Type, "field-type", "", "Specify the field type when creating a field. One of: set, int, decimal, time, bool, mutex")
 	flags.Var(&fieldMin, "field-min", "Specify the minimum for an int field on creation") // TODO: noting that decimal field min/max are not supported here.
