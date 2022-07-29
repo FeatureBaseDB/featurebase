@@ -458,6 +458,7 @@ func (m *Command) SetupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
+	m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
 	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
 
 	serverOptions := []pilosa.ServerOption{
@@ -635,12 +636,12 @@ func (m *Command) setupQueryLogger() error {
 	var err error
 
 	if m.Config.Auth.QueryLogPath == "" {
-		f, err = logger.NewFileWriterMode("queries/query.log", 0600)
+		f, err = logger.NewFileWriterMode("queries/query.log", 0o600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
 	} else {
-		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 0600)
+		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 0o600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}

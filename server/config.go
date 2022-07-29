@@ -364,7 +364,7 @@ func NewConfig() *Config {
 	// Cluster config.
 	c.Cluster.Name = "cluster0"
 	c.Cluster.ReplicaN = 1
-	c.Cluster.LongQueryTime = toml.Duration(-time.Minute) //TODO remove this once cluster.longQueryTime is fully deprecated
+	c.Cluster.LongQueryTime = toml.Duration(-time.Minute) // TODO remove this once cluster.longQueryTime is fully deprecated
 	c.Cluster.PartitionToNodeAssignment = PartitionToNodeJmp
 
 	// AntiEntropy config.
@@ -701,7 +701,6 @@ func (c *Config) ValidateAuth() (errors []error) {
 }
 
 func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
-
 	var p authz.GroupPermissions
 	if err := p.ReadPermissionsFile(permsFile); err != nil {
 		return append(errors, err)
@@ -737,14 +736,12 @@ func (c *Config) ValidatePermissions(permsFile io.Reader) (errors []error) {
 
 	if p.Admin == "" {
 		errors = append(errors, fmt.Errorf("empty string for admin in permissions file: %s", c.Auth.PermissionsFile))
-
 	}
 
 	return errors
 }
 
 func (c *Config) ValidatePermissionsFile() (err error) {
-
 	if c.Auth.PermissionsFile == "" {
 		return fmt.Errorf("empty string for auth config permissions file")
 	}
@@ -757,7 +754,6 @@ func (c *Config) ValidatePermissionsFile() (err error) {
 }
 
 func (c *Config) MustValidateAuth() {
-
 	errorsAuth := c.ValidateAuth()
 	if len(errorsAuth) > 0 {
 		for _, e := range errorsAuth {

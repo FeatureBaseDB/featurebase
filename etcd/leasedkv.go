@@ -168,7 +168,6 @@ func (l *leasedKV) Stop() {
 		// So this is a low-interest message usually.
 		l.e.logger.Debugf("revoking lease during shutdown: %v", err)
 	}
-
 }
 
 // Set will change the specific value for this key.
@@ -183,7 +182,6 @@ func (l *leasedKV) Set(ctx context.Context, value string) error {
 		return err
 	})
 	// l.e.logger.Printf("set key %q on %q value %q: err %v", l.key, l.e.options.Name, value, err)
-
 	if err != nil {
 		return errors.Wrapf(err, "creating key %s with value [%s]", l.key, l.value)
 	}

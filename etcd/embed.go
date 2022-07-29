@@ -48,7 +48,10 @@ type Options struct {
 	LPeerSocket   []*net.TCPListener
 	LClientSocket []*net.TCPListener
 
-	UnsafeNoFsync bool `toml:"no-fsync"`
+	UnsafeNoFsync bool   `toml:"no-fsync"`
+	Cluster       string `toml:"static-cluster"`
+	EtcdHosts     string `toml:"etcd-hosts"`
+	Id            string
 }
 
 var (
@@ -68,9 +71,7 @@ const (
 	shardPrefix     = "/shard/"
 )
 
-var (
-	errEtcdShuttingDown = errors.New("etcd shutting down")
-)
+var errEtcdShuttingDown = errors.New("etcd shutting down")
 
 // nodeData is an internal tracker of the data we're keeping about
 // nodes in etcd, which we update from data collected either directly
@@ -90,13 +91,108 @@ type nodeData struct {
 	node      *disco.Node
 }
 
+// EtcdServicer provides access to either an embeded etcd server or an external host
+type EtcdServicer interface {
+	Shutdown()
+	Peers() []*disco.Peer
+	IsLeader() bool
+	Leader() *disco.Peer
+	ID() string
+	Startup(ctx context.Context, state disco.InitialClusterState) (disco.InitialClusterState, error)
+	NewClient() (*clientv3.Client, error)
+}
+type EmbeddedEtcd struct {
+	e      *embed.Etcd
+	parent *Etcd
+}
+
+func NewEmbeddedEtcd(p *Etcd, opts *embed.Config) (*EmbeddedEtcd, error) {
+	e, err := embed.StartEtcd(opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "starting etcd")
+	}
+	this := &EmbeddedEtcd{}
+	this.parent = p
+	this.e = e
+	p.e = e
+	return this, nil
+}
+
+func (e *EmbeddedEtcd) ID() string {
+	if e.e == nil || e.e.Server == nil {
+		return ""
+	}
+	return e.e.Server.ID().String()
+}
+
+func (e *EmbeddedEtcd) Shutdown() {
+	if e.e != nil {
+		e.e.Close()
+		<-e.e.Server.StopNotify()
+	}
+}
+
+func (e *EmbeddedEtcd) Peers() []*disco.Peer {
+	var peers []*disco.Peer
+	for _, member := range e.e.Server.Cluster().Members() {
+		peers = append(peers, &disco.Peer{ID: member.ID.String(), URL: member.PickPeerURL()})
+	}
+	return peers
+}
+
+func (e *EmbeddedEtcd) IsLeader() bool {
+	if e.e == nil || e.e.Server == nil {
+		return false
+	}
+	return e.e.Server.Leader() == e.e.Server.ID()
+}
+
+func (e *EmbeddedEtcd) Leader() *disco.Peer {
+	id := e.e.Server.Leader()
+	peer := &disco.Peer{ID: id.String()}
+
+	if m := e.e.Server.Cluster().Member(id); m != nil {
+		peer.URL = m.PickPeerURL()
+	}
+
+	return peer
+}
+
+func (e *EmbeddedEtcd) Startup(ctx context.Context, state disco.InitialClusterState) (disco.InitialClusterState, error) {
+	select {
+	case <-ctx.Done():
+		return state, ctx.Err()
+
+	case err := <-e.e.Err():
+		return state, err
+
+	case <-e.e.Server.ReadyNotify():
+		members := e.e.Server.Cluster().Members()
+		e.parent.nodeMu.Lock()
+		defer e.parent.nodeMu.Unlock()
+		// mark everything unknown so we show a state for nodes we haven't
+		// heard from yet.
+		for _, member := range members {
+			peerID := member.ID.String()
+			_ = e.parent.seeNode(peerID)
+		}
+		e.parent.nodesDirty = true
+		return state, e.parent.startHeartbeatAndWatcher(ctx)
+	}
+}
+
+func (e *EmbeddedEtcd) NewClient() (*clientv3.Client, error) {
+	return v3client.New(e.e.Server), nil
+}
+
 type Etcd struct {
 	options  Options
 	replicas int
 
-	e     *embed.Etcd
-	cli   *clientv3.Client
-	cliMu sync.Mutex
+	e       *embed.Etcd // TODO (twg) factor out
+	service EtcdServicer
+	cli     *clientv3.Client
+	cliMu   sync.Mutex
 
 	heartbeatLeasedKV *leasedKV
 
@@ -149,10 +245,7 @@ func (e *Etcd) Close() error {
 		e.childCancel()
 	}
 	// shut down the server, if we have one.
-	if e.e != nil {
-		e.e.Close()
-		<-e.e.Server.StopNotify()
-	}
+	e.service.Shutdown()
 	// shut down the client, if we have one. if something's still
 	// using it, we anticipate the client failing its current call,
 	// and any retry will be checking for the child context being
@@ -178,7 +271,7 @@ func (e *Etcd) newClient(cli *clientv3.Client) *clientv3.Client {
 		return cli
 	}
 	_ = cli.Close()
-	e.cli = v3client.New(e.e.Server)
+	e.cli, _ = e.service.NewClient()
 	return e.cli
 }
 
@@ -282,7 +375,7 @@ func (e *Etcd) parseOptions() (*embed.Config, error) {
 
 			monitor.InitErrorMonitor(e.version)
 			e.logger.Infof("Initializing Monitor: Capturing usage metrics")
-			//check for multiple nodes in the cluster and error if present
+			// check for multiple nodes in the cluster and error if present
 			nodes := strings.Split(e.options.InitCluster, ",")
 			if len(nodes) > 1 {
 				return nil, fmt.Errorf("multiple cluster nodes detected - this version of FeatureBase only supports single node. %+v", e.options.InitCluster)
@@ -324,47 +417,37 @@ func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err erro
 	state := disco.InitialClusterState(opts.ClusterState)
 	// create a context that can be used for our watch processes, etcetera.
 	e.childContext, e.childCancel = context.WithCancel(context.Background())
-
-	e.e, err = embed.StartEtcd(opts)
-	if err != nil {
-		return state, errors.Wrap(err, "starting etcd")
-	}
-	// If we are returning an error, the caller won't be shutting us down
-	// later, so we have to stop the server ourselves.
-	defer func() {
+	if e.options.EtcdHosts != "" {
+		e.service, err = NewExternalEtcd(e, e.options)
 		if err != nil {
-			// shut down everything on our way out.
-			e.Close()
+			return state, errors.Wrap(err, "connecting etcd")
 		}
-	}()
-	e.cli = v3client.New(e.e.Server)
+		e.logger.Infof("using external etcd %v with fixed fb cluster %v", e.options.EtcdHosts, e.options.Cluster)
+	} else {
 
-	select {
-	case <-ctx.Done():
-		return state, ctx.Err()
-
-	case err := <-e.e.Err():
-		return state, err
-
-	case <-e.e.Server.ReadyNotify():
-		members := e.e.Server.Cluster().Members()
-		e.nodeMu.Lock()
-		defer e.nodeMu.Unlock()
-		// mark everything unknown so we show a state for nodes we haven't
-		// heard from yet.
-		for _, member := range members {
-			peerID := member.ID.String()
-			_ = e.seeNode(peerID)
+		e.service, err = NewEmbeddedEtcd(e, opts)
+		if err != nil {
+			return state, errors.Wrap(err, "starting etcd")
 		}
-		e.nodesDirty = true
-		return state, e.startHeartbeatAndWatcher(ctx)
+		// If we are returning an error, the caller won't be shutting us down
+		// later, so we have to stop the server ourselves.
+		defer func() {
+			if err != nil {
+				// shut down everything on our way out.
+				e.Close()
+			}
+		}()
 	}
+
+	e.cli, _ = e.service.NewClient()
+
+	return e.service.Startup(ctx, state)
 }
 
 // startHeartbeatAndWatcher spins up the heartbeat, and also a background
 // watcher that watches for changes to events we care about.
 func (e *Etcd) startHeartbeatAndWatcher(ctx context.Context) error {
-	key := heartbeatPrefix + e.e.Server.ID().String()
+	key := heartbeatPrefix + e.service.ID()
 	e.heartbeatLeasedKV = newLeasedKV(e, e.childContext, key, e.options.HeartbeatTTL)
 
 	if err := e.heartbeatLeasedKV.Start(string(disco.NodeStateStarting)); err != nil {
@@ -383,36 +466,19 @@ func (e *Etcd) SetState(ctx context.Context, state disco.NodeState) (err error) 
 }
 
 func (e *Etcd) ID() string {
-	if e.e == nil || e.e.Server == nil {
-		return ""
-	}
-	return e.e.Server.ID().String()
+	return e.service.ID()
 }
 
 func (e *Etcd) Peers() []*disco.Peer {
-	var peers []*disco.Peer
-	for _, member := range e.e.Server.Cluster().Members() {
-		peers = append(peers, &disco.Peer{ID: member.ID.String(), URL: member.PickPeerURL()})
-	}
-	return peers
+	return e.service.Peers()
 }
 
 func (e *Etcd) IsLeader() bool {
-	if e.e == nil || e.e.Server == nil {
-		return false
-	}
-	return e.e.Server.Leader() == e.e.Server.ID()
+	return e.service.IsLeader()
 }
 
 func (e *Etcd) Leader() *disco.Peer {
-	id := e.e.Server.Leader()
-	peer := &disco.Peer{ID: id.String()}
-
-	if m := e.e.Server.Cluster().Member(id); m != nil {
-		peer.URL = m.PickPeerURL()
-	}
-
-	return peer
+	return e.service.Leader()
 }
 
 func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err error) {
@@ -737,7 +803,7 @@ func (e *Etcd) SetMetadata(ctx context.Context, node *disco.Node) error {
 		return errors.Wrap(err, "marshaling json metadata")
 	}
 	err = e.putKey(ctx, path.Join(metadataPrefix,
-		e.e.Server.ID().String()),
+		e.service.ID()),
 		string(data),
 	)
 	if err != nil {
@@ -1011,7 +1077,7 @@ func (e *Etcd) Shards(ctx context.Context, index, field string) ([][]byte, error
 
 // SetShards implements the Sharder interface.
 func (e *Etcd) SetShards(ctx context.Context, index, field string, shards []byte) error {
-	key := path.Join(shardPrefix, index, field, e.e.Server.ID().String())
+	key := path.Join(shardPrefix, index, field, e.service.ID())
 
 	op := clientv3.OpPut(key, "")
 	op.WithValueBytes(shards)
