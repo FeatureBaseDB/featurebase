@@ -482,10 +482,12 @@ func (e *Etcd) Leader() *disco.Peer {
 }
 
 func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err error) {
-	if e.e == nil {
-		return disco.ClusterStateUnknown, nil
+	if len(e.options.EtcdHosts) == 0 {
+		// only valid if not in external etcd mode
+		if e.e == nil {
+			return disco.ClusterStateUnknown, nil
+		}
 	}
-
 	var (
 		heartbeats int = 0
 		starting   bool
