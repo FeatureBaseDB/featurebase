@@ -2,6 +2,8 @@ module github.com/molecula/featurebase/v3
 
 replace github.com/go-avro/avro => github.com/pilosa/avro v0.0.0-20200626214113-bc1bf9fd41c1
 
+replace google.golang.org/grpc => google.golang.org/grpc v1.38.0
+
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20220409005548-0153238b886a
 	github.com/DataDog/datadog-go v4.8.3+incompatible
@@ -12,7 +14,7 @@ require (
 	github.com/benbjohnson/immutable v0.3.0
 	github.com/buger/jsonparser v1.1.1
 	github.com/cespare/xxhash v1.1.0
-	github.com/confluentinc/confluent-kafka-go v1.9.0
+	github.com/confluentinc/confluent-kafka-go v1.9.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/denisenkom/go-mssqldb v0.11.0
 	github.com/felixge/fgprof v0.9.2
@@ -62,9 +64,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220608161450-d0670ef3b1eb
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
-	google.golang.org/grpc v1.38.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.38.1
-	gopkg.in/avro.v0 v0.0.0-20171217001914-a730b5802183 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
@@ -75,6 +75,7 @@ require (
 require (
 	github.com/jaffee/commandeer v0.5.0
 	github.com/linkedin/goavro/v2 v2.11.1
+	google.golang.org/grpc v1.46.0
 )
 
 require (
@@ -155,7 +156,7 @@ require (
 	golang.org/x/sys v0.0.0-20220227234510-4e6760a101f9 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c // indirect
+	google.golang.org/genproto v0.0.0-20220503193339-ba3ae3f07e29 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect

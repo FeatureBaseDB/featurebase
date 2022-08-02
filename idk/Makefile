@@ -190,7 +190,7 @@ startup: start-all
 
 shutdown:
 	$(DOCKER_COMPOSE) down -v --remove-orphans
-	rm .pulled
+	rm -f .pulled
 
 test-all: testenv
 	$(MAKE) startup
