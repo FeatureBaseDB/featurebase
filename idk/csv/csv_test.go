@@ -310,8 +310,8 @@ func testDirTree(tree string) (string, error) {
 func TestVariousOORValues(t *testing.T) {
 	file := `
 id__ID,s__String_F_YMDH,ts__Timestamp_s_2006-01-02 15:04:05.999,price__Decimal_2,age__Int_1_120
-0,a,1832-01-03 08:00:00.000,0.0,1
-1,b,1700-01-03 08:00:00.000,5.44,35
+0,a,0000-01-03 08:00:00.000,0.0,1
+1,b,9999-12-31 23:59:60.999,5.44,35
 2,b,2019-50-03 08:00:00.000,5.44,120
 3,b,2019-01-50 08:00:00.000,5.44,120
 4,b,2019-01-03 50:00:00.000,5.44,120
@@ -328,7 +328,7 @@ id__ID,s__String_F_YMDH,ts__Timestamp_s_2006-01-02 15:04:05.999,price__Decimal_2
 	name := writeTempFile(t, file)
 
 	checker := make(map[string]interface{})
-	checker["ts"] = []interface{}{nil, nil, nil, nil, nil, nil, nil, "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", nil, "2019-04-03T00:00:00Z"}
+	checker["ts"] = []interface{}{nil, nil, nil, nil, nil, nil, nil, "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "1500-04-03T00:00:00Z", "2019-04-03T00:00:00Z"}
 	checker["age"] = []interface{}{1, 35, 120, 120, 120, nil, 120, 1, 1, 100, nil, nil, nil, 100}
 	checker["price"] = []interface{}{0.0, 5.44, 5.44, 5.44, 5.44, 5.44, 5.44, 123.12, -1.0, nil, 2.34, 3.44, nil, 3.44}
 
@@ -410,6 +410,133 @@ id__ID,s__String_F_YMDH,ts__Timestamp_s_2006-01-02 15:04:05.999,price__Decimal_2
 			default:
 				t.Errorf("unknown type: %T", exp)
 			}
+		}
+	}
+
+}
+
+type TimestampTestCase struct {
+	fieldName string
+	file      string
+	expect    interface{}
+}
+
+// Test Time Layouts
+func TestTimeLayouts(t *testing.T) {
+	testCases := []TimestampTestCase{
+		{
+			fieldName: "ts1",
+			file: `
+id__ID,s__String_F_YMDH,ts1__Timestamp_s_2006-01-02 15:04:05.999_2030-01-02 15:04:05.999_s
+0,a,99221100
+
+`[1:],
+			expect: []interface{}{"2033-02-24T00:29:05Z"},
+		},
+		{
+			fieldName: "ts-nano-min",
+			file: `
+id__ID,s__String_F_YMDH,ts-nano-min__Timestamp_ns_2006-01-02T15:04:05.999999999Z_1833-11-24T17:31:44.01Z_s
+0,a,1
+1,b,-1
+`[1:],
+			expect: []interface{}{"1833-11-24T17:31:45.01Z", nil},
+		},
+		{
+			fieldName: "ts-nano-max",
+			file: `
+id__ID,s__String_F_YMDH,ts-nano-max__Timestamp_ns_2006-01-02T15:04:05.999999999Z_2106-02-07T06:28:16Z_ns
+0,a,1
+1,b,-1000001
+`[1:],
+			expect: []interface{}{nil, "2106-02-07T06:28:15.998999999Z"},
+		},
+		{
+			fieldName: "ts-sec-min",
+			file: `
+id__ID,s__String_F_YMDH,ts-sec-min__Timestamp_s_2006-01-02T15:04:05.999999999Z_0001-01-01T00:00:01Z_ms
+0,a,1001
+1,b,-1001
+`[1:],
+			expect: []interface{}{"0001-01-01T00:00:02Z", nil},
+		},
+		{
+			fieldName: "ts-ms-max",
+			file: `
+id__ID,s__String_F_YMDH,ts-ms-max__Timestamp_ms_2006-01-02T15:04:05.999999999Z_9999-12-31T23:59:59Z_us
+0,a,1001
+1,b,-1001
+
+`[1:],
+			expect: []interface{}{nil, "9999-12-31T23:59:58.999Z"},
+		},
+		{
+			fieldName: "gran-conversion",
+			file: `
+id__ID,s__String_F_YMDH,gran-conversion__Timestamp_ns_2006-01-02T15:04:05.999999999Z_2000-02-07T06:28:16Z_s
+0,a,10000000000
+1,b,-1001
+
+`[1:],
+			expect: []interface{}{nil, "2000-02-07T06:11:35Z"},
+		},
+	}
+
+	for _, tc := range testCases {
+		m := newMainOORFactory(t, tc.file, false, false, true)
+		testTimestampRunner(t, m, tc)
+	}
+}
+
+func testTimestampRunner(t *testing.T, m *Main, testCase TimestampTestCase) {
+	defer func() {
+		if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
+			t.Logf("deleting test index: %v", err)
+		}
+	}()
+
+	err := m.Run()
+	if err != nil {
+		t.Fatalf("running: %v", err)
+	}
+
+	pql := fmt.Sprintf("Extract(All(), Rows(%s))", testCase.fieldName)
+
+	eResp, err := idktest.DoExtractQuery(pql, m.Index)
+	if err != nil {
+		t.Fatal("doing extract: ", err)
+	}
+	if eResp.Results[0].Columns == nil {
+		t.Fatal("no results: ", err)
+	}
+
+	for i, item := range eResp.Results[0].Columns {
+		check := testCase.expect.([]interface{})
+		switch exp := check[i].(type) {
+		case nil:
+			if item.Rows[0] != nil {
+				t.Errorf("expected nil, got %+v", item.Rows[0])
+			}
+		case string:
+			if item.Rows[0] != exp {
+				t.Errorf("expected %s, got %+v", exp, item.Rows[0])
+			}
+		case int:
+			vAsInt := int(item.Rows[0].(float64))
+			if vAsInt != exp {
+				t.Errorf("expected %d, got %+v", exp, item.Rows[0])
+			} else {
+				expAsFloat := float64(exp)
+				if item.Rows[0] != expAsFloat {
+					t.Errorf("expected %f, got %+v", expAsFloat, item.Rows[0])
+				}
+			}
+		case float64:
+			if item.Rows[0] != exp {
+				t.Errorf("expected %f, got %+v", exp, item.Rows[0])
+			}
+		default:
+			t.Errorf("unknown type: %T", exp)
 		}
 	}
 
@@ -502,22 +629,22 @@ id__ID,negneg__Int_-10_-5,negpos__Int_-10_10,pospos__Int_5_10,negzero__Int_-10_0
 // Test that out of range timestamp values are ingested as nil when AllowTimestampOutOfRange is true.
 func TestTimestampOOR(t *testing.T) {
 	file := `
-id__ID,ts1__Timestamp_s_2006-01-02 15:04:05.999,ts2__Timestamp_s_2006-01-02T15:04:05Z07:00_2261-12-31T15:04:05Z_h,ts3__Timestamp_s_2006-01-02T15:04:05Z07:00_1679-12-31T15:04:05Z_h,ts4__Timestamp_s_2006-01-02 15:04:05.999
-0,1833-01-03 08:00:00.000,2431,-19960,2009-11-24 17:31:44.000
-1,1833-11-24 17:31:44.000,2433,-19955,1800-11-24 17:31:44.000
-2,1833-11-25 17:31:44.000,9999,0,2011-11-25 17:31:44.000
-3,2106-02-06 06:28:16.000,0,-99999,2008-02-06 06:28:16.000
-4,2106-02-07 06:28:16.000,9999,-99999,1800-02-07 06:28:16.000
-5,2106-02-08 06:28:16.000,99999999999999999999999,-9999999999999999999999999,2012-02-07 06:28:16.000
+id__ID,ts1__Timestamp_ns_2006-01-02 15:04:05.999,ts2__Timestamp_s_2006-01-02T15:04:05Z07:00_9998-12-31T15:04:05Z_h,ts3__Timestamp_s_2006-01-02T15:04:05Z07:00_0002-12-31T15:04:05Z_h,ts4__Timestamp_s_2006-01-02T15:04:05.999Z
+0,1833-01-03 08:00:00.000,8500,8500,0001-01-01T00:00:00Z
+1,1833-11-24 17:31:44.000,8769,-8500,0001-01-01T00:00:01Z
+2,1833-11-25 17:31:44.000,-99991,0,0001-01-01T00:00:02Z
+3,2106-02-06 06:28:16.000,0,-99995,9999-12-31T23:59:58Z
+4,2106-02-07 06:28:16.000,9999,-99999,9999-12-31T23:59:59Z
+5,2106-02-08 06:28:16.000,99999999999999999999999,-9999999999999999999999999,9999-12-31T23:59:60Z
 `[1:]
 
 	checker := make(map[string]interface{})
 	// should import nil if timestamp val is out of range
 	checker["ts1"] = []interface{}{nil, "1833-11-24T17:31:44Z", "1833-11-25T17:31:44Z", "2106-02-06T06:28:16Z", "2106-02-07T06:28:16Z", nil}
 	// should import nil if custom epoch + value overflows
-	checker["ts2"] = []interface{}{"2262-04-11T22:04:05Z", nil, nil, "2261-12-31T15:04:05Z", nil, nil}
-	checker["ts3"] = []interface{}{nil, "1677-09-21T04:04:05Z", "1679-12-31T15:04:05Z", nil, nil, nil}
-	checker["ts4"] = []interface{}{"2009-11-24T17:31:44Z", nil, "2011-11-25T17:31:44Z", "2008-02-06T06:28:16Z", nil, "2012-02-07T06:28:16Z"}
+	checker["ts2"] = []interface{}{"9999-12-20T19:04:05Z", nil, "9987-08-05T08:04:05Z", "9998-12-31T15:04:05Z", nil, nil}
+	checker["ts3"] = []interface{}{"0003-12-20T19:04:05Z", "0002-01-11T11:04:05Z", "0002-12-31T15:04:05Z", nil, nil, nil}
+	checker["ts4"] = []interface{}{nil, "0001-01-01T00:00:01Z", "0001-01-01T00:00:02Z", "9999-12-31T23:59:58Z", "9999-12-31T23:59:59Z", nil}
 	batchSizes := []int{3, 1, 4, 10}
 	for _, bsize := range batchSizes {
 
@@ -580,13 +707,13 @@ func TestFailureConditions(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		{name: "too small", csv: `id__ID,ts1__Timestamp_s_2006-01-02T15:04:05Z07:00_1600-12-31T15:04:05Z_h
+		{name: "too small", csv: `id__ID,ts1__Timestamp_s_2006-01-02T15:04:05Z07:00_0000-01-01T00:00:00Z_h
 0,0
 `, fail: true, intOutOfRange: true, timestampOutOfRange: true, decimalOutOfRange: true},
 		{name: "just right", csv: `id__ID,ts1__Timestamp_s_2006-01-02T15:04:05Z07:00_2200-12-31T15:04:05Z_h
 0,0
 `, fail: false, intOutOfRange: true, timestampOutOfRange: true, decimalOutOfRange: true},
-		{name: "too big", csv: `id__ID,ts1__Timestamp_s_2006-01-02T15:04:05Z07:00_2262-12-31T15:04:05Z_h
+		{name: "too big", csv: `id__ID,ts1__Timestamp_s_2006-01-02T15:04:05Z07:00_9999-12-31T23:59:60Z_h
 0,0
 `, fail: true, intOutOfRange: true, timestampOutOfRange: true, decimalOutOfRange: true},
 		{name: "intOutOfRange not allowed", csv: `id__ID,pospos__Int_5_10
@@ -596,9 +723,9 @@ func TestFailureConditions(t *testing.T) {
 0,11
 `, fail: true, intOutOfRange: false, timestampOutOfRange: true, decimalOutOfRange: true},
 		{name: "timestampOutOfRange not allowed", csv: `id__ID,ts1__Timestamp_s_2006-01-02 15:04:05.999
-0,1833-01-03 08:00:00.000
+0,-0001-01-03 08:00:00.000
 `, fail: true, intOutOfRange: true, timestampOutOfRange: false, decimalOutOfRange: true},
-		{name: "timestampOutOfRange not allowed-2", csv: `id__ID,ts2__Timestamp_s_2006-01-02T15:04:05Z07:00_2261-12-31T15:04:05Z_h
+		{name: "timestampOutOfRange not allowed-2", csv: `id__ID,ts2__Timestamp_s_2006-01-02T15:04:05Z07:00_9999-12-31T23:59:59Z_h
 0,2433
 `, fail: true, intOutOfRange: true, timestampOutOfRange: false, decimalOutOfRange: true},
 		{name: "decimalOutOfRange not allowed", csv: `id__ID,price__Decimal_2

@@ -315,6 +315,13 @@ func (b BoolField) PilosafyVal(val interface{}) (interface{}, error) {
 	return toBool(val)
 }
 
+var (
+	MinTimestampNano = time.Unix(-1<<32, 0).UTC()       // 1833-11-24T17:31:44Z
+	MaxTimestampNano = time.Unix(1<<32, 0).UTC()        // 2106-02-07T06:28:16Z
+	MinTimestamp     = time.Unix(-62135596799, 0).UTC() // 0001-01-01T00:00:01Z
+	MaxTimestamp     = time.Unix(253402300799, 0).UTC() // 9999-12-31T23:59:59Z
+)
+
 const (
 	Custom      = Unit("c")
 	Day         = Unit("d")
@@ -344,6 +351,34 @@ func (u Unit) IsCustom() bool {
 
 func (u Unit) Duration() (time.Duration, error) {
 	duration := time.Duration(1)
+	switch u.unit() {
+	case Day:
+		duration *= 24
+		fallthrough
+	case Hour:
+		duration *= 60
+		fallthrough
+	case Minute:
+		duration *= 60
+		fallthrough
+	case Second:
+		duration *= 1000
+		fallthrough
+	case Millisecond:
+		duration *= 1000
+		fallthrough
+	case Microsecond:
+		duration *= 1000
+		fallthrough
+	case Nanosecond:
+		return duration, nil
+	}
+	return 0, errors.Errorf(ErrFmtUnknownUnit, u)
+}
+
+// ToNanos returns the number of Nanoseconds per given Unit
+func (u Unit) ToNanos() (int64, error) {
+	duration := int64(1)
 	switch u.unit() {
 	case Day:
 		duration *= 24
@@ -425,6 +460,9 @@ func (r RecordTimeField) PilosafyVal(val interface{}) (interface{}, error) {
 	result, err := timeFromTimestring(val, r.layout())
 	if err != nil {
 		err = errors.Wrap(err, "converting RecordTimeField from layout")
+	}
+	if result.IsZero() {
+		return nil, err
 	}
 	return result, err
 }
@@ -742,25 +780,68 @@ func (d TimestampField) DestName() string {
 	return d.DestNameVal
 }
 
+// ValToTimestamp takes a timeunit and an integer value and converts it to time.Time
+func ValToTimestamp(unit string, val int64) (time.Time, error) {
+	switch unit {
+	case string(Second):
+		return time.Unix(val, 0).UTC(), nil
+	case string(Millisecond):
+		return time.UnixMilli(val).UTC(), nil
+	case string(Microsecond):
+		return time.UnixMicro(val).UTC(), nil
+	case string(Nanosecond):
+		return time.Unix(0, val).UTC(), nil
+	default:
+		return time.Time{}, errors.Errorf("Unknown time unit: '%v'", unit)
+	}
+}
+
+// TimestampToVal takes a time unit and a time.Time and converts it to an integer value
+func TimestampToVal(unit Unit, ts time.Time) int64 {
+	switch unit {
+	case Second:
+		return ts.Unix()
+	case Millisecond:
+		return ts.UnixMilli()
+	case Microsecond:
+		return ts.UnixMicro()
+	case Nanosecond:
+		return ts.UnixNano()
+	}
+	return 0
+
+}
+
 // PilosafyVal for TimestampField always returns an int or nil.
 func (t TimestampField) PilosafyVal(val interface{}) (interface{}, error) {
-	var dur time.Duration
-
 	if val == nil {
 		return nil, nil
 	}
 
-	granAsDur, err := Unit(t.granularity()).DurationFromValue(1) //return ns per granularity
-	if err != nil {
-		return nil, errors.Wrap(err, "converting granularity to duration")
+	var dur int64
+	// Check if the epoch alone is out-of-range. If so, ingest should halt, regardless
+	// of state of the timestamp out-of-range CLI option.
+	if err := validateTimestamp(t.granularity(), t.epoch()); err != nil {
+		return nil, errors.Wrap(err, "validating epoch")
 	}
 
-	if tval, ok := val.(time.Time); ok {
-		if err := t.validateTimestamp(tval); err != nil {
-			return nil, errors.Wrap(err, "validating timestamp")
+	epochAsVal := TimestampToVal(t.granularity(), t.epoch())
+	if _, ok := val.(time.Time); ok || (t.Epoch.IsZero() && t.Unit == "") {
+		ts, err := timeFromTimestring(val, t.layout())
+		if err != nil {
+			if strings.Contains(err.Error(), "out of range") {
+				return nil, errors.Wrap(err, ErrTimestampOutOfRange.Error())
+			}
+			return nil, errors.Wrap(err, "converting TimestampField from layout")
 		}
-		dur = tval.Sub(t.epoch())
-	} else if !t.Epoch.IsZero() || t.Unit != "" {
+		if err := validateTimestamp(t.granularity(), ts); err != nil {
+			return nil, errors.Wrap(ErrTimestampOutOfRange, "validating timestamp")
+		}
+
+		tsAsVal := TimestampToVal(t.granularity(), ts)
+
+		dur = tsAsVal - epochAsVal
+	} else {
 		valAsInt, err := toInt64(val)
 		if err != nil {
 			if strings.Contains(err.Error(), "out of range") {
@@ -768,44 +849,46 @@ func (t TimestampField) PilosafyVal(val interface{}) (interface{}, error) {
 			}
 			return nil, errors.Wrap(err, "converting value to int64")
 		}
-		dur, err = t.Unit.DurationFromValue(valAsInt)
-		if err != nil {
-			return nil, errors.Wrap(err, "converting TimestampField from epoch")
+
+		// Conversion ratio to scale incoming Units to Granularity
+		granNanos, err := Unit(t.granularity()).ToNanos()
+		if err != nil || granNanos == 0 {
+			return nil, errors.Wrap(err, "granularity not supported")
 		}
-		if err := t.validateDuration(dur, granAsDur); err != nil {
+		unitNanos, err := Unit(t.Unit).ToNanos()
+		if err != nil {
+			return nil, errors.Wrap(err, "unit not supported")
+		}
+		scale := float64(unitNanos) / float64(granNanos)
+
+		dur = int64(float64(valAsInt) * scale)
+		if (dur >= 0 && valAsInt < 0) || (dur < 0 && valAsInt > 0) {
+			return nil, errors.Wrap(ErrTimestampOutOfRange, "timestamp value out of range at specified granularity")
+		}
+
+		if err := validateDuration(dur, epochAsVal, Unit(t.granularity())); err != nil {
 			return nil, errors.Wrap(err, "validating duration")
 		}
-	} else {
-		ti, err := timeFromTimestring(val, t.layout())
-		if err != nil {
-			if strings.Contains(err.Error(), "out of range") {
-				return nil, errors.Wrap(err, ErrTimestampOutOfRange.Error())
-			}
-			return nil, errors.Wrap(err, "converting TimestampField from layout")
-		}
-		// if timeFromTimestring is nil, the time is either nil or ""
-		// and there is no time value to write. So we return a nil.
-		if ti == nil {
-			return nil, nil
-		}
-		ts := ti.(time.Time)
-		if err := t.validateTimestamp(ts); err != nil {
-			return nil, errors.Wrap(err, "validating timestamp")
-		}
-		dur = ts.Sub(t.epoch())
 	}
 
-	return int64(dur / granAsDur), nil
+	return dur, nil
 }
 
 // validateTimestamp checks if the timestamp is within the range of what FB accepts.
-func (t TimestampField) validateTimestamp(ts time.Time) error {
+func validateTimestamp(unit Unit, ts time.Time) error {
 	// Min and Max timestamps that Featurebase accepts
-	MinTimestamp := time.Unix(-1<<32, 0).UTC() // 1833-11-24T17:31:44Z
-	MaxTimestamp := time.Unix(1<<32, 0).UTC()  // 2106-02-07T06:28:16Z
+	var minStamp, maxStamp time.Time
+	switch unit {
+	case Nanosecond:
+		minStamp = MinTimestampNano
+		maxStamp = MaxTimestampNano
+	default:
+		minStamp = MinTimestamp
+		maxStamp = MaxTimestamp
+	}
 
-	if ts.Before(MinTimestamp) || ts.After(MaxTimestamp) {
-		return errors.Wrap(ErrTimestampOutOfRange, fmt.Sprintf("timestamp value must be within min: %v and max: %v", MinTimestamp, MaxTimestamp))
+	if ts.Before(minStamp) || ts.After(maxStamp) {
+		return errors.New(fmt.Sprintf("timestamp value must be within min: %v and max: %v", minStamp, maxStamp))
 	}
 	return nil
 }
@@ -814,34 +897,39 @@ func (t TimestampField) validateTimestamp(ts time.Time) error {
 //  Featurebase will ultimately convert this to some duration relative to the Unix epoch.
 //  So if the custom epoch + the provided value in the desired units is too far from
 //  Unix epoch such that it causes an interger overflow, this will return an error.
-func (t TimestampField) validateDuration(dur time.Duration, granularity time.Duration) error {
-	// Check if the epoch alone causes overflow. If so, ingest should halt.
-	if time.Unix(0, 0).After(t.epoch()) {
-		if t.epoch().UnixNano() > 0 {
-			return errors.New("custom epoch is too far from Unix epoch")
-		}
-	} else if t.epoch().UnixNano() < 0 {
-		return errors.New("custom epoch is too far from Unix epoch")
+func validateDuration(dur int64, offset int64, granularity Unit) error {
+	var minInt, maxInt int64
+	switch granularity {
+	case Second:
+		minInt = MinTimestamp.Unix()
+		maxInt = MaxTimestamp.Unix()
+	case Millisecond:
+		minInt = MinTimestamp.UnixMilli()
+		maxInt = MaxTimestamp.UnixMilli()
+	case Microsecond:
+		minInt = MinTimestamp.UnixMicro()
+		maxInt = MaxTimestamp.UnixMicro()
+	case Nanosecond:
+		minInt = MinTimestampNano.UnixNano()
+		maxInt = MaxTimestampNano.UnixNano()
 	}
 
-	offset := int64(t.epoch().Sub(time.Unix(0, 0)).Nanoseconds())
-	durAsInt := int64(dur)
 	if offset > 0 {
-		if durAsInt > math.MaxInt64-offset {
+		if dur > maxInt-offset {
 			return errors.Wrap(ErrTimestampOutOfRange, "value + epoch is too far from Unix epoch")
 		}
-	} else if durAsInt < math.MinInt64-offset {
+	} else if dur < minInt-offset {
 		return errors.Wrap(ErrTimestampOutOfRange, "value + epoch is too far from Unix epoch")
 	}
 	return nil
 }
 
 // Return default granularity if not set
-func (t TimestampField) granularity() string {
+func (t TimestampField) granularity() Unit {
 	if t.Granularity == "" {
 		return "s"
 	}
-	return t.Granularity
+	return Unit(t.Granularity)
 }
 
 // Return default layout if not set
@@ -966,35 +1054,35 @@ func timeFromEpoch(val interface{}, epoch time.Time, unit Unit) (interface{}, er
 	return epoch.Add(dur), err
 }
 
-func timeFromTimestring(val interface{}, layout string) (interface{}, error) {
+func timeFromTimestring(val interface{}, layout string) (time.Time, error) {
 	if val == nil {
-		return nil, nil
+		return time.Time{}, nil
 	}
 	switch valt := val.(type) {
 	case nil:
-		return nil, nil
+		return time.Time{}, nil
 	case []byte:
 		if len(valt) == 0 {
-			return nil, nil
+			return time.Time{}, nil
 		}
 		vt, err := parseTimeWithLayout(layout, string(valt))
 		if err != nil {
-			return nil, errors.Wrap(err, "parsing []byte")
+			return time.Time{}, errors.Wrap(err, "parsing []byte")
 		}
 		return vt, nil
 	case string:
 		if valt == "" {
-			return nil, nil
+			return time.Time{}, nil
 		}
 		vt, err := parseTimeWithLayout(layout, valt)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parsing time string %s", valt)
+			return time.Time{}, errors.Wrapf(err, "parsing time string %s", valt)
 		}
 		return vt, nil
 	case time.Time:
 		return valt, nil
 	default:
-		return nil, errors.Errorf("didn't know how to interpret %v of %[1]T as time", valt)
+		return time.Time{}, errors.Errorf("didn't know how to interpret %v of %[1]T as time", valt)
 	}
 }
 

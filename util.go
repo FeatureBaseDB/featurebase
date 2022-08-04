@@ -55,12 +55,6 @@ func GetLoopProgress(start time.Time, now time.Time, iteration uint, total uint)
 	return time.Duration(avgItemTime * float64(itemsLeft)), pctDone
 }
 
-// FormatTimestampNano returns the string representation of a timestamp given:
-// an epoch value, base, and time unit
-func FormatTimestampNano(value, base int64, timeUnit string) string {
-	return time.Unix(0, (value+base)*TimeUnitNanos(timeUnit)).UTC().Format(time.RFC3339Nano)
-}
-
 type MemoryUsage struct {
 	Capacity uint64 `json:"capacity"`
 	TotalUse uint64 `json:"totalUsed"`

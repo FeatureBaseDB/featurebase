@@ -239,3 +239,198 @@ func TestTTLOf(t *testing.T) {
 	}
 
 }
+
+func TestTimestampField_validateDuration(t *testing.T) {
+	type args struct {
+		dur    int64
+		offset int64
+		unit   Unit
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+		errStr  string
+	}{
+		{
+			name: "max-max",
+			args: args{
+				dur:    0,
+				offset: TimestampToVal(Unit("s"), MaxTimestamp),
+				unit:   Unit("s"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "oor-max",
+			args: args{
+				dur:    1,
+				offset: TimestampToVal(Unit("s"), MaxTimestamp),
+				unit:   Unit("s"),
+			},
+			wantErr: true,
+			errStr:  "value + epoch is too far from Unix epoch",
+		},
+		{
+			name: "max-oor",
+			args: args{
+				dur:    0,
+				offset: TimestampToVal(Unit("s"), MaxTimestamp.Add(1*time.Second)),
+				unit:   Unit("s"),
+			},
+			wantErr: true,
+			errStr:  "value + epoch is too far from Unix epoch",
+		},
+		{
+			name: "min-min",
+			args: args{
+				dur:    0,
+				offset: TimestampToVal(Unit("s"), MinTimestamp),
+				unit:   Unit("s"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "oor-min",
+			args: args{
+				dur:    -1,
+				offset: TimestampToVal(Unit("s"), MinTimestamp),
+				unit:   Unit("s"),
+			},
+			wantErr: true,
+			errStr:  "value + epoch is too far from Unix epoch",
+		},
+		{
+			name: "min-oor",
+			args: args{
+				dur:    0,
+				offset: TimestampToVal(Unit("s"), MinTimestamp.Add(-1*time.Second)),
+				unit:   Unit("s"),
+			},
+			wantErr: true,
+			errStr:  "value + epoch is too far from Unix epoch",
+		},
+		{
+			name: "max-max",
+			args: args{
+				dur:    0,
+				offset: TimestampToVal(Unit("ns"), MaxTimestampNano),
+				unit:   Unit("ns"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "oor-max",
+			args: args{
+				dur:    1,
+				offset: TimestampToVal(Unit("ns"), MaxTimestampNano),
+				unit:   Unit("ns"),
+			},
+			wantErr: true,
+			errStr:  "value + epoch is too far from Unix epoch",
+		},
+		{
+			name: "max-oor",
+			args: args{
+				dur:    0,
+				offset: TimestampToVal(Unit("ns"), MaxTimestampNano.Add(1*time.Nanosecond)),
+				unit:   Unit("ns"),
+			},
+			wantErr: true,
+			errStr:  "value + epoch is too far from Unix epoch",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateDuration(tt.args.dur, tt.args.offset, tt.args.unit); (err != nil) != tt.wantErr {
+				if !strings.Contains(err.Error(), tt.errStr) {
+					t.Errorf("TimestampField.validateDuration() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			}
+		})
+	}
+}
+
+func Test_validateTimestamp(t *testing.T) {
+	type args struct {
+		unit Unit
+		ts   time.Time
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "nano-max",
+			args: args{
+				unit: Unit("ns"),
+				ts:   MaxTimestampNano,
+			},
+			wantErr: false,
+		},
+		{
+			name: "nano-min",
+			args: args{
+				unit: Unit("ns"),
+				ts:   MinTimestampNano,
+			},
+			wantErr: false,
+		},
+		{
+			name: "nano-max-oor",
+			args: args{
+				unit: Unit("ns"),
+				ts:   MaxTimestampNano.Add(1 * time.Nanosecond),
+			},
+			wantErr: true,
+		},
+		{
+			name: "nano-min-oor",
+			args: args{
+				unit: Unit("ns"),
+				ts:   MinTimestampNano.Add(-1 * time.Nanosecond),
+			},
+			wantErr: true,
+		},
+		{
+			name: "ms-max",
+			args: args{
+				unit: Unit("ms"),
+				ts:   MaxTimestamp,
+			},
+			wantErr: false,
+		},
+		{
+			name: "ms-min",
+			args: args{
+				unit: Unit("ms"),
+				ts:   MinTimestamp,
+			},
+			wantErr: false,
+		},
+		{
+			name: "ms-max-oor",
+			args: args{
+				unit: Unit("ms"),
+				ts:   MaxTimestamp.Add(1 * time.Millisecond),
+			},
+			wantErr: true,
+		},
+		{
+			name: "ms-min-oor",
+			args: args{
+				unit: Unit("ms"),
+				ts:   MinTimestamp.Add(-1 * time.Millisecond),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateTimestamp(tt.args.unit, tt.args.ts); (err != nil) != tt.wantErr {
+				t.Errorf("validateTimestamp() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

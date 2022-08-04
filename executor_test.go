@@ -7245,6 +7245,8 @@ func TestVariousQueries(t *testing.T) {
 			variousQueriesOnPercentiles(t, c)
 			variousQueriesCountDistinctTimestamp(t, c)
 			variousQueriesOnIntFields(t, c)
+			variousQueriesOnTimestampFields(t, c)
+			variousQueriesOnLargeEpoch(t, c)
 			backupTest(t, c, "") // test backup/restore of all indexes
 		})
 	}
@@ -7495,6 +7497,10 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 	}
 }
 
+func lineBreaker(s string) string {
+	return strings.Join(strings.Split(s, " "), "\n") + "\n"
+}
+
 // tests for abbreviating time values in queries
 func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 	ts := func(t time.Time) int64 {
@@ -7541,10 +7547,6 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 		return strings.Join(ss, "\n") + "\n"
 	}
 
-	toCSV := func(s string) string {
-		return strings.Join(strings.Split(s, " "), "\n") + "\n"
-	}
-
 	type testCase struct {
 		query       string
 		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
@@ -7555,44 +7557,44 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 		// Rows
 		{
 			query:       `Rows(f1, from='2019-08-04T14:36', to='2019-08-04T16:00')`,
-			csvVerifier: toCSV("R4 R5"),
+			csvVerifier: lineBreaker("R4 R5"),
 		},
 		{
 			query:       `Rows(f1, from='2019-08-04T14', to='2019-08-04T17:00')`,
-			csvVerifier: toCSV("R4 R5 R6"),
+			csvVerifier: lineBreaker("R4 R5 R6"),
 		},
 		{
 			query:       `Rows(f1, from='2019-08-04', to='2019-08-05')`,
-			csvVerifier: toCSV("R3 R4 R5 R6"),
+			csvVerifier: lineBreaker("R3 R4 R5 R6"),
 		},
 		{
 			query:       `Rows(f1, from='2019-08', to='2019-12')`,
-			csvVerifier: toCSV("R2 R3 R4 R5 R6 R7"),
+			csvVerifier: lineBreaker("R2 R3 R4 R5 R6 R7"),
 		},
 		{
 			query:       `Rows(f1, from='2019', to='2020')`,
-			csvVerifier: toCSV("R1 R2 R3 R4 R5 R6 R7 R8"),
+			csvVerifier: lineBreaker("R1 R2 R3 R4 R5 R6 R7 R8"),
 		},
 		// Row
 		{
 			query:       `Row(f2='R', from='2019-08-04T14:36', to='2019-08-04T16:00')`,
-			csvVerifier: toCSV("C4 C5"),
+			csvVerifier: lineBreaker("C4 C5"),
 		},
 		{
 			query:       `Row(f2='R', from='2019-08-04T14', to='2019-08-04T17:00')`,
-			csvVerifier: toCSV("C4 C5 C6"),
+			csvVerifier: lineBreaker("C4 C5 C6"),
 		},
 		{
 			query:       `Row(f2='R', from='2019-08-04', to='2019-08-05')`,
-			csvVerifier: toCSV("C3 C4 C5 C6"),
+			csvVerifier: lineBreaker("C3 C4 C5 C6"),
 		},
 		{
 			query:       `Row(f2='R', from='2019-08', to='2019-12')`,
-			csvVerifier: toCSV("C2 C3 C4 C5 C6 C7"),
+			csvVerifier: lineBreaker("C2 C3 C4 C5 C6 C7"),
 		},
 		{
 			query:       `Row(f2='R', from='2019', to='2020')`,
-			csvVerifier: toCSV("C1 C2 C3 C4 C5 C6 C7 C8"),
+			csvVerifier: lineBreaker("C1 C2 C3 C4 C5 C6 C7 C8"),
 		},
 	}
 
@@ -7692,6 +7694,598 @@ userG,-1,10,10,10
 			if tst.qrVerifier != nil {
 				tst.qrVerifier(t, resp)
 			}
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := splitSortBackToCSV(csvString[strings.Index(csvString, "\n")+1:])
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+		})
+	}
+}
+
+// Constants used in TimestampField testing
+var (
+	minTime  = pilosa.MinTimestamp
+	maxTime  = pilosa.MaxTimestamp
+	minSec   = minTime.Unix()
+	maxSec   = maxTime.Unix()
+	minMilli = minTime.UnixMilli()
+	maxMilli = maxTime.UnixMilli()
+	minMicro = minTime.UnixMicro()
+	maxMicro = maxTime.UnixMicro()
+	minNano  = pilosa.MinTimestampNano.UnixNano()
+	maxNano  = pilosa.MaxTimestampNano.UnixNano()
+)
+
+// variousQueriesOnTimestampFields tests queries on Timestamp Fields at various granularities using the default epoch
+func variousQueriesOnTimestampFields(t *testing.T, c *test.Cluster) {
+	index := "ts_test01"
+
+	// Testing whether the max and min timestamps can be represented for seconds
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_sec", pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "s"))
+	c.ImportIntKey(t, index, "unix_sec", []test.IntKey{
+		{Val: minSec, Key: "userA"},
+		{Val: maxSec, Key: "userB"},
+	})
+
+	// Testing whether the max and min timestamps can be represented for milliseconds
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_milli", pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "ms"))
+	c.ImportIntKey(t, index, "unix_milli", []test.IntKey{
+		{Val: minMilli, Key: "userA"},
+		{Val: maxMilli, Key: "userB"},
+	})
+
+	// Testing whether the max and min timestamps can be represented for microseconds
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_micro", pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "us"))
+	c.ImportIntKey(t, index, "unix_micro", []test.IntKey{
+		{Val: minMicro, Key: "userA"},
+		{Val: maxMicro, Key: "userB"},
+	})
+
+	// Note that min and max values that can be represented for Nanos is a much smaller range than any of the above granularities.
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_nano", pilosa.OptFieldTypeTimestamp(time.Unix(0, 0), "ns"))
+	c.ImportIntKey(t, index, "unix_nano", []test.IntKey{
+		{Val: minNano, Key: "userA"},
+		{Val: maxNano, Key: "userB"},
+	})
+
+	splitSortBackToCSV := func(csvStr string) string {
+		if len(csvStr) == 0 {
+			return ""
+		}
+		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
+		sort.Strings(ss)
+		return strings.Join(ss, "\n") + "\n"
+	}
+
+	type testCase struct {
+		query       string
+		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}
+
+	tests := []testCase{
+		{
+			query: "extract(All(), Rows(unix_sec))",
+			csvVerifier: `userA,0001-01-01T00:00:01Z
+userB,9999-12-31T23:59:59Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_milli))",
+			csvVerifier: `userA,0001-01-01T00:00:01Z
+userB,9999-12-31T23:59:59Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_micro))",
+			csvVerifier: `userA,0001-01-01T00:00:01Z
+userB,9999-12-31T23:59:59Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_nano))",
+			csvVerifier: `userA,1833-11-24T17:31:44Z
+userB,2106-02-07T06:28:16Z
+`,
+		},
+		{
+			query: "All()",
+			csvVerifier: `userA
+userB
+`,
+		},
+		{
+			query: "count(All())",
+			csvVerifier: `2
+`,
+		},
+		// Found an existing bug: Distinct on timestamp does not return values prior to the epoch.
+		// These tests need to be uncommented when issue is fixed.
+		// 		{
+		// 			query: "Distinct(field=unix_sec)",
+		// 			csvVerifier: `0001-01-01T00:00:01Z
+		// 9999-12-31T23:59:59Z
+		// `,
+		// 		},
+		// 		{
+		// 			query: "Distinct(field=unix_milli)",
+		// 			csvVerifier: `0001-01-01T00:00:01Z
+		// 9999-12-31T23:59:59Z
+		// `,
+		// 		},
+		{
+			query: "Min(unix_sec)",
+			csvVerifier: `0001-01-01T00:00:01Z,1
+`,
+		},
+		{
+			query: "Max(unix_sec)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Min(unix_milli)",
+			csvVerifier: `0001-01-01T00:00:01Z,1
+`,
+		},
+		{
+			query: "Max(unix_milli)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Min(unix_micro)",
+			csvVerifier: `0001-01-01T00:00:01Z,1
+`,
+		},
+		{
+			query: "Max(unix_micro)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Min(unix_nano)",
+			csvVerifier: `1833-11-24T17:31:44Z,1
+`,
+		},
+		{
+			query: "Max(unix_nano)",
+			csvVerifier: `2106-02-07T06:28:16Z,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(unix_micro))",
+			csvVerifier: `-62135596799000000,1
+253402300799000000,1
+`,
+		},
+		{
+			query:       `Row(unix_sec="0001-01-01T00:00:01Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_sec="9999-12-31T23:59:59Z")`,
+			csvVerifier: lineBreaker("userB"),
+		},
+		{
+			query:       `Row(unix_milli="0001-01-01T00:00:01Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_milli="9999-12-31T23:59:59Z")`,
+			csvVerifier: lineBreaker("userB"),
+		},
+		{
+			query:       `Row(unix_micro="0001-01-01T00:00:01Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_micro="9999-12-31T23:59:59Z")`,
+			csvVerifier: lineBreaker("userB"),
+		},
+		{
+			query:       `Row(unix_nano="1833-11-24T17:31:44Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_nano="2106-02-07T06:28:16Z")`,
+			csvVerifier: lineBreaker("userB"),
+		},
+		{
+			query:       `Union(Row(unix_nano="2106-02-07T06:28:16Z"), Row(unix_micro="0001-01-01T00:00:01Z"))`,
+			csvVerifier: lineBreaker("userA\nuserB"),
+		},
+		{
+			query: `Set("userA", unix_milli="2000-12-31T23:59:59.999Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: `Clear("userA", unix_milli="2000-12-31T23:59:59.999Z")`,
+			csvVerifier: `true
+`,
+		},
+		// Not Supported for Timestamp
+		// {
+		// 	query:       `ClearRow(unix_milli="2000-12-31T23:59:59.999Z")`,
+		// 	csvVerifier: `true`,
+		// },
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			tr := c.QueryGRPC(t, index, tst.query)
+			csvString, err := tableResponseToCSVString(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// verify everything after header
+			got := splitSortBackToCSV(csvString[strings.Index(csvString, "\n")+1:])
+			if got != tst.csvVerifier {
+				t.Errorf("expected:\n%s\ngot:\n%s", tst.csvVerifier, got)
+			}
+		})
+	}
+}
+
+// variousQueriesOnLargeEpoch tests queries on TimestampFields when the epoch is set either to
+// the min or max timestamp allowed.
+func variousQueriesOnLargeEpoch(t *testing.T, c *test.Cluster) {
+	index := "ts_epoch_test20321"
+	// mag := int64(10000000000)
+
+	// These large constants are close to min and max int64 but not quite since go has to account for the difference between Unix Epoch and Go's Epoch
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_sec_min", pilosa.OptFieldTypeTimestamp(minTime, "s"))
+	c.ImportIntKey(t, index, "unix_sec_min", []test.IntKey{
+		{Val: 0, Key: "userA"},
+		{Val: -minSec, Key: "userB"},
+		{Val: -minSec + maxSec, Key: "userC"},
+	})
+
+	// vprint.VV("-MaxSec: %+v", -maxSec)
+	// vprint.VV("-MaxSec + minsec: %+v", -maxSec+minSec)
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_sec_max", pilosa.OptFieldTypeTimestamp(maxTime, "s"))
+	c.ImportIntKey(t, index, "unix_sec_max", []test.IntKey{
+		{Val: 0, Key: "userA"}, // 9999-12-31
+		// {Val: 1, Key: "userE"},
+		// {Val: -1, Key: "userD"},
+		{Val: -maxSec, Key: "userB"},          //1970....
+		{Val: -maxSec + minSec, Key: "userC"}, //0001
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_milli_min", pilosa.OptFieldTypeTimestamp(minTime, "ms"))
+	c.ImportIntKey(t, index, "unix_milli_min", []test.IntKey{
+		{Val: 0, Key: "userA"},
+		{Val: -minMilli, Key: "userB"},
+		{Val: -minMilli + maxMilli, Key: "userC"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_milli_max", pilosa.OptFieldTypeTimestamp(maxTime, "ms"))
+	c.ImportIntKey(t, index, "unix_milli_max", []test.IntKey{
+		{Val: 0, Key: "userA"},
+		{Val: -maxMilli, Key: "userB"},
+		{Val: -maxMilli + minMilli, Key: "userC"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_micro_min", pilosa.OptFieldTypeTimestamp(minTime, "us"))
+	c.ImportIntKey(t, index, "unix_micro_min", []test.IntKey{
+		{Val: 0, Key: "userA"},
+		{Val: -minMicro, Key: "userB"},
+		{Val: -minMicro + maxMicro, Key: "userC"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_micro_max", pilosa.OptFieldTypeTimestamp(maxTime, "us"))
+	c.ImportIntKey(t, index, "unix_micro_max", []test.IntKey{
+		{Val: 0, Key: "userA"},
+		{Val: -maxMicro, Key: "userB"},
+		{Val: -maxMicro + minMicro, Key: "userC"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_nano_min", pilosa.OptFieldTypeTimestamp(pilosa.MinTimestampNano, "ns"))
+	c.ImportIntKey(t, index, "unix_nano_min", []test.IntKey{
+		{Val: 0, Key: "userA"},
+		{Val: -minNano - 1, Key: "userB"},
+		{Val: -minNano, Key: "userC"},
+	})
+
+	c.CreateField(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true}, "unix_nano_max", pilosa.OptFieldTypeTimestamp(pilosa.MaxTimestampNano, "ns"))
+	c.ImportIntKey(t, index, "unix_nano_max", []test.IntKey{
+		{Val: 0, Key: "userA"},
+		{Val: -maxNano + 1, Key: "userB"},
+		{Val: -maxNano, Key: "userC"},
+	})
+
+	splitSortBackToCSV := func(csvStr string) string {
+		if csvStr == "" {
+			return ""
+		}
+		ss := strings.Split(csvStr[:len(csvStr)-1], "\n")
+		sort.Strings(ss)
+		return strings.Join(ss, "\n") + "\n"
+	}
+
+	type testCase struct {
+		query       string
+		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		csvVerifier string
+	}
+
+	tests := []testCase{
+		{
+			query: "extract(All(), Rows(unix_sec_min))",
+			csvVerifier: `userA,0001-01-01T00:00:01Z
+userB,1970-01-01T00:00:00Z
+userC,9999-12-31T23:59:59Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_sec_max))",
+			csvVerifier: `userA,9999-12-31T23:59:59Z
+userB,1970-01-01T00:00:00Z
+userC,0001-01-01T00:00:01Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_milli_min))",
+			csvVerifier: `userA,0001-01-01T00:00:01Z
+userB,1970-01-01T00:00:00Z
+userC,9999-12-31T23:59:59Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_milli_max))",
+			csvVerifier: `userA,9999-12-31T23:59:59Z
+userB,1970-01-01T00:00:00Z
+userC,0001-01-01T00:00:01Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_micro_min))",
+			csvVerifier: `userA,0001-01-01T00:00:01Z
+userB,1970-01-01T00:00:00Z
+userC,9999-12-31T23:59:59Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_micro_max))",
+			csvVerifier: `userA,9999-12-31T23:59:59Z
+userB,1970-01-01T00:00:00Z
+userC,0001-01-01T00:00:01Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_nano_min))",
+			csvVerifier: `userA,1833-11-24T17:31:44Z
+userB,1969-12-31T23:59:59.999999999Z
+userC,1970-01-01T00:00:00Z
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_nano_max))",
+			csvVerifier: `userA,2106-02-07T06:28:16Z
+userB,1970-01-01T00:00:00.000000001Z
+userC,1970-01-01T00:00:00Z
+`,
+		},
+		{
+			query: "All()",
+			csvVerifier: `userA
+userB
+userC
+`,
+		},
+		{
+			query: "count(All())",
+			csvVerifier: `3
+`,
+		},
+		{
+			query: "Min(unix_sec_min)",
+			csvVerifier: `0001-01-01T00:00:01Z,1
+`,
+		},
+		{
+			query: "Max(unix_sec_min)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Min(unix_sec_max)",
+			csvVerifier: `0001-01-01T00:00:01Z,1
+`,
+		},
+		{
+			query: "Max(unix_sec_max)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Min(unix_milli_min)",
+			csvVerifier: `0001-01-01T00:00:01Z,1
+`,
+		},
+		{
+			query: "Max(unix_milli_min)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Max(unix_milli_max)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Min(unix_micro_min)",
+			csvVerifier: `0001-01-01T00:00:01Z,1
+`,
+		},
+		{
+			query: "Max(unix_micro_max)",
+			csvVerifier: `9999-12-31T23:59:59Z,1
+`,
+		},
+		{
+			query: "Min(unix_nano_min)",
+			csvVerifier: `1833-11-24T17:31:44Z,1
+`,
+		},
+		{
+			query: "Max(unix_nano_min)",
+			csvVerifier: `1970-01-01T00:00:00Z,1
+`,
+		},
+		{
+			query: "Min(unix_nano_max)",
+			csvVerifier: `1970-01-01T00:00:00Z,1
+`,
+		},
+		{
+			query: "Max(unix_nano_max)",
+			csvVerifier: `2106-02-07T06:28:16Z,1
+`,
+		},
+		{
+			query: "GroupBy(Rows(unix_micro_min))",
+			csvVerifier: `-62135596799000000,1
+0,1
+253402300799000000,1
+`,
+		},
+		{
+			query:       `Row(unix_sec_min="0001-01-01T00:00:01Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_sec_max="0001-01-01T00:00:01Z")`,
+			csvVerifier: lineBreaker("userC"),
+		},
+		{
+			query:       `Row(unix_sec_max="9999-12-31T23:59:59Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_milli_min="0001-01-01T00:00:01Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_milli_min="9999-12-31T23:59:59Z")`,
+			csvVerifier: lineBreaker("userC"),
+		},
+		{
+			query:       `Row(unix_micro_max="0001-01-01T00:00:01Z")`,
+			csvVerifier: lineBreaker("userC"),
+		},
+		{
+			query:       `Row(unix_micro_max="9999-12-31T23:59:59Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_nano_min="1833-11-24T17:31:44Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_nano_min="1969-12-31T23:59:59.999999999Z")`,
+			csvVerifier: lineBreaker("userB"),
+		},
+		{
+			query:       `Row(unix_nano_min="1970-01-01T00:00:00Z")`,
+			csvVerifier: lineBreaker("userC"),
+		},
+		{
+			query:       `Row(unix_nano_max="2106-02-07T06:28:16Z")`,
+			csvVerifier: lineBreaker("userA"),
+		},
+		{
+			query:       `Row(unix_nano_max="1970-01-01T00:00:00.000000001Z")`,
+			csvVerifier: lineBreaker("userB"),
+		},
+		{
+			query:       `Row(unix_nano_max="1970-01-01T00:00:00Z")`,
+			csvVerifier: lineBreaker("userC"),
+		},
+		{
+			query:       `Union(Row(unix_nano_max="2106-02-07T06:28:16Z"), Row(unix_micro_max="0001-01-01T00:00:01Z"))`,
+			csvVerifier: lineBreaker("userA\nuserC"),
+		},
+		{
+			query: `Set("userA", unix_sec_min="2000-12-31T23:59:59.999Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_sec_min))",
+			csvVerifier: `userA,2000-12-31T23:59:59Z
+userB,1970-01-01T00:00:00Z
+userC,9999-12-31T23:59:59Z
+`,
+		},
+		{
+			query: `Clear("userA", unix_sec_min="2000-12-31T23:59:59.999Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: `Set("userA", unix_milli_max="2000-12-31T23:59:59.999Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_milli_max))",
+			csvVerifier: `userA,2000-12-31T23:59:59.999Z
+userB,1970-01-01T00:00:00Z
+userC,0001-01-01T00:00:01Z
+`,
+		},
+		{
+			query: `Clear("userA", unix_milli_max="2000-12-31T23:59:59.999Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: `Set("userA", unix_nano_max="2050-02-01T00:00:00.000000002Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_nano_max))",
+			csvVerifier: `userA,2050-02-01T00:00:00.000000002Z
+userB,1970-01-01T00:00:00.000000001Z
+userC,1970-01-01T00:00:00Z
+`,
+		},
+		{
+			query: `Clear("userA", unix_nano_max="1970-01-01T00:00:00.000000002Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: `Set("userA", unix_nano_min="1969-12-31T23:59:59.999999998Z")`,
+			csvVerifier: `true
+`,
+		},
+		{
+			query: "extract(All(), Rows(unix_nano_min))",
+			csvVerifier: `userA,1969-12-31T23:59:59.999999998Z
+userB,1969-12-31T23:59:59.999999999Z
+userC,1970-01-01T00:00:00Z
+`,
+		},
+		{
+			query: `Clear("userA", unix_nano_min="1969-12-31T23:59:59.999999998Z")`,
+			csvVerifier: `true
+`,
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
+			tr := c.QueryGRPC(t, index, tst.query)
 			csvString, err := tableResponseToCSVString(tr)
 			if err != nil {
 				t.Fatal(err)
@@ -8330,6 +8924,9 @@ func tableResponseToCSV(m *proto.TableResponse, w io.Writer) error {
 				record = append(record, fmt.Sprintf("%v", col.GetBoolVal()))
 			case "int64":
 				record = append(record, fmt.Sprintf("%v", col.GetInt64Val()))
+			case "timestamp":
+				record = append(record, fmt.Sprintf("%v", col.GetTimestampVal()))
+
 			}
 		}
 		err := writer.Write(record)

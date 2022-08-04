@@ -1430,6 +1430,7 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 	}
 
 	fields := make([]*pilosaclient.Field, 0, len(schema))
+	existingFields := m.index.Fields()
 	for i, idkField := range schema {
 		// we redefine these inside the loop since we're
 		// capturing them in closures
@@ -1455,10 +1456,10 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 		// different places
 		_, isBool := idkField.(BoolField)
 		_, isSIBK := idkField.(SignedIntBoolKeyField)
-		if !isSIBK && (m.PackBools == "" || !isBool) && m.index.HasField(idkField.DestName()) {
+		pilosaField, ok := existingFields[idkField.DestName()]
+		if !isSIBK && (m.PackBools == "" || !isBool) && ok {
 			// Validate that Pilosa's existing field matches the
 			// type and options of the IDK field.
-			pilosaField := m.index.Field(idkField.DestName())
 			if err := m.checkFieldCompatibility(pilosaField, idkField, ""); err != nil {
 				return nil, nil, nil, nil, errors.Wrap(err, "checking field compatibility")
 			}
@@ -1638,7 +1639,7 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 				return errors.Wrapf(err, "converting field %d:%+v, val:%+v", i, idkField, rawRec[i])
 			})
 		case TimestampField:
-			fields = append(fields, m.index.Field(fld.DestName(), pilosaclient.OptFieldTypeTimestamp(fld.epoch(), fld.granularity())))
+			fields = append(fields, m.index.Field(fld.DestName(), pilosaclient.OptFieldTypeTimestamp(fld.epoch(), string(fld.granularity()))))
 			valIdx := len(fields) - 1
 			recordizers = append(recordizers, func(rawRec []interface{}, rec *pilosaclient.Row) (err error) {
 				switch rawRec[i].(type) {

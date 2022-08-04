@@ -195,26 +195,59 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 // provide any respective configuration values.
 func OptFieldTypeTimestamp(epoch time.Time, timeUnit string) FieldOption {
 	return func(fo *FieldOptions) error {
-		// Check if the epoch will overflow when converted to nano.
-		if err := CheckUnixNanoOverflow(epoch); err != nil {
-			return err
-		}
-		epochValue := epoch.UnixNano() / TimeUnitNanos(timeUnit)
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
-		if timeUnit == "" {
-			return errors.Errorf("time unit required for timestamp field")
-		} else if !IsValidTimeUnit(timeUnit) {
-			return errors.Errorf("invalid time unit: %q", fo.TimeUnit)
+
+		minTime := MinTimestamp
+		maxTime := MaxTimestamp
+
+		var base, minInt, maxInt int64
+		switch timeUnit {
+		case TimeUnitSeconds:
+			base = epoch.Unix()
+			minInt = minTime.Unix() - base
+			maxInt = maxTime.Unix() - base
+		case TimeUnitMilliseconds:
+			base = epoch.UnixMilli()
+			minInt = minTime.UnixMilli() - base
+			maxInt = maxTime.UnixMilli() - base
+		case TimeUnitMicroseconds, TimeUnitUSeconds:
+			base = epoch.UnixMicro()
+			minInt = minTime.UnixMicro() - base
+			maxInt = maxTime.UnixMicro() - base
+		case TimeUnitNanoseconds:
+			// Note: For nano, the min and max values are also the min and max integer
+			// values we support. Also, keep in mind that MinNano is a negative
+			// number. So if base is positive and we do MinNano - base...it would increase minInt
+			// beyond what we support. This isn't an issue with larger granularities.
+			base = epoch.UnixNano()
+			if base > 0 {
+				maxInt = MaxTimestampNano.UnixNano() - base
+				minInt = MinTimestampNano.UnixNano()
+			} else {
+				maxInt = MaxTimestampNano.UnixNano()
+				minInt = MinTimestampNano.UnixNano() - base
+			}
+			minTime = MinTimestampNano
+			maxTime = MaxTimestampNano
+		default:
+			return errors.Errorf("invalid time unit: '%q'", fo.TimeUnit)
 		}
+
+		if err := CheckEpochOutOfRange(epoch, minTime, maxTime); err != nil {
+			return err
+		}
+
 		fo.Type = FieldTypeTimestamp
 		fo.TimeUnit = timeUnit
-		fo.Min = pql.NewDecimal(MinTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
-		fo.Max = pql.NewDecimal(MaxTimestamp.UnixNano()/TimeUnitNanos(timeUnit), 0)
-		fo.Base = epochValue
+		fo.Base = base
+		fo.Min = pql.NewDecimal(minInt, 0)
+		fo.Max = pql.NewDecimal(maxInt, 0)
+
 		return nil
 	}
+
 }
 
 // OptFieldTypeDecimal is a functional option for creating a `decimal` field.
@@ -1416,14 +1449,19 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
-	} else if value < bsig.Min {
-		return false, errors.Wrapf(ErrBSIGroupValueTooLow, "index = %v, field = %v, column ID = %v, value %v is smaller than min allowed %v", f.index, f.name, columnID, value, bsig.Min)
-	} else if value > bsig.Max {
-		return false, errors.Wrapf(ErrBSIGroupValueTooHigh, "index = %v, field = %v, column ID = %v, value %v is larger than max allowed %v", f.index, f.name, columnID, value, bsig.Max)
 	}
 
 	// Determine base value to store.
 	baseValue := int64(value - bsig.Base)
+	//Timestamp expects incoming value to already be relative to epoch
+	if f.Type() == FieldTypeTimestamp {
+		value = baseValue
+	}
+	if value < bsig.Min {
+		return false, errors.Wrapf(ErrBSIGroupValueTooLow, "index = %v, field = %v, column ID = %v, value %v is smaller than min allowed %v", f.index, f.name, columnID, value, bsig.Min)
+	} else if value > bsig.Max {
+		return false, errors.Wrapf(ErrBSIGroupValueTooHigh, "index = %v, field = %v, column ID = %v, value %v is larger than max allowed %v", f.index, f.name, columnID, value, bsig.Max)
+	}
 
 	requiredBitDepth := bitDepthInt64(baseValue)
 
@@ -1565,8 +1603,14 @@ func (f *Field) valCountize(val int64, cnt uint64, bsig *bsiGroup) (ValCount, er
 		dec := pql.NewDecimal(val+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
 	} else if f.Options().Type == FieldTypeTimestamp {
-		valCount.TimestampVal = time.Unix(0, (val+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
+		ts, err := ValToTimestamp(f.options.TimeUnit, val+bsig.Base)
+		if err != nil {
+			return ValCount{}, errors.Wrap(err, "translating value to timestamp")
+		}
+		valCount.TimestampVal = ts
+		// valCount.TimestampVal = time.Unix(0, (val+bsig.Base)*TimeUnitNanos(f.options.TimeUnit)).UTC()
 	}
+
 	valCount.Val = val + bsig.Base
 	return valCount, nil
 }
@@ -1753,7 +1797,7 @@ func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time
 	}
 
 	for i, t := range values {
-		ivalues[i] = t.UnixNano() / TimeUnitNanos(f.options.TimeUnit)
+		ivalues[i] = TimestampToVal(f.options.TimeUnit, t)
 	}
 	return f.importValue(qcx, columnIDs, ivalues, shard, options)
 }
@@ -1796,23 +1840,23 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard 
 		if value < min {
 			min = value
 		}
-		if f.Type() == FieldTypeTimestamp {
-			scale := (TimeUnitNanos(f.options.TimeUnit))
-			offset := f.options.Base * scale
-			dur := value * scale
-			if offset > 0 {
-				if dur > math.MaxInt64-offset {
-					return errors.Wrap(ErrBSIGroupValueTooHigh, "value + epoch is too far from Unix epoch")
-				}
-			} else if dur < math.MinInt64-offset {
-				return errors.Wrap(ErrBSIGroupValueTooLow, "value + epoch is too far from Unix epoch")
-			}
-		}
+
+	}
+
+	// Timestamps differ from other BSI fields in that integer representations
+	// of timestamps are already relative to the epoch (base).
+	// So a user may set an epoch to 2022-03-01 as the start of a race
+	// and import finishing times in seconds.
+	// Timestamps ingested as timestamps are of course absolute, but by the time
+	// we get here it would be a relative integer.
+	if f.Type() != FieldTypeTimestamp {
+		min -= bsig.Base
+		max -= bsig.Base
 	}
 
 	// Determine the highest bit depth required by the min & max.
-	requiredDepth := bitDepthInt64(min - bsig.Base)
-	if v := bitDepthInt64(max - bsig.Base); v > requiredDepth {
+	requiredDepth := bitDepthInt64(min)
+	if v := bitDepthInt64(max); v > requiredDepth {
 		requiredDepth = v
 	}
 	// Increase bit depth if required.
@@ -2078,6 +2122,11 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.Keys,
 		})
 	case FieldTypeTimestamp:
+		epoch, err := ValToTimestamp(o.TimeUnit, o.Base)
+		if err != nil {
+			return nil, errors.Wrap(err, "translating val to timestamp")
+		}
+
 		return json.Marshal(struct {
 			Type     string      `json:"type"`
 			Epoch    time.Time   `json:"epoch"`
@@ -2087,7 +2136,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			TimeUnit string      `json:"timeUnit"`
 		}{
 			o.Type,
-			time.Unix(0, o.Base*TimeUnitNanos(o.TimeUnit)).UTC(),
+			epoch,
 			o.BitDepth,
 			o.Min,
 			o.Max,
@@ -2127,16 +2176,6 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	}
 	return nil, errors.Errorf("invalid field type: '%s'", o.Type)
-}
-
-// MinTimestamp returns the minimum value for a timestamp field.
-func (o FieldOptions) MinTimestamp() time.Time {
-	return time.Unix(0, o.Min.ToInt64(0)*int64(TimeUnitNanos(o.TimeUnit)))
-}
-
-// MaxTimestamp returns the maxnimum value for a timestamp field.
-func (o FieldOptions) MaxTimestamp() time.Time {
-	return time.Unix(0, o.Max.ToInt64(0)*int64(TimeUnitNanos(o.TimeUnit)))
 }
 
 // List of bsiGroup types.
@@ -2304,15 +2343,16 @@ func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
 	return f.schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View)
 }
 
-// Timestamp field range.
+// Timestamp field ranges.
 var (
-	DefaultEpoch = time.Unix(0, 0).UTC() // 1970-01-01T00:00:00Z
-
-	MinTimestamp = time.Unix(-1<<32, 0).UTC() // 1833-11-24T17:31:44Z
-	MaxTimestamp = time.Unix(1<<32, 0).UTC()  // 2106-02-07T06:28:16Z
+	DefaultEpoch     = time.Unix(0, 0).UTC()            // 1970-01-01T00:00:00Z
+	MinTimestampNano = time.Unix(-1<<32, 0).UTC()       // 1833-11-24T17:31:44Z
+	MaxTimestampNano = time.Unix(1<<32, 0).UTC()        // 2106-02-07T06:28:16Z
+	MinTimestamp     = time.Unix(-62135596799, 0).UTC() // 0001-01-01T00:00:01Z
+	MaxTimestamp     = time.Unix(253402300799, 0).UTC() // 9999-12-31T23:59:59Z
 )
 
-// List of time units.
+// Constants related to timestamp.
 const (
 	TimeUnitSeconds      = "s"
 	TimeUnitMilliseconds = "ms"
@@ -2345,12 +2385,9 @@ func TimeUnitNanos(unit string) int64 {
 	}
 }
 
-func CheckUnixNanoOverflow(epoch time.Time) error {
-	if time.Unix(0, 0).After(epoch) {
-		if epoch.UnixNano() > 0 {
-			return errors.Errorf("custom epoch too far from Unix epoch: %s", epoch)
-		}
-	} else if epoch.UnixNano() < 0 {
+// CheckEpochOutOfRange checks if the epoch is after max or before min
+func CheckEpochOutOfRange(epoch, min, max time.Time) error {
+	if epoch.After(max) || epoch.Before(min) {
 		return errors.Errorf("custom epoch too far from Unix epoch: %s", epoch)
 	}
 	return nil

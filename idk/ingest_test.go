@@ -708,7 +708,7 @@ func TestBatchFromSchema(t *testing.T) {
 	runTest := func(t *testing.T, test testcase, removeIndex bool, server serverInfo) {
 		m := NewMain()
 		configureTestFlags(m)
-		m.Index = "cmd_test_index23lkjdkfj"
+		m.Index = "cmd_test_index23lkjdkfjr2"
 		m.PrimaryKeyFields = test.pkFields
 		m.IDField = test.IDField
 		m.AutoGenerate = test.autogen
@@ -721,14 +721,6 @@ func TestBatchFromSchema(t *testing.T) {
 			m.AuthToken = server.AuthToken
 		}
 		m.PilosaHosts = server.PilosaHosts
-		onFinishRun, err := m.Setup()
-		if strings.Contains("validation", test.name) && testErr(t, test.err, err) {
-			return
-		}
-		if err != nil {
-			t.Fatalf("%v", err)
-		}
-		defer onFinishRun()
 		if removeIndex {
 			defer func() {
 				err := m.client.DeleteIndex(m.index)
@@ -737,6 +729,14 @@ func TestBatchFromSchema(t *testing.T) {
 				}
 			}()
 		}
+		onFinishRun, err := m.Setup()
+		if strings.Contains("validation", test.name) && testErr(t, test.err, err) {
+			return
+		}
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		defer onFinishRun()
 
 		rdzs, batch, row, lookupWriteIdxs, err := m.batchFromSchema(test.schema)
 		if testErr(t, test.err, err) {
@@ -937,7 +937,7 @@ func TestBatchFromSchema(t *testing.T) {
 			rawRec:   []interface{}{"blaah", "08 Mar 09 21:00 UTC", "molecula.com"},
 			rowID:    "blaah",
 			rowVals:  []interface{}{"molecula.com"},
-			time:     getQuantizedTime(time.Unix(1236548950, 0)),
+			time:     getQuantizedTime(time.Unix(1236548940, 0).UTC()),
 		},
 		{
 			name:     "record time field epoch",
@@ -959,7 +959,7 @@ func TestBatchFromSchema(t *testing.T) {
 		},
 		{
 			name:     "timestamp field",
-			schema:   []Field{StringField{NameVal: "a"}, TimestampField{NameVal: "b", Granularity: "s", Unit: Millisecond}},
+			schema:   []Field{StringField{NameVal: "a"}, TimestampField{NameVal: "b", Granularity: "s", Unit: Millisecond, Epoch: time.Unix(10000, 0)}},
 			pkFields: []string{"a"},
 			rawRec:   []interface{}{"blah", "5000"},
 			rowID:    "blah",
@@ -967,7 +967,7 @@ func TestBatchFromSchema(t *testing.T) {
 		},
 		{
 			name:     "timestamp incorrect layout",
-			schema:   []Field{StringField{NameVal: "a"}, TimestampField{NameVal: "b", Granularity: "s", Layout: "Mon, 02 Jan 2006 15:04:05 MST"}},
+			schema:   []Field{StringField{NameVal: "a"}, TimestampField{NameVal: "b", Layout: "Mon, 02 Jan 2006 15:04:05 MST"}},
 			pkFields: []string{"a"},
 			rawRec:   []interface{}{"blah", "2025-05-15T05:05:05Z"},
 			rowID:    "blah",
@@ -1173,18 +1173,17 @@ func int64Ptr(i int64) *int64 {
 
 func testErr(t *testing.T, exp string, actual error) (done bool) {
 	t.Helper()
-	fmt.Printf("\n$$ Err Contains: %+v$$\n", actual)
 	if exp == "" && actual == nil {
 		return false
 	}
 	if exp == "" && actual != nil {
-		t.Fatalf("unexpected errs exp/got\n%s\n%v", exp, actual)
+		t.Fatalf("unexpected errs exp: \n%s got: \n%v", exp, actual)
 	}
 	if exp != "" && actual == nil {
-		t.Fatalf("expected errs exp/got\n%s\n%v", exp, actual)
+		t.Fatalf("expected errs exp: \n%s got: \n%v", exp, actual)
 	}
 	if !strings.Contains(actual.Error(), exp) {
-		t.Fatalf("unmatched errs exp/got\n%s\n%v", exp, actual)
+		t.Fatalf("unmatched errs exp: \n%s got: \n%v", exp, actual)
 	}
 	return true
 }

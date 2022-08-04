@@ -275,7 +275,11 @@ func HeaderToField(headerField string, log logger.Logger) (field Field, _ error)
 			if err != nil {
 				return nil, errors.Wrapf(err, "parsing epoch for '%s'", headerField)
 			}
-			tsField.Epoch = epoch
+			if epoch.IsZero() {
+				tsField.Epoch = time.Unix(0, 0)
+			} else {
+				tsField.Epoch = epoch
+			}
 		}
 		if len(fieldspec) > 4 {
 			unit := Unit(fieldspec[4]).unit()

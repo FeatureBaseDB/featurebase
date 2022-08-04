@@ -1701,6 +1701,7 @@ type SchemaOptions struct {
 	TrackExistence bool          `json:"trackExistence"`
 	TimeUnit       string        `json:"timeUnit"`
 	Base           int64         `json:"base"`
+	Epoch          time.Time     `json:"epoch"`
 }
 
 func (so SchemaOptions) asIndexOptions() *IndexOptions {
@@ -1726,6 +1727,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		noStandardView: so.NoStandardView,
 		timeUnit:       so.TimeUnit,
 		base:           so.Base,
+		epoch:          so.Epoch,
 	}
 }
 
