@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,6 +45,7 @@ type Source struct {
 
 	spoolBase     uint64
 	spool         []confluent.TopicPartition
+	highmarks     []confluent.TopicPartition
 	client        *confluent.Consumer
 	recordChannel chan recordWithError
 
@@ -63,6 +65,7 @@ type Source struct {
 	quit   chan struct{}
 	wg     sync.WaitGroup
 	opened bool
+	mu     sync.Mutex
 }
 
 const defaultRegistryHost = "localhost:8081"
@@ -80,6 +83,7 @@ func NewSource() *Source {
 		recordChannel: make(chan recordWithError),
 		quit:          make(chan struct{}),
 		ConfigMap:     &confluent.ConfigMap{},
+		highmarks:     make([]confluent.TopicPartition, 0),
 	}
 
 	src.SchemaRegistryURL = "http://" + defaultRegistryHost
@@ -116,6 +120,8 @@ func (s *Source) Record() (idk.Record, error) {
 	// where we should pick up from... we don't want to re-read this
 	// message, so we add 1
 	msg.TopicPartition.Offset++
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.spool = append(s.spool, msg.TopicPartition)
 	return &Record{
 		src:       s,
@@ -151,12 +157,15 @@ func (s *Source) Schema() []idk.Field {
 func (s *Source) SchemaSubject() string {
 	return s.schema.Subject
 }
+
 func (s *Source) SchemaSchema() string {
 	return s.schema.Schema
 }
+
 func (s *Source) SchemaVersion() int {
 	return s.schema.Version
 }
+
 func (s *Source) SchemaID() int {
 	return s.schema.ID
 }
@@ -195,19 +204,44 @@ func (r *Record) StreamOffset() (string, uint64) {
 var _ idk.OffsetStreamRecord = &Record{}
 
 func (r *Record) Commit(ctx context.Context) error {
+	r.src.mu.Lock()
+	defer r.src.mu.Unlock()
 	idx, base := r.idx, r.src.spoolBase
 	if idx < base {
 		return errors.New("cannot commit a record that has already been committed")
 	}
 	section, remaining := r.src.spool[:idx-base], r.src.spool[idx-base:]
-	committedOffsets, err := r.src.CommitMessages(section)
-	extra := calOffsetDiff(section, committedOffsets)
+	if r.src.Verbose {
+		for _, o := range section {
+			r.src.Log.Debugf("raw p: %v o: %v", o.Partition, o.Offset)
+		}
+	}
+	sort.Slice(section, func(i, j int) bool {
+		if section[i].Partition != section[j].Partition {
+			return section[i].Partition < section[j].Partition
+		}
+		return section[i].Offset > section[j].Offset
+	})
+	p := int32(-1)
+	r.src.highmarks = r.src.highmarks[:0]
+	// sort by increasing partition, decreasing offset
+
+	for _, x := range section {
+		if p != x.Partition {
+			r.src.highmarks = append(r.src.highmarks, x)
+		}
+		p = x.Partition
+	}
+	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)
 	if err != nil {
 		return errors.Wrap(err, "failed to commit messages")
 	}
-	if len(extra) > 0 {
-		remaining = append(remaining, extra...)
-		idx = idx - uint64(len(extra))
+
+	if r.src.Verbose {
+		r.src.Log.Debugf("COMMIT")
+		for _, o := range committedOffsets {
+			r.src.Log.Debugf("p: %v o: %v", o.Partition, o.Offset)
+		}
 	}
 
 	r.src.spool = remaining
@@ -223,6 +257,7 @@ func (r *Record) Data() []interface{} {
 func calOffsetDiff(section, committed []confluent.TopicPartition) []confluent.TopicPartition {
 	return section[len(committed):]
 }
+
 func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.TopicPartition, error) {
 	return s.client.CommitOffsets(recs)
 }
@@ -327,12 +362,18 @@ func (c *Source) generator() {
 	defer func() {
 		close(c.recordChannel)
 		c.wg.Done()
+		if c.Verbose {
+			c.Log.Debugf("generator")
+		}
 	}()
 
 	for {
 		select {
 
 		case <-c.quit:
+			if c.Verbose {
+				c.Log.Debugf("source quit")
+			}
 			return
 		default:
 			ev := c.client.Poll(100)
@@ -346,6 +387,9 @@ func (c *Source) generator() {
 			case confluent.AssignedPartitions:
 				err := c.client.Assign(e.Partitions)
 				if err != nil {
+					if c.Verbose {
+						c.Log.Debugf("quit AssignedParitions")
+					}
 					return
 				}
 				// If we received an `RevokedPartitions` event, we need to revoke this
@@ -354,6 +398,9 @@ func (c *Source) generator() {
 			case confluent.RevokedPartitions:
 				err := c.client.Unassign()
 				if err != nil {
+					if c.Verbose {
+						c.Log.Debugf("quit RevokeParkitions")
+					}
 					return
 				}
 
@@ -365,6 +412,9 @@ func (c *Source) generator() {
 				select {
 				case c.recordChannel <- msg:
 				case <-c.quit:
+					if c.Verbose {
+						c.Log.Debugf("source quit Error")
+					}
 					return
 				}
 
@@ -381,9 +431,22 @@ func (c *Source) generator() {
 				select {
 				case c.recordChannel <- msg:
 				case <-c.quit:
+					if c.Verbose {
+						c.Log.Debugf("source quit Message")
+					}
 					return
 				}
+			case confluent.OffsetsCommitted:
+				c.Log.Debugf("commited %s", e)
+				if c.Verbose {
+					for _, r := range e.Offsets {
+						c.Log.Debugf("p: %v o: %v", r.Partition, r.Offset)
+					}
+				}
 			default:
+				if c.Verbose {
+					c.Log.Debugf("ignored %#v", ev)
+				}
 				continue // consumer doesn't care about all event types (e.g. OffsetsCommitted)
 			}
 		}
@@ -393,7 +456,7 @@ func (c *Source) generator() {
 // Close closes the underlying kafka consumer.
 func (s *Source) Close() error {
 	if s.client != nil {
-		if s.opened { //only close opened sources
+		if s.opened { // only close opened sources
 			s.quit <- struct{}{}
 			s.wg.Wait()
 			err := s.client.Close()
@@ -784,6 +847,7 @@ func cacheConfigProp(p propper) (*idk.CacheConfig, error) {
 
 	return &idk.CacheConfig{CacheType: pilosaclient.CacheType(cacheType), CacheSize: cacheSize}, nil
 }
+
 func intProp(p propper, s string) (int64, error) {
 	ival, ok := p.Prop(s)
 	if !ok {
@@ -815,8 +879,10 @@ type propper interface {
 	Prop(string) (interface{}, bool)
 }
 
-var notFound = errors.New("prop not found")
-var wrongType = errors.New("val is wrong type")
+var (
+	notFound  = errors.New("prop not found")
+	wrongType = errors.New("val is wrong type")
+)
 
 // avroUnionToPDKField takes an avro SchemaField with a Union type,
 // and reduces it to a SchemaField with the type of one of the Types

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -35,6 +36,7 @@ type Source struct {
 
 	spoolBase     uint64
 	spool         []confluent.TopicPartition
+	highmarks     []confluent.TopicPartition
 	client        *confluent.Consumer
 	recordChannel chan recordWithError
 	ConfigMap     *confluent.ConfigMap
@@ -43,6 +45,7 @@ type Source struct {
 	quit   chan struct{}
 	wg     sync.WaitGroup
 	opened bool
+	mu     sync.Mutex
 }
 
 // NewSource gets a new Source
@@ -86,6 +89,8 @@ func (s *Source) Record() (idk.Record, error) {
 	// where we should pick up from... we don't want to re-read this
 	// message, so we add 1
 	msg.TopicPartition.Offset++
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.spool = append(s.spool, msg.TopicPartition)
 	return &Record{
 		src:       s,
@@ -124,6 +129,7 @@ func (s *Source) decodeMessage(buf []byte) ([]interface{}, error) {
 func (s *Source) Schema() []idk.Field {
 	return s.schema
 }
+
 func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.TopicPartition, error) {
 	return s.client.CommitOffsets(recs)
 }
@@ -144,19 +150,33 @@ func (r *Record) StreamOffset() (string, uint64) {
 var _ idk.OffsetStreamRecord = &Record{}
 
 func (r *Record) Commit(ctx context.Context) error {
+	r.src.mu.Lock()
+	defer r.src.mu.Unlock()
+
 	idx, base := r.idx, r.src.spoolBase
 	if idx < base {
 		return errors.New("cannot commit a record that has already been committed")
 	}
 	section, remaining := r.src.spool[:idx-base], r.src.spool[idx-base:]
-	committedOffsets, err := r.src.CommitMessages(section)
-	extra := calOffsetDiff(section, committedOffsets)
+	// sort by increasing partition, decreasing offset
+	sort.Slice(section, func(i, j int) bool {
+		if section[i].Partition != section[j].Partition {
+			return section[i].Partition < section[j].Partition
+		}
+		return section[i].Offset > section[j].Offset
+	})
+	// calculate the high marks
+	p := int32(-1)
+	r.src.highmarks = r.src.highmarks[:0]
+	for _, x := range section {
+		if p != x.Partition {
+			r.src.highmarks = append(r.src.highmarks, x)
+		}
+		p = x.Partition
+	}
+	_, err := r.src.CommitMessages(r.src.highmarks)
 	if err != nil {
 		return errors.Wrap(err, "failed to commit messages")
-	}
-	if len(extra) > 0 {
-		remaining = append(remaining, extra...)
-		idx = idx - uint64(len(extra))
 	}
 
 	r.src.spool = remaining
@@ -306,7 +326,7 @@ func (c *Source) generator() {
 // Close closes the underlying kafka consumer.
 func (s *Source) Close() error {
 	if s.client != nil {
-		if s.opened { //only close opened sources
+		if s.opened { // only close opened sources
 			s.quit <- struct{}{}
 			s.wg.Wait()
 			err := s.client.Close()
