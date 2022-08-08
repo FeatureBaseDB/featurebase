@@ -1,7 +1,7 @@
 {
   "indexes": [
     {
-      "name": "equipment",
+      "name": "e",
       "options": {
         "keys": true,
         "trackExistence": true
@@ -137,7 +137,7 @@
       "shardWidth": 1048576
     },
     {
-      "name": "power_ts",
+      "name": "t",
       "options": {
         "keys": true,
         "trackExistence": true
@@ -285,7 +285,7 @@
       "shardWidth": 1048576
     },
     {
-      "name": "sites",
+      "name": "s",
       "options": {
         "keys": false,
         "trackExistence": true

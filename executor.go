@@ -3052,7 +3052,23 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return mergeGroupCounts(other, findGroupCounts(v), limit)
+		x := mergeGroupCounts(other, findGroupCounts(v), limit)
+		for i := range x {
+			gc := &x[i]
+			for j := range gc.Group {
+				fr := &gc.Group[j]
+				if fr.FieldOptions == nil {
+					// oops, options were omitted possibly by a remote. try to
+					// guess them from our local options
+					field := e.Holder.Field(index, fr.Field)
+					if field != nil {
+						options := field.Options()
+						fr.FieldOptions = &options
+					}
+				}
+			}
+		}
+		return x
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)

@@ -218,7 +218,7 @@ func TestHolder_DeleteIndex(t *testing.T) {
 
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
-	c := test.MustNewCluster(t, 2)
+	c := test.MustUnsharedCluster(t, 2)
 	c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
 	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
 	c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
@@ -230,27 +230,27 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	}
 	defer c.Close()
 
-	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), c.Idx(), pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "y", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), c.Idx("y"), pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index y: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx(), "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f0", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx(), "f0", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f0: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "y", "z", pilosa.OptFieldTypeMutex(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx("y"), "z", pilosa.OptFieldTypeMutex(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field z in y: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "y", "b", pilosa.OptFieldTypeBool())
+	_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx("y"), "b", pilosa.OptFieldTypeBool())
 	if err != nil {
 		t.Fatalf("creating field b in y: %v", err)
 	}
@@ -259,29 +259,29 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
 
 	// Set data on the local holder.
-	hldr0.SetBit("i", "f", 0, 10)
-	hldr0.SetBit("i", "f", 2, 20)
-	hldr0.SetBit("i", "f", 120, 10)
-	hldr0.SetBit("i", "f", 200, 4)
+	hldr0.SetBit(c.Idx(), "f", 0, 10)
+	hldr0.SetBit(c.Idx(), "f", 2, 20)
+	hldr0.SetBit(c.Idx(), "f", 120, 10)
+	hldr0.SetBit(c.Idx(), "f", 200, 4)
 
-	hldr0.SetBit("i", "f0", 9, ShardWidth+5)
+	hldr0.SetBit(c.Idx(), "f0", 9, ShardWidth+5)
 
 	// Set a bit to create the fragment.
-	hldr0.SetBit("y", "z", 0, 0)
-	hldr0.SetBit("y", "b", 0, 0) // rowID = 0 means false
+	hldr0.SetBit(c.Idx("y"), "z", 0, 0)
+	hldr0.SetBit(c.Idx("y"), "b", 0, 0) // rowID = 0 means false
 
 	// Set data on the remote holder.
-	hldr1.SetBit("i", "f", 0, 4000)
-	hldr1.SetBit("i", "f", 3, 10)
-	hldr1.SetBit("i", "f", 120, 10)
+	hldr1.SetBit(c.Idx(), "f", 0, 4000)
+	hldr1.SetBit(c.Idx(), "f", 3, 10)
+	hldr1.SetBit(c.Idx(), "f", 120, 10)
 
-	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+4)
-	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+5)
-	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+7)
+	hldr1.SetBit(c.Idx("y"), "z", 10, (3*ShardWidth)+4)
+	hldr1.SetBit(c.Idx("y"), "z", 10, (3*ShardWidth)+5)
+	hldr1.SetBit(c.Idx("y"), "z", 10, (3*ShardWidth)+7)
 
-	hldr1.SetBit("y", "b", 1, (3*ShardWidth)+4) // true
-	hldr1.SetBit("y", "b", 0, (3*ShardWidth)+5) // false
-	hldr1.SetBit("y", "b", 1, (3*ShardWidth)+7) // true
+	hldr1.SetBit(c.Idx("y"), "b", 1, (3*ShardWidth)+4) // true
+	hldr1.SetBit(c.Idx("y"), "b", 0, (3*ShardWidth)+5) // false
+	hldr1.SetBit(c.Idx("y"), "b", 1, (3*ShardWidth)+7) // true
 
 	err = c.GetNode(0).Server.SyncData()
 	if err != nil {
@@ -294,34 +294,34 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1} {
-		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+		if a := hldr.Row(c.Idx(), "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Errorf("unexpected columns(%d/0): %+v", i, a)
 		}
-		if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+		if a := hldr.Row(c.Idx(), "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Errorf("unexpected columns(%d/2): %+v", i, a)
 		}
-		if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		if a := hldr.Row(c.Idx(), "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Errorf("unexpected columns(%d/3): %+v", i, a)
 		}
-		if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		if a := hldr.Row(c.Idx(), "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Errorf("unexpected columns(%d/120): %+v", i, a)
 		}
-		if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+		if a := hldr.Row(c.Idx(), "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
 			t.Errorf("unexpected columns(%d/200): %+v", i, a)
 		}
 
-		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{ShardWidth + 5}) {
+		if a := hldr.Row(c.Idx(), "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{ShardWidth + 5}) {
 			t.Errorf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 
-		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 5, (3 * ShardWidth) + 7}) {
+		if a := hldr.Row(c.Idx("y"), "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 5, (3 * ShardWidth) + 7}) {
 			t.Errorf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 
-		if a := hldr.Row("y", "b", 0).Columns(); !reflect.DeepEqual(a, []uint64{0, (3 * ShardWidth) + 5}) {
+		if a := hldr.Row(c.Idx("y"), "b", 0).Columns(); !reflect.DeepEqual(a, []uint64{0, (3 * ShardWidth) + 5}) {
 			t.Errorf("unexpected false columns(%d/y/b): %+v", i, a)
 		}
-		if a := hldr.Row("y", "b", 1).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 7}) {
+		if a := hldr.Row(c.Idx("y"), "b", 1).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 7}) {
 			t.Errorf("unexpected true columns(%d/y/b): %+v", i, a)
 		}
 	}
@@ -330,7 +330,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 // Ensure holder can sync with a remote holder and respects
 // the row boundaries of the block.
 func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
-	c := test.MustNewCluster(t, 3)
+	c := test.MustUnsharedCluster(t, 3)
 	c.GetIdleNode(0).Config.Cluster.ReplicaN = 3
 	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
 	c.GetIdleNode(1).Config.Cluster.ReplicaN = 3
@@ -343,11 +343,11 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 	}
 	defer c.Close()
 
-	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), c.Idx(), pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx(), "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
@@ -359,13 +359,13 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 	hldr2 := &test.Holder{Holder: c.GetNode(2).Server.Holder()}
 
 	// Set data on the local holder.
-	hldr0.SetBit("i", "f", blockEdge-1, 10)
-	hldr0.SetBit("i", "f", blockEdge, 20)
+	hldr0.SetBit(c.Idx(), "f", blockEdge-1, 10)
+	hldr0.SetBit(c.Idx(), "f", blockEdge, 20)
 
 	// Set the same data on one of the replicas
 	// so that we have a quorum.
-	hldr1.SetBit("i", "f", blockEdge-1, 10)
-	hldr1.SetBit("i", "f", blockEdge, 20)
+	hldr1.SetBit(c.Idx(), "f", blockEdge-1, 10)
+	hldr1.SetBit(c.Idx(), "f", blockEdge, 20)
 
 	// Leave the third replica empty to force a block merge.
 	//
@@ -376,10 +376,10 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 
 	// Verify data is the same on all nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1, hldr2} {
-		if a := hldr.Row("i", "f", blockEdge-1).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		if a := hldr.Row(c.Idx(), "f", blockEdge-1).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Errorf("unexpected columns(%d/block 0): %+v", i, a)
 		}
-		if a := hldr.Row("i", "f", blockEdge).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+		if a := hldr.Row(c.Idx(), "f", blockEdge).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Errorf("unexpected columns(%d/block 1): %+v", i, a)
 		}
 	}
@@ -387,7 +387,7 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 
 // Ensure holder correctly handles clears during block sync.
 func TestHolderSyncer_Clears(t *testing.T) {
-	c := test.MustNewCluster(t, 3)
+	c := test.MustUnsharedCluster(t, 3)
 	c.GetIdleNode(0).Config.Cluster.ReplicaN = 3
 	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
 	c.GetIdleNode(1).Config.Cluster.ReplicaN = 3
@@ -400,11 +400,11 @@ func TestHolderSyncer_Clears(t *testing.T) {
 	}
 	defer c.Close()
 
-	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), c.Idx(), pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx(), "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
@@ -415,13 +415,13 @@ func TestHolderSyncer_Clears(t *testing.T) {
 
 	// Set data on the local holder that should be cleared
 	// because it's the only instance of this value.
-	hldr0.SetBit("i", "f", 0, 30)
+	hldr0.SetBit(c.Idx(), "f", 0, 30)
 
 	// Set similar data on the replicas, but
 	// different from what's on local. This should end
 	// up being set on all replicas
-	hldr1.SetBit("i", "f", 0, 20)
-	hldr2.SetBit("i", "f", 0, 20)
+	hldr1.SetBit(c.Idx(), "f", 0, 20)
+	hldr2.SetBit(c.Idx(), "f", 0, 20)
 
 	err = c.GetNode(0).Server.SyncData()
 	if err != nil {
@@ -430,7 +430,7 @@ func TestHolderSyncer_Clears(t *testing.T) {
 
 	// Verify data is the same on all nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1, hldr2} {
-		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+		if a := hldr.Row(c.Idx(), "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Errorf("unexpected columns(%d): %+v", i, a)
 		}
 	}
@@ -438,7 +438,7 @@ func TestHolderSyncer_Clears(t *testing.T) {
 
 // Ensure holder can sync time quantum views with a remote holder.
 func TestHolderSyncer_TimeQuantum(t *testing.T) {
-	c := test.MustNewCluster(t, 2)
+	c := test.MustUnsharedCluster(t, 2)
 	c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
 	c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
 	c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
@@ -451,11 +451,11 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 
 	quantum := "D"
 
-	_, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err = c.GetNode(0).API.CreateIndex(context.Background(), c.Idx(), pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index i: %v", err)
 	}
-	_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum(quantum), "0"))
+	_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx(), "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum(quantum), "0"))
 	if err != nil {
 		t.Fatalf("creating field f: %v", err)
 	}
@@ -466,11 +466,11 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	// Set data on the local holder for node0.
 	t1 := time.Date(2018, 8, 1, 12, 30, 0, 0, time.UTC)
 	t2 := time.Date(2018, 8, 2, 12, 30, 0, 0, time.UTC)
-	hldr0.SetBitTime("i", "f", 0, 1, &t1)
-	hldr0.SetBitTime("i", "f", 0, 2, &t2)
+	hldr0.SetBitTime(c.Idx(), "f", 0, 1, &t1)
+	hldr0.SetBitTime(c.Idx(), "f", 0, 2, &t2)
 
 	// Set data on node1.
-	hldr1.SetBitTime("i", "f", 0, 22, &t2)
+	hldr1.SetBitTime(c.Idx(), "f", 0, 22, &t2)
 
 	err = c.GetNode(0).Server.SyncData()
 	if err != nil {
@@ -479,10 +479,10 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1} {
-		if a := hldr.RowTime("i", "f", 0, t1, quantum).Columns(); !reflect.DeepEqual(a, []uint64{1}) {
+		if a := hldr.RowTime(c.Idx(), "f", 0, t1, quantum).Columns(); !reflect.DeepEqual(a, []uint64{1}) {
 			t.Errorf("unexpected columns(%d/0): %+v", i, a)
 		}
-		if a := hldr.RowTime("i", "f", 0, t2, quantum).Columns(); !reflect.DeepEqual(a, []uint64{2, 22}) {
+		if a := hldr.RowTime(c.Idx(), "f", 0, t2, quantum).Columns(); !reflect.DeepEqual(a, []uint64{2, 22}) {
 			t.Errorf("unexpected columns(%d/0): %+v", i, a)
 		}
 	}
@@ -491,7 +491,7 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 // Ensure holder can sync integer views with a remote holder.
 func TestHolderSyncer_IntField(t *testing.T) {
 	t.Run("BasicSync", func(t *testing.T) {
-		c := test.MustNewCluster(t, 2)
+		c := test.MustUnsharedCluster(t, 2)
 		c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
 		c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
 		c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
@@ -503,12 +503,12 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		defer c.Close()
 
 		var idx0 *pilosa.Index
-		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), c.Idx(), pilosa.IndexOptions{})
 		_ = idx0
 		if err != nil {
 			t.Fatalf("creating index i: %v", err)
 		}
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(0, 100))
+		_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx(), "f", pilosa.OptFieldTypeInt(0, 100))
 		if err != nil {
 			t.Fatalf("creating field f: %v", err)
 		}
@@ -517,12 +517,12 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
 
 		// Set data on the local holder for node0. columnID=1, value=1
-		hldr0.SetValue("i", "f", 1, 1)
+		hldr0.SetValue(c.Idx(), "f", 1, 1)
 
 		// in c0 expect the 1 bit
 
 		// Set data on node1. columnID=2, value=2
-		idx1 := hldr1.SetValue("i", "f", 2, 2)
+		idx1 := hldr1.SetValue(c.Idx(), "f", 2, 2)
 		_ = idx1
 
 		err = c.GetNode(0).Server.SyncData()
@@ -537,11 +537,11 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 		// Verify data is the same on both nodes.
 		for i, hldr := range []*test.Holder{hldr0, hldr1} {
-			if a, exists := hldr.Value("i", "f", 1); !exists || a != 1 {
+			if a, exists := hldr.Value(c.Idx(), "f", 1); !exists || a != 1 {
 				// expects exists==true, a==1
 				t.Errorf("unexpected value(node%d/0): a:%d, exists: %v", i, a, exists)
 			}
-			if a, exists := hldr.Value("i", "f", 2); exists {
+			if a, exists := hldr.Value(c.Idx(), "f", 2); exists {
 				t.Errorf("unexpected value(node%d/1): a:%d, exists: %v", i, a, exists)
 			}
 		}
@@ -549,7 +549,7 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 	t.Run("MultiShard", func(t *testing.T) {
 		t.Skip() // skipping due to changed partitioning strategy
-		c := test.MustNewCluster(t, 2)
+		c := test.MustUnsharedCluster(t, 2)
 		c.GetIdleNode(0).Config.Cluster.ReplicaN = 2
 		c.GetIdleNode(0).Config.AntiEntropy.Interval = 0
 		c.GetIdleNode(1).Config.Cluster.ReplicaN = 2
@@ -562,12 +562,12 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 		var idx0 *pilosa.Index
 		_ = idx0
-		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		idx0, err = c.GetNode(0).API.CreateIndex(context.Background(), c.Idx(), pilosa.IndexOptions{})
 		_ = idx0
 		if err != nil {
 			t.Fatalf("creating index i: %v", err)
 		}
-		_, err = c.GetNode(0).API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		_, err = c.GetNode(0).API.CreateField(context.Background(), c.Idx(), "f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatalf("creating field f: %v", err)
 		}
@@ -576,18 +576,18 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		hldr1 := &test.Holder{Holder: c.GetNode(1).Server.Holder()}
 
 		// Set data on the local holder for node0.
-		hldr0.SetValue("i", "f", 1*pilosa.ShardWidth, 11)
-		hldr0.SetValue("i", "f", 3*pilosa.ShardWidth, 32)
-		hldr0.SetValue("i", "f", 4*pilosa.ShardWidth, math.MinInt32)
-		hldr0.SetValue("i", "f", 7*pilosa.ShardWidth, math.MinInt32)
+		hldr0.SetValue(c.Idx(), "f", 1*pilosa.ShardWidth, 11)
+		hldr0.SetValue(c.Idx(), "f", 3*pilosa.ShardWidth, 32)
+		hldr0.SetValue(c.Idx(), "f", 4*pilosa.ShardWidth, math.MinInt32)
+		hldr0.SetValue(c.Idx(), "f", 7*pilosa.ShardWidth, math.MinInt32)
 
 		// Set data on node1.
-		hldr1.SetValue("i", "f", 0*pilosa.ShardWidth, 2)
-		hldr1.SetValue("i", "f", 2*pilosa.ShardWidth, 22)
-		hldr1.SetValue("i", "f", 4*pilosa.ShardWidth, math.MaxInt32)
-		hldr1.SetValue("i", "f", 7*pilosa.ShardWidth, math.MaxInt32)
+		hldr1.SetValue(c.Idx(), "f", 0*pilosa.ShardWidth, 2)
+		hldr1.SetValue(c.Idx(), "f", 2*pilosa.ShardWidth, 22)
+		hldr1.SetValue(c.Idx(), "f", 4*pilosa.ShardWidth, math.MaxInt32)
+		hldr1.SetValue(c.Idx(), "f", 7*pilosa.ShardWidth, math.MaxInt32)
 
-		// Primary for shards (for index "i"):
+		// Primary for shards (for index c.Idx()):
 		// node0: [0,3,7]
 		// node1: [1,2,4]
 
@@ -604,10 +604,10 @@ func TestHolderSyncer_IntField(t *testing.T) {
 
 		// Verify data is the same on both nodes.
 		for i, hldr := range []*test.Holder{hldr0, hldr1} {
-			if a := hldr.Range("i", "f", pql.GT, 0); !reflect.DeepEqual(a.Columns(), []uint64{2 * pilosa.ShardWidth, 3 * pilosa.ShardWidth, 4 * pilosa.ShardWidth}) {
+			if a := hldr.Range(c.Idx(), "f", pql.GT, 0); !reflect.DeepEqual(a.Columns(), []uint64{2 * pilosa.ShardWidth, 3 * pilosa.ShardWidth, 4 * pilosa.ShardWidth}) {
 				t.Errorf("unexpected columns(node%d/0): %d", i, a.Columns())
 			}
-			if a := hldr.Range("i", "f", pql.LT, 0); !reflect.DeepEqual(a.Columns(), []uint64{7 * pilosa.ShardWidth}) {
+			if a := hldr.Range(c.Idx(), "f", pql.LT, 0); !reflect.DeepEqual(a.Columns(), []uint64{7 * pilosa.ShardWidth}) {
 				t.Errorf("unexpected columns(node%d/0): %d", i, a.Columns())
 			}
 		}

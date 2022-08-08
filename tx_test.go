@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"testing"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/server"
-	"github.com/featurebasedb/featurebase/v3/test"
-	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/test"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 func queryIRABit(m0api *pilosa.API, acctOwnerID uint64, iraField string, iraRowID uint64, index string) (bit bool) {
@@ -46,21 +45,14 @@ func queryBalances(m0api *pilosa.API, acctOwnerID uint64, fldAcct0, fldAcct1, in
 }
 
 func TestAPI_ImportAtomicRecord(t *testing.T) {
-	c := test.MustRunCluster(t, 1,
-		[]server.CommandOption{
-			server.OptCommandServerOptions(
-				pilosa.OptServerNodeID("node0"),
-				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderFunc(nil)),
-			)},
-	)
+	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
 	m0 := c.GetNode(0)
 	m0api := m0.API
 
 	ctx := context.Background()
-	index := "i"
+	index := c.Idx()
 
 	fieldAcct0 := "acct0"
 	fieldAcct1 := "acct1"
