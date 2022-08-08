@@ -17,7 +17,7 @@ import (
 
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewTestCluster(tb testing.TB, n int) *cluster {
-	if n > 1 && etcd.AllowCluster() {
+	if n > 1 && !etcd.AllowCluster() {
 		tb.Skipf("cluster size %d not supported in unclustered mode", n)
 	}
 	path, err := testhook.TempDir(tb, "pilosa-cluster-")
@@ -28,7 +28,7 @@ func NewTestCluster(tb testing.TB, n int) *cluster {
 	availableShardFileFlushDuration.Set(100 * time.Millisecond)
 	c := newCluster()
 	c.ReplicaN = 1
-	c.Hasher = NewTestModHasher()
+	c.Hasher = &disco.Jmphasher{}
 	c.Path = path
 
 	nodes := make([]*disco.Node, 0, n)
@@ -62,16 +62,6 @@ func NewTestURIFromHostPort(host string, port uint16) pnet.URI {
 	uri.SetPort(port)
 	return *uri
 }
-
-// ModHasher represents a simple, mod-based hashing.
-type TestModHasher struct{}
-
-// NewTestModHasher returns a new instance of ModHasher with n buckets.
-func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
-
-func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
-
-func (*TestModHasher) Name() string { return "mod" }
 
 func TestReplaceFirstFromBack(t *testing.T) {
 	for name, test := range map[string]struct {

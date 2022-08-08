@@ -217,18 +217,18 @@ func TestImportCommand_RunKeys(t *testing.T) {
 	cmd := cluster.GetNode(0)
 	cm.Host = cmd.API.Node().URI.HostPort()
 
-	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i", cm.Host, cluster), strings.NewReader(`{"options":{"keys": true}}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
-	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"keys": true}}`)))
+	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i/field/f", cm.Host, cluster), strings.NewReader(`{"options":{"keys": true}}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
 
-	cm.Index = "i"
+	cm.Index = cluster.Idx("i")
 	cm.Field = "f"
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
@@ -272,18 +272,18 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 
 	cm.Host = host0
 
-	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i", cm.Host, c), strings.NewReader(`{"options":{"keys": true}}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
-	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"keys": true}}`)))
+	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i/field/f", cm.Host, c), strings.NewReader(`{"options":{"keys": true}}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
 
-	cm.Index = "i"
+	cm.Index = c.Idx("i")
 	cm.Field = "f"
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
@@ -295,7 +295,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 	for _, host := range []string{host0, host1} {
 		if err := test.RetryUntil(2*time.Second, func() error {
 			qry := "Count(Row(f=foo0))"
-			resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+host+"/index/i/query", strings.NewReader(qry)))
+			resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i/query", host, c), strings.NewReader(qry)))
 			if err != nil {
 				return fmt.Errorf("Querying data for validation: %s", err)
 			}
@@ -335,18 +335,18 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 	cmd := cluster.GetNode(0)
 	cm.Host = cmd.API.Node().URI.HostPort()
 
-	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i", cm.Host, cluster), strings.NewReader(`{"options":{"keys": true}}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
-	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
+	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i/field/f", cm.Host, cluster), strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
 
-	cm.Index = "i"
+	cm.Index = cluster.Idx("i")
 	cm.Field = "f"
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
@@ -463,18 +463,18 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 
 	cm.Host = cmd.API.Node().URI.HostPort()
 
-	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i", cm.Host, cluster), strings.NewReader("")))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
-	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max":2147483648 }}`)))
+	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i/field/f", cm.Host, cluster), strings.NewReader(`{"options":{"type": "int", "min": 0, "max":2147483648 }}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
 
-	cm.Index = "i"
+	cm.Index = cluster.Idx("i")
 	cm.Field = "f"
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
@@ -525,18 +525,18 @@ func TestImportCommand_RunBool(t *testing.T) {
 	cmd := cluster.GetNode(0)
 	cm.Host = cmd.API.Node().URI.HostPort()
 
-	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i", cm.Host, cluster), strings.NewReader("")))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
-	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "bool"}}`)))
+	resp, err = http.DefaultClient.Do(MustNewHTTPRequest("POST", fmt.Sprintf("http://%s/index/%i/field/f", cm.Host, cluster), strings.NewReader(`{"options":{"type": "bool"}}`)))
 	if err != nil {
 		t.Fatalf("posting request: %v", err)
 	}
 	resp.Body.Close()
 
-	cm.Index = "i"
+	cm.Index = cluster.Idx("i")
 	cm.Field = "f"
 
 	t.Run("Valid", func(t *testing.T) {
@@ -711,6 +711,7 @@ func TestImport_AuthOn(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// note: cluster isn't shared because of custom opts
 		cluster := test.MustRunCluster(t, clusterSize, commandOpts...)
 		defer cluster.Close()
 		cmd := cluster.GetNode(0)

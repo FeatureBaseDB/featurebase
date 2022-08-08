@@ -14,11 +14,10 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/encoding/proto"
-	"github.com/featurebasedb/featurebase/v3/server"
-	"github.com/featurebasedb/featurebase/v3/testhook"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/server"
 )
 
 // //////////////////////////////////////////////////////////////////////////////////
@@ -37,11 +36,8 @@ func OptAllowedOrigins(origins []string) server.CommandOption {
 }
 
 // newCommand returns a new instance of Main with a temporary data directory and random port.
-func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
-	path, err := testhook.TempDir(tb, "pilosa-command-")
-	if err != nil {
-		panic(err)
-	}
+func newCommand(tb DirCleaner, opts ...server.CommandOption) *Command {
+	path := tb.TempDir()
 
 	// Set aggressive close timeout by default to avoid hanging tests. This was
 	// a problem with PDK tests which used pilosa/client as well. We put it at the
@@ -54,7 +50,7 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), io.Discard, io.Discard, opts...)
 	// pick etcd ports using a socket rather than a real port
-	err = GetPortsGenConfigs(tb, []*Command{m})
+	err := GetPortsGenConfigs(tb, []*Command{m})
 	if err != nil {
 		tb.Fatalf("generating config: %v", err)
 	}
@@ -81,7 +77,7 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 }
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
-func NewCommandNode(tb testing.TB, opts ...server.CommandOption) *Command {
+func NewCommandNode(tb DirCleaner, opts ...server.CommandOption) *Command {
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
 	// has been specified, it will override this one.
@@ -96,7 +92,7 @@ func RunCommand(t *testing.T) *Command {
 
 	// prefer MustRunCluster since it sets up for using etcd using
 	// the GenDisCoConfig(size) option.
-	return MustRunCluster(t, 1).GetNode(0)
+	return MustRunUnsharedCluster(t, 1).GetNode(0)
 }
 
 // Close closes the program and removes the underlying data directory.

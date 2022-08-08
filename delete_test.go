@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"testing"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 )
 
 func TestExecutor_DeleteRecords(t *testing.T) {
-	indexName := "i"
+	c := test.MustRunCluster(t, 1)
+	indexName := c.Idx()
+	defer c.Close()
 	setup := func(t *testing.T, r *require.Assertions, c *test.Cluster) {
 		t.Helper()
 		c.CreateField(t, indexName, pilosa.IndexOptions{TrackExistence: true}, "setfield")
@@ -111,13 +114,6 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 	}
 	require := require.New(t)
 	t.Run("DeleteRecords", func(t *testing.T) {
-		c := test.MustNewCluster(t, 1)
-		for _, n := range c.Nodes {
-			n.Config.Cluster.ReplicaN = 1
-		}
-		err := c.Start()
-		require.NoError(err, "Start cluster DeleteRecords")
-		defer c.Close()
 
 		t.Run("Delete", func(t *testing.T) {
 			setup(t, require, c)
@@ -144,7 +140,9 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 			resp := c.Query(t, indexName, `Extract(All())`)
 			m := resp.Results[0].(pilosa.ExtractedTable)
 			before := convertKey(m.Columns)
-			require.Equal([]string{"one", "A", "B", "C", "D", "two"}, before, "these keyed records before")
+			sort.Strings(before)
+			expected := []string{"A", "B", "C", "D", "one", "two"}
+			require.Equal(expected, before, "these keyed records before")
 			resp = c.Query(t, indexName, `Delete(ConstRow(columns=["A","one"]))`)
 			require.NotEmpty(resp.Results)
 			require.Equal(true, resp.Results[0], "Change should have happened")
@@ -152,6 +150,7 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 			resp = c.Query(t, indexName, `Extract(All())`)
 			m = resp.Results[0].(pilosa.ExtractedTable)
 			after := convertKey(m.Columns)
+			sort.Strings(after)
 			require.Equal([]string{"B", "C", "D", "two"}, after, "these keyed records after delete")
 			//validate that column keys got deleted
 			node := c.GetNode(0)
@@ -240,13 +239,9 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 		})
 	})
 	t.Run("DeleteRecordsBigWithRestart", func(t *testing.T) {
-		c := test.MustNewCluster(t, 1)
-		for _, n := range c.Nodes {
-			n.Config.Cluster.ReplicaN = 1
-		}
-		err := c.Start()
+		// restarting doesn't work correctly for a shared cluster
+		c := test.MustRunUnsharedCluster(t, 1)
 		defer c.Close()
-		require.NoError(err, "Start cluster DeleteRecordsBig")
 		setupBig(t, require, c, 16)
 		defer tearDown(t, require, c)
 		node := c.GetNode(0)
@@ -258,7 +253,7 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 		require.NotNil(resp, "Response should not be nil")
 		require.NotEmpty(resp.Results)
 		require.Equal(uint64(0), resp.Results[0], "Should have removed")
-		err = node.Reopen()
+		err := node.Reopen()
 		require.NoError(err, "restart cluster DeleteRecordsBig")
 		err = c.AwaitState(disco.ClusterStateNormal, 10*time.Second)
 		require.NoError(err, "backToNormal")

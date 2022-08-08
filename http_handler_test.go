@@ -173,10 +173,11 @@ func TestUpdateFieldTTL(t *testing.T) {
 		},
 	}
 
+	indexName := c.Idx("s")
 	for i, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			c.CreateField(t, "ttltest", pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), test.ttl))
-			nodeURL := c.Nodes[0].URL() + "/index/ttltest/field/" + test.field
+			c.CreateField(t, indexName, pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), test.ttl))
+			nodeURL := fmt.Sprintf("%s/index/%s/field/%s", c.Nodes[0].URL(), c, test.field)
 			req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(test.ttlOption))
 			if err != nil {
 				t.Fatal(err)
@@ -215,12 +216,21 @@ func TestUpdateFieldTTL(t *testing.T) {
 				if err != nil {
 					t.Fatalf("getting schema: %v", err)
 				}
-				if ii[0].Fields[i].Name == test.name {
-					if ii[0].Fields[i].Options.TTL != test.expTTL {
-						t.Errorf("expected TTL: '%s', got: '%s'", test.expTTL, ii[0].Fields[i].Options.TTL)
+				for _, idx := range ii {
+					if idx.Name == indexName {
+						if len(idx.Fields) <= i {
+							t.Fatalf("expected %d fields, last %s, got %d fields",
+								i, test.name, len(idx.Fields))
+						}
+						if idx.Fields[i].Name == test.name {
+							if idx.Fields[i].Options.TTL != test.expTTL {
+								t.Errorf("expected noStandardView value: '%s', got: '%s'", test.expTTL, idx.Fields[i].Options.TTL)
+							}
+						} else {
+							t.Errorf("unexpected field: '%s', got: '%s'", test.name, idx.Fields[i].Name)
+						}
+						break
 					}
-				} else {
-					t.Errorf("unexpected field: '%s', got: '%s'", test.name, ii[0].Fields[i].Name)
 				}
 			}
 
@@ -278,11 +288,13 @@ func TestUpdateFieldNoStandardView(t *testing.T) {
 			expNoStandardView: false,
 		},
 	}
+	// "s" to make it match %s behavior of a cluster
+	indexName := c.Idx("s")
 
 	for i, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			c.CreateField(t, "ttltest", pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0"))
-			nodeURL := c.Nodes[0].URL() + "/index/ttltest/field/" + test.field
+			c.CreateField(t, indexName, pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0"))
+			nodeURL := fmt.Sprintf("%s/index/%s/field/%s", c.Nodes[0].URL(), c, test.field)
 			req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(test.fieldOption))
 			if err != nil {
 				t.Fatal(err)
@@ -317,33 +329,34 @@ func TestUpdateFieldNoStandardView(t *testing.T) {
 				if err != nil {
 					t.Fatalf("getting schema: %v", err)
 				}
-				if ii[0].Fields[i].Name == test.name {
-					if ii[0].Fields[i].Options.NoStandardView != test.expNoStandardView {
-						t.Errorf("expected noStandardView value: '%t', got: '%t'", test.expNoStandardView, ii[0].Fields[i].Options.NoStandardView)
+				for _, idx := range ii {
+					if idx.Name == indexName {
+						if len(idx.Fields) <= i {
+							t.Fatalf("expected %d fields, last %s, got %d fields",
+								i, test.name, len(idx.Fields))
+						}
+						if idx.Fields[i].Name == test.name {
+							if idx.Fields[i].Options.NoStandardView != test.expNoStandardView {
+								t.Errorf("expected noStandardView value: '%t', got: '%t'", test.expNoStandardView, idx.Fields[i].Options.NoStandardView)
+							}
+						} else {
+							t.Errorf("unexpected field: '%s', got: '%s'", test.name, idx.Fields[i].Name)
+						}
+						break
 					}
-				} else {
-					t.Errorf("unexpected field: '%s', got: '%s'", test.name, ii[0].Fields[i].Name)
 				}
 			}
-
 		})
 	}
 }
 
 func TestIngestSchemaHandler(t *testing.T) {
-	c := test.MustRunCluster(t, 3,
-		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
-		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
-		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
-	)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	schema := `
+	schema := fmt.Sprintf(`
 {
-   "index-name": "example",
+   "index-name": "%s",
    "primary-key-type": "string",
    "index-action": "create",
    "fields": [
@@ -408,7 +421,7 @@ func TestIngestSchemaHandler(t *testing.T) {
        }
    ]
 }
-`
+`, c)
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
@@ -425,15 +438,16 @@ func TestIngestSchemaHandler(t *testing.T) {
 func TestPostFieldWithTTL(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
+	indexName := c.Idx("%s")
 
-	schema := `
+	schema := fmt.Sprintf(`
 	{
-		"index-name": "ttl_test",
+		"index-name": "%s",
 		"primary-key-type": "string",
 		"index-action": "create",
 		"fields":[]
 	 }
-	`
+	`, c)
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
@@ -451,7 +465,7 @@ func TestPostFieldWithTTL(t *testing.T) {
 	}{
 		{
 			name:      "t1_48h",
-			url:       fmt.Sprintf("%s/index/ttl_test/field/t1_48h", m.URL()),
+			url:       fmt.Sprintf("%s/index/%s/field/t1_48h", m.URL(), c),
 			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"48h" }}`,
 			expStatus: 200,
 			expErr:    `"success":true`,
@@ -459,28 +473,28 @@ func TestPostFieldWithTTL(t *testing.T) {
 		},
 		{
 			name:      "t2_unknown_unit",
-			url:       fmt.Sprintf("%s/index/ttl_test/field/t2_unknown_unit", m.URL()),
+			url:       fmt.Sprintf("%s/index/%s/field/t2_unknown_unit", m.URL(), c),
 			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"24abc" }}`,
 			expStatus: 400,
 			expErr:    "cannot parse ttl",
 		},
 		{
 			name:      "t3_invalid",
-			url:       fmt.Sprintf("%s/index/ttl_test/field/t3_invalid", m.URL()),
+			url:       fmt.Sprintf("%s/index/%s/field/t3_invalid", m.URL(), c),
 			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"abcdef" }}`,
 			expStatus: 400,
 			expErr:    "cannot parse ttl",
 		},
 		{
 			name:      "t4_invalid_empty",
-			url:       fmt.Sprintf("%s/index/ttl_test/field/t4_invalid_empty", m.URL()),
+			url:       fmt.Sprintf("%s/index/%s/field/t4_invalid_empty", m.URL(), c),
 			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"" }}`,
 			expStatus: 400,
 			expErr:    "cannot parse ttl",
 		},
 		{
 			name:      "t5_negative",
-			url:       fmt.Sprintf("%s/index/ttl_test/field/t5_negative", m.URL()),
+			url:       fmt.Sprintf("%s/index/%s/field/t5_negative", m.URL(), c),
 			option:    `{ "options": {"timeQuantum":"YMDH","type":"time","ttl":"-24h" }}`,
 			expStatus: 400,
 			expErr:    "ttl can't be negative",
@@ -508,12 +522,21 @@ func TestPostFieldWithTTL(t *testing.T) {
 						t.Fatalf("getting schema: %v", err)
 					}
 
-					if ii[0].Fields[i].Name == test_i.name {
-						if ii[0].Fields[i].Options.TTL != test_i.expTTL {
-							t.Errorf("expected TTL: '%s', got: '%s'", test_i.expTTL, ii[0].Fields[i].Options.TTL)
+					for _, idx := range ii {
+						if idx.Name == indexName {
+							if len(idx.Fields) <= i {
+								t.Fatalf("expected %d fields, last %s, got %d fields",
+									i, test_i.name, len(idx.Fields))
+							}
+							if idx.Fields[i].Name == test_i.name {
+								if idx.Fields[i].Options.TTL != test_i.expTTL {
+									t.Errorf("expected TTL: '%s', got: '%s'", test_i.expTTL, idx.Fields[i].Options.TTL)
+								}
+							} else {
+								t.Errorf("unexpected field: '%s', got: '%s'", test_i.name, idx.Fields[i].Name)
+							}
+							break
 						}
-					} else {
-						t.Errorf("unexpected field: '%s', got: '%s'", test_i.name, ii[0].Fields[i].Name)
 					}
 				}
 			}
@@ -525,9 +548,9 @@ func TestGetViewAndDelete(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	schema := `
+	schema := fmt.Sprintf(`
 	{
-		"index-name": "example",
+		"index-name": "%s",
 		"primary-key-type": "string",
 		"index-action": "create",
 		"fields": [
@@ -540,7 +563,7 @@ func TestGetViewAndDelete(t *testing.T) {
 			}
 		]
 	 }
-	 `
+	 `, c)
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
@@ -549,7 +572,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	}
 
 	// Send sample data
-	postQueryUrl := fmt.Sprintf("%s/index/example/query", m.URL())
+	postQueryUrl := fmt.Sprintf("%s/index/%s/query", m.URL(), c)
 	queryOption := `
 	Set(1,test_view=1,2001-02-03T04:05)
 	`
@@ -568,7 +591,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	}
 
 	// Call view to get data
-	viewUrl := fmt.Sprintf("%s/index/example/field/test_view/view", m.URL())
+	viewUrl := fmt.Sprintf("%s/index/%s/field/test_view/view", m.URL(), c)
 	respView := test.Do(t, "GET", viewUrl, "")
 	if respView.StatusCode != gohttp.StatusOK {
 		t.Errorf("view handler, status: %d, body=%s", respView.StatusCode, respView.Body)
@@ -598,7 +621,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	}
 
 	// call delete on view standard_2001020304
-	deleteViewUrl := fmt.Sprintf("%s/index/example/field/test_view/view/standard_2001020304", m.URL())
+	deleteViewUrl := fmt.Sprintf("%s/index/%s/field/test_view/view/standard_2001020304", m.URL(), c)
 	respDelete := test.Do(t, "DELETE", deleteViewUrl, "")
 	if respDelete.StatusCode != gohttp.StatusOK {
 		t.Errorf("delete handler, status: %d, body=%s", respDelete.StatusCode, respDelete.Body)
@@ -608,7 +631,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	expectedViewNames = expectedViewNames[:len(expectedViewNames)-1]
 
 	// call view again
-	viewUrl = fmt.Sprintf("%s/index/example/field/test_view/view", m.URL())
+	viewUrl = fmt.Sprintf("%s/index/%s/field/test_view/view", m.URL(), c)
 	respView = test.Do(t, "GET", viewUrl, "")
 	if respView.StatusCode != gohttp.StatusOK {
 		t.Errorf("view handler after delete, status: %d, body=%s", respView.StatusCode, respView.Body)
@@ -641,9 +664,9 @@ func TestTranslationHandlers(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	schema := `
+	schema := fmt.Sprintf(`
 {
-   "index-name": "example",
+   "index-name": "%s",
    "primary-key-type": "string",
    "index-action": "create",
    "fields": [
@@ -657,7 +680,7 @@ func TestTranslationHandlers(t *testing.T) {
        }
    ]
 }
-`
+`, c)
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
@@ -665,9 +688,9 @@ func TestTranslationHandlers(t *testing.T) {
 		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 	baseURLs := []string{
-		fmt.Sprintf("%s/internal/translate/index/example/", m.URL()),
-		fmt.Sprintf("%s/internal/translate/field/example/stringset/", m.URL()),
-		fmt.Sprintf("%s/internal/translate/field/example/nonexistent/", m.URL()),
+		fmt.Sprintf("%s/internal/translate/index/%s/", m.URL(), c),
+		fmt.Sprintf("%s/internal/translate/field/%s/stringset/", m.URL(), c),
+		fmt.Sprintf("%s/internal/translate/field/%s/nonexistent/", m.URL(), c),
 	}
 	for _, url := range baseURLs {
 		expectFailure := strings.HasSuffix(url, "/nonexistent/")

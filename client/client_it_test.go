@@ -71,7 +71,7 @@ func TestClientAgainstCluster(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 
 			// Start size.replicaN cluster
-			c := test.MustNewCluster(t, size)
+			c := test.MustUnsharedCluster(t, size)
 			for _, n := range c.Nodes {
 				n.Config.Cluster.ReplicaN = replicaN
 			}
