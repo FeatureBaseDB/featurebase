@@ -21,7 +21,7 @@ func TestViewsRemovalTTL(t *testing.T) {
 	// Create a client
 	client := node.Client()
 
-	indexName := "i"
+	indexName := cluster.Idx()
 
 	// Create indexes and field with ttl lasting 24 hours
 	if err := client.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{TrackExistence: true}); err != nil && err != pilosa.ErrIndexExists {
@@ -195,7 +195,7 @@ func TestViewsRemovalStandard(t *testing.T) {
 	// Create a client
 	client := node.Client()
 
-	indexName := "i"
+	indexName := cluster.Idx()
 
 	// Create indexes and field with ttl lasting 24 hours
 	if err := client.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{TrackExistence: true}); err != nil && err != pilosa.ErrIndexExists {

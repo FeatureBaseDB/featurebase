@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -13,6 +14,30 @@ import (
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/testhook"
 )
+
+// AssertEqual checks a given RowIdentifiers against expected values.
+func (r *RowIdentifiers) AssertEqual(tb testing.TB, other *RowIdentifiers) {
+	sort.Slice(r.Rows, func(i, j int) bool { return r.Rows[i] < r.Rows[j] })
+	sort.Slice(other.Rows, func(i, j int) bool { return other.Rows[i] < other.Rows[j] })
+	if len(r.Rows) != len(other.Rows) {
+		tb.Fatalf("row ID mismatch: got %d, expected %d", r.Rows, other.Rows)
+	}
+	for i := range r.Rows {
+		if r.Rows[i] != other.Rows[i] {
+			tb.Fatalf("row ID mismatch: got %d, expected %d", r.Rows, other.Rows)
+		}
+	}
+	sort.Strings(r.Keys)
+	sort.Strings(other.Keys)
+	if len(r.Keys) != len(other.Keys) {
+		tb.Fatalf("row keys mismatch: got %s, expected %s", r.Keys, other.Keys)
+	}
+	for i := range r.Keys {
+		if r.Keys[i] != other.Keys[i] {
+			tb.Fatalf("row keys mismatch: got %s, expected %s", r.Keys, other.Keys)
+		}
+	}
+}
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	path, _ := testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")

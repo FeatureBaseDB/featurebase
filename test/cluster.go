@@ -7,8 +7,10 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+	"unicode"
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/api/client"
@@ -22,22 +24,86 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// modHasher represents a simple, mod-based hashing.
-type ModHasher struct{}
-
-func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
-
-func (*ModHasher) Name() string { return "mod" }
-
-// Cluster represents a Pilosa cluster (multiple Command instances)
+// Cluster represents a per-test wrapper of a "real" cluster.
+// Individual tests which request a cluster can get one of these
+// back, wrapped with their test name.
 type Cluster struct {
-	Nodes []*Command
-	tb    testing.TB
+	*ShareableCluster
+	tb         testing.TB
+	indexName  string
+	indexBytes []byte
+}
+
+// Idx produces an index name suitable for this test's
+// cluster, using the name itself, or the concatenation
+// of that name and any provided strings, joined by underscores.
+func (c *Cluster) Idx(of ...string) string {
+	if len(of) == 0 {
+		return c.indexName
+	}
+	for i := range of {
+		of[i] = indexName(of[i])
+	}
+	return c.indexName + strings.Join(of, "_")
+}
+
+// Format implements Formatter, allowing us to use clusters in
+// format strings to handle the extremely common problem of "I
+// want to embed the index name in this here string". Because we
+// are horrible criminals, we append the rune, so you can use
+// %i and %j to get index-name-plus-i and index-name-plus-j,
+// respectively. We do assume that the rune works as a plain byte,
+// though.
+func (c *Cluster) Format(state fmt.State, r rune) {
+	c.indexBytes = append(c.indexBytes[:0], c.indexName...)
+	c.indexBytes = append(c.indexBytes, byte(r))
+	_, _ = state.Write(c.indexBytes)
+}
+
+func (c *Cluster) Close() error {
+	if c.shared {
+		// We're not going to actually close the cluster, BUT, we do want to
+		// delete and close all the indexes we might have just made.
+		h := c.GetHolder(0)
+		indexes := h.Indexes()
+		var lastErr error
+		api := c.Nodes[0].API
+		for _, idx := range indexes {
+			name := idx.Name()
+			if strings.HasPrefix(name, c.indexName) {
+				err := api.DeleteIndex(context.Background(), name)
+				if err != nil {
+					lastErr = err
+				}
+			}
+		}
+		return lastErr
+	}
+	if !c.started {
+		return errors.New("cluster not started yet")
+	}
+	return c.ShareableCluster.Close()
+}
+
+func (c *Cluster) Start() error {
+	if c.started {
+		return errors.New("cluster already started")
+	}
+	c.started = true
+	return c.ShareableCluster.Start()
+}
+
+// ShareableCluster represents a featurebase cluster (multiple Command instances)
+// without test-specific overhead.
+type ShareableCluster struct {
+	Nodes   []*Command
+	started bool
+	shared  bool
 }
 
 // Query executes an API.Query through one of the cluster's node's API. It fails
 // the test if there is an error.
-func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse {
+func (c *ShareableCluster) Query(t testing.TB, index, query string) pilosa.QueryResponse {
 	t.Helper()
 	if len(c.Nodes) == 0 {
 		t.Fatal("must have at least one node in cluster to query")
@@ -49,7 +115,7 @@ func (c *Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse 
 // QueryHTTP executes a PQL query through the HTTP endpoint. It fails
 // the test for explicit errors, but returns an error which has the
 // response body if the HTTP call returns a non-OK status.
-func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
+func (c *ShareableCluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 	t.Helper()
 	if len(c.Nodes) == 0 {
 		t.Fatal("must have at least one node in cluster to query")
@@ -60,7 +126,7 @@ func (c *Cluster) QueryHTTP(t testing.TB, index, query string) (string, error) {
 
 // QueryGRPC executes a PQL query through the GRPC endpoint. It fails the
 // test if there is an error.
-func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableResponse {
+func (c *ShareableCluster) QueryGRPC(t testing.TB, index, query string) *proto.TableResponse {
 	t.Helper()
 	if len(c.Nodes) == 0 {
 		t.Fatal("must have at least one node in cluster to query")
@@ -92,7 +158,7 @@ func (c *Cluster) QueryGRPC(t testing.TB, index, query string) *proto.TableRespo
 // starting; it's ok to reference each node by its index in the pre-sorted node
 // list. It's also safe to use this method after `MustRunCluster()` if the
 // cluster contains only one node.
-func (c *Cluster) GetIdleNode(n int) *Command {
+func (c *ShareableCluster) GetIdleNode(n int) *Command {
 	return c.Nodes[n]
 }
 
@@ -104,7 +170,7 @@ func (c *Cluster) GetIdleNode(n int) *Command {
 // `123`, `789`, then we actually want `GetNode(0)` to return `c.Nodes[1]`, and
 // `GetNode(1)` to return `c.Nodes[0]`. This method looks at all the node IDs,
 // sorts them, and then returns the node that the test expects.
-func (c *Cluster) GetNode(n int) *Command {
+func (c *ShareableCluster) GetNode(n int) *Command {
 	// Put all the node IDs into a list to be sorted.
 	ids := make([]nodePlace, len(c.Nodes))
 	for i := range c.Nodes {
@@ -125,7 +191,7 @@ func (c *Cluster) GetNode(n int) *Command {
 // This used to be node0 in tests, but since implementing etcd, the primary
 // can be any node in the cluster, so we have to use this method in tests which
 // need to act on the primary.
-func (c *Cluster) GetPrimary() *Command {
+func (c *ShareableCluster) GetPrimary() *Command {
 	for _, n := range c.Nodes {
 		if n.IsPrimary() {
 			return n
@@ -135,7 +201,7 @@ func (c *Cluster) GetPrimary() *Command {
 }
 
 // GetNonPrimary gets first first non-primary node in the list of nodes.
-func (c *Cluster) GetNonPrimary() *Command {
+func (c *ShareableCluster) GetNonPrimary() *Command {
 	for _, n := range c.Nodes {
 		if !n.IsPrimary() {
 			return n
@@ -145,7 +211,7 @@ func (c *Cluster) GetNonPrimary() *Command {
 }
 
 // GetNonPrimaries gets all nodes except the primary.
-func (c *Cluster) GetNonPrimaries() []*Command {
+func (c *ShareableCluster) GetNonPrimaries() []*Command {
 	rtn := make([]*Command, 0)
 	for _, n := range c.Nodes {
 		if !n.IsPrimary() {
@@ -161,15 +227,15 @@ type nodePlace struct {
 	idx int
 }
 
-func (c *Cluster) GetHolder(n int) *Holder {
+func (c *ShareableCluster) GetHolder(n int) *Holder {
 	return &Holder{Holder: c.GetNode(n).Server.Holder()}
 }
 
-func (c *Cluster) Len() int {
+func (c *ShareableCluster) Len() int {
 	return len(c.Nodes)
 }
 
-func (c *Cluster) ImportBitsWithTimestamp(t testing.TB, index, field string, rowcols [][2]uint64, timestamps []int64) {
+func (c *ShareableCluster) ImportBitsWithTimestamp(t testing.TB, index, field string, rowcols [][2]uint64, timestamps []int64) {
 	t.Helper()
 	byShard := make(map[uint64][][2]uint64)
 	byShardTs := make(map[uint64][]int64)
@@ -236,14 +302,15 @@ func (c *Cluster) ImportBitsWithTimestamp(t testing.TB, index, field string, row
 		}
 	}
 }
-func (c *Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
+
+func (c *ShareableCluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
 	var noTime []int64
 	c.ImportBitsWithTimestamp(t, index, field, rowcols, noTime)
 }
 
 // ImportKeyKey imports data into an index where both the index and
 // the field are using string keys.
-func (c *Cluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys [][2]string) {
+func (c *ShareableCluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys [][2]string) {
 	t.Helper()
 	importRequest := &pilosa.ImportRequest{
 		Index:      index,
@@ -272,7 +339,7 @@ type TimeQuantumKey struct {
 
 // ImportTimeQuantumKey imports data into an index where the index is keyd
 // and the field is a time-quantum
-func (c *Cluster) ImportTimeQuantumKey(t testing.TB, index, field string, entries []TimeQuantumKey) {
+func (c *ShareableCluster) ImportTimeQuantumKey(t testing.TB, index, field string, entries []TimeQuantumKey) {
 	t.Helper()
 	importRequest := &pilosa.ImportRequest{
 		Index:      index,
@@ -302,7 +369,7 @@ type IntKey struct {
 }
 
 // ImportIntKey imports int data into an index which uses string keys.
-func (c *Cluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey) {
+func (c *ShareableCluster) ImportIntKey(t testing.TB, index, field string, pairs []IntKey) {
 	t.Helper()
 	importRequest := &pilosa.ImportValueRequest{
 		Index:      index,
@@ -328,7 +395,7 @@ type IntID struct {
 }
 
 // ImportIntID imports data into an int field in an unkeyed index.
-func (c *Cluster) ImportIntID(t testing.TB, index, field string, pairs []IntID) {
+func (c *ShareableCluster) ImportIntID(t testing.TB, index, field string, pairs []IntID) {
 	t.Helper()
 	importRequest := &pilosa.ImportValueRequest{
 		Index:     index,
@@ -356,7 +423,7 @@ type KeyID struct {
 }
 
 //ImportIDKey imports data into an unkeyed set field in a keyed index.
-func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) {
+func (c *ShareableCluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) {
 	t.Helper()
 	importRequest := &pilosa.ImportRequest{
 		Index:      index,
@@ -377,7 +444,7 @@ func (c *Cluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) 
 }
 
 // CreateField creates the index (if necessary) and field specified.
-func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
+func (c *ShareableCluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
 	t.Helper()
 	idx, err := c.GetPrimary().API.CreateIndex(context.Background(), index, iopts)
 	if err != nil && !strings.Contains(err.Error(), "index already exists") {
@@ -402,11 +469,7 @@ func (c *Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOpti
 }
 
 // Start runs a Cluster
-func (c *Cluster) Start() error {
-	err := GetPortsGenConfigs(c.tb, c.Nodes)
-	if err != nil {
-		return errors.Wrap(err, "configuring cluster ports")
-	}
+func (c *ShareableCluster) Start() error {
 	var eg errgroup.Group
 	for _, cc := range c.Nodes {
 		cc := cc
@@ -414,7 +477,7 @@ func (c *Cluster) Start() error {
 			return cc.Start()
 		})
 	}
-	err = eg.Wait()
+	err := eg.Wait()
 	if err != nil {
 		return errors.Wrap(err, "starting cluster")
 	}
@@ -422,7 +485,17 @@ func (c *Cluster) Start() error {
 }
 
 // Close stops a Cluster
-func (c *Cluster) Close() error {
+func (c *ShareableCluster) Close() error {
+	if c.shared {
+		for i := range c.Nodes {
+			holder := c.GetHolder(i)
+			indexes := holder.Indexes()
+			var indexNames []string
+			for _, idx := range indexes {
+				indexNames = append(indexNames, idx.Name())
+			}
+		}
+	}
 	for i, cc := range c.Nodes {
 		if err := cc.Close(); err != nil {
 			return errors.Wrapf(err, "stopping server %d", i)
@@ -431,7 +504,10 @@ func (c *Cluster) Close() error {
 	return nil
 }
 
-func (c *Cluster) CloseAndRemoveNonPrimary() error {
+func (c *ShareableCluster) CloseAndRemoveNonPrimary() error {
+	if c.shared {
+		return errors.New("can't close-and-remove in shared cluster")
+	}
 	for i, n := range c.Nodes {
 		if !n.IsPrimary() {
 			return c.CloseAndRemove(i)
@@ -440,7 +516,10 @@ func (c *Cluster) CloseAndRemoveNonPrimary() error {
 	return errors.New("could not find non-primary node")
 }
 
-func (c *Cluster) CloseAndRemove(n int) error {
+func (c *ShareableCluster) CloseAndRemove(n int) error {
+	if c.shared {
+		return errors.New("can't close-and-remove in shared cluster")
+	}
 	if n < 0 || n >= len(c.Nodes) {
 		return fmt.Errorf("close/remove from cluster: index %d out of range (len %d)", n, len(c.Nodes))
 	}
@@ -454,7 +533,7 @@ func (c *Cluster) CloseAndRemove(n int) error {
 // When this happens, we know etcd reached a combination of node states that
 // would imply this cluster state, but some nodes may not have caught up yet;
 // we just test that the coordinator thought the cluster was in the given state.
-func (c *Cluster) AwaitPrimaryState(expectedState disco.ClusterState, timeout time.Duration) error {
+func (c *ShareableCluster) AwaitPrimaryState(expectedState disco.ClusterState, timeout time.Duration) error {
 	if len(c.Nodes) < 1 {
 		return errors.New("can't await coordinator state on an empty cluster")
 	}
@@ -473,16 +552,15 @@ func (c *Cluster) AwaitPrimaryState(expectedState disco.ClusterState, timeout ti
 			return errors.New("timed out waiting for cluster to have valid topology")
 		}
 		// we used up some of our timeout waiting for this
-		c.tb.Logf("had to wait %v for cluster topology", elapsed)
 		timeout -= elapsed
 	}
-	onlyCoordinator := &Cluster{Nodes: []*Command{primary}}
+	onlyCoordinator := &ShareableCluster{Nodes: []*Command{primary}}
 	return onlyCoordinator.AwaitState(expectedState, timeout)
 }
 
 // ExceptionalState returns an error if any node in the cluster is not
 // in the expected state.
-func (c *Cluster) ExceptionalState(expectedState disco.ClusterState) error {
+func (c *ShareableCluster) ExceptionalState(expectedState disco.ClusterState) error {
 	for _, node := range c.Nodes {
 		state, err := node.API.State()
 		if err != nil || state != expectedState {
@@ -493,7 +571,7 @@ func (c *Cluster) ExceptionalState(expectedState disco.ClusterState) error {
 }
 
 // AwaitState waits for the whole cluster to reach a specified state.
-func (c *Cluster) AwaitState(expectedState disco.ClusterState, timeout time.Duration) (err error) {
+func (c *ShareableCluster) AwaitState(expectedState disco.ClusterState, timeout time.Duration) (err error) {
 	if len(c.Nodes) < 1 {
 		return errors.New("can't await state of an empty cluster")
 	}
@@ -511,7 +589,8 @@ func (c *Cluster) AwaitState(expectedState disco.ClusterState, timeout time.Dura
 		elapsed, expectedState, err)
 }
 
-// MustNewCluster creates a new cluster. If opts contains only one
+// MustNewCluster creates a new cluster or returns an existing one. It never shares
+// a cluster with non-empty opts. If opts contains only one
 // slice of command options, those options are used with every node.
 // If it is empty, default options are used. Otherwise, it must contain size
 // slices of command options, which are used with corresponding nodes.
@@ -521,29 +600,111 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cl
 	}
 	tb.Helper()
 
+	shareable := len(opts) == 0
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
 	// has been specified, it will override this one.
 	opts = prependOpts(opts, size)
 
-	c, err := newCluster(tb, size, opts...)
+	c, err := newCluster(tb, size, shareable, opts...)
 	if err != nil {
 		tb.Fatalf("new cluster: %v", err)
 	}
 	return c
 }
 
-// newCluster creates a new cluster
-func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Cluster, error) {
-	if size == 0 {
-		return nil, errors.New("cluster must contain at least one node")
+// MustUnsharedCluster creates a new cluster. If opts contains only one
+// slice of command options, those options are used with every node.
+// If it is empty, default options are used. Otherwise, it must contain size
+// slices of command options, which are used with corresponding nodes. The
+// new cluster is always unshared.
+func MustUnsharedCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
+	if size > 1 && !etcd.AllowCluster() {
+		tb.Skip("Testing PLG which does not allow clustering")
 	}
+	tb.Helper()
+	// We want tests to default to using the in-memory translate store, so we
+	// prepend opts with that functional option. If a different translate store
+	// has been specified, it will override this one.
+	opts = prependOpts(opts, size)
 
-	if len(opts) != size && len(opts) != 0 && len(opts) != 1 {
-		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
+	c, err := newCluster(tb, size, false, opts...)
+	if err != nil {
+		tb.Fatalf("new cluster: %v", err)
 	}
+	return c
+}
 
-	cluster := &Cluster{Nodes: make([]*Command, size), tb: tb}
+// MustRunUnsharedCluster creates a new cluster. If opts contains only one
+// slice of command options, those options are used with every node.
+// If it is empty, default options are used. Otherwise, it must contain size
+// slices of command options, which are used with corresponding nodes. The
+// new cluster is always unshared. The new cluster is started automatically,
+// or the test is failed.
+func MustRunUnsharedCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
+	if size > 1 && !etcd.AllowCluster() {
+		tb.Skip("Testing PLG which does not allow clustering")
+	}
+	tb.Helper()
+	// We want tests to default to using the in-memory translate store, so we
+	// prepend opts with that functional option. If a different translate store
+	// has been specified, it will override this one.
+	opts = prependOpts(opts, size)
+
+	c, err := newCluster(tb, size, false, opts...)
+	if err != nil {
+		tb.Fatalf("new cluster: %v", err)
+	}
+	err = c.Start()
+	if err != nil {
+		tb.Fatalf("starting cluster: %v", err)
+	}
+	return c
+}
+
+type clusterCache struct {
+	mu       sync.Mutex
+	clusters map[int]*ShareableCluster
+}
+
+// CleanupClusters calls the close functions on any shared clusters that are
+// still open.
+func (c *clusterCache) CleanupClusters() {
+	for k, v := range c.clusters {
+		_ = v.Close()
+		delete(c.clusters, k)
+	}
+}
+
+func (c *clusterCache) newCluster(tb testing.TB, size int) (*ShareableCluster, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c := c.clusters[size]; c != nil {
+		return c, nil
+	}
+	// Make a whole-test wrapper so that the cluster we create will use the provided tb
+	// for nearly everything, but the call to TempDir inside NewCommand will pick up a
+	// persistent directory which outlives the provided TB.
+	newTB := NewWholeTestRun(tb)
+	if c.clusters == nil {
+		c.clusters = make(map[int]*ShareableCluster)
+		// tb should always be a wholeTestRun for clusterCache, and we need to
+		// register with that, so our cleanup happens *before* the deletion of
+		// the directories, otherwise etcd can fail to flush WAL files on
+		// exit, causing tests to fail.
+		newTB.Cleanup(c.CleanupClusters)
+	}
+	cluster, err := underlyingNewCluster(newTB, size)
+	if err != nil {
+		return nil, err
+	}
+	cluster.shared = true
+	c.clusters[size] = cluster
+	return cluster, nil
+}
+
+func underlyingNewCluster(tb DirCleaner, size int, opts ...[]server.CommandOption) (*ShareableCluster, error) {
+	cluster := &ShareableCluster{Nodes: make([]*Command, size)}
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {
@@ -554,17 +715,51 @@ func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (*Clust
 
 		cluster.Nodes[i] = m
 	}
-
+	// The GetPorts... stuff calls things elsewhere that want a plain testing.TB,
+	// and doesn't produce permanent directories, I think.
+	err := GetPortsGenConfigs(tb, cluster.Nodes)
+	if err != nil {
+		return nil, errors.Wrap(err, "configuring cluster ports")
+	}
 	return cluster, nil
+}
+
+var globalClusterCache clusterCache
+
+// newCluster creates a new cluster, using the shared cluster cache if no opts are
+// specified.
+func newCluster(tb testing.TB, size int, shareable bool, opts ...[]server.CommandOption) (*Cluster, error) {
+	if size == 0 {
+		return nil, errors.New("cluster must contain at least one node")
+	}
+
+	if len(opts) != size && len(opts) != 0 && len(opts) != 1 {
+		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
+	}
+
+	var shared *ShareableCluster
+	var err error
+	if !shareable {
+		shared, err = underlyingNewCluster(tb, size, opts...)
+	} else {
+		shared, err = globalClusterCache.newCluster(tb, size)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &Cluster{ShareableCluster: shared, tb: tb, indexName: indexName(tb.Name())}, nil
 }
 
 // MustRunCluster creates and starts a new cluster. The opts parameter
 // is slightly magical; see MustNewCluster.
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) *Cluster {
 	cluster := MustNewCluster(tb, size, opts...)
-	err := cluster.Start()
-	if err != nil {
-		tb.Fatalf("run cluster: %v", err)
+	if !cluster.started {
+		err := cluster.Start()
+		if err != nil {
+			tb.Fatalf("run cluster: %v", err)
+		}
+		cluster.started = true
 	}
 	return cluster
 }
@@ -611,4 +806,20 @@ func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
 		),
 	}
 	return append(defaultOpts, opts...)
+}
+
+func indexName(in string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 127 {
+			switch {
+			case unicode.IsLetter(r):
+				return unicode.ToLower(r)
+			case unicode.IsNumber(r):
+				return r
+			case r == '/':
+				return '_'
+			}
+		}
+		return -1
+	}, in)
 }

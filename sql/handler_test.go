@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/sql"
 	"github.com/molecula/featurebase/v3/test"
 	"vitess.io/vitess/go/vt/sqlparser"
@@ -33,6 +33,9 @@ func TestHandler(t *testing.T) {
 }
 
 func TestSelectHandler_MapSelect(t *testing.T) {
+	// it's load-bearing that this is the only cluster in this directory right
+	// now, because that allows us to hardcode index names and not immediately
+	// die.
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
 	api := cluster.GetNode(0).API

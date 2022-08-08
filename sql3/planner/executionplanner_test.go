@@ -22,7 +22,7 @@ func TestPlanner_Show(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	index, err := c.GetHolder(0).CreateIndex("i", pilosa.IndexOptions{TrackExistence: true})
+	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestPlanner_Show(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	index2, err := c.GetHolder(0).CreateIndex("i2", pilosa.IndexOptions{TrackExistence: false})
+	index2, err := c.GetHolder(0).CreateIndex(c.Idx("l"), pilosa.IndexOptions{TrackExistence: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowColumns", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW COLUMNS FROM i`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SHOW COLUMNS FROM %i`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowColumns2", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW COLUMNS FROM i2`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SHOW COLUMNS FROM %l`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -371,7 +371,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			// Ensure the schema field options match the expected options.
 			for _, fld := range fields {
 				t.Run(fmt.Sprintf("Field:%s", fld.name), func(t *testing.T) {
-					// Field `_id` isn't returned from FeatureBase in the schema,
+					// Field fmt.Sprintf(`_id`, c) isn't returned from FeatureBase in the schema,
 					// but we do want to validate that its type is used to determine
 					// whether or not the table is keyed.
 					if fld.name == "_id" {
@@ -532,7 +532,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	index, err := c.GetHolder(0).CreateIndex("i", pilosa.IndexOptions{TrackExistence: true})
+	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -546,7 +546,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	server := c.GetNode(0).Server
 
 	t.Run("AlterTableDrop", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, server, `alter table i drop column f`)
+		results, columns, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i drop column f`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -560,7 +560,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 
 	t.Run("AlterTableAdd", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, server, `alter table i add column f int`)
+		results, columns, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column f int`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -575,7 +575,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 
 	t.Run("AlterTableRename", func(t *testing.T) {
 		t.Skip("not yet implemented")
-		results, columns, err := sql_test.MustQueryRows(t, server, `alter table i rename column f to g`)
+		results, columns, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i rename column f to g`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -593,7 +593,7 @@ func TestPlanner_DropTable(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	index, err := c.GetHolder(0).CreateIndex("i", pilosa.IndexOptions{TrackExistence: true})
+	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -605,7 +605,7 @@ func TestPlanner_DropTable(t *testing.T) {
 	}
 
 	t.Run("DropTable", func(t *testing.T) {
-		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `DROP TABLE i`)
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`DROP TABLE %i`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -616,7 +616,7 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,7 +627,7 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex("i1", pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -640,7 +640,7 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(1, b=100)
@@ -651,7 +651,7 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 	}
 
 	t.Run("ParenOne", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT (a != b) = false, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT (a != b) = false, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -672,7 +672,7 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 	})
 
 	t.Run("ParenTwo", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT (a != b) = (false), _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT (a != b) = (false), _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -697,7 +697,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -716,7 +716,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(1, b=100)
@@ -730,7 +730,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	}
 
 	t.Run("LiteralsBool", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT false = true, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT false = true, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -751,7 +751,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsInt", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT 1 + 2, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT 1 + 2, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -772,7 +772,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsID", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT _id + 2, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT _id + 2, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -793,7 +793,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsDecimal", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT d + 2.0, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT d + 2.0, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -814,7 +814,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsString", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT str || ' bar', _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT str || ' bar', _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -839,7 +839,7 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -858,7 +858,7 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(1, b=100)
@@ -872,7 +872,7 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 	}
 
 	t.Run("CaseWithBase", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT b, case b when 100 then 10 when 201 then 20 else 5 end, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT b, case b when 100 then 10 when 201 then 20 else 5 end, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -894,7 +894,7 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 	})
 
 	t.Run("CaseWithNoBase", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT b, case when b = 100 then 10 when b = 201 then 20 else 5 end, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT b, case when b = 100 then 10 when b = 201 then 20 else 5 end, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -920,7 +920,7 @@ func TestPlanner_Select(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -931,7 +931,7 @@ func TestPlanner_Select(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex("i1", pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -944,7 +944,7 @@ func TestPlanner_Select(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(1, b=100)
@@ -955,7 +955,7 @@ func TestPlanner_Select(t *testing.T) {
 	}
 
 	t.Run("UnqualifiedColumns", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT a, b, _id FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -977,7 +977,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("QualifiedTableRef", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT bar.a, bar.b, bar._id FROM i0 as bar`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT bar.a, bar.b, bar._id FROM %j as bar`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -999,7 +999,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("AliasedUnqualifiedColumns", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT a as foo, b as bar, _id as baz FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a as foo, b as bar, _id as baz FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1021,7 +1021,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("QualifiedColumns", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT i0._id, i0.a, i0.b FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT %j._id, %j.a, %j.b FROM %j`, c, c, c, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1043,7 +1043,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("UnqualifiedStar", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT * FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT * FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1065,7 +1065,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("QualifiedStar", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT i0.* FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT %j.* FROM %j`, c, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1087,7 +1087,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("NoIdentifier", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT a, b FROM i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1108,7 +1108,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("ErrFieldNotFound", func(t *testing.T) {
-		_, err := c.GetNode(0).Server.CompileExecutionPlan(context.Background(), `SELECT xyz FROM i0`)
+		_, err := c.GetNode(0).Server.CompileExecutionPlan(context.Background(), fmt.Sprintf(`SELECT xyz FROM %j`, c))
 		if err == nil || !strings.Contains(err.Error(), `column 'xyz' not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1119,7 +1119,7 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1132,7 +1132,7 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(1, b=100)
@@ -1143,7 +1143,7 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 	}
 
 	t.Run("OrderBy", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT a, b, _id FROM i0 order by a desc`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b, _id FROM %j order by a desc`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1169,7 +1169,7 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1182,7 +1182,7 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(1, b=100)
@@ -1193,7 +1193,7 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 	}
 
 	t.Run("ParenSource", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT a, b, _id FROM (select * from i0)`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b, _id FROM (select * from %j)`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1215,7 +1215,7 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 	})
 
 	t.Run("ParenSourceWithAlias", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT foo.a, b, _id FROM (select * from i0) as foo`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT foo.a, b, _id FROM (select * from %j) as foo`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1241,7 +1241,7 @@ func TestPlanner_In(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1250,7 +1250,7 @@ func TestPlanner_In(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex("i1", pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1263,7 +1263,7 @@ func TestPlanner_In(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(2, a=20)
@@ -1273,7 +1273,7 @@ func TestPlanner_In(t *testing.T) {
 	}
 
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i1",
+		Index: c.Idx("k"),
 		Query: `
 			Set(1, parentid=1)
 			Set(1, x=100)
@@ -1289,9 +1289,9 @@ func TestPlanner_In(t *testing.T) {
 
 	t.Run("Count", func(t *testing.T) {
 		t.Skip("Need to add join conditions to get this to pass")
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT i0._id, i0.a, i1._id, i1.parentid, i1.x FROM i0 INNER JOIN i1 ON i0._id = i1.parentid`)
-		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid`)
-		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT a FROM i0 where a = 20`) //   SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT %j._id, %j.a, %k._id, %k.parentid, %k.x FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c, c, c, c, c, c))
+		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c))
+		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a FROM %j where a = 20`, c)) //   SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1310,8 +1310,8 @@ func TestPlanner_In(t *testing.T) {
 	})
 
 	/*t.Run("Count", func(t *testing.T) {
-		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid`)
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 where i0._id in (select distinct parentid from i1)`) //   SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid
+		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c))
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j where %j._id in (select distinct parentid from %k)`, c, c, c)) //   SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1330,7 +1330,7 @@ func TestPlanner_In(t *testing.T) {
 	})
 
 	t.Run("CountWithParentCondition", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 where i0._id in (select distinct parentid from i1) and i0.a = 10`) // SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid WHERE i0.a = 10
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j where %j._id in (select distinct parentid from %k) and %j.a = 10`, c, c, c, c)) // SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid WHERE %j.a = 10
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1349,7 +1349,7 @@ func TestPlanner_In(t *testing.T) {
 	})
 
 	t.Run("CountWithParentAndChildCondition", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT COUNT(*) FROM i0 where i0._id in (select distinct parentid from i1 where x = 200) and i0.a = 10`) // SELECT COUNT(*) FROM i0 INNER JOIN i1 ON i0._id = i1.parentid WHERE i0.a = 10
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j where %j._id in (select distinct parentid from %k where x = 200) and %j.a = 10`, c, c, c, c)) // SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid WHERE %j.a = 10
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1372,7 +1372,7 @@ func TestPlanner_Distinct(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1381,7 +1381,7 @@ func TestPlanner_Distinct(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex("i1", pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1394,7 +1394,7 @@ func TestPlanner_Distinct(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(2, a=20)
@@ -1404,7 +1404,7 @@ func TestPlanner_Distinct(t *testing.T) {
 	}
 
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i1",
+		Index: c.Idx("k"),
 		Query: `
 			Set(1, parentid=1)
 			Set(1, x=100)
@@ -1419,7 +1419,7 @@ func TestPlanner_Distinct(t *testing.T) {
 	}
 
 	t.Run("SelectDistinct_id", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT distinct _id from i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT distinct _id from %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1441,7 +1441,7 @@ func TestPlanner_Distinct(t *testing.T) {
 
 	t.Run("SelectDistinctNonId", func(t *testing.T) {
 		t.Skip("WIP")
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT distinct parentid from i1`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT distinct parentid from %k`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1462,7 +1462,7 @@ func TestPlanner_Distinct(t *testing.T) {
 	})
 
 	t.Run("SelectDistinctMultiple", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select distinct _id, parentid from i1`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`select distinct _id, parentid from %k`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1488,7 +1488,7 @@ func TestPlanner_SelectTop(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex("i0", pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1503,7 +1503,7 @@ func TestPlanner_SelectTop(t *testing.T) {
 
 	// Populate with data.
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
-		Index: "i0",
+		Index: c.Idx("j"),
 		Query: `
 			Set(1, a=10)
 			Set(2, a=20)
@@ -1516,7 +1516,7 @@ func TestPlanner_SelectTop(t *testing.T) {
 	}
 
 	t.Run("SelectTopStar", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select top(1) * from i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`select top(1) * from %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1537,7 +1537,7 @@ func TestPlanner_SelectTop(t *testing.T) {
 	})
 
 	t.Run("SelectTopNStar", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select topn(1) * from i0`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`select topn(1) * from %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}

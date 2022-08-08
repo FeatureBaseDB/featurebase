@@ -27,7 +27,7 @@ import (
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {
-	cluster := test.MustRunCluster(t, 3)
+	cluster := test.MustRunUnsharedCluster(t, 3)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 	h := cmd.Handler.(*pilosa.Handler).Handler
@@ -66,7 +66,8 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 }
 
 func TestHandler_Endpoints(t *testing.T) {
-	cluster := test.MustRunCluster(t, 1)
+	// this test is full of hardcoded indexes and things
+	cluster := test.MustRunUnsharedCluster(t, 1)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 	h := cmd.Handler.(*pilosa.Handler).Handler
@@ -175,11 +176,8 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	const shard = 0
-	tx0, err := holder.BeginTx(true, i0.Index, shard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx0.Rollback()
+	tx0 := holder.Txf().NewWritableQcx()
+	defer tx0.Abort()
 	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx0, 0, 0, nil); err != nil {
@@ -188,22 +186,19 @@ func TestHandler_Endpoints(t *testing.T) {
 	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx0.Commit(); err != nil {
+	if err := tx0.Finish(); err != nil {
 		t.Fatal(err)
 	}
 
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
-	tx1, err := holder.BeginTx(true, i1.Index, shard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx1.Rollback()
+	tx1 := holder.Txf().NewWritableQcx()
+	defer tx1.Abort()
 	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx1, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx1.Commit(); err != nil {
+	if err := tx1.Finish(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -241,11 +236,8 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	// i2 is for SchemaDetails
 	i2 := hldr.MustCreateIndexIfNotExists("i2", pilosa.IndexOptions{})
-	tx2, err := holder.BeginTx(true, i2.Index, shard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx2.Rollback()
+	tx2 := holder.Txf().NewWritableQcx()
+	defer tx2.Abort()
 	if f, err := i2.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000)); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
@@ -290,7 +282,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tx2.Commit(); err != nil {
+	if err := tx2.Finish(); err != nil {
 		t.Fatal(err)
 	}
 

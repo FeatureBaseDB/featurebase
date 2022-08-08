@@ -235,14 +235,14 @@ func TestConcurrentFieldCreation(t *testing.T) {
 	}
 
 	api0 := node0.API
-	if _, err := api0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil {
+	if _, err := api0.CreateIndex(context.Background(), cluster.Idx(), pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
 	eg := errgroup.Group{}
 	for i := 0; i < 100; i++ {
 		i := i
 		eg.Go(func() error {
-			if _, err := api0.CreateField(context.Background(), "i", fmt.Sprintf("f%d", i)); err != nil {
+			if _, err := api0.CreateField(context.Background(), cluster.Idx(), fmt.Sprintf("f%d", i)); err != nil {
 				return err
 			}
 			return nil
@@ -387,10 +387,10 @@ func TestMain_RecalculateCaches(t *testing.T) {
 
 	// Create the schema.
 	client0 := cluster.GetNode(0).Client()
-	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	if err := client0.CreateIndex(context.Background(), cluster.Idx(), pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
-	if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
+	if err := client0.CreateField(context.Background(), cluster.Idx(), "f"); err != nil {
 		t.Fatal("create field:", err)
 	}
 
@@ -401,7 +401,7 @@ func TestMain_RecalculateCaches(t *testing.T) {
 			data = append(data, fmt.Sprintf(`Set(%d, f=%d)`, columnID, rowID))
 		}
 	}
-	if _, err := cluster.GetNode(0).Query(t, "i", "", strings.Join(data, "")); err != nil {
+	if _, err := cluster.GetNode(0).Query(t, cluster.Idx(), "", strings.Join(data, "")); err != nil {
 		t.Fatal("setting columns:", err)
 	}
 
@@ -415,7 +415,7 @@ func TestMain_RecalculateCaches(t *testing.T) {
 
 	// Run a TopN query on all nodes. The result should be the same as the target.
 	for _, m := range cluster.Nodes {
-		res, err := m.Query(t, "i", "", `TopN(f)`)
+		res, err := m.Query(t, cluster.Idx(), "", `TopN(f)`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -498,7 +498,7 @@ func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 
 func TestClusteringNodesReplica1(t *testing.T) {
-	cluster := test.MustRunCluster(t, 3)
+	cluster := test.MustRunUnsharedCluster(t, 3)
 	defer cluster.Close()
 
 	if err := cluster.AwaitState(disco.ClusterStateNormal, 100*time.Millisecond); err != nil {
@@ -564,7 +564,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	// Because this test shuts down 2 nodes, it needs to start as a 5-node
 	// cluster in order to retain enough available nodes for raft leader
 	// election.
-	cluster := test.MustNewCluster(t, 5)
+	cluster := test.MustUnsharedCluster(t, 5)
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}
@@ -919,10 +919,11 @@ func TestClusterMinMaxSumDecimal(t *testing.T) {
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 
-	cmd.MustCreateIndex(t, "testdec", pilosa.IndexOptions{Keys: true, TrackExistence: true})
-	cmd.MustCreateField(t, "testdec", "adec", pilosa.OptFieldTypeDecimal(2))
+	index := cluster.Idx("i")
+	cmd.MustCreateIndex(t, index, pilosa.IndexOptions{Keys: true, TrackExistence: true})
+	cmd.MustCreateField(t, index, "adec", pilosa.OptFieldTypeDecimal(2))
 
-	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", `
+	test.Do(t, "POST", fmt.Sprintf("%s/index/%i/query", cmd.URL(), cluster), `
 Set("a", adec=42.2)
 Set("b", adec=11.12)
 Set("c", adec=13.41)
@@ -933,21 +934,21 @@ Set("g", adec=15.52)
 Set("h", adec=100.22)
 `)
 
-	result := test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", "Sum(field=adec)")
+	result := test.Do(t, "POST", fmt.Sprintf("%s/index/%i/query", cmd.URL(), cluster), "Sum(field=adec)")
 	if !strings.Contains(result.Body, `"decimalValue":305.59`) {
 		t.Fatalf("expected decimal sum of 305.59, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":8`) {
 		t.Fatalf("expected count 8, but got: '%s'", result.Body)
 	}
 
-	result = test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", "Max(field=adec)")
+	result = test.Do(t, "POST", fmt.Sprintf("%s/index/%i/query", cmd.URL(), cluster), "Max(field=adec)")
 	if !strings.Contains(result.Body, `"decimalValue":100.22`) {
 		t.Fatalf("expected decimal max of 100.22, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {
 		t.Fatalf("expected count 1, but got: '%s'", result.Body)
 	}
 
-	result = test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/testdec/query", "Min(field=adec)")
+	result = test.Do(t, "POST", fmt.Sprintf("%s/index/%i/query", cmd.URL(), cluster), "Min(field=adec)")
 	if !strings.Contains(result.Body, `"decimalValue":11.12`) {
 		t.Fatalf("expected decimal min of 11.12, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {
@@ -983,7 +984,8 @@ func TestClusterCreatedAtRace(t *testing.T) {
 	}
 	for k := 0; k < iterations; k++ {
 		t.Run(fmt.Sprintf("run-%d", k), func(t *testing.T) {
-			cluster := test.MustRunCluster(t, 4)
+			// needs fresh cluster so the index creations are new
+			cluster := test.MustRunUnsharedCluster(t, 4)
 			defer cluster.Close()
 
 			for _, com := range cluster.Nodes {
@@ -1040,7 +1042,7 @@ func TestClusterCreatedAtRace(t *testing.T) {
 }
 
 func TestClusterQueryCountInDegraded(t *testing.T) {
-	cluster := test.MustNewCluster(t, 3)
+	cluster := test.MustUnsharedCluster(t, 3)
 	for _, c := range cluster.Nodes {
 		c.Config.Cluster.ReplicaN = 2
 	}

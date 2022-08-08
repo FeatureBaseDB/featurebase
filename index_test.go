@@ -260,7 +260,7 @@ func isNotFoundError(err error) bool {
 // This is a regression test after a customer experienced the same deadlock.
 // For details, check out https://molecula.atlassian.net/browse/CORE-919
 func TestIndex_RecreateFieldOnRestart(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
+	c := test.MustRunUnsharedCluster(t, 1)
 	defer c.Close()
 
 	// create index

@@ -9,50 +9,10 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/molecula/featurebase/v3/disco"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/testhook"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
-
-// newHolderWithTempPath returns a new instance of Holder.
-func newHolderWithTempPath(tb testing.TB, backend string) *Holder {
-	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-holder-")
-	if err != nil {
-		panic(err)
-	}
-	cfg := mustHolderConfig()
-	cfg.StorageConfig.Backend = backend
-	h := NewHolder(path, cfg)
-	PanicOn(h.Open())
-	testhook.Cleanup(tb, func() {
-		h.Close()
-	})
-	return h
-}
-
-// newIndexWithTempPath returns a new instance of Index.
-func newIndexWithTempPath(tb testing.TB, name string) *Index {
-	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-index-")
-	if err != nil {
-		panic(err)
-	}
-	cfg := DefaultHolderConfig()
-	cfg.StorageConfig.FsyncEnabled = false
-	cfg.RBFConfig.FsyncEnabled = false
-	h := NewHolder(path, cfg)
-	PanicOn(h.Open())
-	index, err := h.CreateIndex(name, IndexOptions{})
-	testhook.Cleanup(tb, func() {
-		h.Close()
-	})
-	if err != nil {
-		panic(err)
-	}
-	return index
-}
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
@@ -62,7 +22,7 @@ func TestCluster_Owners(t *testing.T) {
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
 		}),
-		Hasher:   NewTestModHasher(),
+		Hasher:   &disco.Jmphasher{},
 		ReplicaN: 2,
 	}
 
@@ -71,14 +31,24 @@ func TestCluster_Owners(t *testing.T) {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := c.NewSnapshot()
 
-	// Verify nodes are distributed.
-	if a := snap.PartitionNodes(0); !reflect.DeepEqual(a, []*disco.Node{cNodes[0], cNodes[1]}) {
-		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
+	assigned := make(map[int]int)
+	for i := 0; i < 256; i++ {
+		nodes := snap.PartitionNodes(i)
+		for _, node := range nodes {
+			for j, n := range cNodes {
+				if n == node {
+					assigned[j]++
+				}
+			}
+		}
 	}
-
-	// Verify nodes go around the ring.
-	if a := snap.PartitionNodes(2); !reflect.DeepEqual(a, []*disco.Node{cNodes[2], cNodes[0]}) {
-		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
+	expected := float64((256.0 * 2) / 3) // each partition is on two nodes, there's three nodes
+	for k, v := range assigned {
+		ratio := float64(v) / expected
+		// Empirically, we expect 167/171/174
+		if ratio < 0.97 || ratio > 1.03 {
+			t.Fatalf("node %d has %d assigned partitions, expected about %.1f", k, v, expected)
+		}
 	}
 }
 
@@ -135,10 +105,18 @@ func TestCluster_ContainsShards(t *testing.T) {
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := c.NewSnapshot()
 
-	shards := snap.ContainsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), cNodes[2])
-
-	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
-		t.Fatalf("unexpected shars for node's index: %v", shards)
+	availableShards := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+	nodeCounts := make(map[uint64]int)
+	for _, n := range cNodes {
+		shards := snap.ContainsShards("test", availableShards, n)
+		for _, shard := range shards {
+			nodeCounts[shard]++
+		}
+	}
+	for shard, count := range nodeCounts {
+		if count != 3 {
+			t.Fatalf("shard %d on %d nodes, expected 3", shard, count)
+		}
 	}
 }
 

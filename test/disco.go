@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"testing"
 
 	"github.com/molecula/featurebase/v3/etcd"
 	"github.com/molecula/featurebase/v3/server"
@@ -55,7 +54,7 @@ func listenerWithURL() (listener *net.TCPListener, url string, err error) {
 // and modifies the configs of the provided Command objects
 // to point to these etcd configs. It uses etcd.GenEtcdConfigs,
 // which in turn creates temporary directories and the like.
-func GetPortsGenConfigs(tb testing.TB, nodes []*Command) error {
+func GetPortsGenConfigs(tb DirCleaner, nodes []*Command) error {
 	clusterName, cfgs := etcd.GenEtcdConfigs(tb, len(nodes))
 	for i := range nodes {
 		if nodes[i].Config == nil {

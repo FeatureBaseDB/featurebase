@@ -111,7 +111,9 @@ func TestStatsCount_TopN(t *testing.T) {
 }
 
 func TestStatsCount_Bitmap(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
+	// Cluster has to be unhsared because we're mocking the stats which writes
+	// to a holder in use by other tests.
+	c := test.MustRunUnsharedCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
@@ -140,7 +142,8 @@ func TestStatsCount_Bitmap(t *testing.T) {
 }
 
 func TestStatsCount_APICalls(t *testing.T) {
-	cluster := test.MustRunCluster(t, 1)
+	// We can't share a cluster when we're modifying its stats counter.
+	cluster := test.MustRunUnsharedCluster(t, 1)
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 	h := cmd.Handler.(*pilosa.Handler).Handler
