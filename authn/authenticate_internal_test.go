@@ -267,7 +267,7 @@ func TestAuthenticate(t *testing.T) {
 				claims["oid"] = test.uid
 				claims["name"] = test.uname
 				if test.exp != 0 {
-					claims["exp"] = strconv.Itoa(int(test.exp))
+					claims["exp"] = float64(test.exp)
 				}
 				token, err = tkn.SignedString(a.SecretKey())
 				if err != nil {
@@ -298,7 +298,7 @@ func TestAuthenticate(t *testing.T) {
 					claims := tkn.Claims.(jwt.MapClaims)
 					claims["oid"] = test.uid
 					claims["name"] = test.uname
-					expiry := strconv.Itoa(int(time.Now().Add(2 * time.Hour).Unix()))
+					expiry := float64(time.Now().Add(2 * time.Hour).Unix())
 					claims["exp"] = expiry
 					fresh, err := tkn.SignedString(a.SecretKey())
 					if err != nil {
@@ -306,7 +306,7 @@ func TestAuthenticate(t *testing.T) {
 					}
 
 					a.groupsCache[fresh] = cachedGroups{time.Now(), test.groups}
-					fmt.Fprintf(w, `{"access_token": "`+fresh+`",  "refresh_token": "blah",  "token_type": "bearer",  "expires": `+expiry+` }`)
+					fmt.Fprintf(w, `{"access_token": "`+fresh+`",  "refresh_token": "blah",  "token_type": "bearer",  "expires": `+strconv.FormatFloat(expiry, 'f', 0, 64)+` }`)
 				}))
 				defer srv.Close()
 				a.oAuthConfig.Endpoint.TokenURL = srv.URL
@@ -571,7 +571,7 @@ func TestHandlers(t *testing.T) {
 		claims["name"] = "user name"
 		expiresIn := 2 * time.Hour
 		exp := time.Now().Add(expiresIn)
-		expiry := strconv.Itoa(int(exp.Unix()))
+		expiry := float64(exp.Unix())
 		claims["exp"] = expiry
 		fresh, err := tkn.SignedString(a.SecretKey())
 		if err != nil {

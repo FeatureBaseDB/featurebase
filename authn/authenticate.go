@@ -190,8 +190,21 @@ func (a *Auth) Authenticate(access, refresh string) (*UserInfo, error) {
 	claims := *token.Claims.(*jwt.MapClaims)
 
 	// expiry check
-	if exp, ok := claims["exp"].(string); ok {
-		if expiry, err := strconv.ParseInt(exp, 10, 64); err != nil || expiry < time.Now().UTC().Unix() {
+	if exp, ok := claims["exp"]; ok {
+		var expiry int64
+		switch v := exp.(type) {
+		case string:
+			expiry, err = strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("parsing exp string: %v", err)
+			}
+		case float64:
+			expiry = int64(v)
+		case int64:
+			expiry = v
+		}
+
+		if expiry < time.Now().UTC().Unix() {
 			access, refresh, err = a.refreshToken(access, refresh)
 			if err != nil {
 				return nil, fmt.Errorf("token is expired: %w", err)
