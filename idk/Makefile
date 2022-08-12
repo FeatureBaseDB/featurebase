@@ -1,6 +1,7 @@
 GO ?= go
 GOOS ?= $(shell $(GO) env GOOS)
 GOARCH ?= $(shell $(GO) env GOARCH)
+GOPATH ?= $(shell $(GO) env GOPATH)
 GO_VERSION=1.17.8
 GO_BUILD_FLAGS=
 ODBC_ENABLED=
@@ -309,3 +310,21 @@ docker-push-ecr: docker-image aws-login
 
 aws-login:
 	aws sso login --profile $(PROFILE)
+
+
+# Build mock implementations of AWS service API interfaces for unit testing.
+#
+# These are run-once/rarely targets as they produce code artifacts only used
+# during `go test`. An automated CI/CD process does NOT need to invoke every time.
+MOCKS = S3 Kinesis SQS
+install-mock-generator:
+	@which $(GOPATH)/bin/mockery || (echo "Installing missing dependency 'mockery' to generate mock implementations for unit testing." && \
+                                         $(GO) install 'github.com/vektra/mockery/v2@latest')
+
+update-mocks: $(addprefix update-mocks-, $(MOCKS))
+
+update-mocks-%: install-mock-generator
+	$(eval AWS_SERVICE := $(shell echo $* | tr '[:upper:]' '[:lower:]'))
+	$(eval AWS_SDK_VERSION := $(shell grep 'github.com/aws/aws-sdk-go' ../go.mod | cut -d ' ' -f 2))
+	echo Generating mock for AWS service $(AWS_SERVICE) and SDK version $(AWS_SDK_VERSION) && \
+	$(GOPATH)/bin/mockery --name $*API --output idktest/mocks --filename $(AWS_SERVICE).go --dir $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/$(AWS_SERVICE)/$(AWS_SERVICE)iface

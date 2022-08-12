@@ -73,6 +73,7 @@ require (
 )
 
 require (
+	github.com/google/uuid v1.3.0
 	github.com/jaffee/commandeer v0.5.0
 	github.com/linkedin/goavro/v2 v2.11.1
 	google.golang.org/grpc v1.46.0
@@ -97,7 +98,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect

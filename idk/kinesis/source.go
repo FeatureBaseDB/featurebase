@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go/service/sqs"
 
 	"github.com/molecula/featurebase/v3/idk"
 	"github.com/molecula/featurebase/v3/idk/internal"
@@ -36,6 +37,8 @@ type Source struct {
 
 	StreamName  string
 	OffsetsPath string
+
+	ErrorQueueName string
 
 	schema []idk.Field
 	paths  idk.PathTable
@@ -172,11 +175,17 @@ func (s *Source) initAWS() error {
 		s.Log.Infof("Overriding default AWS region: %s", s.AWSRegion)
 		config.Region = aws.String(s.AWSRegion)
 	}
+
 	sess, err := session.NewSession(config)
 	if err != nil {
 		return errors.Wrap(err, "creating AWS session")
 	}
 	s.session = sess
+
+	// Wrap the Logger instance to additionally broadcast errors and panics into an SQS queue.
+	queue := sqs.New(sess)
+	s.Log = NewErrorStreamLogger(s.Log, SinkErrorQueueFrom(queue, s))
+
 	s.s3client = s3.New(sess)
 	s.kinesisClient = kinesis.New(sess)
 	return nil

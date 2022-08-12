@@ -191,6 +191,7 @@ func init() {
 
 func (m *Main) PilosaClient() *pilosaclient.Client { return m.client }
 func (m *Main) Log() logger.Logger                 { return m.log }
+func (m *Main) SetLog(log logger.Logger)           { m.log = log }
 
 func NewMain() *Main {
 	fmt.Fprintf(os.Stderr, "Molecula Consumer %s, build time %s\n", Version, BuildTime)
