@@ -33,6 +33,8 @@ const (
 var (
 	ErrNoFieldSpec      = errors.New("no field spec in this header")
 	ErrInvalidFieldName = errors.New("field name must match [a-z][a-z0-9_-]{0,229}")
+	ErrParsingEpoch     = "parsing epoch for "
+	ErrDecodingConfig   = "decoding config for field "
 )
 
 // HeaderToField takes a header specification which looks like
@@ -73,265 +75,31 @@ func HeaderToField(headerField string, log logger.Logger) (field Field, _ error)
 
 	switch fieldType {
 	case IDType:
-		idField := IDField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			if fieldspec[1] == "T" {
-				idField.Mutex = true
-			} else if fieldspec[1] != "F" {
-				return nil, errors.Errorf("can't interpret '%s' for IDField.Mutex for field '%s'", fieldspec[1], sourceName)
-			}
-		}
-		if len(fieldspec) > 2 {
-			idField.Quantum = fieldspec[2]
-		}
-		if len(fieldspec) > 3 {
-			idField.TTL = fieldspec[3]
-		}
-		if len(fieldspec) > 4 {
-			log.Printf("ignoring extra arguments to IDField %s: %v", headerField, fieldspec[4:])
-		}
-		field = idField
+		field, err = headerToIDField(headerField, sourceName, destName, fieldspec, log)
 	case BoolType:
-		field = BoolField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			log.Printf("ignoring extra arguments to BoolField %s: %v", headerField, fieldspec[1:])
-		}
+		field, err = headerToBoolField(headerField, sourceName, destName, fieldspec, log)
 	case StringType:
-		strField := StringField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			if fieldspec[1] == "T" {
-				strField.Mutex = true
-			} else if fieldspec[1] != "F" {
-				return nil, errors.Errorf("can't interpret '%s' for StringField.Mutex for field '%s'", fieldspec[1], sourceName)
-			}
-		}
-		if len(fieldspec) > 2 {
-			strField.Quantum = fieldspec[2]
-		}
-		if len(fieldspec) > 3 {
-			strField.TTL = fieldspec[3]
-		}
-		if len(fieldspec) > 4 {
-			log.Printf("ignoring extra arguments to StringField %s: %v", headerField, fieldspec[4:])
-		}
-		field = strField
+		field, err = headerToStringField(headerField, sourceName, destName, fieldspec, log)
 	case LookupTextType:
-		lTextField := LookupTextField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			log.Printf("ignoring extra arguments to LookupTextField %s: %v", headerField, fieldspec[1:])
-		}
-		field = lTextField
+		field, err = headerToLookupTextField(headerField, sourceName, destName, fieldspec, log)
 	case IntType:
-		intField := IntField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			min, err := strconv.ParseInt(fieldspec[1], 10, 64)
-			if err != nil {
-				return nil, errors.Wrapf(err, "parsing min for %s", sourceName)
-			}
-			intField.Min = &min
-		}
-		if len(fieldspec) > 2 {
-			max, err := strconv.ParseInt(fieldspec[2], 10, 64)
-			if err != nil {
-				return nil, errors.Wrapf(err, "parsing max for %s", sourceName)
-			}
-			intField.Max = &max
-		}
-		if len(fieldspec) > 3 {
-			intField.ForeignIndex = fieldspec[3]
-		}
-		if len(fieldspec) > 4 {
-			log.Printf("ignoring extra arguments to IntField %s: %v", headerField, fieldspec[4:])
-		}
-		field = intField
+		field, err = headerToIntField(headerField, sourceName, destName, fieldspec, log)
 	case ForeignKeyType:
-		fkField := IntField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			fkField.ForeignIndex = fieldspec[1]
-		} else {
-			return nil, errors.Errorf("need foreign index for foreign key field: %s", headerField)
-		}
-		if len(fieldspec) > 2 {
-			log.Printf("ignoring extra arguments to ForeignKey Field %s: %v", headerField, fieldspec[2:])
-		}
-		field = fkField
+		field, err = headerToForeignKeyField(headerField, sourceName, destName, fieldspec, log)
 	case DecimalType:
-		decField := DecimalField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			scale, err := strconv.ParseInt(fieldspec[1], 10, 64)
-			if err != nil {
-				return nil, errors.Wrapf(err, "parsing scale for %s", sourceName)
-			}
-			decField.Scale = scale
-		}
-		if len(fieldspec) > 2 {
-			log.Printf("ignoring extra arguments to DecimalField %s: %v", headerField, fieldspec[2:])
-		}
-		field = decField
+		field, err = headerToDecimalField(headerField, sourceName, destName, fieldspec, log)
 	case StringArrayType:
-		strArrField := StringArrayField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			strArrField.Quantum = fieldspec[1]
-		}
-		if len(fieldspec) > 2 {
-			strArrField.TTL = fieldspec[2]
-		}
-		if len(fieldspec) > 3 {
-			log.Printf("ignoring extra arguments to StringArrayField %s: %v", headerField, fieldspec[3:])
-		}
-		field = strArrField
+		field, err = headerToStringArrayField(headerField, sourceName, destName, fieldspec, log)
 	case IDArrayType:
-		idArrField := IDArrayField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			idArrField.Quantum = fieldspec[1]
-		}
-		if len(fieldspec) > 2 {
-			idArrField.TTL = fieldspec[2]
-		}
-		if len(fieldspec) > 3 {
-			log.Printf("ignoring extra arguments to IDArrayField %s: %v", headerField, fieldspec[3:])
-		}
-		field = idArrField
+		field, err = headerToIDArrayField(headerField, sourceName, destName, fieldspec, log)
 	case DateIntType:
-		dateField := DateIntField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		layout := time.RFC3339
-		if len(fieldspec) > 1 {
-			layout = fieldspec[1]
-		}
-		dateField.Layout = layout
-		if len(fieldspec) > 2 {
-			epoch, err := time.Parse(layout, fieldspec[2])
-			if err != nil {
-				return nil, errors.Wrapf(err, "parsing epoch for '%s'", headerField)
-			}
-			dateField.Epoch = epoch
-		}
-		if len(fieldspec) > 3 {
-			dateField.Unit = Unit(fieldspec[3]).unit()
-
-			if len(fieldspec) > 4 && (dateField.Unit.IsCustom()) {
-				if _, err := time.ParseDuration(fieldspec[4]); err != nil {
-					return nil, errors.Wrapf(err, "parsing custom unit %s", fieldspec[4])
-				}
-				dateField.CustomUnit = fieldspec[4]
-			} else {
-				if _, err := dateField.Unit.Duration(); err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if len(fieldspec) > 5 {
-			log.Printf("ignoring extra arguments to DateIntField %s: %v", headerField, fieldspec[5:])
-		}
-		field = dateField
+		field, err = headerToDateIntField(headerField, sourceName, destName, fieldspec, log)
 	case TimestampType:
-		tsField := TimestampField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		granularity := "s"
-		layout := time.RFC3339Nano
-		if len(fieldspec) > 1 {
-			granularity = fieldspec[1]
-		}
-		tsField.Granularity = granularity
-		if len(fieldspec) > 2 {
-			layout = fieldspec[2]
-		}
-		tsField.Layout = layout
-		if len(fieldspec) > 3 {
-			epoch, err := time.Parse(layout, fieldspec[3])
-			if err != nil {
-				return nil, errors.Wrapf(err, "parsing epoch for '%s'", headerField)
-			}
-			if epoch.IsZero() {
-				tsField.Epoch = time.Unix(0, 0)
-			} else {
-				tsField.Epoch = epoch
-			}
-		}
-		if len(fieldspec) > 4 {
-			unit := Unit(fieldspec[4]).unit()
-			if _, err := unit.Duration(); err != nil {
-				return nil, errors.Wrapf(err, "invalid unit for TimestampField %s", headerField)
-			}
-			tsField.Unit = unit
-		}
-		if len(fieldspec) > 5 {
-			log.Printf("ignoring extra arguments to TimestampField %s: %v", headerField, fieldspec[5:])
-		}
-		field = tsField
+		field, err = headerToTimestampField(headerField, sourceName, destName, fieldspec, log)
 	case RecordTimeType:
-		rtField := RecordTimeField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		// We used to use a default of "" here, and then
-		// (RecordTimeType).layout() would treat that as RFC3339.
-		// This is now more parallel to the handling for DateIntType.
-		layout := time.RFC3339
-		if len(fieldspec) > 1 {
-			layout = fieldspec[1]
-		}
-		rtField.Layout = layout
-		if len(fieldspec) > 2 {
-			epoch, err := time.Parse(layout, fieldspec[2])
-			if err != nil {
-				return nil, errors.Wrapf(err, "parsing epoch for '%s'", headerField)
-			}
-			rtField.Epoch = epoch
-		}
-		if len(fieldspec) > 3 {
-			unit := Unit(fieldspec[3]).unit()
-			_, err := unit.Duration()
-			if err != nil {
-				return nil, err
-			}
-			rtField.Unit = unit
-		}
-		if len(fieldspec) > 4 {
-			log.Printf("ignoring extra arguments to RecordTimeField %s: %v", headerField, fieldspec[4:])
-		}
-		field = rtField
+		field, err = headerToRecordTimeField(headerField, sourceName, destName, fieldspec, log)
 	case SignedIntBoolKeyType:
-		field = SignedIntBoolKeyField{
-			NameVal:     sourceName,
-			DestNameVal: destName,
-		}
-		if len(fieldspec) > 1 {
-			log.Printf("ignoring extra arguments to SignedIntBoolKeyField %s: %v", headerField, fieldspec[1:])
-		}
+		field, err = headerToSignedIntBoolKeyField(headerField, sourceName, destName, fieldspec, log)
 	case IgnoreType:
 		field = IgnoreField{}
 		if len(fieldspec) > 1 {
@@ -341,6 +109,294 @@ func HeaderToField(headerField string, log logger.Logger) (field Field, _ error)
 		return nil, errors.Errorf("unknown field '%s' for '%s'", fieldspec[0], headerField)
 	}
 
+	return field, err
+}
+
+func headerToIDField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	idField := IDField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		if fieldspec[1] == "T" {
+			idField.Mutex = true
+		} else if fieldspec[1] != "F" {
+			return nil, errors.Errorf("can't interpret '%s' for IDField.Mutex for field '%s'", fieldspec[1], sourceName)
+		}
+	}
+	if len(fieldspec) > 2 {
+		idField.Quantum = fieldspec[2]
+	}
+	if len(fieldspec) > 3 {
+		idField.TTL = fieldspec[3]
+	}
+	if len(fieldspec) > 4 {
+		log.Printf("ignoring extra arguments to IDField %s: %v", headerField, fieldspec[4:])
+	}
+	return idField, nil
+}
+
+func headerToBoolField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	field := BoolField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		log.Printf("ignoring extra arguments to BoolField %s: %v", headerField, fieldspec[1:])
+	}
+	return field, nil
+}
+
+func headerToStringField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	strField := StringField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		if fieldspec[1] == "T" {
+			strField.Mutex = true
+		} else if fieldspec[1] != "F" {
+			return nil, errors.Errorf("can't interpret '%s' for StringField.Mutex for field '%s'", fieldspec[1], sourceName)
+		}
+	}
+	if len(fieldspec) > 2 {
+		strField.Quantum = fieldspec[2]
+	}
+	if len(fieldspec) > 3 {
+		strField.TTL = fieldspec[3]
+	}
+	if len(fieldspec) > 4 {
+		log.Printf("ignoring extra arguments to StringField %s: %v", headerField, fieldspec[4:])
+	}
+	return strField, nil
+}
+
+func headerToLookupTextField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	lTextField := LookupTextField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		log.Printf("ignoring extra arguments to LookupTextField %s: %v", headerField, fieldspec[1:])
+	}
+	return lTextField, nil
+}
+
+func headerToIntField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	intField := IntField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		min, err := strconv.ParseInt(fieldspec[1], 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parsing min for %s", sourceName)
+		}
+		intField.Min = &min
+	}
+	if len(fieldspec) > 2 {
+		max, err := strconv.ParseInt(fieldspec[2], 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parsing max for %s", sourceName)
+		}
+		intField.Max = &max
+	}
+	if len(fieldspec) > 3 {
+		intField.ForeignIndex = fieldspec[3]
+	}
+	if len(fieldspec) > 4 {
+		log.Printf("ignoring extra arguments to IntField %s: %v", headerField, fieldspec[4:])
+	}
+	return intField, nil
+}
+
+func headerToForeignKeyField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	fkField := IntField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		fkField.ForeignIndex = fieldspec[1]
+	} else {
+		return nil, errors.Errorf("need foreign index for foreign key field: %s", headerField)
+	}
+	if len(fieldspec) > 2 {
+		log.Printf("ignoring extra arguments to ForeignKey Field %s: %v", headerField, fieldspec[2:])
+	}
+	return fkField, nil
+}
+
+func headerToDecimalField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	decField := DecimalField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		scale, err := strconv.ParseInt(fieldspec[1], 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parsing scale for %s", sourceName)
+		}
+		decField.Scale = scale
+	}
+	if len(fieldspec) > 2 {
+		log.Printf("ignoring extra arguments to DecimalField %s: %v", headerField, fieldspec[2:])
+	}
+	return decField, nil
+}
+
+func headerToStringArrayField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	strArrField := StringArrayField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		strArrField.Quantum = fieldspec[1]
+	}
+	if len(fieldspec) > 2 {
+		strArrField.TTL = fieldspec[2]
+	}
+	if len(fieldspec) > 3 {
+		log.Printf("ignoring extra arguments to StringArrayField %s: %v", headerField, fieldspec[3:])
+	}
+	return strArrField, nil
+}
+
+func headerToIDArrayField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	idArrField := IDArrayField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		idArrField.Quantum = fieldspec[1]
+	}
+	if len(fieldspec) > 2 {
+		idArrField.TTL = fieldspec[2]
+	}
+	if len(fieldspec) > 3 {
+		log.Printf("ignoring extra arguments to IDArrayField %s: %v", headerField, fieldspec[3:])
+	}
+	return idArrField, nil
+}
+
+func headerToDateIntField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	dateField := DateIntField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	layout := time.RFC3339
+	if len(fieldspec) > 1 {
+		layout = fieldspec[1]
+	}
+	dateField.Layout = layout
+	if len(fieldspec) > 2 {
+		epoch, err := time.Parse(layout, fieldspec[2])
+		if err != nil {
+			return nil, errors.Wrapf(err, ErrParsingEpoch, headerField)
+		}
+		dateField.Epoch = epoch
+	}
+	if len(fieldspec) > 3 {
+		dateField.Unit = Unit(fieldspec[3]).unit()
+
+		if len(fieldspec) > 4 && (dateField.Unit.IsCustom()) {
+			if _, err := time.ParseDuration(fieldspec[4]); err != nil {
+				return nil, errors.Wrapf(err, "parsing custom unit %s", fieldspec[4])
+			}
+			dateField.CustomUnit = fieldspec[4]
+		} else {
+			if _, err := dateField.Unit.Duration(); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if len(fieldspec) > 5 {
+		log.Printf("ignoring extra arguments to DateIntField %s: %v", headerField, fieldspec[5:])
+	}
+	return dateField, nil
+}
+
+func headerToTimestampField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	tsField := TimestampField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	granularity := "s"
+	layout := time.RFC3339Nano
+	if len(fieldspec) > 1 {
+		granularity = fieldspec[1]
+	}
+	tsField.Granularity = granularity
+	if len(fieldspec) > 2 {
+		layout = fieldspec[2]
+	}
+	tsField.Layout = layout
+	if len(fieldspec) > 3 {
+		epoch, err := time.Parse(layout, fieldspec[3])
+		if err != nil {
+			return nil, errors.Wrapf(err, ErrParsingEpoch, headerField)
+		}
+		if epoch.IsZero() {
+			tsField.Epoch = time.Unix(0, 0)
+		} else {
+			tsField.Epoch = epoch
+		}
+	}
+	if len(fieldspec) > 4 {
+		unit := Unit(fieldspec[4]).unit()
+		if _, err := unit.Duration(); err != nil {
+			return nil, errors.Wrapf(err, "invalid unit for TimestampField %s", headerField)
+		}
+		tsField.Unit = unit
+	}
+	if len(fieldspec) > 5 {
+		log.Printf("ignoring extra arguments to TimestampField %s: %v", headerField, fieldspec[5:])
+	}
+	return tsField, nil
+}
+
+func headerToRecordTimeField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	rtField := RecordTimeField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	// We used to use a default of "" here, and then
+	// (RecordTimeType).layout() would treat that as RFC3339.
+	// This is now more parallel to the handling for DateIntType.
+	layout := time.RFC3339
+	if len(fieldspec) > 1 {
+		layout = fieldspec[1]
+	}
+	rtField.Layout = layout
+	if len(fieldspec) > 2 {
+		epoch, err := time.Parse(layout, fieldspec[2])
+		if err != nil {
+			return nil, errors.Wrapf(err, ErrParsingEpoch, headerField)
+		}
+		rtField.Epoch = epoch
+	}
+	if len(fieldspec) > 3 {
+		unit := Unit(fieldspec[3]).unit()
+		_, err := unit.Duration()
+		if err != nil {
+			return nil, err
+		}
+		rtField.Unit = unit
+	}
+	if len(fieldspec) > 4 {
+		log.Printf("ignoring extra arguments to RecordTimeField %s: %v", headerField, fieldspec[4:])
+	}
+	return rtField, nil
+}
+
+func headerToSignedIntBoolKeyField(headerField string, sourceName string, destName string, fieldspec []string, log logger.Logger) (Field, error) {
+	field := SignedIntBoolKeyField{
+		NameVal:     sourceName,
+		DestNameVal: destName,
+	}
+	if len(fieldspec) > 1 {
+		log.Printf("ignoring extra arguments to SignedIntBoolKeyField %s: %v", headerField, fieldspec[1:])
+	}
 	return field, nil
 }
 
@@ -475,7 +531,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -486,7 +542,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -497,7 +553,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -508,7 +564,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -519,7 +575,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -530,7 +586,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -541,7 +597,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -552,7 +608,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -563,7 +619,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -574,7 +630,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -585,7 +641,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name
@@ -595,7 +651,7 @@ func ParseHeader(raw []byte) ([]Field, PathTable, error) {
 			if s.Config != nil {
 				err := json.Unmarshal(s.Config, &field)
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "decoding config for field %q", s.Name)
+					return nil, nil, errors.Wrapf(err, ErrDecodingConfig, s.Name)
 				}
 			}
 			field.NameVal = s.Name

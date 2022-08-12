@@ -240,7 +240,8 @@ func TestTTLOf(t *testing.T) {
 
 }
 
-func TestTimestampField_validateDuration(t *testing.T) {
+func TestTimestampFieldValidateDuration(t *testing.T) {
+	errTimeOutsideEpoch := "value + epoch is too far from Unix epoch"
 	type args struct {
 		dur    int64
 		offset int64
@@ -269,7 +270,7 @@ func TestTimestampField_validateDuration(t *testing.T) {
 				unit:   Unit("s"),
 			},
 			wantErr: true,
-			errStr:  "value + epoch is too far from Unix epoch",
+			errStr:  errTimeOutsideEpoch,
 		},
 		{
 			name: "max-oor",
@@ -279,7 +280,7 @@ func TestTimestampField_validateDuration(t *testing.T) {
 				unit:   Unit("s"),
 			},
 			wantErr: true,
-			errStr:  "value + epoch is too far from Unix epoch",
+			errStr:  errTimeOutsideEpoch,
 		},
 		{
 			name: "min-min",
@@ -298,7 +299,7 @@ func TestTimestampField_validateDuration(t *testing.T) {
 				unit:   Unit("s"),
 			},
 			wantErr: true,
-			errStr:  "value + epoch is too far from Unix epoch",
+			errStr:  errTimeOutsideEpoch,
 		},
 		{
 			name: "min-oor",
@@ -308,7 +309,7 @@ func TestTimestampField_validateDuration(t *testing.T) {
 				unit:   Unit("s"),
 			},
 			wantErr: true,
-			errStr:  "value + epoch is too far from Unix epoch",
+			errStr:  errTimeOutsideEpoch,
 		},
 		{
 			name: "max-max",
@@ -327,7 +328,7 @@ func TestTimestampField_validateDuration(t *testing.T) {
 				unit:   Unit("ns"),
 			},
 			wantErr: true,
-			errStr:  "value + epoch is too far from Unix epoch",
+			errStr:  errTimeOutsideEpoch,
 		},
 		{
 			name: "max-oor",
@@ -337,7 +338,7 @@ func TestTimestampField_validateDuration(t *testing.T) {
 				unit:   Unit("ns"),
 			},
 			wantErr: true,
-			errStr:  "value + epoch is too far from Unix epoch",
+			errStr:  errTimeOutsideEpoch,
 		},
 	}
 	for _, tt := range tests {
@@ -351,7 +352,7 @@ func TestTimestampField_validateDuration(t *testing.T) {
 	}
 }
 
-func Test_validateTimestamp(t *testing.T) {
+func TestValidateTimestamp(t *testing.T) {
 	type args struct {
 		unit Unit
 		ts   time.Time

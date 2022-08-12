@@ -11,6 +11,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	ErrDeletingIndex = "deleting index"
+	ErrRunningIngest = "running ingester"
+	ErrGettingSchema = "getting schema"
+	ErrGettingQuery  = "querying"
+)
+
 type ExtractResponse struct {
 	Results []Result
 }

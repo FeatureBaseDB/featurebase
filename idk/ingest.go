@@ -42,8 +42,11 @@ import (
 
 type contextKey int
 
+const contextKeyToken contextKey = iota
+
 const (
-	contextKeyToken contextKey = iota
+	Exists           = "-exists"
+	ErrCommittingIDs = "committing IDs for batch"
 )
 
 // TODO Jaeger
@@ -378,7 +381,7 @@ initialFetch:
 				if nexter != nil {
 					err := nexter.Commit(ctx)
 					if err != nil {
-						return errors.Wrap(err, "committing IDs for batch")
+						return errors.Wrap(err, ErrCommittingIDs)
 					}
 				}
 				m.log.Printf("imported batch after timeout")
@@ -413,7 +416,7 @@ initialFetch:
 				if nexter != nil {
 					ierr := nexter.Commit(ctx)
 					if ierr != nil {
-						return errors.Wrap(ierr, "committing IDs for batch")
+						return errors.Wrap(ierr, ErrCommittingIDs)
 					}
 				}
 				m.log.Printf("1 records processed %v-> (%v)", sourceInstance, recordCounter)
@@ -534,7 +537,7 @@ initialFetch:
 			if nexter != nil {
 				err = nexter.Commit(ctx)
 				if err != nil {
-					return errors.Wrap(err, "committing IDs for batch")
+					return errors.Wrap(err, ErrCommittingIDs)
 				}
 			}
 			batchStart = true
@@ -1111,7 +1114,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 					return errors.Errorf("unsupported directive '%s' field name must be equal to packed bools field: '%s'", directive, m.PackBools)
 				}
 				boolsField := index.Field(m.PackBools)
-				boolsExists := index.Field(m.PackBools + "-exists")
+				boolsExists := index.Field(m.PackBools + Exists)
 				_, err := client.Query(index.BatchQuery(
 					boolsField.Clear(value, recordID),
 					boolsExists.Clear(value, recordID),
@@ -1418,7 +1421,7 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 				return nil, nil, nil, nil, errors.Wrap(err, "checking packed bool field compatibility")
 			}
 		}
-		packBoolsExistsFld := m.PackBools + "-exists"
+		packBoolsExistsFld := m.PackBools + Exists
 		if m.index.HasField(packBoolsExistsFld) {
 			pBoolFieldExists := m.index.Field(packBoolsExistsFld)
 			if err := m.checkFieldCompatibility(pBoolFieldExists, nil, packBoolsExistsFld); err != nil {
@@ -1426,7 +1429,7 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 			}
 		}
 		boolField = m.index.Field(m.PackBools, pilosaclient.OptFieldTypeSet(pilosaclient.CacheTypeRanked, pilosacore.DefaultCacheSize), pilosaclient.OptFieldKeys(true))
-		boolFieldExists = m.index.Field(m.PackBools+"-exists", pilosaclient.OptFieldTypeSet(pilosaclient.CacheTypeRanked, pilosacore.DefaultCacheSize), pilosaclient.OptFieldKeys(true))
+		boolFieldExists = m.index.Field(m.PackBools+Exists, pilosaclient.OptFieldTypeSet(pilosaclient.CacheTypeRanked, pilosacore.DefaultCacheSize), pilosaclient.OptFieldKeys(true))
 	}
 
 	fields := make([]*pilosaclient.Field, 0, len(schema))
@@ -1661,7 +1664,7 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 			name := fld.DestName()
 			fields = append(fields,
 				m.index.Field(name, pilosaclient.OptFieldTypeSet(pilosaclient.CacheTypeRanked, pilosacore.DefaultCacheSize)),
-				m.index.Field(name+"-exists", pilosaclient.OptFieldTypeSet(pilosaclient.CacheTypeRanked, pilosacore.DefaultCacheSize)),
+				m.index.Field(name+Exists, pilosaclient.OptFieldTypeSet(pilosaclient.CacheTypeRanked, pilosacore.DefaultCacheSize)),
 			)
 			valIdx := len(fields) - 2
 			recordizers = append(recordizers, func(rawRec []interface{}, rec *pilosaclient.Row) (err error) {
@@ -1973,10 +1976,7 @@ func getPrimaryKeyRecordizer(schema []Field, pkFields []string) (recordizer Reco
 		// primary key field and it is a byte slice already.
 		if len(fieldIndices) == 1 {
 			switch recID := rawRec[fieldIndices[0]].(type) {
-			case []byte:
-				rec.ID = recID
-				return nil
-			case string:
+			case []byte, string:
 				rec.ID = recID
 				return nil
 			}

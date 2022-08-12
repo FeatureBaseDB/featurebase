@@ -16,6 +16,8 @@ import (
 	"github.com/molecula/featurebase/v3/idk/idktest"
 )
 
+const TestName = "csvtest"
+
 func configureTestFlags(main *Main) {
 	if pilosaHost, ok := os.LookupEnv("IDK_TEST_PILOSA_HOST"); ok {
 		main.PilosaHosts = []string{pilosaHost}
@@ -28,6 +30,54 @@ func configureTestFlags(main *Main) {
 		main.PilosaGRPCHosts = []string{"pilosa:20101"}
 	}
 	main.Stats = ""
+}
+
+// helper method to run "Extract(All(), Rows())" queries and compare results
+func testExtractRowsQuery(t *testing.T, index string, field string, check []interface{}) {
+	pql := fmt.Sprintf("Extract(All(), Rows(%s))", field)
+
+	eResp, err := idktest.DoExtractQuery(pql, index)
+	if err != nil {
+		t.Fatal("doing extract: ", err)
+	}
+	if eResp.Results[0].Columns == nil {
+		t.Fatal("no results: ", err)
+	}
+
+	for i, item := range eResp.Results[0].Columns {
+		switch exp := check[i].(type) {
+		case nil:
+			if item.Rows[0] != nil {
+				t.Errorf("expected nil, got %+v", item.Rows[0])
+			}
+		case string:
+			if item.Rows[0] != exp {
+				t.Errorf("expected %s, got %+v", exp, item.Rows[0])
+			}
+		case int:
+			vAsInt := int(item.Rows[0].(float64))
+			if vAsInt != exp {
+				t.Errorf("expected %d, got %+v", exp, item.Rows[0])
+			} else {
+				expAsFloat := float64(exp)
+				if item.Rows[0] != expAsFloat {
+					t.Errorf("expected %f, got %+v", expAsFloat, item.Rows[0])
+				}
+			}
+		case float64:
+			if item.Rows[0] != exp {
+				t.Errorf("expected %f, got %+v", exp, item.Rows[0])
+			}
+		default:
+			t.Errorf("unknown type: %T", exp)
+		}
+	}
+}
+
+func testDeleteIndex(t *testing.T, m *Main) {
+	if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
+		t.Logf(idktest.ErrDeletingIndex+"%v", err)
+	}
 }
 
 func TestCSVCommand(t *testing.T) {
@@ -47,24 +97,19 @@ id__ID,s__String_F_YMDH,__RecordTime_2006-01-02T15
 	configureTestFlags(m)
 	m.Files = []string{name}
 	rand.Seed(time.Now().UnixNano())
-	m.Index = fmt.Sprintf("csvtest%d", rand.Intn(100000))
-
-	defer func() {
-		if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-			t.Logf("deleting test index: %v", err)
-		}
-	}()
+	m.Index = fmt.Sprintf(TestName+"%d", rand.Intn(100000))
+	defer testDeleteIndex(t, m)
 
 	err := m.Run()
 	if err != nil {
-		t.Fatalf("running: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 	client := m.PilosaClient()
 
 	schema, err := client.Schema()
 	if err != nil {
-		t.Fatalf("getting schema: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrGettingSchema, err)
 	}
 	index := schema.Index(m.Index)
 
@@ -72,7 +117,7 @@ id__ID,s__String_F_YMDH,__RecordTime_2006-01-02T15
 
 	resp, err := client.Query(s.Range("a", tim(t, "2019-01-07T03"), tim(t, "2019-01-10T05")))
 	if err != nil {
-		t.Fatalf("querying: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrGettingQuery, err)
 	}
 
 	if !reflect.DeepEqual(resp.Results()[0].Row().Columns, []uint64{0, 1, 5}) {
@@ -99,24 +144,19 @@ ABCD,2019-01-30,40%
 	configureTestFlags(m)
 	m.Files = []string{name}
 	rand.Seed(time.Now().UnixNano())
-	m.Index = fmt.Sprintf("csvtest%d", rand.Intn(100000))
-
-	defer func() {
-		if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-			t.Logf("deleting test index: %v", err)
-		}
-	}()
+	m.Index = fmt.Sprintf(TestName+"%d", rand.Intn(100000))
+	defer testDeleteIndex(t, m)
 
 	err := m.Run()
 	if err != nil {
-		t.Fatalf("running: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 	client := m.PilosaClient()
 
 	schema, err := client.Schema()
 	if err != nil {
-		t.Fatalf("getting schema: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrGettingSchema, err)
 	}
 	index := schema.Index(m.Index)
 
@@ -124,7 +164,7 @@ ABCD,2019-01-30,40%
 
 	resp, err := client.Query(s.Row("ABCD"))
 	if err != nil {
-		t.Fatalf("querying: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrGettingQuery, err)
 	}
 
 	if !reflect.DeepEqual(resp.Results()[0].Row().Columns, []uint64{0, 1, 2, 7}) {
@@ -176,24 +216,19 @@ func TestCSVRecordTime(t *testing.T) {
 		configureTestFlags(m)
 		m.Files = []string{name}
 		rand.Seed(time.Now().UnixNano())
-		m.Index = fmt.Sprintf("csvtest%d", rand.Intn(100000))
-
-		defer func() {
-			if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-				t.Logf("deleting test index: %v", err)
-			}
-		}()
+		m.Index = fmt.Sprintf(TestName+"%d", rand.Intn(100000))
+		defer testDeleteIndex(t, m)
 
 		err := m.Run()
 		if err != nil {
-			t.Fatalf("running: %v", err)
+			t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 		}
 
 		client := m.PilosaClient()
 
 		schema, err := client.Schema()
 		if err != nil {
-			t.Fatalf("getting schema: %v", err)
+			t.Fatalf("%s: %v", idktest.ErrGettingSchema, err)
 		}
 		index := schema.Index(m.Index)
 
@@ -204,7 +239,7 @@ func TestCSVRecordTime(t *testing.T) {
 		// not convinced that this is correct.
 		resp, err := client.Query(s.Range("a", tim(t, "2019-01-09T03"), tim(t, "2019-01-09T05").Add(1*time.Minute)))
 		if err != nil {
-			t.Fatalf("querying: %v", err)
+			t.Fatalf("%s: %v", idktest.ErrGettingQuery, err)
 		}
 
 		if !reflect.DeepEqual(resp.Results()[0].Row().Columns, []uint64{1, 2, 3}) {
@@ -328,7 +363,8 @@ id__ID,s__String_F_YMDH,ts__Timestamp_s_2006-01-02 15:04:05.999,price__Decimal_2
 	name := writeTempFile(t, file)
 
 	checker := make(map[string]interface{})
-	checker["ts"] = []interface{}{nil, nil, nil, nil, nil, nil, nil, "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "2019-04-03T00:00:00Z", "1500-04-03T00:00:00Z", "2019-04-03T00:00:00Z"}
+	ts := "2019-04-03T00:00:00Z"
+	checker["ts"] = []interface{}{nil, nil, nil, nil, nil, nil, nil, ts, ts, ts, ts, ts, "1500-04-03T00:00:00Z", ts}
 	checker["age"] = []interface{}{1, 35, 120, 120, 120, nil, 120, 1, 1, 100, nil, nil, nil, 100}
 	checker["price"] = []interface{}{0.0, 5.44, 5.44, 5.44, 5.44, 5.44, 5.44, 123.12, -1.0, nil, 2.34, 3.44, nil, 3.44}
 
@@ -338,81 +374,37 @@ id__ID,s__String_F_YMDH,ts__Timestamp_s_2006-01-02 15:04:05.999,price__Decimal_2
 	configureTestFlags(m)
 	m.Files = []string{name}
 	rand.Seed(time.Now().UnixNano())
-	m.Index = fmt.Sprintf("csvtest%d", rand.Intn(100000))
+	m.Index = fmt.Sprintf(TestName+"%d", rand.Intn(100000))
 	m.AllowIntOutOfRange = true
 	m.AllowDecimalOutOfRange = true
 	m.AllowTimestampOutOfRange = true
-
-	defer func() {
-		if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-			t.Logf("deleting test index: %v", err)
-		}
-	}()
+	defer testDeleteIndex(t, m)
 
 	err := m.Run()
 	if err != nil {
-		t.Fatalf("running: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 	client := m.PilosaClient()
 
 	schema, err := client.Schema()
 	if err != nil {
-		t.Fatalf("getting schema: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrGettingSchema, err)
 	}
 	index := schema.Index(m.Index)
 
 	resp, err := client.Query(index.Count(index.All()))
 	if err != nil {
-		t.Fatalf("querying: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrGettingQuery, err)
 	}
 	if cnt := resp.Result().Count(); cnt != 14 {
 		t.Fatalf("expected 14, got %+v", cnt)
 	}
 
 	for _, field := range []string{"ts", "age", "price"} {
-		pql := fmt.Sprintf("Extract(All(), Rows(%s))", field)
-
-		eResp, err := idktest.DoExtractQuery(pql, m.Index)
-		if err != nil {
-			t.Fatal("doing extract: ", err)
-		}
-		if eResp.Results[0].Columns == nil {
-			t.Fatal("no results: ", err)
-		}
-
-		for i, item := range eResp.Results[0].Columns {
-			check := checker[field].([]interface{})
-
-			switch exp := check[i].(type) {
-			case nil:
-				if item.Rows[0] != nil {
-					t.Errorf("expected nil, got %+v", item.Rows[0])
-				}
-			case string:
-				if item.Rows[0] != exp {
-					t.Errorf("expected %s, got %+v", exp, item.Rows[0])
-				}
-			case int:
-				vAsInt := int(item.Rows[0].(float64))
-				if vAsInt != exp {
-					t.Errorf("expected %d, got %+v", exp, item.Rows[0])
-				} else {
-					expAsFloat := float64(exp)
-					if item.Rows[0] != expAsFloat {
-						t.Errorf("expected %f, got %+v", expAsFloat, item.Rows[0])
-					}
-				}
-			case float64:
-				if item.Rows[0] != exp {
-					t.Errorf("expected %f, got %+v", exp, item.Rows[0])
-				}
-			default:
-				t.Errorf("unknown type: %T", exp)
-			}
-		}
+		check := checker[field].([]interface{})
+		testExtractRowsQuery(t, m.Index, field, check)
 	}
-
 }
 
 type TimestampTestCase struct {
@@ -489,56 +481,15 @@ id__ID,s__String_F_YMDH,gran-conversion__Timestamp_ns_2006-01-02T15:04:05.999999
 }
 
 func testTimestampRunner(t *testing.T, m *Main, testCase TimestampTestCase) {
-	defer func() {
-		if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-			t.Logf("deleting test index: %v", err)
-		}
-	}()
+	defer testDeleteIndex(t, m)
 
 	err := m.Run()
 	if err != nil {
-		t.Fatalf("running: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
-	pql := fmt.Sprintf("Extract(All(), Rows(%s))", testCase.fieldName)
-
-	eResp, err := idktest.DoExtractQuery(pql, m.Index)
-	if err != nil {
-		t.Fatal("doing extract: ", err)
-	}
-	if eResp.Results[0].Columns == nil {
-		t.Fatal("no results: ", err)
-	}
-
-	for i, item := range eResp.Results[0].Columns {
-		check := testCase.expect.([]interface{})
-		switch exp := check[i].(type) {
-		case nil:
-			if item.Rows[0] != nil {
-				t.Errorf("expected nil, got %+v", item.Rows[0])
-			}
-		case string:
-			if item.Rows[0] != exp {
-				t.Errorf("expected %s, got %+v", exp, item.Rows[0])
-			}
-		case int:
-			vAsInt := int(item.Rows[0].(float64))
-			if vAsInt != exp {
-				t.Errorf("expected %d, got %+v", exp, item.Rows[0])
-			} else {
-				expAsFloat := float64(exp)
-				if item.Rows[0] != expAsFloat {
-					t.Errorf("expected %f, got %+v", expAsFloat, item.Rows[0])
-				}
-			}
-		case float64:
-			if item.Rows[0] != exp {
-				t.Errorf("expected %f, got %+v", exp, item.Rows[0])
-			}
-		default:
-			t.Errorf("unknown type: %T", exp)
-		}
-	}
+	check := testCase.expect.([]interface{})
+	testExtractRowsQuery(t, m.Index, testCase.fieldName, check)
 
 }
 
@@ -568,58 +519,16 @@ id__ID,negneg__Int_-10_-5,negpos__Int_-10_10,pospos__Int_5_10,negzero__Int_-10_0
 		t.Run(fmt.Sprintf("batchsize=%d", bsize), func(t *testing.T) {
 			m := newMainOORFactory(t, file, true, false, false)
 			m.BatchSize = bsize
-
-			defer func() {
-				if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-					t.Logf("deleting test index: %v", err)
-				}
-			}()
+			defer testDeleteIndex(t, m)
 
 			err := m.Run()
 			if err != nil {
-				t.Fatalf("running: %v", err)
+				t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 			}
 
 			for _, field := range []string{"negneg", "negzero", "negpos", "zeropos", "pospos"} {
-				pql := fmt.Sprintf("Extract(All(), Rows(%s))", field)
-
-				eResp, err := idktest.DoExtractQuery(pql, m.Index)
-				if err != nil {
-					t.Fatal("doing extract: ", err)
-				}
-				if eResp.Results[0].Columns == nil {
-					t.Fatal("no results: ", err)
-				}
-
-				for i, item := range eResp.Results[0].Columns {
-					check := checker[field].([]interface{})
-					switch exp := check[i].(type) {
-					case nil:
-						if item.Rows[0] != nil {
-							t.Errorf("expected nil, got %+v", item.Rows[0])
-						}
-					case string:
-						if item.Rows[0] != exp {
-							t.Errorf("expected %s, got %+v", exp, item.Rows[0])
-						}
-					case int:
-						vAsInt := int(item.Rows[0].(float64))
-						if vAsInt != exp {
-							t.Errorf("expected %d, got %+v", exp, item.Rows[0])
-						} else {
-							expAsFloat := float64(exp)
-							if item.Rows[0] != expAsFloat {
-								t.Errorf("expected %f, got %+v", expAsFloat, item.Rows[0])
-							}
-						}
-					case float64:
-						if item.Rows[0] != exp {
-							t.Errorf("expected %f, got %+v", exp, item.Rows[0])
-						}
-					default:
-						t.Errorf("unknown type: %T", exp)
-					}
-				}
+				check := checker[field].([]interface{})
+				testExtractRowsQuery(t, m.Index, field, check)
 			}
 		})
 	}
@@ -651,44 +560,16 @@ id__ID,ts1__Timestamp_ns_2006-01-02 15:04:05.999,ts2__Timestamp_s_2006-01-02T15:
 		t.Run(fmt.Sprintf("batchsize=%d", bsize), func(t *testing.T) {
 			m := newMainOORFactory(t, file, false, false, true)
 			m.BatchSize = bsize
-
-			defer func() {
-				if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-					t.Logf("deleting test index: %v", err)
-				}
-			}()
+			defer testDeleteIndex(t, m)
 
 			err := m.Run()
 			if err != nil {
-				t.Fatalf("running: %v", err)
+				t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 			}
 			for _, field := range []string{"ts1", "ts2", "ts3", "ts4"} {
-				pql := fmt.Sprintf("Extract(All(), Rows(%s))", field)
+				check := checker[field].([]interface{})
+				testExtractRowsQuery(t, m.Index, field, check)
 
-				eResp, err := idktest.DoExtractQuery(pql, m.Index)
-				if err != nil {
-					t.Fatal("doing extract: ", err)
-				}
-				if eResp.Results[0].Columns == nil {
-					t.Fatal("no results: ", err)
-				}
-
-				for i, item := range eResp.Results[0].Columns {
-					check := checker[field].([]interface{})
-
-					switch exp := check[i].(type) {
-					case nil:
-						if item.Rows[0] != nil {
-							t.Errorf("expected nil, got %+v", item.Rows[0])
-						}
-					case string:
-						if item.Rows[0] != exp {
-							t.Errorf("expected %s, got %+v", exp, item.Rows[0])
-						}
-					default:
-						t.Errorf("unknown type: %T", exp)
-					}
-				}
 			}
 		})
 	}
@@ -743,27 +624,18 @@ func TestFailureConditions(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			m := newMainOORFactory(t, test.csv, test.intOutOfRange, test.decimalOutOfRange, test.timestampOutOfRange)
 			m.BatchSize = 1
-
-			defer func() {
-				if err := m.PilosaClient().DeleteIndexByName(m.Index); err != nil {
-					t.Logf("deleting test index: %v", err)
-				}
-			}()
+			defer testDeleteIndex(t, m)
 
 			err := m.Run()
 			if test.fail {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-			} else {
-				if err != nil {
-					t.Fatalf("running: %v", err)
-				}
+			} else if err != nil {
+				t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 			}
 		})
-
 	}
-
 }
 
 func newMainOORFactory(t *testing.T, file string, allowIntOOR bool, allowDecOOR bool, allowTSOOR bool) *Main {

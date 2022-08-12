@@ -18,6 +18,7 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/molecula/featurebase/v3/authn"
 	pilosaclient "github.com/molecula/featurebase/v3/client"
+	"github.com/molecula/featurebase/v3/idk/idktest"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
@@ -60,7 +61,7 @@ func TestErrFlush(t *testing.T) {
 
 	err := ingester.Run()
 	if err != nil {
-		t.Fatalf("running ingester: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 	client := ingester.PilosaClient()
@@ -102,7 +103,7 @@ func TestErrBatchNowStale(t *testing.T) {
 
 	defer func() {
 		if err := ingester.PilosaClient().DeleteIndexByName(ingester.Index); err != nil {
-			t.Logf("deleting test index: %v", err)
+			t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, ingester.Index, err)
 		}
 	}()
 
@@ -110,7 +111,7 @@ func TestErrBatchNowStale(t *testing.T) {
 	go func() {
 		err := ingester.Run()
 		if err != nil {
-			t.Logf("running ingester: %v", err)
+			t.Logf("%s: %v", idktest.ErrRunningIngest, err)
 		}
 		close(signal)
 	}()
@@ -154,13 +155,13 @@ func TestIngestSignedIntBoolField(t *testing.T) {
 	configureTestFlags(ingester)
 	ingester.NewSource = func() (Source, error) { return ts, nil }
 	rand.Seed(time.Now().UTC().UnixNano())
-	ingester.Index = fmt.Sprintf("satest%d", rand.Intn(100000))
+	ingester.Index = fmt.Sprintf("ingestint%d", rand.Intn(100000))
 	ingester.BatchSize = 2
 	ingester.PrimaryKeyFields = []string{"rcid"}
 
 	err := ingester.Run()
 	if err != nil {
-		t.Fatalf("running ingester: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 	client := ingester.PilosaClient()
@@ -173,34 +174,24 @@ func TestIngestSignedIntBoolField(t *testing.T) {
 	svals := ingester.index.Field("svals")
 	svalsex := ingester.index.Field("svals-exists")
 
-	if resp, err := client.Query(svals.Row(22)); err != nil {
-		t.Fatalf("row 22: %v", err)
-	} else if !stringSliceSame(resp.ResultList[0].Row().Keys, []string{"b"}) {
-		t.Fatalf("wanted [b], got: %+v", resp.ResultList[0].Row().Keys)
+	tests := []struct {
+		field *pilosaclient.Field
+		row   int
+		want  []string
+	}{
+		{field: svals, row: 22, want: []string{"b"}},
+		{field: svalsex, row: 22, want: []string{"a", "b"}},
+		{field: svalsex, row: 44, want: []string{"a", "b"}},
+		{field: svalsex, row: 5, want: []string{"a", "c"}},
+		{field: svals, row: 5, want: []string{"a", "c"}},
 	}
 
-	if resp, err := client.Query(svalsex.Row(22)); err != nil {
-		t.Fatalf("row 22: %v", err)
-	} else if !stringSliceSame(resp.ResultList[0].Row().Keys, []string{"a", "b"}) {
-		t.Fatalf("wanted [a b], got: %+v", resp.ResultList[0].Row().Keys)
-	}
-
-	if resp, err := client.Query(svalsex.Row(44)); err != nil {
-		t.Fatalf("row 22: %v", err)
-	} else if !stringSliceSame(resp.ResultList[0].Row().Keys, []string{"a", "b"}) {
-		t.Fatalf("wanted [b], got: %+v", resp.ResultList[0].Row().Keys)
-	}
-
-	if resp, err := client.Query(svalsex.Row(5)); err != nil {
-		t.Fatalf("row 22: %v", err)
-	} else if !stringSliceSame(resp.ResultList[0].Row().Keys, []string{"a", "c"}) {
-		t.Fatalf("wanted [b], got: %+v", resp.ResultList[0].Row().Keys)
-	}
-
-	if resp, err := client.Query(svals.Row(5)); err != nil {
-		t.Fatalf("row 22: %v", err)
-	} else if !stringSliceSame(resp.ResultList[0].Row().Keys, []string{"a", "c"}) {
-		t.Fatalf("wanted [b], got: %+v", resp.ResultList[0].Row().Keys)
+	for _, test := range tests {
+		if resp, err := client.Query(test.field.Row(test.row)); err != nil {
+			t.Fatalf("row %d: %v", test.row, err)
+		} else if !stringSliceSame(resp.ResultList[0].Row().Keys, test.want) {
+			t.Fatalf("wanted %+v, got: %+v", test.want, resp.ResultList[0].Row().Keys)
+		}
 	}
 }
 
@@ -223,7 +214,7 @@ func TestSingleBoolClear(t *testing.T) {
 	ingester.IDField = "id"
 
 	if err := ingester.Run(); err != nil {
-		t.Fatalf("running ingester: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 	client := ingester.PilosaClient()
@@ -281,7 +272,7 @@ func TestForeignKeyRegression(t *testing.T) {
 
 	defer func() {
 		if err := ingester.PilosaClient().DeleteIndexByName(ingester.Index); err != nil {
-			t.Logf("deleting test index: %v", err)
+			t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, ingester.Index, err)
 		}
 	}()
 
@@ -304,7 +295,7 @@ func TestForeignKeyRegression(t *testing.T) {
 
 	defer func() {
 		if err := client.DeleteIndexByName("testusers834"); err != nil {
-			t.Logf("deleting testusers index: %v", err)
+			t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, "testusers834", err)
 		}
 	}()
 
@@ -312,7 +303,7 @@ func TestForeignKeyRegression(t *testing.T) {
 	// getting cleared for int fields.
 	err = ingester.run()
 	if err != nil {
-		t.Fatalf("running ingester: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 }
@@ -384,16 +375,16 @@ func TestIngestStringArrays(t *testing.T) {
 			ingester := tt.ingester()
 			ingester.NewSource = func() (Source, error) { return &tt.source, nil }
 			rand.Seed(time.Now().UTC().UnixNano())
-			ingester.Index = fmt.Sprintf("satest%d", rand.Intn(100000))
+			ingester.Index = fmt.Sprintf("ingeststring%d", rand.Intn(100000))
 			ingester.BatchSize = 5
 			defer func() {
 				if err := ingester.PilosaClient().DeleteIndexByName(ingester.Index); err != nil {
-					t.Logf("deleting test index: %v", err)
+					t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, ingester.index, err)
 				}
 			}()
 			err := ingester.Run()
 			if err != nil {
-				t.Fatalf("running ingester: %v", err)
+				t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 			}
 
 			client := ingester.PilosaClient()
@@ -433,7 +424,7 @@ func TestIngesterServesPrometheusEndpoint(t *testing.T) {
 	go func() {
 		err := ingester.Run()
 		if err != nil {
-			t.Logf("running ingester: %v", err)
+			t.Logf("%s: %v", idktest.ErrRunningIngest, err)
 		}
 		close(signal)
 	}()
@@ -461,10 +452,10 @@ func TestIngesterServesPrometheusEndpoint(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	rand.Seed(time.Now().UTC().UnixNano())
-	indexName := fmt.Sprintf("satest%d", rand.Intn(100000))
+	indexName := fmt.Sprintf("delete%d", rand.Intn(100000))
 	primaryKeyFields := []string{"aba", "db", "id"}
 
-	ts_write := newTestSource(
+	tsWrite := newTestSource(
 		[]Field{
 			StringField{NameVal: "aba"},
 			StringField{NameVal: "db"},
@@ -483,7 +474,7 @@ func TestDelete(t *testing.T) {
 	)
 
 	// first set up deleter - we want to make sure that even if it starts first before the index is created that things still work
-	ts_delete := newTestSource(
+	tsDelete := newTestSource(
 		[]Field{
 			//IDField{NameVal: "id"},
 			StringField{NameVal: "aba"},
@@ -518,7 +509,7 @@ func TestDelete(t *testing.T) {
 	deleter := NewMain()
 	configureTestFlags(deleter)
 	deleter.Delete = true
-	deleter.NewSource = func() (Source, error) { return ts_delete, nil }
+	deleter.NewSource = func() (Source, error) { return tsDelete, nil }
 	deleter.Index = indexName
 	deleter.BatchSize = 5
 	deleter.PrimaryKeyFields = []string{"aba", "db", "id"}
@@ -531,20 +522,20 @@ func TestDelete(t *testing.T) {
 
 	ingester := NewMain()
 	configureTestFlags(ingester)
-	ingester.NewSource = func() (Source, error) { return ts_write, nil }
+	ingester.NewSource = func() (Source, error) { return tsWrite, nil }
 	ingester.PrimaryKeyFields = primaryKeyFields
 	ingester.Index = indexName
 	ingester.BatchSize = 1
 
 	defer func() {
 		if err := ingester.PilosaClient().DeleteIndexByName(ingester.Index); err != nil {
-			t.Logf("deleting test index: %v", err)
+			t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, ingester.Index, err)
 		}
 	}()
 
 	err = ingester.Run()
 	if err != nil {
-		t.Fatalf("running ingester: %v", err)
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
 	}
 
 	client := ingester.PilosaClient()
@@ -725,7 +716,7 @@ func TestBatchFromSchema(t *testing.T) {
 			defer func() {
 				err := m.client.DeleteIndex(m.index)
 				if err != nil {
-					t.Logf("deleting test index: %v", err)
+					t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, m.Index, err)
 				}
 			}()
 		}
@@ -1076,7 +1067,7 @@ func TestCheckFieldCompatibility(t *testing.T) {
 	}
 	defer func() {
 		if err := ingester.PilosaClient().DeleteIndexByName(idxName); err != nil {
-			t.Logf("deleting test index: %v", err)
+			t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, idxName, err)
 		}
 	}()
 	if err := client.CreateField(idx.Field("pset", pilosaclient.OptFieldTypeSet(pilosaclient.CacheTypeNone, 0))); err != nil {
@@ -1339,7 +1330,7 @@ func getAuthToken(t *testing.T) string {
 	return token
 }
 
-func Test_Setup(t *testing.T) {
+func TestSetup(t *testing.T) {
 	m := NewMain()
 	configureTestFlags(m)
 	m.AutoGenerate = true
@@ -1362,7 +1353,7 @@ func Test_Setup(t *testing.T) {
 		}
 	})
 }
-func Test_NilIngest(t *testing.T) {
+func TestNilIngest(t *testing.T) {
 	type testcase struct {
 		name       string
 		schema     []Field
@@ -1406,7 +1397,7 @@ func Test_NilIngest(t *testing.T) {
 			defer func() {
 				err := m.client.DeleteIndex(m.index)
 				if err != nil {
-					t.Logf("deleting test index: %v", err)
+					t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, m.Index, err)
 				}
 			}()
 		}
