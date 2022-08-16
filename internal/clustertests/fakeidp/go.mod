@@ -1,4 +1,4 @@
-module fakeidp
+module fakeidpclustertests
 
 go 1.17
 

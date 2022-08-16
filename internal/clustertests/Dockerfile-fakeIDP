@@ -4,4 +4,4 @@ WORKDIR /
 COPY fakeidp ./
 RUN go build .
 
-ENTRYPOINT ["/fakeidp"]
+ENTRYPOINT ["/fakeidpclustertests"]

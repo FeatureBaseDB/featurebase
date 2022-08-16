@@ -53,31 +53,33 @@ test:
 test-race:
 	CGO_ENABLED=1 $(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout $(RACE_TEST_TIMEOUT) -v
 
-testv: topt testvsub
+testv: testvsub
 
-testv-race: topt-race testvsub-race
+testv-race: testvsub-race
 
 # testvsub: run go test -v in sub-directories in "local mode" with incremental output,
 #            avoiding go -test ./... "package list mode" which doesn't give output
 #            until the test run finishes. Package list mode makes it hard to
 #            find which test is hung/deadlocked.
 #
+GOPACKAGES := $(shell $(GO) list ./...)
 testvsub:
-	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
-           echo; echo "___ testing subpkg $$i"; \
-           cd $$i; pwd; \
-           $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(RACE_TEST_TIMEOUT) || break; \
-           echo; echo "999 done testing subpkg $$i"; \
-           cd ..; \
-        done
+	@set -e; for pkg in $(GOPACKAGES); do \
+			if [ $${pkg:0:38} == "github.com/molecula/featurebase/v3/idk" ]; then \
+				echo; echo "___ skipping subpkg $$pkg"; \
+				continue; \
+			fi; \
+			echo; echo "___ testing subpkg $$pkg"; \
+			$(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(RACE_TEST_TIMEOUT) $$pkg || break; \
+			echo; echo "999 done testing subpkg $$pkg"; \
+		done
+
 
 testvsub-race:
-	set -e; for i in boltdb client ctl http pg pql rbf roaring server sql txkey; do \
-           echo; echo "___ testing subpkg $$i -race"; \
-           cd $$i; pwd; \
-           CGO_ENABLED=1 $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout $(RACE_TEST_TIMEOUT) || break; \
-           echo; echo "999 done testing subpkg $$i -race"; \
-           cd ..; \
+	@set -e; for pkg in $(GOPACKAGES); do \
+           echo; echo "___ testing subpkg $$pkg"; \
+           CGO_ENABLED=1 $(GO) test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -race -timeout $(RACE_TEST_TIMEOUT) $$pkg || break; \
+           echo; echo "999 done testing subpkg $$pkg"; \
         done
 
 bench:

@@ -1,4 +1,4 @@
-module fakeidp
+module fakeidpidk
 
 go 1.17
 
