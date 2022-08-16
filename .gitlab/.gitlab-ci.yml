@@ -139,7 +139,7 @@ build amd container fb:
   before_script:
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:
-    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_NAME}
+    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_SLUG}
     - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
@@ -252,7 +252,7 @@ run go tests idk race:
     - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
     - echo $PROJECT
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
-    - BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all-race
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-race
   after_script:
     - make save-pilosa-logs
     - make shutdown
@@ -283,7 +283,7 @@ run go tests idk shard transactional:
     - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
     - echo $PROJECT
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
-    - BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
     - make save-pilosa-logs
     - make shutdown
@@ -311,7 +311,7 @@ run go tests idk 533:
     - cd ./idk/
     - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
-    - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all
+    - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
     - make save-pilosa-logs
     - make shutdown
@@ -340,7 +340,7 @@ run go tests idk sasl:
     - cd ./idk/
     - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
-    - BRANCH_NAME=${CI_COMMIT_BRANCH} make test-all-kafka-sasl
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-kafka-sasl
   after_script:
     - make save-pilosa-logs
     - make shutdown
@@ -578,7 +578,7 @@ build arm container fb:
   before_script:
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:
-    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-arm64-${CI_COMMIT_REF_NAME}
+    - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-arm64-${CI_COMMIT_REF_SLUG}
     - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
