@@ -4,6 +4,7 @@ include:
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
 gosec-sast:
+  allow_failure: false
   before_script:
     - export GOPRIVATE=github.com/molecula/*
     - apk add openssh-client
@@ -14,6 +15,13 @@ gosec-sast:
     - git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"
     - ssh-keygen -F github.com || echo "$SSH_KNOWN_HOSTS_HASHED" >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
+  script:
+    ## securego/gosec works for scanning, but not converting to the gitlab report format.
+    - go install github.com/securego/gosec/v2/cmd/gosec@v2.12.0
+    - gosec -fmt=json -out=gosec.json -tests ./... || true
+    ## gitlab's wrapper for gosec works for converting, but not for scanning.
+    - go install 'gitlab.com/gitlab-org/security-products/analyzers/gosec@v1.4.0'
+    - gosec convert gosec.json > gl-sast-report.json
 
 variables:
   GOVERSION: "1.17.8"
