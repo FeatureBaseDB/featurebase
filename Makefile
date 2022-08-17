@@ -45,13 +45,17 @@ vendor: go.mod
 version:
 	@echo $(VERSION)
 
+# We build a list of packages that omits the IDK packages because the IDK
+# packages require fancy environment setup.
+GOPACKAGES := $(shell $(GO) list ./... | grep -v "/idk")
+
 # Run test suite
 test:
-	$(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT)
+	$(GO) test $(GOPACKAGES) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT)
 
 # Run test suite with race flag
 test-race:
-	CGO_ENABLED=1 $(GO) test ./... -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout $(RACE_TEST_TIMEOUT) -v
+	CGO_ENABLED=1 $(GO) test $(GOPACKAGES) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -race -timeout $(RACE_TEST_TIMEOUT) -v
 
 testv: testvsub
 
@@ -62,7 +66,6 @@ testv-race: testvsub-race
 #            until the test run finishes. Package list mode makes it hard to
 #            find which test is hung/deadlocked.
 #
-GOPACKAGES := $(shell $(GO) list ./...)
 testvsub:
 	@set -e; for pkg in $(GOPACKAGES); do \
 			if [ $${pkg:0:38} == "github.com/molecula/featurebase/v3/idk" ]; then \
@@ -83,7 +86,7 @@ testvsub-race:
         done
 
 bench:
-	$(GO) test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
+	$(GO) test $(GOPACKAGES) -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
 
 # Run test suite with coverage enabled
 cover:
@@ -280,7 +283,7 @@ pilosa-fsck:
 
 # Run Pilosa tests inside Docker container
 docker-test:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -timeout $(TEST_TIMEOUT) ./...
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -timeout $(TEST_TIMEOUT) $(GOPACKAGES)
 
 # Must use bash in order to -o pipefail; otherwise the tee will hide red tests.
 # run top tests, not subdirs. print summary red/green after.
@@ -308,6 +311,8 @@ linter: golangci-lint
 ocd: golangci-lint
 
 # Run gometalinter with custom flags
+# Note the "./..." in gometalinter is still allowed, because we do want
+# linting to reach IDK pagkages.
 gometalinter: require-gometalinter vendor
 	GO111MODULE=off gometalinter --vendor --disable-all \
 	    --deadline=300s \
