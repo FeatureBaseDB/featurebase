@@ -68,8 +68,21 @@ stages:
     - ssh-keygen -F github.com || echo "$SSH_KNOWN_HOSTS_HASHED" >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
 
+.go-cache:
+  variables:
+    GOPATH: $CI_PROJECT_DIR/.go
+  before_script:
+    - mkdir -p .go
+  cache:
+    # this caching strategy makes it so each branch uses the same cache
+    # which I think is the best default strategy
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - .go/pkg/mod/
+
 smoke build:
   image: golang:$GOVERSION
+  extends: .go-cache
   stage: lint
   allow_failure: false
   rules:
@@ -80,6 +93,7 @@ smoke build:
 
 golangci-lint:
   image: golangci/golangci-lint:v1.46.2
+  extends: .go-cache
   stage: lint
   allow_failure: false
   rules:
@@ -91,6 +105,7 @@ golangci-lint:
 go mod tidy:
   stage: lint
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
@@ -122,13 +137,14 @@ build lattice:
 build for linux amd64:
   stage: pretest
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
     - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
   artifacts:
@@ -173,6 +189,7 @@ run jest tests:
 run go tests:
   stage: test
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
@@ -185,6 +202,7 @@ run go tests:
 run go tests race:
   stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
@@ -198,6 +216,7 @@ run go tests race:
 run go tests shardwidth22:
   stage: test
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -212,6 +231,7 @@ run go tests shardwidth22:
 run go tests future:
   stage: test
   image: golang:1.18
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
@@ -229,6 +249,7 @@ run go tests future:
 run go tests future plg:
   stage: test
   image: golang:1.18
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
@@ -388,13 +409,14 @@ upload to sonarcloud:
 build for linux arm64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
     - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
   artifacts:
@@ -405,13 +427,14 @@ build for linux arm64:
 build for darwin amd64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
     - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
   artifacts:
@@ -422,13 +445,14 @@ build for darwin amd64:
 build for darwin arm64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
     - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
   artifacts:
@@ -439,6 +463,7 @@ build for darwin arm64:
 package for linux amd64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
@@ -456,6 +481,7 @@ package for linux amd64:
 package for linux arm64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
@@ -474,13 +500,14 @@ package for linux arm64:
 build plg for linux amd64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="amd64" make plg FLAGS="-o single_node_featurebase_linux_amd64"
     - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
   artifacts:
@@ -491,13 +518,14 @@ build plg for linux amd64:
 build plg for linux arm64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="arm64" make plg FLAGS="-o single_node_featurebase_linux_arm64"
     - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
   artifacts:
@@ -508,13 +536,14 @@ build plg for linux arm64:
 build plg for darwin amd64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="amd64" make plg FLAGS="-o single_node_featurebase_darwin_amd64"
     - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
   artifacts:
@@ -525,13 +554,14 @@ build plg for darwin amd64:
 build plg for darwin arm64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
     - go get -v -u github.com/rakyll/statik
-    - /go/bin/statik -src=lattice
+    - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="arm64" make plg FLAGS="-o single_node_featurebase_darwin_arm64"
     - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
   artifacts:
@@ -542,6 +572,7 @@ build plg for darwin arm64:
 package plg for linux amd64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
@@ -559,6 +590,7 @@ package plg for linux amd64:
 package plg for linux arm64:
   stage: build
   image: golang:$GOVERSION
+  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
@@ -746,6 +778,7 @@ authclustertests:
 external lookup tests:
   stage: integration
   image: golang:$GOVERSION
+  extends: .go-cache
   # TODO: no rules here, do we need to add the rules line?
   variables:
     POSTGRES_DB: $POSTGRES_DB
