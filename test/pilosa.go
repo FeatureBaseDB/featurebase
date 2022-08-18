@@ -52,6 +52,11 @@ func newCommand(tb testing.TB, opts ...server.CommandOption) *Command {
 
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
+	// pick etcd ports using a socket rather than a real port
+	err = GetPortsGenConfigs(tb, []*Command{m})
+	if err != nil {
+		tb.Fatalf("generating config: %v", err)
+	}
 	m.Config.DataDir = path
 	defaultConf := server.NewConfig()
 
