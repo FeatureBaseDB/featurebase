@@ -3,13 +3,19 @@ ARG GO_VERSION=1.17.8
 FROM golang:1.17.8-stretch as builder
 
 WORKDIR /
-RUN ["apt-get","update","-y"]
-RUN ["apt-get","install","-y","git","unixodbc","unixodbc-dev","netcat", "build-essential","musl-tools"]
+RUN apt-get update -y -qq && apt-get install -y -qq \
+  build-essential \
+  git \
+  musl-tools \
+  netcat \
+  unixodbc \
+  unixodbc-dev \
+  && rm -rf /var/lib/apt/lists/*
 RUN ["git", "clone", "https://github.com/edenhill/librdkafka.git"]
 WORKDIR /librdkafka
-RUN ["./configure", "--prefix", "/usr"]
-RUN ["make"]
-RUN ["make", "install"]
+RUN ./configure --prefix /usr && \
+  make && \
+  make install
 
 WORKDIR /featurebase
 
@@ -24,12 +30,15 @@ RUN make build GO_BUILD_FLAGS="-mod=vendor ${GO_BUILD_FLAGS}" ${MAKE_FLAGS}
 
 FROM ubuntu:20.04 as runner
 
-RUN ["apt-get","update","-y"]
-RUN ["apt-get","install","-y","unixodbc-dev","netcat","ca-certificates", "musl-tools"]
+RUN apt-get update -y -qq && apt-get install -y -qq \
+  ca-certificates \
+  musl-tools \
+  netcat \
+  unixodbc-dev \
+  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /idk/bin/* /usr/local/bin/
-
-COPY /docker-sasl/ssl_keys /etc/kafka/secrets
+COPY --from=builder /featurebase/idk/bin/* /usr/local/bin/
+COPY ./idk/docker-sasl/ssl_keys /etc/kafka/secrets
 
 # Verify that the linker can find everything.
 FROM runner as linkcheck

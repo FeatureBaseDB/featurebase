@@ -638,16 +638,9 @@ idk package_docker_all:
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
-    - cd ./idk/
-    - make docker GOOS="linux" GOARCH="amd64"
-    - make docker GOOS="linux" GOARCH="arm64"
-    - make docker GOOS="darwin" GOARCH="amd64"
-    - make docker GOOS="darwin" GOARCH="arm64"
+    - make docker-idk GOOS="linux" GOARCH="amd64"
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - make docker-tag-push GOOS="linux" GOARCH="amd64"
-    - make docker-tag-push GOOS="linux" GOARCH="arm64"
-    - make docker-tag-push GOOS="darwin" GOARCH="amd64"
-    - make docker-tag-push GOOS="darwin" GOARCH="arm64"
+    - make docker-idk-tag-push GOOS="linux" GOARCH="amd64"
   needs:
     - job: idk build_all
     - job: idk build_linux_arm64

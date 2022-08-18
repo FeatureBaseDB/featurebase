@@ -251,6 +251,22 @@ docker-tag-push: vendor
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
 
+# These commands (docker-idk and docker-idk-tag-push)
+# are designed to be used in CI.
+# docker-idk builds idk docker images and tags them - intended for use in CI.
+docker-idk: vendor
+	docker build \
+		-f idk/Dockerfile \
+		--build-arg GO_VERSION=$(GO_VERSION) \
+		--build-arg MAKE_FLAGS="GOOS=$(GOOS) GOARCH=$(GOARCH) BUILD_CGO=$(BUILD_CGO)" \
+		--tag registry.gitlab.com/molecula/featurebase/idk:$(VERSION_ID) .
+	@echo Created docker image: registry.gitlab.com/molecula/featurebase/idk:$(VERSION_ID)
+# docker-idk-tag-push pushes tagged docker images to the GitLab container
+# registry - intended for use in CI.
+docker-idk-tag-push:
+	docker push registry.gitlab.com/molecula/featurebase/idk:$(VERSION_ID)
+	@echo Pushed docker image: registry.gitlab.com/molecula/featurebase/idk:$(VERSION_ID)
+
 # Install diagnostic pilosa-keydump tool. Allows viewing the keys in a transaction-engine directory.
 pilosa-keydump:
 	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa-keydump
