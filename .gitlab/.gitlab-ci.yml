@@ -391,7 +391,7 @@ upload to sonarcloud:
   variables:
     SONAR_TOKEN: $SONAR_TOKEN
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
     - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/coverage*out -Dsonar.go.tests.reportPaths=test-report*.out,idk/testdata/report*out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
     - cd ./idk
@@ -690,7 +690,7 @@ idk s3 dump:
   tags:
     - shell
   rules:
-    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
@@ -1132,7 +1132,7 @@ s3 dump:
   tags:
     - shell
   rules:
-    - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
