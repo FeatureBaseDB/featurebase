@@ -604,6 +604,16 @@ var callInfoByFunc = map[string]callInfo{
 			"column": stringOrInt64,
 		},
 	},
+	"Sort": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_field":    stringOrVariable,
+			"field":     stringOrVariable,
+			"limit":     int64(0),
+			"offset":    int64(0),
+			"sort-desc": false,
+		},
+	},
 }
 
 // We want to allow case-insensitive names, but we want to continue using

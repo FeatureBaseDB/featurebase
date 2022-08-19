@@ -3609,3 +3609,100 @@ func ParseQualifiedFragmentName(name string) (index, field, view string, shard u
 	}
 	return index, field, view, shard, nil
 }
+
+type RowKV struct {
+	RowID uint64      `json:"id"`
+	Value interface{} `json:"value"`
+}
+
+func (r *RowKV) Compare(o RowKV, desc bool) (bool, bool) {
+	switch val := r.Value.(type) {
+	case string:
+		if oVal, ok := o.Value.(string); ok {
+			return desc != (val < oVal), true
+		}
+		return desc, false
+	case bool:
+		if oVal, ok := o.Value.(bool); ok {
+			return desc != oVal, true
+		}
+		return desc, false
+	case int64:
+		if oVal, ok := o.Value.(int64); ok {
+			return desc != (val < oVal), true
+		}
+		return desc, false
+	default:
+		return desc, false
+	}
+}
+
+// sortBSIData, fetches the rows and seperates the positive and negetive values.
+// these values and sorted seperately and appended
+func (f *fragment) sortBsiData(tx Tx, filter *Row, bitDepth uint64, sort_desc bool) (*SortedRow, error) {
+	consider, err := f.row(tx, bsiExistsBit)
+	if err != nil {
+		return nil, err
+	} else if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+	row, err := f.row(tx, bsiSignBit)
+	if err != nil {
+		return nil, err
+	}
+	pos := consider.Difference(row)
+	row, err = f.row(tx, 0)
+	if err != nil {
+		return nil, err
+	}
+	neg := consider.Difference(pos)
+
+	var sortedRowIds []RowKV
+	f.flattenRowValues(tx, &sortedRowIds, neg, bitDepth, -1)
+	ok := true
+	f.flattenRowValues(tx, &sortedRowIds, pos, bitDepth, 1)
+	sort.SliceStable(sortedRowIds, func(i, j int) bool {
+		if c, k := sortedRowIds[i].Compare(sortedRowIds[j], sort_desc); k {
+			return c
+		} else {
+			ok = false
+			return !k
+		}
+	})
+	if !ok {
+		return nil, errors.New("Couldn't compare field type for sorting")
+	}
+
+	return &SortedRow{
+		Row:    consider,
+		RowKVs: sortedRowIds,
+	}, nil
+}
+
+func (f *fragment) flattenRowValues(tx Tx, sortedRowIds *[]RowKV, filter *Row, bitDepth uint64, sign int64) error {
+	m := make(map[uint64]int64)
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row, err := f.row(tx, uint64(bsiOffsetBit+i))
+		if err != nil {
+			return err
+		}
+		row = row.Intersect(filter)
+
+		for _, v := range row.Columns() {
+			if val, ok := m[v]; ok {
+				m[v] = val | (1 << i)
+			} else {
+				m[v] = (1 << i)
+			}
+		}
+
+	}
+
+	for k, v := range m {
+		*sortedRowIds = append(*sortedRowIds, RowKV{
+			RowID: k,
+			Value: (v * sign),
+		})
+	}
+	return nil
+}

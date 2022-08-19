@@ -324,6 +324,8 @@ func safeCopy(resp QueryResponse) (out QueryResponse) {
 			out.Results = append(out.Results, safe)
 		case DistinctTimestamp:
 			out.Results = append(out.Results, x)
+		case *SortedRow:
+			out.Results = append(out.Results, x)
 		default:
 			panic(fmt.Sprintf("handle %T here", v))
 		}
@@ -791,6 +793,9 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		statFn() // TODO(twg) need this?
 		res, err := e.executeDeleteRecords(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeDelete")
+	case "Sort":
+		res, err := e.executeSort(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrap(err, "executeSort")
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
@@ -4352,6 +4357,14 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 		return ExtractedIDMatrix{}, errors.New("missing column filter in Extract")
 	}
 	filter := c.Children[0]
+	var sort_desc bool
+	if filter.Name == "Sort" {
+		sd, _, err := filter.BoolArg("sort-desc")
+		if err != nil {
+			return ExtractedIDMatrix{}, errors.Wrap(err, "sort field error")
+		}
+		sort_desc = sd
+	}
 
 	// Extract fields from rows calls.
 	fields := make([]string, len(c.Children)-1)
@@ -4398,12 +4411,35 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-		other, _ := prev.(ExtractedIDMatrix)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		other.Append(v.(ExtractedIDMatrix))
-		return other
+		switch other := v.(type) {
+		case ExtractedIDMatrixSorted:
+			if prev == nil {
+				return other
+			}
+			if _, ok := prev.(ExtractedIDMatrixSorted); !ok {
+				return other
+			}
+			if out, err := MergeExtractedIDMatrixSorted(other, prev.(ExtractedIDMatrixSorted), sort_desc); err != nil {
+				return err
+			} else {
+				return out
+			}
+
+		case ExtractedIDMatrix:
+			if prev != nil {
+				if p, ok := prev.(ExtractedIDMatrix); ok {
+					other.Append(p)
+				}
+			}
+			return other
+		case nil:
+			return prev
+		default:
+			return ExtractedIDMatrix{}
+		}
 	}
 
 	// Get full result set.
@@ -4411,11 +4447,33 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 	if err != nil {
 		return ExtractedIDMatrix{}, err
 	}
-	results, _ := other.(ExtractedIDMatrix)
-	sort.Slice(results.Columns, func(i, j int) bool {
-		return results.Columns[i].ColumnID < results.Columns[j].ColumnID
-	})
-	return results, nil
+
+	switch results := other.(type) {
+	case ExtractedIDMatrix:
+		sort.Slice(results.Columns, func(i, j int) bool {
+			return results.Columns[i].ColumnID < results.Columns[j].ColumnID
+		})
+		return results, nil
+	case ExtractedIDMatrixSorted:
+		offset, hasOffset, err := filter.UintArg("offset")
+		if err != nil {
+			return ExtractedIDMatrix{}, err
+		}
+		limit, hasLimit, err := filter.UintArg("limit")
+		if err != nil {
+			return ExtractedIDMatrix{}, err
+		}
+		if hasOffset {
+			results.ExtractedIDMatrix.Columns = results.ExtractedIDMatrix.Columns[offset:]
+		}
+		if hasLimit && limit < uint64(len(results.RowKVs)) {
+			results.ExtractedIDMatrix.Columns = results.ExtractedIDMatrix.Columns[:limit]
+		}
+		return *results.ExtractedIDMatrix, nil
+	default:
+		return ExtractedIDMatrix{}, errors.New("Extract, unexpected result type found")
+	}
+
 }
 
 func mergeBits(bits *Row, mask uint64, out map[uint64]uint64) {
@@ -4429,11 +4487,27 @@ var (
 	falseRowFakeID = []uint64{0}
 )
 
-func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index string, fields []string, filter *pql.Call, shard uint64, mopt *mapOptions, timeArgs []TimeArgs) (_ ExtractedIDMatrix, err0 error) {
-	// Execute filter.
-	colsBitmap, err := e.executeBitmapCallShard(ctx, qcx, index, filter, shard)
-	if err != nil {
-		return ExtractedIDMatrix{}, errors.Wrap(err, "failed to get extraction column filter")
+func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index string, fields []string, filter *pql.Call, shard uint64, mopt *mapOptions, timeArgs []TimeArgs) (_ interface{}, err0 error) {
+	var colsBitmap *Row
+	var cols []uint64
+	var sortedResult *SortedRow
+	if filter.Name == "Sort" {
+		res, err := e.executeSortShard(ctx, qcx, index, filter, shard)
+		if err != nil {
+			return ExtractedIDMatrix{}, errors.Wrap(err, "failed to get extraction sort column filter")
+		}
+		cols = res.Columns()
+		colsBitmap = res.Row
+		sortedResult = res
+	} else {
+		// Execute filter.
+		res, err := e.executeBitmapCallShard(ctx, qcx, index, filter, shard)
+		if err != nil {
+			return ExtractedIDMatrix{}, errors.Wrap(err, "failed to get extraction column filter")
+		}
+		// Decompress columns bitmap.
+		colsBitmap = res
+		cols = colsBitmap.Columns()
 	}
 
 	// Fetch index.
@@ -4447,9 +4521,6 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 		return ExtractedIDMatrix{}, err
 	}
 	defer finisher(&err0)
-
-	// Decompress columns bitmap.
-	cols := colsBitmap.Columns()
 
 	// Generate a matrix to stuff the results into.
 	m := make([]ExtractedIDColumn, len(cols))
@@ -4674,6 +4745,13 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 	}
 	if v := atomic.AddInt64(mopt.memoryAvailable, -calcResultMemory(matrix)); v < 0 {
 		return ExtractedIDMatrix{}, fmt.Errorf("result exceeds available memory")
+	}
+
+	if sortedResult != nil {
+		return ExtractedIDMatrixSorted{
+			ExtractedIDMatrix: &matrix,
+			RowKVs:            sortedResult.RowKVs,
+		}, nil
 	}
 	return matrix, nil
 }
@@ -8897,4 +8975,344 @@ func deleteKeyTranslation(ctx context.Context, idx *Index, shard uint64, records
 	paritionID := disco.ShardToShardPartition(idx.name, shard, idx.holder.partitionN)
 
 	return idx.TranslateStore(paritionID).Delete(records)
+}
+
+func (e *executor) executeSort(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*SortedRow, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSort")
+	defer span.Finish()
+
+	sort_desc, _, err := c.BoolArg("sort-desc")
+	if err != nil {
+		return nil, errors.Wrap(err, " getting sort-desc")
+	}
+
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
+		return e.executeSortShard(ctx, qcx, index, c, shard)
+	}
+
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		//var result *SortedRow
+		switch other := prev.(type) {
+		case *SortedRow:
+			if err := other.Merge(v.(*SortedRow), sort_desc); err != nil {
+				return err
+			} else {
+				return other
+			}
+		case *Row:
+			other.Merge(v.(*Row))
+			return other
+		case nil:
+			if v == nil {
+				return nil
+			}
+			if out, ok := v.(*SortedRow); ok {
+				return out
+			}
+			return v.(*Row)
+		default:
+			return errors.Errorf("unexpected return type from executeSortShard: %+v %T", other, other)
+		}
+	}
+
+	res, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, errors.Wrap(err, "mapReduce")
+	}
+
+	offset, hasOffset, err := c.UintArg("offset")
+	if err != nil {
+		return nil, err
+	}
+	limit, hasLimit, err := c.UintArg("limit")
+	if err != nil {
+		return nil, err
+	}
+	result := res.(*SortedRow)
+	if hasOffset {
+		result.RowKVs = result.RowKVs[offset:]
+		result.Row = NewRow(result.Columns()...)
+	}
+	if hasLimit && limit < result.Row.Count() {
+		result.RowKVs = result.RowKVs[:limit]
+		result.Row = NewRow(result.Columns()...)
+	}
+	return result, nil
+}
+
+func (e *executor) executeSortShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (*SortedRow, error) {
+	var filter *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, qcx, index, c.Children[0], shard)
+		if err != nil {
+			return nil, err
+		}
+		filter = row
+	}
+
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, index)
+	}
+
+	fieldName, err := c.FirstStringArg("field", "_field")
+	if err != nil {
+		return nil, errors.Wrap(err, "getting field")
+	}
+	f := idx.Field(fieldName)
+	if f == nil {
+		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
+	}
+
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+	if err != nil {
+		return nil, ErrQcxDone
+	}
+	defer finisher(&err)
+
+	sort_desc, _, err := c.BoolArg("sort-desc")
+	if err != nil {
+		return nil, errors.Wrap(err, " getting sort-desc")
+	}
+
+	switch f.Type() {
+	case FieldTypeBool:
+		fragment := e.Holder.fragment(index, f.name, viewStandard, shard)
+		if fragment == nil {
+			return nil, errors.New("bool fragment not found")
+		}
+		falses, err := fragment.row(tx, falseRowID)
+		if err != nil {
+			return nil, errors.New("error loading false from fragment")
+		}
+		trues, err := fragment.row(tx, trueRowID)
+		if err != nil {
+			return nil, errors.New("error loading true from fragment")
+		}
+		falses = filter.Intersect(falses)
+		trues = filter.Intersect(trues)
+		rowKVs := make([]RowKV, len(filter.Columns()))
+		var i int
+		if sort_desc {
+			for _, col := range trues.Columns() {
+				rowKVs[i] = RowKV{
+					RowID: col,
+					Value: true,
+				}
+				i++
+			}
+			for _, col := range falses.Columns() {
+				rowKVs[i] = RowKV{
+					RowID: col,
+					Value: false,
+				}
+				i++
+			}
+		} else {
+			for _, col := range falses.Columns() {
+				rowKVs[i] = RowKV{
+					RowID: col,
+					Value: false,
+				}
+				i++
+			}
+			for _, col := range trues.Columns() {
+				rowKVs[i] = RowKV{
+					RowID: col,
+					Value: true,
+				}
+				i++
+			}
+		}
+		return &SortedRow{
+			Row:    filter,
+			RowKVs: rowKVs,
+		}, nil
+	case FieldTypeDecimal, FieldTypeInt, FieldTypeTimestamp:
+		return f.SortShardRow(tx, shard, filter, sort_desc)
+	case FieldTypeMutex:
+		fragment := e.Holder.fragment(index, f.name, viewStandard, shard)
+		if fragment == nil {
+			return nil, errors.Errorf("fragment not found for field %s", f.name)
+		}
+		rows, err := fragment.rows(ctx, tx, 0)
+		if err != nil {
+			return nil, errors.Wrap(err, " ggettign rows error")
+		}
+		rowKVs := make([]RowKV, filter.Count())
+		i := 0
+		for _, rowID := range rows {
+			row, err := fragment.row(tx, rowID)
+			if err != nil {
+				return nil, errors.Wrap(err, "couldn't load row from fragment")
+			}
+			row = row.Intersect(filter)
+			if row.Count() > 0 {
+				if f.Keys() {
+					if rowStr, err := f.translateStore.TranslateID(rowID); err != nil {
+						return nil, errors.Wrap(err, "error getting translateIDs")
+					} else {
+						for _, v := range row.Columns() {
+							rowKVs[i] = RowKV{
+								RowID: v,
+								Value: rowStr,
+							}
+							i++
+						}
+					}
+				} else {
+					for _, v := range row.Columns() {
+						rowKVs[i] = RowKV{
+							RowID: v,
+							Value: rowID,
+						}
+						i++
+					}
+				}
+
+			}
+		}
+		//this is to make sure compare function worked.
+		ok := true
+		sort.SliceStable(rowKVs, func(i, j int) bool {
+			if c, k := rowKVs[i].Compare(rowKVs[j], sort_desc); k {
+				return c
+			} else {
+				ok = false
+				return !k
+			}
+		})
+		if !ok {
+			return nil, errors.New("could not compare values for sort")
+		}
+		return &SortedRow{
+			Row:    filter,
+			RowKVs: rowKVs,
+		}, nil
+	default:
+		return nil, errors.Errorf("Sort of field type %s not implemented yet", f.Type())
+	}
+}
+
+type SortedRow struct {
+	Row    *Row
+	RowKVs []RowKV
+}
+
+func (s *SortedRow) Columns() []uint64 {
+	out := make([]uint64, len(s.RowKVs))
+	for i, rkv := range s.RowKVs {
+		out[i] = rkv.RowID
+	}
+	return out
+}
+
+func (s *SortedRow) ToRows(callback func(*proto.RowResponse) error) error {
+	ci := []*proto.ColumnInfo{{Name: "_id", Datatype: "int64"}}
+
+	for _, kvs := range s.RowKVs {
+		val, err := toInt64(kvs.RowID)
+		if err != nil {
+			return errors.Wrap(err, "converting uint64 to int64 (positive)")
+		}
+		if err := callback(&proto.RowResponse{
+			Headers: ci,
+			Columns: []*proto.ColumnResponse{
+				{ColumnVal: &proto.ColumnResponse_Int64Val{Int64Val: val}},
+			},
+		}); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+		ci = nil
+	}
+	return nil
+}
+
+func (s *SortedRow) Merge(o *SortedRow, sort_desc bool) error {
+	rowKVs := make([]RowKV, len(s.RowKVs)+len(o.RowKVs))
+
+	i, j, k := 0, 0, 0
+	for i < len(s.RowKVs) && j < len(o.RowKVs) {
+		if c, ok := s.RowKVs[i].Compare(o.RowKVs[j], sort_desc); ok {
+			if c {
+				rowKVs[k] = s.RowKVs[i]
+				i++
+			} else {
+				rowKVs[k] = o.RowKVs[j]
+				j++
+			}
+			k++
+		} else {
+			return errors.Errorf("Coultn't compare %v and %v", s.RowKVs[i], o.RowKVs[j])
+		}
+	}
+
+	for i < len(s.RowKVs) {
+		rowKVs[k] = s.RowKVs[i]
+		i++
+		k++
+	}
+
+	for j < len(o.RowKVs) {
+		rowKVs[k] = o.RowKVs[j]
+		j++
+		k++
+	}
+
+	s.RowKVs = rowKVs
+	s.Row.Merge(o.Row)
+	return nil
+}
+
+type ExtractedIDMatrixSorted struct {
+	ExtractedIDMatrix *ExtractedIDMatrix
+	RowKVs            []RowKV
+}
+
+func MergeExtractedIDMatrixSorted(a, b ExtractedIDMatrixSorted, sort_desc bool) (ExtractedIDMatrixSorted, error) {
+	columns := make([]ExtractedIDColumn, len(a.ExtractedIDMatrix.Columns)+len(b.ExtractedIDMatrix.Columns))
+	rowKVs := make([]RowKV, len(a.RowKVs)+len(b.RowKVs))
+	i, j, k := 0, 0, 0
+	for i < len(a.ExtractedIDMatrix.Columns) && j < len(b.ExtractedIDMatrix.Columns) {
+		if c, ok := a.RowKVs[i].Compare(b.RowKVs[j], sort_desc); ok {
+			if c {
+				columns[k] = a.ExtractedIDMatrix.Columns[i]
+				rowKVs[k] = a.RowKVs[i]
+				i++
+			} else {
+				columns[k] = b.ExtractedIDMatrix.Columns[j]
+				rowKVs[k] = b.RowKVs[j]
+				j++
+			}
+			k++
+		} else {
+			return ExtractedIDMatrixSorted{}, errors.Errorf("error comparing %v and %v", a.RowKVs[i], b.RowKVs[j])
+		}
+	}
+	for i < len(a.ExtractedIDMatrix.Columns) {
+		columns[k] = a.ExtractedIDMatrix.Columns[i]
+		rowKVs[k] = a.RowKVs[i]
+		i++
+		k++
+	}
+	for j < len(b.ExtractedIDMatrix.Columns) {
+		columns[k] = b.ExtractedIDMatrix.Columns[j]
+		rowKVs[k] = b.RowKVs[j]
+		j++
+		k++
+	}
+	if a.ExtractedIDMatrix.Fields == nil {
+		a.ExtractedIDMatrix.Fields = b.ExtractedIDMatrix.Fields
+	}
+	return ExtractedIDMatrixSorted{
+		ExtractedIDMatrix: &ExtractedIDMatrix{
+			Columns: columns,
+			Fields:  a.ExtractedIDMatrix.Fields,
+		},
+		RowKVs: rowKVs,
+	}, nil
+
 }

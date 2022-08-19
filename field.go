@@ -2392,3 +2392,30 @@ func CheckEpochOutOfRange(epoch, min, max time.Time) error {
 	}
 	return nil
 }
+
+func (f *Field) SortShardRow(tx Tx, shard uint64, filter *Row, sort_desc bool) (*SortedRow, error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return nil, errors.New("bsig is nil")
+	}
+
+	view := f.view(viewBSIGroupPrefix + f.name)
+	if view == nil {
+		return nil, errors.New("view is nil")
+	}
+
+	fragment := view.Fragment(shard)
+	if fragment == nil {
+		return nil, errors.New("fragment is nil")
+	}
+
+	var localTx Tx
+	if NilInside(tx) {
+		localTx = f.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
+		defer localTx.Rollback()
+	} else {
+		localTx = tx
+	}
+
+	return fragment.sortBsiData(localTx, filter, bsig.BitDepth, sort_desc)
+}

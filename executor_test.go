@@ -4207,6 +4207,114 @@ func TestExecutor_Execute_Limit(t *testing.T) {
 
 }
 
+func TestExecutor_Sort(t *testing.T) {
+	t.Run("Sort", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+
+		c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bsint", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		c.Query(t, "i", `
+			Set(0, bsint = 1)
+			Set(1, bsint = -1)
+			Set(2, bsint = 2)
+			Set(3, bsint = -2)
+			Set(4, bsint = 2)
+			Set(5, bsint = 3)
+			`)
+
+		c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "bool", pilosa.OptFieldTypeBool())
+		c.Query(t, "i", `
+				Set(0, bool=true)
+				Set(1, bool=false)
+				Set(2, bool=false)
+				Set(3, bool=true)
+				Set(4, bool=false)
+				Set(5, bool=true)
+			`)
+
+		c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "keymutex", pilosa.OptFieldKeys(), pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000))
+		c.Query(t, "i", `
+				Set(0, keymutex="h")
+				Set(1, keymutex="xyzzy")
+				Set(2, keymutex="ra")
+				Set(3, keymutex="plugh")
+				Set(4, keymutex="wl")
+				Set(5, keymutex="ig")
+			`)
+
+		queries := []string{
+			"Extract(Sort(Row(bsint > 1), field = bsint, limit  = 2, offset = 1), Rows(bsint))",
+			"Extract(Sort(Row(bsint < -1), field = bool, limit = 1, sort-desc = true), Rows(bool))",
+			"Extract(Sort(All(), field = keymutex, limit = 1), Rows(keymutex))",
+		}
+
+		expect := []interface{}{
+			pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{
+						Name: "bsint",
+						Type: "int64",
+					},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 4},
+						Rows: []interface{}{
+							int64(2),
+						},
+					},
+					{
+						Column: pilosa.KeyOrID{ID: 5},
+						Rows: []interface{}{
+							int64(3),
+						},
+					},
+				},
+			},
+			pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{
+						Name: "bool",
+						Type: "bool",
+					},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 3},
+						Rows: []interface{}{
+							true,
+						},
+					},
+				},
+			},
+			pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{
+						Name: "keymutex",
+						Type: "string",
+					},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 0},
+						Rows: []interface{}{
+							"h",
+						},
+					},
+				},
+			},
+		}
+
+		for i, q := range queries {
+			resp := c.Query(t, "i", q)
+			if !reflect.DeepEqual(expect[i], resp.Results[0]) {
+				t.Errorf("expected %v but got %v", expect[i], resp.Results[0])
+			}
+		}
+
+	})
+}
+
 // Ensure an all query can be executed.
 func TestExecutor_Execute_All(t *testing.T) {
 	t.Run("ColumnID", func(t *testing.T) {
