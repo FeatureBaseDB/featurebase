@@ -543,13 +543,43 @@ func TestTx_AddRemove_Quick(t *testing.T) {
 }
 
 func TestTx_Remove(t *testing.T) {
+	// reusable containers for the tests to work with so we don't have to do
+	// millions of adds to get millions of bits
+	// justEnoughBits to cause a container to mutate to bitmap in RBF
+	justEnoughBits := make([]uint16, 4082)
+	for i := range justEnoughBits {
+		justEnoughBits[i] = uint16(i)
+	}
+	justEnoughBitmap := make([]uint64, 1024)
+	for i := 0; i < 64; i++ {
+		justEnoughBitmap[i] = ^uint64(0)
+	}
+	// and now a sparse-ish one, to test non-contiguous blocks
+	sparseBits := make([]uint16, 0, 4082)
+	// every 8th bit so it's easy to fill them in in the bitmap form
+	for i := 0; i < cap(sparseBits); i++ {
+		sparseBits = append(sparseBits, uint16(i*8))
+	}
+	sparseBitmapData := make([]uint64, 1024)
+	for i := range sparseBitmapData {
+		sparseBitmapData[i] = 0x0101010101010101
+	}
+	tinyArray := roaring.NewContainerArray(justEnoughBits[:1])
+	smallArray := roaring.NewContainerArray(justEnoughBits[:8])
+	bigArray := roaring.NewContainerArray(justEnoughBits[:rbf.ArrayMaxSize])
+	smallBitmap := roaring.NewContainerBitmapN(justEnoughBitmap, 4096)
+	sparseSmallArray := roaring.NewContainerArray(sparseBits[:16])
+	sparseBigArray := roaring.NewContainerArray(sparseBits[:4070])
+	sparseBitmap := roaring.NewContainerBitmapN(sparseBitmapData, 65536/8)
+	t.Logf("sparseSmallArray: %d", sparseSmallArray.N())
+
 	t.Run("FullContiguous", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("-short enabled, skipping")
 		}
 
-		for _, bitN := range []uint64{1000, 100000, 2000000} {
-			t.Run(fmt.Sprint(bitN), func(t *testing.T) {
+		for _, containers := range []uint64{1, 2, 31} {
+			t.Run(fmt.Sprint(containers), func(t *testing.T) {
 				db := MustOpenDB(t)
 				defer MustCloseDB(t, db)
 
@@ -561,9 +591,16 @@ func TestTx_Remove(t *testing.T) {
 					if err := tx.CreateBitmap("x"); err != nil {
 						t.Fatal(err)
 					}
-					for i := uint64(0); i < bitN; i++ {
-						if _, err := tx.Add("x", i); err != nil {
-							t.Fatalf("Add(%d) err=%q", i, err)
+					// for each container, we want to create it as an array, then turn it into a bitmap.
+					for i := uint64(0); i < containers; i++ {
+						if err := tx.PutContainer("x", i, smallArray); err != nil {
+							t.Fatalf("putting small container %d: %v", i, err)
+						}
+						if err := tx.PutContainer("x", i, bigArray); err != nil {
+							t.Fatalf("putting big container %d: %v", i, err)
+						}
+						if err := tx.PutContainer("x", i, smallBitmap); err != nil {
+							t.Fatalf("putting bitmap container %d: %v", i, err)
 						}
 					}
 					if err := tx.Commit(); err != nil {
@@ -576,9 +613,19 @@ func TestTx_Remove(t *testing.T) {
 					tx := MustBegin(t, db, true)
 					defer tx.Rollback()
 
-					for i := uint64(0); i < bitN; i++ {
-						if _, err := tx.Remove("x", i); err != nil {
-							t.Fatalf("Remove(%d) err=%q", i, err)
+					for i := uint64(0); i < containers; i++ {
+						// remove all the bits
+						if err := tx.PutContainer("x", i, bigArray); err != nil {
+							t.Fatalf("putting big container %d: %v", i, err)
+						}
+						if err := tx.PutContainer("x", i, smallArray); err != nil {
+							t.Fatalf("putting small container %d: %v", i, err)
+						}
+						if err := tx.PutContainer("x", i, tinyArray); err != nil {
+							t.Fatalf("putting one-item container %d: %v", i, err)
+						}
+						if _, err := tx.Remove("x", i<<16); err != nil {
+							t.Fatalf("removing last bit: %v", err)
 						}
 					}
 					if err := tx.Commit(); err != nil {
@@ -598,66 +645,13 @@ func TestTx_Remove(t *testing.T) {
 		}
 	})
 
-	t.Run("PartialContiguous", func(t *testing.T) {
-		db := MustOpenDB(t)
-		defer MustCloseDB(t, db)
-
-		// Add bits
-		const bitN = 100000
-		const multiplier = 7 // space out bits so we span more containers
-		func() {
-			tx := MustBegin(t, db, true)
-			defer tx.Rollback()
-
-			if err := tx.CreateBitmap("x"); err != nil {
-				t.Fatal(err)
-			}
-			for i := uint64(0); i < bitN; i++ {
-				if _, err := tx.Add("x", i*multiplier); err != nil {
-					t.Fatalf("Add(%d) err=%q", i, err)
-				}
-			}
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		// Remove some bits in small contiguous chunks.
-		var deleteN int
-		for i := uint64(bitN / 2); i < bitN; {
-			func() {
-				tx := MustBegin(t, db, true)
-				defer tx.Rollback()
-				for j := uint64(0); j < 100; i, j = i+1, j+1 {
-					if n, err := tx.Remove("x", i*multiplier); err != nil || n != 1 {
-						t.Fatalf("Remove(%d)=(%v,%q)", i, n, err)
-					}
-					deleteN++
-				}
-				if err := tx.Commit(); err != nil {
-					t.Fatal(err)
-				}
-			}()
-		}
-
-		// Verify that we have the correct count afterward.
-		tx := MustBegin(t, db, false)
-		defer tx.Rollback()
-		if n, err := tx.Count("x"); err != nil {
-			t.Fatal(err)
-		} else if got, want := n, uint64(bitN-deleteN); got != want {
-			t.Fatalf("Count=%d, want %d", got, want)
-		}
-	})
-
 	t.Run("PartialNonContiguous", func(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 
 		// Add bits
-		const bitN = 100000
-		const multiplier = 7 // space out bits
-		bits := make([]uint64, 0, bitN)
+		const containers = 256
+		bitsAdded := 0
 		func() {
 			tx := MustBegin(t, db, true)
 			defer tx.Rollback()
@@ -665,28 +659,39 @@ func TestTx_Remove(t *testing.T) {
 			if err := tx.CreateBitmap("x"); err != nil {
 				t.Fatal(err)
 			}
-			for i := uint64(0); i < bitN; i++ {
-				if _, err := tx.Add("x", i*multiplier); err != nil {
-					t.Fatalf("Add(%d) err=%q", i, err)
+			for i := uint64(0); i < containers; i++ {
+				if err := tx.PutContainer("x", i, sparseSmallArray); err != nil {
+					t.Fatalf("putting small container %d: %v", i, err)
 				}
-				bits = append(bits, i*multiplier)
+				bitsThisContainer := sparseSmallArray.N()
+				if i&1 == 1 {
+					if err := tx.PutContainer("x", i, sparseBigArray); err != nil {
+						t.Fatalf("putting big container %d: %v", i, err)
+					}
+					bitsThisContainer = sparseBigArray.N()
+				}
+				if i&2 == 2 {
+					if err := tx.PutContainer("x", i, sparseBitmap); err != nil {
+						t.Fatalf("putting bitmap container %d: %v", i, err)
+					}
+					bitsThisContainer = sparseBitmap.N()
+				}
+				bitsAdded += int(bitsThisContainer)
 			}
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
 		}()
 
-		// Remove some bits in small contiguous chunks.
+		// Remove some bits in small contiguous chunks. First 16 bits from each container.
 		var deleteN int
-		perm := rand.Perm(len(bits))
-		for i := uint64(bitN / 2); i < bitN; {
+		for i := uint64(0); i < containers; i++ {
 			func() {
 				tx := MustBegin(t, db, true)
 				defer tx.Rollback()
-				for j := uint64(0); j < 100; i, j = i+1, j+1 {
-					value := bits[perm[i]]
-					if n, err := tx.Remove("x", value); err != nil || n != 1 {
-						t.Fatalf("Remove(%d)=(%v,%q)", value, n, err)
+				for j := uint64(0); j < 16; j++ {
+					if n, err := tx.Remove("x", (i<<16)+(j*8)); err != nil || n != 1 {
+						t.Fatalf("Remove(%d)=(%d,%v)", i, n, err)
 					}
 					deleteN++
 				}
@@ -701,7 +706,7 @@ func TestTx_Remove(t *testing.T) {
 		defer tx.Rollback()
 		if n, err := tx.Count("x"); err != nil {
 			t.Fatal(err)
-		} else if got, want := n, uint64(bitN-deleteN); got != want {
+		} else if got, want := n, uint64(bitsAdded-deleteN); got != want {
 			t.Fatalf("Count=%d, want %d", got, want)
 		}
 	})
@@ -749,7 +754,7 @@ func TestTx_Remove(t *testing.T) {
 				defer MustCloseDB(t, db)
 
 				// Create bitmap & insert until we hit a tree depth.
-				var bitN int
+				var containerN int
 				func() {
 					tx := MustBegin(t, db, true)
 					defer tx.Rollback()
@@ -757,10 +762,10 @@ func TestTx_Remove(t *testing.T) {
 						t.Fatal(err)
 					}
 					for i := uint64(0); ; i++ {
-						if _, err := tx.Add("x", i<<16); err != nil {
-							t.Fatalf("Add(%d) err=%q", i<<16, err)
+						if err := tx.PutContainer("x", i, bigArray); err != nil {
+							t.Fatalf("putting big container %d: %v", i, err)
 						}
-						bitN++
+						containerN++
 
 						if d, err := tx.Depth("x"); err != nil {
 							t.Fatal(err)
@@ -777,9 +782,9 @@ func TestTx_Remove(t *testing.T) {
 				func() {
 					tx := MustBegin(t, db, true)
 					defer tx.Rollback()
-					for i := bitN - 1; i >= 0; i-- {
-						if n, err := tx.Remove("x", uint64(i)<<16); err != nil || n != 1 {
-							t.Fatalf("Remove(%d)=(%v,%q)", uint64(i)<<16, n, err)
+					for i := containerN - 1; i >= 0; i-- {
+						if err := tx.PutContainer("x", uint64(i), nil); err != nil {
+							t.Fatalf("removing container (%d)=(%v)", uint64(i)<<16, err)
 						}
 					}
 					if err := tx.Commit(); err != nil {
@@ -790,9 +795,13 @@ func TestTx_Remove(t *testing.T) {
 				// Ensure bitmap no longer exists.
 				tx := MustBegin(t, db, false)
 				defer tx.Rollback()
-				for i := uint64(0); i < uint64(bitN); i++ {
-					if ok, err := tx.Contains("x", i<<16); err != nil || ok {
-						t.Fatalf("Contains(%d)=(%v,%q)", i<<16, ok, err)
+				for i := uint64(0); i < uint64(containerN); i++ {
+					c, err := tx.Container("x", i)
+					if err != nil {
+						t.Fatalf("checking for container %d: %v", i, err)
+					}
+					if c != nil {
+						t.Fatalf("container %d still exists after removal", i)
 					}
 				}
 			})
