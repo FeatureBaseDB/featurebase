@@ -4809,9 +4809,9 @@ type mutexSize struct {
 }
 
 var mutexDensities = []mutexDensity{
-	{"64K", 16},
+	// {"64K", 16},
 	// {"32K", 15}, // 50-50
-	// {"16K", 14}, // 1/4
+	{"16K", 14}, // 1/4
 	// {"8K", 13},
 	// {"4K", 12}, // a fair number of things
 	{"1K", 10},
@@ -4821,9 +4821,9 @@ var mutexDensities = []mutexDensity{
 
 var mutexSizes = []mutexSize{
 	// {"4r", 2},
-	// {"16r", 4},
+	{"16r", 4},
 	// {"256r", 8},
-	{"2Kr", 11},
+	// {"2Kr", 11},
 	// {"65Kr", 16},
 }
 
