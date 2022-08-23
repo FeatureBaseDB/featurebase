@@ -3766,11 +3766,11 @@ func TestContainerCombinations(t *testing.T) {
 					ret := runContainerFunc(testOp.f, cts[x][testOp.x], cts[y][testOp.y])
 					exp := testOp.exp
 
-					// Convert to all container types and check result.
-					for _, ct := range containerTypes {
-						if err := ret.BitwiseCompare(cts[ct][exp]); err != nil {
-							t.Error(err)
-						}
+					// Compare to the same-type container, which is usually the cheapest
+					// to compare with.
+					ct := ret.typ()
+					if err := ret.BitwiseCompare(cts[ct][exp]); err != nil {
+						t.Error(err)
 					}
 				})
 			}
