@@ -47,7 +47,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			t.Parallel()
 
 			rand := rand.New(rand.NewSource(int64(i)))
-			cmds := GenerateSetCommands(1000, rand)
+			cmds := GenerateSetCommands(100, rand)
 
 			m := test.RunCommand(t)
 
