@@ -351,7 +351,7 @@ func TestTx_Add_Quick(t *testing.T) {
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
 		defer tx.Rollback()
-		values := GenerateValues(rand, 10000)
+		values := GenerateValues(rand, 2000)
 
 		if err := tx.CreateBitmap("x"); err != nil {
 			t.Fatal(err)
@@ -499,7 +499,7 @@ func TestTx_AddRemove_Quick(t *testing.T) {
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
 		defer tx.Rollback()
-		values := GenerateValues(rand, 10000)
+		values := GenerateValues(rand, 2000)
 
 		if err := tx.CreateBitmap("x"); err != nil {
 			t.Fatal(err)

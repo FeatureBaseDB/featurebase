@@ -158,9 +158,20 @@ func MustAddRandom(tb testing.TB, rand *rand.Rand, tx *rbf.Tx, name string, valu
 func GenerateValues(rand *rand.Rand, n int) []uint64 {
 	a := make([]uint64, n)
 	for i := range a {
-		a[i] = uint64(rand.Intn(rbf.ShardWidth))
+		// Cram them into the first quarter of the shard, so we'll
+		// see more updates to existing things in smallish random
+		// tests.
+		a[i] = uint64(rand.Intn(rbf.ShardWidth / 4))
 	}
 	sort.Slice(a, func(i, j int) bool { return a[i] < a[j] })
+	prev := uint64(0)
+	// eliminate duplicates by bumping things a bit
+	for i := range a {
+		if a[i] <= prev {
+			a[i] = prev + 1
+		}
+		prev = a[i]
+	}
 	return a
 }
 
