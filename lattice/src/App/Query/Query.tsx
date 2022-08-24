@@ -69,7 +69,7 @@ export const Query: FC<QueryProps> = ({
   );
 
   const onReRunQuery = (query: string) => {
-    const queryPattern = query.match(/\[(.*?)\]/);
+    const queryPattern = query.match(/\[([\w-]*?)\]/);
     if (query[0] === '[' || (queryPattern && queryPattern.index === 0)) {
       const indexStart = query.indexOf('[') + 1;
       const indexEnd = query.indexOf(']');

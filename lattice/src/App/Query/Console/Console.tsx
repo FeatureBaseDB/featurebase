@@ -96,7 +96,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
         const indexEnd = query.indexOf(']');
         const index = query.substring(indexStart, indexEnd);
         const pqlQuery = query.substring(indexEnd + 1);
-        onQuery(pqlQuery.replace(/;+$/, ''), queryType, index);
+        onQuery(pqlQuery.replace(/(?<!;)(?=(;+))\1+$/, ''), queryType, index);
       } else {
         onQuery(ref.current.value, queryType);
       }
@@ -120,7 +120,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
     let pqlPattern;
 
     if (trimmedValue !== '') {
-      pqlPattern = trimmedValue.match(/\[(.*?)\]/);
+      pqlPattern = trimmedValue.match(/\[([\w-]*?)\]/);
       setInputIsDirty(true);
     } else {
       setInputIsDirty(false);
@@ -147,7 +147,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
 
         switch (op) {
           case 'Row':
-            if (postOpString.match(/(.*?),/)) {
+            if (postOpString.includes(',')) {
               const indexOfComma = postOpString.indexOf(',');
               const postCommaString = postOpString
                 .substring(indexOfComma + 1)
@@ -185,7 +185,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
             }
             break;
           case 'Rows':
-            if (postOpString.match(/(.*?),/)) {
+            if (postOpString.includes(',')) {
               const lastIndexOfComma = postOpString.lastIndexOf(',');
               const postCommaString = postOpString
                 .substring(lastIndexOfComma + 1)
@@ -201,7 +201,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
             break;
           case 'Clear':
           case 'Set':
-            if (postOpString.match(/(.*?),/)) {
+            if (postOpString.includes(',')) {
               const indexOfComma = postOpString.indexOf(',');
               const postCommaString = postOpString
                 .substring(indexOfComma + 1)
@@ -212,7 +212,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
             }
             break;
           case 'SetRowAttrs':
-            if (postOpString.match(/(.*?),/)) {
+            if (postOpString.includes(',')) {
               const indexOfComma = postOpString.indexOf(',');
               const postCommaString = postOpString
                 .substring(indexOfComma + 1)
@@ -223,7 +223,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
             }
             break;
           case 'Store':
-            if (postOpString.match(/(.*?),/)) {
+            if (postOpString.includes(',')) {
               const indexOfComma = postOpString.indexOf(',');
               const postCommaString = postOpString
                 .substring(indexOfComma + 1)
@@ -269,13 +269,13 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
           case 'Min':
           case 'Max':
           case 'Sum':
-            if (postOpString.match(/(.*?)field=/)) {
+            if (postOpString.includes('field=')) {
               const lastIndexOfEquals = postOpString.lastIndexOf('=');
               const postEquals = postOpString
                 .substring(lastIndexOfEquals + 1)
                 .trimStart();
               setAutocompleteText(index.fields, true, postEquals, true);
-            } else if (postOpString.match(/(.*?),(.*?)/g)) {
+            } else if (postOpString.includes(',')) {
               const openParen = postOpString.match(/\(/g) || [];
               const closeParen = postOpString.match(/\)/g) || [];
               const lastIndexOfComma = postOpString.lastIndexOf(',');
@@ -409,13 +409,11 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
             }
             break;
           case 'select':
-            if (value.match(/select(\s+)distinct(\s+)(.*)(\s+)from(\s+)/)) {
+            if (value.includes('distinct ') && value.includes('from ')) {
               const fromIdx = value.indexOf('from ');
               const postFromString = value.substring(fromIdx + 5);
               setAutocompleteText(indexList, true, postFromString.trim());
-            } else if (
-              value.match(/select(\s+)(.*)(\s+)from(\s+)(.*)(\s+)where(\s+)/)
-            ) {
+            } else if (!value.includes('distinct ') && value.includes('from ') && value.includes('where ')) {
               const whereIdx = value.indexOf('where ');
               const postWhereString = value.substring(whereIdx + 6);
               const indexMatch = value.match(/from (.*) where(\s+)/);
@@ -425,7 +423,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
                 );
                 if (index) {
                   onSetIndex(index.name);
-                  if (postWhereString.match(/(.*)=(.*)(\s+)and(\s+)/)) {
+                  if (postWhereString.includes('=') && postWhereString.includes('and')) {
                     const lastSpaceIdx = postWhereString.lastIndexOf(' ');
                     const postAndString = postWhereString
                       .substring(lastSpaceIdx + 1)
@@ -435,7 +433,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
                       true,
                       postAndString.replaceAll('`', '')
                     );
-                  } else if (postWhereString.match(/(.*)=(.*)/)) {
+                  } else if (postWhereString.includes('=') ) {
                     const lastSpaceIdx = postWhereString.lastIndexOf(' ');
                     const postFieldString = postWhereString
                       .substring(lastSpaceIdx + 1)
@@ -452,7 +450,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
               } else {
                 setAutocomplete('');
               }
-            } else if (value.match(/select(\s+)(.*)(\s+)from(\s+)/)) {
+            } else if (!value.includes('distinct ') && value.includes('from ')) {
               const fromIdx = value.indexOf('from ');
               const postFromString = value.substring(fromIdx + 5).trimStart();
               const spaceIdx = postFromString.trimStart().indexOf(' ');
@@ -574,7 +572,7 @@ export const Console = forwardRef((props: ConsoleProps, ref: any) => {
       setShowError(false);
       updateHelper(ref.current.value);
       if (isPQL) {
-        const pqlPattern = ref.current.value.match(/\[(.*?)\]/);
+        const pqlPattern = ref.current.value.match(/\[([\w-]*?)\]/);
         if (pqlPattern) {
           onSetIndex(pqlPattern[1]);
         }
