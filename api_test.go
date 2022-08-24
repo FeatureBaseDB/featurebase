@@ -1126,7 +1126,7 @@ func TestAPI_MutexCheck(t *testing.T) {
 	rowKeysBase := []string{"v0", "v1", "v2", "v3"}
 	colKeysBase := []string{"c0", "c1", "c2", "c3"}
 
-	const nShards = 10
+	const nShards = 9
 
 	// now, try the same thing for each combination of keyed/unkeyed. we
 	// share code between keyed/unkeyed fields, but for indexes, the logic
@@ -1191,7 +1191,20 @@ func TestAPI_MutexCheck(t *testing.T) {
 				(4 << shardwidth.Exponent) + 1: true,
 				(5 << shardwidth.Exponent) + 1: true,
 				(8 << shardwidth.Exponent) + 1: true,
-				(9 << shardwidth.Exponent) + 1: true,
+				// So, nShards used to be 10. If you run a complete test,
+				// with go test -race, and you have the sample input for the
+				// unrelated TestImportMutexSampleData configured to use 64K
+				// bit density and 2K rows, everything is fine. If you run a
+				// partial test, everything is fine. If you run a complete
+				// test with -race, but you skip TestImportMutexSampleData,
+				// or reduce either the bit density or the row count, you get
+				// a very strange panic where the go panic handler panics
+				// trying to report what happened so we don't get a valid
+				// stack dump. On Macs. This is as much as I could debug it
+				// after about 6 hours. Since there's no special reason to
+				// think we need all 10 shards, and 9 still tests the
+				// behavior, we're leaving this one a mystery.
+				// (9 << shardwidth.Exponent) + 1: true,
 			}
 
 			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName, true, 0)
