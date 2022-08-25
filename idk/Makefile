@@ -32,8 +32,8 @@ else
 	IS_MAC := 0
 endif
 
-LDFLAGS="-X github.com/molecula/featurebase/idk.Version=$(VERSION) -X github.com/molecula/featurebase/idk.BuildTime=$(BUILD_TIME)"
-LDFLAGS_STATIC="-linkmode external -extldflags \"-static\" -X github.com/molecula/featurebase/idk.Version=$(VERSION) -X github.com/molecula/featurebase/idk.BuildTime=$(BUILD_TIME) "
+LDFLAGS="-X 'github.com/molecula/featurebase/v3/idk.Version=$(VERSION)' -X 'github.com/molecula/featurebase/v3/idk.BuildTime=$(BUILD_TIME)'"
+LDFLAGS_STATIC="-linkmode external -extldflags \"-static\" -X 'github.com/molecula/featurebase/v3/idk.Version=$(VERSION)' -X 'github.com/molecula/featurebase/v3/idk.BuildTime=$(BUILD_TIME)' "
 export GOPRIVATE=github.com/molecula
 export CGO_ENABLED=1
 
