@@ -1,6 +1,6 @@
-ARG GO_VERSION=1.17.8
+ARG GO_VERSION=1.19
 
-FROM golang:1.17.8-stretch as builder
+FROM golang:1.19-buster as builder
 
 WORKDIR /
 RUN apt-get update -y -qq && apt-get install -y -qq \

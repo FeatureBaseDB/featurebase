@@ -1,5 +1,5 @@
 variables:
-  GOVERSION: "1.17.8"
+  GOVERSION: "1.19"
 
 stages:
   - performance

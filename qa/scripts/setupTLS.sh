@@ -23,10 +23,10 @@ ifErr "installing wget"
 sudo yum install git -y
 ifErr "installing git"
 
-sudo wget -q https://go.dev/dl/go1.17.8.linux-arm64.tar.gz
+sudo wget -q https://go.dev/dl/go1.19.linux-arm64.tar.gz
 ifErr "downloading golang"
 
-sudo tar -C /usr/local -xzf go1.17.8.linux-arm64.tar.gz
+sudo tar -C /usr/local -xzf go1.19.linux-arm64.tar.gz
 ifErr "unpacking golang"
 
 echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc

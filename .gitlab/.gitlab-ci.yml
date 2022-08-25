@@ -24,7 +24,7 @@ gosec-sast:
     - gosec convert gosec.json > gl-sast-report.json
 
 variables:
-  GOVERSION: "1.17.8"
+  GOVERSION: "1.19"
 
 stages:
   - lint
@@ -143,7 +143,7 @@ build for linux amd64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
     - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
@@ -432,7 +432,7 @@ build for linux arm64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
     - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
@@ -450,7 +450,7 @@ build for darwin amd64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
     - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
@@ -468,7 +468,7 @@ build for darwin arm64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
     - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
@@ -523,7 +523,7 @@ build plg for linux amd64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="amd64" make plg FLAGS="-o single_node_featurebase_linux_amd64"
     - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
@@ -541,7 +541,7 @@ build plg for linux arm64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="arm64" make plg FLAGS="-o single_node_featurebase_linux_arm64"
     - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
@@ -559,7 +559,7 @@ build plg for darwin amd64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="amd64" make plg FLAGS="-o single_node_featurebase_darwin_amd64"
     - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
@@ -577,7 +577,7 @@ build plg for darwin arm64:
   script:
     - rm -r lattice
     - tar -xvf lattice.tar.gz
-    - go get -v -u github.com/rakyll/statik
+    - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="darwin" GOARCH="arm64" make plg FLAGS="-o single_node_featurebase_darwin_arm64"
     - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
@@ -1057,8 +1057,8 @@ samsung-gauntlet:
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - apt update && apt -y install jq wget
-    - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
-    - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
+    - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.19.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-gauntlet-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
@@ -1119,8 +1119,8 @@ backup-restore-gauntlet:
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - apt update && apt -y install jq wget
-    - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
-    - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
+    - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.19.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-gauntlet-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
@@ -1244,8 +1244,8 @@ perf_delete:
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - apt update && apt -y install jq wget
-    - wget -q https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
-    - tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
+    - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
+    - tar -C /usr/local -xzf go1.19.linux-amd64.tar.gz
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-delete-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
@@ -1360,4 +1360,3 @@ cleanup_build_job:
   needs:
     - job: smoke test
     - job: smoke test auth
-
