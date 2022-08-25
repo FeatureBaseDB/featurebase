@@ -53,6 +53,8 @@ at https://docs.molecula.cloud/.
 	rc.AddCommand(newChkSumCommand(stdin, stdout, stderr))
 	rc.AddCommand(newBackupCommand(stdin, stdout, stderr))
 	rc.AddCommand(newRestoreCommand(stdin, stdout, stderr))
+	rc.AddCommand(newBackupTarCommand(stdin, stdout, stderr))
+	rc.AddCommand(newRestoreTarCommand(stdin, stdout, stderr))
 	rc.AddCommand(newConfigCommand(stdin, stdout, stderr))
 	rc.AddCommand(newExportCommand(stdin, stdout, stderr))
 	rc.AddCommand(newGenerateConfigCommand(stdin, stdout, stderr))
