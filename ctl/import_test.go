@@ -246,11 +246,9 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// create a large import file in order to test the
-	// translateStoreBufferSize growth logic.
 	keyBytes := []byte{}
-	for row := 0; row < 1000; row++ {
-		for col := 0; col < 1000; col++ {
+	for row := 0; row < 50; row++ {
+		for col := 0; col < 50; col++ {
 			x := fmt.Sprintf("foo%d,bar%d\n", row, col)
 			keyBytes = append(keyBytes, x...)
 		}
@@ -303,7 +301,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 			}
 
 			// Read body and unmarshal response.
-			exp := `{"results":[1000]}` + "\n"
+			exp := `{"results":[50]}` + "\n"
 			if body, err := ioutil.ReadAll(resp.Body); err != nil {
 				return fmt.Errorf("reading: %s", err)
 			} else if !reflect.DeepEqual(body, []byte(exp)) {
