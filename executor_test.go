@@ -1177,6 +1177,10 @@ func runCallTest(c *test.Cluster, t *testing.T, writeQuery string, readQueries [
 		responses[i] = res
 	}
 
+	err = c.GetNode(0).API.DeleteIndex(context.TODO(), indexName)
+	if err != nil {
+		t.Fatalf("cleaning up index: %v", err)
+	}
 	return responses
 }
 
