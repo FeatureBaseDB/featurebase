@@ -66,3 +66,7 @@ pilosa-sec-data-idk
 tags.dot
 *.log
 *.swp
+*__debug_bin
+
+# SQL3
+/sql3/sql3.html

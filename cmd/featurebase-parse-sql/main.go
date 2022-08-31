@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/sql2"
+	"github.com/molecula/featurebase/v3/sql3/parser"
 )
 
 func main() {
@@ -32,7 +32,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("query required")
 	}
 
-	stmt, err := sql2.NewParser(strings.NewReader(q)).ParseStatement()
+	stmt, err := parser.NewParser(strings.NewReader(q)).ParseStatement()
 	if err != nil {
 		return err
 	}

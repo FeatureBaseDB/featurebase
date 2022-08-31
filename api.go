@@ -29,6 +29,7 @@ import (
 	//"github.com/molecula/featurebase/v3/pg"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
+	planner_types "github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
@@ -198,7 +199,7 @@ func (api *API) query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	}
 
 	// TODO can we get rid of exec options and pass the QueryRequest directly to executor?
-	execOpts := &execOptions{
+	execOpts := &ExecOptions{
 		Remote:        req.Remote,
 		Profile:       req.Profile,
 		PreTranslated: req.PreTranslated,
@@ -1068,6 +1069,23 @@ func (api *API) Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error
 	}
 
 	return api.holder.limitedSchema()
+}
+
+// IndexInfo returns the same information as Schema(), but only for a single
+// index.
+func (api *API) IndexInfo(ctx context.Context, name string) (*IndexInfo, error) {
+	schema, err := api.Schema(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, idx := range schema {
+		if idx.Name == name {
+			return idx, nil
+		}
+	}
+
+	return nil, ErrIndexNotFound
 }
 
 // ApplySchema takes the given schema and applies it across the
@@ -3171,8 +3189,15 @@ processing:
 	}
 	return result, ctx.Err()
 }
-func (api *API) Plan(ctx context.Context, q string) (*Stmt, error) {
-	return api.server.PlanSQL(ctx, q)
+
+// CompilePlan takes a sql string and returns a PlanOperator. Note that this is
+// different from the internal CompilePlan() method on the CompilePlanner
+// interface, which takes a parser statement and returns a PlanOperator. In
+// other words, this CompilePlan() both parses and plans the provided sql
+// string; it's the equivalent of the CompileExecutionPlan() method on Server.
+// TODO: consider renaming this to something with less conflict.
+func (api *API) CompilePlan(ctx context.Context, q string) (planner_types.PlanOperator, error) {
+	return api.server.CompileExecutionPlan(ctx, q)
 }
 
 func (api *API) RBFDebugInfo() map[string]*rbf.DebugInfo {
@@ -3311,4 +3336,99 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiIngestOperations:     {},
 	apiIngestNodeOperations: {},
 	apiMutexCheck:           {},
+}
+
+// SchemaAPI is a subset of the API methods which have to do with schema. This
+// interface was introduced in order to remove, from the sql3 package, the
+// pointer to API, and instead use this interface. In the current FeatureBase,
+// this interface can be implemented directly with API. But in an implementation
+// for DAX, for example, we might want something else servicing the
+// schema-related calls to the SchemaAPI.
+type SchemaAPI interface {
+	CreateIndexAndFields(ctx context.Context, indexName string, options IndexOptions, fields []CreateFieldObj) error
+	CreateField(ctx context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error)
+	DeleteField(ctx context.Context, indexName string, fieldName string) error
+	DeleteIndex(ctx context.Context, indexName string) error
+	IndexInfo(ctx context.Context, indexName string) (*IndexInfo, error)
+	Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error)
+}
+
+// CreateFieldObj is used to encapsulate the information required for creating a
+// field in the SchemaAPI.CreateIndexAndFields interface method.
+type CreateFieldObj struct {
+	Name    string
+	Options []FieldOption
+}
+
+// ComputeAPI is a subset of the API methods which have to do with compute
+// operations such as import.
+type ComputeAPI interface {
+	Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error
+	ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error
+	Txf() *TxFactory
+}
+
+// FeatureBaseSchemaAPI is a wrapper around pilosa.API. It implements the
+// SchemaAPI interface with methods which are not a part of pilosa.API.
+type FeatureBaseSchemaAPI struct {
+	*API
+}
+
+func (fapi *FeatureBaseSchemaAPI) CreateIndexAndFields(ctx context.Context, indexName string, options IndexOptions, fields []CreateFieldObj) error {
+	// Add the index.
+	if _, err := fapi.CreateIndex(ctx, indexName, options); err != nil {
+		return err
+	}
+
+	// Now add fields.
+	for _, f := range fields {
+		if _, err := fapi.CreateField(ctx, indexName, f.Name, f.Options...); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// IndexInfo wraps the API.IndexInfo method and prepends an _id field to its
+// list of fields.
+func (fapi *FeatureBaseSchemaAPI) IndexInfo(ctx context.Context, indexName string) (*IndexInfo, error) {
+	idx, err := fapi.API.IndexInfo(ctx, indexName)
+	if err != nil {
+		return nil, err
+	}
+
+	// sortedFields will contain the sorted list of fields from IndexInfo, along
+	// with the primary key field (which will always be at the beginning of the
+	// list).
+	sortedFields := make([]*FieldInfo, 0, len(idx.Fields)+1)
+
+	// Add the primary key field to the beginning of the list.
+	idKeys := idx.Options.Keys
+	idType := "id"
+	if idKeys {
+		idType = "string"
+	}
+
+	idFld := &FieldInfo{
+		Name:      "_id",
+		CreatedAt: idx.CreatedAt,
+		Options: FieldOptions{
+			Type: idType,
+			Keys: idKeys,
+		},
+	}
+	sortedFields = append(sortedFields, idFld)
+
+	// Sort idx.Fields by CreatedAt before adding them to sortedFields.
+	sort.Slice(idx.Fields, func(i, j int) bool {
+		return idx.Fields[i].CreatedAt < idx.Fields[j].CreatedAt
+	})
+
+	// Add the sorted fields to sortedFields.
+	sortedFields = append(sortedFields, idx.Fields...)
+
+	idx.Fields = sortedFields
+
+	return idx, nil
 }

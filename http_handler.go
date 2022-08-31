@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"mime"
 	"net"
 	"net/http"
@@ -37,6 +38,7 @@ import (
 	"github.com/molecula/featurebase/v3/monitor"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/molecula/featurebase/v3/storage"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
@@ -79,6 +81,10 @@ type Handler struct {
 	auth *authn.Auth
 
 	permissions *authz.GroupPermissions
+
+	// sqlEnabled is serving as a feature flag for turning on/off the /sql
+	// endpoint.
+	sqlEnabled bool
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -207,6 +213,14 @@ func OptHandlerListener(ln net.Listener, url string) handlerOption {
 func OptHandlerCloseTimeout(d time.Duration) handlerOption {
 	return func(h *Handler) error {
 		h.closeTimeout = d
+		return nil
+	}
+}
+
+// OptHandlerSQLEnabled enables the /sql endpoint.
+func OptHandlerSQLEnabled(v bool) handlerOption {
+	return func(h *Handler) error {
+		h.sqlEnabled = v
 		return nil
 	}
 }
@@ -519,6 +533,12 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/transaction/{id}/finish", handler.chkAuthZ(handler.handlePostFinishTransaction, authz.Read)).Methods("POST").Name("PostFinishTransaction")
 	router.HandleFunc("/transactions", handler.chkAuthZ(handler.handleGetTransactions, authz.Read)).Methods("GET").Name("GetTransactions")
 	router.HandleFunc("/queries", handler.chkAuthZ(handler.handleGetActiveQueries, authz.Admin)).Methods("GET").Name("GetActiveQueries")
+
+	// enable this endpoint based on config
+	if handler.sqlEnabled {
+		router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
+	}
+
 	router.HandleFunc("/query-history", handler.chkAuthZ(handler.handleGetPastQueries, authz.Admin)).Methods("GET").Name("GetPastQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
@@ -1329,6 +1349,159 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, err error) {
+	w.WriteHeader(http.StatusBadRequest)
+	e := h.writeQueryResponse(w, r, &QueryResponse{Err: err})
+	if e != nil {
+		h.logger.Errorf("write query response error: %v (while trying to write another error: %v)", e, err)
+	}
+
+}
+
+// handlePostSQL handles /sql requests.
+func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
+
+	b, err := io.ReadAll(r.Body)
+
+	if err != nil {
+		h.writeBadRequest(w, r, err)
+		return
+	}
+
+	start := time.Now()
+
+	rootOperator, err := h.api.CompilePlan(r.Context(), string(b))
+	if err != nil {
+		h.writeBadRequest(w, r, err)
+		return
+	}
+
+	// Write response back to client.
+	w.Header().Set("Content-Type", "application/json")
+
+	// the pandas data frame format in json per https://molecula.atlassian.net/wiki/spaces/MOLECULA/pages/540999700/Queries
+
+	// Opening bracket.
+	w.Write([]byte("{"))
+
+	// Write the closing bracket on any exit from this method.
+	defer func() {
+		duration := time.Since(start)
+		value, err := json.Marshal(duration.Microseconds())
+		if err != nil {
+			value = big.NewInt(-1).Bytes()
+		}
+		w.Write([]byte(`,"exec_time":`))
+		w.Write(value)
+		w.Write([]byte("}"))
+	}()
+
+	// writeError is a helper function that can be called anywhere during the
+	// output handling to insert an error into the json output.
+	writeError := func(err error) {
+		if err != nil {
+			errMsg, err := json.Marshal(err.Error())
+			if err != nil {
+				errMsg = []byte(`"PROBLEM ENCODING ERROR MESSAGE"`)
+			}
+			w.Write([]byte(`,"error":`))
+			w.Write(errMsg)
+		}
+	}
+
+	// writeWarnings is a helper function that can be called anywhere during the
+	// output handling to insert warnings into the json output.
+	writeWarnings := func(warnings []string) {
+		if len(warnings) > 0 {
+			w.Write([]byte(`,"warnings": [`))
+			for i, warn := range warnings {
+				warnMsg, err := json.Marshal(warn)
+				if err != nil {
+					warnMsg = []byte(`"PROBLEM ENCODING WARNING"`)
+				}
+				w.Write(warnMsg)
+				if i < len(warnings)-1 {
+					w.Write([]byte(`,`))
+				}
+			}
+			w.Write([]byte(`]`))
+		}
+	}
+
+	// Get a query iterator.
+	iter, err := rootOperator.Iterator(r.Context(), nil)
+	if err != nil {
+		writeError(err)
+		writeWarnings(rootOperator.Warnings())
+		return
+	}
+
+	// Read schema & write to response.
+	columns := rootOperator.Schema()
+	schema := SQLSchema{
+		Fields: make([]*SQLField, len(columns)),
+	}
+	for i, col := range columns {
+		schema.Fields[i] = &SQLField{
+			Name: col.Name,
+			Type: col.Type.TypeName(),
+		}
+	}
+	w.Write([]byte(`"schema":`))
+	jsonSchema, err := json.Marshal(schema)
+	if err != nil {
+		h.logger.Errorf("write schema response error: %s", err)
+		// Provide an empty list as the schema value to maintain valid json.
+		w.Write([]byte("[]"))
+		writeError(err)
+		writeWarnings(rootOperator.Warnings())
+		return
+	}
+	w.Write(jsonSchema)
+
+	// Write the data (rows).
+	w.Write([]byte(`,"data":[`))
+
+	var rowErr error
+	var currentRow types.Row
+	var nextErr error
+
+	rowCounter := 1
+	for currentRow, nextErr = iter.Next(r.Context()); nextErr == nil; currentRow, nextErr = iter.Next(r.Context()) {
+		jsonRow, err := json.Marshal(currentRow)
+		if err != nil {
+			h.logger.Errorf("json encoding error: %s", err)
+			rowErr = err
+			break
+		}
+
+		if rowCounter > 1 {
+			// Include a comma between data rows.
+			w.Write([]byte(","))
+		}
+		w.Write(jsonRow)
+
+		rowCounter++
+	}
+	if nextErr != nil && nextErr != types.ErrNoMoreRows {
+		rowErr = nextErr
+	}
+
+	w.Write([]byte("]"))
+
+	writeError(rowErr)
+	writeWarnings(rootOperator.Warnings())
+}
+
+type SQLField struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type SQLSchema struct {
+	Fields []*SQLField `json:"fields"`
+}
+
 func (h *Handler) handleCPUProfileStart(w http.ResponseWriter, r *http.Request) {
 
 	if h.pprofCPUProfileBuffer == nil {
@@ -1511,7 +1684,7 @@ type postIndexRequest struct {
 	Options IndexOptions `json:"options"`
 }
 
-//_postIndexRequest is necessary to avoid recursion while decoding.
+// _postIndexRequest is necessary to avoid recursion while decoding.
 type _postIndexRequest postIndexRequest
 
 // Custom Unmarshal JSON to validate request body when creating a new index.

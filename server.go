@@ -21,7 +21,9 @@ import (
 	pnet "github.com/molecula/featurebase/v3/net"
 	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
 	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/sql2"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/parser"
+	planner_types "github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/storage"
 	"github.com/pkg/errors"
@@ -89,7 +91,11 @@ type Server struct { // nolint: maligned
 	// Threshold for logging long-running queries
 	longQueryTime      time.Duration
 	queryHistoryLength int
+
+	executionPlannerFn ExecutionPlannerFn
 }
+
+type ExecutionPlannerFn func(executor Executor, api *API, sql string) sql3.CompilePlanner
 
 // Holder returns the holder for server.
 func (s *Server) Holder() *Holder {
@@ -423,6 +429,13 @@ func OptServerPartitionAssigner(p string) ServerOption {
 	}
 }
 
+func OptServerExecutionPlannerFn(fn ExecutionPlannerFn) ServerOption {
+	return func(s *Server) error {
+		s.executionPlannerFn = fn
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cluster := newCluster()
@@ -453,6 +466,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		resetTranslationSyncCh: make(chan struct{}, 1),
 
 		logger: logger.NopLogger,
+
+		executionPlannerFn: func(e Executor, a *API, s string) sql3.CompilePlanner {
+			return sql3.NewNopCompilePlanner()
+		},
 	}
 	s.cluster.InternalClient = s.defaultClient
 
@@ -1412,13 +1429,14 @@ func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (
 	return trns, nil
 }
 
-// PlanSQL parses and prepares a SQL statement.
-func (s *Server) PlanSQL(ctx context.Context, q string) (*Stmt, error) {
-	st, err := sql2.NewParser(strings.NewReader(q)).ParseStatement()
+// CompileExecutionPlan parses and compiles an execution plan from a SQL
+// statement using a new parser and planner.
+func (s *Server) CompileExecutionPlan(ctx context.Context, q string) (planner_types.PlanOperator, error) {
+	st, err := parser.NewParser(strings.NewReader(q)).ParseStatement()
 	if err != nil {
 		return nil, err
 	}
-	return NewPlanner(s.executor).PlanStatement(ctx, st)
+	return s.executionPlannerFn(s.executor, s.executor.client.api, q).CompilePlan(ctx, st)
 }
 
 // countOpenFiles on operating systems that support lsof.

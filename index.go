@@ -937,6 +937,17 @@ type IndexInfo struct {
 	ShardWidth uint64       `json:"shardWidth"`
 }
 
+// Field returns the FieldInfo the provided field name. If the field does not
+// exist, it returns nil
+func (ii *IndexInfo) Field(name string) *FieldInfo {
+	for _, fld := range ii.Fields {
+		if fld.Name == name {
+			return fld
+		}
+	}
+	return nil
+}
+
 type indexInfoSlice []*IndexInfo
 
 func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -947,6 +958,7 @@ func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type IndexOptions struct {
 	Keys           bool `json:"keys"`
 	TrackExistence bool `json:"trackExistence"`
+	PartitionN     int  `json:"partitionN"`
 }
 
 type importData struct {

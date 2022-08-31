@@ -43,6 +43,10 @@ const (
 	errConnectionRefused = "connect: connection refused"
 )
 
+type Executor interface {
+	Execute(context.Context, string, *pql.Query, []uint64, *ExecOptions) (QueryResponse, error)
+}
+
 // executor recursively executes calls in a PQL query across all shards.
 type executor struct {
 	Holder *Holder
@@ -70,7 +74,7 @@ type executor struct {
 	maxMemory int64
 }
 
-// executorOption is a functional option type for pilosa.Executor
+// executorOption is a functional option type for pilosa.executor
 type executorOption func(e *executor) error
 
 func optExecutorInternalQueryClient(c *InternalClient) executorOption {
@@ -112,7 +116,7 @@ func emptyResult(c *pql.Call) interface{} {
 	return nil
 }
 
-// newExecutor returns a new instance of Executor.
+// newExecutor returns a new instance of executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
 		workerPoolSize: 2,
@@ -168,8 +172,8 @@ func (e *executor) InitStats() {
 }
 
 // Execute executes a PQL query.
-func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
+func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *ExecOptions) (QueryResponse, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()
 
@@ -203,7 +207,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	// Default options.
 	if opt == nil {
-		opt = &execOptions{}
+		opt = &ExecOptions{}
 	}
 	// Default maximum memory, if not passed in.
 	if opt.MaxMemory == 0 && q.HasCall("Extract") {
@@ -335,7 +339,7 @@ func safeCopy(resp QueryResponse) (out QueryResponse) {
 
 // handlePreCalls traverses the call tree looking for calls that need
 // precomputed values (e.g. Distinct, UnionRows, ConstRow...).
-func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
+func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) error {
 	if c.Name == "Precomputed" {
 		idx := c.Args["valueidx"].(int64)
 		if idx >= 0 && idx < int64(len(opt.EmbeddedData)) {
@@ -434,7 +438,7 @@ func (e *executor) dumpPrecomputedCalls(ctx context.Context, c *pql.Call) {
 }
 
 // handlePreCallChildren handles any pre-calls in the children of a given call.
-func (e *executor) handlePreCallChildren(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
+func (e *executor) handlePreCallChildren(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) error {
 	for i := range c.Children {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -461,8 +465,8 @@ func (e *executor) handlePreCallChildren(ctx context.Context, qcx *Qcx, index st
 	return nil
 }
 
-func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Query, shards []uint64, opt *execOptions) ([]interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.execute")
+func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Query, shards []uint64, opt *ExecOptions) ([]interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.execute")
 	defer span.Finish()
 
 	// Apply translations if necessary.
@@ -603,7 +607,7 @@ func (vc *ValCount) cleanup() {
 }
 
 // preprocessQuery expands any calls that need preprocessing.
-func (e *executor) preprocessQuery(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*pql.Call, error) {
+func (e *executor) preprocessQuery(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*pql.Call, error) {
 	switch c.Name {
 	case "All":
 		_, hasLimit, err := c.UintArg("limit")
@@ -650,8 +654,8 @@ func (e *executor) preprocessQuery(ctx context.Context, qcx *Qcx, index string, 
 }
 
 // executeCall executes a call.
-func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeCall")
+func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeCall")
 	defer span.Finish()
 
 	if err := validateQueryContext(ctx); err != nil {
@@ -842,11 +846,11 @@ func (e *executor) validateTimeCallArgs(c *pql.Call, indexName string) error {
 	return nil
 }
 
-func (e *executor) executeOptionsCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeOptionsCall")
+func (e *executor) executeOptionsCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeOptionsCall")
 	defer span.Finish()
 
-	optCopy := &execOptions{}
+	optCopy := &ExecOptions{}
 	*optCopy = *opt
 	if arg, ok := c.Args["shards"]; ok {
 		if optShards, ok := arg.([]interface{}); ok {
@@ -866,7 +870,7 @@ func (e *executor) executeOptionsCall(ctx context.Context, qcx *Qcx, index strin
 }
 
 // executeIncludesColumnCall executes an IncludesColumn() call.
-func (e *executor) executeIncludesColumnCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
+func (e *executor) executeIncludesColumnCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (bool, error) {
 	// Get the shard containing the column, since that's the only
 	// shard that needs to execute this query.
 	var shard uint64
@@ -902,7 +906,7 @@ func (e *executor) executeIncludesColumnCall(ctx context.Context, qcx *Qcx, inde
 }
 
 // executeFieldValueCall executes a FieldValue() call.
-func (e *executor) executeFieldValueCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
+func (e *executor) executeFieldValueCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ ValCount, err error) {
 	fieldName, ok := c.Args["field"].(string)
 	if !ok || fieldName == "" {
 		return ValCount{}, ErrFieldRequired
@@ -993,7 +997,7 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, qcx *Qcx, fie
 }
 
 // executeLimitCall executes a Limit() call.
-func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
+func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*Row, error) {
 	bitmapCall := c.Children[0]
 
 	limit, hasLimit, err := c.UintArg("limit")
@@ -1070,7 +1074,7 @@ func (e *executor) executeLimitCall(ctx context.Context, qcx *Qcx, index string,
 
 // executeIncludesColumnCallShard
 func (e *executor) executeIncludesColumnCallShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, column uint64) (_ bool, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIncludesColumnCallShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeIncludesColumnCallShard")
 	defer span.Finish()
 
 	if len(c.Children) == 1 {
@@ -1085,8 +1089,8 @@ func (e *executor) executeIncludesColumnCallShard(ctx context.Context, qcx *Qcx,
 }
 
 // executeSum executes a Sum() call.
-func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSum")
+func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ ValCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeSum")
 	defer span.Finish()
 
 	fieldName, err := c.FirstStringArg("field", "_field")
@@ -1139,8 +1143,8 @@ func (e *executor) executeSum(ctx context.Context, qcx *Qcx, index string, c *pq
 
 // executeDistinct executes a Distinct call on a field. It returns a
 // SignedRow for int fields and a *Row for set/mutex/time fields.
-func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinct")
+func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeDistinct")
 	defer span.Finish()
 
 	field, hasField, err := c.StringArg("field")
@@ -1191,8 +1195,8 @@ func (e *executor) executeDistinct(ctx context.Context, qcx *Qcx, index string, 
 }
 
 // executeMin executes a Min() call.
-func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMin")
+func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ ValCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeMin")
 	defer span.Finish()
 
 	if _, err := c.FirstStringArg("field", "_field"); err != nil {
@@ -1227,8 +1231,8 @@ func (e *executor) executeMin(ctx context.Context, qcx *Qcx, index string, c *pq
 }
 
 // executeMax executes a Max() call.
-func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMax")
+func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ ValCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeMax")
 	defer span.Finish()
 
 	if _, err := c.FirstStringArg("field", "_field"); err != nil {
@@ -1263,8 +1267,8 @@ func (e *executor) executeMax(ctx context.Context, qcx *Qcx, index string, c *pq
 }
 
 // executePercentile executes a Percentile() call.
-func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ ValCount, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePercentile")
+func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ ValCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executePercentile")
 	defer span.Finish()
 
 	// get nth
@@ -1389,8 +1393,8 @@ func (e *executor) executePercentile(ctx context.Context, qcx *Qcx, index string
 }
 
 // executeMinRow executes a MinRow() call.
-func (e *executor) executeMinRow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ interface{}, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMinRow")
+func (e *executor) executeMinRow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ interface{}, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeMinRow")
 	defer span.Finish()
 
 	if field := c.Args["field"]; field == "" {
@@ -1428,8 +1432,8 @@ func (e *executor) executeMinRow(ctx context.Context, qcx *Qcx, index string, c 
 }
 
 // executeMaxRow executes a MaxRow() call.
-func (e *executor) executeMaxRow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ interface{}, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxRow")
+func (e *executor) executeMaxRow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ interface{}, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeMaxRow")
 	defer span.Finish()
 
 	if field := c.Args["field"]; field == "" {
@@ -1467,8 +1471,8 @@ func (e *executor) executeMaxRow(ctx context.Context, qcx *Qcx, index string, c 
 }
 
 // executePrecomputedCall pretends to execute a call that we have a precomputed value for.
-func (e *executor) executePrecomputedCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ *Row, err error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executePrecomputedCall")
+func (e *executor) executePrecomputedCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ *Row, err error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "executor.executePrecomputedCall")
 	defer span.Finish()
 	result := NewRow()
 
@@ -1479,8 +1483,8 @@ func (e *executor) executePrecomputedCall(ctx context.Context, qcx *Qcx, index s
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
-func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ *Row, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
+func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ *Row, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeBitmapCall")
 	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()
 
@@ -1528,7 +1532,7 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, qcx *Qcx, index s
 		return nil, err
 	}
 
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCallShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeBitmapCallShard")
 	defer span.Finish()
 
 	switch c.Name {
@@ -1562,7 +1566,7 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, qcx *Qcx, index s
 // executeDistinctShard executes a Distinct call on a single shard, yielding
 // a SignedRow of the values found.
 func (e *executor) executeDistinctShard(ctx context.Context, qcx *Qcx, index string, fieldName string, c *pql.Call, shard uint64) (result interface{}, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinctShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeDistinctShard")
 	defer span.Finish()
 
 	idx := e.Holder.Index(index)
@@ -1898,7 +1902,7 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 
 // executeSumCountShard calculates the sum and count for bsiGroups on a shard.
 func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, filter *Row, shard uint64) (_ ValCount, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeSumCountShard")
 	defer span.Finish()
 
 	// use tx to keep consistency between
@@ -1941,7 +1945,7 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 	}
 	defer finisher(&err0)
 
-	sumspan, _ := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_fragment.sum")
+	sumspan, _ := tracing.StartSpanFromContext(ctx, "executor.executeSumCountShard_fragment.sum")
 	defer sumspan.Finish()
 	vsum, vcount, err := fragment.sum(tx, filter, bsig.BitDepth)
 	if err != nil {
@@ -1961,7 +1965,7 @@ func (e *executor) executeSumCountShard(ctx context.Context, qcx *Qcx, index str
 
 // executeMinShard calculates the min for bsiGroups on a shard.
 func (e *executor) executeMinShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ ValCount, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMinShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeMinShard")
 	defer span.Finish()
 
 	idx := e.Holder.Index(index)
@@ -2113,8 +2117,8 @@ func (e *executor) executeMaxRowShard(ctx context.Context, qcx *Qcx, index strin
 	}, nil
 }
 
-func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopK")
+func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeTopK")
 	defer span.Finish()
 
 	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
@@ -2172,7 +2176,7 @@ func (e *executor) executeTopK(ctx context.Context, qcx *Qcx, index string, c *p
 
 // executeTopKShard builds a perpendicular BSI bitmap of a shard for TopK.
 func (e *executor) executeTopKShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ []*Row, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopKShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeTopKShard")
 	defer span.Finish()
 
 	// Look up the index.
@@ -2245,7 +2249,7 @@ func (e *executor) executeTopKShard(ctx context.Context, qcx *Qcx, index string,
 
 // executeTopKShardSet builds a perpendicular BSI bitmap of a set field within a shard.
 func (e *executor) executeTopKShardSet(ctx context.Context, tx Tx, filter *Row, index, field string, shard uint64) ([]*Row, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopKShardSet")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeTopKShardSet")
 	defer span.Finish()
 
 	f := e.Holder.fragment(index, field, viewStandard, shard)
@@ -2535,8 +2539,8 @@ func (f *topKFilter) fillIt(it roaring.ContainerIterator) {
 // executeTopN executes a TopN() call.
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
-func (e *executor) executeTopN(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*PairsField, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopN")
+func (e *executor) executeTopN(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*PairsField, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeTopN")
 	defer span.Finish()
 
 	idsArg, _, err := c.UintSliceArg("ids")
@@ -2587,8 +2591,8 @@ func (e *executor) executeTopN(ctx context.Context, qcx *Qcx, index string, c *p
 	}, nil
 }
 
-func (e *executor) executeTopNShards(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*PairsField, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopNShards")
+func (e *executor) executeTopNShards(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*PairsField, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeTopNShards")
 	defer span.Finish()
 
 	// Execute calls in bulk on each remote node and merge.
@@ -2626,7 +2630,7 @@ func (e *executor) executeTopNShards(ctx context.Context, qcx *Qcx, index string
 
 // executeTopNShard executes a TopN call for a single shard.
 func (e *executor) executeTopNShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *PairsField, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopNShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeTopNShard")
 	defer span.Finish()
 
 	fieldName, _ := c.Args["_field"].(string)
@@ -2707,7 +2711,7 @@ func (e *executor) executeTopNShard(ctx context.Context, qcx *Qcx, index string,
 
 // executeDifferenceShard executes a difference() call for a local shard.
 func (e *executor) executeDifferenceShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDifferenceShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeDifferenceShard")
 	defer span.Finish()
 
 	var other *Row
@@ -2937,8 +2941,8 @@ func findGroupCounts(v interface{}) []GroupCount {
 	return nil
 }
 
-func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*GroupCounts, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupBy")
+func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*GroupCounts, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeGroupBy")
 	defer span.Finish()
 	// validate call
 	if len(c.Children) == 0 {
@@ -3665,7 +3669,7 @@ func applyConditionToGroupCounts(gcs []GroupCount, subj string, cond *pql.Condit
 }
 
 func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs, bases map[int]int64, ignoreLimit bool) (_ []GroupCount, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeGroupByShard")
 	defer span.Finish()
 
 	var filterRow *Row
@@ -3680,7 +3684,7 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 		return nil, err
 	}
 
-	newspan, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard_newGroupByIterator")
+	newspan, ctx := tracing.StartSpanFromContext(ctx, "executor.executeGroupByShard_newGroupByIterator")
 	iter, err := newGroupByIterator(e, qcx, childRows, c.Children, aggregate, filterRow, index, shard, e.Holder)
 	newspan.Finish()
 
@@ -3733,7 +3737,7 @@ func (e *executor) executeGroupByShard(ctx context.Context, qcx *Qcx, index stri
 	return results, nil
 }
 
-func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+func (e *executor) executeRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (RowIDs, error) {
 	// Fetch field name from argument.
 	// Check "field" first for backwards compatibility.
 	// TODO: remove at Pilosa 2.0
@@ -4103,7 +4107,7 @@ var (
 	typeSQLNullInt64  = reflect.TypeOf(sql.NullInt64{})
 )
 
-func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (res ExtractedTable, err error) {
+func (e *executor) executeExternalLookup(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (res ExtractedTable, err error) {
 	if e.Holder.lookupDB == nil {
 		return ExtractedTable{}, errors.New("external DB connection is not configured")
 	}
@@ -4351,7 +4355,7 @@ type TimeArgs struct {
 	To   time.Time
 }
 
-func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (ExtractedIDMatrix, error) {
+func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ExtractedIDMatrix, error) {
 	// Extract the column filter call.
 	if len(c.Children) < 1 {
 		return ExtractedIDMatrix{}, errors.New("missing column filter in Extract")
@@ -4757,7 +4761,7 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 }
 
 func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowShard")
+	span, _ := tracing.StartSpanFromContext(ctx, "executor.executeRowShard")
 	defer span.Finish()
 
 	// Handle bsiGroup ranges differently.
@@ -4870,7 +4874,7 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
 func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (cloneable *Row, err0 error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
+	span, _ := tracing.StartSpanFromContext(ctx, "executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
 	// Only one conditional should be present.
@@ -5037,7 +5041,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 
 // executeIntersectShard executes a intersect() call for a local shard.
 func (e *executor) executeIntersectShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIntersectShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeIntersectShard")
 	defer span.Finish()
 
 	var other *Row
@@ -5062,7 +5066,7 @@ func (e *executor) executeIntersectShard(ctx context.Context, qcx *Qcx, index st
 
 // executeUnionShard executes a union() call for a local shard.
 func (e *executor) executeUnionShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (out *Row, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeUnionShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeUnionShard")
 	defer span.Finish()
 
 	if len(c.Children) == 0 {
@@ -5193,7 +5197,7 @@ func (e *executor) executeInnerUnionRowsShard(ctx context.Context, qcx *Qcx, ind
 
 // executeXorShard executes a xor() call for a local shard.
 func (e *executor) executeXorShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeXorShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeXorShard")
 	defer span.Finish()
 
 	other := NewRow()
@@ -5234,7 +5238,7 @@ func (e *executor) executePrecomputedCallShard(ctx context.Context, qcx *Qcx, in
 
 // executeNotShard executes a Not() call for a local shard.
 func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeNotShard")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeNotShard")
 	defer span.Finish()
 
 	if len(c.Children) == 0 {
@@ -5293,7 +5297,7 @@ func (e *executor) executeConstRow(ctx context.Context, index string, c *pql.Cal
 	return NewRow(ids...), nil
 }
 
-func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
+func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*Row, error) {
 	// Turn UnionRows(Rows(...)) into Union(Row(...), ...).
 	var rows []*pql.Call
 	for _, child := range c.Children {
@@ -5379,7 +5383,7 @@ func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string,
 
 // executeAllCallShard executes an All() call for a local shard.
 func (e *executor) executeAllCallShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (res *Row, err0 error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeAllCallShard")
+	span, _ := tracing.StartSpanFromContext(ctx, "executor.executeAllCallShard")
 	defer span.Finish()
 
 	if len(c.Children) > 0 {
@@ -5436,8 +5440,8 @@ func (e *executor) executeShiftShard(ctx context.Context, qcx *Qcx, index string
 }
 
 // executeCount executes a count() call.
-func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (uint64, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeCount")
+func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeCount")
 	defer span.Finish()
 
 	if len(c.Children) == 0 {
@@ -5492,8 +5496,8 @@ func (e *executor) executeCount(ctx context.Context, qcx *Qcx, index string, c *
 }
 
 // executeClearBit executes a Clear() call.
-func (e *executor) executeClearBit(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) (bool, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearBit")
+func (e *executor) executeClearBit(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeClearBit")
 	defer span.Finish()
 
 	// Read colID
@@ -5536,8 +5540,8 @@ func (e *executor) executeClearBit(ctx context.Context, qcx *Qcx, index string, 
 }
 
 // executeClearBitField executes a Clear() call for a field.
-func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *execOptions) (_ bool, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearBitField")
+func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *ExecOptions) (_ bool, err0 error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeClearBitField")
 	defer span.Finish()
 
 	shard := colID / ShardWidth
@@ -5582,8 +5586,8 @@ func (e *executor) executeClearBitField(ctx context.Context, qcx *Qcx, index str
 }
 
 // executeClearRow executes a ClearRow() call.
-func (e *executor) executeClearRow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (_ bool, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearRow")
+func (e *executor) executeClearRow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (_ bool, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeClearRow")
 	defer span.Finish()
 
 	// Ensure the field type supports ClearRow().
@@ -5634,7 +5638,7 @@ func (e *executor) executeClearRow(ctx context.Context, qcx *Qcx, index string, 
 
 // executeClearRowShard executes a ClearRow() call for a single shard.
 func (e *executor) executeClearRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ bool, err0 error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeClearRowShard")
+	span, _ := tracing.StartSpanFromContext(ctx, "executor.executeClearRowShard")
 	defer span.Finish()
 
 	fieldName, err := c.FieldArg()
@@ -5683,7 +5687,7 @@ func (e *executor) executeClearRowShard(ctx context.Context, qcx *Qcx, index str
 
 // executeSetRow executes a Store() call.
 
-func (e *executor) executeSetRow(ctx context.Context, qcx *Qcx, indexName string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
+func (e *executor) executeSetRow(ctx context.Context, qcx *Qcx, indexName string, c *pql.Call, shards []uint64, opt *ExecOptions) (bool, error) {
 	// Parse arguments.
 	fieldName, err := c.FieldArg()
 	if err != nil {
@@ -5800,8 +5804,8 @@ func (e *executor) executeSetRowShard(ctx context.Context, qcx *Qcx, index strin
 }
 
 // executeSet executes a Set() call.
-func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *execOptions) (_ bool, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSet")
+func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *ExecOptions) (_ bool, err0 error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeSet")
 	defer span.Finish()
 
 	// Read colID.
@@ -5895,8 +5899,8 @@ func (e *executor) executeSet(ctx context.Context, qcx *Qcx, index string, c *pq
 }
 
 // executeSetBitField executes a Set() call for a specific field.
-func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *execOptions) (_ bool, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSetBitField")
+func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (_ bool, err0 error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeSetBitField")
 	defer span.Finish()
 
 	shard := colID / ShardWidth
@@ -5941,8 +5945,8 @@ func (e *executor) executeSetBitField(ctx context.Context, qcx *Qcx, index strin
 }
 
 // executeSetValueField executes a Set() call for a specific int field.
-func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, value int64, opt *execOptions) (_ bool, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSetValueField")
+func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, value int64, opt *ExecOptions) (_ bool, err0 error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeSetValueField")
 	defer span.Finish()
 
 	shard := colID / ShardWidth
@@ -5988,8 +5992,8 @@ func (e *executor) executeSetValueField(ctx context.Context, qcx *Qcx, index str
 }
 
 // executeClearValueField removes value for colID if present
-func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, opt *execOptions) (_ bool, err0 error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearValueField")
+func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index string, c *pql.Call, f *Field, colID uint64, opt *ExecOptions) (_ bool, err0 error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeClearValueField")
 	defer span.Finish()
 
 	shard := colID / ShardWidth
@@ -6034,7 +6038,7 @@ func (e *executor) executeClearValueField(ctx context.Context, qcx *Qcx, index s
 
 // remoteExec executes a PQL query remotely for a set of shards on a node.
 func (e *executor) remoteExec(ctx context.Context, node *disco.Node, index string, q *pql.Query, shards []uint64, embed []*Row, maxMemory int64) (results []interface{}, err error) { // nolint: interfacer
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeExec")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeExec")
 	defer span.Finish()
 
 	// Encode request object.
@@ -6089,8 +6093,8 @@ loop:
 // mapReduce has to ensure that it never returns before any work it spawned has
 // terminated. It's not enough to cancel the jobs; we have to wait for them to be
 // done, or we can unmap resources they're still using.
-func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) (result interface{}, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapReduce")
+func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) (result interface{}, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.mapReduce")
 	defer span.Finish()
 
 	ch := make(chan mapResponse)
@@ -6219,8 +6223,8 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*disco.Node, index string, shards []uint64, c *pql.Call, opt *execOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) (reterr error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
+func (e *executor) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, nodes []*disco.Node, index string, shards []uint64, c *pql.Call, opt *ExecOptions, lastAttempt bool, mapFn mapFunc, reduceFn reduceFunc) (reterr error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.mapper")
 	defer span.Finish()
 
 	// Group shards together by nodes.
@@ -6402,7 +6406,7 @@ var errShutdown = errors.New("executor has shut down")
 
 // mapperLocal performs map & reduce entirely on the local node.
 func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc, memoryAvailable int64) (_ interface{}, err error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapperLocal")
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.mapperLocal")
 	defer span.Finish()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -7176,7 +7180,7 @@ func (e *executor) callZero(c *pql.Call) *pql.Call {
 }
 
 func (e *executor) translateResults(ctx context.Context, index string, idx *Index, calls []*pql.Call, results []interface{}, memoryAvailable int64) (err error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateResults")
+	span, _ := tracing.StartSpanFromContext(ctx, "executor.translateResults")
 	defer span.Finish()
 
 	idMap := make(map[uint64]string)
@@ -7858,8 +7862,8 @@ type mapResponse struct {
 	err    error
 }
 
-// execOptions represents an execution context for a single Execute() call.
-type execOptions struct {
+// ExecOptions represents an execution context for a single Execute() call.
+type ExecOptions struct {
 	Remote        bool
 	Profile       bool
 	PreTranslated bool
@@ -8712,8 +8716,8 @@ func decimalToInt64(dec pql.Decimal, opt FieldOptions) int64 {
 }
 
 // executeDeleteRecords executes a delete() call.
-func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDelete")
+func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (bool, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeDelete")
 	defer span.Finish()
 
 	if len(c.Children) == 0 {
@@ -8977,7 +8981,7 @@ func deleteKeyTranslation(ctx context.Context, idx *Index, shard uint64, records
 	return idx.TranslateStore(paritionID).Delete(records)
 }
 
-func (e *executor) executeSort(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*SortedRow, error) {
+func (e *executor) executeSort(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*SortedRow, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSort")
 	defer span.Finish()
 

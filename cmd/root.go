@@ -65,6 +65,7 @@ at https://docs.molecula.cloud/.
 	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
 	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
 	rc.AddCommand(newKeygenCommand(stdin, stdout, stderr))
+	rc.AddCommand(newCLICommand(stdin, stdout, stderr))
 
 	rc.SetOutput(stderr)
 	return rc
