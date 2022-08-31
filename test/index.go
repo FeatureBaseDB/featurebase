@@ -24,6 +24,7 @@ func newIndex(tb testing.TB) *Index {
 	cfg := pilosa.DefaultHolderConfig()
 	cfg.StorageConfig.FsyncEnabled = false
 	cfg.RBFConfig.FsyncEnabled = false
+	cfg.RBFConfig.MaxSize = (1 << 28)
 	h := pilosa.NewHolder(path, cfg)
 	testhook.Cleanup(tb, func() {
 		h.Close()
