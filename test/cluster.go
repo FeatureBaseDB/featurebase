@@ -591,8 +591,14 @@ func prependOpts(opts [][]server.CommandOption, size int) [][]server.CommandOpti
 	return opts
 }
 
-// prependTestServerOpts prepends opts with the OpenInMemTranslateStore.
+// prependTestServerOpts prepends opts with the OpenInMemTranslateStore,
+// tweaks to initial startup delay, and storage config to disable fsync and
+// specify a smaller RBF size.
 func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
+	cfg := pilosa.DefaultHolderConfig()
+	cfg.RBFConfig.FsyncEnabled = false
+	cfg.RBFConfig.MaxSize = (1 << 28)
+	cfg.RBFConfig.MaxWALSize = (1 << 28)
 	defaultOpts := []server.CommandOption{
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore),
@@ -601,6 +607,7 @@ func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
 				Backend:      storage.DefaultBackend,
 				FsyncEnabled: false,
 			}),
+			pilosa.OptServerRBFConfig(cfg.RBFConfig),
 		),
 	}
 	return append(defaultOpts, opts...)
