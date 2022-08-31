@@ -28,6 +28,7 @@ func NewHolder(tb testing.TB) *Holder {
 	cfg := pilosa.DefaultHolderConfig()
 	cfg.StorageConfig.FsyncEnabled = false
 	cfg.RBFConfig.FsyncEnabled = false
+	cfg.RBFConfig.MaxSize = (1 << 28)
 	h := &Holder{Holder: pilosa.NewHolder(path, cfg), tb: tb}
 
 	return h
