@@ -54,15 +54,20 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 		t.Helper()
 		fieldName := "setfield"
 		c.CreateField(t, indexName, pilosa.IndexOptions{TrackExistence: true}, fieldName)
-		rows := make([][2]uint64, ShardWidth*Rows)
-		for columnID := uint64(0); columnID < ShardWidth; columnID++ {
+		// we don't need to populate the whole thing, just enough to get a sample of it
+		width := uint64(ShardWidth / 4)
+		rows := make([][2]uint64, width*Rows)
+		n := 0
+		// populate rows with decreasing density
+		for columnID := uint64(0); columnID < width; columnID++ {
 			for rowID := uint64(0); rowID < Rows; rowID++ {
-				if rowID == 0 || (columnID%rowID+1) != 0 {
-					rows[rowID] = [2]uint64{rowID, columnID}
+				if (columnID % (rowID + 1)) == 0 {
+					rows[n] = [2]uint64{rowID, columnID}
+					n++
 				}
 			}
 		}
-		c.ImportBits(t, indexName, "setfield", rows)
+		c.ImportBits(t, indexName, "setfield", rows[:n])
 	}
 
 	setupKeys := func(t *testing.T, r *require.Assertions, c *test.Cluster) {
@@ -256,7 +261,6 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 		require.NoError(err, "restart cluster DeleteRecordsBig")
 		err = c.AwaitState(disco.ClusterStateNormal, 10*time.Second)
 		require.NoError(err, "backToNormal")
-
 	})
 }
 
