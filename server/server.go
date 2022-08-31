@@ -28,22 +28,24 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/authn"
-	"github.com/featurebasedb/featurebase/v3/authz"
-	"github.com/featurebasedb/featurebase/v3/boltdb"
-	"github.com/featurebasedb/featurebase/v3/encoding/proto"
-	petcd "github.com/featurebasedb/featurebase/v3/etcd"
-	"github.com/featurebasedb/featurebase/v3/gcnotify"
-	"github.com/featurebasedb/featurebase/v3/gopsutil"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	pnet "github.com/featurebasedb/featurebase/v3/net"
-	"github.com/featurebasedb/featurebase/v3/prometheus"
-	"github.com/featurebasedb/featurebase/v3/statik"
-	"github.com/featurebasedb/featurebase/v3/stats"
-	"github.com/featurebasedb/featurebase/v3/statsd"
-	"github.com/featurebasedb/featurebase/v3/syswrap"
-	"github.com/featurebasedb/featurebase/v3/testhook"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	petcd "github.com/molecula/featurebase/v3/etcd"
+	"github.com/molecula/featurebase/v3/gcnotify"
+	"github.com/molecula/featurebase/v3/gopsutil"
+	"github.com/molecula/featurebase/v3/logger"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/prometheus"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/planner"
+	"github.com/molecula/featurebase/v3/statik"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/statsd"
+	"github.com/molecula/featurebase/v3/syswrap"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
@@ -81,7 +83,6 @@ type Command struct {
 	listenURI    *pnet.URI
 	tlsConfig    *tls.Config
 	closeTimeout time.Duration
-	pgserver     *PostgresServer
 
 	serverOptions []pilosa.ServerOption
 	auth          *authn.Auth
@@ -247,29 +248,6 @@ func (m *Command) Start() (err error) {
 			m.logger.Errorf("grpc server error: %v", err)
 		}
 	}()
-
-	// Initialize postgres.
-	m.pgserver = nil
-	if m.Config.Postgres.Bind != "" {
-		var tlsConf *tls.Config
-		if m.Config.Postgres.TLS.CertificatePath != "" {
-			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger)
-			if err != nil {
-				return errors.Wrap(err, "setting up postgres TLS")
-			}
-			tlsConf = conf
-		}
-		m.pgserver = NewPostgresServer(m.API, m.logger, tlsConf, SqlVersion(m.Config.Postgres.SqlVersion))
-		m.pgserver.s.StartupTimeout = time.Duration(m.Config.Postgres.StartupTimeout)
-		m.pgserver.s.ReadTimeout = time.Duration(m.Config.Postgres.ReadTimeout)
-		m.pgserver.s.WriteTimeout = time.Duration(m.Config.Postgres.WriteTimeout)
-		m.pgserver.s.MaxStartupSize = m.Config.Postgres.MaxStartupSize
-		m.pgserver.s.ConnectionLimit = m.Config.Postgres.ConnectionLimit
-		err := m.pgserver.Start(m.Config.Postgres.Bind)
-		if err != nil {
-			return errors.Wrap(err, "starting postgres")
-		}
-	}
 
 	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
@@ -461,6 +439,11 @@ func (m *Command) SetupServer() error {
 	m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
 	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
 
+	executionPlannerFn := func(e pilosa.Executor, a *pilosa.API, s string) sql3.CompilePlanner {
+		fapi := &pilosa.FeatureBaseSchemaAPI{API: a}
+		return planner.NewExecutionPlanner(e, fapi, a, s)
+	}
+
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(longQueryTime)),
@@ -488,6 +471,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
 		pilosa.OptServerDisCo(e, e, e, e),
+		pilosa.OptServerExecutionPlannerFn(executionPlannerFn),
 	}
 
 	if m.Config.LookupDBDSN != "" {
@@ -549,9 +533,6 @@ func (m *Command) SetupServer() error {
 			m.queryLogger.Infof("Configured IPs for allowed networks: %v", ac.ConfiguredIPs)
 		}
 
-		// disable postgres binding if auth is enabled
-		m.Config.Postgres.Bind = ""
-
 		// TLS must be enabled if auth is
 		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" {
 			return fmt.Errorf("transport layer security (TLS) is not configured properly. TLS is required when AuthN/Z is enabled, current configuration: %v", m.Config.TLS)
@@ -586,6 +567,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptHandlerAuthZ(&p),
 		pilosa.OptHandlerSerializer(proto.Serializer{}),
 		pilosa.OptHandlerRoaringSerializer(proto.RoaringSerializer),
+		pilosa.OptHandlerSQLEnabled(m.Config.SQL.EndpointEnabled),
 	)
 	return errors.Wrap(err, "new handler")
 }
@@ -673,7 +655,6 @@ func (m *Command) Close() error {
 		eg.Go(m.Handler.Close)
 		eg.Go(m.Server.Close)
 		eg.Go(m.API.Close)
-		eg.Go(m.pgserver.Close)
 		if closer, ok := m.logOutput.(io.Closer); ok {
 			// If closer is os.Stdout or os.Stderr, don't close it.
 			if closer != os.Stdout && closer != os.Stderr {

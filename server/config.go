@@ -177,27 +177,10 @@ type Config struct {
 		MutexFraction int `toml:"mutex-fraction"`
 	} `toml:"profile"`
 
-	Postgres struct {
-		// Bind is the address to which to bind a postgres endpoint.
-		// If this is empty, no endpoint will be created.
-		Bind string `toml:"bind"`
-		// TLS configuration for postgres connections.
-		TLS TLSConfig `toml:"tls"`
-
-		StartupTimeout toml.Duration `toml:"startup-timeout"`
-		ReadTimeout    toml.Duration `toml:"read-timeout"`
-		WriteTimeout   toml.Duration `toml:"write-timout"`
-
-		MaxStartupSize uint32 `toml:"max-startup-size"`
-
-		// ConnectionLimit is the maximum number of postgres connections to allow simultaneously.
-		// Setting this to 0 disables the limit.
-		// This mostly exists because other DBs seem to have it.
-		ConnectionLimit uint16 `toml:"max-connections"`
-		// SqlVersion is which type of sqlhandling to be applied.
-		// The constant SqlV2 can be used to try the new experimental Molecula SQL handling
-		SqlVersion uint16 `toml:"sql-version"`
-	} `toml:"postgres"`
+	SQL struct {
+		// EndpointEnabled enables the /sql endpoint.
+		EndpointEnabled bool `toml:"endpoint-enabled"`
+	} `toml:"sql"`
 
 	// Storage.Backend determines which Tx implementation the holder/Index will
 	// use; one of the available transactional-storage engines. Choices are
@@ -287,7 +270,6 @@ func (c *Config) validate() error {
 		"Etcd.LPeerURL", c.Etcd.LPeerURL, // ":"
 		"Etcd.APeerURL", c.Etcd.APeerURL, // ""
 		"Etcd.ClusterURL", c.Etcd.ClusterURL,
-		"Postgres.Bind", c.Postgres.Bind,
 	}
 
 	ports := make(map[int]bool)
@@ -383,12 +365,7 @@ func NewConfig() *Config {
 	c.Profile.BlockRate = 10000000 // 1 sample per 10 ms
 	c.Profile.MutexFraction = 100  // 1% sampling
 
-	// Postgres config (off by default).
-	c.Postgres.MaxStartupSize = 8 * 1024 * 1024
-	c.Postgres.StartupTimeout = toml.Duration(5 * time.Second)
-	c.Postgres.ReadTimeout = toml.Duration(10 * time.Second)
-	c.Postgres.WriteTimeout = toml.Duration(10 * time.Second)
-	// we don't really need a connection limit
+	c.SQL.EndpointEnabled = false
 
 	c.Etcd.AClientURL = ""
 	c.Etcd.LClientURL = "http://localhost:10301"
