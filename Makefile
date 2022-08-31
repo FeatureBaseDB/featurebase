@@ -379,3 +379,6 @@ install-gometalinter:
 
 test-external-lookup:
 	$(GO) test . -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -run ^TestExternalLookup$$ -externalLookupDSN $(EXTERNAL_LOOKUP_DSN)
+
+bnf:
+	ebnf2railroad --no-overview-diagram  --no-optimizations ./sql3/sql3.ebnf

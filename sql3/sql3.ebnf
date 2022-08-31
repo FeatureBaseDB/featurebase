@@ -1,0 +1,264 @@
+(*
+
+  sql3
+  ==========================
+
+  Document the SQL language support in FeatureBase
+  
+*)
+
+sql3 = statement, [ ";" ] ;
+
+statement = show_tables
+      | show_columns
+      | drop_table
+      | create_table_stmt
+      | alter_table_stmt
+      | select_stmt
+      | insert_stmt
+      | delete_stmt ;
+
+(*
+
+  SHOW TABLES
+  ----------------
+  Shows the tables within a FeatureBase instance.
+
+*)
+show_tables = "SHOW", "TABLES" ;
+
+(*
+
+  SHOW COLUMNS
+  ----------------
+  Shows the columns on a FeatureBase table.
+
+*)
+show_columns = "SHOW", "COLUMNS", "FROM", identifier ;
+
+(*
+
+  DROP TABLE
+  ----------------
+  Drops a FeatureBase table.
+
+*)
+drop_table = "DROP", "TABLE", [ "IF", "EXISTS" ], identifier ;
+
+
+(*
+
+  CREATE TABLE
+  ----------------
+  Creates a FeatureBase table.
+
+*)
+create_table_stmt = "CREATE", "TABLE", [ "IF", "NOT", "EXISTS" ], identifier, "(", column_def, { ",", column_def }, ")", { table_options } ;
+
+column_def = identifier, type_name, { column_constraint } ;
+
+(*
+
+  Column Constraint
+  ----------------
+  Constraints for a column:
+
+  MIN, MAX - min/max for int types
+
+  TIMEUNIT - 's', 'ms' etc.
+
+  TIMEQUANTUM - 'YMD' etc.
+
+*)
+column_constraint =  
+        "MIN", integer_literal
+      | "MAX", integer_literal
+      | "TIMEUNIT", string_literal, [ "EPOCH", date_literal ]
+      | "TIMEQUANTUM", string_literal, [ "TTL", string_literal ]
+      | "CACHETYPE", ( "RANKED" | "LRU" ), [ "SIZE", integer_literal ] ;
+
+table_options = "KEYPARTITIONS", integer_literal
+      | "SHARDWIDTH", integer_literal ;
+
+type_name = "INT" 
+    | "BOOL"
+    | "TIMESTAMP"
+    | "DECIMAL"
+    | "STRING"
+    | "STRINGSET"
+    | "ID"
+    | "IDSET" ;
+
+(*
+
+  ALTER TABLE
+  ----------------
+  Alters a FeatureBase table.
+
+*)
+alter_table_stmt = "ALTER", "TABLE", ( add_column | drop_column | rename_column ) ;
+
+add_column = "ADD", [ "COLUMN" ], column_def ;
+
+drop_column =  "DROP", [ "COLUMN" ], identifier ;
+
+rename_column = "RENAME", [ "COLUMN" ], identifier, "TO", identifier ;
+
+(*
+
+  INSERT
+  ----------------
+  Inserts data into a FeatureBase table.
+
+*)
+insert_stmt = "INSERT", "INTO", identifier, "(", identifier, { identifier, "," }, ")", "VALUES", "(", expr, { expr, "," }, ")" ;
+
+(*
+
+  DELETE
+  ----------------
+  Deletes data from a FeatureBase table.
+
+*)
+delete_stmt = "DELETE" ;
+
+(*
+
+  SELECT
+  ----------------
+  Queries a FeatureBase table.
+
+*)
+select_stmt = "SELECT", [ top_clause ], [ "DISTINCT" ], result_column, { ",", result_column }, [ from_clause ], [ where_clause ], [group_by_clause] ;
+
+top_clause = ( "TOP" | "TOPN" ), "(", expr, ")" ;  
+
+result_column = expr, [ [ "AS" ], column_alias ]
+      | "*"
+      | identifier, ".", "*" ;
+
+column_alias = identifier ;
+
+from_clause = "FROM", table_or_subquery, { ",", table_or_subquery } ;
+
+table_or_subquery = identifier, [ [ "AS" ], table_alias ], [ table_option ]
+      | "(", select_stmt, ")", [ [ "AS" ], table_alias ] ;
+
+table_alias = identifier ;
+
+table_option = "SHARDS", "(", integer_literal, { ",", integer_literal }, ")";
+
+where_clause = "WHERE", expr ;
+
+group_by_clause = "GROUP", "BY", expr, { ",", expr }, [ "HAVING", expr ] ;
+
+(*
+
+  Expressions
+  ----------------
+
+  timequantums - modelling
+
+  * let stringsetcolq refer to a set with a timequantum column
+  * the expression stringsetcolq is an array/table? of tuple of (timestamp, set)
+  * when you refer to stringsetcolq by name, this is shorthand for 
+    "the set value for the latest timestamp"
+  * if we were to use dotted notation to refer to the components of the tuple,
+    we could refer to the components of the tuple e.g.
+      - stringsetcolq.timestamp
+      - stringsetcolq.value
+  * but stringsetcolq is an array of tuples, so assuming some array type notation
+    - stringsetcolq[subscript].timestamp
+    - stringsetcolq[subscript].value
+  * this is dumb
+  * what if, when you refer to stringsetcolq by name, this is shorthand for 
+    "the set value for the latest timestamp" - the tuple not the array
+  * the underlying 'table' could be modelled as (_id, timestamp, set)
+  * if you want access to that table, we could use a table valued function that would enable us to use
+    cross apply etc.
+  
+  
+  * you want to do range queries on the timestamp
+  * you want to be able to see what timestamps you have
+  * you want to be able to see what sets and set values you have
+  * do we ever want to be able to do this with any arbitary range queryable type, right 
+    now we have one additional dimension, would we ever want more? would we want additional values?
+  
+*)
+expr = integer_literal
+    | string_literal
+    | decimal_literal
+    | set_literal
+    | date_literal
+    | [ table_name, "." ], column_name
+    | unary_op, expr
+    | expr, binary_op, expr
+    | function_call
+    | "(", expr, ")"
+    | "CAST", "(", expr, "AS", type_name, ")"
+    | expr, [ "NOT" ], "LIKE", expr
+    | expr, "IS", [ "NOT" ], "NULL"
+    | expr, [ "NOT" ], "BETWEEN", expr, "AND", expr
+    | expr, [ "NOT" ], "IN", "(", ( select_stmt | expr, { ",", expr } ), ")"
+    | paren_select_stmt
+    | case_expr ;
+
+paren_select_stmt = "(", select_stmt, ")" ;
+
+case_expr = "CASE", [ expr ], { "WHEN", expr, "THEN", expr }, [ "ELSE", expr ], "END" ;
+
+unary_op = "-"
+    | "+" 
+    | "!" ;
+
+binary_op = "="
+    | "!="
+    | "<="
+    | ">="
+    | "&"
+    | "|"
+    | "<<"
+    | ">>"
+    | "+"
+    | "-"
+    | "*"
+    | "/" 
+    | "%"
+    | "||" ;
+  
+set_literal = "[", expr, { ",", expr }, "]" ;
+
+date_literal = rfc_3339
+    | "CURRENT_DATE"
+    | "CURRENT_TIMESTAMP" ;
+
+table_name = identifier ;
+
+column_name = identifier ;
+
+function_call = agg_function
+    | non_agg_function ;
+
+agg_function = ( "AVG" | "COUNT" | "MAX" | "MIN" | "SUM" ), "(", ( ( [ "DISTINCT" ], expr ) | "*" ), ")"
+    | "PERCENTILE", "(", expr, ",", expr, ")" ;
+
+non_agg_function = 
+      "SETCONTAINS" , "(", expr, ",", expr, ")" 
+    | "SETCONTAINSALL" , "(", expr, ",", expr, ")" 
+    | "SETCONTAINSANY" , "(", expr, ",", expr, ")" 
+    | "DATEPART" , "(", expr, ",", expr, ")" ;
+
+identifier = letter , { letter | digit | "_" } ;
+
+letter = "A" | "B" | "C" | "D" | "E" | "F" | "G"
+       | "H" | "I" | "J" | "K" | "L" | "M" | "N"
+       | "O" | "P" | "Q" | "R" | "S" | "T" | "U"
+       | "V" | "W" | "X" | "Y" | "Z" | "a" | "b"
+       | "c" | "d" | "e" | "f" | "g" | "h" | "i"
+       | "j" | "k" | "l" | "m" | "n" | "o" | "p"
+       | "q" | "r" | "s" | "t" | "u" | "v" | "w"
+       | "x" | "y" | "z" ;
+
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+
