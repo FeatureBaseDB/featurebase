@@ -384,18 +384,21 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("QuickCheck", func(t *testing.T) {
+		f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
+		_ = idx
+		defer f.Clean(t)
+		tx.Rollback()
+
 		if err := quick.Check(func(bitDepth uint64, bitN uint64, values []uint64) bool {
+			tx = idx.holder.txf.NewTx(Txo{Write: true, Index: idx, Fragment: f, Shard: f.shard})
+			defer tx.Rollback()
 			// Limit bit depth & maximum values.
-			bitDepth = (bitDepth % 62) + 1
+			bitDepth = (bitDepth % 8) + 1
 			bitN = (bitN % 99) + 1
 
 			for i := range values {
 				values[i] = values[i] % (1 << bitDepth)
 			}
-
-			f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
-			_ = idx
-			defer f.Clean(t)
 
 			// Set values.
 			m := make(map[uint64]int64)
@@ -425,7 +428,7 @@ func TestFragment_SetValue(t *testing.T) {
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
-			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+			tx = idx.holder.txf.NewTx(Txo{Write: false, Index: idx, Fragment: f, Shard: f.shard})
 			defer tx.Rollback()
 
 			// Ensure values are set.
