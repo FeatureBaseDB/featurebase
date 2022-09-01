@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/chzyer/readline"
@@ -31,17 +33,32 @@ Type "exit" to quit.
 )
 
 type CLICommand struct {
-	Host string `json:"host"`
-	Port string `json:"port"`
+	Host        string `json:"host"`
+	Port        string `json:"port"`
+	HistoryPath string `json:"history-path"`
 
 	// commands holds the list of sql commands to be executed.
 	commands []string
 }
 
 func NewCLICommand(stdin io.Reader, stdout, stderr io.Writer) *CLICommand {
+	historyPath := ""
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("Error getting home directory, command history persistence will be disabled: %v\n", err)
+	} else {
+		historyDir := filepath.Join(home, ".featurebase")
+		err := os.MkdirAll(historyDir, 0750)
+		if err != nil {
+			fmt.Printf("Creating directory for history: %v\n", err)
+		} else {
+			historyPath = filepath.Join(historyDir, "cli_history")
+		}
+	}
 	return &CLICommand{
-		Host: "localhost",
-		Port: "10101",
+		Host:        "localhost",
+		Port:        "10101",
+		HistoryPath: historyPath,
 	}
 }
 
@@ -49,7 +66,12 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 	// Print the splash message.
 	fmt.Print(splash)
 
-	rl, err := readline.New(promptBegin)
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:                 promptBegin,
+		HistoryFile:            cmd.HistoryPath,
+		HistoryLimit:           100000,
+		DisableAutoSaveHistory: true,
+	})
 	if err != nil {
 		return errors.Wrap(err, "getting readline")
 	}
@@ -132,6 +154,11 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 			}
 		}
 
+		err = rl.SaveHistory(strings.Join(cmd.commands, "; ") + ";")
+		if err != nil {
+			fmt.Printf("Couldn't save history: %v\n", err)
+		}
+
 		if err := cmd.executeCommands(ctx); err != nil {
 			return errors.Wrap(err, "executing commands")
 		}
@@ -161,10 +188,14 @@ func (cmd *CLICommand) executeCommands(ctx context.Context) error {
 		}
 
 		var sqlResponse response
-		dec := json.NewDecoder(resp.Body)
-		err = dec.Decode(&sqlResponse)
+		fullbod, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return errors.Wrap(err, "reading response")
+		}
+		err = json.Unmarshal(fullbod, &sqlResponse)
 		if err != nil {
 			fmt.Printf("couldn't decode response: %v\n", err)
+			fmt.Printf("%s\n", fullbod)
 		}
 
 		err = sqlResponse.WriteOut(os.Stdout)
