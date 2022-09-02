@@ -54,9 +54,9 @@ Configuration: [https://docs.featurebase.com/setting-up-featurebase/enterprise/f
 
 ## Community
 
-You can email us at comminuty@featurebase.com or learn more about contributing at [https://www.featurebase.com/community][Community].
+You can email us at community@featurebase.com or learn more about contributing at [https://www.featurebase.com/community][Community].
 
-Chat with us: [https://discord.gg/bKAP5CEY][Discord]
+Chat with us: [https://discord.gg/FBn2vEp7Na][Discord]
 
 ## What's Changed Since the Pilosa Days? 
 
@@ -76,7 +76,7 @@ FeatureBase is licensed under the [Apache License, Version 2.0][License]
 [Community]: https://www.featurebase.com/community
 [Config]: https://docs.featurebase.com/setting-up-featurebase/enterprise/featurebase-configuration
 [DataModel]: https://docs.featurebase.com/data-modeling-guide/data-modeling
-[Discord]: https://discord.gg/bKAP5CEY
+[Discord]: https://discord.gg/FBn2vEp7Na
 [HomePage]: https://www.featurebase.com
 [Ingest]: https://docs.featurebase.com/data-ingestion/enterprise/ingesters
 [Install]: https://docs.featurebase.com/setting-up-featurebase/enterprise/installing-featurebase
