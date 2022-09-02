@@ -1,0 +1,20 @@
+.block {
+  padding: 32px;
+
+  &.top {
+    border-top: 1px solid var(--divider);
+  }
+  &.right {
+    border-right: 1px solid var(--divider);
+  }
+  &.bottom {
+    border-bottom: 1px solid var(--divider);
+  }
+  &.left {
+    border-left: 1px solid var(--divider);
+  }
+}
+
+[data-theme='dark'] .block {
+  background-color: var(--default);
+}

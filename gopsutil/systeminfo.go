@@ -1,27 +1,17 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package gopsutil
 
 import (
+	"math"
 	"runtime"
 	"strings"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/mem"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 var _ pilosa.SystemInfo = NewSystemInfo()
@@ -114,6 +104,13 @@ func (s *systemInfo) collectPlatformInfo() error {
 		}
 		s.cpuModel = infos[0].ModelName
 		s.cpuMHz = computeMHz(s.cpuModel)
+		if s.cpuMHz < 0 {
+			s.cpuMHz = int(math.Round(infos[0].Mhz))
+		}
+		if s.cpuMHz < 0 {
+			// This is supposed to be unsigned.
+			s.cpuMHz = 0
+		}
 
 		// gopsutil reports core and clock speed info inconsistently
 		// by OS
@@ -233,6 +230,16 @@ func (s *systemInfo) CPUCores() (physical, logical int, err error) {
 		return 0, 0, err
 	}
 	return s.cpuPhysicalCores, s.cpuLogicalCores, nil
+}
+
+// DiskCapacity returns the disk capacity.
+func (s *systemInfo) DiskCapacity(path string) (uint64, error) {
+	diskInfo, err := disk.Usage(path)
+
+	if err != nil {
+		return 0, err
+	}
+	return diskInfo.Total, nil
 }
 
 // NewSystemInfo is a constructor for the gopsutil implementation of SystemInfo.

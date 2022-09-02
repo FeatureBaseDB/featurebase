@@ -1,0 +1,56 @@
+.main {
+  min-height: 100vh;
+  background-repeat: no-repeat;
+  background-image: linear-gradient(
+      to bottom,
+      rgba(250, 250, 250, 1),
+      rgba(250, 250, 250, 0.7)
+    ),
+    url(/assets/bg-pattern.png);
+  background-size: cover;
+  padding-bottom: 32px;
+}
+
+.logoContainer {
+  text-align: center;
+}
+
+.logo {
+  height: 85px;
+  margin: 16px;
+}
+
+.loginForm {
+  width: 500px;
+  margin: 0 auto;
+  padding-top: 75px;
+}
+
+.formError {
+  color: #f44336;
+  margin-bottom: 16px;
+}
+
+.sso {
+  text-align: center;
+  padding: 24px 0 16px;
+}
+
+.passwordField {
+  position: relative;
+
+  .forgotPassword {
+    // [syang] Eww yes, I hate this
+    position: absolute;
+    right: 0;
+    z-index: 1;
+  }
+}
+
+.backToSignIn {
+  padding: 24px 0 16px;
+}
+
+.alert {
+  margin-bottom: 16px;
+}

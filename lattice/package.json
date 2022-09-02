@@ -1,0 +1,70 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@date-io/moment": "^1.3.13",
+    "@improbable-eng/grpc-web": "^0.13.0",
+    "@material-ui/core": "^4.11.0",
+    "@material-ui/icons": "^4.9.1",
+    "@material-ui/lab": "^4.0.0-alpha.57",
+    "@material-ui/pickers": "^3.3.10",
+    "@nivo/bar": "^0.69.1",
+    "@nivo/core": "^0.69.0",
+    "@nivo/line": "^0.69.1",
+    "axios": "^0.19.2",
+    "classnames": "^2.2.6",
+    "copy-to-clipboard": "^3.3.1",
+    "d3-array": "^2.4.0",
+    "d3-scale-chromatic": "^2.0.0",
+    "date-fns": "^2.16.1",
+    "framer-motion": "^2.0.0",
+    "fuse.js": "^6.4.1",
+    "get-ip-range": "^4.0.1",
+    "google-protobuf": "^3.13.0",
+    "lodash": "^4.17.20",
+    "moment": "^2.29.1",
+    "moment-timezone": "^0.5.31",
+    "react": "^17.0.1",
+    "react-beautiful-dnd": "^13.1.0",
+    "react-dom": "^17.0.1",
+    "react-highlight-words": "^0.16.0",
+    "react-moment": "^0.9.7",
+    "react-pluralize": "^1.6.3",
+    "react-router": "^5.2.0",
+    "react-router-dom": "^5.2.0",
+    "react-split": "^2.0.9",
+    "react-use": "^15.3.3"
+  },
+  "devDependencies": {
+    "@types/d3-array": "^2.0.0",
+    "@types/jest": "^26.0.4",
+    "@types/react": "^16.9.41",
+    "@types/react-beautiful-dnd": "^13.0.0",
+    "@types/react-dom": "^16.9.8",
+    "@types/react-router": "^5.1.8",
+    "@types/react-router-dom": "^5.1.5",
+    "jest-sonar-reporter": "^2.0.0",
+    "node-sass": "^4.14.1",
+    "react-scripts": "^4.0.3",
+    "tslint": "^6.1.2",
+    "typescript": "^4.2.2"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "lint": "yarn tslint -c tslint.json 'src/**/*.{ts,tsx}'",
+    "lint:fix": "yarn tslint --fix -c tslint.json 'src/**/*.{ts,tsx}'",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": "react-app"
+  },
+  "browserslist": [
+    ">0.2%",
+    "not dead",
+    "not ie <= 11",
+    "not op_mini all"
+  ]
+}

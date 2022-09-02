@@ -1,0 +1,28 @@
+.queryItem {
+  display: flex;
+  align-items: center;
+
+  &:hover {
+    cursor: pointer;
+  }
+
+  .copyIcon {
+    margin-right: 4px;
+    font-size: 0.75rem;
+    opacity: 0.3;
+    transition: opacity 0.3s ease;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+
+  .queryText {
+    font-family: 'Roboto Mono', monospace;
+    transition: color 0.3s ease;
+
+    &:hover {
+      color: var(--text-primary);
+    }
+  }
+}

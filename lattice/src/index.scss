@@ -1,0 +1,83 @@
+:root {
+  --nav-background: #e8eef2;
+  --primary: #48b5cd;
+  --secondary: #48b5cd;
+  --default: #c3d3dc;
+  --accent: #004379;
+  --surface: #f5f7f9;
+  --success: #36c650;
+  --warning: #ffa427;
+  --error: #cd6048;
+  --disabled: #a9a9a9;
+  --base: #ffffff;
+  --contrast: #000000;
+  --divider: rgba(0, 0, 0, 0.12);
+
+  // For use in rgba values
+  --primary-rgb: 72, 181, 205;
+  --secondary-rgb: 72, 181, 205;
+  --default-rgb: 195, 211, 220;
+  --accent-rgb: 0, 67, 121;
+  --surface-rgb: 245, 247, 249;
+  --success-rgb: 54, 198, 80;
+  --warning-rgb: 255,164,39;
+  --error-rgb: 205, 96, 72;
+  --disabled-rgb: 169,169,169;
+  --base-rgb: 255, 255, 255;
+  --contrast-rgb: 0, 0, 0;
+
+  --text-primary: #212121;
+  --text-contrast: #f9f9f9;
+  --text-primary-rgb: 33, 33, 33;
+  --text-secondary: rgba(0, 0, 0, 0.54);
+
+  // This block of colors needed for Reaviz
+  --color-background: #22272b;
+  --color-on-background: var(--text-contrast);
+  --color-layer-transparent: rgba(0, 5, 11, 0.9);
+  --color-surface: #2c343a;
+  --color-primary: var(--primary);
+  --color-on-primary: var(--text-primary);
+}
+
+[data-theme='dark'] {
+  --nav-background: #2e3438;
+  --default: #252a2d;
+  --accent: #ffdf40;
+  --surface: #252a2d;
+  --success: #48cd60;
+  --warning: #ffaf40;;
+  --base: #000000;
+  --contrast: #ffffff;
+  --divider: rgba(255, 255, 255, 0.12);
+
+  // For use in rgba values
+  --default-rgb: 195, 211, 220;
+  --accent-rgb: 255, 223, 64;
+  --surface-rgb: 37, 42, 45;
+  --success-rgb: 72, 205, 96;
+  --warning-rgb: 255, 175, 64;
+  --base-rgb: 0, 0, 0;
+  --contrast-rgb: 255, 255, 255;
+
+  --text-primary: #ffffff;
+  --text-contrast: #f9f9f9;
+  --text-primary-rgb: 255, 255, 255;
+  --text-secondary: rgba(var(--text-primary-rgb), 0.7);
+}
+
+body {
+  font-family: 'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+a {
+  text-decoration: none;
+}
+
+code,
+pre {
+  font-family: 'Roboto Mono', monospace;
+}

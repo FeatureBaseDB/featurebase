@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package roaring
 
 import (
@@ -36,7 +24,10 @@ func NewBTreeBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newBTreeContainers(),
 	}
-	// TODO: We have no way to report this.
+	// We have no way to report this.
+	// Because we just created Bitmap, its OpWriter is nil, so there
+	// is no code path which would cause Add() to return an error.
+	// Therefore, it's safe to swallow this error.
 	_, _ = b.Add(a...)
 	return b
 }
@@ -62,39 +53,7 @@ func (btc *bTreeContainers) Put(key uint64, c *Container) {
 	// Get can result in the tree containing a different container
 	// than we'll get on next lookup.
 	btc.lastKey, btc.lastContainer = key, c
-	// If a mapped container is added to the tree, reset the
-	// lastContainer cache so that the cache is not pointing
-	// at a read-only mmap.
-	if c.Mapped() {
-		btc.lastKey = ^uint64(0)
-	}
 	btc.tree.Set(key, c)
-}
-
-func (u updater) update(oldV *Container, exists bool) (*Container, bool) {
-	// update the existing container
-	if exists {
-		oldV = oldV.UpdateOrMake(u.typ, u.n, u.mapped)
-		return oldV, true
-	}
-	cont := NewContainer()
-	cont.setTyp(u.typ)
-	cont.setN(u.n)
-	cont.setMapped(u.mapped)
-	return cont, true
-}
-
-// this struct is added to prevent the closure locals from being escaped out to the heap
-type updater struct {
-	key    uint64
-	n      int32
-	typ    byte
-	mapped bool
-}
-
-func (btc *bTreeContainers) PutContainerValues(key uint64, typ byte, n int, mapped bool) {
-	a := updater{key, int32(n), typ, mapped}
-	btc.tree.Put(key, a.update)
 }
 
 func (btc *bTreeContainers) Remove(key uint64) {
@@ -119,7 +78,6 @@ func (btc *bTreeContainers) GetOrCreate(key uint64) *Container {
 		btc.lastContainer = cont
 		return cont
 	}
-
 	btc.lastContainer = v
 	return btc.lastContainer
 }
@@ -218,7 +176,9 @@ func (btc *bTreeContainers) Repair() {
 // (new-container, write). If write is true, the container is used to
 // replace the given container.
 func (btc *bTreeContainers) Update(key uint64, fn func(*Container, bool) (*Container, bool)) {
-	btc.tree.Put(key, fn)
+	_, _ = btc.tree.Put(key, fn)
+	btc.lastKey = ^uint64(0)
+	btc.lastContainer = nil
 }
 
 // UpdateEvery calls fn (existing-container, existed), and expects
@@ -229,6 +189,9 @@ func (btc *bTreeContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Cont
 	// currently not handling the error from this, but in practice it has
 	// to be io.EOF.
 	_ = e.Every(fn)
+	// invalidate cache.
+	btc.lastKey = ^uint64(0)
+	btc.lastContainer = nil
 }
 
 type btcIterator struct {
@@ -236,6 +199,8 @@ type btcIterator struct {
 	key uint64
 	val *Container
 }
+
+func (i *btcIterator) Close() {}
 
 func (i *btcIterator) Next() bool {
 	k, v, err := i.e.Next()

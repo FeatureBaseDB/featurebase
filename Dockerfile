@@ -1,22 +1,55 @@
-FROM golang:1.13.0 as builder
+ARG GO_VERSION=latest
 
-COPY . pilosa
+#######################
+### Lattice builder ###
+#######################
 
-RUN cd pilosa && CGO_ENABLED=0 make install FLAGS="-a"
+FROM moleculacorp/nodejs:latest as lattice-builder
+WORKDIR /lattice
 
-FROM alpine:3.9.4
+COPY lattice/package.json ./
+COPY lattice/yarn.lock ./
+RUN yarn install
 
-LABEL maintainer "dev@pilosa.com"
+COPY lattice ./
+RUN yarn build
+
+######################
+### Pilosa builder ###
+######################
+
+FROM golang:${GO_VERSION} as pilosa-builder
+ARG MAKE_FLAGS
+WORKDIR /pilosa
+
+RUN go get github.com/rakyll/statik
+
+COPY . ./
+COPY --from=lattice-builder /lattice/build /lattice
+RUN /go/bin/statik -src=/lattice -dest=/pilosa
+
+RUN make build FLAGS="-o build/featurebase" ${MAKE_FLAGS}
+
+#####################
+### Pilosa runner ###
+#####################
+
+FROM alpine:3.13.2 as runner
+
+LABEL maintainer "dev@molecula.com"
 
 RUN apk add --no-cache curl jq
 
-COPY --from=builder /go/bin/pilosa /pilosa
+COPY --from=pilosa-builder /pilosa/build/featurebase /
 
-COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
 
 EXPOSE 10101
 VOLUME /data
 
-ENTRYPOINT ["/pilosa"]
-CMD ["server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]
+ENV PILOSA_DATA_DIR /data
+ENV PILOSA_BIND 0.0.0.0:10101
+ENV PILOSA_BIND_GRPC 0.0.0.0:20101
+
+ENTRYPOINT ["/featurebase"]
+CMD ["server"]

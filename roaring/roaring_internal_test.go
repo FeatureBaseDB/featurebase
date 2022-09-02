@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package roaring
 
 import (
@@ -19,44 +7,69 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/molecula/featurebase/v3/generator"
 	"github.com/pkg/errors"
 )
 
 // String produces a human viewable string of the contents.
-func (iv interval16) String() string {
-	return fmt.Sprintf("[%d, %d]", iv.start, iv.last)
+func (iv Interval16) String() string {
+	return fmt.Sprintf("[%d, %d]", iv.Start, iv.Last)
+}
+
+func GetRoaringIter(bitsToSet ...uint64) RoaringIterator {
+
+	b := NewBitmap()
+	changed := b.DirectAddN(bitsToSet...)
+	n := len(bitsToSet)
+	if changed != n {
+		e := fmt.Sprintf("changed=%v but bitsToSet len = %v", changed, n)
+		panic(e)
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, er := b.WriteTo(buf)
+	if er != nil {
+		if er != nil {
+			panic(er)
+		}
+	}
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		panic(err)
+	}
+	return itr
 }
 
 func TestRunAppendInterval(t *testing.T) {
 	a := NewContainerRun(nil)
 	tests := []struct {
-		base []interval16
-		app  interval16
+		base []Interval16
+		app  Interval16
 		exp  int32
 	}{
 		{
-			base: []interval16{},
-			app:  interval16{start: 22, last: 25},
+			base: []Interval16{},
+			app:  Interval16{Start: 22, Last: 25},
 			exp:  4,
 		},
 		{
-			base: []interval16{{start: 20, last: 23}},
-			app:  interval16{start: 22, last: 25},
+			base: []Interval16{{Start: 20, Last: 23}},
+			app:  Interval16{Start: 22, Last: 25},
 			exp:  2,
 		},
 		{
-			base: []interval16{{start: 20, last: 23}},
-			app:  interval16{start: 21, last: 22},
+			base: []Interval16{{Start: 20, Last: 23}},
+			app:  Interval16{Start: 21, Last: 22},
 			exp:  0,
 		},
 		{
-			base: []interval16{{start: 20, last: 23}},
-			app:  interval16{start: 19, last: 25},
+			base: []Interval16{{Start: 20, Last: 23}},
+			app:  Interval16{Start: 19, Last: 25},
 			exp:  2, // runAppendInterval explicitly does not support intervals whose start is < c.runs[-1].start
 		},
 	}
@@ -71,11 +84,11 @@ func TestRunAppendInterval(t *testing.T) {
 }
 
 func TestInterval16RunLen(t *testing.T) {
-	iv := interval16{start: 7, last: 9}
+	iv := Interval16{Start: 7, Last: 9}
 	if iv.runlen() != 3 {
 		t.Fatalf("should be 3")
 	}
-	iv = interval16{start: 7, last: 7}
+	iv = Interval16{Start: 7, Last: 7}
 	if iv.runlen() != 1 {
 		t.Fatalf("should be 1")
 	}
@@ -85,21 +98,22 @@ func TestContainerRunAdd(t *testing.T) {
 	c := NewContainerRun(nil)
 	tests := []struct {
 		op  uint16
-		exp []interval16
+		exp []Interval16
 	}{
-		{1, []interval16{{start: 1, last: 1}}},
-		{2, []interval16{{start: 1, last: 2}}},
-		{4, []interval16{{start: 1, last: 2}, {start: 4, last: 4}}},
-		{3, []interval16{{start: 1, last: 4}}},
-		{10, []interval16{{start: 1, last: 4}, {start: 10, last: 10}}},
-		{7, []interval16{{start: 1, last: 4}, {start: 7, last: 7}, {start: 10, last: 10}}},
-		{6, []interval16{{start: 1, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
-		{0, []interval16{{start: 0, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
-		{8, []interval16{{start: 0, last: 4}, {start: 6, last: 8}, {start: 10, last: 10}}},
+		{1, []Interval16{{Start: 1, Last: 1}}},
+		{2, []Interval16{{Start: 1, Last: 2}}},
+		{4, []Interval16{{Start: 1, Last: 2}, {Start: 4, Last: 4}}},
+		{3, []Interval16{{Start: 1, Last: 4}}},
+		{10, []Interval16{{Start: 1, Last: 4}, {Start: 10, Last: 10}}},
+		{7, []Interval16{{Start: 1, Last: 4}, {Start: 7, Last: 7}, {Start: 10, Last: 10}}},
+		{6, []Interval16{{Start: 1, Last: 4}, {Start: 6, Last: 7}, {Start: 10, Last: 10}}},
+		{0, []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 7}, {Start: 10, Last: 10}}},
+		{8, []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 8}, {Start: 10, Last: 10}}},
 	}
+	var changed bool
 	for _, test := range tests {
 		c.setMapped(true)
-		c, changed := c.add(test.op)
+		c, changed = c.add(test.op)
 		if !changed {
 			t.Fatalf("result of adding new bit should be true: %v", c.runs())
 		}
@@ -118,7 +132,7 @@ func TestContainerRunAdd2(t *testing.T) {
 	if !ret {
 		t.Fatalf("result of adding new bit should be true: %v", c.runs())
 	}
-	if !reflect.DeepEqual(c.runs(), []interval16{{start: 0, last: 0}}) {
+	if !reflect.DeepEqual(c.runs(), []Interval16{{Start: 0, Last: 0}}) {
 		t.Fatalf("should have 1 run of length 1, but have %v", c.runs())
 	}
 	c, ret = c.add(0)
@@ -129,87 +143,87 @@ func TestContainerRunAdd2(t *testing.T) {
 
 func TestRunCountRange(t *testing.T) {
 	c := NewContainerRun(nil)
-	cnt := c.runCountRange(2, 9)
+	cnt := RunCountRange(c.runs(), 2, 9)
 	if cnt != 0 {
 		t.Fatalf("should get 0 from empty container, but got: %v", cnt)
 	}
-	c.add(5)
-	c.add(6)
-	c.add(7)
+	c, _ = c.add(5)
+	c, _ = c.add(6)
+	c, _ = c.add(7)
 
-	cnt = c.runCountRange(2, 9)
+	cnt = RunCountRange(c.runs(), 2, 9)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from interval within range, but got: %v", cnt)
 	}
 
-	c.add(8)
-	c.add(9)
-	c.add(10)
-	c.add(11)
+	c, _ = c.add(8)
+	c, _ = c.add(9)
+	c, _ = c.add(10)
+	c, _ = c.add(11)
 
-	cnt = c.runCountRange(4, 8)
+	cnt = RunCountRange(c.runs(), 4, 8)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range overlaps front of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(5, 8)
+	cnt = RunCountRange(c.runs(), 5, 8)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(6, 8)
+	cnt = RunCountRange(c.runs(), 6, 8)
 	if cnt != 2 {
 		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(3, 9)
+	cnt = RunCountRange(c.runs(), 3, 9)
 	if cnt != 4 {
 		t.Fatalf("should get 4 from range overlaps front of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(9, 14)
+	cnt = RunCountRange(c.runs(), 9, 14)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range overlaps back of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(8, 10)
+	cnt = RunCountRange(c.runs(), 8, 10)
 	if cnt != 2 {
 		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(8, 11)
+	cnt = RunCountRange(c.runs(), 8, 11)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(8, 12)
+	cnt = RunCountRange(c.runs(), 8, 12)
 	if cnt != 4 {
 		t.Fatalf("should get 4 from range overlaps back of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(5, 12)
+	cnt = RunCountRange(c.runs(), 5, 12)
 	if cnt != 7 {
 		t.Fatalf("should get 7 from interval within range, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(5, 11)
+	cnt = RunCountRange(c.runs(), 5, 11)
 	if cnt != 6 {
 		t.Fatalf("should get 6 from interval equal to range, but got: %v", cnt)
 	}
 
-	c.add(17)
-	c.add(19)
-	c.add(18)
+	c, _ = c.add(17)
+	c, _ = c.add(19)
+	c, _ = c.add(18)
 
-	cnt = c.runCountRange(1, 22)
+	cnt = RunCountRange(c.runs(), 1, 22)
 	if cnt != 10 {
 		t.Fatalf("should get 10 from multiple ranges in interval, but got: %v", cnt)
 	}
 
-	c.add(13)
-	c.add(14)
+	c, _ = c.add(13)
+	c, _ = c.add(14)
 
-	cnt = c.runCountRange(6, 18)
+	cnt = RunCountRange(c.runs(), 6, 18)
 	if cnt != 9 {
 		t.Fatalf("should get 9 from multiple ranges overlapping both sides, but got: %v", cnt)
 	}
@@ -225,17 +239,17 @@ func TestRunContains(t *testing.T) {
 	if c.runContains(5) {
 		t.Fatalf("empty run container should not contain 5")
 	}
-	c.add(5)
+	c, _ = c.add(5)
 	if !c.runContains(5) {
 		t.Fatalf("run container with 5 should contain 5")
 	}
 
-	c.add(6)
-	c.add(7)
+	c, _ = c.add(6)
+	c, _ = c.add(7)
 
-	c.add(9)
-	c.add(10)
-	c.add(11)
+	c, _ = c.add(9)
+	c, _ = c.add(10)
+	c, _ = c.add(11)
 
 	if !c.runContains(10) {
 		t.Fatalf("run container with 10 in second run should contain 10")
@@ -247,44 +261,44 @@ func TestBitmapCountRange(t *testing.T) {
 	tests := []struct {
 		start  int32
 		end    int32
-		bitmap []uint64
+		bitmap [bitmapN]uint64
 		exp    int32
 	}{
-		{start: 0, end: 1, bitmap: []uint64{1}, exp: 1},
-		{start: 2, end: 7, bitmap: []uint64{0xFFFFFFFFFFFFFF18}, exp: 2},
-		{start: 67, end: 68, bitmap: []uint64{0, 0x8}, exp: 1},
-		{start: 1, end: 68, bitmap: []uint64{0x3, 0x8, 0xF}, exp: 2},
-		{start: 1, end: 258, bitmap: []uint64{0xF, 0x8, 0xA, 0x4, 0xFFFFFFFFFFFFFFFF}, exp: 9},
-		{start: 66, end: 71, bitmap: []uint64{0xF, 0xFFFFFFFFFFFFFF18}, exp: 2},
-		{start: 63, end: 64, bitmap: []uint64{0x8000000000000000}, exp: 1},
+		{start: 0, end: 1, bitmap: [bitmapN]uint64{1}, exp: 1},
+		{start: 2, end: 7, bitmap: [bitmapN]uint64{0xFFFFFFFFFFFFFF18}, exp: 2},
+		{start: 67, end: 68, bitmap: [bitmapN]uint64{0, 0x8}, exp: 1},
+		{start: 1, end: 68, bitmap: [bitmapN]uint64{0x3, 0x8, 0xF}, exp: 2},
+		{start: 1, end: 258, bitmap: [bitmapN]uint64{0xF, 0x8, 0xA, 0x4, 0xFFFFFFFFFFFFFFFF}, exp: 9},
+		{start: 66, end: 71, bitmap: [bitmapN]uint64{0xF, 0xFFFFFFFFFFFFFF18}, exp: 2},
+		{start: 63, end: 64, bitmap: [bitmapN]uint64{0x8000000000000000}, exp: 1},
 	}
 
 	for i, test := range tests {
-		c.setBitmap(test.bitmap)
-		if ret := c.bitmapCountRange(test.start, test.end); ret != test.exp {
+		c.setBitmap(test.bitmap[:])
+		if ret := BitmapCountRange(c.bitmap(), test.start, test.end); ret != test.exp {
 			t.Fatalf("test #%v count of %v from %v to %v should be %v but got %v", i, test.bitmap, test.start, test.end, test.exp, ret)
 		}
 	}
 }
 
 func TestIntersectionCountArrayBitmap3(t *testing.T) {
-	a, b := NewContainerBitmapN(getFullBitmap(), maxContainerVal+1), NewContainerBitmapN(getFullBitmap(), maxContainerVal+1)
+	a, b := NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1), NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1)
 
 	res := intersectBitmapBitmap(a, b)
-	if res.N() != res.count() || res.N() != maxContainerVal+1 {
-		t.Fatalf("test #1 intersectCountBitmapBitmap fail orig: %v new: %v exp: %v", res.N(), res.count(), maxContainerVal+1)
+	if res.N() != res.count() || res.N() != MaxContainerVal+1 {
+		t.Fatalf("test #1 intersectCountBitmapBitmap fail orig: %v new: %v exp: %v", res.N(), res.count(), MaxContainerVal+1)
 	}
 
 	a = a.bitmapToRun(0)
 	res = intersectBitmapRun(b, a)
-	if res.N() != res.count() || res.N() != maxContainerVal+1 {
-		t.Fatalf("test #2 intersectCountBitmapRun fail orig: %v new: %v exp: %v", res.N(), res.count(), maxContainerVal+1)
+	if res.N() != res.count() || res.N() != MaxContainerVal+1 {
+		t.Fatalf("test #2 intersectCountBitmapRun fail orig: %v new: %v exp: %v", res.N(), res.count(), MaxContainerVal+1)
 	}
-	b.bitmapToRun(0)
+	b = b.bitmapToRun(0)
 	res = intersectRunRun(a, b)
 	n := intersectionCountRunRun(a, b)
-	if res.N() != res.count() || res.N() != maxContainerVal+1 || res.N() != int32(n) {
-		t.Fatalf("test #3 intersectCountRunRun fail orig: %v new: %v exp: %v", res.N(), res.count(), maxContainerVal+1)
+	if res.N() != res.count() || res.N() != MaxContainerVal+1 || res.N() != int32(n) {
+		t.Fatalf("test #3 intersectCountRunRun fail orig: %v new: %v exp: %v", res.N(), res.count(), MaxContainerVal+1)
 	}
 }
 
@@ -292,39 +306,39 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 	a, b := NewContainerArray(nil), NewContainerBitmap(0, nil)
 	tests := []struct {
 		array  []uint16
-		bitmap []uint64
+		bitmap [bitmapN]uint64
 		exp    int32
 	}{
 		{
 			array:  []uint16{0},
-			bitmap: []uint64{1},
+			bitmap: [bitmapN]uint64{1},
 			exp:    1,
 		},
 		{
 			array:  []uint16{0, 1},
-			bitmap: []uint64{3},
+			bitmap: [bitmapN]uint64{3},
 			exp:    2,
 		},
 		{
 			array:  []uint16{64, 128, 129, 2000},
-			bitmap: []uint64{932421, 2},
+			bitmap: [bitmapN]uint64{932421, 2},
 			exp:    0,
 		},
 		{
 			array:  []uint16{0, 65, 130, 195},
-			bitmap: []uint64{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
+			bitmap: [bitmapN]uint64{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
 			exp:    4,
 		},
 		{
 			array:  []uint16{63, 120, 543, 639, 12000},
-			bitmap: []uint64{0x8000000000000000, 0, 0, 0, 0, 0, 0, 0, 0, 0x8000000000000000},
+			bitmap: [bitmapN]uint64{0x8000000000000000, 0, 0, 0, 0, 0, 0, 0, 0, 0x8000000000000000},
 			exp:    2,
 		},
 	}
 
 	for i, test := range tests {
 		a.setArray(test.array)
-		b.setBitmap(test.bitmap)
+		b.setBitmap(test.bitmap[:])
 		ret := intersectionCountArrayBitmap(a, b)
 		if ret != test.exp {
 			t.Fatalf("test #%v intersectCountArrayBitmap fail received: %v exp: %v", i, ret, test.exp)
@@ -333,22 +347,22 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 }
 
 func TestRunRemove(t *testing.T) {
-	c := NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}})
+	c := NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}})
 	tests := []struct {
 		op     uint16
-		exp    []interval16
+		exp    []Interval16
 		expRet bool
 	}{
-		{2, []interval16{{start: 3, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
-		{10, []interval16{{start: 3, last: 9}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
-		{12, []interval16{{start: 3, last: 9}, {start: 13, last: 13}, {start: 15, last: 16}}, true},
-		{13, []interval16{{start: 3, last: 9}, {start: 15, last: 16}}, true},
-		{16, []interval16{{start: 3, last: 9}, {start: 15, last: 15}}, true},
-		{6, []interval16{{start: 3, last: 5}, {start: 7, last: 9}, {start: 15, last: 15}}, true},
-		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, true},
-		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
-		{1, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
-		{44, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+		{2, []Interval16{{Start: 3, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}, true},
+		{10, []Interval16{{Start: 3, Last: 9}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}, true},
+		{12, []Interval16{{Start: 3, Last: 9}, {Start: 13, Last: 13}, {Start: 15, Last: 16}}, true},
+		{13, []Interval16{{Start: 3, Last: 9}, {Start: 15, Last: 16}}, true},
+		{16, []Interval16{{Start: 3, Last: 9}, {Start: 15, Last: 15}}, true},
+		{6, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 9}, {Start: 15, Last: 15}}, true},
+		{8, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, true},
+		{8, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, false},
+		{1, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, false},
+		{44, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, false},
 	}
 
 	for i, test := range tests {
@@ -368,7 +382,7 @@ func TestRunRemove(t *testing.T) {
 }
 
 func TestRunMax(t *testing.T) {
-	c := NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}})
+	c := NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}})
 	max := c.max()
 	if max != 16 {
 		t.Fatalf("max for %v should be 16", c.runs())
@@ -383,7 +397,7 @@ func TestRunMax(t *testing.T) {
 
 func TestIntersectionCountArrayRun(t *testing.T) {
 	a := NewContainerArray([]uint16{1, 5, 10, 11, 12})
-	b := NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}})
+	b := NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}})
 
 	ret := intersectionCountArrayRun(a, b)
 	if ret != 3 {
@@ -395,7 +409,7 @@ func TestIntersectionCountBitmapRun(t *testing.T) {
 	ob := make([]uint64, bitmapN)
 	ob[0] = 1 << 63
 	a := NewContainerBitmap(1, ob)
-	b := NewContainerRun([]interval16{{start: 63, last: 64}})
+	b := NewContainerRun([]Interval16{{Start: 63, Last: 64}})
 
 	ret := intersectionCountBitmapRun(a, b)
 	if ret != 1 {
@@ -403,7 +417,7 @@ func TestIntersectionCountBitmapRun(t *testing.T) {
 	}
 
 	a = NewContainerBitmap(-1, []uint64{0xF0000001, 0xFF00000000000000, 0xFF000000000000F0, 0x0F0000})
-	b = NewContainerRun([]interval16{{start: 29, last: 31}, {start: 125, last: 134}, {start: 191, last: 197}, {start: 200, last: 300}})
+	b = NewContainerRun([]Interval16{{Start: 29, Last: 31}, {Start: 125, Last: 134}, {Start: 191, Last: 197}, {Start: 200, Last: 300}})
 
 	ret = intersectionCountBitmapRun(a, b)
 	if ret != 14 {
@@ -413,40 +427,40 @@ func TestIntersectionCountBitmapRun(t *testing.T) {
 
 func TestIntersectionCountRunRun(t *testing.T) {
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
+		aruns []Interval16
+		bruns []Interval16
 		exp   int32
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 3, last: 8}}, exp: 0},
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 3, Last: 8}}, exp: 0},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 3, last: 8}}, exp: 6},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 3, Last: 8}}, exp: 6},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 1, last: 11}}, exp: 9},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 1, Last: 11}}, exp: 9},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 0, last: 2}}, exp: 1},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 0, Last: 2}}, exp: 1},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 1, last: 10}}, exp: 9},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 1, Last: 10}}, exp: 9},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 5, last: 12}}, exp: 6},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 5, Last: 12}}, exp: 6},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 10, last: 99}}, exp: 1},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 10, Last: 99}}, exp: 1},
 		{
-			aruns: []interval16{{start: 2, last: 10}, {start: 44, last: 99}},
-			bruns: []interval16{{start: 12, last: 14}}, exp: 0},
+			aruns: []Interval16{{Start: 2, Last: 10}, {Start: 44, Last: 99}},
+			bruns: []Interval16{{Start: 12, Last: 14}}, exp: 0},
 		{
-			aruns: []interval16{{start: 2, last: 10}, {start: 12, last: 13}},
-			bruns: []interval16{{start: 2, last: 10}, {start: 12, last: 13}}, exp: 11},
+			aruns: []Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}},
+			bruns: []Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}}, exp: 11},
 		{
-			aruns: []interval16{{start: 8, last: 12}, {start: 15, last: 19}},
-			bruns: []interval16{{start: 9, last: 9}, {start: 11, last: 17}}, exp: 6},
+			aruns: []Interval16{{Start: 8, Last: 12}, {Start: 15, Last: 19}},
+			bruns: []Interval16{{Start: 9, Last: 9}, {Start: 11, Last: 17}}, exp: 6},
 	}
 	for i, test := range tests {
 		a := NewContainerRun(test.aruns)
@@ -463,27 +477,27 @@ func TestIntersectArrayRun(t *testing.T) {
 	b := NewContainerRun(nil)
 	tests := []struct {
 		array []uint16
-		runs  []interval16
+		runs  []Interval16
 		exp   []uint16
 	}{
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{5, 7, 10},
 		},
 		{
 			array: []uint16{},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16(nil),
 		},
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{},
+			runs:  []Interval16{},
 			exp:   []uint16(nil),
 		},
 		{
 			array: []uint16{0, 1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 0, last: 5}, {start: 7, last: 7}},
+			runs:  []Interval16{{Start: 0, Last: 5}, {Start: 7, Last: 7}},
 			exp:   []uint16{0, 1, 4, 5, 7},
 		},
 	}
@@ -506,45 +520,45 @@ func TestIntersectRunRun(t *testing.T) {
 	a := NewContainerRun(nil)
 	b := NewContainerRun(nil)
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 		expN  int32
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16(nil),
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16(nil),
 			expN:  0,
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 10}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 10}},
 			expN:  6,
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 5}, {start: 7, last: 10}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 5}, {Start: 7, Last: 10}},
 			expN:  5,
 		},
 		{
-			aruns: []interval16{{start: 20, last: 30}},
-			bruns: []interval16{{start: 5, last: 10}, {start: 19, last: 21}},
-			exp:   []interval16{{start: 20, last: 21}},
+			aruns: []Interval16{{Start: 20, Last: 30}},
+			bruns: []Interval16{{Start: 5, Last: 10}, {Start: 19, Last: 21}},
+			exp:   []Interval16{{Start: 20, Last: 21}},
 			expN:  2,
 		},
 		{
-			aruns: []interval16{{start: 5, last: 10}},
-			bruns: []interval16{{start: 7, last: 12}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 5, Last: 10}},
+			bruns: []Interval16{{Start: 7, Last: 12}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 			expN:  4,
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 7, last: 10}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 7, Last: 10}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 			expN:  4,
 		},
 	}
@@ -568,37 +582,37 @@ func TestIntersectRunRun(t *testing.T) {
 func TestIntersectBitmapRunBitmap(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 		expN   int32
 	}{
 		{
 			bitmap: []uint64{1},
-			runs:   []interval16{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
+			runs:   []Interval16{{Start: 0, Last: 0}, {Start: 2, Last: 5}, {Start: 62, Last: 71}, {Start: 77, Last: 4096}},
 			exp:    []uint64{1},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}},
+			runs:   []Interval16{{Start: 1, Last: 1}},
 			exp:    []uint64{2},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 10, Last: 12}, {Start: 61, Last: 77}},
 			exp:    []uint64{0xe000000000001C02},
 			expN:   7,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 61, last: 77}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 61, Last: 77}},
 			exp:    []uint64{0xE000000000000002, 0x00000000000003FFF},
 			expN:   18,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
-			runs:   []interval16{{start: 63, last: 10000}},
+			runs:   []Interval16{{Start: 63, Last: 10000}},
 			exp:    []uint64{0x8000000000000000, 1, 1, 1, 0xA, 1, 1, 0, 1},
 			expN:   9,
 		},
@@ -611,7 +625,7 @@ func TestIntersectBitmapRunBitmap(t *testing.T) {
 		b.setN(4097)
 		ret := intersectBitmapRun(a, b)
 		if ret.isArray() {
-			ret.arrayToBitmap()
+			ret = ret.arrayToBitmap()
 		}
 		if !reflect.DeepEqual(ret.bitmap(), exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, ret.bitmap())
@@ -628,37 +642,37 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 	b := NewContainerRun(nil)
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint16
 		expN   int32
 	}{
 		{
 			bitmap: []uint64{1},
-			runs:   []interval16{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
+			runs:   []Interval16{{Start: 0, Last: 0}, {Start: 2, Last: 5}, {Start: 62, Last: 71}, {Start: 77, Last: 4096}},
 			exp:    []uint16{0},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}},
+			runs:   []Interval16{{Start: 1, Last: 1}},
 			exp:    []uint16{1},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 10, Last: 12}, {Start: 61, Last: 77}},
 			exp:    []uint16{1, 10, 11, 12, 61, 62, 63},
 			expN:   7,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 61, last: 68}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 61, Last: 68}},
 			exp:    []uint16{1, 61, 62, 63, 64, 65, 66, 67, 68},
 			expN:   9,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
-			runs:   []interval16{{start: 63, last: 10000}, {start: 65000, last: 65535}},
+			runs:   []Interval16{{Start: 63, Last: 10000}, {Start: 65000, Last: 65535}},
 			exp:    []uint16{63, 64, 128, 192, 257, 259, 320, 384, 512},
 			expN:   9,
 		},
@@ -686,7 +700,7 @@ func TestUnionMixed(t *testing.T) {
 	b := NewContainerBitmap(2, []uint64{0x3})
 
 	// run container
-	r := NewContainerRun([]interval16{{start: 5, last: 10}})
+	r := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 
 	t.Run("various container Unions", func(t *testing.T) {
 		tests := []struct {
@@ -708,9 +722,9 @@ func TestUnionMixed(t *testing.T) {
 			res := union(tt.c1, tt.c2)
 			// convert to array for comparison
 			if res.isBitmap() {
-				res.bitmapToArray()
+				res = res.bitmapToArray()
 			} else if res.isRun() {
-				res.runToArray()
+				res = res.runToArray()
 			}
 			if !reflect.DeepEqual(res.array(), tt.exp) {
 				t.Fatalf("test %s expected %v, but got %v", tt.name, tt.exp, res.array())
@@ -719,8 +733,190 @@ func TestUnionMixed(t *testing.T) {
 	})
 }
 
+func TestUnionInterval16InPlace(t *testing.T) {
+	tests := []struct {
+		name      string
+		a         []Interval16
+		b         []Interval16
+		expected  []Interval16
+		expectedN int32
+	}{
+		{
+			name:      "firstBitUnset lastBitSet",
+			a:         []Interval16{{1, 10}},
+			b:         []Interval16{{10, 10}},
+			expected:  []Interval16{{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "single overlap",
+			a:         []Interval16{{1, 10}, {21, 28}},
+			b:         []Interval16{{8, 12}},
+			expected:  []Interval16{{1, 12}, {21, 28}},
+			expectedN: 20,
+		},
+		{
+			name:      "nested intervals",
+			a:         []Interval16{{3, 13}, {17, 20}},
+			b:         []Interval16{{1, 4}, {6, 7}, {8, 9}, {10, 11}, {14, 17}},
+			expected:  []Interval16{{1, 20}},
+			expectedN: 20,
+		},
+		{
+			name:      "no overlap",
+			a:         []Interval16{{3, 4}, {7, 8}},
+			b:         []Interval16{{1, 2}, {5, 6}, {9, 10}},
+			expected:  []Interval16{{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "b in a",
+			a:         []Interval16{{1, 10}},
+			b:         []Interval16{{5, 7}},
+			expected:  []Interval16{{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "a eq b",
+			a:         []Interval16{{1, 10}},
+			b:         []Interval16{{1, 10}},
+			expected:  []Interval16{{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "a in b",
+			a:         []Interval16{{5, 7}},
+			b:         []Interval16{{1, 10}},
+			expected:  []Interval16{{1, 10}},
+			expectedN: 10,
+		},
+		{
+			name:      "a ahead b",
+			a:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
+			b:         []Interval16{{10, 11}, {12, 13}, {14, 15}},
+			expected:  []Interval16{{1, 7}, {10, 15}},
+			expectedN: 13,
+		},
+		{
+			name:      "b ahead a",
+			a:         []Interval16{{10, 11}, {12, 13}, {14, 15}},
+			b:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
+			expected:  []Interval16{{1, 7}, {10, 15}},
+			expectedN: 13,
+		},
+		{
+			name:      "empty a and b",
+			a:         []Interval16{},
+			b:         []Interval16{},
+			expected:  []Interval16{},
+			expectedN: 0,
+		},
+		{
+			name:      "empty a",
+			a:         []Interval16{},
+			b:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
+			expected:  []Interval16{{1, 7}},
+			expectedN: 7,
+		},
+		{
+			name:      "empty b",
+			a:         []Interval16{{1, 2}, {3, 4}, {5, 7}},
+			b:         []Interval16{},
+			expected:  []Interval16{{1, 7}},
+			expectedN: 7,
+		},
+		{
+			name:      "single a",
+			a:         []Interval16{{1, 2}},
+			b:         []Interval16{},
+			expected:  []Interval16{{1, 2}},
+			expectedN: 2,
+		},
+		{
+			name:      "single b",
+			a:         []Interval16{},
+			b:         []Interval16{{1, 2}},
+			expected:  []Interval16{{1, 2}},
+			expectedN: 2,
+		},
+		{
+			name:      "single a single b",
+			a:         []Interval16{{3, 4}},
+			b:         []Interval16{{1, 2}},
+			expected:  []Interval16{{1, 4}},
+			expectedN: 4,
+		},
+		{
+			name:      "oddBitsSet lastBitUnset",
+			a:         []Interval16{{1, 1}, {3, 3}, {5, 5}},
+			b:         []Interval16{{0, 4}},
+			expected:  []Interval16{{0, 5}},
+			expectedN: 6,
+		},
+		{
+			name:      "all bits",
+			a:         []Interval16{{1, 1}, {3, 3}, {5, 5}},
+			b:         []Interval16{{0, 0}, {2, 2}, {4, 4}},
+			expected:  []Interval16{{0, 5}},
+			expectedN: 6,
+		},
+		{
+			name:      "short a long b",
+			a:         []Interval16{{5, 5}, {7, 7}, {9, 10}, {12, 12}, {15, 17}, {19, 20}},
+			b:         []Interval16{{1, 10}, {12, 12}, {14, 18}},
+			expected:  []Interval16{{1, 10}, {12, 12}, {14, 20}},
+			expectedN: 18,
+		},
+		{
+			name:      "common endings",
+			a:         []Interval16{{1, 5}, {15, 20}, {25, 35}},
+			b:         []Interval16{{1, 10}, {15, 20}, {30, 35}},
+			expected:  []Interval16{{1, 10}, {15, 20}, {25, 35}},
+			expectedN: 27,
+		},
+		{
+			name:      "common endings and overlap",
+			a:         []Interval16{{1, 5}, {10, 15}},
+			b:         []Interval16{{5, 10}, {12, 17}},
+			expected:  []Interval16{{1, 17}},
+			expectedN: 17,
+		},
+		{
+			name:      "no common endings and overlap",
+			a:         []Interval16{{5, 10}, {12, 17}},
+			b:         []Interval16{{0, 11}, {15, 20}},
+			expected:  []Interval16{{0, 20}},
+			expectedN: 21,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bb := make([]Interval16, len(tc.b))
+			copy(bb, tc.b)
+
+			runs, n := unionInterval16InPlace(tc.a, tc.b)
+
+			for i, v := range tc.expected {
+				if runs[i] != v {
+					t.Fatalf("runs expected: %+v, got: %+v", tc.expected, runs)
+				}
+			}
+			if n != tc.expectedN {
+				t.Fatalf("N expected: %d, got: %d", tc.expectedN, n)
+			}
+
+			for i, v := range bb {
+				if tc.b[i] != v {
+					t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, tc.b)
+				}
+			}
+		})
+	}
+}
+
 func TestIntersectMixed(t *testing.T) {
-	a := NewContainerRun([]interval16{{start: 5, last: 10}})
+	a := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 	b := NewContainerArray([]uint16{1, 4, 5, 7, 10, 11, 12})
 	c := NewContainerBitmap(2, []uint64{0x60})
 
@@ -733,8 +929,8 @@ func TestIntersectMixed(t *testing.T) {
 		t.Fatalf("test #1 expected %v, but got %v", []uint16{5, 7, 10}, res.array())
 	}
 	res = intersect(a, a)
-	if !reflect.DeepEqual(res.runs(), []interval16{{start: 5, last: 10}}) {
-		t.Fatalf("test #3 expected %v, but got %v", []interval16{{start: 5, last: 10}}, res.runs())
+	if !reflect.DeepEqual(res.runs(), []Interval16{{Start: 5, Last: 10}}) {
+		t.Fatalf("test #3 expected %v, but got %v", []Interval16{{Start: 5, Last: 10}}, res.runs())
 	}
 
 	res = intersect(c, a)
@@ -758,7 +954,7 @@ func TestIntersectMixed(t *testing.T) {
 
 }
 func TestDifferenceMixed(t *testing.T) {
-	a := NewContainerRun([]interval16{{start: 5, last: 10}})
+	a := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 
 	b := NewContainerArray([]uint16{0, 2, 4, 6, 8, 10, 12})
 
@@ -778,7 +974,7 @@ func TestDifferenceMixed(t *testing.T) {
 	}
 
 	res = difference(a, a)
-	if !reflect.DeepEqual(res.runs(), []interval16{}) {
+	if !reflect.DeepEqual(res.runs(), []Interval16{}) {
 		t.Fatalf("test #3 expected empty but got %v", res.runs())
 	}
 
@@ -788,8 +984,8 @@ func TestDifferenceMixed(t *testing.T) {
 	}
 
 	res = difference(a, c)
-	if !reflect.DeepEqual(res.runs(), []interval16{{start: 7, last: 10}}) {
-		t.Fatalf("test #5 expected %v, but got %v", []interval16{{start: 7, last: 10}}, res.runs())
+	if !reflect.DeepEqual(res.runs(), []Interval16{{Start: 7, Last: 10}}) {
+		t.Fatalf("test #5 expected %v, but got %v", []Interval16{{Start: 7, Last: 10}}, res.runs())
 	}
 
 	res = difference(b, c)
@@ -828,49 +1024,49 @@ func TestUnionRunRun(t *testing.T) {
 	a := NewContainerRun(nil)
 	b := NewContainerRun(nil)
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 10}},
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 12}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 1, last: 3}, {start: 5, last: 12}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 2, last: 65535}},
-			exp:   []interval16{{start: 1, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 2, Last: 65535}},
+			exp:   []Interval16{{Start: 1, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 2, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			exp:   []interval16{{start: 1, last: 65535}},
+			aruns: []Interval16{{Start: 2, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			exp:   []Interval16{{Start: 1, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 0, last: 65535}},
-			exp:   []interval16{{start: 0, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 0, Last: 65535}},
+			exp:   []Interval16{{Start: 0, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			exp:   []interval16{{start: 0, last: 65535}},
+			aruns: []Interval16{{Start: 0, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			exp:   []Interval16{{Start: 0, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
-			bruns: []interval16{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
-			exp:   []interval16{{start: 1, last: 9}, {start: 12, last: 27}, {start: 33, last: 34}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 9}, {Start: 12, Last: 22}},
+			bruns: []Interval16{{Start: 2, Last: 8}, {Start: 16, Last: 27}, {Start: 33, Last: 34}},
+			exp:   []Interval16{{Start: 1, Last: 9}, {Start: 12, Last: 27}, {Start: 33, Last: 34}},
 		},
 	}
 	for i, test := range tests {
@@ -883,247 +1079,32 @@ func TestUnionRunRun(t *testing.T) {
 	}
 }
 
-func TestUnionInterval16InPlace(t *testing.T) {
-	tests := []struct {
-		name      string
-		a         []interval16
-		b         []interval16
-		expected  []interval16
-		expectedN int32
-	}{
-		{
-			name:      "firstBitUnset lastBitSet",
-			a:         []interval16{interval16{1, 10}},
-			b:         []interval16{interval16{10, 10}},
-			expected:  []interval16{interval16{1, 10}},
-			expectedN: 10,
-		},
-		{
-			name:      "single overlap",
-			a:         []interval16{interval16{1, 10}, interval16{21, 28}},
-			b:         []interval16{interval16{8, 12}},
-			expected:  []interval16{interval16{1, 12}, interval16{21, 28}},
-			expectedN: 20,
-		},
-		{
-			name:      "nested intervals",
-			a:         []interval16{interval16{3, 13}, interval16{17, 20}},
-			b:         []interval16{interval16{1, 4}, interval16{6, 7}, interval16{8, 9}, interval16{10, 11}, interval16{14, 17}},
-			expected:  []interval16{interval16{1, 20}},
-			expectedN: 20,
-		},
-		{
-			name:      "no overlap",
-			a:         []interval16{interval16{3, 4}, interval16{7, 8}},
-			b:         []interval16{interval16{1, 2}, interval16{5, 6}, interval16{9, 10}},
-			expected:  []interval16{interval16{1, 10}},
-			expectedN: 10,
-		},
-		{
-			name:      "b in a",
-			a:         []interval16{interval16{1, 10}},
-			b:         []interval16{interval16{5, 7}},
-			expected:  []interval16{interval16{1, 10}},
-			expectedN: 10,
-		},
-		{
-			name:      "a eq b",
-			a:         []interval16{interval16{1, 10}},
-			b:         []interval16{interval16{1, 10}},
-			expected:  []interval16{interval16{1, 10}},
-			expectedN: 10,
-		},
-		{
-			name:      "a in b",
-			a:         []interval16{interval16{5, 7}},
-			b:         []interval16{interval16{1, 10}},
-			expected:  []interval16{interval16{1, 10}},
-			expectedN: 10,
-		},
-		{
-			name:      "a ahead b",
-			a:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			b:         []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}},
-			expected:  []interval16{interval16{1, 7}, interval16{10, 15}},
-			expectedN: 13,
-		},
-		{
-			name:      "b ahead a",
-			a:         []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}},
-			b:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			expected:  []interval16{interval16{1, 7}, interval16{10, 15}},
-			expectedN: 13,
-		},
-		{
-			name:      "empty a and b",
-			a:         []interval16{},
-			b:         []interval16{},
-			expected:  []interval16{},
-			expectedN: 0,
-		},
-		{
-			name:      "empty a",
-			a:         []interval16{},
-			b:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			expected:  []interval16{interval16{1, 7}},
-			expectedN: 7,
-		},
-		{
-			name:      "empty b",
-			a:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			b:         []interval16{},
-			expected:  []interval16{interval16{1, 7}},
-			expectedN: 7,
-		},
-		{
-			name:      "single a",
-			a:         []interval16{interval16{1, 2}},
-			b:         []interval16{},
-			expected:  []interval16{interval16{1, 2}},
-			expectedN: 2,
-		},
-		{
-			name:      "single b",
-			a:         []interval16{},
-			b:         []interval16{interval16{1, 2}},
-			expected:  []interval16{interval16{1, 2}},
-			expectedN: 2,
-		},
-		{
-			name:      "single a single b",
-			a:         []interval16{interval16{3, 4}},
-			b:         []interval16{interval16{1, 2}},
-			expected:  []interval16{interval16{1, 4}},
-			expectedN: 4,
-		},
-		{
-			name:      "oddBitsSet lastBitUnset",
-			a:         []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}},
-			b:         []interval16{interval16{0, 4}},
-			expected:  []interval16{interval16{0, 5}},
-			expectedN: 6,
-		},
-		{
-			name:      "all bits",
-			a:         []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}},
-			b:         []interval16{interval16{0, 0}, interval16{2, 2}, interval16{4, 4}},
-			expected:  []interval16{interval16{0, 5}},
-			expectedN: 6,
-		},
-		{
-			name:      "short a long b",
-			a:         []interval16{interval16{5, 5}, interval16{7, 7}, interval16{9, 10}, interval16{12, 12}, interval16{15, 17}, interval16{19, 20}},
-			b:         []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 18}},
-			expected:  []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 20}},
-			expectedN: 18,
-		},
-		{
-			name:      "common endings",
-			a:         []interval16{interval16{1, 5}, interval16{15, 20}, interval16{25, 35}},
-			b:         []interval16{interval16{1, 10}, interval16{15, 20}, interval16{30, 35}},
-			expected:  []interval16{interval16{1, 10}, interval16{15, 20}, interval16{25, 35}},
-			expectedN: 27,
-		},
-		{
-			name:      "common endings and overlap",
-			a:         []interval16{interval16{1, 5}, interval16{10, 15}},
-			b:         []interval16{interval16{5, 10}, interval16{12, 17}},
-			expected:  []interval16{interval16{1, 17}},
-			expectedN: 17,
-		},
-		{
-			name:      "no common endings and overlap",
-			a:         []interval16{interval16{5, 10}, interval16{12, 17}},
-			b:         []interval16{interval16{0, 11}, interval16{15, 20}},
-			expected:  []interval16{interval16{0, 20}},
-			expectedN: 21,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			bb := make([]interval16, len(tc.b))
-			copy(bb, tc.b)
-
-			runs, n := unionInterval16InPlace(tc.a, tc.b)
-
-			for i, v := range tc.expected {
-				if runs[i] != v {
-					t.Fatalf("runs expected: %+v, got: %+v", tc.expected, runs)
-				}
-			}
-			if n != tc.expectedN {
-				t.Fatalf("N expected: %d, got: %d", tc.expectedN, n)
-			}
-
-			for i, v := range bb {
-				if tc.b[i] != v {
-					t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, tc.b)
-				}
-			}
-		})
-	}
-}
-
-func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
-	runs := []struct {
-		name string
-		run  []interval16
-	}{
-		{name: "FirstBitSet", run: runFirstBitSet()},
-		{name: "LastBitSet", run: runLastBitSet()},
-		{name: "FirstBitUnset", run: runFirstBitUnset()},
-		{name: "LastBitUnset", run: runLastBitUnset()},
-		{name: "InnerBitsSet", run: runInnerBitsSet()},
-		{name: "OuterBitsSet", run: runOuterBitsSet()},
-		{name: "OddBitsSet", run: runOddBitsSet()},
-		{name: "EvenBitsSet", run: runEvenBitsSet()},
-	}
-
-	for _, a := range runs {
-		for _, b := range runs {
-			t.Run(a.name+"-"+b.name, func(t *testing.T) {
-				arun := doContainer(containerRun, a.run)
-				brun := doContainer(containerRun, b.run)
-
-				out1 := unionBitmapRunInPlace(arun.runToBitmap(), brun)
-				out2 := unionRunRunInPlace(arun, brun)
-
-				err := out1.BitwiseCompare(out2.runToBitmap())
-				if err != nil {
-					t.Fatal(err)
-				}
-			})
-		}
-	}
-}
-
 func TestUnionArrayRun(t *testing.T) {
 	a := NewContainerArray(nil)
 	b := NewContainerRun(nil)
 	tests := []struct {
 		array []uint16
-		runs  []interval16
+		runs  []Interval16
 		exp   []uint16
 	}{
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{1, 4, 5, 6, 7, 8, 9, 10, 11, 12},
 		},
 		{
 			array: []uint16{},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{5, 6, 7, 8, 9, 10},
 		},
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{},
+			runs:  []Interval16{},
 			exp:   []uint16{1, 4, 5, 7, 10, 11, 12},
 		},
 		{
 			array: []uint16{0, 1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 0, last: 5}, {start: 7, last: 7}},
+			runs:  []Interval16{{Start: 0, Last: 5}, {Start: 7, Last: 7}},
 			exp:   []uint16{0, 1, 2, 3, 4, 5, 7, 10, 11, 12},
 		},
 	}
@@ -1226,27 +1207,27 @@ func TestBitmapToArray(t *testing.T) {
 
 func TestRunToBitmap(t *testing.T) {
 	tests := []struct {
-		runs []interval16
+		runs []Interval16
 		exp  []uint64
 	}{
 		{
-			runs: []interval16{},
+			runs: []Interval16{},
 			exp:  []uint64{},
 		},
 		{
-			runs: []interval16{{start: 0, last: 0}},
+			runs: []Interval16{{Start: 0, Last: 0}},
 			exp:  []uint64{1},
 		},
 		{
-			runs: []interval16{{start: 0, last: 4}},
+			runs: []Interval16{{Start: 0, Last: 4}},
 			exp:  []uint64{31},
 		},
 		{
-			runs: []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			runs: []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 			exp:  []uint64{155876},
 		},
 		{
-			runs: []interval16{{start: 0, last: 3}, {start: 60, last: 67}},
+			runs: []Interval16{{Start: 0, Last: 3}, {Start: 60, Last: 67}},
 			exp:  []uint64{0xF00000000000000F, 0x000000000000000F},
 		},
 	}
@@ -1278,55 +1259,55 @@ func getFullBitmap() []uint64 {
 func TestBitmapToRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		exp    []interval16
+		exp    []Interval16
 	}{
 		{
 			// empty run
 			bitmap: []uint64{},
-			exp:    []interval16{},
+			exp:    []Interval16{},
 		},
 		{
 			// single-bit run
 			bitmap: []uint64{1},
-			exp:    []interval16{{start: 0, last: 0}},
+			exp:    []Interval16{{Start: 0, Last: 0}},
 		},
 		{
 			// single multi-bit run in one word
 			bitmap: []uint64{31},
-			exp:    []interval16{{start: 0, last: 4}},
+			exp:    []Interval16{{Start: 0, Last: 4}},
 		},
 		{
 			// multiple runs in one word
 			bitmap: []uint64{155876},
-			exp:    []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			exp:    []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 		},
 		{
 			// span two words, both mixed
 			bitmap: []uint64{0xF00000000000000F, 0x000000000000000F},
-			exp:    []interval16{{start: 0, last: 3}, {start: 60, last: 67}},
+			exp:    []Interval16{{Start: 0, Last: 3}, {Start: 60, Last: 67}},
 		},
 		{
 			// span two words, first = maxBitmap
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xF},
-			exp:    []interval16{{start: 0, last: 67}},
+			exp:    []Interval16{{Start: 0, Last: 67}},
 		},
 		{
 			// span two words, second = maxBitmap
 			bitmap: []uint64{0xF000000000000000, 0xFFFFFFFFFFFFFFFF},
-			exp:    []interval16{{start: 60, last: 127}},
+			exp:    []Interval16{{Start: 60, Last: 127}},
 		},
 		{
 			// span three words
 			bitmap: []uint64{0xF000000000000000, 0xFFFFFFFFFFFFFFFF, 0xF},
-			exp:    []interval16{{start: 60, last: 131}},
+			exp:    []Interval16{{Start: 60, Last: 131}},
 		},
 		{
 			bitmap: make([]uint64, bitmapN),
-			exp:    []interval16{{start: 65408, last: 65535}},
+			exp:    []Interval16{{Start: 65408, Last: 65535}},
 		},
 		{
 			bitmap: getFullBitmap(),
-			exp:    []interval16{{start: 0, last: 65535}},
+			exp:    []Interval16{{Start: 0, Last: 65535}},
 		},
 	}
 	tests[8].bitmap[1022] = 0xFFFFFFFFFFFFFFFF
@@ -1335,11 +1316,11 @@ func TestBitmapToRun(t *testing.T) {
 	for i, test := range tests {
 		a := NewContainerBitmap(-1, test.bitmap)
 		x := a.bitmap()
-		a.bitmapToRun(0)
+		a = a.bitmapToRun(0)
 		if !reflect.DeepEqual(a.runs(), test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs())
 		}
-		a.runToBitmap()
+		a = a.runToBitmap()
 		if !reflect.DeepEqual(a.bitmap(), x) {
 			t.Fatalf("test #%v expected %v, but got %v", i, a.bitmap(), x)
 		}
@@ -1349,23 +1330,23 @@ func TestBitmapToRun(t *testing.T) {
 func TestArrayToRun(t *testing.T) {
 	tests := []struct {
 		array []uint16
-		exp   []interval16
+		exp   []Interval16
 	}{
 		{
 			array: []uint16{},
-			exp:   []interval16{},
+			exp:   []Interval16{},
 		},
 		{
 			array: []uint16{0},
-			exp:   []interval16{{start: 0, last: 0}},
+			exp:   []Interval16{{Start: 0, Last: 0}},
 		},
 		{
 			array: []uint16{0, 1, 2, 3, 4},
-			exp:   []interval16{{start: 0, last: 4}},
+			exp:   []Interval16{{Start: 0, Last: 4}},
 		},
 		{
 			array: []uint16{2, 5, 6, 7, 13, 14, 17},
-			exp:   []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			exp:   []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 		},
 	}
 
@@ -1380,23 +1361,23 @@ func TestArrayToRun(t *testing.T) {
 
 func TestRunToArray(t *testing.T) {
 	tests := []struct {
-		runs []interval16
+		runs []Interval16
 		exp  []uint16
 	}{
 		{
-			runs: []interval16{},
+			runs: []Interval16{},
 			exp:  []uint16{},
 		},
 		{
-			runs: []interval16{{start: 0, last: 0}},
+			runs: []Interval16{{Start: 0, Last: 0}},
 			exp:  []uint16{0},
 		},
 		{
-			runs: []interval16{{start: 0, last: 4}},
+			runs: []Interval16{{Start: 0, Last: 4}},
 			exp:  []uint16{0, 1, 2, 3, 4},
 		},
 		{
-			runs: []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			runs: []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 			exp:  []uint16{2, 5, 6, 7, 13, 14, 17},
 		},
 	}
@@ -1454,13 +1435,13 @@ func TestBitmapZeroRange(t *testing.T) {
 func TestUnionBitmapRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 		expN   int32
 	}{
 		{
 			bitmap: []uint64{2},
-			runs:   []interval16{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 78}},
+			runs:   []Interval16{{Start: 0, Last: 0}, {Start: 2, Last: 5}, {Start: 62, Last: 71}, {Start: 77, Last: 78}},
 			exp:    []uint64{0xC00000000000003F, 0x60FF},
 			expN:   18,
 		},
@@ -1576,12 +1557,12 @@ func TestArrayCountRuns(t *testing.T) {
 func TestDifferenceArrayRun(t *testing.T) {
 	tests := []struct {
 		array []uint16
-		runs  []interval16
+		runs  []Interval16
 		exp   []uint16
 	}{
 		{
 			array: []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{0, 1, 2, 3, 4, 11, 12},
 		},
 	}
@@ -1597,54 +1578,54 @@ func TestDifferenceArrayRun(t *testing.T) {
 
 func TestDifferenceRunArray(t *testing.T) {
 	tests := []struct {
-		runs  []interval16
+		runs  []Interval16
 		array []uint16
-		exp   []interval16
+		exp   []Interval16
 	}{
 		{
-			runs:  []interval16{{start: 0, last: 12}},
+			runs:  []Interval16{{Start: 0, Last: 12}},
 			array: []uint16{5, 6, 7, 8, 9, 10},
-			exp:   []interval16{{start: 0, last: 4}, {start: 11, last: 12}},
+			exp:   []Interval16{{Start: 0, Last: 4}, {Start: 11, Last: 12}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 12}},
+			runs:  []Interval16{{Start: 0, Last: 12}},
 			array: []uint16{0, 1, 2, 3},
-			exp:   []interval16{{start: 4, last: 12}},
+			exp:   []Interval16{{Start: 4, Last: 12}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 12}},
+			runs:  []Interval16{{Start: 0, Last: 12}},
 			array: []uint16{9, 10, 11, 12, 13},
-			exp:   []interval16{{start: 0, last: 8}},
+			exp:   []Interval16{{Start: 0, Last: 8}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}},
+			runs:  []Interval16{{Start: 1, Last: 12}},
 			array: []uint16{0, 9, 10, 11, 12, 13},
-			exp:   []interval16{{start: 1, last: 8}},
+			exp:   []Interval16{{Start: 1, Last: 8}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}, {start: 14, last: 14}, {start: 18, last: 18}},
+			runs:  []Interval16{{Start: 1, Last: 12}, {Start: 14, Last: 14}, {Start: 18, Last: 18}},
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17},
-			exp:   []interval16{{start: 1, last: 8}, {start: 18, last: 18}},
+			exp:   []Interval16{{Start: 1, Last: 8}, {Start: 18, Last: 18}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}, {start: 14, last: 14}, {start: 18, last: 18}},
+			runs:  []Interval16{{Start: 1, Last: 12}, {Start: 14, Last: 14}, {Start: 18, Last: 18}},
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17, 19},
-			exp:   []interval16{{start: 1, last: 8}, {start: 18, last: 18}},
+			exp:   []Interval16{{Start: 1, Last: 8}, {Start: 18, Last: 18}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}, {start: 14, last: 17}, {start: 19, last: 28}},
+			runs:  []Interval16{{Start: 1, Last: 12}, {Start: 14, Last: 17}, {Start: 19, Last: 28}},
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17, 19, 25, 27},
-			exp:   []interval16{{start: 1, last: 8}, {start: 15, last: 16}, {start: 20, last: 24}, {start: 26, last: 26}, {start: 28, last: 28}},
+			exp:   []Interval16{{Start: 1, Last: 8}, {Start: 15, Last: 16}, {Start: 20, Last: 24}, {Start: 26, Last: 26}, {Start: 28, Last: 28}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 20}, {start: 65533, last: 65535}},
+			runs:  []Interval16{{Start: 0, Last: 20}, {Start: 65533, Last: 65535}},
 			array: []uint16{65533, 65534, 65535},
-			exp:   []interval16{{start: 0, last: 20}},
+			exp:   []Interval16{{Start: 0, Last: 20}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 20}, {start: 65530, last: 65535}},
+			runs:  []Interval16{{Start: 0, Last: 20}, {Start: 65530, Last: 65535}},
 			array: []uint16{37, 65535},
-			exp:   []interval16{{start: 0, last: 20}, {start: 65530, last: 65534}},
+			exp:   []Interval16{{Start: 0, Last: 20}, {Start: 65530, Last: 65534}},
 		},
 	}
 	for i, test := range tests {
@@ -1656,65 +1637,63 @@ func TestDifferenceRunArray(t *testing.T) {
 		}
 	}
 }
-
 func MakeBitmap(start []uint64) []uint64 {
 	b := make([]uint64, bitmapN)
 	copy(b, start)
 	return b
 }
-
 func MakeLastBitSet() []uint64 {
 	obj := NewFileBitmap(65535)
 	c := obj.container(0)
-	c.arrayToBitmap()
+	c = c.arrayToBitmap()
 	return c.bitmap()
 }
 
 func TestDifferenceRunBitmap(t *testing.T) {
 	tests := []struct {
-		runs   []interval16
+		runs   []Interval16
 		bitmap []uint64
-		exp    []interval16
+		exp    []Interval16
 	}{
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x0000FFFF000000F0}),
-			exp:    []interval16{{start: 0, last: 3}, {start: 8, last: 31}, {start: 48, last: 63}},
+			exp:    []Interval16{{Start: 0, Last: 3}, {Start: 8, Last: 31}, {Start: 48, Last: 63}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x8000000000000000}),
-			exp:    []interval16{{start: 0, last: 62}},
+			exp:    []Interval16{{Start: 0, Last: 62}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x0000000000000001}),
-			exp:    []interval16{{start: 1, last: 63}},
+			exp:    []Interval16{{Start: 1, Last: 63}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x0, 0x0000000000000001}),
-			exp:    []interval16{{start: 0, last: 63}},
+			exp:    []Interval16{{Start: 0, Last: 63}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 65}},
+			runs:   []Interval16{{Start: 0, Last: 65}},
 			bitmap: MakeBitmap([]uint64{0x0, 0x0000000000000001}),
-			exp:    []interval16{{start: 0, last: 63}, {start: 65, last: 65}},
+			exp:    []Interval16{{Start: 0, Last: 63}, {Start: 65, Last: 65}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 65}},
+			runs:   []Interval16{{Start: 0, Last: 65}},
 			bitmap: MakeBitmap([]uint64{0x0, 0x8000000000000000}),
-			exp:    []interval16{{start: 0, last: 65}},
+			exp:    []Interval16{{Start: 0, Last: 65}},
 		},
 		{
-			runs:   []interval16{{start: 1, last: 65535}},
+			runs:   []Interval16{{Start: 1, Last: 65535}},
 			bitmap: MakeBitmap([]uint64{0x0000000000000001}),
-			exp:    []interval16{{start: 1, last: 65535}},
+			exp:    []Interval16{{Start: 1, Last: 65535}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 65533}, {start: 65535, last: 65535}},
+			runs:   []Interval16{{Start: 0, Last: 65533}, {Start: 65535, Last: 65535}},
 			bitmap: MakeLastBitSet(),
-			exp:    []interval16{{start: 0, last: 65533}},
+			exp:    []Interval16{{Start: 0, Last: 65533}},
 		},
 	}
 	for i, test := range tests {
@@ -1730,67 +1709,66 @@ func TestDifferenceRunBitmap(t *testing.T) {
 func TestDifferenceBitmapRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 	}{
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 4, last: 7}, {start: 32, last: 47}},
+			runs:   []Interval16{{Start: 4, Last: 7}, {Start: 32, Last: 47}},
 			exp:    []uint64{0xFFFF0000FFFFFF0F},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
-			runs:   []interval16{{start: 0, last: 5}, {start: 7, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 5}, {Start: 7, Last: 63}},
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
-			runs:   []interval16{{start: 0, last: 5}},
+			runs:   []Interval16{{Start: 0, Last: 5}},
 			exp:    []uint64{0xFFFFFFFFFFFFFF80},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 60, last: 63}},
+			runs:   []Interval16{{Start: 60, Last: 63}},
 			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 60, last: 65}},
+			runs:   []Interval16{{Start: 60, Last: 65}},
 			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 60, last: 65}, {start: 67, last: 72}, {start: 126, last: 130}},
+			runs:   []Interval16{{Start: 60, Last: 65}, {Start: 67, Last: 72}, {Start: 126, Last: 130}},
 			exp:    []uint64{0x0FFFFFFFFFFFFFFF, 0x3FFFFFFFFFFFFE04, 0xFFFFFFFFFFFFFFF8},
 		},
 		{
 			bitmap: []uint64{0x0000000000000001},
-			runs:   []interval16{{start: 0, last: 0}},
+			runs:   []Interval16{{Start: 0, Last: 0}},
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
 			bitmap: []uint64{0x8000000000000000},
-			runs:   []interval16{{start: 63, last: 63}},
+			runs:   []Interval16{{Start: 63, Last: 63}},
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
 			bitmap: []uint64{0xC000000000000000, 0x0000000000000003},
-			runs:   []interval16{{start: 63, last: 64}},
+			runs:   []Interval16{{Start: 63, Last: 64}},
 			exp:    []uint64{0x4000000000000000, 0x0000000000000002},
 		},
 		{
 			bitmap: []uint64{0x0000000000000000},
-			runs:   []interval16{{start: 5, last: 7}},
+			runs:   []Interval16{{Start: 5, Last: 7}},
 			exp:    []uint64{0x0000000000000000},
-		},
-		{
+		}, {
 			bitmap: bitmapLastBitSet(),
-			runs:   []interval16{{start: 65535, last: 65535}},
+			runs:   []Interval16{{Start: 65535, Last: 65535}},
 			exp:    bitmapEmpty(),
 		},
 		{
 			bitmap: bitmapFull(),
-			runs:   []interval16{{start: 0, last: 65535}},
+			runs:   []Interval16{{Start: 0, Last: 65535}},
 			exp:    bitmapEmpty(),
 		},
 	}
@@ -1880,18 +1858,18 @@ func TestDifferenceBitmapBitmap(t *testing.T) {
 
 func TestDifferenceRunRun(t *testing.T) {
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 		expn  int32
 	}{
 		{
 			// this tests all six overlap combinations
 			// A                     [   ]                   [   ]                        [ ]              [     ]             [   ]                 [  ]
 			// B                    [     ]                [   ]                     [ ]                     [  ]                [   ]                    [  ]
-			aruns: []interval16{{start: 3, last: 6}, {start: 13, last: 16}, {start: 24, last: 26}, {start: 33, last: 38}, {start: 43, last: 46}, {start: 53, last: 56}},
-			bruns: []interval16{{start: 1, last: 8}, {start: 11, last: 14}, {start: 21, last: 23}, {start: 35, last: 37}, {start: 44, last: 48}, {start: 57, last: 59}},
-			exp:   []interval16{{start: 15, last: 16}, {start: 24, last: 26}, {start: 33, last: 34}, {start: 38, last: 38}, {start: 43, last: 43}, {start: 53, last: 56}},
+			aruns: []Interval16{{Start: 3, Last: 6}, {Start: 13, Last: 16}, {Start: 24, Last: 26}, {Start: 33, Last: 38}, {Start: 43, Last: 46}, {Start: 53, Last: 56}},
+			bruns: []Interval16{{Start: 1, Last: 8}, {Start: 11, Last: 14}, {Start: 21, Last: 23}, {Start: 35, Last: 37}, {Start: 44, Last: 48}, {Start: 57, Last: 59}},
+			exp:   []Interval16{{Start: 15, Last: 16}, {Start: 24, Last: 26}, {Start: 33, Last: 34}, {Start: 38, Last: 38}, {Start: 43, Last: 43}, {Start: 53, Last: 56}},
 			expn:  13,
 		},
 	}
@@ -1929,9 +1907,10 @@ func TestWriteReadArray(t *testing.T) {
 
 func TestWriteReadBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := NewContainerBitmapN(nil, 129*32)
+	cb := NewContainerBitmapN(nil, 0)
 	for i := 0; i < 129; i++ {
 		cb.bitmap()[i] = 0x5555555555555555
+		cb.n += 32
 	}
 	bb := NewFileBitmap()
 	bb.Containers.Put(0, cb)
@@ -1952,9 +1931,10 @@ func TestWriteReadBitmap(t *testing.T) {
 
 func TestWriteReadFullBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := NewContainerBitmapN(nil, 65536)
+	cb := NewContainerBitmapN(nil, 0)
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap()[i] = 0xffffffffffffffff
+		cb.n += 64
 	}
 	bb := NewFileBitmap()
 	bb.Containers.Put(0, cb)
@@ -1984,7 +1964,7 @@ func TestWriteReadFullBitmap(t *testing.T) {
 }
 
 func TestWriteReadRun(t *testing.T) {
-	cr := NewContainerRun([]interval16{{start: 3, last: 13}, {start: 100, last: 109}})
+	cr := NewContainerRun([]Interval16{{Start: 3, Last: 13}, {Start: 100, Last: 109}})
 	br := NewFileBitmap()
 	br.Containers.Put(0, cr)
 	br2 := NewFileBitmap()
@@ -2010,19 +1990,19 @@ func TestXorArrayRun(t *testing.T) {
 	}{
 		{
 			a:   NewContainerArray([]uint16{1, 5, 10, 11, 12}),
-			b:   NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}),
+			b:   NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}),
 			exp: NewContainerArray([]uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}),
 		}, {
 			a:   NewContainerArray([]uint16{1, 5, 10, 11, 12, 13, 14}),
-			b:   NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}),
+			b:   NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}),
 			exp: NewContainerArray([]uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}),
 		}, {
 			a:   NewContainerArray([]uint16{65535}),
-			b:   NewContainerRun([]interval16{{start: 65534, last: 65535}}),
+			b:   NewContainerRun([]Interval16{{Start: 65534, Last: 65535}}),
 			exp: NewContainerArray([]uint16{65534}),
 		}, {
 			a:   NewContainerArray([]uint16{65535}),
-			b:   NewContainerRun([]interval16{{start: 65535, last: 65535}}),
+			b:   NewContainerRun([]Interval16{{Start: 65535, Last: 65535}}),
 			exp: NewContainerArray([]uint16{}),
 		},
 	}
@@ -2044,8 +2024,8 @@ func TestXorArrayRun(t *testing.T) {
 
 //special case that didn't fit the xorrunrun table testing below.
 func TestXorRunRun1(t *testing.T) {
-	a := NewContainerRun([]interval16{{start: 4, last: 10}})
-	b := NewContainerRun([]interval16{{start: 5, last: 10}})
+	a := NewContainerRun([]Interval16{{Start: 4, Last: 10}})
+	b := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 	ret := xorRunRun(a, b)
 	if !reflect.DeepEqual(ret.array(), []uint16{4}) {
 		t.Fatalf("test #1 expected %v, but got %v", []uint16{4}, ret.array())
@@ -2060,84 +2040,84 @@ func TestXorRunRun(t *testing.T) {
 	a := NewContainerRun(nil)
 	b := NewContainerRun(nil)
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 10}},
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 4}},
-			bruns: []interval16{{start: 6, last: 10}},
-			exp:   []interval16{{start: 0, last: 4}, {start: 6, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 4}},
+			bruns: []Interval16{{Start: 6, Last: 10}},
+			exp:   []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 6}},
-			bruns: []interval16{{start: 4, last: 10}},
-			exp:   []interval16{{start: 0, last: 3}, {start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 6}},
+			bruns: []Interval16{{Start: 4, Last: 10}},
+			exp:   []Interval16{{Start: 0, Last: 3}, {Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 4, last: 10}},
-			bruns: []interval16{{start: 0, last: 6}},
-			exp:   []interval16{{start: 0, last: 3}, {start: 7, last: 10}},
+			aruns: []Interval16{{Start: 4, Last: 10}},
+			bruns: []Interval16{{Start: 0, Last: 6}},
+			exp:   []Interval16{{Start: 0, Last: 3}, {Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 10}},
-			bruns: []interval16{{start: 0, last: 6}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 10}},
+			bruns: []Interval16{{Start: 0, Last: 6}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 6}},
-			bruns: []interval16{{start: 0, last: 10}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 6}},
+			bruns: []Interval16{{Start: 0, Last: 10}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 6}},
-			bruns: []interval16{{start: 0, last: 10}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 6}},
+			bruns: []Interval16{{Start: 0, Last: 10}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 11, last: 12}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 11, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 1, last: 3}, {start: 6, last: 6}, {start: 11, last: 12}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 1, Last: 3}, {Start: 6, Last: 6}, {Start: 11, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			bruns: []interval16{{start: 2, last: 65535}},
-			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			bruns: []Interval16{{Start: 2, Last: 65535}},
+			exp:   []Interval16{{Start: 1, Last: 1}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 2, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 2, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			exp:   []Interval16{{Start: 1, Last: 1}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			bruns: []interval16{{start: 0, last: 65535}},
-			exp:   []interval16{{start: 0, last: 0}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			bruns: []Interval16{{Start: 0, Last: 65535}},
+			exp:   []Interval16{{Start: 0, Last: 0}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			exp:   []interval16{{start: 0, last: 0}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 0, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			exp:   []Interval16{{Start: 0, Last: 0}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
-			bruns: []interval16{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
-			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 9, last: 9}, {start: 12, last: 15}, {start: 23, last: 27}, {start: 33, last: 34}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 9}, {Start: 12, Last: 22}},
+			bruns: []Interval16{{Start: 2, Last: 8}, {Start: 16, Last: 27}, {Start: 33, Last: 34}},
+			exp:   []Interval16{{Start: 1, Last: 1}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 9, Last: 9}, {Start: 12, Last: 15}, {Start: 23, Last: 27}, {Start: 33, Last: 34}},
 		},
 		{
-			aruns: []interval16{{start: 65530, last: 65535}},
-			bruns: []interval16{{start: 65532, last: 65535}},
-			exp:   []interval16{{start: 65530, last: 65531}},
+			aruns: []Interval16{{Start: 65530, Last: 65535}},
+			bruns: []Interval16{{Start: 65532, Last: 65535}},
+			exp:   []Interval16{{Start: 65530, Last: 65531}},
 		},
 	}
 	for i, test := range tests {
@@ -2221,12 +2201,12 @@ func TestBitmapXorRange(t *testing.T) {
 func TestXorBitmapRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 	}{
 		{
 			bitmap: []uint64{0x0, 0x0, 0x0},
-			runs:   []interval16{{start: 129, last: 131}},
+			runs:   []Interval16{{Start: 129, Last: 131}},
 			exp:    []uint64{0x0, 0x0, 0x00000000000000E},
 		},
 	}
@@ -2556,7 +2536,7 @@ func TestIteratorVarious(t *testing.T) {
 
 func TestRunBinSearchContains(t *testing.T) {
 	tests := []struct {
-		runs  []interval16
+		runs  []Interval16
 		index uint16
 		exp   struct {
 			index int32
@@ -2564,7 +2544,7 @@ func TestRunBinSearchContains(t *testing.T) {
 		}
 	}{
 		{
-			runs:  []interval16{{start: 0, last: 10}},
+			runs:  []Interval16{{Start: 0, Last: 10}},
 			index: uint16(3),
 			exp: struct {
 				index int32
@@ -2572,7 +2552,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			}{index: 0, found: true},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 10}},
+			runs:  []Interval16{{Start: 0, Last: 10}},
 			index: uint16(13),
 			exp: struct {
 				index int32
@@ -2580,7 +2560,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			}{index: 0, found: false},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 10}, {start: 20, last: 30}},
+			runs:  []Interval16{{Start: 0, Last: 10}, {Start: 20, Last: 30}},
 			index: uint16(13),
 			exp: struct {
 				index int32
@@ -2588,7 +2568,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			}{index: 0, found: false},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 10}, {start: 20, last: 30}},
+			runs:  []Interval16{{Start: 0, Last: 10}, {Start: 20, Last: 30}},
 			index: uint16(36),
 			exp: struct {
 				index int32
@@ -2599,7 +2579,7 @@ func TestRunBinSearchContains(t *testing.T) {
 	for i, test := range tests {
 		index := test.index
 		runs := test.runs
-		idx, found := binSearchRuns(index, runs)
+		idx, found := BinSearchRuns(index, runs)
 
 		if test.exp.index != idx && test.exp.found != found {
 			t.Fatalf("test #%v expected %v , but got %v %v", i, test.exp, idx, found)
@@ -2609,78 +2589,77 @@ func TestRunBinSearchContains(t *testing.T) {
 
 func TestRunBinSearch(t *testing.T) {
 	tests := []struct {
-		runs   []interval16
+		runs   []Interval16
 		search uint16
 		exp    bool
 		expi   int32
 	}{
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 1,
 			exp:    false,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 2,
 			exp:    true,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 5,
 			exp:    true,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 10,
 			exp:    true,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 20,
 			exp:    false,
 			expi:   1,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 55,
 			exp:    true,
 			expi:   1,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 70,
 			exp:    false,
 			expi:   2,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 100,
 			exp:    false,
 			expi:   3,
 		},
 	}
 	for i, test := range tests {
-		idx, contains := binSearchRuns(test.search, test.runs)
+		idx, contains := BinSearchRuns(test.search, test.runs)
 		if !(test.exp == contains && test.expi == idx) {
 			t.Fatalf("test #%v expected (%v, %v) but got (%v, %v)", i, test.exp, test.expi, contains, idx)
 		}
 	}
 }
-
 func TestBitmap_RemoveEmptyContainers(t *testing.T) {
 	bm1 := NewFileBitmap(1<<16, 2<<16, 3<<16)
 	bm2 := NewFileBitmap(1<<16, 2<<16+1, 3<<16)
 	bm3 := bm1.Intersect(bm2)
-	if bm3.countEmptyContainers() != 1 {
+	if bm3.countNonEmptyContainers() != 2 {
 		t.Fatalf("Should be 1 empty container ")
 	}
 	bm3.removeEmptyContainers()
 
-	if bm3.countEmptyContainers() != 0 {
+	if bm3.countNonEmptyContainers() != bm3.Containers.Size() {
 		t.Fatalf("Should be no empty containers ")
 	}
 }
@@ -2698,7 +2677,7 @@ func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 	if err := bm0.UnmarshalBinary(buf.Bytes()); err != nil {
 		t.Fatalf("unmarshalling: %v", err)
 	}
-	if bm0.countEmptyContainers() != 0 {
+	if bm0.countNonEmptyContainers() != bm0.Containers.Size() {
 		t.Fatalf("Should be no empty containers ")
 	}
 	if bm0.Count() != bm1.Count() {
@@ -2848,7 +2827,7 @@ func TestBitmapClone(t *testing.T) {
 		}
 	}
 	c := b.Clone()
-	if err := bitmapsEqual(b, c); err != nil {
+	if _, err := b.BitwiseEqual(c); err != nil {
 		t.Fatalf("Clone Objects not equal: %v\n", err)
 	}
 	d := func() *Bitmap { //anybody know how to declare a nil value?
@@ -2867,19 +2846,19 @@ func TestBitmapClone(t *testing.T) {
 // sets 100 bits per true
 func rleCont(num int, left, mid, right bool) []uint64 {
 	ret := make([]uint64, 0)
-	base := containerWidth * uint64(num)
+	base := uint64(containerWidth * uint64(num))
 	if left {
 		for i := uint64(0); i < 100; i++ {
 			ret = append(ret, base+i)
 		}
 	}
 	if mid {
-		for i := containerWidth / 2; i < containerWidth/2+100; i++ {
+		for i := uint64(containerWidth / 2); i < containerWidth/2+100; i++ {
 			ret = append(ret, base+i)
 		}
 	}
 	if right {
-		for i := containerWidth - 100; i < containerWidth; i++ {
+		for i := uint64(containerWidth - 100); i < containerWidth; i++ {
 			ret = append(ret, base+i)
 		}
 	}
@@ -2894,7 +2873,7 @@ func arrCont(num int, left, mid, right bool) []uint64 {
 		ret = append(ret, base+0, base+2)
 	}
 	if mid {
-		half := containerWidth / 2
+		half := uint64(containerWidth / 2)
 		ret = append(ret, base+half, base+half+2)
 	}
 	if right {
@@ -2951,23 +2930,52 @@ func getFunctionName(i interface{}) string {
 	return y[0]
 }
 
-// UnionInPlace is defined at the Bitmap level, but this wrapper lets us insert
-// it into our ContainerCombinations tests so that it gets exercised on a wide
-// variety of container data.
 func unionInPlaceWrapper(a, b *Container) *Container {
-	out := NewBitmap()
-	out.Containers.Put(0, a.Clone())
-	B := NewBitmap()
-	B.Containers.Put(0, b)
-	out.UnionInPlace(B)
-	return out.Containers.Get(0)
+	ret := a.Clone().unionInPlace(b)
+	ret.Repair()
+	return ret
+}
+
+func differenceInPlaceWrapper(a, b *Container) *Container {
+	a = a.Clone()
+	a = a.DifferenceInPlace(b)
+	return a
+}
+
+func intersectInPlaceWrapper(a, b *Container) *Container {
+	return a.Clone().intersectInPlace(b)
+}
+
+func TestContainerBitwiseCompare(t *testing.T) {
+	cts := setupContainerTests()
+
+	for t1, containers := range cts {
+		for name, c := range containers {
+			for t2, other := range cts {
+				for otherName, otherC := range other {
+					err := c.BitwiseCompare(otherC)
+					if err != nil {
+						if otherName == name {
+							t.Fatalf("container types %d/%d, contents %s: unexpected error %v",
+								t1, t2, name, err)
+						}
+					} else {
+						if name != otherName {
+							t.Fatalf("container types %d/%d, unexpected %s == %s",
+								t1, t2, name, otherName)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func TestContainerCombinations(t *testing.T) {
 
 	cts := setupContainerTests()
 
-	containerTypes := []byte{containerArray, containerBitmap, containerRun}
+	containerTypes := []byte{ContainerArray, ContainerBitmap, ContainerRun}
 
 	testOps := []testOp{
 		// intersect
@@ -3080,6 +3088,109 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "evenBitsSet", "outerBitsSet", "firstBitSet"},
 		{intersect, "evenBitsSet", "oddBitsSet", "empty"},
 		{intersect, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
+
+		// intersect in place
+		{intersectInPlaceWrapper, "empty", "empty", "empty"},
+		{intersectInPlaceWrapper, "empty", "full", "empty"},
+		{intersectInPlaceWrapper, "empty", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "firstBitUnset", "empty"},
+		{intersectInPlaceWrapper, "empty", "lastBitUnset", "empty"},
+		{intersectInPlaceWrapper, "empty", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "outerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "oddBitsSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "evenBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "full", "empty", "empty"},
+		{intersectInPlaceWrapper, "full", "full", "full"},
+		{intersectInPlaceWrapper, "full", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "full", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "full", "firstBitUnset", "firstBitUnset"},
+		{intersectInPlaceWrapper, "full", "lastBitUnset", "lastBitUnset"},
+		{intersectInPlaceWrapper, "full", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "full", "outerBitsSet", "outerBitsSet"},
+		{intersectInPlaceWrapper, "full", "oddBitsSet", "oddBitsSet"},
+		{intersectInPlaceWrapper, "full", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersectInPlaceWrapper, "firstBitSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "full", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "firstBitUnset", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "lastBitUnset", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "outerBitsSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "oddBitsSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersectInPlaceWrapper, "lastBitSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "full", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "firstBitUnset", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "lastBitUnset", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "outerBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "oddBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "evenBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "firstBitUnset", "empty", "empty"},
+		{intersectInPlaceWrapper, "firstBitUnset", "full", "firstBitUnset"},
+		{intersectInPlaceWrapper, "firstBitUnset", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitUnset", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "firstBitUnset", "firstBitUnset"},
+		{intersectInPlaceWrapper, "firstBitUnset", "lastBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "outerBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "oddBitsSet", "oddBitsSet"},
+		//
+		{intersectInPlaceWrapper, "lastBitUnset", "empty", "empty"},
+		{intersectInPlaceWrapper, "lastBitUnset", "full", "lastBitUnset"},
+		{intersectInPlaceWrapper, "lastBitUnset", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "lastBitUnset", "firstBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
+		{intersectInPlaceWrapper, "lastBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "outerBitsSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersectInPlaceWrapper, "innerBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "innerBitsSet", "full", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "innerBitsSet", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "innerBitsSet", "firstBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "lastBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "outerBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "outerBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "outerBitsSet", "full", "outerBitsSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "firstBitUnset", "lastBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "lastBitUnset", "firstBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "oddBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersectInPlaceWrapper, "oddBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "oddBitsSet", "full", "oddBitsSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "oddBitsSet", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "firstBitUnset", "oddBitsSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "outerBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "evenBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "evenBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "evenBitsSet", "full", "evenBitsSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "evenBitsSet", "lastBitUnset", "evenBitsSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "outerBitsSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "oddBitsSet", "empty"},
+		{intersectInPlaceWrapper, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
 
 		// union
 		{union, "empty", "empty", "empty"},
@@ -3536,63 +3647,133 @@ func TestContainerCombinations(t *testing.T) {
 		{flip, "outerBitsSet", "", "innerBitsSet"},
 		{flip, "oddBitsSet", "", "evenBitsSet"},
 		{flip, "evenBitsSet", "", "oddBitsSet"},
+
+		// differenceInPlace
+		{differenceInPlaceWrapper, "empty", "empty", "empty"},
+		{differenceInPlaceWrapper, "empty", "full", "empty"},
+		{differenceInPlaceWrapper, "empty", "firstBitSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "lastBitSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "empty", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "empty", "innerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "oddBitsSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "evenBitsSet", "empty"},
+		//
+		{differenceInPlaceWrapper, "full", "empty", "full"},
+		{differenceInPlaceWrapper, "full", "full", "empty"},
+		{differenceInPlaceWrapper, "full", "firstBitSet", "firstBitUnset"},
+		{differenceInPlaceWrapper, "full", "lastBitSet", "lastBitUnset"},
+		{differenceInPlaceWrapper, "full", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "full", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "full", "innerBitsSet", "outerBitsSet"},
+		{differenceInPlaceWrapper, "full", "outerBitsSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "full", "oddBitsSet", "evenBitsSet"},
+		{differenceInPlaceWrapper, "full", "evenBitsSet", "oddBitsSet"},
+		//
+		{differenceInPlaceWrapper, "firstBitSet", "empty", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "full", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "firstBitSet", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "lastBitSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "innerBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "oddBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "evenBitsSet", "empty"},
+		//
+		{differenceInPlaceWrapper, "lastBitSet", "empty", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "full", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "firstBitSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "lastBitSet", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "innerBitsSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "oddBitsSet", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "evenBitsSet", "lastBitSet"},
+		//
+		{differenceInPlaceWrapper, "firstBitUnset", "empty", "firstBitUnset"},
+		{differenceInPlaceWrapper, "firstBitUnset", "full", "empty"},
+		{differenceInPlaceWrapper, "firstBitUnset", "firstBitSet", "firstBitUnset"},
+		{differenceInPlaceWrapper, "firstBitUnset", "lastBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "firstBitUnset", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "firstBitUnset", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "firstBitUnset", "innerBitsSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "firstBitUnset", "outerBitsSet", "innerBitsSet"},
+		//{differenceInPlaceWrapper, "firstBitUnset", "oddBitsSet", ""},
+		{differenceInPlaceWrapper, "firstBitUnset", "evenBitsSet", "oddBitsSet"},
+		//
+		{differenceInPlaceWrapper, "lastBitUnset", "empty", "lastBitUnset"},
+		{differenceInPlaceWrapper, "lastBitUnset", "full", "empty"},
+		{differenceInPlaceWrapper, "lastBitUnset", "firstBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "lastBitSet", "lastBitUnset"},
+		{differenceInPlaceWrapper, "lastBitUnset", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "lastBitUnset", "innerBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "outerBitsSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "oddBitsSet", "evenBitsSet"},
+		//{differenceInPlaceWrapper, "lastBitUnset", "evenBitsSet", ""},
+		//
+		{differenceInPlaceWrapper, "innerBitsSet", "empty", "innerBitsSet"},
+		{differenceInPlaceWrapper, "innerBitsSet", "full", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "firstBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "innerBitsSet", "lastBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "innerBitsSet", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "innerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "outerBitsSet", "innerBitsSet"},
+		//{differenceInPlaceWrapper, "innerBitsSet", "oddBitsSet", ""},
+		//{differenceInPlaceWrapper, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{differenceInPlaceWrapper, "outerBitsSet", "empty", "outerBitsSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "full", "empty"},
+		{differenceInPlaceWrapper, "outerBitsSet", "firstBitSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "lastBitSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "innerBitsSet", "outerBitsSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "outerBitsSet", "oddBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "evenBitsSet", "lastBitSet"},
+		//
+		{differenceInPlaceWrapper, "oddBitsSet", "empty", "oddBitsSet"},
+		{differenceInPlaceWrapper, "oddBitsSet", "full", "empty"},
+		{differenceInPlaceWrapper, "oddBitsSet", "firstBitSet", "oddBitsSet"},
+		//{differenceInPlaceWrapper, "oddBitsSet", "lastBitSet", ""},
+		{differenceInPlaceWrapper, "oddBitsSet", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "oddBitsSet", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "oddBitsSet", "innerBitsSet", "lastBitSet"},
+		//{differenceInPlaceWrapper, "oddBitsSet", "outerBitsSet", ""},
+		{differenceInPlaceWrapper, "oddBitsSet", "oddBitsSet", "empty"},
+		{differenceInPlaceWrapper, "oddBitsSet", "evenBitsSet", "oddBitsSet"},
+		//
+		{differenceInPlaceWrapper, "evenBitsSet", "empty", "evenBitsSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "full", "empty"},
+		//{differenceInPlaceWrapper, "evenBitsSet", "firstBitSet", ""},
+		{differenceInPlaceWrapper, "evenBitsSet", "lastBitSet", "evenBitsSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "evenBitsSet", "innerBitsSet", "firstBitSet"},
+		//{differenceInPlaceWrapper, "evenBitsSet", "outerBitsSet", ""},
+		{differenceInPlaceWrapper, "evenBitsSet", "oddBitsSet", "evenBitsSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "evenBitsSet", "empty"},
 	}
 	for _, testOp := range testOps {
 		for _, x := range containerTypes {
 			for _, y := range containerTypes {
 				desc := fmt.Sprintf("%s(%s/%s, %s/%s)", getFunctionName(testOp.f), containerTypeNames[x], testOp.x, containerTypeNames[y], testOp.y)
-				ret := runContainerFunc(testOp.f, cts[x][testOp.x], cts[y][testOp.y])
-				exp := testOp.exp
+				t.Run(desc, func(t *testing.T) {
+					ret := runContainerFunc(testOp.f, cts[x][testOp.x], cts[y][testOp.y])
+					exp := testOp.exp
 
-				// Convert to all container types and check result.
-				for _, ct := range containerTypes {
-					clone := ret.Clone()
-					if ct == containerArray {
-						if clone == nil {
-							clone = NewContainerArray(nil)
-						} else if clone.isBitmap() {
-							clone = clone.bitmapToArray()
-						} else if clone.isRun() {
-							clone = clone.runToArray()
-						}
-						if clone.N() != cts[ct][exp].N() {
-							t.Errorf("test %s expected array n=%d, but got n=%d", desc, cts[ct][exp].N(), clone.N())
-						}
-						// Because xorRunRun resulting in an empty container returns an array container with a
-						// nil slice array, then we need to check len() on array first (look for 0).
-						if !(len(clone.array()) == 0 && len(cts[ct][exp].array()) == 0) && !reflect.DeepEqual(clone.array(), cts[ct][exp].array()) {
-							t.Errorf("test %s expected array %X, but got %X", desc, cts[ct][exp].array(), clone.array())
-						}
-					} else if ct == containerBitmap {
-						if clone == nil {
-							clone = NewContainerBitmap(0, nil)
-						} else if clone.isArray() {
-							clone = clone.arrayToBitmap()
-						} else if clone.isRun() {
-							clone = clone.runToBitmap()
-						}
-						if clone.N() != cts[ct][exp].N() {
-							t.Errorf("test %s expected bitmap n=%d, but got n=%d", desc, cts[ct][exp].N(), clone.N())
-						}
-						if !reflect.DeepEqual(clone.bitmap(), cts[ct][exp].bitmap()) {
-							t.Errorf("test %s expected bitmap %X, but got %X", desc, cts[ct][exp].bitmap(), clone.bitmap())
-						}
-					} else if ct == containerRun {
-						if clone == nil {
-							clone = NewContainerRun(nil)
-						} else if clone.isArray() {
-							clone = clone.arrayToRun(0)
-						} else if clone.isBitmap() {
-							clone = clone.bitmapToRun(0)
-						}
-						if clone.N() != cts[ct][exp].N() {
-							t.Errorf("test %s expected runs n=%d, but got n=%d", desc, cts[ct][exp].N(), clone.N())
-						}
-						if !reflect.DeepEqual(clone.runs(), cts[ct][exp].runs()) {
-							t.Errorf("test %s expected runs %X, but got %X", desc, cts[ct][exp].runs(), clone.runs())
-						}
+					// Compare to the same-type container, which is usually the cheapest
+					// to compare with.
+					ct := ret.typ()
+					if err := ret.BitwiseCompare(cts[ct][exp]); err != nil {
+						t.Error(err)
 					}
-				}
+				})
 			}
 		}
 	}
@@ -3691,7 +3872,7 @@ func BenchmarkUnionBitmapBitmapInPlace(b *testing.B) {
 	b1 := newTestBitmapContainer()
 	b2 := newTestBitmapContainer()
 	for n := 0; n < b.N; n++ {
-		unionBitmapBitmapInPlace(b1, b2)
+		b1 = unionBitmapBitmapInPlace(b1, b2)
 	}
 }
 
@@ -3706,6 +3887,28 @@ func newTestBitmapContainer() *Container {
 	return NewContainerBitmap(0, nil)
 }
 
+/*
+// This function exercises an arcane edge case in dead code.
+// It doesn't need to be run right now.
+func TestEquals(t *testing.T) {
+	bma := NewBitmap()
+	bmr := NewBitmap()
+	for i := uint64(0); i < 30; i++ {
+		bma.Add(i)
+		bmr.Add(i)
+	}
+	bmr.Optimize()
+	bmi := bma.Intersect(bmr)
+	err := bitmapsEqual(bmi, bma)
+	if err != nil {
+		t.Fatalf("expected intersection to equal array")
+	}
+	err = bitmapsEqual(bmi, bmr)
+	if err != nil {
+		t.Fatalf("expected intersection to equal run")
+	}
+}
+*/
 func TestShiftArray(t *testing.T) {
 	tests := []struct {
 		array []uint16
@@ -3782,31 +3985,31 @@ func TestShiftBitmap(t *testing.T) {
 }
 func TestShiftRun(t *testing.T) {
 	tests := []struct {
-		runs  []interval16
+		runs  []Interval16
 		n     int32
 		en    int32
-		exp   []interval16
+		exp   []Interval16
 		carry bool
 	}{
 		{
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			n:     5,
 			en:    5,
-			exp:   []interval16{{start: 6, last: 11}},
+			exp:   []Interval16{{Start: 6, Last: 11}},
 			carry: false,
 		},
 		{
-			runs:  []interval16{{start: 5, last: 65535}},
+			runs:  []Interval16{{Start: 5, Last: 65535}},
 			n:     65530,
 			en:    65529,
-			exp:   []interval16{{start: 6, last: 65535}},
+			exp:   []Interval16{{Start: 6, Last: 65535}},
 			carry: true,
 		},
 		{
-			runs:  []interval16{{start: 65535, last: 65535}},
+			runs:  []Interval16{{Start: 65535, Last: 65535}},
 			n:     1,
 			en:    0,
-			exp:   []interval16{},
+			exp:   []Interval16{},
 			carry: true,
 		},
 	}
@@ -3990,7 +4193,11 @@ func TestDirectAddNVsAdd(t *testing.T) {
 		{9384932, 101000, 2, 1, 0},
 		{3489, 19230, 394, 0, 893982, 890283, 14, 7},
 	}
-	// TODO generate more tests and fuzz
+	// Add some randomly created tests.
+	rand := rand.New(rand.NewSource(1))
+	for i := 0; i < 100; i++ {
+		tests = append(tests, generator.Uint64Slice(1+rand.Intn(1000), 0, 10000000, i%2 == 0, rand))
+	}
 	testsCopy := make([][]uint64, len(tests))
 	copy(testsCopy, tests)
 	for i, test := range testsCopy {
@@ -4079,47 +4286,6 @@ func BenchmarkUnionInPlaceRegression(b *testing.B) {
 	})
 }
 
-func BenchmarkUnionRunRunInPlace(bm *testing.B) {
-	bm.Skip("Skipping long running BenchmarkUnionRunRunInPlace")
-
-	runs := []struct {
-		name string
-		fn   func() []interval16
-	}{
-		{"FirstBitSet", runFirstBitSet},
-		{"LastBitSet", runLastBitSet},
-		{"FirstBitUnset", runFirstBitUnset},
-		{"LastBitUnset", runLastBitUnset},
-		{"InnerBitsSet", runInnerBitsSet},
-		{"OuterBitsSet", runOuterBitsSet},
-		{"OddBitsSet", runOddBitsSet},
-		{"EvenBitsSet", runEvenBitsSet},
-	}
-
-	for _, ar := range runs {
-		for _, br := range runs {
-			bm.Run("RunToBitmapRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
-				for i := 0; i < bm.N; i++ {
-					arun := doContainer(containerRun, ar.fn())
-					brun := doContainer(containerRun, br.fn())
-
-					abmp := arun.runToBitmap()
-					unionBitmapRunInPlace(abmp, brun)
-				}
-			})
-
-			bm.Run("RunRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
-				for i := 0; i < bm.N; i++ {
-					arun := doContainer(containerRun, ar.fn())
-					brun := doContainer(containerRun, br.fn())
-
-					unionRunRunInPlace(arun, brun)
-				}
-			})
-		}
-	}
-}
-
 func TestBitmapAny(t *testing.T) {
 	bm := NewBTreeBitmap()
 	if bm.Any() {
@@ -4166,5 +4332,520 @@ func TestBitmapAny(t *testing.T) {
 	}
 	if bm.Any() {
 		t.Error("shouldn't be any left")
+	}
+}
+
+func TestDifferenceInPlace_N(t *testing.T) {
+	a := doContainer(ContainerRun, runFull())
+	b := doContainer(ContainerBitmap, bitmapFull())
+	r := differenceInPlaceWrapper(a, b)
+	if r.N() != 0 {
+		t.Error("expected difference of containers to have n=0")
+	}
+}
+
+func BenchmarkUnionRunRunInPlace(bm *testing.B) {
+	bm.Skip("Skipping long running BenchmarkUnionRunRunInPlace")
+
+	runs := []struct {
+		name string
+		fn   func() []Interval16
+	}{
+		{"FirstBitSet", runFirstBitSet},
+		{"LastBitSet", runLastBitSet},
+		{"FirstBitUnset", runFirstBitUnset},
+		{"LastBitUnset", runLastBitUnset},
+		{"InnerBitsSet", runInnerBitsSet},
+		{"OuterBitsSet", runOuterBitsSet},
+		{"OddBitsSet", runOddBitsSet},
+		{"EvenBitsSet", runEvenBitsSet},
+	}
+
+	for _, ar := range runs {
+		for _, br := range runs {
+			bm.Run("RunToBitmapRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
+				for i := 0; i < bm.N; i++ {
+					arun := doContainer(ContainerRun, ar.fn())
+					brun := doContainer(ContainerRun, br.fn())
+
+					abmp := arun.runToBitmap()
+					_ = unionBitmapRunInPlace(abmp, brun)
+				}
+			})
+
+			bm.Run("RunRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
+				for i := 0; i < bm.N; i++ {
+					arun := doContainer(ContainerRun, ar.fn())
+					brun := doContainer(ContainerRun, br.fn())
+
+					_ = unionRunRunInPlace(arun, brun)
+				}
+			})
+		}
+	}
+}
+
+func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
+	runs := []struct {
+		name string
+		fn   func() []Interval16
+	}{
+		{name: "FirstBitSet", fn: runFirstBitSet},
+		{name: "LastBitSet", fn: runLastBitSet},
+		{name: "FirstBitUnset", fn: runFirstBitUnset},
+		{name: "LastBitUnset", fn: runLastBitUnset},
+		{name: "InnerBitsSet", fn: runInnerBitsSet},
+		{name: "OuterBitsSet", fn: runOuterBitsSet},
+		{name: "OddBitsSet", fn: runOddBitsSet},
+		{name: "EvenBitsSet", fn: runEvenBitsSet},
+	}
+
+	for _, a := range runs {
+		for _, b := range runs {
+			t.Run(a.name+"-"+b.name, func(t *testing.T) {
+				arun := doContainer(ContainerRun, a.fn())
+				abm := doContainer(ContainerRun, a.fn()).runToBitmap()
+				brun := doContainer(ContainerRun, b.fn())
+
+				out1 := unionBitmapRunInPlace(abm, brun)
+				out2 := unionRunRunInPlace(arun, brun)
+				out1.Repair()
+
+				// out2 may no longer be a run container, so don't assume that.
+				err := out1.BitwiseCompare(out2)
+				if err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
+func TestCloneRoaringIterator(t *testing.T) {
+
+	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
+	ba := NewFileBitmap()
+	ba.Containers.Put(0, ca)
+	ba.Containers.Put(10, ca)
+	ba.Containers.Put(101, ca)
+	ba.Containers.Put(10001, ca)
+	var buf bytes.Buffer
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
+	}
+
+	itr2 := itr.Clone()
+
+	ikeys := itr2.ContainerKeys()
+	if len(ikeys) == 0 {
+		t.Fatalf("should not be empty")
+	}
+	if ikeys[0] != 0 {
+		t.Fatalf("first ikeys should be 0")
+	}
+	if ikeys[len(ikeys)-1] != 10001 {
+		t.Fatalf("last ikeys should be 10001")
+	}
+
+	var keys []uint64
+	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
+		keys = append(keys, itrKey)
+		_ = synthC
+	}
+
+	var keys2 []uint64
+	for itrKey, synthC := itr2.NextContainer(); synthC != nil; itrKey, synthC = itr2.NextContainer() {
+		keys2 = append(keys2, itrKey)
+		_ = synthC
+	}
+	if !reflect.DeepEqual(keys, keys2) {
+		t.Fatalf("keys != keys2. keys='%#v'; keys2='%#v'", keys, keys2)
+	}
+}
+
+func TestRoaringIteratorContainerKeys(t *testing.T) {
+
+	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
+	ba := NewFileBitmap()
+	ba.Containers.Put(101, ca)
+	ba.Containers.Put(10, ca)
+	ba.Containers.Put(10001, ca)
+	var buf bytes.Buffer
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
+	}
+
+	ikeys := itr.ContainerKeys()
+	if len(ikeys) == 0 {
+		t.Fatalf("should not be empty")
+	}
+	if ikeys[0] != 10 {
+		t.Fatalf("first ikeys should be 10")
+	}
+	if ikeys[len(ikeys)-1] != 10001 {
+		t.Fatalf("last ikeys should be 10001")
+	}
+
+	// make and check empty bitmap
+
+	baEmpty := NewFileBitmap()
+	var bufEmpty bytes.Buffer
+	_, err = baEmpty.WriteTo(&bufEmpty)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itrEmpty, err := NewRoaringIterator(bufEmpty.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(bufEmpty.Bytes()): %v", err)
+	}
+	ikeys = itrEmpty.ContainerKeys()
+
+	if len(ikeys) != 0 {
+		t.Fatalf("should be empty")
+	}
+}
+
+func TestRoaringIteratorSkip(t *testing.T) {
+
+	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
+	ba := NewFileBitmap()
+	ba.Containers.Put(101, ca)
+	ba.Containers.Put(10, ca)
+	ba.Containers.Put(10001, ca)
+	var buf bytes.Buffer
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
+	}
+
+	itr.Skip()
+	ckey1, ct := itr.NextContainer()
+	_ = ct
+	if ckey1 != 101 {
+		t.Fatalf("expected to skip 10 and get 101 but got: %v", ckey1)
+	}
+
+	// make and check empty bitmap
+
+	baEmpty := NewFileBitmap()
+	var bufEmpty bytes.Buffer
+	_, err = baEmpty.WriteTo(&bufEmpty)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itrEmpty, err := NewRoaringIterator(bufEmpty.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(bufEmpty.Bytes()): %v", err)
+	}
+	itrEmpty.Skip()
+	// should not have panic-ed.
+}
+
+// we were seeing unionInterval16InPlace() returning too
+// large an run container, which was causing problems when
+// we write to the transactional backends. Verify that
+// unionRunRunInPlace() converts to bitmap if its too large.
+//
+func TestContainer_unionRunRunInPlace_TwoBigRunArrays(t *testing.T) {
+
+	a := NewContainerRun(nil)
+	b := NewContainerRun(nil)
+
+	for i := uint16(0); i < 8192; i++ {
+		if i%3 == 0 {
+			a, _ = a.runAdd(i)
+		}
+	}
+	for i := uint16(0); i < 8192; i++ {
+		if i%3 == 1 {
+			b, _ = b.runAdd(i)
+		}
+	}
+
+	c := unionRunRunInPlace(a, b)
+
+	typ := ContainerType(c)
+	if typ == ContainerRun {
+		nr := len(c.runs())
+		if nr > runMaxSize {
+			panic(fmt.Sprintf("runs is over runMaxSize: %v", nr))
+		}
+	}
+}
+
+// we were seeing unionInterval16InPlace() returning too
+// large an array container, which was causing problems when
+// we write to the transactional backends. Verify that
+// unionArrayArrayInPlace() converts to bitmap if its too large.
+// Confirms that optimize() is done at the end of unionArrayArrayInPlace().
+func TestContainer_unionArrayArrayInPlace_TwoBigArrayArrays(t *testing.T) {
+
+	a := NewContainerArray(nil)
+	b := NewContainerArray(nil)
+
+	for i := uint16(0); i < 4096; i++ {
+		a, _ = a.arrayAdd(i)
+	}
+	for i := uint16(4096); i < 8192; i++ {
+		b, _ = b.arrayAdd(i)
+	}
+
+	c := unionArrayArrayInPlace(a, b)
+
+	typ := ContainerType(c)
+	if typ == ContainerArray {
+		nr := len(c.array())
+		if nr > ArrayMaxSize {
+			panic(fmt.Sprintf("arrays is over arrayMaxSize: %v", nr))
+		}
+	}
+}
+
+// the love child of the above two tests.
+func TestContainer_unionInPlace_ArrayUnionRun(t *testing.T) {
+
+	for k := 0; k < 2; k++ {
+		a := NewContainerArray(nil)
+		for i := uint16(0); i < 8192; i += 2 {
+			a, _ = a.arrayAdd(i)
+		}
+
+		b := NewContainerRun(nil)
+		for i := uint16(8192); i < 8192*2; i++ {
+			if i%3 == 1 {
+				b, _ = b.runAdd(i)
+			}
+		}
+
+		var c *Container
+		if k == 0 {
+			c = a.unionInPlace(b)
+		} else {
+			c = b.unionInPlace(a)
+		}
+		typ := ContainerType(c)
+		if typ == ContainerArray {
+			panic("should be impossible to have an array")
+		}
+	}
+}
+
+func TestContainerCallback(t *testing.T) {
+	containers, err := InitContainerArchetypes()
+	if err != nil {
+		t.Fatalf("creating containers: %v", err)
+	}
+	got := make([]uint16, 65536)
+	hit := func(u uint16) {
+		got = append(got, u)
+	}
+	var expected []uint16
+	// complain() wraps up some pretty-printing logic for this,
+	// but note also the closure trapping expected/got so we can
+	// just refer to them without passing them in.
+	complain := func(t *testing.T, msg string, args ...interface{}) {
+		l1 := len(expected)
+		l2 := len(got)
+		dotdot1 := ""
+		dotdot2 := ""
+		if l1 > 8 {
+			expected = expected[:8]
+			dotdot1 = "..."
+		}
+		if l2 > 8 {
+			got = got[:8]
+			dotdot2 = "..."
+		}
+		t.Fatalf("%s: expected %d%s, got %d%s", fmt.Sprintf(msg, args...), expected, dotdot1, got, dotdot2)
+	}
+	for t1, ci := range containers {
+		t.Run(ContainerArchetypeNames[t1], func(t *testing.T) {
+			for _, c1 := range ci {
+				got = got[:0]
+				expected = c1.Slice()
+				containerCallback(c1, hit)
+				if len(got) != len(expected) {
+					complain(t, "wrong length (%d vs %d)", len(expected), len(got))
+				}
+				for i := range got {
+					if got[i] != expected[i] {
+						complain(t, "element %d differs: expected %d, got %d", i, expected[i], got[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestIntersectionCallback(t *testing.T) {
+	containers, err := InitContainerArchetypes()
+	if err != nil {
+		t.Fatalf("creating containers: %v", err)
+	}
+	got := make([]uint16, 65536)
+	hit := func(u uint16) {
+		got = append(got, u)
+	}
+	var expected []uint16
+	// complain() wraps up some pretty-printing logic for this,
+	// but note also the closure trapping expected/got so we can
+	// just refer to them without passing them in.
+	complain := func(t *testing.T, msg string, args ...interface{}) {
+		l1 := len(expected)
+		l2 := len(got)
+		dotdot1 := ""
+		dotdot2 := ""
+		if l1 > 8 {
+			expected = expected[:8]
+			dotdot1 = "..."
+		}
+		if l2 > 8 {
+			got = got[:8]
+			dotdot2 = "..."
+		}
+		t.Fatalf("%s: expected %d%s, got %d%s", fmt.Sprintf(msg, args...), expected, dotdot1, got, dotdot2)
+	}
+	for t1, ci := range containers {
+		for t2, cj := range containers {
+			t.Run(fmt.Sprintf("%s-%s", ContainerArchetypeNames[t1], ContainerArchetypeNames[t2]), func(t *testing.T) {
+				for _, c1 := range ci {
+					for _, c2 := range cj {
+						got = got[:0]
+						expectedContainer := intersect(c1, c2)
+						expected = expectedContainer.Slice()
+						intersectionCallback(c1, c2, hit)
+						if len(got) != len(expected) {
+							complain(t, "wrong length (%d vs %d)", len(expected), len(got))
+						}
+						for i := range got {
+							if got[i] != expected[i] {
+								complain(t, "element %d differs: expected %d, got %d", i, expected[i], got[i])
+							}
+						}
+					}
+				}
+
+			})
+		}
+	}
+}
+func TestImportBitmap(t *testing.T) {
+	b := NewBitmap()
+	i := GetRoaringIter(1, 3, 5)
+
+	changed, _, err := b.ImportRoaringRawIterator(i, false, true, 16)
+	if err != nil {
+		t.Fatal("no error should happen changed")
+	}
+	if changed != 3 {
+		t.Fatal("Should have changed")
+	}
+	i = GetRoaringIter(1, 3, 5)
+	changed, _, err = b.ImportRoaringRawIterator(i, true, true, 16)
+	if err != nil {
+		t.Fatal("no error should happen changed")
+	}
+	if changed != 3 {
+		t.Fatalf("Should have changed %v", changed)
+	}
+}
+func TestVariousBitmap(t *testing.T) {
+	b := NewBitmap(3)
+
+	c, e := b.Add(8)
+	if e != nil {
+		t.Fatal("add:", e)
+	}
+	if c == false {
+		t.Fatal("add: should have changed")
+	}
+	c, _ = b.Add(8)
+	if c == true {
+
+		t.Fatal("add: should not changed")
+	}
+	z, _ := b.AddN(9)
+	if z != 1 {
+		t.Fatal("add: should changed 1")
+	}
+	z, _ = b.RemoveN(9)
+	if z != 1 {
+		t.Fatal("add: should changed 1")
+	}
+	if b.Contains(100) {
+		t.Fatal("should not contain 100")
+	}
+	if !b.Any() {
+		t.Fatal("should have bits ")
+	}
+	if b.Size() == 0 {
+		t.Fatal("should have storage")
+	}
+	if b.Count() == 0 {
+		t.Fatal("should have bits")
+	}
+	if b.Max() == 0 {
+		t.Fatal("should max >0")
+	}
+	if m, e := b.Min(); !(m == 3 && e) {
+		t.Fatal("min should be 3 and containers exist", m, e)
+	}
+	b = nil
+	x := b.Clone()
+	if x != nil {
+
+		t.Fatal("nil clone should be nil")
+	}
+	n := b.Freeze()
+	if n != nil {
+
+		t.Fatal("nil freeze should be nil")
+	}
+	r, _ := b.AddN()
+	if r != 0 {
+
+		t.Fatal("nil AddN should be 0")
+	}
+}
+func TestBitmapHash(t *testing.T) {
+	a, b := NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1), NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1)
+	arr := NewContainerArray([]uint16{1, 2, 3, 5, 8})
+	run := NewContainerRun([]Interval16{{Start: 0, Last: 32}})
+	ba := NewBitmap()
+	bb := NewBitmap()
+	ba.Containers.Put(1, arr)
+	ba.Containers.Put(2, run)
+	ba.Containers.Put(101, a)
+	ba.Containers.Put(102, a)
+
+	bb.Containers.Put(1, arr)
+	bb.Containers.Put(2, run)
+	bb.Containers.Put(101, b)
+	bb.Containers.Put(102, b)
+	if ba.Hash(0) != bb.Hash(0) {
+		t.Fatal("hash should be equal")
+	}
+	bb.Containers.Put(103, b)
+	if ba.Hash(0) == bb.Hash(0) {
+		t.Fatal("hash should be different")
 	}
 }

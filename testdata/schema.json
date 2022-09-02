@@ -1,0 +1,424 @@
+{
+  "indexes": [
+    {
+      "name": "equipment",
+      "options": {
+        "keys": true,
+        "trackExistence": true
+      },
+      "fields": [
+        {
+          "name": "classification",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "equip_id",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "id",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": false
+          }
+        },
+        {
+          "name": "last_inspection",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 15,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "latitude",
+          "options": {
+            "type": "decimal",
+            "base": 0,
+            "scale": 4,
+            "bitDepth": 19,
+            "min": -1000,
+            "max": 1000,
+            "keys": false
+          }
+        },
+        {
+          "name": "longitude",
+          "options": {
+            "type": "decimal",
+            "base": 0,
+            "scale": 4,
+            "bitDepth": 21,
+            "min": -1000,
+            "max": 1000,
+            "keys": false
+          }
+        },
+        {
+          "name": "maintainer",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "region",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "service_provider",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "site_id",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "timestamp",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "type",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        }
+      ],
+      "shardWidth": 1048576
+    },
+    {
+      "name": "power_ts",
+      "options": {
+        "keys": true,
+        "trackExistence": true
+      },
+      "fields": [
+        {
+          "name": "cost",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 20,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "date_acquired",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 15,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "domain",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "equip_id",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "id",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": false
+          }
+        },
+        {
+          "name": "last_maintenance",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 15,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "manufacturer",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "model",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "name",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "site_id",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 23,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "sites_id",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "timestamp",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "type",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        }
+      ],
+      "shardWidth": 1048576
+    },
+    {
+      "name": "sites",
+      "options": {
+        "keys": false,
+        "trackExistence": true
+      },
+      "fields": [
+        {
+          "name": "cost",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 20,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "date_acquired",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 15,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "domain",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "equip_id",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "id",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": false
+          }
+        },
+        {
+          "name": "last_maintenance",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 15,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "manufacturer",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "model",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "name",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        },
+        {
+          "name": "site_id",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 23,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "timestamp",
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 1,
+            "min": -1000,
+            "max": 1000,
+            "keys": false,
+            "foreignIndex": ""
+          }
+        },
+        {
+          "name": "type",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": true
+          }
+        }
+      ],
+      "shardWidth": 1048576
+    }
+  ]
+}

@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package cmd_test
 
 import (
@@ -25,7 +13,8 @@ import (
 
 	"time"
 
-	"github.com/pilosa/pilosa/v2/cmd"
+	"github.com/molecula/featurebase/v3/cmd"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/spf13/cobra"
 )
 
@@ -55,6 +44,9 @@ func tExec(t *testing.T, cmd *cobra.Command, out io.Reader, w io.WriteCloser) (o
 	if err := w.Close(); err != nil {
 		return output, fmt.Errorf("closing cmd's stdout: %v", err)
 	}
+
+	// NOTE: if cmd.Execute doesn't return, then this select (and
+	// therefore the one-second timeout, won't be reached)
 	select {
 	case <-done:
 	case <-time.After(time.Second * 1):
@@ -64,7 +56,7 @@ func tExec(t *testing.T, cmd *cobra.Command, out io.Reader, w io.WriteCloser) (o
 }
 
 // ExecNewRootCommand executes the pilosa root command with the given arguments
-// and returns it's output. It will fail if the command does not complete within
+// and returns its output. It will fail if the command does not complete within
 // 1 second.
 func ExecNewRootCommand(t *testing.T, args ...string) (string, error) {
 	out, w := io.Pipe()
@@ -132,7 +124,7 @@ func executeDry(t *testing.T, tests []commandTest) {
 // a temp config file with the cfgFileContent string as its content.
 func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 	// make config file
-	cfgFile, err := ioutil.TempFile("", "")
+	cfgFile, err := testhook.TempFile(t, "cmdconf")
 	failErr(t, err, "making temp file")
 	_, err = cfgFile.WriteString(ct.cfgFileContent)
 	failErr(t, err, "writing config to temp file")
@@ -145,6 +137,10 @@ func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 		err = os.Setenv(name, val)
 		failErr(t, err, fmt.Sprintf("setting environment variable '%s' to '%s'", name, val))
 	}
+	// address common case where system might have postgres bind
+	// setting that an existing running Pilosa is using (causing test
+	// failures due to port conflict)
+	os.Setenv("PILOSA_POSTGRES_BIND", "")
 
 	// make command and set args
 	rc := cmd.NewRootCommand(strings.NewReader(""), ioutil.Discard, ioutil.Discard)
@@ -173,20 +169,16 @@ func TestRootCommand(t *testing.T) {
 }
 
 func TestRootCommand_Config(t *testing.T) {
-	file, err := ioutil.TempFile("", "test.conf")
+	file, err := testhook.TempFile(t, "test.conf")
 	if err != nil {
-		panic(err)
+		t.Fatalf("creating config file: %v", err)
 	}
 	config := `data-dir = "/tmp/pil5_0"
 bind = "127.0.0.1:10101"
 
 [cluster]
   replicas = 2
-  partitions = 128
-  hosts = [
-    "127.0.0.1:10101",
-    "127.0.0.1:10111",
-  ]`
+  partitions = 128`
 	if _, err := file.Write([]byte(config)); err != nil {
 		t.Fatalf("writing config file: %v", err)
 	}

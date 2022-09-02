@@ -1,0 +1,76 @@
+.header {
+  display: flex;
+  align-items: center;
+
+  .label {
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    margin-right: 4px;
+  }
+
+  .value {
+    transition: background-color 0.3s ease;
+    font-size: 0.75rem;
+  }
+
+  .exclusiveIcon {
+    margin-left: 4px;
+    opacity: 0.3;
+  }
+}
+
+.details {
+  display: flex;
+  padding-top: 16px;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+
+  &:not(:last-child) {
+    margin-right: 3%;
+  }
+
+  label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    font-weight: 400;
+  }
+
+  .blockedBy {
+    display: flex;
+    align-items: center;
+  }
+
+  .nestedIcon {
+    transform: rotate(-45deg);
+    opacity: 0.3;
+    margin-right: 4px;
+  }
+
+  .blockedById {
+    &:hover {
+      text-decoration: underline;
+      cursor: pointer;
+    }
+  }
+}
+
+.error {
+  color: var(--error)
+}
+
+.errorMessage {
+  padding: 4px;
+}
+
+.finishLink {
+  &:hover {
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}

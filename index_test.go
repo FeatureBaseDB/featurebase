@@ -1,26 +1,21 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa_test
 
 import (
-	"io/ioutil"
+	"context"
+	"fmt"
+	"math/rand"
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 )
 
@@ -29,8 +24,7 @@ const ShardWidth = pilosa.ShardWidth
 
 // Ensure index can open and retrieve a field.
 func TestIndex_CreateFieldIfNotExists(t *testing.T) {
-	index := test.MustOpenIndex()
-	defer index.Close()
+	index := test.MustOpenIndex(t)
 
 	// Create field.
 	f, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDefault())
@@ -57,11 +51,10 @@ func TestIndex_CreateField(t *testing.T) {
 	// Ensure time quantum can be set appropriately on a new field.
 	t.Run("TimeQuantum", func(t *testing.T) {
 		t.Run("Explicit", func(t *testing.T) {
-			index := test.MustOpenIndex()
-			defer index.Close()
+			index := test.MustOpenIndex(t)
 
 			// Create field with explicit quantum.
-			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
@@ -73,11 +66,10 @@ func TestIndex_CreateField(t *testing.T) {
 	// Ensure time quantum can be set appropriately on a new field.
 	t.Run("TimeQuantumNoStandardView", func(t *testing.T) {
 		t.Run("Explicit", func(t *testing.T) {
-			index := test.MustOpenIndex()
-			defer index.Close()
+			index := test.MustOpenIndex(t)
 
 			// Create field with explicit quantum with no standard view
-			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), true))
+			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0", true))
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
@@ -88,9 +80,8 @@ func TestIndex_CreateField(t *testing.T) {
 
 	// Ensure field can include range columns.
 	t.Run("BSIFields", func(t *testing.T) {
-		t.Run("OK", func(t *testing.T) {
-			index := test.MustOpenIndex()
-			defer index.Close()
+		t.Run("Int", func(t *testing.T) {
+			index := test.MustOpenIndex(t)
 
 			// Create field with schema and verify it exists.
 			if f, err := index.CreateField("f", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
@@ -107,12 +98,29 @@ func TestIndex_CreateField(t *testing.T) {
 			}
 		})
 
+		t.Run("Timestamp", func(t *testing.T) {
+			index := test.MustOpenIndex(t)
+
+			// Create field with schema and verify it exists.
+			if f, err := index.CreateField("f", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds)); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeTimestamp) {
+				t.Fatalf("unexpected type: %#v", f.Type())
+			}
+
+			// Reopen the index & verify the fields are loaded.
+			if err := index.Reopen(); err != nil {
+				t.Fatal(err)
+			} else if f := index.Field("f"); !reflect.DeepEqual(f.Type(), pilosa.FieldTypeTimestamp) {
+				t.Fatalf("unexpected type after reopen: %#v", f.Type())
+			}
+		})
+
 		// TODO: These errors don't apply  here. Instead, we need these tests
 		// on field creation FieldOptions validation.
 		/*
 			t.Run("ErrRangeCacheAllowed", func(t *testing.T) {
-				index := test.MustOpenIndex()
-				defer index.Close()
+				index := test.MustOpenIndex(t)
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					CacheType: pilosa.CacheTypeRanked,
@@ -122,8 +130,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("BSIFieldsWithCacheTypeNone", func(t *testing.T) {
-				index := test.MustOpenIndex()
-				defer index.Close()
+				index := test.MustOpenIndex(t)
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					CacheType: pilosa.CacheTypeNone,
 					CacheSize: uint32(5),
@@ -133,8 +140,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrFieldFieldsAllowed", func(t *testing.T) {
-				index := test.MustOpenIndex()
-				defer index.Close()
+				index := test.MustOpenIndex(t)
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
@@ -146,8 +152,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrFieldNameRequired", func(t *testing.T) {
-				index := test.MustOpenIndex()
-				defer index.Close()
+				index := test.MustOpenIndex(t)
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
@@ -159,8 +164,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrInvalidFieldType", func(t *testing.T) {
-				index := test.MustOpenIndex()
-				defer index.Close()
+				index := test.MustOpenIndex(t)
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
@@ -172,8 +176,7 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 
 			t.Run("ErrInvalidBSIGroupRange", func(t *testing.T) {
-				index := test.MustOpenIndex()
-				defer index.Close()
+				index := test.MustOpenIndex(t)
 
 				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
@@ -185,12 +188,33 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 		*/
 	})
+
+	t.Run("WithKeys", func(t *testing.T) {
+		// Don't allow an int field to be created with keys=true
+		t.Run("IntField", func(t *testing.T) {
+			index := test.MustOpenIndex(t)
+
+			_, err := index.CreateField("f", pilosa.OptFieldTypeInt(-1, 1), pilosa.OptFieldKeys())
+			if errors.Cause(err) != pilosa.ErrIntFieldWithKeys {
+				t.Fatal("int field cannot be created with keys=true")
+			}
+		})
+
+		// Don't allow a decimal field to be created with keys=true
+		t.Run("DecimalField", func(t *testing.T) {
+			index := test.MustOpenIndex(t)
+
+			_, err := index.CreateField("f", pilosa.OptFieldTypeDecimal(1, pql.NewDecimal(-1, 0), pql.NewDecimal(1, 0)), pilosa.OptFieldKeys())
+			if errors.Cause(err) != pilosa.ErrDecimalFieldWithKeys {
+				t.Fatal("decimal field cannot be created with keys=true")
+			}
+		})
+	})
 }
 
 // Ensure index can delete a field.
 func TestIndex_DeleteField(t *testing.T) {
-	index := test.MustOpenIndex()
-	defer index.Close()
+	index := test.MustOpenIndex(t)
 
 	// Create field.
 	if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDefault()); err != nil {
@@ -213,11 +237,11 @@ func TestIndex_DeleteField(t *testing.T) {
 
 // Ensure index can validate its name.
 func TestIndex_InvalidName(t *testing.T) {
-	path, err := ioutil.TempDir("", "pilosa-index-")
+	path, err := testhook.TempDir(t, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
-	index, err := pilosa.NewIndex(path, "ABC")
+	index, err := pilosa.NewIndex(pilosa.NewHolder(path, mustHolderConfig()), path, "ABC")
 	if err == nil {
 		t.Fatalf("should have gotten an error on index name with caps")
 	}
@@ -230,4 +254,80 @@ func isNotFoundError(err error) bool {
 	root := errors.Cause(err)
 	_, ok := root.(pilosa.NotFoundError)
 	return ok
+}
+
+// Ensure that after node/cluster restart, deleting and recreating a field
+// does not cause a deadlock
+// This is a regression test after a customer experienced the same deadlock.
+// For details, check out https://molecula.atlassian.net/browse/CORE-919
+func TestIndex_RecreateFieldOnRestart(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	// create index
+	indexName := fmt.Sprintf("idx_%d", rand.Uint64())
+	holder := c.GetHolder(0)
+	_, err := holder.CreateIndex(indexName, pilosa.IndexOptions{
+		Keys: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// create field
+	fieldName := fmt.Sprintf("field_%d", rand.Uint64())
+	_, err = c.GetNode(0).API.CreateField(context.Background(), indexName, fieldName,
+		pilosa.OptFieldTypeDefault())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// set value
+	_, err = c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: indexName,
+		Query: fmt.Sprintf(`Set(1, %s=1)`, fieldName),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// restart node
+	node := c.GetNode(0)
+	if err := node.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.AwaitState(disco.ClusterStateNormal, 10*time.Second); err != nil {
+		t.Fatalf("restarting cluster: %v", err)
+	}
+
+	// delete field
+	err = c.GetNode(0).API.DeleteField(context.Background(), indexName, fieldName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// recreate field
+	errCh := make(chan error)
+	go func() {
+		_, err := c.GetNode(0).API.CreateField(context.Background(), indexName,
+			fieldName, pilosa.OptFieldTypeDefault())
+		errCh <- err
+	}()
+	select {
+	case <-time.After(10 * time.Second):
+		// We have to use os.Exit here instead of t.Fatal or panic since
+		// on panic, deferred statements are still ran. Given that
+		// we have deferred cluster.Close(), it deadlocks on the same
+		// issue this test is, well, is testing on.
+		// With os.Exit, the process exits at that point without running the
+		// deferred actions. This is more of a work-around fix to make the
+		// test meaningful on timeout.
+		t.Logf("recreating field took too long")
+		os.Exit(1)
+	case err := <-errCh:
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 }

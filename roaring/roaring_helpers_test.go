@@ -1,22 +1,12 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package roaring
+
+import "sync"
 
 ///////////////////////////////////////////////////////////////////////////
 
-var containerWidth uint64 = 65536
+const containerWidth = 1 << 16
 
 ////////////////// array
 func arrayEmpty() []uint16 {
@@ -173,65 +163,65 @@ func bitmapEvenBitsSet() []uint64 {
 }
 
 ////////////////// run
-func runEmpty() []interval16 {
-	return make([]interval16, 0)
+func runEmpty() []Interval16 {
+	return make([]Interval16, 0)
 }
 
-func runFull() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 65535})
+func runFull() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 65535})
 	return run
 }
 
-func runFirstBitSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 0})
+func runFirstBitSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 0})
 	return run
 }
 
-func runLastBitSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 65535, last: 65535})
+func runLastBitSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 65535, Last: 65535})
 	return run
 }
 
-func runFirstBitUnset() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 1, last: 65535})
+func runFirstBitUnset() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 1, Last: 65535})
 	return run
 }
 
-func runLastBitUnset() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 65534})
+func runLastBitUnset() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 65534})
 	return run
 }
 
-func runInnerBitsSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 1, last: 65534})
+func runInnerBitsSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 1, Last: 65534})
 	return run
 }
 
-func runOuterBitsSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 0})
-	run = append(run, interval16{start: 65535, last: 65535})
+func runOuterBitsSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 0})
+	run = append(run, Interval16{Start: 65535, Last: 65535})
 	return run
 }
 
-func runOddBitsSet() []interval16 {
-	run := make([]interval16, containerWidth/2)
+func runOddBitsSet() []Interval16 {
+	run := make([]Interval16, containerWidth/2)
 	for i := 0; i < int(containerWidth/2); i++ {
-		run[i] = interval16{start: uint16(2*i + 1), last: uint16(2*i + 1)}
+		run[i] = Interval16{Start: uint16(2*i + 1), Last: uint16(2*i + 1)}
 	}
 	return run
 }
 
-func runEvenBitsSet() []interval16 {
-	run := make([]interval16, containerWidth/2)
+func runEvenBitsSet() []Interval16 {
+	run := make([]Interval16, containerWidth/2)
 	for i := 0; i < int(containerWidth/2); i++ {
-		run[i] = interval16{start: uint16(2 * i), last: uint16(2 * i)}
+		run[i] = Interval16{Start: uint16(2 * i), Last: uint16(2 * i)}
 	}
 	return run
 }
@@ -250,62 +240,67 @@ type testOp struct {
 
 func doContainer(typ byte, data interface{}) *Container {
 	switch typ {
-	case containerArray:
+	case ContainerArray:
 		return NewContainerArray(data.([]uint16))
-	case containerBitmap:
+	case ContainerBitmap:
 		c := NewContainerBitmap(-1, data.([]uint64))
 		return c
-	case containerRun:
-		return NewContainerRun(data.([]interval16))
+	case ContainerRun:
+		return NewContainerRun(data.([]Interval16))
 	}
 	return nil
 }
 
+var makeCts sync.Once
+var sampleTestContainers map[byte]map[string]*Container
+
 func setupContainerTests() map[byte]map[string]*Container {
 
-	cts := make(map[byte]map[string]*Container)
+	makeCts.Do(func() {
+		sampleTestContainers = make(map[byte]map[string]*Container)
 
-	// array containers
-	cts[containerArray] = map[string]*Container{
-		"empty":         doContainer(containerArray, arrayEmpty()),
-		"full":          doContainer(containerArray, arrayFull()),
-		"firstBitSet":   doContainer(containerArray, arrayFirstBitSet()),
-		"lastBitSet":    doContainer(containerArray, arrayLastBitSet()),
-		"firstBitUnset": doContainer(containerArray, arrayFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerArray, arrayLastBitUnset()),
-		"innerBitsSet":  doContainer(containerArray, arrayInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerArray, arrayOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerArray, arrayOddBitsSet()),
-		"evenBitsSet":   doContainer(containerArray, arrayEvenBitsSet()),
-	}
+		// array containers
+		sampleTestContainers[ContainerArray] = map[string]*Container{
+			"empty":         doContainer(ContainerArray, arrayEmpty()),
+			"full":          doContainer(ContainerArray, arrayFull()),
+			"firstBitSet":   doContainer(ContainerArray, arrayFirstBitSet()),
+			"lastBitSet":    doContainer(ContainerArray, arrayLastBitSet()),
+			"firstBitUnset": doContainer(ContainerArray, arrayFirstBitUnset()),
+			"lastBitUnset":  doContainer(ContainerArray, arrayLastBitUnset()),
+			"innerBitsSet":  doContainer(ContainerArray, arrayInnerBitsSet()),
+			"outerBitsSet":  doContainer(ContainerArray, arrayOuterBitsSet()),
+			"oddBitsSet":    doContainer(ContainerArray, arrayOddBitsSet()),
+			"evenBitsSet":   doContainer(ContainerArray, arrayEvenBitsSet()),
+		}
 
-	// bitmap containers
-	cts[containerBitmap] = map[string]*Container{
-		"empty":         doContainer(containerBitmap, bitmapEmpty()),
-		"full":          doContainer(containerBitmap, bitmapFull()),
-		"firstBitSet":   doContainer(containerBitmap, bitmapFirstBitSet()),
-		"lastBitSet":    doContainer(containerBitmap, bitmapLastBitSet()),
-		"firstBitUnset": doContainer(containerBitmap, bitmapFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerBitmap, bitmapLastBitUnset()),
-		"innerBitsSet":  doContainer(containerBitmap, bitmapInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerBitmap, bitmapOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerBitmap, bitmapOddBitsSet()),
-		"evenBitsSet":   doContainer(containerBitmap, bitmapEvenBitsSet()),
-	}
+		// bitmap containers
+		sampleTestContainers[ContainerBitmap] = map[string]*Container{
+			"empty":         doContainer(ContainerBitmap, bitmapEmpty()),
+			"full":          doContainer(ContainerBitmap, bitmapFull()),
+			"firstBitSet":   doContainer(ContainerBitmap, bitmapFirstBitSet()),
+			"lastBitSet":    doContainer(ContainerBitmap, bitmapLastBitSet()),
+			"firstBitUnset": doContainer(ContainerBitmap, bitmapFirstBitUnset()),
+			"lastBitUnset":  doContainer(ContainerBitmap, bitmapLastBitUnset()),
+			"innerBitsSet":  doContainer(ContainerBitmap, bitmapInnerBitsSet()),
+			"outerBitsSet":  doContainer(ContainerBitmap, bitmapOuterBitsSet()),
+			"oddBitsSet":    doContainer(ContainerBitmap, bitmapOddBitsSet()),
+			"evenBitsSet":   doContainer(ContainerBitmap, bitmapEvenBitsSet()),
+		}
 
-	// run containers
-	cts[containerRun] = map[string]*Container{
-		"empty":         doContainer(containerRun, runEmpty()),
-		"full":          doContainer(containerRun, runFull()),
-		"firstBitSet":   doContainer(containerRun, runFirstBitSet()),
-		"lastBitSet":    doContainer(containerRun, runLastBitSet()),
-		"firstBitUnset": doContainer(containerRun, runFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerRun, runLastBitUnset()),
-		"innerBitsSet":  doContainer(containerRun, runInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerRun, runOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerRun, runOddBitsSet()),
-		"evenBitsSet":   doContainer(containerRun, runEvenBitsSet()),
-	}
+		// run containers
+		sampleTestContainers[ContainerRun] = map[string]*Container{
+			"empty":         doContainer(ContainerRun, runEmpty()),
+			"full":          doContainer(ContainerRun, runFull()),
+			"firstBitSet":   doContainer(ContainerRun, runFirstBitSet()),
+			"lastBitSet":    doContainer(ContainerRun, runLastBitSet()),
+			"firstBitUnset": doContainer(ContainerRun, runFirstBitUnset()),
+			"lastBitUnset":  doContainer(ContainerRun, runLastBitUnset()),
+			"innerBitsSet":  doContainer(ContainerRun, runInnerBitsSet()),
+			"outerBitsSet":  doContainer(ContainerRun, runOuterBitsSet()),
+			"oddBitsSet":    doContainer(ContainerRun, runOddBitsSet()),
+			"evenBitsSet":   doContainer(ContainerRun, runEvenBitsSet()),
+		}
+	})
 
-	return cts
+	return sampleTestContainers
 }

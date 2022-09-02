@@ -1,0 +1,47 @@
+name: "featurebase"
+arch: "${GOARCH}"
+version: "${VERSION}"
+section: "default"
+priority: "extra"
+maintainer: "Molecula Corp. <info@molecula.com>"
+description: "FeatureBase is a feature extraction and storage technology that enables real-time analytics."
+vendor: "Molecula"
+homepage: "https://molecula.com"
+contents:
+  - src: ./featurebase
+    dst: /usr/bin/featurebase
+  - src: ./install/featurebase.conf
+    dst: /etc/featurebase/featurebase.conf
+    type: config|noreplace
+    file_info:
+      owner: featurebase
+      group: featurebase
+  - src: ./install/featurebase.redhat.service
+    dst: /usr/lib/systemd/system/featurebase.service
+    packager: rpm
+  - src: ./install/featurebase.debian.service
+    dst: /lib/systemd/system/featurebase.service
+    packager: deb
+  - dst: /var/log/molecula  # We use vendor name on log directory in case other molecula components need it.
+    type: dir
+    file_info:
+      mode: 0755
+      owner: featurebase
+      group: featurebase
+  - dst: /var/lib/featurebase
+    type: dir
+    file_info:
+      mode: 0755
+      owner: featurebase
+      group: featurebase
+  - dst: /etc/featurebase # Keeping the config writable by the featurebase user is necessary for the agent.
+    type: dir
+    file_info:
+      mode: 0755
+      owner: featurebase
+      group: featurebase
+
+scripts:
+  preinstall: ./install/preinstall.sh
+  postinstall: ./install/postinstall.sh
+  preremove: ./install/preremove.sh

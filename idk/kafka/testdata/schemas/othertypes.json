@@ -1,0 +1,16 @@
+{
+     "type": "record",
+     "namespace": "com.example",
+     "name": "FullName",
+     "fields": [
+	 { "name": "first", "type": "string", "mutex": true },
+	 { "name": "second", "type": {"type": "array", "items": "string"}},
+	 { "name": "third", "type": "int"},
+	 { "name": "fourth", "type": "long"},
+	 { "name": "fifth", "type": "float"},
+	 { "name": "sixth", "type": "double"},
+	 { "name": "seventh", "type": "boolean"},
+	 { "name": "eighth", "type": ["null", "string"], "mutex": true, "default": null },
+	 { "name": "ninth", "type": ["null", {"type": "string", "mutex": true}], "default": null }
+     ]
+}

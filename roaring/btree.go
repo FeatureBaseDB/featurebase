@@ -925,6 +925,15 @@ func (e *enumerator) Every(upd func(key uint64, oldV *Container, exists bool) (n
 		if write {
 			if nv == nil {
 				e.t.Delete(i.k)
+				f, _ := e.t.Seek(e.k)
+				*e = *f
+				f.Close()
+				// we don't want to e.next() here; we'll
+				// already be on an item with key >= i.k,
+				// and since we just deleted the item with
+				// key i.k, that means key is > i.k, which
+				// makes it the next item.
+				continue
 			} else {
 				e.q.d[e.i].v = nv
 			}

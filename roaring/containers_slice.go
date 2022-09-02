@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package roaring
 
 type sliceContainers struct {
@@ -43,30 +31,8 @@ func (sc *sliceContainers) Put(key uint64, c *Container) {
 	} else {
 		sc.containers[i] = c
 	}
-
-}
-
-func (sc *sliceContainers) PutContainerValues(key uint64, typ byte, n int, mapped bool) {
-	i := search64(sc.keys, key)
-	if i < 0 {
-		c := NewContainer()
-		c.setTyp(typ)
-		c.setN(int32(n))
-		c.setMapped(mapped)
-		sc.insertAt(key, c, -i-1)
-	} else {
-		// if the container already exists, and is frozen, this may
-		// result in copying its data, which is sort of pointless
-		// because PutContainerValues almost always gets called
-		// because we're reading new data from a file -- but also
-		// that means this case probably never happens.
-		c := sc.containers[i].Thaw()
-		c.setTyp(typ)
-		c.setN(int32(n))
-		c.setMapped(mapped)
-		sc.containers[i] = c
-	}
-
+	sc.lastKey = key
+	sc.lastContainer = c
 }
 
 func (sc *sliceContainers) Remove(key uint64) {
@@ -76,8 +42,7 @@ func (sc *sliceContainers) Remove(key uint64) {
 		return
 	}
 	if key == sc.lastKey {
-		sc.lastKey = ^uint64(0)
-		sc.lastContainer = nil
+		sc.invalidateCache()
 	}
 	sc.keys = append(sc.keys[:i], sc.keys[i+1:]...)
 	sc.containers = append(sc.containers[:i], sc.containers[i+1:]...)
@@ -114,11 +79,16 @@ func (sc *sliceContainers) GetOrCreate(key uint64) *Container {
 }
 
 func (sc *sliceContainers) Clone() Containers {
+
 	other := newSliceContainers()
 	other.keys = make([]uint64, len(sc.keys))
 	other.containers = make([]*Container, len(sc.containers))
 	copy(other.keys, sc.keys)
 	for i, c := range sc.containers {
+		if c == nil {
+			other.containers[i] = nil
+			continue
+		}
 		other.containers[i] = c.Clone()
 	}
 	return other
@@ -158,8 +128,7 @@ func (sc *sliceContainers) Count() uint64 {
 func (sc *sliceContainers) Reset() {
 	sc.keys = sc.keys[:0]
 	sc.containers = sc.containers[:0]
-	sc.lastContainer = nil
-	sc.lastKey = 0
+	sc.invalidateCache()
 }
 
 func (sc *sliceContainers) ResetN(n int) {
@@ -170,8 +139,7 @@ func (sc *sliceContainers) ResetN(n int) {
 		sc.keys = sc.keys[:0]
 		sc.containers = sc.containers[:0]
 	}
-	sc.lastContainer = nil
-	sc.lastKey = 0
+	sc.invalidateCache()
 }
 
 func (sc *sliceContainers) seek(key uint64) (int, bool) {
@@ -186,13 +154,28 @@ func (sc *sliceContainers) seek(key uint64) (int, bool) {
 
 func (sc *sliceContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
 	i, found := sc.seek(key)
-	return &sliceIterator{e: sc, i: i}, found
+	return &sliceIterator{e: sc, i: i, index: i}, found
 }
 
+// Repair tries to repair all containers,
+// results in nil and empty containers getting dropped from the slice.
+// For instance, that has to happen for writing the roaring format,
+// which can't represent an empty container (c.N() == 0).
 func (sc *sliceContainers) Repair() {
-	for _, c := range sc.containers {
+	n := 0
+	for i, c := range sc.containers {
+		if c == nil {
+			continue
+		}
 		c.Repair()
+		sc.containers[n] = c
+		sc.keys[n] = sc.keys[i]
+		n++
 	}
+	sc.containers = sc.containers[:n]
+	sc.keys = sc.keys[:n]
+
+	sc.invalidateCache()
 }
 
 // Update calls fn (existing-container, existed), and expects
@@ -212,9 +195,10 @@ func (sc *sliceContainers) Update(key uint64, fn func(*Container, bool) (*Contai
 		// don't expand the slice just to add a nil container, we
 		// could return that anyway
 		if write && nc != nil {
-			sc.insertAt(key, nc, -i-1)
+			sc.insertAt(key, nc, i)
 		}
 	}
+	sc.invalidateCache()
 }
 
 // UpdateEvery calls fn (existing-container, existed), and expects
@@ -227,24 +211,37 @@ func (sc *sliceContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Conta
 			sc.containers[i] = nc
 		}
 	}
+
+	sc.invalidateCache()
+}
+
+func (sc *sliceContainers) invalidateCache() {
+	sc.lastKey = ^uint64(0)
+	sc.lastContainer = nil
 }
 
 type sliceIterator struct {
 	e     *sliceContainers
-	i     int
-	key   uint64
-	value *Container
+	i     int        // next e's index to get key, value
+	index int        // current e's index of key, value
+	key   uint64     // current key
+	value *Container // current value
 }
+
+func (si *sliceIterator) Close() {}
 
 func (si *sliceIterator) Next() bool {
 	if si.e == nil {
 		return false
 	}
+
 	// discard nil containers from iteration. we don't always
 	// actually remove them because copying is expensive.
 	for si.i < len(si.e.keys) {
 		si.key = si.e.keys[si.i]
 		si.value = si.e.containers[si.i]
+		// keep the current index of key, value
+		si.index = si.i
 		si.i++
 		if si.value != nil {
 			return true

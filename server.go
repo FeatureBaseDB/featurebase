@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
@@ -27,11 +15,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/stats"
+	uuid "github.com/satori/go.uuid"
+
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
+	pnet "github.com/molecula/featurebase/v3/net"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/sql2"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/storage"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+
+	_ "github.com/lib/pq"
 )
 
 // Default server settings.
@@ -46,6 +43,7 @@ var _ broadcaster = &Server{}
 type Server struct { // nolint: maligned
 	// Close management.
 	wg      sync.WaitGroup
+	muWG    sync.Mutex
 	closing chan struct{}
 
 	// Internal
@@ -54,32 +52,69 @@ type Server struct { // nolint: maligned
 	diagnostics      *diagnosticsCollector
 	executor         *executor
 	executorPoolSize int
-	hosts            []string
-	clusterDisabled  bool
 	serializer       Serializer
 
+	// Distributed Consensus
+	disCo     disco.DisCo
+	noder     disco.Noder
+	sharder   disco.Sharder
+	schemator disco.Schemator
+
 	// External
-	systemInfo SystemInfo
-	gcNotifier GCNotifier
-	logger     logger.Logger
+	systemInfo  SystemInfo
+	gcNotifier  GCNotifier
+	logger      logger.Logger
+	queryLogger logger.Logger
 
-	nodeID              string
-	uri                 URI
-	antiEntropyInterval time.Duration
-	metricInterval      time.Duration
-	diagnosticInterval  time.Duration
-	maxWritesPerRequest int
-	isCoordinator       bool
-	syncer              holderSyncer
+	nodeID               string
+	uri                  pnet.URI
+	grpcURI              pnet.URI
+	antiEntropyInterval  time.Duration
+	metricInterval       time.Duration
+	diagnosticInterval   time.Duration
+	viewsRemovalInterval time.Duration
+	maxWritesPerRequest  int
+	confirmDownSleep     time.Duration
+	confirmDownRetries   int
+	syncer               holderSyncer
+	maxQueryMemory       int64
 
-	defaultClient InternalClient
+	translationSyncer      TranslationSyncer
+	resetTranslationSyncCh chan struct{}
+	// HolderConfig stashes server options that are really Holder options.
+	holderConfig *HolderConfig
+
+	defaultClient *InternalClient
 	dataDir       string
+
+	// Threshold for logging long-running queries
+	longQueryTime      time.Duration
+	queryHistoryLength int
 }
 
 // Holder returns the holder for server.
-// TODO: have this return an interface for Holder instead of concrete object?
 func (s *Server) Holder() *Holder {
 	return s.holder
+}
+
+// addToWaitGroup adds to the server WaitGroup but makes sure the server isn't
+// closing, and that the WaitGroup is not already waiting before it adds
+func (s *Server) addToWaitGroup(delta int) bool {
+	select {
+	case <-s.closing:
+		return false
+	default:
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
+		select {
+		case <-s.closing:
+			// if we're closing after having gotten the lock, stop!!
+			return false
+		default:
+			s.wg.Add(delta)
+			return true
+		}
+	}
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -90,6 +125,14 @@ type ServerOption func(s *Server) error
 func OptServerLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = l
+		s.holderConfig.Logger = l
+		return nil
+	}
+}
+
+func OptServerQueryLogger(l logger.Logger) ServerOption {
+	return func(s *Server) error {
+		s.queryLogger = l
 		return nil
 	}
 }
@@ -112,16 +155,6 @@ func OptServerDataDir(dir string) ServerOption {
 	}
 }
 
-// OptServerAttrStoreFunc is a functional option on Server
-// used to provide the function to use to generate a new
-// attribute store.
-func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
-	return func(s *Server) error {
-		s.holder.NewAttrStore = af
-		return nil
-	}
-}
-
 // OptServerAntiEntropyInterval is a functional option on Server
 // used to set the anti-entropy interval.
 func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
@@ -131,11 +164,20 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 	}
 }
 
+// OptServerViewsRemovalInterval is a functional option on Server
+// used to set the ttl removal interval.
+func OptServerViewsRemovalInterval(interval time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.viewsRemovalInterval = interval
+		return nil
+	}
+}
+
 // OptServerLongQueryTime is a functional option on Server
 // used to set long query duration.
 func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	return func(s *Server) error {
-		s.cluster.longQueryTime = dur
+		s.longQueryTime = dur
 		return nil
 	}
 }
@@ -178,7 +220,7 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 
 // OptServerInternalClient is a functional option on Server
 // used to set the implementation of InternalClient.
-func OptServerInternalClient(c InternalClient) ServerOption {
+func OptServerInternalClient(c *InternalClient) ServerOption {
 	return func(s *Server) error {
 		s.defaultClient = c
 		s.cluster.InternalClient = c
@@ -196,7 +238,7 @@ func OptServerExecutorPoolSize(size int) ServerOption {
 // OptServerPrimaryTranslateStore has been deprecated.
 func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	return func(s *Server) error {
-		s.logger.Printf("DEPRECATED: OptServerPrimaryTranslateStore")
+		s.logger.Infof("DEPRECATED: OptServerPrimaryTranslateStore")
 		return nil
 	}
 }
@@ -205,7 +247,7 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 // used to specify the stats client.
 func OptServerStatsClient(sc stats.StatsClient) ServerOption {
 	return func(s *Server) error {
-		s.holder.Stats = sc
+		s.holderConfig.StatsClient = sc
 		return nil
 	}
 }
@@ -219,21 +261,39 @@ func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 	}
 }
 
+// OptServerNodeDownRetries is a functional option on Server
+// used to specify the retries and sleep duration for node down
+// checks.
+func OptServerNodeDownRetries(retries int, sleep time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.confirmDownRetries = retries
+		s.confirmDownSleep = sleep
+		return nil
+	}
+}
+
 // OptServerURI is a functional option on Server
 // used to set the server URI.
-func OptServerURI(uri *URI) ServerOption {
+func OptServerURI(uri *pnet.URI) ServerOption {
 	return func(s *Server) error {
 		s.uri = *uri
 		return nil
 	}
 }
 
-// OptServerClusterDisabled tells the server whether to use a static cluster with the
-// defined hosts. Mostly used for testing.
-func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
+// OptServerGRPCURI is a functional option on Server
+// used to set the server gRPC URI.
+func OptServerGRPCURI(uri *pnet.URI) ServerOption {
 	return func(s *Server) error {
-		s.hosts = hosts
-		s.clusterDisabled = disabled
+		s.grpcURI = *uri
+		return nil
+	}
+}
+
+// OptServerClusterName sets the human-readable cluster name.
+func OptServerClusterName(name string) ServerOption {
+	return func(s *Server) error {
+		s.cluster.Name = name
 		return nil
 	}
 }
@@ -243,15 +303,6 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 func OptServerSerializer(ser Serializer) ServerOption {
 	return func(s *Server) error {
 		s.serializer = ser
-		return nil
-	}
-}
-
-// OptServerIsCoordinator is a functional option on Server
-// used to specify whether or not this server is the coordinator.
-func OptServerIsCoordinator(is bool) ServerOption {
-	return func(s *Server) error {
-		s.isCoordinator = is
 		return nil
 	}
 }
@@ -268,7 +319,7 @@ func OptServerNodeID(nodeID string) ServerOption {
 // OptServerClusterHasher is a functional option on Server
 // used to specify the consistent hash algorithm for data
 // location within the cluster.
-func OptServerClusterHasher(h Hasher) ServerOption {
+func OptServerClusterHasher(h disco.Hasher) ServerOption {
 	return func(s *Server) error {
 		s.cluster.Hasher = h
 		return nil
@@ -279,7 +330,17 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 // used to specify the translation data store type.
 func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 	return func(s *Server) error {
-		s.holder.OpenTranslateStore = fn
+		s.holderConfig.OpenTranslateStore = fn
+		return nil
+	}
+}
+
+// OptServerOpenIDAllocator is a functional option on Server
+// used to specify the ID allocator data store type.
+// Except not really (because there's only one at this time).
+func OptServerOpenIDAllocator(fn OpenIDAllocatorFunc) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.OpenIDAllocator = fn
 		return nil
 	}
 }
@@ -288,32 +349,121 @@ func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 // used to specify the remote translation data reader.
 func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 	return func(s *Server) error {
-		s.holder.OpenTranslateReader = fn
+		s.holderConfig.OpenTranslateReader = fn
+		return nil
+	}
+}
+
+// OptServerStorageConfig is a functional option on Server used to specify the
+// transactional-storage backend to use, resulting in RoaringTx or RbfTx
+// being used for all Tx interface calls.
+func OptServerStorageConfig(cfg *storage.Config) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.StorageConfig = cfg
+		// For historical reasons, RBF's config can ignore the storage config
+		// in some cases.
+		s.holderConfig.RBFConfig.FsyncEnabled = s.holderConfig.StorageConfig.FsyncEnabled
+		return nil
+	}
+}
+
+// OptServerRBFConfig conveys the RBF flags to the Holder.
+func OptServerRBFConfig(cfg *rbfcfg.Config) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.RBFConfig = cfg
+		return nil
+	}
+}
+
+// OptServerQueryHistoryLength is a functional option on Server
+// used to specify the length of the query history buffer that maintains
+// the information returned at /query-history.
+func OptServerQueryHistoryLength(length int) ServerOption {
+	return func(s *Server) error {
+		s.queryHistoryLength = length
+		return nil
+	}
+}
+
+// OptServerMaxQueryMemory sets the memory used per Extract() and SELECT query.
+func OptServerMaxQueryMemory(v int64) ServerOption {
+	return func(s *Server) error {
+		s.maxQueryMemory = v
+		return nil
+	}
+}
+
+// OptServerDisCo is a functional option on Server
+// used to set the Distributed Consensus implementation.
+func OptServerDisCo(disCo disco.DisCo,
+	noder disco.Noder,
+	sharder disco.Sharder,
+	schemator disco.Schemator) ServerOption {
+
+	return func(s *Server) error {
+		s.disCo = disCo
+		s.noder = noder
+		s.sharder = sharder
+		s.schemator = schemator
+		return nil
+	}
+}
+
+// OptServerLookupDB configures a connection to an external postgres database for ExternalLookup queries.
+func OptServerLookupDB(dsn string) ServerOption {
+	return func(s *Server) error {
+		s.holderConfig.LookupDBDSN = dsn
+		return nil
+	}
+}
+
+func OptServerPartitionAssigner(p string) ServerOption {
+	return func(s *Server) error {
+		s.cluster.partitionAssigner = p
 		return nil
 	}
 }
 
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
+	cluster := newCluster()
+
 	s := &Server{
 		closing:       make(chan struct{}),
-		cluster:       newCluster(),
-		holder:        NewHolder(),
+		cluster:       cluster,
 		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:    newNopSystemInfo(),
-		defaultClient: nopInternalClient{},
+		defaultClient: &InternalClient{}, // TODO may need to make this a valid thing
 
 		gcNotifier: NopGCNotifier,
 
-		antiEntropyInterval: time.Minute * 10,
-		metricInterval:      0,
-		diagnosticInterval:  0,
+		antiEntropyInterval:  0,
+		metricInterval:       0,
+		diagnosticInterval:   0,
+		viewsRemovalInterval: time.Hour,
+
+		disCo:      disco.NopDisCo,
+		noder:      disco.NewEmptyLocalNoder(),
+		sharder:    disco.NopSharder,
+		schemator:  disco.NopSchemator,
+		serializer: NopSerializer,
+
+		confirmDownRetries: defaultConfirmDownRetries,
+		confirmDownSleep:   defaultConfirmDownSleep,
+
+		resetTranslationSyncCh: make(chan struct{}, 1),
 
 		logger: logger.NopLogger,
 	}
 	s.cluster.InternalClient = s.defaultClient
 
+	s.translationSyncer = newActiveTranslationSyncer(s.resetTranslationSyncCh)
+	s.cluster.translationSyncer = s.translationSyncer
+
 	s.diagnostics.server = s
+	s.holderConfig = DefaultHolderConfig()
+	s.holderConfig.TranslationSyncer = s.translationSyncer
+	s.holderConfig.Logger = s.logger
 
 	for _, opt := range opts {
 		err := opt(s)
@@ -321,101 +471,102 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+	s.holderConfig.AntiEntropyInterval = s.antiEntropyInterval
+
+	memTotal, err := s.systemInfo.MemTotal()
+	if err != nil {
+		return nil, errors.Wrap(err, "mem total")
+	}
+
+	// Default memory to 20% of total.
+	maxQueryMemory := s.maxQueryMemory
+	if maxQueryMemory == 0 {
+		maxQueryMemory = int64(float64(memTotal) * .20)
+	}
 
 	// set up executor after server opts have been processed
-	executorOpts := []executorOption{optExecutorInternalQueryClient(s.defaultClient)}
+	executorOpts := []executorOption{
+		optExecutorInternalQueryClient(s.defaultClient),
+		optExecutorMaxMemory(maxQueryMemory),
+	}
 	if s.executorPoolSize > 0 {
 		executorOpts = append(executorOpts, optExecutorWorkerPoolSize(s.executorPoolSize))
 	}
 	s.executor = newExecutor(executorOpts...)
 
-	// s.holder.translateFile.logger = s.logger
-
 	path, err := expandDirName(s.dataDir)
 	if err != nil {
 		return nil, err
 	}
-
-	s.holder.Path = path
-	// s.holder.translateFile.Path = filepath.Join(path, ".keys")
-	s.holder.Logger = s.logger
+	s.holder = NewHolder(path, s.holderConfig)
 	s.holder.Stats.SetLogger(s.logger)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	s.holder.Logger.Infof("cwd: %v", cwd)
+	s.holder.Logger.Infof("cmd line: %v", strings.Join(os.Args, " "))
 
 	s.cluster.Path = path
 	s.cluster.logger = s.logger
 	s.cluster.holder = s.holder
-
-	// Get or create NodeID.
-	s.nodeID = s.loadNodeID()
-	if s.isCoordinator {
-		s.cluster.Coordinator = s.nodeID
-	}
-
-	// Set Cluster Node.
-	node := &Node{
-		ID:            s.nodeID,
-		URI:           s.uri,
-		IsCoordinator: s.cluster.Coordinator == s.nodeID,
-		State:         nodeStateDown,
-	}
-	s.cluster.Node = node
-	if s.clusterDisabled {
-		err := s.cluster.setStatic(s.hosts)
-		if err != nil {
-			return nil, errors.Wrap(err, "setting cluster static")
-		}
-	}
+	s.cluster.disCo = s.disCo
+	s.cluster.noder = s.noder
+	s.cluster.sharder = s.sharder
 
 	// Append the NodeID tag to stats.
-	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.nodeID))
+	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
 
 	s.executor.Holder = s.holder
-	s.executor.Node = node
+	s.holder.executor = s.executor
 	s.executor.Cluster = s.cluster
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
+	s.cluster.confirmDownRetries = s.confirmDownRetries
+	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
+	s.holder.schemator = s.schemator
+	s.holder.sharder = s.sharder
+	s.holder.serializer = s.serializer
 
-	err = s.cluster.setup()
-	if err != nil {
-		return nil, errors.Wrap(err, "setting up cluster")
-	}
+	// Initial stats must be invoked after the executor obtains reference to the holder.
+	s.executor.InitStats()
 
 	return s, nil
 }
 
-func (s *Server) InternalClient() InternalClient {
+func (s *Server) InternalClient() *InternalClient {
 	return s.defaultClient
+}
+
+func (s *Server) GRPCURI() pnet.URI {
+	return s.grpcURI
+}
+
+func (s *Server) SetAPI(api *API) {
+	s.defaultClient.SetInternalAPI(api)
 }
 
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {
-	s.logger.Printf("open server")
-
 	// Log startup
 	err := s.holder.logStartup()
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
-
-	// Open holder.
-	if err := s.holder.Open(); err != nil {
-		return errors.Wrap(err, "opening Holder")
+	s.logger.Infof("open server. PID %v", os.Getpid())
+	if err = s.Open(); err != nil {
+		return errors.Wrap(err, "starting server")
 	}
-
-	errh := s.holder.Close()
-	if errh != nil {
-		return errors.Wrap(errh, "closing holder")
-	}
-
-	return nil
+	err = s.Close()
+	return errors.Wrap(err, "shutting down server")
 }
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	s.logger.Printf("open server")
+	s.logger.Infof("open server. PID %v", os.Getpid())
 
 	// Log startup
 	err := s.holder.logStartup()
@@ -423,83 +574,218 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Open Cluster management.
-	if err := s.cluster.waitForStarted(); err != nil {
-		return errors.Wrap(err, "opening Cluster")
+	// Start DisCo.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	initState, err := s.disCo.Start(ctx)
+	if err != nil {
+		return errors.Wrap(err, "starting DisCo")
+	}
+	// I'm pretty sure this can't happen, because the path that would have led to it
+	// happening now generates an error already, but let's be careful.
+	if initState == disco.InitialClusterStateExisting {
+		return errors.New("disco reports existing cluster, but this is not supported")
 	}
 
+	// Set node ID.
+	s.nodeID = s.disCo.ID()
+
+	node := &disco.Node{
+		ID:        s.nodeID,
+		URI:       s.uri,
+		GRPCURI:   s.grpcURI,
+		State:     disco.NodeStateUnknown,
+		IsPrimary: s.IsPrimary(),
+	}
+
+	if err := s.noder.SetMetadata(context.Background(), node); err != nil {
+		return errors.Wrap(err, "setting metadata")
+	}
+
+	s.cluster.Node = node
+	s.executor.Node = node
+
+	// Set up the holderSyncer.
+	s.syncer.Holder = s.holder
+	s.syncer.Node = node
+	s.syncer.Cluster = s.cluster
+	s.syncer.Closing = s.closing
+	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
+
+	// Start background process listening for translation
+	// sync resets.
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
+
+	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
+	go func() { _ = s.translationSyncer.Reset() }()
+
 	// Open holder.
+	func() {
+		s.holder.startMsgsMu.Lock()
+		defer s.holder.startMsgsMu.Unlock()
+
+		s.holder.startMsgs = []Message{}
+	}()
 	if err := s.holder.Open(); err != nil {
 		return errors.Wrap(err, "opening Holder")
 	}
-	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
+	// bring up the background tasks for the holder.
+	s.holder.Activate()
+
+	if err := s.noder.SetState(context.Background(), disco.NodeStateStarted); err != nil {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-	// Listen for joining nodes.
-	// This needs to start after the Holder has opened so that nodes can join
-	// the cluster without waiting for data to load on the coordinator. Before
-	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
-	// buffered channel.
-	s.cluster.listenForJoins()
-
-	s.syncer.Holder = s.holder
-	s.syncer.Node = s.cluster.Node
-	s.syncer.Cluster = s.cluster
-	s.syncer.Closing = s.closing
-	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
-
-	// Start background monitoring.
-	s.wg.Add(3)
+	if ok := s.addToWaitGroup(4); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
+	go func() { defer s.wg.Done(); s.monitorViewsRemoval() }()
+
+	toSend := func() []Message {
+		s.holder.startMsgsMu.Lock()
+		defer s.holder.startMsgsMu.Unlock()
+
+		toSend := s.holder.startMsgs
+		s.holder.startMsgs = nil
+		return toSend
+	}()
+
+	if ok := s.addToWaitGroup(1); !ok {
+		return fmt.Errorf("closing server while opening server is NOT allowed")
+	}
+	go func() {
+		defer s.wg.Done()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if ok := s.addToWaitGroup(1); !ok {
+			// the server is closing, stop!!
+			return
+		}
+		go func() {
+			defer s.wg.Done()
+			defer cancel()
+			select {
+			case <-s.closing:
+			case <-ctx.Done():
+			}
+		}()
+
+		timer := time.NewTimer(0)
+		defer timer.Stop()
+		if !timer.Stop() {
+			<-timer.C
+		}
+		for {
+			state, err := s.noder.ClusterState(ctx)
+			if err != nil {
+				s.logger.Printf("failed to check cluster state: %v", err)
+				timer.Reset(time.Second)
+				select {
+				case <-s.closing:
+					return
+				case <-timer.C:
+					continue
+				}
+			}
+			switch state {
+			case disco.ClusterStateStarting, disco.ClusterStateUnknown, disco.ClusterStateDown:
+				timer.Reset(time.Second)
+				select {
+				case <-s.closing:
+					return
+				case <-timer.C:
+					continue
+				}
+			}
+			break
+		}
+
+		start := time.Now()
+		prevMsg := start
+		numMsgs := uint(len(toSend))
+		s.logger.Printf("start initial cluster state sync")
+		for i := range toSend {
+			for {
+				err := s.holder.broadcaster.SendSync(toSend[i])
+				if err != nil {
+					s.logger.Printf("failed to broadcast startup cluster message (trying again in a bit): %v", err)
+					timer.Reset(time.Second)
+					select {
+					case <-s.closing:
+						return
+					case <-timer.C:
+						continue
+					}
+				}
+				break
+			}
+
+			if now := time.Now(); now.Sub(prevMsg) > time.Second {
+				estimate, pctDone := GetLoopProgress(start, now, uint(i), numMsgs)
+				s.logger.Printf("synced %d/%d messages (%.2f%% complete; %s remaining)", i+1, numMsgs, pctDone, estimate)
+				prevMsg = now
+			}
+		}
+		s.logger.Printf("completed initial cluster state sync in %s", time.Since(start).String())
+	}()
 
 	return nil
 }
 
 // Close closes the server and waits for it to shutdown.
 func (s *Server) Close() error {
-	errE := s.executor.Close()
+	select {
+	case <-s.closing:
+		return nil
+	default:
+		// get the muWG lock so that noone adds to the WaitGroup while it Waits
+		s.muWG.Lock()
+		defer s.muWG.Unlock()
+		// Notify goroutines to stop.
+		close(s.closing)
+		s.wg.Wait()
 
-	// Notify goroutines to stop.
-	close(s.closing)
-	s.wg.Wait()
+		errE := s.executor.Close()
 
-	var errh error
-	var errc error
-	if s.cluster != nil {
-		errc = s.cluster.close()
-	}
-	if s.holder != nil {
-		errh = s.holder.Close()
-	}
-	// prefer to return holder error over cluster
-	// error. This order is somewhat arbitrary. It would be better if we had
-	// some way to combine all the errors, but probably not important enough to
-	// warrant the extra complexity.
-	if errh != nil {
-		return errors.Wrap(errh, "closing holder")
-	}
-	if errc != nil {
-		return errors.Wrap(errc, "closing cluster")
-	}
-	return errors.Wrap(errE, "closing executor")
+		var errh, errd error
+		var errhs error
+		var errc error
 
-}
+		if s.cluster != nil {
+			errc = s.cluster.close()
+		}
+		errhs = s.syncer.stopTranslationSync()
+		if s.disCo != nil {
+			errd = s.disCo.Close()
+		}
+		if s.holder != nil {
+			errh = s.holder.Close()
+		}
 
-// loadNodeID gets NodeID from disk, or creates a new value.
-// If server.NodeID is already set, a new ID is not created.
-func (s *Server) loadNodeID() string {
-	if s.nodeID != "" {
-		return s.nodeID
+		// prefer to return holder error over cluster
+		// error. This order is somewhat arbitrary. It would be better if we had
+		// some way to combine all the errors, but probably not important enough to
+		// warrant the extra complexity.
+		if errh != nil {
+			return errors.Wrap(errh, "closing holder")
+		}
+		if errhs != nil {
+			return errors.Wrap(errhs, "terminating holder translation sync")
+		}
+		if errc != nil {
+			return errors.Wrap(errc, "closing cluster")
+		}
+		if errd != nil {
+			return errors.Wrap(errd, "closing disco")
+		}
+		return errors.Wrap(errE, "closing executor")
 	}
-	nodeID, err := s.holder.loadNodeID()
-	if err != nil {
-		s.logger.Printf("loading NodeID: %v", err)
-		return s.nodeID
-	}
-	return nodeID
 }
 
 // NodeID returns the server's node id.
@@ -511,7 +797,116 @@ func (s *Server) SyncData() error {
 	return errors.Wrap(s.syncer.SyncHolder(), "syncing holder")
 }
 
+// monitorResetTranslationSync is a background process which
+// listens for events indicating the need to reset the translation
+// sync processes.
+func (s *Server) monitorResetTranslationSync() {
+	s.logger.Infof("holder translation sync monitor initializing")
+	for {
+		// Wait for a reset or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-s.resetTranslationSyncCh:
+			if ok := s.addToWaitGroup(1); !ok {
+				// the server is closing!!! stop!!
+				return
+			}
+			s.logger.Infof("holder translation sync beginning")
+			go func() {
+				// Obtaining this lock ensures that there is only
+				// one instance of resetTranslationSync() running
+				// at once.
+				s.syncer.mu.Lock()
+				defer s.syncer.mu.Unlock()
+				defer s.wg.Done()
+				if err := s.syncer.resetTranslationSync(); err != nil {
+					s.logger.Errorf("holder translation sync error: err=%s", err)
+				}
+			}()
+		}
+	}
+}
+
+func (s *Server) monitorViewsRemoval() {
+	ctx := context.Background()
+	// Run ViewsRemoval on server start
+	s.ViewsRemoval(ctx)
+	ticker := time.NewTicker(s.viewsRemovalInterval)
+	for {
+		select {
+		case <-s.closing:
+			return
+		case <-ticker.C:
+			s.ViewsRemoval(ctx)
+		}
+	}
+}
+
+// Remove views based on these criterias:
+// 1. views that are older than specified TTL
+// 2. "standard" view of a field if its "noStandardView" option is set to true
+func (s *Server) ViewsRemoval(ctx context.Context) {
+	for _, index := range s.holder.Indexes() {
+		for _, field := range index.Fields() {
+			if field.Options().Type == "time" {
+				if field.Options().TTL > 0 {
+					for _, view := range field.views() {
+						// view names follow the format of "standard_(time_quantum)"
+						// to get view time, we split the view.name by "_"
+						// then grab the second value (the time quantum)
+						viewName := strings.Split(view.name, "_")
+						if len(viewName) == 2 {
+							// when getting the view time, we want to grab the end date
+							// because start date will aways be older
+							viewTime, err := timeOfView(view.name, true)
+							if err != nil {
+								s.logger.Printf("view: %s; err: %s", viewName, err)
+								continue
+							}
+							timeSince := time.Since(viewTime)
+
+							if timeSince >= field.Options().TTL {
+								for _, shard := range field.AvailableShards(true).Slice() {
+									err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
+									if err != nil {
+										s.logger.Errorf("view: %s, shard: %d, ttl delete fragment: %s", shard, viewName, err)
+									}
+								}
+
+								err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
+								if err != nil {
+									s.logger.Errorf("view: %s, ttl delete view: %s", viewName, err)
+								}
+								s.logger.Infof("ttl deleted - index: %s, field: %s, view: %s ", index.name, field.name, view.name)
+							}
+						}
+					}
+				}
+				if field.Options().NoStandardView && field.view(viewStandard) != nil {
+					// delete view "standard" if NoStandardView is true and view "standard" exists
+					for _, shard := range field.AvailableShards(true).Slice() {
+						err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), viewStandard, shard, nil)
+						if err != nil {
+							s.logger.Errorf("delete view %s from shard %d: %s", viewStandard, shard, err)
+						}
+					}
+
+					err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), viewStandard)
+					if err != nil {
+						s.logger.Errorf("view: %s, delete view: %s", viewStandard, err)
+					}
+					s.logger.Infof("view %s deleted - index: %s, field: %s ", viewStandard, index.name, field.name)
+				}
+			}
+		}
+	}
+}
+
 func (s *Server) monitorAntiEntropy() {
+	// %% begin sonarcloud ignore %%
+	// This code isn't really used anymore because of problems with the design,
+	// but we haven't taken it out yet. But there's no code coverage of it.
 	if s.antiEntropyInterval == 0 || s.cluster.ReplicaN <= 1 {
 		return // anti entropy disabled
 	}
@@ -520,7 +915,7 @@ func (s *Server) monitorAntiEntropy() {
 	ticker := time.NewTicker(s.antiEntropyInterval)
 	defer ticker.Stop()
 
-	s.logger.Printf("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
+	s.logger.Infof("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
 
 	// Initialize syncer with local holder and remote client.
 	for {
@@ -528,28 +923,37 @@ func (s *Server) monitorAntiEntropy() {
 		select {
 		case <-s.closing:
 			return
-		case <-s.cluster.abortAntiEntropyCh: // receive here so we don't block resizing
+		case <-s.cluster.abortAntiEntropyCh:
+			// receive here so we don't block resizing
+			// ... note that resizing is gone now, but I don't know whether we still need this.
 			continue
 		case <-ticker.C:
-			s.holder.Stats.Count("AntiEntropy", 1, 1.0)
+			s.holder.Stats.Count(MetricAntiEntropy, 1, 1.0)
 		}
 		t := time.Now()
-		if s.cluster.State() == ClusterStateResizing {
-			continue // don't launch anti-entropy during resize.
-			// the cluster sets its state to resizing and *then* sends to
-			// abortAntiEntropyCh before starting to resize
-		}
-		// Sync holders.
-		s.logger.Printf("holder sync beginning")
-		if err := s.syncer.SyncHolder(); err != nil {
-			s.logger.Printf("holder sync error: err=%s", err)
+
+		// We used to check for resizing before doing anti-entropy, but resizing is out
+		// so we don't otherwise care about state.
+		_, err := s.cluster.State()
+		if err != nil {
+			s.logger.Printf("cluster state error: err=%s", err)
 			continue
 		}
 
+		// Sync holders.
+		s.logger.Infof("holder sync beginning")
+		s.cluster.muAntiEntropy.Lock()
+		if err := s.syncer.SyncHolder(); err != nil {
+			s.cluster.muAntiEntropy.Unlock()
+			s.logger.Errorf("holder sync error: err=%s", err)
+			continue
+		}
+		s.cluster.muAntiEntropy.Unlock()
+
 		// Record successful sync in log.
-		s.logger.Printf("holder sync complete")
+		s.logger.Infof("holder sync complete")
 		dif := time.Since(t)
-		s.holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
+		s.holder.Stats.Timing(MetricAntiEntropyDurationSeconds, dif, 1.0)
 
 		// Drain tick channel since we just finished anti-entropy. If the AE
 		// process took a long time, we don't want them to pile up on each
@@ -563,6 +967,7 @@ func (s *Server) monitorAntiEntropy() {
 			break
 		}
 	}
+	// %% end sonarcloud ignore %%
 }
 
 // receiveMessage represents an implementation of BroadcastHandler.
@@ -576,24 +981,25 @@ func (s *Server) receiveMessage(m Message) error {
 		if err := f.AddRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
 			return errors.Wrap(err, "adding remote available shards")
 		}
+
 	case *CreateIndexMessage:
-		opt := obj.Meta
-		_, err := s.holder.CreateIndex(obj.Index, *opt)
-		if err != nil {
+		if _, err := s.holder.LoadIndex(obj.Index); err != nil {
 			return err
 		}
+
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
+
 	case *CreateFieldMessage:
-		idx := s.holder.Index(obj.Index)
-		if idx == nil {
-			return fmt.Errorf("local index not found: %s", obj.Index)
+		if _, err := s.holder.LoadField(obj.Index, obj.Field); err != nil {
+			return err
 		}
-		opt := obj.Meta
-		_, err := idx.createFieldIfNotExists(obj.Field, *opt)
-		if err != nil {
+
+	case *UpdateFieldMessage:
+		idx := s.holder.Index(obj.CreateFieldMessage.Index)
+		if err := idx.UpdateFieldLocal(&obj.CreateFieldMessage, obj.Update); err != nil {
 			return err
 		}
 	case *DeleteFieldMessage:
@@ -601,64 +1007,75 @@ func (s *Server) receiveMessage(m Message) error {
 		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
+
 	case *DeleteAvailableShardMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if err := f.RemoveAvailableShard(obj.ShardID); err != nil {
 			return err
 		}
+
 	case *CreateViewMessage:
-		f := s.holder.Field(obj.Index, obj.Field)
-		if f == nil {
-			return fmt.Errorf("local field not found: %s", obj.Field)
-		}
-		_, _, err := f.createViewIfNotExistsBase(obj.View)
-		if err != nil {
+		if _, err := s.holder.LoadView(obj.Index, obj.Field, obj.View); err != nil {
 			return err
 		}
+
 	case *DeleteViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
 			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
 		err := f.deleteView(obj.View)
-		if err != nil {
+		if errors.Cause(err) == ErrInvalidView {
+			s.logger.Infof("got intra-cluster message requesting delete of view: %s, but it did not exist (this is usually fine). Index: %s, field: %s ", obj.View, obj.Index, obj.Field)
+		} else if err != nil {
 			return err
 		}
-	case *ClusterStatus:
-		err := s.cluster.mergeClusterStatus(obj)
-		if err != nil {
-			return err
-		}
-	case *ResizeInstruction:
-		err := s.cluster.followResizeInstruction(obj)
-		if err != nil {
-			return err
-		}
-	case *ResizeInstructionComplete:
-		err := s.cluster.markResizeInstructionComplete(obj)
-		if err != nil {
-			return err
-		}
-	case *SetCoordinatorMessage:
-		return s.cluster.setCoordinator(obj.New)
-	case *UpdateCoordinatorMessage:
-		s.cluster.updateCoordinator(obj.New)
-	case *NodeStateMessage:
-		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
-		if err != nil {
-			return err
-		}
+
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
-	case *NodeEvent:
-		err := s.cluster.ReceiveEvent(obj)
+
+	case *LoadSchemaMessage:
+		err := s.holder.LoadSchema()
 		if err != nil {
-			return errors.Wrapf(err, "cluster receiving NodeEvent %v", obj)
+			return errors.Wrapf(err, "handling load schema message: %v", obj)
 		}
+
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
+
+	case *TransactionMessage:
+		err := s.handleTransactionMessage(obj)
+		if err != nil {
+			return errors.Wrapf(err, "handling transaction message: %v", obj)
+		}
 	}
 
+	return nil
+}
+
+func (s *Server) handleTransactionMessage(tm *TransactionMessage) error {
+	mtrns := tm.Transaction // message transaction
+	ctx := context.Background()
+	switch tm.Action {
+	case TRANSACTION_START:
+		_, err := s.StartTransaction(ctx, mtrns.ID, mtrns.Timeout, mtrns.Exclusive, true)
+		if err != nil {
+			return errors.Wrap(err, "starting transaction locally")
+		}
+	case TRANSACTION_FINISH:
+		_, err := s.FinishTransaction(ctx, mtrns.ID, true)
+		if err != nil {
+			return errors.Wrap(err, "finishing transaction locally")
+		}
+	case TRANSACTION_VALIDATE:
+		trns, err := s.GetTransaction(ctx, mtrns.ID, true)
+		if err != nil {
+			return errors.Wrap(err, "getting local transaction to validate")
+		}
+		return CompareTransactions(mtrns, trns)
+	default:
+		return errors.Errorf("unknown transaction action: '%s'", tm.Action)
+	}
 	return nil
 }
 
@@ -673,13 +1090,15 @@ func (s *Server) SendSync(m Message) error {
 
 	for _, node := range s.cluster.Nodes() {
 		node := node
+		uri := node.URI // URI is a struct value
+
 		// Don't forward the message to ourselves.
-		if s.uri == node.URI {
+		if s.uri == uri {
 			continue
 		}
 
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(context.Background(), &node.URI, msg)
+			return s.defaultClient.SendMessage(context.Background(), &uri, msg)
 		})
 	}
 
@@ -692,25 +1111,34 @@ func (s *Server) SendAsync(m Message) error {
 }
 
 // SendTo represents an implementation of Broadcaster.
-func (s *Server) SendTo(to *Node, m Message) error {
+func (s *Server) SendTo(node *disco.Node, m Message) error {
 	msg, err := s.serializer.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 	msg = append([]byte{getMessageType(m)}, msg...)
-	return s.defaultClient.SendMessage(context.Background(), &to.URI, msg)
+
+	uri := node.URI // URI is a struct value
+
+	return s.defaultClient.SendMessage(context.Background(), &uri, msg)
 }
 
 // node returns the pilosa.node object. It is used by membership protocols to
-// get this node's name(ID), location(URI), and coordinator status.
-func (s *Server) node() Node {
-	return *s.cluster.Node
+// get this node's name(ID), location(URI), and primary status.
+func (s *Server) node() *disco.Node {
+	return s.cluster.Node.Clone()
 }
 
 // handleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) handleRemoteStatus(pb Message) {
+	state, err := s.cluster.State()
+	if err != nil {
+		s.logger.Printf("getting cluster state: %s", err)
+		return
+	}
+
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
-	if s.cluster.State() != ClusterStateNormal {
+	if state != disco.ClusterStateNormal {
 		return
 	}
 
@@ -720,7 +1148,7 @@ func (s *Server) handleRemoteStatus(pb Message) {
 
 		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {
-			s.logger.Printf("merge remote status: %s", err)
+			s.logger.Errorf("merge remote status: %s", err)
 		}
 	}()
 }
@@ -744,7 +1172,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
-				s.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
+				s.logger.Errorf("local field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
 			if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
@@ -756,20 +1184,25 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 	return nil
 }
 
+// IsPrimary returns if this node is primary right now or not.
+func (s *Server) IsPrimary() bool {
+	return s.nodeID == s.noder.PrimaryNodeID(s.cluster.Hasher)
+}
+
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
 	// Do not send more than once a minute
 	if s.diagnosticInterval < time.Minute {
-		s.logger.Printf("diagnostics disabled")
+		s.logger.Infof("diagnostics disabled")
 		return
 	}
-	s.logger.Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.diagnosticInterval)
+	s.logger.Infof("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.diagnosticInterval)
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.cluster.nodes))
+	s.diagnostics.Set("NumNodes", len(s.cluster.noder.Nodes()))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)
@@ -787,11 +1220,11 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.EnrichWithSchemaProperties()
 		err = s.diagnostics.CheckVersion()
 		if err != nil {
-			s.logger.Printf("can't check version: %v", err)
+			s.logger.Errorf("can't check version: %v", err)
 		}
 		err = s.diagnostics.Flush()
 		if err != nil {
-			s.logger.Printf("diagnostics error: %s", err)
+			s.logger.Errorf("diagnostics error: %s", err)
 		}
 	}
 
@@ -822,7 +1255,7 @@ func (s *Server) monitorRuntime() {
 
 	defer s.gcNotifier.Close()
 
-	s.logger.Printf("runtime stats initializing (%s interval)", s.metricInterval)
+	s.logger.Infof("runtime stats initializing (%s interval)", s.metricInterval)
 
 	for {
 		// Wait for tick or a close.
@@ -831,27 +1264,162 @@ func (s *Server) monitorRuntime() {
 			return
 		case <-s.gcNotifier.AfterGC():
 			// GC just ran.
-			s.holder.Stats.Count("garbage_collection", 1, 1.0)
+			s.holder.Stats.Count(MetricGarbageCollection, 1, 1.0)
 		case <-ticker.C:
 		}
 
 		// Record the number of go routines.
-		s.holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+		s.holder.Stats.Gauge(MetricGoroutines, float64(runtime.NumGoroutine()), 1.0)
 
 		openFiles, err := countOpenFiles()
 		// Open File handles.
 		if err == nil {
-			s.holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
+			s.holder.Stats.Gauge(MetricOpenFiles, float64(openFiles), 1.0)
 		}
 
 		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
-		s.holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
-		s.holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
-		s.holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
-		s.holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
-		s.holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
+		s.holder.Stats.Gauge(MetricHeapAlloc, float64(m.HeapAlloc), 1.0)
+		s.holder.Stats.Gauge(MetricHeapInuse, float64(m.HeapInuse), 1.0)
+		s.holder.Stats.Gauge(MetricStackInuse, float64(m.StackInuse), 1.0)
+		s.holder.Stats.Gauge(MetricMallocs, float64(m.Mallocs), 1.0)
+		s.holder.Stats.Gauge(MetricFrees, float64(m.Frees), 1.0)
 	}
+}
+
+func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (*Transaction, error) {
+	snap := srv.cluster.NewSnapshot()
+	node := srv.node()
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotPrimary
+	}
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
+		return nil, errors.New("unexpected remote start call to primary or single node cluster")
+	}
+
+	if remote {
+		return srv.holder.StartTransaction(ctx, id, timeout, exclusive)
+	}
+
+	// empty string id should generate an id
+	if id == "" {
+		id = uuid.NewV4().String()
+	}
+	trns, err := srv.holder.StartTransaction(ctx, id, timeout, exclusive)
+	if err != nil {
+		return trns, errors.Wrap(err, "starting transaction")
+	}
+	err = srv.SendSync(
+		&TransactionMessage{
+			Action:      TRANSACTION_START,
+			Transaction: trns,
+		})
+	if err != nil {
+		// try to clean up, but ignore errors
+		_, errLocal := srv.holder.FinishTransaction(ctx, id)
+		errBroadcast := srv.SendSync(
+			&TransactionMessage{
+				Action:      TRANSACTION_FINISH,
+				Transaction: trns,
+			},
+		)
+		if errLocal != nil || errBroadcast != nil {
+			srv.logger.Errorf("error(s) while trying to clean up transaction which failed to start, local: %v, broadcast: %v",
+				errLocal,
+				errBroadcast,
+			)
+		}
+		return trns, errors.Wrap(err, "broadcasting transaction start")
+	}
+	return trns, nil
+}
+
+func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	snap := srv.cluster.NewSnapshot()
+	node := srv.node()
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotPrimary
+	}
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
+		return nil, errors.New("unexpected remote finish call to primary or single node cluster")
+	}
+
+	if remote {
+		return srv.holder.FinishTransaction(ctx, id)
+	}
+	trns, err := srv.holder.FinishTransaction(ctx, id)
+	if err != nil {
+		return trns, errors.Wrap(err, "finishing transaction")
+	}
+	err = srv.SendSync(
+		&TransactionMessage{
+			Action:      TRANSACTION_FINISH,
+			Transaction: trns,
+		},
+	)
+	if err != nil {
+		srv.logger.Errorf("error broadcasting transaction finish: %v", err)
+		// TODO retry?
+	}
+	return trns, nil
+}
+
+func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, error) {
+	snap := srv.cluster.NewSnapshot()
+	node := srv.node()
+	if !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotPrimary
+	}
+
+	return srv.holder.Transactions(ctx)
+}
+
+func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	snap := srv.cluster.NewSnapshot()
+
+	node := srv.node()
+	if !remote && !snap.IsPrimaryFieldTranslationNode(node.ID) && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotPrimary
+	}
+
+	if remote && (snap.IsPrimaryFieldTranslationNode(node.ID) || len(srv.cluster.Nodes()) == 1) {
+		return nil, errors.New("unexpected remote get call to primary or single node cluster")
+	}
+
+	trns, err := srv.holder.GetTransaction(ctx, id)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting transaction")
+	}
+
+	// The way a client would find out that the exclusive transaction
+	// it requested is active is by polling the GetTransaction
+	// endpoint. Therefore, returning an active, exclusive
+	// transaction, from here is what truly makes the transaction
+	// "live". Before doing so, we want to make sure all nodes
+	// agree. (in case other nodes have activity on this transaction
+	// we're not aware of)
+	if !remote && trns.Exclusive && trns.Active {
+		err := srv.SendSync(
+			&TransactionMessage{
+				Action:      TRANSACTION_VALIDATE,
+				Transaction: trns,
+			},
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "contacting remote hosts")
+		}
+		return trns, nil
+	}
+	return trns, nil
+}
+
+// PlanSQL parses and prepares a SQL statement.
+func (s *Server) PlanSQL(ctx context.Context, q string) (*Stmt, error) {
+	st, err := sql2.NewParser(strings.NewReader(q)).ParseStatement()
+	if err != nil {
+		return nil, err
+	}
+	return NewPlanner(s.executor).PlanStatement(ctx, st)
 }
 
 // countOpenFiles on operating systems that support lsof.
@@ -868,7 +1436,6 @@ func countOpenFiles() (int, error) {
 		lines := strings.Split(string(out), strconv.Itoa(pid))
 		return len(lines), nil
 	case "windows":
-		// TODO: count open file handles on windows
 		return 0, errors.New("countOpenFiles() on Windows is not supported")
 	default:
 		return 0, errors.New("countOpenFiles() on this OS is not supported")

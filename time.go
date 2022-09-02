@@ -1,23 +1,13 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,6 +29,16 @@ func (q TimeQuantum) HasDay() bool { return strings.ContainsRune(string(q), 'D')
 
 // HasHour returns true if the quantum contains a 'H' unit.
 func (q TimeQuantum) HasHour() bool { return strings.ContainsRune(string(q), 'H') }
+
+// IsEmpty returns true if the quantum is empty.
+func (q TimeQuantum) IsEmpty() bool { return string(q) == "" }
+
+func (q TimeQuantum) Granularity() rune {
+	var g rune
+	for _, g = range q {
+	}
+	return g
+}
 
 // Valid returns true if q is a valid time quantum value.
 func (q TimeQuantum) Valid() bool {
@@ -87,15 +87,69 @@ func viewByTimeUnit(name string, t time.Time, unit rune) string {
 	}
 }
 
+// YYYYMMDDHH lengths. Note that this is a []int, not a map[byte]int, so
+// the lookups can be cheaper.
+var lengthsByQuantum = []int{
+	'Y': 4,
+	'M': 6,
+	'D': 8,
+	'H': 10,
+}
+
+// viewsByTimeInto computes the list of views for a given time. It expects
+// to be given an initial buffer of the form `name_YYYYMMDDHH`, and a slice
+// of []bytes. This allows us to reuse the buffer for all the sub-buffers,
+// and also to reuse the slice of slices, to eliminate all those allocations.
+// This might seem crazy, but even including the JSON parsing and all the
+// disk activity, the straightforward viewsByTime implementation was 25%
+// of runtime in an ingest test.
+func viewsByTimeInto(fullBuf []byte, into [][]byte, t time.Time, q TimeQuantum) [][]byte {
+	l := len(fullBuf) - 10
+	date := fullBuf[l : l+10]
+	y, m, d := t.Date()
+	h := t.Hour()
+	// Did you know that Sprintf, Printf, and other things like that all
+	// do allocations, and that doing allocations in a tight loop like this
+	// is stunningly expensive? viewsByTime was 25% of an ingest test's
+	// total CPU, not counting the garbage collector overhead. This is about
+	// 3%. No, I'm not totally sure that justifies it.
+	if y < 1000 {
+		ys := fmt.Sprintf("%04d", y)
+		copy(date[0:4], []byte(ys))
+	} else if y >= 10000 {
+		// This is probably a bad answer but there isn't really a
+		// good answer.
+		ys := fmt.Sprintf("%04d", y%1000)
+		copy(date[0:4], []byte(ys))
+	} else {
+		strconv.AppendInt(date[:0], int64(y), 10)
+	}
+	date[4] = '0' + byte(m/10)
+	date[5] = '0' + byte(m%10)
+	date[6] = '0' + byte(d/10)
+	date[7] = '0' + byte(d%10)
+	date[8] = '0' + byte(h/10)
+	date[9] = '0' + byte(h%10)
+	into = into[:0]
+	for _, unit := range q {
+		if int(unit) < len(lengthsByQuantum) && lengthsByQuantum[unit] != 0 {
+			into = append(into, fullBuf[:l+lengthsByQuantum[unit]])
+		}
+	}
+	return into
+}
+
 // viewsByTime returns a list of views for a given timestamp.
 func viewsByTime(name string, t time.Time, q TimeQuantum) []string { // nolint: unparam
+	y, m, d := t.Date()
+	h := t.Hour()
+	full := fmt.Sprintf("%s_%04d%02d%02d%02d", name, y, m, d, h)
+	l := len(name) + 1
 	a := make([]string, 0, len(q))
 	for _, unit := range q {
-		view := viewByTimeUnit(name, t, unit)
-		if view == "" {
-			continue
+		if int(unit) < len(lengthsByQuantum) && lengthsByQuantum[unit] != 0 {
+			a = append(a, full[:l+lengthsByQuantum[unit]])
 		}
-		a = append(a, view)
 	}
 	return a
 }
@@ -223,7 +277,10 @@ func parseTime(t interface{}) (time.Time, error) {
 	switch v := t.(type) {
 	case string:
 		if calcTime, err = time.Parse(TimeFormat, v); err != nil {
-			return time.Time{}, errors.New("cannot parse string time")
+			// if the default parsing fails, check if user tried to
+			// supply partial time eg year and month
+			calcTime, err = parsePartialTime(v)
+			return calcTime, err
 		}
 	case int64:
 		calcTime = time.Unix(v, 0).UTC()
@@ -231,6 +288,122 @@ func parseTime(t interface{}) (time.Time, error) {
 		return time.Time{}, errors.New("arg must be a timestamp")
 	}
 	return calcTime, nil
+}
+
+// parsePartialTime parses strings where the time provided is only partial
+// eg given 2006-02, it extracts the year and month and the rest of the
+// components are set to the default values. The time must have the format
+// used in parseTime. The year must be present. The rest of the components are
+// optional but if a component is present in the input, this implies that all
+// the preceding components are also specified. For example, if the hour is provided
+// then the day, month and year must be present. This function could and should be
+// simplified
+func parsePartialTime(t string) (time.Time, error) {
+	// helper parseCustomHourMinute parses strings of the form HH:MM to
+	// hour and minute component
+	parseHourMinute := func(t string) (hour, minute int, err error) {
+		// time should have the format HH:MM
+		subStrings := strings.Split(t, ":")
+		switch len(subStrings) {
+		case 2:
+			// has minutes
+			minute, err = strconv.Atoi(subStrings[1])
+			if err != nil {
+				return -1, -1, errors.New("invalid time")
+			}
+			fallthrough
+		case 1:
+			hour, err = strconv.Atoi(subStrings[0])
+			if err != nil {
+				return -1, -1, errors.New("invalid time")
+			}
+		default:
+			return -1, -1, errors.New("invalid time")
+		}
+
+		return
+	}
+	// helper trim function
+	trim := func(subMatches []string) (filtered []string, err error) {
+		restAreEmpty := func(ss []string) bool {
+			for _, s := range ss {
+				if s != "" {
+					return false
+				}
+			}
+			return true
+		}
+		if len(subMatches) <= 1 {
+			return nil, errors.New("invalid time")
+		}
+		// ignore full match which is at index 0
+		subMatches = subMatches[1:] // ignore full match which is at index 0
+		for i, s := range subMatches {
+			if s != "" {
+				if i > 0 {
+					s = s[1:] // remove preceding hyphen or T
+				}
+				filtered = append(filtered, s)
+			} else {
+				// rest must be empty for date-time to be valid
+				if !restAreEmpty(subMatches[i:]) {
+					return nil, errors.New("invalid date-time")
+				}
+				break
+			}
+		}
+		return filtered, nil
+	}
+
+	var errInvalidTime error = errors.New("cannot parse string time")
+	var regex = regexp.MustCompile(`^(\d{4})(-\d{2})?(-\d{2})?(T.+)?$`)
+	subMatches := regex.FindStringSubmatch(t)
+	subMatches, err := trim(subMatches)
+	if err != nil {
+		return time.Time{}, errInvalidTime
+	}
+	// defaults
+	var (
+		yr    int
+		month = time.January
+		day   = 1
+		hour  = 0
+		min   = 0
+	)
+	// year must be set, the rest are optional
+	switch len(subMatches) {
+	case 4:
+		// time
+		hour, min, err = parseHourMinute(subMatches[3])
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+		fallthrough
+	case 3:
+		// day
+		day, err = strconv.Atoi(subMatches[2])
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+		fallthrough
+	case 2:
+		// month
+		monthNum, err := strconv.Atoi(subMatches[1])
+		month = time.Month(monthNum)
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+		fallthrough
+	case 1:
+		// year
+		yr, err = strconv.Atoi(subMatches[0])
+		if err != nil {
+			return time.Time{}, errInvalidTime
+		}
+	default:
+		return time.Time{}, errInvalidTime
+	}
+	return time.Date(yr, month, day, hour, min, 0, 0, time.UTC), nil
 }
 
 // minMaxViews returns the min and max view from a list of views
@@ -241,7 +414,29 @@ func minMaxViews(views []string, q TimeQuantum) (min string, max string) {
 	// Sort the list of views.
 	sort.Strings(views)
 
-	// Determine the least significant quantum and set that as the
+	// get the lowest granularity quantum available from the given views
+	lowestQuantumFromViews := getLowestGranularityQuantum(views)
+
+	/*
+		- lowestQuantumFromViews was added because of a unique case where the view for least precise quantum was somehow deleted:
+			- ex: q="YMDH" but views only have "DH" (ex: std_20220531, std_2022053123)
+			- without lowestQuantumFromViews, this function would return empty for min, max (as if there were no time views)
+				because it would look for "Y" views but cant find it since it was deleted
+			- with lowestQuantumFromViews, this function will look at the available quantum from views (ex: "DH")
+				grab the least precise quantum ("D")
+				and use D (day) view (ex: std_20220531)
+		- use lowestQuantumFromViews if
+		1. lowestQuantumFromViews is not empty
+		2. lowestQuantumFromViews is actually a substring of q
+		 - lowestQuantumFromViews has to be a substring of q because if q="Y" but views quantum="DH" (ex: std_20220531, std_2022053123),
+		 the "DH" quantum wont matter since originally q of "Y" didnt include "DH"
+	*/
+
+	if !(lowestQuantumFromViews.IsEmpty()) && strings.Contains(q.String(), lowestQuantumFromViews.String()) {
+		q = lowestQuantumFromViews
+	}
+
+	// Determine the least precise quantum and set that as the
 	// number of string characters to compare against.
 	var chars int
 	if q.HasYear() {
@@ -281,7 +476,7 @@ func timeOfView(v string, adj bool) (time.Time, error) {
 		return time.Time{}, nil
 	}
 
-	layout := "2006010203"
+	layout := "2006010215"
 	timePart := viewTimePart(v)
 
 	switch len(timePart) {
@@ -330,5 +525,63 @@ func timeOfView(v string, adj bool) (time.Time, error) {
 // e.g. the view "string_201901" would return "201901".
 func viewTimePart(v string) string {
 	parts := strings.Split(v, "_")
+	if _, err := strconv.Atoi(parts[len(parts)-1]); err != nil {
+		// it's not a number!
+		return ""
+	}
 	return parts[len(parts)-1]
+}
+
+// getLowestGranularityQuantum returns lowest granularity quantum from a list of views
+// e.g.
+//	[std_2001, std_200102, std_20010203, std_2001020304] - returns "Y" since year is the lowest granularity
+//	[std_2001020304, std_200102, std_20010203] - returns "M", the order of views should not affect lowest granularity
+func getLowestGranularityQuantum(views []string) TimeQuantum {
+
+	// Time quantum with the highest level of granularity we support
+	timeQuantum := "YMDH"
+
+	write_Y := false
+	write_M := false
+	write_D := false
+	write_H := false
+	for _, v := range views {
+		viewTime := viewTimePart(v)
+		if viewTime != "" {
+			if len(viewTime) == 4 {
+				if !write_Y {
+					write_Y = true
+				}
+			} else if len(viewTime) == 6 {
+				if !write_M {
+					write_M = true
+				}
+			} else if len(viewTime) == 8 {
+				if !write_D {
+					write_D = true
+				}
+			} else if len(viewTime) == 10 {
+				if !write_H {
+					write_H = true
+				}
+			}
+		}
+	}
+
+	lowestGranularity := ""
+	if write_Y {
+		// Y
+		lowestGranularity = timeQuantum[:1]
+	} else if !write_Y && write_M {
+		// M
+		lowestGranularity = timeQuantum[1:2]
+	} else if !write_Y && !write_M && write_D {
+		// D
+		lowestGranularity = timeQuantum[2:3]
+	} else if !write_Y && !write_M && !write_D && write_H {
+		// H
+		lowestGranularity = timeQuantum[3:4]
+	}
+
+	return TimeQuantum(lowestGranularity)
 }

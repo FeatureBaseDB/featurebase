@@ -1,0 +1,136 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+  zookeeper:
+    image: confluentinc/cp-zookeeper:${CONFLUENT_VERSION:-5.5.3}
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/secrets/jaas_kafka_broker.conf"
+    volumes:
+      - ./docker-sasl/ssl_keys:/etc/kafka/secrets
+
+  kafka:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-5.5.3}
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: LISTENER_DOCKER_INTERNAL://kafka:19092,LISTENER_DOCKER_EXTERNAL://kafka:9092,LISTENER_DOCKER_EXTERNAL_SSL://kafka:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_DOCKER_INTERNAL:PLAINTEXT,LISTENER_DOCKER_EXTERNAL:PLAINTEXT,LISTENER_DOCKER_EXTERNAL_SSL:SASL_SSL
+      KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_DOCKER_INTERNAL
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_BROKER_ID: 1
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/secrets/jaas_kafka_broker.conf"
+
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SSL_KEYSTORE_FILENAME: broker_kafkaBroker_server.keystore.jks
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: credentials
+      KAFKA_SSL_KEY_CREDENTIALS: credentials
+
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+    volumes:
+      - ./docker-sasl/ssl_keys:/etc/kafka/secrets
+      
+    depends_on:
+      - zookeeper
+
+  # UI can be nice for debugging stuff and messing with Kafka. Not used by tests.
+  kafka-ui:
+    container_name: kafka-ui
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - 8080:8080
+    depends_on:
+      - zookeeper
+      - kafka
+      - schema-registry
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_JMXPORT: 9997
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:${CONFLUENT_VERSION:-5.5.3}
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:19092
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    depends_on:
+      - zookeeper
+      - kafka
+
+  pilosa:
+    image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    environment:
+      PILOSA_DATA_DIR: /data
+      PILOSA_BIND: 0.0.0.0:10101
+      PILOSA_BIND_GRPC: 0.0.0.0:20101
+      PILOSA_ADVERTISE: pilosa:10101
+      PILOSA_LOOKUP_DB_DSN: "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable"
+    depends_on: 
+      - postgres
+    volumes:
+      - ./testenv/certs:/certs
+
+  pilosa-tls:
+    image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    environment:
+      PILOSA_DATA_DIR: /data
+      PILOSA_BIND: https://0.0.0.0:10111
+      PILOSA_BIND_GRPC: 0.0.0.0:20111
+      PILOSA_ADVERTISE: https://pilosa-tls:10111
+      PILOSA_TLS_CA_CERTIFICATE: /certs/ca.crt
+      PILOSA_TLS_CERTIFICATE: /certs/pilosa-tls.crt
+      PILOSA_TLS_KEY: /certs/pilosa-tls.key
+      PILOSA_TLS_ENABLE_CLIENT_VERIFICATION: 1
+    volumes:
+      - ./testenv/certs:/certs
+
+  pilosa-auth:
+    image: registry.gitlab.com/molecula/featurebase/featurebase:linux-amd64-${BRANCH_NAME}
+    environment:
+      PILOSA_DATA_DIR: /data
+      PILOSA_BIND: 0.0.0.0:10105
+      PILOSA_BIND_GRPC: 0.0.0.0:20105
+      PILOSA_ADVERTISE: pilosa-auth:10105
+      PILOSA_CONFIG: /testdata/featurebase.conf
+    volumes:
+      - ./testdata:/testdata
+    depends_on:
+      - fakeidp
+
+  fakeidp:
+    build:
+      context: .
+      dockerfile: Dockerfile-fakeIDP
+
+  idk-test:
+    build:
+      context: ../.
+      dockerfile: ./idk/Dockerfile-test
+    environment:
+      IDK_DEFAULT_SHARD_TRANSACTIONAL: ${IDK_DEFAULT_SHARD_TRANSACTIONAL}
+    volumes:
+      - ./testenv/certs:/certs
+      - ./docker-sasl/ssl_keys:/ssl_keys
+      - ./testdata:/testdata
+    depends_on:
+      - kafka
+      - postgres
+      - fakeidp
+  wait:
+    build:
+      context: .
+      dockerfile: Dockerfile-wait
+    volumes:
+      - ./testenv/certs:/certs
+
+
+

@@ -1,16 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 //
 // Package server contains the `pilosa server` subcommand which runs Pilosa
 // itself. The purpose of this package is to define an easily tested Command
@@ -20,34 +9,43 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/boltdb"
-	"github.com/pilosa/pilosa/v2/encoding/proto"
-	"github.com/pilosa/pilosa/v2/gcnotify"
-	"github.com/pilosa/pilosa/v2/gopsutil"
-	"github.com/pilosa/pilosa/v2/gossip"
-	"github.com/pilosa/pilosa/v2/http"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/prometheus"
-	"github.com/pilosa/pilosa/v2/stats"
-	"github.com/pilosa/pilosa/v2/statsd"
-	"github.com/pilosa/pilosa/v2/syswrap"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	petcd "github.com/molecula/featurebase/v3/etcd"
+	"github.com/molecula/featurebase/v3/gcnotify"
+	"github.com/molecula/featurebase/v3/gopsutil"
+	"github.com/molecula/featurebase/v3/logger"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/prometheus"
+	"github.com/molecula/featurebase/v3/statik"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/statsd"
+	"github.com/molecula/featurebase/v3/syswrap"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
 
@@ -63,10 +61,6 @@ type Command struct {
 	// Configuration.
 	Config *Config
 
-	// Gossip transport
-	gossipTransport *gossip.Transport
-	gossipMemberSet io.Closer
-
 	// Standard input/output
 	*pilosa.CmdIO
 
@@ -75,17 +69,23 @@ type Command struct {
 	// done will be closed when Command.Close() is called
 	done chan struct{}
 
-	// Passed to the Gossip implementation.
-	logOutput io.Writer
-	logger    loggerLogger
+	logOutput      io.Writer
+	queryLogOutput io.Writer
+	logger         loggerLogger
+	queryLogger    loggerLogger
 
-	Handler      pilosa.Handler
+	Handler      pilosa.HandlerI
+	grpcServer   *grpcServer
+	grpcLn       net.Listener
 	API          *pilosa.API
 	ln           net.Listener
-	listenURI    *pilosa.URI
+	listenURI    *pnet.URI
+	tlsConfig    *tls.Config
 	closeTimeout time.Duration
+	pgserver     *PostgresServer
 
 	serverOptions []pilosa.ServerOption
+	auth          *authn.Auth
 }
 
 type CommandOption func(c *Command) error
@@ -106,6 +106,13 @@ func OptCommandCloseTimeout(d time.Duration) CommandOption {
 
 func OptCommandConfig(config *Config) CommandOption {
 	return func(c *Command) error {
+		defer c.Config.MustValidate()
+		if c.Config != nil {
+			c.Config.Etcd = config.Etcd
+			c.Config.Auth = config.Auth
+			c.Config.TLS = config.TLS
+			return nil
+		}
 		c.Config = config
 		return nil
 	}
@@ -133,37 +140,139 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 	return c
 }
 
+// defaultFileLimit is a suggested open file count limit for Pilosa to run with
+const (
+	defaultFileLimit = uint64(256 * 1024)
+)
+
+// we want to set resource limits *exactly once*, and then be able
+// to report on whether or not that succeeded.
+var setupResourceLimitsOnce sync.Once
+var setupResourceLimitsErr error
+
+// doSetupResourceLimits is the function which actually does the
+// resource limit setup, possibly yielding an error. it's a Command
+// method because it uses the command's logger, but is in fact
+// expected to work globally.
+func (m *Command) doSetupResourceLimits() error {
+	oldLimit := &syscall.Rlimit{}
+
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
+		return fmt.Errorf("checking open file limit: %w", err)
+	}
+	// inherit existing limit
+	targetFileLimit := defaultFileLimit
+	if targetFileLimit > oldLimit.Max {
+		m.logger.Warnf("open file maximum (%d) lower than suggested open files (%d)",
+			oldLimit.Max, defaultFileLimit)
+		targetFileLimit = oldLimit.Max
+	}
+	// If the soft limit is lower than the defaultFileLimit constant, we will try to change it.
+	if oldLimit.Cur < targetFileLimit {
+		newLimit := &syscall.Rlimit{
+			Cur: targetFileLimit,
+			Max: oldLimit.Max,
+		}
+		// Try to set the limit
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, newLimit); err != nil {
+			return fmt.Errorf("setting open file limit: %w", err)
+		}
+
+		// Check the limit after setting it. OS may not obey Setrlimit call.
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
+			return fmt.Errorf("checking open file limit: %w", err)
+		} else {
+			if oldLimit.Cur != targetFileLimit {
+				m.logger.Warnf("tried to set open file limit to %d, but it is %d; see https://docs.featurebase.com/reference/hostsystem#operating-system-configuration", targetFileLimit, oldLimit.Cur)
+			}
+		}
+	}
+	// We don't have corresponding options for non-Linux right now, but probably should.
+	if runtime.GOOS == "linux" {
+		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")
+		if err != nil {
+			m.logger.Infof("Tried unsuccessfully to check system mmap limit: %w", err)
+		} else {
+			sysMmapLimit, err := strconv.ParseUint(strings.TrimSuffix(string(result), "\n"), 10, 64)
+			if err != nil {
+				m.logger.Infof("Tried unsuccessfully to check system mmap limit: %w", err)
+			} else if m.Config.MaxMapCount > sysMmapLimit {
+				m.logger.Warnf("Config max map limit (%v) is greater than current system limits (%v)", m.Config.MaxMapCount, sysMmapLimit)
+			}
+		}
+	}
+	return nil
+}
+
+// setupResourceLimits tries to set up resource limits, like mmap limits
+// and open files, if that hasn't been done already, and returns an error
+// if the attempt failed in a way that we didn't anticipate. Mere permission
+// denied errors are not that concerning.
+func (m *Command) setupResourceLimits() error {
+	setupResourceLimitsOnce.Do(func() {
+		setupResourceLimitsErr = m.doSetupResourceLimits()
+	})
+	return setupResourceLimitsErr
+}
+
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
-
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-
 	// SetupServer
 	err = m.SetupServer()
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
-
-	// SetupNetworking
-	err = m.setupNetworking()
+	err = m.setupResourceLimits()
 	if err != nil {
-		return errors.Wrap(err, "setting up networking")
+		return errors.Wrap(err, "setting resource limits")
 	}
-	go func() {
-		err := m.Handler.Serve()
-		if err != nil {
-			m.logger.Printf("handler serve error: %v", err)
-		}
-	}()
 
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return errors.Wrap(err, "opening server")
 	}
 
+	// Initialize HTTP.
+	go func() {
+		if err := m.Handler.Serve(); err != nil {
+			m.logger.Errorf("handler serve error: %v", err)
+		}
+	}()
 	m.logger.Printf("listening as %s\n", m.listenURI)
 
+	// Initialize gRPC.
+	go func() {
+		if err := m.grpcServer.Serve(); err != nil {
+			m.logger.Errorf("grpc server error: %v", err)
+		}
+	}()
+
+	// Initialize postgres.
+	m.pgserver = nil
+	if m.Config.Postgres.Bind != "" {
+		var tlsConf *tls.Config
+		if m.Config.Postgres.TLS.CertificatePath != "" {
+			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger)
+			if err != nil {
+				return errors.Wrap(err, "setting up postgres TLS")
+			}
+			tlsConf = conf
+		}
+		m.pgserver = NewPostgresServer(m.API, m.logger, tlsConf, SqlVersion(m.Config.Postgres.SqlVersion))
+		m.pgserver.s.StartupTimeout = time.Duration(m.Config.Postgres.StartupTimeout)
+		m.pgserver.s.ReadTimeout = time.Duration(m.Config.Postgres.ReadTimeout)
+		m.pgserver.s.WriteTimeout = time.Duration(m.Config.Postgres.WriteTimeout)
+		m.pgserver.s.MaxStartupSize = m.Config.Postgres.MaxStartupSize
+		m.pgserver.s.ConnectionLimit = m.Config.Postgres.ConnectionLimit
+		err := m.pgserver.Start(m.Config.Postgres.Bind)
+		if err != nil {
+			return errors.Wrap(err, "starting postgres")
+		}
+	}
+
+	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
 	return nil
 }
@@ -177,16 +286,12 @@ func (m *Command) UpAndDown() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
+	m.logger.Infof("bringing server up and shutting it down immediately")
 
-	// SetupNetworking (so we'll have profiling)
-	err = m.setupNetworking()
-	if err != nil {
-		return errors.Wrap(err, "setting up networking")
-	}
 	go func() {
 		err := m.Handler.Serve()
 		if err != nil {
-			m.logger.Printf("handler serve error: %v", err)
+			m.logger.Errorf("handler serve error: %v", err)
 		}
 	}()
 
@@ -195,7 +300,7 @@ func (m *Command) UpAndDown() (err error) {
 		return errors.Wrap(err, "bringing server up and down")
 	}
 
-	m.logger.Printf("brought up and shut down again")
+	m.logger.Infof("teardown complete")
 
 	return nil
 }
@@ -207,13 +312,13 @@ func (m *Command) Wait() error {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	select {
 	case sig := <-c:
-		m.logger.Printf("received signal '%s', gracefully shutting down...\n", sig.String())
+		m.logger.Infof("received signal '%s', gracefully shutting down...\n", sig.String())
 
 		// Second signal causes a hard shutdown.
 		go func() { <-c; os.Exit(1) }()
 		return errors.Wrap(m.Close(), "closing command")
 	case <-m.done:
-		m.logger.Printf("server closed externally")
+		m.logger.Infof("server closed externally")
 		return nil
 	}
 }
@@ -223,19 +328,18 @@ func (m *Command) SetupServer() error {
 	runtime.SetBlockProfileRate(m.Config.Profile.BlockRate)
 	runtime.SetMutexProfileFraction(m.Config.Profile.MutexFraction)
 
-	syswrap.SetMaxMapCount(m.Config.MaxMapCount)
-	syswrap.SetMaxFileCount(m.Config.MaxFileCount)
+	_ = syswrap.SetMaxMapCount(m.Config.MaxMapCount)
+	_ = syswrap.SetMaxFileCount(m.Config.MaxFileCount)
 
 	err := m.setupLogger()
 	if err != nil {
 		return errors.Wrap(err, "setting up logger")
 	}
 
-	productName := "Pilosa"
-	if pilosa.EnterpriseEnabled {
-		productName += " Enterprise"
-	}
-	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
+	version := pilosa.VersionInfo(m.Config.Future.Rename)
+	m.logger.Infof("%s", version)
+
+	handleTrialDeadline(m.logger)
 
 	// validateAddrs sets the appropriate values for Bind and Advertise
 	// based on the inputs. It is not responsible for applying defaults, although
@@ -251,10 +355,27 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "processing bind address")
 	}
 
+	grpcURI, err := pnet.NewURIFromAddress(m.Config.BindGRPC)
+	if err != nil {
+		return errors.Wrap(err, "processing bind grpc address")
+	}
+	if m.Config.GRPCListener == nil {
+		// create gRPC listener
+		m.grpcLn, err = net.Listen("tcp", grpcURI.HostPort())
+		if err != nil {
+			return errors.Wrap(err, "creating grpc listener")
+		}
+		// If grpc port is 0, get auto-allocated port from listener
+		if grpcURI.Port == 0 {
+			grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
+		}
+	} else {
+		m.grpcLn = m.Config.GRPCListener
+	}
+
 	// Setup TLS
-	var TLSConfig *tls.Config
 	if uri.Scheme == "https" {
-		TLSConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
+		m.tlsConfig, err = GetTLSConfig(&m.Config.TLS, m.logger)
 		if err != nil {
 			return errors.Wrap(err, "get tls config")
 		}
@@ -265,12 +386,12 @@ func (m *Command) SetupServer() error {
 		diagnosticsInterval = defaultDiagnosticsInterval
 	}
 
-	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host, m.Config.Namespace())
 	if err != nil {
 		return errors.Wrap(err, "new stats client")
 	}
 
-	m.ln, err = getListener(*uri, TLSConfig)
+	m.ln, err = getListener(*uri, m.tlsConfig)
 	if err != nil {
 		return errors.Wrap(err, "getting listener")
 	}
@@ -283,7 +404,7 @@ func (m *Command) SetupServer() error {
 	// Save listenURI for later reference.
 	m.listenURI = uri
 
-	c := http.GetHTTPClient(TLSConfig)
+	c := pilosa.GetHTTPClient(m.tlsConfig)
 
 	// Get advertise address as uri.
 	advertiseURI, err := pilosa.AddressWithDefaults(m.Config.Advertise)
@@ -294,20 +415,56 @@ func (m *Command) SetupServer() error {
 		advertiseURI.SetPort(uri.Port)
 	}
 
-	// Primary store configuration is handled automatically now.
-	if m.Config.Translation.PrimaryURL != "" {
-		m.logger.Printf("DEPRECATED: The primary-url configuration option is no longer used.")
+	// Get grpc advertise address as uri.
+	advertiseGRPCURI, err := pnet.NewURIFromAddress(m.Config.AdvertiseGRPC)
+	if err != nil {
+		return errors.Wrap(err, "processing grpc advertise address")
+	}
+	if advertiseGRPCURI.Port == 0 {
+		advertiseGRPCURI.SetPort(grpcURI.Port)
 	}
 
-	// Set Coordinator.
-	coordinatorOpt := pilosa.OptServerIsCoordinator(false)
-	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
-		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
+	// Primary store configuration is handled automatically now.
+	if m.Config.Translation.PrimaryURL != "" {
+		m.logger.Infof("DEPRECATED: The primary-url configuration option is no longer used.")
 	}
+	// Handle renamed and deprecated config parameter
+	longQueryTime := m.Config.LongQueryTime
+	if m.Config.Cluster.LongQueryTime >= 0 {
+		longQueryTime = m.Config.Cluster.LongQueryTime
+		m.logger.Infof("DEPRECATED: Configuration parameter cluster.long-query-time has been renamed to long-query-time")
+	}
+
+	// Use other config parameters to set Etcd parameters which we don't want to
+	// expose in the user-facing config.
+	//
+	// Use cluster.name for etcd.cluster-name
+	m.Config.Etcd.ClusterName = m.Config.Cluster.Name
+	//
+	// Use name for etcd.name
+	m.Config.Etcd.Name = m.Config.Name
+	// use the pilosa provided tls credentials if available
+	m.Config.Etcd.TrustedCAFile = m.Config.TLS.CACertPath
+	m.Config.Etcd.ClientCertFile = m.Config.TLS.CertificatePath
+	m.Config.Etcd.ClientKeyFile = m.Config.TLS.CertificateKeyPath
+	m.Config.Etcd.PeerCertFile = m.Config.TLS.CertificatePath
+	m.Config.Etcd.PeerKeyFile = m.Config.TLS.CertificateKeyPath
+	//
+	// If an Etcd.Dir is not provided, nest a default under the pilosa data dir.
+	if m.Config.Etcd.Dir == "" {
+		path, err := expandDirName(m.Config.DataDir)
+		if err != nil {
+			return errors.Wrapf(err, "expanding directory name: %s", m.Config.DataDir)
+		}
+		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
+	}
+
+	m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
+	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
 
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
-		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
+		pilosa.OptServerLongQueryTime(time.Duration(longQueryTime)),
 		pilosa.OptServerDataDir(m.Config.DataDir),
 		pilosa.OptServerReplicaN(m.Config.Cluster.ReplicaN),
 		pilosa.OptServerMaxWritesPerRequest(m.Config.MaxWritesPerRequest),
@@ -315,20 +472,36 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
 		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(c)),
+		pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
+		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
-		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),
+		pilosa.OptServerQueryLogger(m.queryLogger),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
-		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
+		pilosa.OptServerGRPCURI(advertiseGRPCURI),
+		pilosa.OptServerClusterName(m.Config.Cluster.Name),
 		pilosa.OptServerSerializer(proto.Serializer{}),
-		coordinatorOpt,
+		pilosa.OptServerStorageConfig(m.Config.Storage),
+		pilosa.OptServerRBFConfig(m.Config.RBFConfig),
+		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
+		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
+		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
+		pilosa.OptServerDisCo(e, e, e, e),
+	}
+
+	if m.Config.LookupDBDSN != "" {
+		serverOptions = append(serverOptions, pilosa.OptServerLookupDB(m.Config.LookupDBDSN))
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
+
+	if m.Config.Auth.Enable {
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(pilosa.NewInternalClientFromURI(uri, c, pilosa.WithSecretKey(m.Config.Auth.SecretKey), pilosa.WithSerializer(proto.Serializer{}))))
+	} else {
+		serverOptions = append(serverOptions, pilosa.OptServerInternalClient(pilosa.NewInternalClientFromURI(uri, c, pilosa.WithSerializer(proto.Serializer{}))))
+	}
 
 	m.Server, err = pilosa.NewServer(serverOptions...)
 
@@ -343,96 +516,200 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "new api")
 	}
+	// Tell server about its new API, which its client will need.
+	m.Server.SetAPI(m.API)
 
-	m.Handler, err = http.NewHandler(
-		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
-		http.OptHandlerAPI(m.API),
-		http.OptHandlerLogger(m.logger),
-		http.OptHandlerListener(m.ln),
-		http.OptHandlerCloseTimeout(m.closeTimeout),
+	var p authz.GroupPermissions
+	if m.Config.Auth.Enable {
+		m.Config.MustValidateAuth()
+		permsFile, err := os.Open(m.Config.Auth.PermissionsFile)
+		if err != nil {
+			return err
+		}
+		defer permsFile.Close()
+
+		if err = p.ReadPermissionsFile(permsFile); err != nil {
+			return err
+		}
+
+		ac := m.Config.Auth
+		m.auth, err = authn.NewAuth(m.logger, ac.RedirectBaseURL, ac.Scopes, ac.AuthorizeURL, ac.TokenURL, ac.GroupEndpointURL, ac.LogoutURL, ac.ClientId, ac.ClientSecret, ac.SecretKey, ac.ConfiguredIPs)
+		if err != nil {
+			return errors.Wrap(err, "instantiating authN object")
+		}
+
+		err = m.setupQueryLogger()
+		if err != nil {
+			return errors.Wrap(err, "setting up queryLogger")
+		}
+
+		m.queryLogger.Infof("Starting Featurebase...")
+		m.queryLogger.Infof("Group with admin level access: %v", p.Admin)
+		m.queryLogger.Infof("Permissions: %+v", p.Permissions)
+		if len(ac.ConfiguredIPs) > 0 {
+			m.queryLogger.Infof("Configured IPs for allowed networks: %v", ac.ConfiguredIPs)
+		}
+
+		// disable postgres binding if auth is enabled
+		m.Config.Postgres.Bind = ""
+
+		// TLS must be enabled if auth is
+		if m.Config.TLS.CertificatePath == "" || m.Config.TLS.CertificateKeyPath == "" {
+			return fmt.Errorf("transport layer security (TLS) is not configured properly. TLS is required when AuthN/Z is enabled, current configuration: %v", m.Config.TLS)
+		}
+
+	}
+
+	m.grpcServer, err = NewGRPCServer(
+		OptGRPCServerAPI(m.API),
+		OptGRPCServerListener(m.grpcLn),
+		OptGRPCServerTLSConfig(m.tlsConfig),
+		OptGRPCServerLogger(m.logger),
+		OptGRPCServerStats(statsClient),
+		OptGRPCServerAuth(m.auth),
+		OptGRPCServerPerm(&p),
+		OptGRPCServerQueryLogger(m.queryLogger),
+	)
+	if err != nil {
+		return errors.Wrap(err, "getting grpcServer")
+	}
+
+	m.Handler, err = pilosa.NewHandler(
+		pilosa.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
+		pilosa.OptHandlerAPI(m.API),
+		pilosa.OptHandlerLogger(m.logger),
+		pilosa.OptHandlerQueryLogger(m.queryLogger),
+		pilosa.OptHandlerFileSystem(&statik.FileSystem{}),
+		pilosa.OptHandlerListener(m.ln, m.Config.Advertise),
+		pilosa.OptHandlerCloseTimeout(m.closeTimeout),
+		pilosa.OptHandlerMiddleware(m.grpcServer.middleware(m.Config.Handler.AllowedOrigins)),
+		pilosa.OptHandlerAuthN(m.auth),
+		pilosa.OptHandlerAuthZ(&p),
+		pilosa.OptHandlerSerializer(proto.Serializer{}),
+		pilosa.OptHandlerRoaringSerializer(proto.RoaringSerializer),
 	)
 	return errors.Wrap(err, "new handler")
 }
 
-// setupNetworking sets up internode communication based on the configuration.
-func (m *Command) setupNetworking() error {
-	if m.Config.Cluster.Disabled {
-		return nil
+// setupLogger sets up the logger based on the configuration.
+func (m *Command) setupLogger() error {
+	var f *logger.FileWriter
+	var err error
+	if m.Config.LogPath == "" {
+		m.logOutput = m.Stderr
+	} else {
+		f, err = logger.NewFileWriter(m.Config.LogPath)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+		m.logOutput = f
 	}
-
-	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
-	if err != nil {
-		return errors.Wrap(err, "parsing port")
+	if m.Config.Verbose {
+		m.logger = logger.NewVerboseLogger(m.logOutput)
+	} else {
+		m.logger = logger.NewStandardLogger(m.logOutput)
 	}
+	if m.Config.LogPath != "" {
+		sighup := make(chan os.Signal, 1)
+		signal.Notify(sighup, syscall.SIGHUP)
+		go func() {
+			for {
+				// duplicate stderr onto log file
+				err := m.dup(int(f.Fd()), int(os.Stderr.Fd()))
+				if err != nil {
+					m.logger.Errorf("syscall dup: %s\n", err.Error())
+				}
 
-	// get the host portion of addr to use for binding
-	gossipHost := m.listenURI.Host
-	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-	if err != nil {
-		return errors.Wrap(err, "getting transport")
+				// reopen log file on SIGHUP
+				<-sighup
+				err = f.Reopen()
+				if err != nil {
+					m.logger.Infof("reopen: %s\n", err.Error())
+				}
+			}
+		}()
 	}
-
-	gossipMemberSet, err := gossip.NewMemberSet(
-		m.Config.Gossip,
-		m.API,
-		gossip.WithLogOutput(&filteredWriter{logOutput: m.logOutput, v: m.Config.Verbose}),
-		gossip.WithPilosaLogger(m.logger),
-		gossip.WithTransport(m.gossipTransport),
-	)
-	if err != nil {
-		return errors.Wrap(err, "getting memberset")
-	}
-	m.gossipMemberSet = gossipMemberSet
-
-	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
+	return nil
 }
 
-// GossipTransport allows a caller to return the gossip transport created when
-// setting up the GossipMemberSet. This is useful if one needs to determine the
-// allocated ephemeral port programmatically. (usually used in tests)
-func (m *Command) GossipTransport() *gossip.Transport {
-	return m.gossipTransport
+func (m *Command) setupQueryLogger() error {
+	var f *logger.FileWriter
+	var err error
+
+	if m.Config.Auth.QueryLogPath == "" {
+		f, err = logger.NewFileWriterMode("queries/query.log", 0o600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	} else {
+		f, err = logger.NewFileWriterMode(m.Config.Auth.QueryLogPath, 0o600)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+	}
+	m.queryLogOutput = f
+
+	m.queryLogger = logger.NewStandardLogger(m.queryLogOutput)
+
+	sighup := make(chan os.Signal, 1)
+	signal.Notify(sighup, syscall.SIGHUP)
+	go func() {
+		for range sighup {
+			if err := f.Reopen(); err != nil {
+				m.queryLogger.Infof("reopen: %s\n", err.Error())
+			}
+		}
+	}()
+	return nil
 }
 
 // Close shuts down the server.
 func (m *Command) Close() error {
-	defer close(m.done)
-	eg := errgroup.Group{}
-	eg.Go(m.Handler.Close)
-	eg.Go(m.Server.Close)
-	eg.Go(m.API.Close)
-	if m.gossipMemberSet != nil {
-		eg.Go(m.gossipMemberSet.Close)
-	}
-	if closer, ok := m.logOutput.(io.Closer); ok {
-		// If closer is os.Stdout or os.Stderr, don't close it.
-		if closer != os.Stdout && closer != os.Stderr {
-			eg.Go(closer.Close)
+	select {
+	case <-m.done:
+		return nil
+	default:
+		eg := errgroup.Group{}
+		m.grpcServer.Stop()
+		eg.Go(m.Handler.Close)
+		eg.Go(m.Server.Close)
+		eg.Go(m.API.Close)
+		eg.Go(m.pgserver.Close)
+		if closer, ok := m.logOutput.(io.Closer); ok {
+			// If closer is os.Stdout or os.Stderr, don't close it.
+			if closer != os.Stdout && closer != os.Stderr {
+				eg.Go(closer.Close)
+			}
 		}
-	}
 
-	err := eg.Wait()
-	return errors.Wrap(err, "closing everything")
+		err := eg.Wait()
+		_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
+		close(m.done)
+
+		return errors.Wrap(err, "closing everything")
+	}
 }
 
 // newStatsClient creates a stats client from the config
-func newStatsClient(name string, host string) (stats.StatsClient, error) {
+func newStatsClient(name string, host string, namespace string) (stats.StatsClient, error) {
 	switch name {
 	case "expvar":
 		return stats.NewExpvarStatsClient(), nil
 	case "statsd":
-		return statsd.NewStatsClient(host)
+		return statsd.NewStatsClient(host, namespace)
 	case "prometheus":
-		return prometheus.NewPrometheusClient()
+		return prometheus.NewPrometheusClient(
+			prometheus.OptClientNamespace(namespace),
+		)
 	case "nop", "none":
 		return stats.NopStatsClient, nil
 	default:
-		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].", name)
+		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, prometheus, none].", name)
 	}
 }
 
 // getListener gets a net.Listener based on the config.
-func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
+func getListener(uri pnet.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
 	// If bind URI has the https scheme, enable TLS
 	if uri.Scheme == "https" && tlsconf != nil {
 		ln, err = tls.Listen("tcp", uri.HostPort(), tlsconf)
@@ -452,23 +729,23 @@ func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err erro
 	return ln, nil
 }
 
-type filteredWriter struct {
-	v         bool
-	logOutput io.Writer
+// ParseConfig parses s into a Config.
+func ParseConfig(s string) (Config, error) {
+	var c Config
+	err := toml.Unmarshal([]byte(s), &c)
+	return c, err
 }
 
-// Write forwards the write to logOutput if verbose is true, or it doesn't
-// contain [DEBUG] or [INFO]. This implementation isn't technically correct
-// since Write could be called with only part of a log line, but I don't think
-// that actually happens, so until it becomes a problem, I don't think it's
-// worth dealing with the extra complexity. (jaffee)
-func (f *filteredWriter) Write(p []byte) (n int, err error) {
-	if bytes.Contains(p, []byte("[DEBUG]")) || bytes.Contains(p, []byte("[INFO]")) {
-		if f.v {
-			return f.logOutput.Write(p)
+// expandDirName was copied from pilosa/server.go.
+// TODO: consider centralizing this if we need this across packages.
+func expandDirName(path string) (string, error) {
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(path, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return "", errors.New("data directory not specified and no home dir available")
 		}
-	} else {
-		return f.logOutput.Write(p)
+		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
 	}
-	return len(p), nil
+	return path, nil
 }

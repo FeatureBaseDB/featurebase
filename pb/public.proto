@@ -1,0 +1,262 @@
+syntax = "proto3";
+
+package pb;
+
+message Row {
+	repeated uint64 Columns = 1;
+	repeated string Keys = 3;
+	bytes Roaring = 4;
+	string Index = 5;
+	string Field = 6;
+}
+
+message RowMatrix {
+	repeated Row Rows = 1;
+}
+
+message SignedRow {
+	Row Pos = 1;
+	Row Neg = 2;
+}
+
+message RowIdentifiers {
+	repeated uint64 Rows = 1;
+	repeated string Keys = 2;
+}
+
+message IDList {
+	repeated uint64 IDs = 1;
+}
+
+message ExtractedIDColumn {
+	uint64 ID = 1;
+	repeated IDList Vals = 2;
+}
+
+message ExtractedIDMatrix {
+	repeated string Fields = 1;
+	repeated ExtractedIDColumn Columns = 2;
+}
+
+message KeyList {
+	repeated string Keys = 1;
+}
+
+message ExtractedTableValue {
+	oneof Value {
+		IDList IDs = 1;
+		KeyList Keys = 2;
+		int64 BSIValue = 3;
+		uint64 MutexID = 4;
+		string MutexKey = 5;
+		bool Bool = 6;
+	}
+}
+
+message ExtractedTableColumn {
+	oneof KeyOrID {
+		string Key = 1;
+		uint64 ID = 2;
+	}
+	repeated ExtractedTableValue Values = 3;
+}
+
+message ExtractedTableField {
+	string Name = 1;
+	string Type = 2;
+}
+
+message ExtractedTable {
+	repeated ExtractedTableField Fields = 1;
+	repeated ExtractedTableColumn Columns = 2;
+}
+
+message Pair {
+	uint64 ID = 1;
+	string Key = 3;
+	uint64 Count = 2;
+}
+
+message PairField {
+	Pair Pair = 1;
+	string Field = 2;
+}
+
+message PairsField {
+	repeated Pair Pairs = 1;
+	string Field = 2;
+}
+
+message Int64 {
+	int64 Value = 1;
+}
+
+message FieldRow {
+	string Field = 1;
+	uint64 RowID = 2;
+	string RowKey = 3;
+	Int64 Value = 4;
+}
+
+message GroupCount{
+	repeated FieldRow Group = 1;
+	uint64 Count = 2;
+	int64 Agg = 3;
+}
+
+message ValCount {
+	int64 Val = 1;
+	int64 Count = 2;
+	double FloatVal = 3;
+	Decimal DecimalVal = 4;
+    string TimestampVal = 5;
+}
+
+message Decimal {
+    int64 Value = 1;
+    int64 Scale = 2;
+    bool NewVersion = 3;
+    bytes ValAbs = 4;
+    bool ValNeg = 5;
+}
+
+message DistinctTimestamp {
+    repeated string Values = 1;
+    string Name = 2;
+}
+
+
+message QueryRequest {
+	string Query = 1;
+	repeated uint64 Shards = 2;
+	bool Remote = 5;
+	repeated Row EmbeddedData = 8;
+	bool PreTranslated = 9;
+	int64 MaxMemory = 10;
+}
+
+message QueryResponse {
+	string Err = 1;
+	repeated QueryResult Results = 2;
+}
+
+message QueryResult {
+	uint32 Type = 6;
+	Row Row = 1;
+	uint64 N = 2;
+	repeated Pair Pairs = 3;
+	bool Changed = 4;
+	ValCount ValCount = 5;
+	repeated uint64 RowIDs = 7;
+	// In the past, GroupCounts was a []GroupCount which did not indicate
+	// whether it had an aggregate, or which aggregate it had. We've
+	// updated this, but we keep this here so that messages using the old
+	// format can get a best-effort treatment rather than causing panics.
+	// Later this can almost certainly go away, but leave a comment warning
+	// people that 8 is Spoken For if you do that, please.
+	repeated GroupCount OldGroupCounts = 8;
+	RowIdentifiers RowIdentifiers = 9;
+	SignedRow SignedRow = 10;
+	PairsField PairsField = 11;
+	PairField PairField = 12;
+	ExtractedIDMatrix ExtractedIDMatrix = 13;
+	ExtractedTable ExtractedTable = 14;
+	RowMatrix RowMatrix = 15;
+	GroupCounts GroupCounts = 16;
+    DistinctTimestamp DistinctTimestamp = 17;
+}
+
+message ImportRequest {
+	string Index = 1;
+
+	string Field = 2;
+	uint64 Shard = 3;
+	repeated uint64 RowIDs = 4;
+	repeated uint64 ColumnIDs = 5;
+	repeated string RowKeys = 7;
+	repeated string ColumnKeys = 8;
+	repeated int64 Timestamps = 6;
+	int64 IndexCreatedAt = 9;
+	int64 FieldCreatedAt = 10;
+	bool Clear = 11;
+}
+
+message ImportValueRequest {
+	string Index = 1;
+	string Field = 2;
+	uint64 Shard = 3;
+	repeated uint64 ColumnIDs = 5;
+	repeated string ColumnKeys = 7;
+	repeated int64 Values = 6;
+	repeated double FloatValues = 8;
+	repeated string StringValues = 9;
+	int64 IndexCreatedAt = 10;
+	int64 FieldCreatedAt = 11;
+	bool Clear = 12;
+}
+
+message AtomicRecord {
+	string Index = 1;
+	uint64 Shard = 2;
+	repeated ImportValueRequest Ivr = 3;
+	repeated ImportRequest Ir = 4;
+}
+
+message AtomicImportResponse {
+	string Error = 1;
+}
+
+message TranslateKeysRequest {
+	string Index = 1;
+	string Field = 2;
+	repeated string Keys = 3;
+	bool NotWritable = 4;
+}
+
+message TranslateKeysResponse {
+	repeated uint64 IDs = 3;
+}
+
+message TranslateIDsRequest {
+	string Index = 1;
+	string Field = 2;
+	repeated uint64 IDs = 3;
+}
+
+message TranslateIDsResponse {
+	repeated string Keys = 3;
+}
+
+message ImportRoaringRequestView {
+	string Name = 1;
+	bytes Data = 2;
+}
+
+message ImportRoaringRequest {
+	bool Clear = 1;
+	repeated ImportRoaringRequestView views = 2;
+	string Action = 3;
+	uint64 Block = 4;
+	int64 IndexCreatedAt = 5;
+	int64 FieldCreatedAt = 6;
+        bool UpdateExistence = 7;
+}
+
+message RoaringUpdate {
+	string Field = 1;
+	string View = 2;
+	bytes Clear = 3;
+	bytes Set = 4;
+	bool ClearRecords = 5;
+}
+
+message ImportRoaringShardRequest {
+	bool Remote = 1;
+	repeated RoaringUpdate Views = 2;
+}
+
+
+message GroupCounts{
+	string Aggregate = 1;
+	repeated GroupCount Groups = 2;
+}

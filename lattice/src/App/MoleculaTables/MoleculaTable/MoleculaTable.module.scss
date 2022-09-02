@@ -1,0 +1,140 @@
+.layout {
+  display: flex;
+  padding-bottom: 16px;
+
+  .label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    font-weight: 400;
+  }
+
+  .breakdown {
+    margin-left: 16px;
+    flex-grow: 1;
+  }
+
+  .optionsItem {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+
+    > div {
+      margin: 0 32px 0 8px;
+    }
+  }
+
+  .clearFilter {
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid rgba(var(--contrast-rgb), 0.27);
+  }
+}
+
+.table {
+  .tableHeader {
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 33px;
+    border-bottom: 1px solid rgba(var(--contrast-rgb), 0.1);
+  }
+
+  .sortable {
+    display: flex;
+    align-items: center;
+
+    .sortArrow {
+      font-size: 1rem;
+    }
+
+    &:hover {
+      cursor: pointer;
+    }
+  }
+
+  .currentSort {
+    color: var(--primary);
+
+    .asc {
+      transform: rotate(180deg);
+    }
+  }
+
+  .row {
+    pre {
+      font-size: 11px;
+    }
+
+    &:nth-child(even) {
+      background: rgba(var(--default-rgb), 0.15);
+    }
+  }
+
+  .tableCell {
+    border-bottom: 0;
+  }
+}
+
+.code {
+  font-size: 11px;
+}
+
+.optionsTable {
+  display: grid;
+  grid-template-columns: 100px auto 1fr;
+  gap: 2px 8px;
+  padding: 8px 0;
+  font-size: 11px;
+}
+
+.filter {
+  margin: 8px 0;
+}
+
+.highlight {
+  background: rgba(var(--primary-rgb), 0.5);
+  color: var(--contrast);
+  padding: 0 1px;
+}
+
+.noResults {
+  padding: 8px;
+}
+
+.reset {
+  color: var(--primary);
+  margin-left: 4px;
+
+  &:hover {
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}
+
+.pagination {
+  padding: 12px 0;
+  margin-top: 8px;
+  border-top: 1px solid rgba(var(--contrast-rgb), 0.1);
+}
+
+[data-theme='dark'] {
+  .row {
+    &:nth-child(even) {
+      background: rgba(var(--base-rgb), 0.1);
+    }
+  }
+}
+
+.infoMessage {
+  padding: 16px;
+  border: 1px solid rgba(var(--primary-rgb), 0.5);
+  background: rgba(var(--primary-rgb), 0.1);
+  border-radius: 4px;
+  margin: 4px 0 16px;
+
+  .infoTooltip {
+    border-bottom: 1px dashed rgba(var(--primary-rgb), 0.7);
+  }
+}

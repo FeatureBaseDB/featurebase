@@ -1,0 +1,8 @@
+{
+     "type": "record",
+     "namespace": "com.example",
+     "name": "FullName",
+     "fields": [
+	 { "name": "first", "type": "float", "scale": 4 }
+     ]
+}

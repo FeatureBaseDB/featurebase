@@ -1,44 +1,35 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"math/big"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/v2/internal"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/roaring"
-	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 // Index represents a container for fields.
 type Index struct {
-	mu   sync.RWMutex
-	path string
-	name string
-	keys bool // use string keys
+	mu            sync.RWMutex
+	createdAt     int64
+	path          string
+	name          string
+	qualifiedName string
+	keys          bool // use string keys
 
 	// Existence tracking.
 	trackExistence bool
@@ -47,64 +38,108 @@ type Index struct {
 	// Fields by name.
 	fields map[string]*Field
 
-	newAttrStore func(string) AttrStore
-
-	// Column attribute storage and cache.
-	columnAttrs AttrStore
-
-	translateStore TranslateStore
-
 	broadcaster broadcaster
+	Schemator   disco.Schemator
+	serializer  Serializer
 	Stats       stats.StatsClient
 
-	logger        logger.Logger
-	snapshotQueue chan *fragment
-
-	// Used for notifying holder when a field is added.
+	// Passed to field for foreign-index lookup.
 	holder *Holder
 
-	// Instantiates new translation stores for fields.
+	// Per-partition translation stores
+	translateStores map[int]TranslateStore
+
+	translationSyncer TranslationSyncer
+
+	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
+
+	// track the subset of shards available to our views
+	fieldView2shard *FieldView2Shards
+
+	// indicate that we're closing and should wrap up and not allow new actions
+	closing chan struct{}
 }
 
-// NewIndex returns a new instance of Index.
-func NewIndex(path, name string) (*Index, error) {
-	err := validateName(name)
+// NewIndex returns an existing (but possibly empty) instance of
+// Index at path. It will not erase any prior content.
+func NewIndex(holder *Holder, path, name string) (*Index, error) {
+
+	// Emulate what the spf13/cobra does, letting env vars override
+	// the defaults, because we may be under a simple "go test" run where
+	// not all that command line machinery has been spun up.
+
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
-	return &Index{
+	idx := &Index{
 		path:   path,
 		name:   name,
 		fields: make(map[string]*Field),
 
-		newAttrStore: newNopAttrStore,
-		columnAttrs:  nopStore,
-
 		broadcaster:    NopBroadcaster,
 		Stats:          stats.NopStatsClient,
-		logger:         logger.NopLogger,
+		holder:         holder,
 		trackExistence: true,
 
+		Schemator:  disco.NewInMemSchemator(),
+		serializer: NopSerializer,
+
+		translateStores: make(map[int]TranslateStore),
+
+		translationSyncer: NopTranslationSyncer,
+
 		OpenTranslateStore: OpenInMemTranslateStore,
-	}, nil
+	}
+	return idx, nil
+}
+
+func (i *Index) NewTx(txo Txo) Tx {
+	return i.holder.txf.NewTx(txo)
+}
+
+// CreatedAt is an timestamp for a specific version of an index.
+func (i *Index) CreatedAt() int64 {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return i.createdAt
 }
 
 // Name returns name of the index.
 func (i *Index) Name() string { return i.name }
 
+// Holder yields this index's Holder.
+func (i *Index) Holder() *Holder { return i.holder }
+
+// QualifiedName returns the qualified name of the index.
+func (i *Index) QualifiedName() string { return i.qualifiedName }
+
 // Path returns the path the index was initialized with.
-func (i *Index) Path() string { return i.path }
+func (i *Index) Path() string {
+	return i.path
+}
+
+// FieldsPath returns the path of the fields directory.
+func (i *Index) FieldsPath() string {
+	return filepath.Join(i.path, FieldsDir)
+}
+
+// TranslateStorePath returns the translation database path for a partition.
+func (i *Index) TranslateStorePath(partitionID int) string {
+	return filepath.Join(i.path, translateStoreDir, strconv.Itoa(partitionID))
+}
+
+// TranslateStore returns the translation store for a given partition.
+func (i *Index) TranslateStore(partitionID int) TranslateStore {
+	i.mu.RLock() // avoid race with Index.Close() doing i.translateStores = make(map[int]TranslateStore)
+	defer i.mu.RUnlock()
+	return i.translateStores[partitionID]
+}
 
 // Keys returns true if the index uses string keys.
 func (i *Index) Keys() bool { return i.keys }
-
-// ColumnAttrStore returns the storage for column attributes.
-func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrs }
-
-// TranslateStore returns the underlying translation store for the index.
-func (i *Index) TranslateStore() TranslateStore { return i.translateStore }
 
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
@@ -121,22 +156,75 @@ func (i *Index) options() IndexOptions {
 }
 
 // Open opens and initializes the index.
-func (i *Index) Open() (err error) {
+func (i *Index) Open() error {
+	return i.open(nil)
+}
+
+// OpenWithSchema opens the index and uses the provided schema to verify that
+// the index's fields are expected.
+func (i *Index) OpenWithSchema(idx *disco.Index) error {
+	if idx == nil {
+		return ErrInvalidSchema
+	}
+
+	// decode the CreateIndexMessage from the schema data in order to
+	// get its metadata.
+	cim, err := decodeCreateIndexMessage(i.serializer, idx.Data)
+	if err != nil {
+		return errors.Wrap(err, "decoding create index message")
+	}
+	i.createdAt = cim.CreatedAt
+	i.trackExistence = cim.Meta.TrackExistence
+	i.keys = cim.Meta.Keys
+
+	return i.open(idx)
+}
+
+// open opens the index with an optional schema (disco.Index). If a schema is
+// provided, it will apply the metadata from the schema to the index, and then
+// open all fields found in the schema. If a schema is not provided, the
+// metadata for the index is not changed from its existing value, and fields are
+// not validated against the schema as they are opened.
+func (i *Index) open(idx *disco.Index) (err error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	// Ensure the path exists.
-	i.logger.Debugf("ensure index path exists: %s", i.path)
-	if err := os.MkdirAll(i.path, 0777); err != nil {
+	i.holder.Logger.Debugf("ensure index path exists: %s", i.FieldsPath())
+	if err := os.MkdirAll(i.FieldsPath(), 0750); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
+	i.closing = make(chan struct{})
+	// fmt.Printf("new channel %p for index %p\n", i.closing, i)
 
-	// Read meta file.
-	i.logger.Debugf("load meta file for index: %s", i.name)
-	if err := i.loadMeta(); err != nil {
-		return errors.Wrap(err, "loading meta file")
+	// we don't want to open *all* the views for each shard, since
+	// most are empty when we are doing time quantums. It slows
+	// down startup dramatically. So we ask for the meta data
+	// of what fields/views/shards are present with data up front.
+	fieldView2shard, err := i.holder.txf.GetFieldView2ShardsMapForIndex(i)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("i.holder.txf.GetFieldView2ShardsMapForIndex('%v')", i.name))
+	}
+	i.fieldView2shard = fieldView2shard
+
+	// Add index to a map in holder. Used by openFields.
+	i.holder.addIndex(i)
+
+	i.holder.Logger.Debugf("open fields for index: %s", i.name)
+	if err := i.openFields(idx); err != nil {
+		return errors.Wrap(err, "opening fields")
 	}
 
-	i.logger.Debugf("open fields for index: %s", i.name)
-	if err := i.openFields(); err != nil {
-		return errors.Wrap(err, "opening fields")
+	// Set bit depths.
+	// This is called in Index.open() (as opposed to Field.Open()) because the
+	// Field.bitDepth() method uses a transaction which relies on the index and
+	// its entry for the field in the Index.field map. If we try to set a
+	// field's BitDepth in Field.Open(), which itself might be inside the
+	// Index.openField() loop, then the field has not yet been added to the
+	// Index.field map. I think it would be better if Field.bitDepth didn't rely
+	// on its index at all, but perhaps with transactions that not possible. I
+	// don't know.
+	if err := i.setFieldBitDepths(); err != nil {
+		return errors.Wrap(err, "setting field bitDepths")
 	}
 
 	if i.trackExistence {
@@ -145,75 +233,142 @@ func (i *Index) Open() (err error) {
 		}
 	}
 
-	if err := i.columnAttrs.Open(); err != nil {
-		return errors.Wrap(err, "opening attrstore")
+	if i.keys {
+		i.holder.Logger.Debugf("open translate store for index: %s", i.name)
+
+		var g errgroup.Group
+		var mu sync.Mutex
+		for partitionID := 0; partitionID < i.holder.partitionN; partitionID++ {
+			partitionID := partitionID
+
+			g.Go(func() error {
+				store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.holder.partitionN, i.holder.cfg.StorageConfig.FsyncEnabled)
+				if err != nil {
+					return errors.Wrapf(err, "opening index translate store: partition=%d", partitionID)
+				}
+
+				mu.Lock()
+				defer mu.Unlock()
+				i.translateStores[partitionID] = store
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
 	}
 
-	// Instantiate & open translation store.
-	if i.translateStore, err = i.OpenTranslateStore(filepath.Join(i.path, "keys"), i.name, ""); err != nil {
-		return errors.Wrap(err, "opening translate store")
-	}
-
+	_ = testhook.Opened(i.holder.Auditor, i, nil)
 	return nil
 }
 
 var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
-func (i *Index) openFields() error {
-	f, err := os.Open(i.path)
-	if err != nil {
-		return errors.Wrap(err, "opening directory")
-	}
-	defer f.Close()
-
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return errors.Wrap(err, "reading directory")
-	}
+func (i *Index) openFields(idx *disco.Index) error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
+	if idx == nil {
+		return nil
+	}
 fileLoop:
-	for _, loopFi := range fis {
+	for fname, fld := range idx.Fields {
+		lfname := fname
 		select {
 		case <-ctx.Done():
 			break fileLoop
 		default:
-			fi := loopFi
-			if !fi.IsDir() {
-				continue
+			// Decode the CreateFieldMessage from the schema data in order to
+			// get its metadata.
+			cfm, err := decodeCreateFieldMessage(i.holder.serializer, fld.Data)
+			if err != nil {
+				return errors.Wrap(err, "decoding create field message")
 			}
+
 			indexQueue <- struct{}{}
 			eg.Go(func() error {
 				defer func() {
 					<-indexQueue
 				}()
-				i.logger.Debugf("open field: %s", fi.Name())
-				mu.Lock()
-				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-				mu.Unlock()
+				i.holder.Logger.Debugf("open field: %s", lfname)
+
+				_, err := i.openField(&mu, cfm, lfname)
 				if err != nil {
-					return errors.Wrapf(ErrName, "'%s'", fi.Name())
+					return errors.Wrap(err, "opening field")
 				}
 
-				if err := fld.Open(); err != nil {
-					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
-				}
-				i.logger.Debugf("add field to index.fields: %s", fi.Name())
-				mu.Lock()
-				i.fields[fld.Name()] = fld
-				mu.Unlock()
 				return nil
 			})
 		}
 	}
-	return eg.Wait()
+
+	err := eg.Wait()
+	if err != nil {
+		// Close any fields which got opened, since the overall
+		// index won't be open.
+		for n, f := range i.fields {
+			f.Close()
+			delete(i.fields, n)
+		}
+	}
+	return err
+}
+
+// openField opens the field directory, initializes the field, and adds it to
+// the in-memory map of fields maintained by Index.
+func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) (*Field, error) {
+	mu.Lock()
+	fld, err := i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
+	mu.Unlock()
+	if err != nil {
+		return nil, errors.Wrapf(ErrName, "'%s'", file)
+	}
+
+	// Pass holder through to the field for use in looking
+	// up a foreign index.
+	fld.holder = i.holder
+
+	fld.createdAt = cfm.CreatedAt
+	fld.options = applyDefaultOptions(cfm.Meta)
+
+	// open the views we have data for.
+	if err := fld.Open(); err != nil {
+		return nil, fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
+	}
+
+	i.holder.Logger.Debugf("add field to index.fields: %s", file)
+	mu.Lock()
+	i.fields[fld.Name()] = fld
+	mu.Unlock()
+
+	return fld, nil
 }
 
 // openExistenceField gets or creates the existence field and associates it to the index.
 func (i *Index) openExistenceField() error {
-	f, err := i.createFieldIfNotExists(existenceFieldName, FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     existenceFieldName,
+		CreatedAt: 0,
+		Meta:      &FieldOptions{Type: FieldTypeSet, CacheType: CacheTypeNone, CacheSize: 0},
+	}
+
+	// First try opening the existence field from disk. If it doesn't already
+	// exist on disk, then we fall through to the code path which creates it.
+	var mu sync.Mutex
+	fld, err := i.openField(&mu, cfm, existenceFieldName)
+	if err == nil {
+		i.existenceFld = fld
+		return nil
+	} else if errors.Cause(err) != ErrName {
+		return errors.Wrap(err, "opening existence file")
+	}
+
+	// If we have gotten here, it means that we couldn't successfully open the
+	// existence field from disk, so we need to create it.
+
+	f, err := i.createFieldIfNotExists(cfm)
 	if err != nil {
 		return errors.Wrap(err, "creating existence field")
 	}
@@ -221,45 +376,23 @@ func (i *Index) openExistenceField() error {
 	return nil
 }
 
-// loadMeta reads meta data for the index, if any.
-func (i *Index) loadMeta() error {
-	var pb internal.IndexMeta
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading")
-	} else {
-		if err := proto.Unmarshal(buf, &pb); err != nil {
-			return errors.Wrap(err, "unmarshalling")
+// setFieldBitDepths sets the BitDepth for all int and decimal fields in the index.
+func (i *Index) setFieldBitDepths() error {
+	for name, f := range i.fields {
+		switch f.Type() {
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+			// pass
+		default:
+			continue
+		}
+		bd, err := f.bitDepth()
+		if err != nil {
+			return errors.Wrapf(err, "getting bit depth for field: %s", name)
+		}
+		if err := f.cacheBitDepth(bd); err != nil {
+			return errors.Wrapf(err, "caching field bitDepth: %d", bd)
 		}
 	}
-
-	// Copy metadata fields.
-	i.keys = pb.Keys
-	i.trackExistence = pb.TrackExistence
-
-	return nil
-}
-
-// saveMeta writes meta data for the index.
-func (i *Index) saveMeta() error {
-	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.IndexMeta{
-		Keys:           i.keys,
-		TrackExistence: i.trackExistence,
-	})
-	if err != nil {
-		return errors.Wrap(err, "marshalling")
-	}
-
-	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(i.path, ".meta"), buf, 0666); err != nil {
-		return errors.Wrap(err, "writing")
-	}
-
 	return nil
 }
 
@@ -267,9 +400,32 @@ func (i *Index) saveMeta() error {
 func (i *Index) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	// flag that we're trying to shut down
+	if i.closing != nil {
+		select {
+		case <-i.closing:
+			// already closed. prevent double-close
+			return errors.New("double close of index")
+		default:
+		}
+		close(i.closing)
+	}
+	defer func() {
+		_ = testhook.Closed(i.holder.Auditor, i, nil)
+	}()
 
-	// Close the attribute store.
-	i.columnAttrs.Close()
+	err := i.holder.txf.CloseIndex(i)
+	if err != nil {
+		return errors.Wrap(err, "closing index")
+	}
+
+	// Close partitioned translation stores.
+	for _, store := range i.translateStores {
+		if err := store.Close(); err != nil {
+			return errors.Wrap(err, "closing translation store")
+		}
+	}
+	i.translateStores = make(map[int]TranslateStore)
 
 	// Close all fields.
 	for _, f := range i.fields {
@@ -279,17 +435,31 @@ func (i *Index) Close() error {
 	}
 	i.fields = make(map[string]*Field)
 
-	if i.translateStore != nil {
-		if err := i.translateStore.Close(); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
+func (i *Index) flushCaches() {
+	// look up the close channel so if we somehow end up living until the
+	// index gets reopened, we don't have a data race, but correctly detect
+	// that the old one is closed.
+	i.mu.RLock()
+	closing := i.closing
+	i.mu.RUnlock()
+	for _, field := range i.Fields() {
+		select {
+		case <-closing:
+			return
+		default:
+			field.flushCaches()
+		}
+	}
+}
+
+// make it clear what the Index.AvailableShards() calls are trying to obtain.
+const includeRemote = false
+
 // AvailableShards returns a bitmap of all shards with data in the index.
-func (i *Index) AvailableShards() *roaring.Bitmap {
+func (i *Index) AvailableShards(localOnly bool) *roaring.Bitmap {
 	if i == nil {
 		return roaring.NewBitmap()
 	}
@@ -299,15 +469,21 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for _, f := range i.fields {
-		b = b.Union(f.AvailableShards())
+		//b.Union(f.AvailableShards(localOnly))
+		b.UnionInPlace(f.AvailableShards(localOnly))
 	}
 
-	i.Stats.Gauge("maxShard", float64(b.Max()), 1.0)
+	i.Stats.Gauge(MetricMaxShard, float64(b.Max()), 1.0)
 	return b
 }
 
+// Begin starts a transaction on a shard of the index.
+func (i *Index) BeginTx(writable bool, shard uint64) (Tx, error) {
+	return i.holder.txf.NewTx(Txo{Write: writable, Index: i, Shard: shard}), nil
+}
+
 // fieldPath returns the path to a field in the index.
-func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
+func (i *Index) fieldPath(name string) string { return filepath.Join(i.FieldsPath(), name) }
 
 // Field returns a field in the index by name.
 func (i *Index) Field(name string) *Field {
@@ -316,7 +492,9 @@ func (i *Index) Field(name string) *Field {
 	return i.field(name)
 }
 
-func (i *Index) field(name string) *Field { return i.fields[name] }
+func (i *Index) field(name string) *Field {
+	return i.fields[name]
+}
 
 // Fields returns a list of all fields in the index.
 func (i *Index) Fields() []*Field {
@@ -349,11 +527,53 @@ func (i *Index) recalculateCaches() {
 
 // CreateField creates a field.
 func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
-	err := validateName(name)
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
+	// Grab lock, check for field existing, release lock. We don't want
+	// to stay holding the lock, but we might care about the ErrFieldExists
+	// part of this.
+	err = func() error {
+		i.mu.Lock()
+		defer i.mu.Unlock()
+
+		// Ensure field doesn't already exist.
+		if i.fields[name] != nil {
+			return newConflictError(ErrFieldExists)
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
+	}
+
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: timestamp(),
+		Meta:      fo,
+	}
+
+	// Create the field in etcd as the system of record. We do this without
+	// the lock held because it can take an arbitrary amount of time...
+	if err := i.persistField(context.Background(), cfm); errors.Cause(err) == ErrFieldExists {
+		return nil, newConflictError(ErrFieldExists)
+	} else if err != nil {
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	// This is identical to the previous check, because we could get super
+	// unlucky and have the persist-field thing happen, and somehow the field
+	// gets created, before we get to run again, and the specific nature of
+	// the error can matter to the backend.
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -362,21 +582,13 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 		return nil, newConflictError(ErrFieldExists)
 	}
 
-	// Apply functional options.
-	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
-		}
-	}
-
-	return i.createField(name, fo)
+	// Actually do the internal bookkeeping.
+	return i.createField(cfm)
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
 func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field, error) {
-	err := validateName(name)
+	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -389,19 +601,42 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 		return f, nil
 	}
 
-	// Apply functional options.
-	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
-		}
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
 	}
 
-	return i.createField(name, fo)
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: timestamp(),
+		Meta:      fo,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil && errors.Cause(err) != ErrFieldExists {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm)
 }
 
-func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
+// CreateFieldIfNotExistsWithOptions is a method which I created because I
+// needed the functionality of CreateFieldIfNotExists, but instead of taking
+// function options, taking a *FieldOptions struct. TODO: This should
+// definintely be refactored so we don't have these virtually equivalent
+// methods, but I'm puttin this here for now just to see if it works.
+func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions) (*Field, error) {
+	err := ValidateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -409,60 +644,243 @@ func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 	if f := i.fields[name]; f != nil {
 		return f, nil
 	}
+	if opt != nil && (opt.Type == FieldTypeInt || opt.Type == FieldTypeTimestamp) {
+		min, max := pql.MinMax(0)
+		// ensure the provided bounds are valid
+		zero := big.NewInt(0)
+		maxv := opt.Max.Value()
+		if maxv.Cmp(zero) == 0 {
+			opt.Max = max
+		} else if max.LessThan(opt.Max) {
+			opt.Max = max
+		}
+		minv := opt.Min.Value()
+		if minv.Cmp(zero) == 0 {
+			opt.Min = min
+		} else if min.GreaterThan(opt.Min) {
+			opt.Min = min
+		}
+	}
+	// added for backward compatablity with old schemas
+	if opt != nil && opt.Type == FieldTypeDecimal {
+		min, max := pql.MinMax(opt.Scale)
+		zero := big.NewInt(0)
 
-	return i.createField(name, opt)
+		// ensure the provided bounds are valid
+		maxv := opt.Max.Value()
+		if maxv.Cmp(zero) == 0 {
+			opt.Max = max
+		} else if max.LessThan(opt.Max) {
+			opt.Max = max
+		}
+
+		minv := opt.Min.Value()
+		if minv.Cmp(zero) == 0 {
+			opt.Min = min
+		} else if min.GreaterThan(opt.Min) {
+			opt.Min = min
+		}
+	}
+
+	cfm := &CreateFieldMessage{
+		Index:     i.name,
+		Field:     name,
+		CreatedAt: timestamp(),
+		Meta:      opt,
+	}
+
+	// Create the field in etcd as the system of record.
+	if err := i.persistField(context.Background(), cfm); err != nil && errors.Cause(err) != ErrFieldExists {
+		// There is a case where the index is not in memory, but it is in
+		// persistent storage. In that case, this will return an "index exists"
+		// error, which in that case should return the index. TODO: We may need
+		// to allow for that in the future.
+		return nil, errors.Wrap(err, "persisting field")
+	}
+
+	return i.createField(cfm)
 }
 
-func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
-	if name == "" {
+// persistField stores the field information in etcd.
+func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error {
+	if cfm.Index == "" {
+		return ErrIndexRequired
+	} else if cfm.Field == "" {
+		return ErrFieldRequired
+	}
+
+	if err := ValidateName(cfm.Field); err != nil {
+		return errors.Wrap(err, "validating name")
+	}
+
+	if b, err := i.serializer.Marshal(cfm); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := i.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldExists {
+		return ErrFieldExists
+	} else if err != nil {
+		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
+	}
+	return nil
+}
+
+func (i *Index) persistUpdateField(ctx context.Context, cfm *CreateFieldMessage) error {
+	if cfm.Index == "" {
+		return ErrIndexRequired
+	} else if cfm.Field == "" {
+		return ErrFieldRequired
+	}
+
+	if b, err := i.serializer.Marshal(cfm); err != nil {
+		return errors.Wrap(err, "marshaling")
+	} else if err := i.Schemator.UpdateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldDoesNotExist {
+		return ErrFieldNotFound
+	} else if err != nil {
+		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
+	}
+	return nil
+}
+
+func (i *Index) UpdateField(ctx context.Context, name string, update FieldUpdate) (*CreateFieldMessage, error) {
+	// Get field from etcd
+	buf, err := i.Schemator.Field(ctx, i.name, name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting field '%s' from etcd", name)
+	}
+	cfm, err := decodeCreateFieldMessage(i.holder.serializer, buf)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding CreateFieldMessage")
+	} else if cfm == nil {
+		return nil, errors.New("got nil CreateFieldMessage when decoding")
+	}
+
+	// Handle the options we know how to update, or error.
+	switch update.Option {
+	case "TTL", "ttl":
+		if cfm.Meta.Type != FieldTypeTime {
+			return nil, NewBadRequestError(errors.Errorf("can only add TTL to a 'time' type field, not '%s'", cfm.Meta.Type))
+		}
+		dur, err := time.ParseDuration(update.Value)
+		if err != nil {
+			return nil, NewBadRequestError(errors.Wrap(err, "parsing duration"))
+		}
+		if dur < 0 {
+			return nil, NewBadRequestError(errors.Errorf("ttl can't be negative: '%s'", update.Value))
+		}
+		cfm.Meta.TTL = dur
+	case "noStandardView":
+		if cfm.Meta.Type != FieldTypeTime {
+			return nil, NewBadRequestError(errors.Errorf("can only update 'noStandardView' on a 'time' type field, not '%s'", cfm.Meta.Type))
+		}
+		boolValue, err := strconv.ParseBool(update.Value)
+		if err != nil {
+			return nil, NewBadRequestError(errors.Errorf("invalid value for noStandardView: '%s'", update.Value))
+		}
+		cfm.Meta.NoStandardView = boolValue
+	default:
+		return nil, NewBadRequestError(errors.Errorf("updates for option '%s' are not supported", update.Option))
+	}
+
+	// Persist the updated field to etcd.
+	if err := i.persistUpdateField(ctx, cfm); err != nil {
+		return nil, errors.Wrap(err, "persisting updated field")
+	}
+
+	return cfm, nil
+}
+
+func (i *Index) UpdateFieldLocal(cfm *CreateFieldMessage, update FieldUpdate) error {
+	// Update local structures. This assumes we don't need to do
+	// anything else... which is fine for TTL specifically, but I'm
+	// not sure about other things, so be aware when adding new update
+	// abilities.
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	field := i.field(cfm.Field)
+	if field == nil {
+		return errors.Errorf("field '%s' not found locally", cfm.Field)
+	}
+	if err := field.applyOptions(*cfm.Meta); err != nil {
+		return errors.Wrap(err, "updating local field options")
+	}
+
+	return nil
+
+}
+
+// createFieldIfNotExists creates the field if it does not already exist in the
+// in-memory index structure. This is not related to whether or not the field
+// exists in etcd.
+func (i *Index) createFieldIfNotExists(cfm *CreateFieldMessage) (*Field, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[cfm.Field]; f != nil {
+		return f, nil
+	}
+
+	return i.createField(cfm)
+}
+
+// createField does the internal field creation logic, creating the in-memory
+// data structure, and kicking translation sync if appropriate. It does not
+// notify other nodes; that's done from the API's initial CreateField call
+// now.
+func (i *Index) createField(cfm *CreateFieldMessage) (*Field, error) {
+	opt := cfm.Meta
+	if opt == nil {
+		opt = &FieldOptions{}
+	}
+
+	// TODO: can we do a general FieldOption validation here instead of just cache type?
+	if cfm.Field == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
 		return nil, ErrInvalidCacheType
 	}
 
 	// Initialize field.
-	f, err := i.newField(i.fieldPath(name), name)
+	f, err := i.newField(i.fieldPath(cfm.Field), cfm.Field)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
+	f.createdAt = cfm.CreatedAt
+
+	// Pass holder through to the field for use in looking
+	// up a foreign index.
+	f.holder = i.holder
+
+	f.setOptions(opt)
 
 	// Open field.
 	if err := f.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
 
-	// Apply field options.
-	if err := f.applyOptions(opt); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "applying options")
-	}
-
-	if err := f.saveMeta(); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "saving meta")
-	}
-
 	// Add to index's field lookup.
-	i.fields[name] = f
+	i.fields[cfm.Field] = f
 
-	// Update replication, if needed.
-	if i.holder != nil {
-		go i.holder.refreshTranslateStoreReplicator()
+	// enable Txf to find the index in field_test.go TestField_SetValue
+	f.idx = i
+
+	// Kick off the field's translation sync process.
+	if err := i.translationSyncer.Reset(); err != nil {
+		return nil, errors.Wrap(err, "resetting translation syncer")
 	}
 
 	return f, nil
 }
 
 func (i *Index) newField(path, name string) (*Field, error) {
-	f, err := newField(path, i.name, name, OptFieldTypeDefault())
+	f, err := newField(i.holder, path, i.name, name, OptFieldTypeDefault())
 	if err != nil {
 		return nil, err
 	}
-	f.logger = i.logger
+	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
-	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
-	f.snapshotQueue = i.snapshotQueue
+	f.schemator = i.Schemator
+	f.serializer = i.serializer
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }
@@ -472,10 +890,20 @@ func (i *Index) DeleteField(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	// Disallow deleting the existence field.
+	if name == existenceFieldName {
+		return newNotFoundError(ErrFieldNotFound, existenceFieldName)
+	}
+
 	// Confirm field exists.
 	f := i.field(name)
 	if f == nil {
 		return newNotFoundError(ErrFieldNotFound, name)
+	}
+
+	// Delete the field from etcd as the system of record.
+	if err := i.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
+		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
 	}
 
 	// Close field.
@@ -483,27 +911,16 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "closing")
 	}
 
-	// Delete field directory.
-	if err := os.RemoveAll(i.fieldPath(name)); err != nil {
-		return errors.Wrap(err, "removing directory")
-	}
-
-	// If the field being deleted is the existence field,
-	// turn off existence tracking on the index.
-	if name == existenceFieldName {
-		i.trackExistence = false
-		i.existenceFld = nil
-
-		// Update meta data on disk.
-		if err := i.saveMeta(); err != nil {
-			return errors.Wrap(err, "saving existence meta data")
-		}
+	if err := i.holder.txf.DeleteFieldFromStore(i.name, name, i.fieldPath(name)); err != nil {
+		return errors.Wrap(err, "Txf.DeleteFieldFromStore")
 	}
 
 	// Remove reference.
 	delete(i.fields, name)
 
-	return nil
+	// remove shard metadata for field
+	i.fieldView2shard.removeField(name)
+	return i.translationSyncer.Reset()
 }
 
 type indexSlice []*Index
@@ -515,6 +932,7 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
 	Name       string       `json:"name"`
+	CreatedAt  int64        `json:"createdAt,omitempty"`
 	Options    IndexOptions `json:"options"`
 	Fields     []*FieldInfo `json:"fields"`
 	ShardWidth uint64       `json:"shardWidth"`
@@ -532,27 +950,16 @@ type IndexOptions struct {
 	TrackExistence bool `json:"trackExistence"`
 }
 
-// hasTime returns true if a contains a non-nil time.
-func hasTime(a []*time.Time) bool {
-	for _, t := range a {
-		if t != nil {
-			return true
-		}
-	}
-	return false
-}
-
-type importKey struct {
-	View  string
-	Shard uint64
-}
-
 type importData struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64
 }
 
-type importValueData struct {
-	ColumnIDs []uint64
-	Values    []int64
+// FormatQualifiedIndexName generates a qualified name for the index to be used with Tx operations.
+func FormatQualifiedIndexName(index string) string {
+	return fmt.Sprintf("%s\x00", index)
+}
+
+func (i *Index) Txf() *TxFactory {
+	return i.holder.txf
 }

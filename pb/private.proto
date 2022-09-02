@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+package pb;
+
+import "public.proto";
+
+message IndexMeta {
+	bool Keys = 3;
+	bool TrackExistence = 4;
+}
+
+message FieldOptions {
+	string Type = 8;
+	string CacheType = 3;
+	uint32 CacheSize = 4;
+	string TimeQuantum = 5;
+	int64 OldMin = 9;
+	int64 OldMax = 10;
+	bool Keys = 11;
+	bool NoStandardView = 12;
+	int64 Base = 13;
+	uint64 BitDepth = 14;
+	int64 Scale = 15;
+	string ForeignIndex = 16;
+	Decimal Min = 17;
+	Decimal Max = 18;
+	string TimeUnit = 19;
+	string TTL = 20;
+}
+
+message ImportResponse {
+	string Err = 1;
+}
+
+message BlockDataRequest {
+	string Index = 1;
+	string Field = 2;
+	string View = 5;
+	uint64 Shard = 4;
+	uint64 Block = 3;
+}
+
+message BlockDataResponse {
+	repeated uint64 RowIDs = 1;
+	repeated uint64 ColumnIDs = 2;
+}
+
+message Cache {
+	repeated uint64 IDs = 1;
+}
+
+message MaxShards {
+	map<string, uint64> Standard = 1;
+}
+
+message CreateShardMessage {
+	string Index = 1;
+	string Field = 3;
+	uint64 Shard = 2;
+}
+
+message DeleteIndexMessage {
+	string Index = 1;
+}
+
+message CreateIndexMessage {
+	string Index = 1;
+	IndexMeta Meta = 2;
+	int64 CreatedAt  = 3;
+}
+
+message CreateFieldMessage {
+	string Index = 1;
+	string Field = 2;
+	FieldOptions Meta = 3;
+	int64 CreatedAt  = 4;
+}
+
+message UpdateFieldMessage {
+	CreateFieldMessage CreateFieldMessage = 1;
+	FieldUpdate Update = 2;
+}
+
+message FieldUpdate {
+	string Option = 1;
+	string Value = 2;
+}
+
+message DeleteFieldMessage {
+	string Index = 1;
+	string Field = 2;
+}
+
+message DeleteAvailableShardMessage {
+	string Index = 1;
+	string Field = 2;
+	uint64 ShardID = 3;
+}
+
+message Field {
+	string Name = 1;
+	FieldOptions Meta = 2;
+	repeated string Views = 3;
+	int64 CreatedAt = 4;
+}
+
+message Schema {
+	repeated Index Indexes = 1;
+}
+
+message Index {
+	string Name = 1;
+	int64 CreatedAt = 2;
+	IndexMeta Options = 5;
+	repeated Field Fields = 4;
+}
+
+message URI {
+	string Scheme = 1;
+	string Host = 2;
+	uint32 Port = 3;
+}
+
+message Node {
+	string ID = 1;
+	URI URI = 2;
+	bool IsPrimary = 3;
+	string State = 4;
+	URI GRPCURI = 5;
+}
+
+message NodeStateMessage {
+	string NodeID = 1;
+	string State = 2;
+}
+
+message NodeEventMessage {
+	uint32 Event = 1;
+	Node Node = 2;
+}
+
+message NodeStatus {
+	Node Node = 1;
+	Schema Schema = 3;
+	repeated IndexStatus Indexes = 4;
+}
+
+message IndexStatus {
+	string Name = 1;
+	repeated FieldStatus Fields = 2;
+	int64 CreatedAt = 3;
+}
+
+message FieldStatus {
+	string Name = 1;
+	repeated uint64 AvailableShards = 2;
+	int64 CreatedAt = 3;
+}
+
+message ClusterStatus {
+	string ClusterID = 1;
+	string State = 2;
+	repeated Node Nodes = 3;
+	Schema Schema = 4;
+}
+
+message BSIGroup {
+	string Name = 1;
+	string Type = 2;
+	int64 Min = 3;
+	int64 Max = 4;
+}
+
+message CreateViewMessage {
+	string Index = 1;
+	string Field = 2;
+	string View = 3;
+}
+
+message DeleteViewMessage {
+	string Index = 1;
+	string Field = 2;
+	string View = 3;
+}
+
+message ResizeInstruction {
+	int64 JobID = 1;
+	Node Node = 2;
+	Node Primary = 3;
+	repeated ResizeSource Sources = 4;
+	repeated TranslationResizeSource TranslationSources = 8;
+	NodeStatus NodeStatus = 7;
+	ClusterStatus ClusterStatus = 6;
+}
+
+message ResizeSource {
+	Node Node = 1;
+	string Index = 2;
+	string Field = 3;
+	string View = 4;
+	uint64 Shard = 5;
+}
+
+message TranslationResizeSource {
+	Node Node = 1;
+	string Index = 2;
+	int32 PartitionID = 3;
+}
+
+message ResizeInstructionComplete {
+	int64 JobID = 1;
+	Node Node = 2;
+	string Error = 3;
+}
+
+message Topology {
+	string ClusterID = 1;
+	repeated string NodeIDs = 2;
+}
+
+message RecalculateCaches {}
+
+message LoadSchemaMessage {}
+
+message TransactionMessage {
+	string Action = 1;
+	Transaction Transaction = 2;
+}
+
+message Transaction {
+	string ID = 1;
+	bool Active = 2;
+	bool Exclusive = 3;
+	int64 Timeout = 4;
+	int64 Deadline = 5;
+	TransactionStats Stats = 6;
+}
+
+message TransactionStats {}
+
+message ResizeAbortMessage {
+
+}
+
+message ResizeNodeMessage {
+	string NodeID = 1;
+	string Action = 2;
+}
+
+message FieldOperation {
+    repeated uint64 RecordIDs = 1;
+	repeated uint64 Values = 2;
+	repeated int64 Signed = 3;
+}
+
+message ShardIngestOperation {
+	string OpType = 1;
+	repeated uint64 ClearRecordIDs = 2;
+	repeated string ClearFields = 3;
+	map <string, FieldOperation> FieldOps = 4;
+}
+
+message ShardIngestOperations {
+	repeated ShardIngestOperation Ops = 1;
+}
+
+message ShardedIngestRequest {
+    map <uint64, ShardIngestOperations> Ops = 1;
+}

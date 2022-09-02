@@ -1,80 +1,85 @@
-<p>
-    <a href="https://www.pilosa.com">
-        <img src="https://www.pilosa.com/img/logo.svg" width="50%">
-    </a>
-</p>
+# FeatureBase
 
-[![CircleCI](https://circleci.com/gh/pilosa/pilosa/tree/master.svg?style=shield)](https://circleci.com/gh/pilosa/pilosa/tree/master)
-[![GoDoc](https://godoc.org/github.com/pilosa/pilosa?status.svg)](https://godoc.org/github.com/pilosa/pilosa)
-[![Go Report Card](https://goreportcard.com/badge/github.com/pilosa/pilosa)](https://goreportcard.com/report/github.com/pilosa/pilosa)
-[![license](https://img.shields.io/github/license/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/blob/master/LICENSE)
-[![CLA Assistant](https://cla-assistant.io/readme/badge/pilosa/pilosa)](https://cla-assistant.io/pilosa/pilosa)
-[![GitHub release](https://img.shields.io/github/release/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/releases)
+## Pilosa is now FeatureBase
 
-## An open source, distributed bitmap index.
-- [Docs](#docs)
-- [Getting Started](#getting-started)
-- [Data Model](#data-model)
-- [Query Language](#query-language)
-- [Client Libraries](#client-libraries)
-- [Get Support](#get-support)
-- [Contributing](#contributing)
+As of September 7, 2022, the Pilosa project is now FeatureBase. The core of the project remains the same: FeatureBase is the first real-time distributed database built entirely on bitmaps. (More information about updated capabilities and improvements below.)
 
-Want to contribute? One of the easiest ways is to [tell us how you're using (or want to use) Pilosa](https://github.com/pilosa/pilosa/issues/1074). We learn from every discussion!
+FeatureBase delivers low-latency query results, regardless of throughput or query volumes, on fresh data with extreme efficiency. It works because bitmaps are faster, simpler, and far more I/O efficient than traditional column-oriented data formats. With FeatureBase, you can ingest data from batch data sources (e.g. S3, CSV, Snowflake, BigQuery, etc.) and/or streaming data sources (e.g. Kafka/Confluent, Kinesis, Pulsar).
 
-## Docs
-
-See our [Documentation](https://www.pilosa.com/docs/) for information about installing and working with Pilosa.
-
+For more information about FeatureBase, please visit [www.featurebase.com][HomePage].
 
 ## Getting Started
 
-1.  [Install Pilosa](https://www.pilosa.com/docs/installation/).
+### Build FeatureBase Server from source
 
-2.  [Start Pilosa](https://www.pilosa.com/docs/getting-started/#starting-pilosa) with the default configuration:
+0. Install go. Ensure that your shell's search path includes the go/bin directory.
+1. Clone the FeatureBase repository (or download as zip).
+2. In the featurebase directory, run `make install` to compile the FeatureBase server binary. By default, it will be installed in the go/bin directory.
+3. In the idk directory, run `make install` to compile the ingester binaries. By default, they will be installed in the go/bin directory.
+4. Run `featurebase server --handler.allowed-origins=http://localhost:3000` to run FeatureBase server with default settings (learn more about configuring FeatureBase at the link below). The `--handler.allowed-origins` parameter allows the standalone web UI to talk to the server; this can be omitted if the web UI is not needed.
+5. Run `curl localhost:10101/status` to verify the server is running and accessible.
 
-    ```shell
-    pilosa server
-    ```
-    
-    and verify that it's running:
-    
-    ```shell
-    curl localhost:10101/nodes
-    ```
+### Ingest Data and Query
 
-3.  Follow along with the [Sample Project](https://www.pilosa.com/docs/getting-started/#sample-project) to get a better understanding of Pilosa's capabilities.
+1. Run 
+```
+molecula-consumer-csv \
+    --index repository \
+    --header "language__ID_F,project_id__ID_F" \
+    --id-field project_id \
+    --batch-size 1000 \
+    --files example.csv
+```
 
+This will ingest the `example.csv` file into a FeatureBase table called `repository`. If the table does not exist, it will be automatically created. Learn more about ingesting into FeatureBase: [https://docs.featurebase.com/data-ingestion/enterprise/ingesters][Ingest]
 
-## Data Model
+2. Query your data. 
+```
+curl localhost:10101/index/repository/query \
+     -X POST \
+     -d 'Row(example=5)'
+```
+Learn about supported [SQL][SQL], native [Pilosa Query Language (PQL)][PQL].
 
-Check out how the Pilosa [Data Model](https://www.pilosa.com/docs/data-model/) works.
+### Data Model
 
+Because FeatureBase is built on bitmaps, there is bit of a learning curve to grasp how your data is represented. 
+Data Model Guide: [https://docs.featurebase.com/data-modeling-guide/data-modeling][DataModel]
 
-## Query Language
+### More Information
 
-You can interact with Pilosa directly in the console using the [Pilosa Query Language](https://www.pilosa.com/docs/query-language/) (PQL).
+Installation:[https://docs.featurebase.com/setting-up-featurebase/enterprise/installing-featurebase][Install]
 
+Configuration: [https://docs.featurebase.com/setting-up-featurebase/enterprise/featurebase-configuration][Config]
 
-## Client Libraries
+## Community
 
-There are supported libraries for the following languages:
-- [Go](https://www.pilosa.com/docs/client-libraries/#go)
-- [Java](https://www.pilosa.com/docs/client-libraries/#java)
-- [Python](https://www.pilosa.com/docs/client-libraries/#python)
+You can email us at comminuty@featurebase.com or learn more about contributing at [https://www.featurebase.com/community][Community].
 
-## Licenses
+Chat with us: [https://discord.gg/bKAP5CEY][Discord]
 
-The core Pilosa code base and all default builds (referred to as Pilosa Community Edition) are licensed completely under the Apache License, Version 2.0.
-If you build Pilosa with the `enterprise` build tag (Pilosa Enterprise Edition), then that build will include features licensed under the GNU Affero General
-Public License (AGPL). Enterprise code is located entirely in the [github.com/pilosa/pilosa/enterprise](https://github.com/pilosa/pilosa/tree/master/enterprise)
-directory. See [github.com/pilosa/pilosa/NOTICE](https://github.com/pilosa/pilosa/blob/master/NOTICE) and
-[github.com/pilosa/pilosa/LICENSE](https://github.com/pilosa/pilosa/blob/master/LICENSE) for more information about Pilosa licenses.
+## What's Changed Since the Pilosa Days? 
 
-## Get Support
+A lot has changed since the days of Pilosa. This list highlights some new capabilites included in FeatureBase. We have also made signficant improvements to the performance, scalability, and stability of the FeatureBase product. 
 
-There are [several channels](https://www.pilosa.com/community/#support) available for you to reach out to us for support. The Slack channel (#pilosa in the [Golang](https://invite.slack.golangbridge.org/) team) is the most active.
+* Query Languages: FeatureBase supports Pilosa Query Language (PQL), as well as SQL
+* Stream and Batch Ingest: Combine real-time data streams with batch historical data and act on it within milliseconds.
+* Mutable: Perform inserts, updates, and deletes at scale, in real time and on-the-fly. This is key for meeting data compliance requirements, and for reflecting the constantly-changing nature of high-volume data.
+* Multi-Valued Set Fields: Store multiple comma-delimited values within a single field while *increasing* query performance of counts, TopKs, etc.
+* Time Quantums: Setting a time quantum on a field creates extra views which allow ranged Row queries down to the time interval specified. For example, if the time quantum is set to YMD, ranged Row queries down to the granularity of a day are supported.
+* RBF storage backend: this is a new compressed bitmap format which improves performance in a number of ways: ACID support on a per shard basis, prevents issues with the number of open files, reduces memory allocation and lock contention for reads, provides more consistent garbage collection, and allows backups to run concurrently with writes. However, because of this change, Pilosa backup files cannot be restored into FeatureBase.
 
-## Contributing
+## License
 
-Pilosa is an open source project. Please see our [Contributing Guide](CONTRIBUTING.md) for information about how to get involved.
+FeatureBase is licensed under the [Apache License, Version 2.0][License]
+
+[Community]: https://www.featurebase.com/community
+[Config]: https://docs.featurebase.com/setting-up-featurebase/enterprise/featurebase-configuration
+[DataModel]: https://docs.featurebase.com/data-modeling-guide/data-modeling
+[Discord]: https://discord.gg/bKAP5CEY
+[HomePage]: https://www.featurebase.com
+[Ingest]: https://docs.featurebase.com/data-ingestion/enterprise/ingesters
+[Install]: https://docs.featurebase.com/setting-up-featurebase/enterprise/installing-featurebase
+[License]: http://www.apache.org/licenses/LICENSE-2.0
+[PQL]: https://docs.featurebase.com/data-querying/pql/introduction
+[SQL]: https://docs.featurebase.com/data-querying/sql

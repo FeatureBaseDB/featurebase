@@ -1,22 +1,11 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
 	"fmt"
 
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/pkg/errors"
 )
 
@@ -26,11 +15,22 @@ type Serializer interface {
 	Unmarshal([]byte, Message) error
 }
 
+// NopSerializer represents a Serializer that doesn't do anything.
+var NopSerializer Serializer = &nopSerializer{}
+
+type nopSerializer struct{}
+
+// Marshal is a no-op implementation of Serializer Marshal method.
+func (*nopSerializer) Marshal(Message) ([]byte, error) { return nil, nil }
+
+// Unmarshal is a no-op implementation of Serializer Unmarshal method.
+func (*nopSerializer) Unmarshal([]byte, Message) error { return nil }
+
 // broadcaster is an interface for broadcasting messages.
 type broadcaster interface {
 	SendSync(Message) error
 	SendAsync(Message) error
-	SendTo(*Node, Message) error
+	SendTo(*disco.Node, Message) error
 }
 
 // Message is the interface implemented by all core pilosa types which can be serialized to messages.
@@ -49,7 +49,7 @@ func (nopBroadcaster) SendSync(Message) error { return nil }
 func (nopBroadcaster) SendAsync(Message) error { return nil }
 
 // SendTo is a no-op implementation of Broadcaster SendTo method.
-func (nopBroadcaster) SendTo(*Node, Message) error { return nil }
+func (nopBroadcaster) SendTo(*disco.Node, Message) error { return nil }
 
 // Broadcast message types.
 const (
@@ -61,14 +61,17 @@ const (
 	messageTypeCreateView
 	messageTypeDeleteView
 	messageTypeClusterStatus
-	messageTypeResizeInstruction
-	messageTypeResizeInstructionComplete
-	messageTypeSetCoordinator
-	messageTypeUpdateCoordinator
+	messageTypeUNUSED0 // used to be ResizeInstruction
+	messageTypeUNUSED1 // used to be ResizeInstructionComplete
 	messageTypeNodeState
 	messageTypeRecalculateCaches
+	messageTypeLoadSchemaMessage
 	messageTypeNodeEvent
 	messageTypeNodeStatus
+	messageTypeTransaction
+	messageTypeUNUSED2 // used to be ResizeNodeMessage
+	messageTypeUNUSED3 // used to be ResizeAbortMessage
+	messageTypeUpdateField
 )
 
 // MarshalInternalMessage serializes the pilosa message and adds pilosa internal
@@ -100,22 +103,20 @@ func getMessage(typ byte) Message {
 		return &DeleteViewMessage{}
 	case messageTypeClusterStatus:
 		return &ClusterStatus{}
-	case messageTypeResizeInstruction:
-		return &ResizeInstruction{}
-	case messageTypeResizeInstructionComplete:
-		return &ResizeInstructionComplete{}
-	case messageTypeSetCoordinator:
-		return &SetCoordinatorMessage{}
-	case messageTypeUpdateCoordinator:
-		return &UpdateCoordinatorMessage{}
 	case messageTypeNodeState:
 		return &NodeStateMessage{}
 	case messageTypeRecalculateCaches:
 		return &RecalculateCaches{}
+	case messageTypeLoadSchemaMessage:
+		return &LoadSchemaMessage{}
 	case messageTypeNodeEvent:
 		return &NodeEvent{}
 	case messageTypeNodeStatus:
 		return &NodeStatus{}
+	case messageTypeTransaction:
+		return &TransactionMessage{}
+	case messageTypeUpdateField:
+		return &UpdateFieldMessage{}
 	default:
 		panic(fmt.Sprintf("unknown message type %d", typ))
 	}
@@ -139,22 +140,20 @@ func getMessageType(m Message) byte {
 		return messageTypeDeleteView
 	case *ClusterStatus:
 		return messageTypeClusterStatus
-	case *ResizeInstruction:
-		return messageTypeResizeInstruction
-	case *ResizeInstructionComplete:
-		return messageTypeResizeInstructionComplete
-	case *SetCoordinatorMessage:
-		return messageTypeSetCoordinator
-	case *UpdateCoordinatorMessage:
-		return messageTypeUpdateCoordinator
 	case *NodeStateMessage:
 		return messageTypeNodeState
 	case *RecalculateCaches:
 		return messageTypeRecalculateCaches
+	case *LoadSchemaMessage:
+		return messageTypeLoadSchemaMessage
 	case *NodeEvent:
 		return messageTypeNodeEvent
 	case *NodeStatus:
 		return messageTypeNodeStatus
+	case *TransactionMessage:
+		return messageTypeTransaction
+	case *UpdateFieldMessage:
+		return messageTypeUpdateField
 	default:
 		panic(fmt.Sprintf("don't have type for message %#v", m))
 	}

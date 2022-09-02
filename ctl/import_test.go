@@ -1,33 +1,30 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package ctl
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/test"
+	"github.com/golang-jwt/jwt"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 func TestImportCommand_Validation(t *testing.T) {
@@ -57,7 +54,7 @@ func TestImportCommand_Basic(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import.csv")
+		file, err := testhook.TempFile(t, "import.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -72,7 +69,7 @@ func TestImportCommand_Basic(t *testing.T) {
 
 		cluster := test.MustRunCluster(t, 1)
 		defer cluster.Close()
-		cmd := cluster[0]
+		cmd := cluster.GetNode(0)
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		cm.Index = "i"
@@ -89,7 +86,7 @@ func TestImportCommand_Basic(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import.csv")
+		file, err := testhook.TempFile(t, "import.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -101,7 +98,7 @@ func TestImportCommand_Basic(t *testing.T) {
 
 		cluster := test.MustRunCluster(t, 1)
 		defer cluster.Close()
-		cmd := cluster[0]
+		cmd := cluster.GetNode(0)
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		cm.Index = "i"
@@ -122,7 +119,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import-value.csv")
+		file, err := testhook.TempFile(t, "import-value.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -134,7 +131,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 
 		cluster := test.MustRunCluster(t, 1)
 		defer cluster.Close()
-		cmd := cluster[0]
+		cmd := cluster.GetNode(0)
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
@@ -161,7 +158,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 		buf := bytes.Buffer{}
 		stdin, stdout, stderr := GetIO(buf)
 		cm := NewImportCommand(stdin, stdout, stderr)
-		file, err := ioutil.TempFile("", "import-value.csv")
+		file, err := testhook.TempFile(t, "import-value.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
 		}
@@ -176,7 +173,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 
 		cluster := test.MustRunCluster(t, 1)
 		defer cluster.Close()
-		cmd := cluster[0]
+		cmd := cluster.GetNode(0)
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
@@ -206,7 +203,7 @@ func TestImportCommand_RunKeys(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-key.csv")
+	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +215,7 @@ func TestImportCommand_RunKeys(t *testing.T) {
 
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	cm.Host = cmd.API.Node().URI.HostPort()
 
 	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
@@ -246,15 +243,15 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-key.csv")
+	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// create a large import file in order to test the
 	// translateStoreBufferSize growth logic.
 	keyBytes := []byte{}
-	for row := 0; row < 100; row++ {
-		for col := 0; col < 100; col++ {
+	for row := 0; row < 1000; row++ {
+		for col := 0; col < 1000; col++ {
 			x := fmt.Sprintf("foo%d,bar%d\n", row, col)
 			keyBytes = append(keyBytes, x...)
 		}
@@ -268,10 +265,10 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	c := test.MustRunCluster(t, 2)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
-	cmd0 := c[0]
-	cmd1 := c[1]
+	cmd0 := c.GetNode(0)
+	cmd1 := c.GetNode(1)
 
 	host0 := cmd0.API.Node().URI.HostPort()
 	host1 := cmd1.API.Node().URI.HostPort()
@@ -299,20 +296,26 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 
 	// Verify that the data is available on both nodes.
 	for _, host := range []string{host0, host1} {
-		qry := "Count(Row(f=foo0))"
-		resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+host+"/index/i/query", strings.NewReader(qry)))
-		if err != nil {
-			t.Fatalf("Querying data for validation: %s", err)
-		}
+		if err := test.RetryUntil(2*time.Second, func() error {
+			qry := "Count(Row(f=foo0))"
+			resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+host+"/index/i/query", strings.NewReader(qry)))
+			if err != nil {
+				return fmt.Errorf("Querying data for validation: %s", err)
+			}
 
-		// Read body and unmarshal response.
-		exp := `{"results":[100]}` + "\n"
-		if body, err := ioutil.ReadAll(resp.Body); err != nil {
-			t.Fatalf("reading: %s", err)
-		} else if !reflect.DeepEqual(body, []byte(exp)) {
-			t.Fatalf("expected: %s, but got: %s", exp, body)
+			// Read body and unmarshal response.
+			exp := `{"results":[1000]}` + "\n"
+			if body, err := ioutil.ReadAll(resp.Body); err != nil {
+				return fmt.Errorf("reading: %s", err)
+			} else if !reflect.DeepEqual(body, []byte(exp)) {
+				return fmt.Errorf("expected: %s, but got: %s", exp, body)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
+
 }
 
 // Ensure that integer import with keys runs.
@@ -320,7 +323,7 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-key.csv")
+	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +335,7 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	cm.Host = cmd.API.Node().URI.HostPort()
 
 	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
@@ -358,7 +361,7 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 func TestImportCommand_InvalidFile(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
@@ -366,7 +369,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 	cm.Host = cmd.API.Node().URI.HostPort()
 	cm.Index = "i"
 	cm.Field = "f"
-	file, err := ioutil.TempFile("", "import.csv")
+	file, err := testhook.TempFile(t, "import.csv")
 	if err != nil {
 		t.Fatalf("creating tempfile: %v", err)
 	}
@@ -380,7 +383,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 		t.Fatalf("expect error: invalid row id on row, actual: %s", err)
 	}
 
-	file, err = ioutil.TempFile("", "import1.csv")
+	file, err = testhook.TempFile(t, "import1.csv")
 	if err != nil {
 		t.Fatalf("creating tempfile: %v", err)
 	}
@@ -394,7 +397,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 		t.Fatalf("expect error: invalid column id on row, actual: %s", err)
 	}
 
-	file, err = ioutil.TempFile("", "import1.csv")
+	file, err = testhook.TempFile(t, "import1.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +411,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 		t.Fatalf("expect error: invalid timestamp on row, actual: %s", err)
 	}
 
-	file, err = ioutil.TempFile("", "import1.csv")
+	file, err = testhook.TempFile(t, "import1.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,12 +449,12 @@ func GetIO(buf bytes.Buffer) (io.Reader, io.Writer, io.Writer) {
 func TestImportCommand_BugOverwriteValue(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import-value.csv")
+	file, err := testhook.TempFile(t, "import-value.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +486,7 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 	}
 
 	file.Close()
-	file, err = ioutil.TempFile("", "import-value2.csv")
+	file, err = testhook.TempFile(t, "import-value2.csv")
 	if err != nil {
 		t.Fatalf("Error creating tempfile: %s", err)
 	}
@@ -498,7 +501,7 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 	}
 
 	file.Close()
-	file, err = ioutil.TempFile("", "import-value3.csv")
+	file, err = testhook.TempFile(t, "import-value3.csv")
 	if err != nil {
 		t.Fatalf("Error creating tempfile: %s", err)
 	}
@@ -522,7 +525,7 @@ func TestImportCommand_RunBool(t *testing.T) {
 
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
+	cmd := cluster.GetNode(0)
 	cm.Host = cmd.API.Node().URI.HostPort()
 
 	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
@@ -540,7 +543,7 @@ func TestImportCommand_RunBool(t *testing.T) {
 	cm.Field = "f"
 
 	t.Run("Valid", func(t *testing.T) {
-		file, err := ioutil.TempFile("", "import-bool.csv")
+		file, err := testhook.TempFile(t, "import-bool.csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -558,7 +561,7 @@ func TestImportCommand_RunBool(t *testing.T) {
 
 	// Ensure that invalid bool values return an error.
 	t.Run("Invalid", func(t *testing.T) {
-		file, err := ioutil.TempFile("", "import-invalid-bool.csv")
+		file, err := testhook.TempFile(t, "import-invalid-bool.csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -570,6 +573,177 @@ func TestImportCommand_RunBool(t *testing.T) {
 		err = cm.Run(ctx)
 		if !strings.Contains(err.Error(), "bool field imports only support values 0 and 1") {
 			t.Fatalf("expect error: bool field imports only support values 0 and 1, actual: %s", err)
+		}
+	})
+}
+
+func TestImport_AuthOn(t *testing.T) {
+	clusterSize := 1
+
+	logFilename := "./testdata/query.log"
+	_, err := os.Create(logFilename)
+	if err != nil {
+		t.Fatalf("Failed to create query log file: %s", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := json.Marshal(
+			authn.Groups{
+				Groups: []authn.Group{
+					{
+						GroupID:   "group-id-test",
+						GroupName: "group-id-test",
+					},
+				},
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error marshalling groups response: %v", err)
+		}
+		fmt.Fprintf(w, "%s", body)
+	}))
+
+	auth := server.Auth{
+		Enable:           true,
+		ClientId:         "e9088663-eb08-41d7-8f65-efb5f54bbb71",
+		ClientSecret:     "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		AuthorizeURL:     "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/authorize",
+		TokenURL:         "https://login.microsoftonline.com/4a137d66-d161-4ae4-b1e6-07e9920874b8/oauth2/v2.0/token",
+		GroupEndpointURL: srv.URL,
+		LogoutURL:        "https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+		Scopes:           []string{"https://graph.microsoft.com/.default", "offline_access"},
+		SecretKey:        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+		RedirectBaseURL:  "https://localhost:0",
+		QueryLogPath:     logFilename,
+		PermissionsFile:  "./testdata/permissions.yaml",
+	}
+
+	commandOpts := make([][]server.CommandOption, clusterSize)
+	configs := make([]*server.Config, clusterSize)
+	for i := range configs {
+		conf := server.NewConfig()
+		configs[i] = conf
+		conf.Bind = "https://localhost:0"
+		conf.Auth = auth
+		conf.TLS.CertificatePath = "./testdata/certs/localhost.crt"
+		conf.TLS.CertificateKeyPath = "./testdata/certs/localhost.key"
+		conf.TLS.CACertPath = "./testdata/certs/pilosa-ca.crt"
+		conf.TLS.EnableClientVerification = false
+		conf.TLS.SkipVerify = true
+		commandOpts[i] = append(commandOpts[i], server.OptCommandConfig(conf))
+	}
+	a, err := authn.NewAuth(
+		logger.NewStandardLogger(os.Stdout),
+		"http://localhost:0/",
+		auth.Scopes,
+		auth.AuthorizeURL,
+		auth.TokenURL,
+		srv.URL,
+		auth.LogoutURL,
+		auth.ClientId,
+		auth.ClientSecret,
+		auth.SecretKey,
+		[]string{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make a valid token
+	tkn := jwt.New(jwt.SigningMethodHS256)
+	claims := tkn.Claims.(jwt.MapClaims)
+	claims["oid"] = "42"
+	claims["name"] = "valid"
+	token, err := tkn.SignedString([]byte(a.SecretKey()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	validToken := "Bearer " + token
+	invalidToken := "Bearer " + string(tkn.Raw)
+
+	tests := []struct {
+		Index        string
+		Field        string
+		CreateSchema bool
+		Token        string
+		Err          error
+	}{
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: true,
+			Token:        validToken,
+			Err:          nil,
+		},
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: false,
+			Token:        validToken,
+			Err:          nil,
+		},
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: false,
+			Token:        invalidToken,
+			Err:          fmt.Errorf("auth token is empty"),
+		},
+		{
+			Index:        "test",
+			Field:        "field1",
+			CreateSchema: true,
+			Token:        invalidToken,
+			Err:          fmt.Errorf("auth token is empty"),
+		},
+	}
+
+	t.Run("set", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		stdin, stdout, stderr := GetIO(buf)
+		cm := NewImportCommand(stdin, stdout, stderr)
+		file, err := testhook.TempFile(t, "import.csv")
+		if err != nil {
+			t.Fatalf("creating tempfile: %v", err)
+		}
+		_, err = file.Write([]byte("1,2\n3,4\n5,6"))
+		if err != nil {
+			t.Fatalf("writing to tempfile: %v", err)
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cluster := test.MustRunCluster(t, clusterSize, commandOpts...)
+		defer cluster.Close()
+		cmd := cluster.GetNode(0)
+		cm.Host = cmd.API.Node().URI.HostPort()
+
+		for i, test := range tests {
+			cm.Index = test.Index
+			cm.Field = test.Field
+			cm.CreateSchema = test.CreateSchema
+			cm.Paths = []string{file.Name()}
+			ctx := context.WithValue(
+				context.Background(),
+				authn.ContextValueAccessToken,
+				test.Token,
+			)
+			err = cm.Run(ctx)
+			if test.Err != nil {
+				if !strings.Contains(err.Error(), test.Err.Error()) {
+					t.Fatalf("Test: %d, Import Run doesn't work: got %s, expected: %s", i, err, test.Err)
+				}
+			} else {
+				if err != test.Err {
+					t.Fatalf("Test: %d, Import Run doesn't work: got %s, expected: %s", i, err, test.Err)
+				}
+			}
+
+		}
+		err = os.Remove(logFilename)
+		if err != nil {
+			t.Fatalf("Failed to delete query log file: %s", err)
 		}
 	})
 }

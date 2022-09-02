@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package prometheus
 
 import (
@@ -20,14 +8,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/stats"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
 	// namespace is prepended to each metric event name with "_"
-	namespace = "pilosa"
+	defaultNamespace = "general"
 )
 
 // Ensure client implements interface.
@@ -46,11 +34,22 @@ type prometheusClient struct {
 	gaugeVecs   map[string]*prometheus.GaugeVec
 	observers   map[string]prometheus.Observer
 	summaryVecs map[string]*prometheus.SummaryVec
+	namespace   string
+}
+
+// ClientOption is a functional option type for prometheusClient
+type ClientOption func(c *prometheusClient)
+
+// OptClientPrefix is a functional option on prometheusClient used to set the namespace
+func OptClientNamespace(namespace string) ClientOption {
+	return func(c *prometheusClient) {
+		c.namespace = namespace
+	}
 }
 
 // NewPrometheusClient returns a new instance of StatsClient.
-func NewPrometheusClient() (*prometheusClient, error) {
-	return &prometheusClient{
+func NewPrometheusClient(opts ...ClientOption) (*prometheusClient, error) {
+	client := &prometheusClient{
 		logger:      logger.NopLogger,
 		counters:    make(map[string]prometheus.Counter),
 		counterVecs: make(map[string]*prometheus.CounterVec),
@@ -58,7 +57,14 @@ func NewPrometheusClient() (*prometheusClient, error) {
 		gaugeVecs:   make(map[string]*prometheus.GaugeVec),
 		observers:   make(map[string]prometheus.Observer),
 		summaryVecs: make(map[string]*prometheus.SummaryVec),
-	}, nil
+		namespace:   defaultNamespace,
+	}
+
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	return client, nil
 }
 
 // Open no-op to satisfy interface
@@ -76,7 +82,7 @@ func (c *prometheusClient) Tags() []string {
 
 // labels returns an instance of prometheus.Labels with the value of the set tags.
 func (c *prometheusClient) labels() prometheus.Labels {
-	return tagsToLabels(c.tags)
+	return tagsToLabels(c.tags, c.logger)
 }
 
 // WithTags returns a new client with additional tags appended.
@@ -90,6 +96,7 @@ func (c *prometheusClient) WithTags(tags ...string) stats.StatsClient {
 		gaugeVecs:   c.gaugeVecs,
 		observers:   c.observers,
 		summaryVecs: c.summaryVecs,
+		namespace:   c.namespace,
 	}
 }
 
@@ -103,7 +110,7 @@ func (c *prometheusClient) Count(name string, value int64, rate float64) {
 	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.CounterOpts{
-		Namespace: namespace,
+		Namespace: c.namespace,
 		Name:      name,
 	}
 	if len(labels) == 0 {
@@ -127,7 +134,7 @@ func (c *prometheusClient) Count(name string, value int64, rate float64) {
 		var err error
 		counter, err = counterVec.GetMetricWith(labels)
 		if err != nil {
-			c.logger.Printf("counterVec.GetMetricWith error: %s", err)
+			c.logger.Errorf("counterVec.GetMetricWith error: %s", err)
 		}
 	}
 	if value == 1 {
@@ -152,7 +159,7 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.GaugeOpts{
-		Namespace: namespace,
+		Namespace: c.namespace,
 		Name:      name,
 	}
 	if len(labels) == 0 {
@@ -176,7 +183,7 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 		var err error
 		gauge, err = gaugeVec.GetMetricWith(labels)
 		if err != nil {
-			c.logger.Printf("gaugeVec.GetMetricWith error: %s", err)
+			c.logger.Errorf("gaugeVec.GetMetricWith error: %s", err)
 			return
 		}
 	}
@@ -193,7 +200,7 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.SummaryOpts{
-		Namespace:  namespace,
+		Namespace:  c.namespace,
 		Name:       name,
 		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 	}
@@ -219,7 +226,7 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 		var err error
 		observer, err = summaryVec.GetMetricWith(labels)
 		if err != nil {
-			c.logger.Printf("summaryVec.GetMetricWith error: %s", err)
+			c.logger.Errorf("summaryVec.GetMetricWith error: %s", err)
 			return
 		}
 	}
@@ -228,13 +235,12 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 
 // Set tracks number of unique elements.
 func (c *prometheusClient) Set(name string, value string, rate float64) {
-	c.logger.Printf("prometheusClient.Set unimplemented: %s=%s", name, value)
+	c.logger.Infof("prometheusClient.Set unimplemented: %s=%s", name, value)
 }
 
 // Timing tracks timing information for a metric.
 func (c *prometheusClient) Timing(name string, value time.Duration, rate float64) {
-	durationMs := value / time.Second
-	c.Histogram(name, float64(durationMs), rate)
+	c.Histogram(name, value.Seconds(), rate)
 }
 
 // SetLogger sets the logger for client.
@@ -277,12 +283,13 @@ func unionStringSlice(a, b []string) []string {
 	return other
 }
 
-func tagsToLabels(tags []string) (labels prometheus.Labels) {
+func tagsToLabels(tags []string, logger logger.Logger) (labels prometheus.Labels) {
 	labels = make(prometheus.Labels)
 	for _, tag := range tags {
 		tagParts := strings.SplitAfterN(tag, ":", 2)
 		if len(tagParts) != 2 {
 			// only process tags in "key:value" form
+			logger.Errorf("invalid Prometheus label: %v\n", tag)
 			continue
 		}
 		labels[tagParts[0][0:len(tagParts[0])-1]] = tagParts[1]

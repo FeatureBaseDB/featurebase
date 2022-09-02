@@ -1,0 +1,29 @@
+.activityLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 250px;
+  grid-gap: 32px;
+}
+
+.tooltip {
+  padding: 4px 8px;
+  background: #ffffff;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+
+  .metric {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+  }
+
+  .metricName {
+    margin-right: 20px;
+  }
+}
+
+[data-theme='dark'] {
+  .tooltip {
+    background: #1c2022;
+  }
+}

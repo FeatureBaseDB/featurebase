@@ -1,0 +1,7 @@
+FROM golang:1.19
+
+WORKDIR /
+COPY fakeidp ./
+RUN go build .
+
+ENTRYPOINT ["/fakeidpidk"]

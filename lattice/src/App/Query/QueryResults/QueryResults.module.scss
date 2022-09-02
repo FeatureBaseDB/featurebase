@@ -1,0 +1,57 @@
+.queryMetadata {
+  margin-bottom: 16px;
+}
+
+.queryItemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.queryHeaderRight {
+  display: flex;
+  align-items: center;
+
+  .removeItemButton {
+    margin-left: 16px;
+  }
+}
+
+.durationTooltip {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-gap: 4px;
+
+  .duration {
+    text-align: right;
+  }
+}
+
+.queryString {
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.link {
+  color: var(--primary);
+  font-size: 12px;
+
+  &:hover {
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--primary);
+  }
+}
+
+.queryHeader {
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  color: var(--text-secondary);
+
+  .icon {
+    margin-left: 4px;
+    font-size: 0.75rem;
+  }
+}

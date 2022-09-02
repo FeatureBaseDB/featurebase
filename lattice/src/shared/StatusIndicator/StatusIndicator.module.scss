@@ -1,0 +1,81 @@
+.wrapper {
+  &.left {
+    margin-left: 8px;
+  }
+
+  &.right {
+    margin-right: 8px;
+  }
+
+  &.both {
+    margin: 0 8px;
+  }
+}
+
+.indicator {
+  width: 15px;
+  height: 15px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  position: relative;
+
+  &.success {
+    background: var(--success);
+    box-shadow: inset -2px -2px 3px rgba(var(--contrast-rgb), 0.25),
+      0 0 4px 4px rgba(var(--success-rgb), 0.15);
+  }
+
+  &.warning {
+    background: var(--warning);
+    box-shadow: inset -2px -2px 3px rgba(var(--contrast-rgb), 0.25),
+      0 0 4px 4px rgba(var(--warning-rgb), 0.15);
+  }
+
+  &.error {
+    background: var(--error);
+    box-shadow: inset -2px -2px 3px rgba(var(--contrast-rgb), 0.25),
+      0 0 4px 4px rgba(var(--error-rgb), 0.15);
+  }
+
+  &.info {
+    background: var(--primary);
+    box-shadow: inset -2px -2px 3px rgba(var(--contrast-rgb), 0.25),
+      0 0 4px 4px rgba(var(--primary-rgb), 0.15);
+  }
+
+  &.disabled {
+    background: var(--disabled);
+    box-shadow: inset -2px -2px 3px rgba(var(--contrast-rgb), 0.25),
+      0 0 4px 4px rgba(var(--disabled-rgb), 0.15);
+  }
+
+  &.small {
+    width: 10px;
+    height: 10px;
+    margin: 0;
+  }
+
+  &.large {
+    width: 22px;
+    height: 22px;
+    margin: -4px 0 0 -4px;
+  }
+}
+
+.indicator::after {
+  content: ' ';
+  top: -2px;
+  right: -2px;
+  bottom: -2px;
+  left: -2px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  position: absolute;
+
+  &.large::after {
+    top: -4px;
+    right: -4px;
+    bottom: -4px;
+    left: -4px;
+  }
+}

@@ -1,0 +1,24 @@
+ARG GO_VERSION=1.19
+
+FROM golang:${GO_VERSION} as build_base
+
+WORKDIR /
+RUN ["apt-get","update","-y"]
+RUN ["apt-get","install","-y","git","unixodbc","unixodbc-dev","netcat", "build-essential","musl-tools"]
+RUN ["git", "clone", "https://github.com/edenhill/librdkafka.git"]
+WORKDIR /librdkafka
+# need to install dependencies because librdkafka does not find openssl header otherwise
+RUN ["./configure", "--install-deps"] 
+RUN ["./configure", "--prefix", "/usr"]
+RUN ["make"]
+RUN ["make", "install"]
+
+FROM build_base
+
+WORKDIR /go/src/github.com/molecula/featurebase/
+
+COPY . .
+
+WORKDIR /go/src/github.com/molecula/featurebase/idk/
+
+CMD ["go","test","-v","-mod=vendor","-tags=odbc,dynamic","./..."]

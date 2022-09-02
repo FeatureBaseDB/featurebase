@@ -1,0 +1,8 @@
+[
+    {"name": "protocol", "path": ["protocol"], "type": "string", "config": {"Mutex": true}},
+    {"name": "port", "path": ["port"], "type": "int"},
+    {"name": "client", "path": ["client"], "type": "string", "config": {"Mutex": true}},
+    {"name": "server", "path": ["server"], "type": "string", "config": {"Mutex": true}},
+    {"name": "suspicious", "path": ["metadata", "suspicious"], "type": "bool"},
+    {"name": "region", "path": ["metadata", "region"], "type": "string", "config": {"Mutex": true}}
+]

@@ -1,0 +1,9 @@
+name: "GitHub Import Load Testing (1 day)"
+
+main: "pilosa server --data-dir ${TMPDIR} --storage.backend ${STORAGE_BACKEND}"
+load: "molecula-consumer-github -i events -d id --record-type event --batch-size=100000 --start-time 2020-01-01T00:00:00Z --end-time 2020-01-01T23:00:00Z --cache-dir ~/.githubarchive"
+
+health_url: "http://localhost:10101/status"
+vars_urls:
+  - http://localhost:10101/debug/vars
+  - http://localhost:7070/debug/vars

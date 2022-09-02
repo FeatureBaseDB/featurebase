@@ -1,0 +1,102 @@
+.rowGroup {
+  position: relative;
+
+  .removeGroup {
+    position: absolute;
+    right: -21px;
+    top: 6px;
+    width: 20px;
+    line-height: 1;
+    padding: 4px 1px 2px 0;
+    background: var(--divider);
+    border-radius: 0 4px 4px 0;
+    text-align: center;
+    transition: background-color 0.3s ease;
+
+    &:hover {
+      cursor: pointer;
+      background: rgba(var(--primary-rgb), 0.3);
+    }
+  }
+
+  .removeGroupIcon {
+    font-size: 12px;
+  }
+}
+
+.isNot {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+
+  .isNotCheckbox {
+    margin-right: 4px;
+    fill: var(--divider);
+
+    &.checked {
+      fill: var(--primary);
+    }
+
+    &:hover {
+      cursor: pointer;
+    }
+  }
+
+  .isNotLabel {
+    &:hover {
+      cursor: pointer;
+    }
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+
+  .fieldSelector {
+    width: auto;
+    min-width: 85px;
+  }
+}
+
+.operator {
+  margin: 0 8px;
+  text-align: center;
+}
+
+.rowValue {
+  flex-grow: 1;
+}
+
+.rowGroup {
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  padding: 8px;
+  margin: 8px 0;
+}
+
+.link,
+.removeRowIcon {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+
+  &:hover {
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--primary);
+  }
+}
+
+.link {
+  color: var(--primary);
+}
+
+.removeRowIcon {
+  margin-left: 8px;
+}
+
+.menuPaper {
+  padding: 0 !important;
+}

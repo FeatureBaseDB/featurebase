@@ -1,0 +1,108 @@
+.consoleCol {
+  padding-right: 32px;
+}
+
+.consoleLayout {
+  display: flex;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.consoleContent {
+  flex-grow: 1;
+
+  .syntaxHelper {
+    margin: 16px 0;
+    font-family: 'Roboto Mono', monospace;
+  }
+}
+
+.fieldsCol {
+  padding: 0 32px;
+  margin: 16px 0;
+
+  .fieldList {
+    font-family: 'Roboto Mono', monospace;
+
+    > div {
+      white-space: nowrap;
+      max-width: 100%;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+  }
+}
+
+.toggleFields {
+  margin-left: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+
+  &:hover {
+    cursor: pointer;
+    color: var(--primary);
+    text-decoration: underline;
+  }
+}
+
+.filterDropdown {
+  max-height: 300px;
+  overflow: auto;
+  margin: 3px 0 0 8px;
+
+  .filterDropdownItem {
+    padding: 8px 16px;
+    transition: background-color 0.15s ease;
+
+    &.hover {
+      background: rgba(var(--base-rgb), 0.3);
+      cursor: pointer;
+    }
+
+    &.active {
+      background: rgba(var(--primary-rgb), 0.3);
+    }
+  }
+
+  .noResults {
+    padding: 8px 16px;
+    font-style: italic;
+  }
+}
+
+.results {
+  padding: 2px 16px;
+  margin-bottom: 32px;
+}
+
+.loadingContainer {
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.clearResults {
+  text-align: right;
+  margin-bottom: 16px;
+
+  .divider {
+    margin: 0 8px;
+  }
+
+  .recentLink,
+  .clearLink {
+    color: var(--text-secondary);
+    font-size: 12px;
+
+    &:hover {
+      cursor: pointer;
+      text-decoration: underline;
+      color: var(--primary);
+    }
+  }
+}
+
+.list {
+  padding-bottom: 24px;
+}

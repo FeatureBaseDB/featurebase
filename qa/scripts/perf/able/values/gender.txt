@@ -1,0 +1,5 @@
+Male,0.48
+Female,0.48
+Transgender,0.01
+Other,0.01
+Unspecified,0.02

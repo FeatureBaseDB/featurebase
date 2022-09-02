@@ -1,0 +1,92 @@
+.inputLayout {
+  display: flex;
+  align-items: center;
+  min-height: 66px;
+  padding: 8px;
+  border: 1px solid rgba(var(--contrast-rgb), 0.23);
+  border-radius: 4px;
+  background-color: rgba(var(--base-rgb), 0.1);
+  transition: border-color 0.15s ease;
+
+  &:hover {
+    border-color: rgba(var(--contrast-rgb), 0.5);
+  }
+
+  &.active {
+    border: 1px solid rgba(var(--primary-rgb), 1);
+  }
+
+  .console {
+    flex-grow: 1;
+    align-self: center;
+  }
+}
+
+.consoleError {
+  padding: 16px;
+  border: 1px solid rgba(var(--error-rgb), 0.5);
+  background: rgba(var(--error-rgb), 0.1);
+  border-radius: 4px;
+  margin: 16px 0;
+}
+
+.queryConsole {
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+
+  .cursor {
+    margin: 12px 0 12px 16px;
+  }
+
+  .input {
+    flex-grow: 1;
+    font-family: 'Roboto Mono', monospace;
+    margin: 8px 0;
+    background-color: transparent;
+    position: relative;
+
+    .textarea {
+      width: 100%;
+      background-color: transparent;
+      textarea {
+        width: 100%;
+        font-family: 'Roboto Mono', monospace;
+        background-color: transparent;
+      }
+    }
+  }
+
+  .autocompleteText {
+    position: absolute !important;
+    display: block !important;
+    top: 0;
+    opacity: 0.5;
+    width: 100%;
+    background-color: transparent;
+    textarea {
+      width: 100%;
+      font-family: 'Roboto Mono', monospace;
+      background-color: transparent;
+    }
+  }
+
+  .iconButton {
+    padding-right: 16px;
+    transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+      background-color 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+  }
+}
+
+.queryTypeTag {
+  padding: 2px 8px;
+  background: rgba(var(--default-rgb), 0.35);
+  color: var(--text-secondary);
+  border-radius: 4px;
+}
+
+[data-theme='dark'] {
+  .queryTypeTag {
+    background: rgba(var(--base-rgb), 0.2);
+  }
+}

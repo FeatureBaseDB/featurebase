@@ -1,0 +1,119 @@
+.infoMessage {
+  padding: 16px;
+  border: 1px solid rgba(var(--primary-rgb), 0.5);
+  background: rgba(var(--primary-rgb), 0.1);
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.metricsLabel {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  font-weight: 400;
+  margin-right: 8px;
+}
+
+.clearFilter {
+  padding-left: 8px;
+  border-left: 1px solid rgba(var(--contrast-rgb), 0.27);
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--divider);
+
+  .typeFilter {
+    margin-left: 16px;
+    background: transparent;
+  }
+}
+
+.key {
+  font-weight: 600;
+}
+
+.highlight {
+  background: rgba(var(--primary-rgb), 0.5);
+  color: var(--contrast);
+  padding: 0 1px;
+}
+
+.metricsList {
+  padding: 8px;
+
+  .metricsHeader {
+    display: flex;
+    align-items: center;
+    line-height: 1;
+  }
+
+  .loading {
+    display: flex;
+    align-items: center;
+  }
+
+  .loadingIcon {
+    margin: 0 2px 0 8px;
+  }
+}
+
+.reset {
+  color: var(--primary);
+
+  &:hover {
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}
+
+.metricType {
+  float: right;
+}
+
+.metricItem {
+  margin-bottom: 48px;
+}
+
+.metricName {
+  margin-right: 8px;
+  font-size: 1rem;
+}
+
+.dataTable {
+  padding: 8px;
+  background: rgba(var(--default-rgb), 0.15);
+
+  .tableValue {
+    padding: 8px;
+    vertical-align: top;
+
+    pre,
+    code {
+      margin: 0;
+      font-size: 11px;
+    }
+  }
+
+  .tableRow:last-child {
+    .tableValue {
+      border-bottom: 0;
+    }
+  }
+}
+
+.dialogPaper {
+  height: calc(100% - 64px);
+}
+
+.refreshMetrics {
+  float: right;
+}
+
+[data-theme='dark'] {
+  .dataTable {
+    background: rgba(var(--base-rgb), 0.1);
+  }
+}

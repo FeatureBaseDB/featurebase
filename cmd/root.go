@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package cmd
 
 import (
@@ -19,33 +7,28 @@ import (
 	"io"
 	"strings"
 
-	"github.com/pilosa/pilosa/v2"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	productName := "Pilosa " + pilosa.Version
-	if pilosa.EnterpriseEnabled {
-		productName = "Pilosa Enterprise " + pilosa.Version
-	}
 	rc := &cobra.Command{
-		Use:   "pilosa",
-		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
-		// TODO - is documentation actually there?
-		Long: `Pilosa is a fast index to turbocharge your database.
+		Use: "featurebase",
+		// TODO: These short/long descriptions could use some updating.
+		Short: "FeatureBase is a feature extraction and storage technology that enables real-time analytics.",
+		Long: `FeatureBase is a feature extraction and storage technology that enables real-time analytics.
 
-This binary contains Pilosa itself, as well as common
-tools for administering pilosa, importing/exporting data,
+This binary contains FeatureBase itself, as well as common
+tools for administering FeatureBase, importing/exporting data,
 backing up, and more. Complete documentation is available
-at https://www.pilosa.com/docs/.
+at https://docs.featurebase.com/.
 
-` + productName + `
-Build Time: ` + pilosa.BuildTime + "\n",
+` + pilosa.VersionInfo(true) + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
-			err := setAllConfig(v, cmd.Flags(), "PILOSA")
+			err := setAllConfig(v, cmd.Flags())
 			if err != nil {
 				return err
 			}
@@ -68,14 +51,19 @@ Build Time: ` + pilosa.BuildTime + "\n",
 	_ = rc.PersistentFlags().MarkHidden("dry-run")
 	rc.PersistentFlags().StringP("config", "c", "", "Configuration file to read from.")
 
-	rc.AddCommand(newCheckCommand(stdin, stdout, stderr))
+	rc.AddCommand(newChkSumCommand(stdin, stdout, stderr))
+	rc.AddCommand(newBackupCommand(stdin, stdout, stderr))
+	rc.AddCommand(newRestoreCommand(stdin, stdout, stderr))
 	rc.AddCommand(newConfigCommand(stdin, stdout, stderr))
 	rc.AddCommand(newExportCommand(stdin, stdout, stderr))
 	rc.AddCommand(newGenerateConfigCommand(stdin, stdout, stderr))
 	rc.AddCommand(newImportCommand(stdin, stdout, stderr))
-	rc.AddCommand(newInspectCommand(stdin, stdout, stderr))
+	rc.AddCommand(newAuthTokenCommand(stdin, stdout, stderr))
+	rc.AddCommand(newRBFCommand(stdin, stdout, stderr))
 	rc.AddCommand(newServeCmd(stdin, stdout, stderr))
 	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
+	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
+	rc.AddCommand(newKeygenCommand(stdin, stdout, stderr))
 
 	rc.SetOutput(stderr)
 	return rc
@@ -91,11 +79,17 @@ Build Time: ` + pilosa.BuildTime + "\n",
 // setAllConfig looks for environment variables which are capitalized versions
 // of the flag names with dashes replaced by underscores, and prefixed with
 // envPrefix plus an underscore.
-func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error { // nolint: unparam
+func setAllConfig(v *viper.Viper, flags *pflag.FlagSet) error { // nolint: unparam
 	// add cmd line flag def to viper
 	err := v.BindPFlags(flags)
 	if err != nil {
 		return err
+	}
+
+	envPrefix := "PILOSA"
+	rename := v.GetBool("future.rename")
+	if rename {
+		envPrefix = "FEATUREBASE"
 	}
 
 	// add env to viper

@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package server_test
 
 import (
@@ -27,22 +15,23 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/boltdb"
-	"github.com/pilosa/pilosa/v2/encoding/proto"
-	"github.com/pilosa/pilosa/v2/http"
-	"github.com/pilosa/pilosa/v2/server"
-	"github.com/pilosa/pilosa/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestHandler_PostSchemaCluster(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
-	cmd := cluster[0]
-	h := cmd.Handler.(*http.Handler).Handler
+	cmd := cluster.GetNode(0)
+	h := cmd.Handler.(*pilosa.Handler).Handler
 
 	t.Run("PostSchema", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -54,8 +43,8 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 			}
 			t.Fatalf("unexpected code: %v, bod: %s", w.Code, bod)
 		}
-		for i := 0; i < len(cluster); i++ {
-			cmd = cluster[i]
+		for i := 0; i < cluster.Len(); i++ {
+			cmd = cluster.GetNode(i)
 			idx, err := cmd.API.Index(context.Background(), "blah")
 			if err != nil {
 				t.Fatalf("getting index: %v", err)
@@ -80,8 +69,8 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 func TestHandler_Endpoints(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
-	h := cmd.Handler.(*http.Handler).Handler
+	cmd := cluster.GetNode(0)
+	h := cmd.Handler.(*pilosa.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
@@ -101,7 +90,20 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		body := w.Body.String()
-		if body != "{\"indexes\":null}\n" {
+		if body != "{\"indexes\":[]}\n" {
+			t.Fatalf("unexpected empty schema: '%v'", body)
+		}
+
+	})
+
+	t.Run("SchemaDetailsEmpty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		body := w.Body.String()
+		if body != "{\"indexes\":[]}\n" {
 			t.Fatalf("unexpected empty schema: '%v'", body)
 		}
 
@@ -173,18 +175,36 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
-	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(0, 0, nil); err != nil {
+	const shard = 0
+	tx0, err := holder.BeginTx(true, i0.Index, shard)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
+	defer tx0.Rollback()
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(tx0, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx0.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
+	tx1, err := holder.BeginTx(true, i1.Index, shard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx1.Rollback()
+	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx1, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx1.Commit(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,19 +214,184 @@ func TestHandler_Endpoints(t *testing.T) {
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		body := w.Body.String()
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}
-`, pilosa.ShardWidth)
-		if body != target {
-			t.Fatalf("%s != %s", target, body)
+
+		var bodySchema pilosa.Schema
+		if err := json.Unmarshal(w.Body.Bytes(),
+			&bodySchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+		// DO NOT COMPARE `CreatedAt` - reset to 0
+		for _, i := range bodySchema.Indexes {
+			i.CreatedAt = 0
+			for _, f := range i.Fields {
+				f.CreatedAt = 0
+			}
+		}
+		//
+
+		var targetSchema pilosa.Schema
+		if err := json.Unmarshal([]byte(fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)),
+			&targetSchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+
+		if !reflect.DeepEqual(targetSchema, bodySchema) {
+			t.Fatalf("target: %+v\nbody: %+v\n", targetSchema, bodySchema)
+		}
+	})
+
+	// i2 is for SchemaDetails
+	i2 := hldr.MustCreateIndexIfNotExists("i2", pilosa.IndexOptions{})
+	tx2, err := holder.BeginTx(true, i2.Index, shard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx2.Rollback()
+	if f, err := i2.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := i2.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeInt(-100, 100))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for n := 0; n < 4; n++ {
+		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	f, err = i2.CreateFieldIfNotExists("f2", pilosa.OptFieldTypeDecimal(1, pql.NewDecimal(-10, 0), pql.NewDecimal(10, 0)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for n := 0; n < 5; n++ {
+		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if f, err := i2.CreateFieldIfNotExists("f3", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0")); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := i2.CreateFieldIfNotExists("f4", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000)); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := i2.CreateFieldIfNotExists("f5", pilosa.OptFieldTypeBool()); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx2.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("SchemaDetails", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+
+		var bodySchema pilosa.Schema
+		if err := json.Unmarshal(w.Body.Bytes(), &bodySchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+		// DO NOT COMPARE `CreatedAt` - reset to 0
+		for _, i := range bodySchema.Indexes {
+			i.CreatedAt = 0
+			for _, f := range i.Fields {
+				f.CreatedAt = 0
+			}
+		}
+		//
+
+		var targetSchema pilosa.Schema
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"views":[{"name":"standard"}]},{"name":"f1","options":{"type":"int","base":0,"bitDepth":0,"min":-100,"max":100,"keys":false,"foreignIndex":""},"views":[{"name":"bsig_f1"}]},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":0,"min":-10,"max":10,"keys":false},"views":[{"name":"bsig_f2"}]},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"views":[{"name":"standard"}]},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"views":[{"name":"standard"}]},{"name":"f5","options":{"type":"bool"},"views":[{"name":"standard"}]}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
+		if err := json.Unmarshal([]byte(target), &targetSchema); err != nil {
+			t.Fatalf("unexpected unmarshalling error: %v", err)
+		}
+
+		if !reflect.DeepEqual(targetSchema, bodySchema) {
+			t.Fatalf("target: %+v\nbody: %+v\n", targetSchema, bodySchema)
+		}
+	})
+
+	t.Run("Import", func(t *testing.T) {
+		indexInfo, err := cmd.API.Schema(context.Background(), false)
+		if err != nil {
+			t.Fatalf("getting schema: %v", err)
+		}
+
+		idx := indexInfo[0]
+		fld := indexInfo[0].Fields[0]
+		msg := pilosa.ImportRequest{
+			Index:          idx.Name,
+			IndexCreatedAt: idx.CreatedAt,
+			Field:          fld.Name,
+			FieldCreatedAt: fld.CreatedAt,
+			Shard:          0,
+		}
+		ser := proto.Serializer{}
+		data, err := ser.Marshal(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/index/%s/field/%s/import", idx.Name, fld.Name)
+		httpReq := test.MustNewHTTPRequest("POST", path, bytes.NewBuffer(data))
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		httpReq.Header.Set("Accept", "application/x-protobuf")
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httpReq)
+		if w.Code != 200 {
+			t.Fatalf(w.Body.String())
+		}
+
+		msg.IndexCreatedAt = -idx.CreatedAt
+		msg.FieldCreatedAt = -fld.CreatedAt
+		data, err = ser.Marshal(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq = test.MustNewHTTPRequest("POST", path, bytes.NewBuffer(data))
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		httpReq.Header.Set("Accept", "application/x-protobuf")
+
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, httpReq)
+
+		if w.Code != 412 {
+			t.Fatalf("expected: Precondition Failed, got: %d", w.Code)
 		}
 	})
 
 	t.Run("ImportRoaring", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
+
+		idx, err := cmd.API.Index(context.Background(), "i0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		fld, err := cmd.API.Field(context.Background(), "i0", "f1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		msg := pilosa.ImportRoaringRequest{
-			Clear: false,
+			IndexCreatedAt: idx.CreatedAt(),
+			FieldCreatedAt: fld.CreatedAt(),
+			Clear:          false,
 			Views: map[string][]byte{
 				"": roaringData,
 			},
@@ -216,31 +401,53 @@ func TestHandler_Endpoints(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(data))
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")
 		httpReq.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, httpReq)
+		if w.Code != 200 {
+			t.Fatalf("Unexpected response body: %s", w.Body.String())
+		}
 		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "TopN(f1)"})
 		if err != nil {
 			t.Fatalf("querying: %v", err)
 		}
-		if !reflect.DeepEqual(resp.Results[0], []pilosa.Pair{{Count: 12, ID: 0}}) {
+		if !reflect.DeepEqual(resp.Results[0], &pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{Count: 12, ID: 0},
+			},
+			Field: "f1",
+		}) {
 			t.Fatalf("Unexpected result %v", resp.Results[0])
 		}
-
 	})
 
-	t.Run("ImportRoaringFieldTypeFail", func(t *testing.T) {
-		// Roaring import into a non-set field should fail.
-		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 1)); err != nil {
+	t.Run("ImportRoaringOverwrite", func(t *testing.T) {
+		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 10)); err != nil {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
-		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
+
+		// byShardWidth is a map of the same roaring (fragment) data generated
+		// with different shard widths.
+		// TODO: a better approach may be to generate this in the test based
+		// on shard width.
+		byShardWidth := make(map[uint64][]byte)
+		// col/val: 3/3, 8/8
+		byShardWidth[1<<20] = []byte{60, 48, 0, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 80, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 72, 0, 0, 0, 76, 0, 0, 0, 78, 0, 0, 0, 80, 0, 0, 0, 3, 0, 8, 0, 3, 0, 3, 0, 8, 0}
+		byShardWidth[1<<22] = []byte{60, 48, 0, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 128, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 192, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 64, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 72, 0, 0, 0, 76, 0, 0, 0, 78, 0, 0, 0, 80, 0, 0, 0, 3, 0, 8, 0, 3, 0, 3, 0, 8, 0}
+
+		var roaringData []byte
+		if data, ok := byShardWidth[pilosa.ShardWidth]; ok {
+			roaringData = data
+		}
+
 		msg := pilosa.ImportRoaringRequest{
-			Clear: false,
+			Action: pilosa.RequestActionOverwrite,
+			Block:  0,
 			Views: map[string][]byte{
-				"": roaringData,
+				"bsig_int-field": roaringData,
 			},
 		}
 		ser := proto.Serializer{}
@@ -251,11 +458,15 @@ func TestHandler_Endpoints(t *testing.T) {
 		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/int-field/import-roaring/0", bytes.NewBuffer(data))
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")
 		httpReq.Header.Set("Accept", "application/x-protobuf")
-		h.ServeHTTP(w, httpReq)
-		if w.Code != gohttp.StatusBadRequest {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		}
 
+		h.ServeHTTP(w, httpReq)
+		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "Row(int-field>0)"})
+		if err != nil {
+			t.Fatalf("querying: %v", err)
+		}
+		if row := resp.Results[0].(*pilosa.Row); !reflect.DeepEqual(row.Columns(), []uint64{3, 8}) {
+			t.Fatalf("Unexpected result %v", row.Columns())
+		}
 	})
 
 	t.Run("Status", func(t *testing.T) {
@@ -273,14 +484,47 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Abort no resize job", func(t *testing.T) {
+	t.Run("UI/shard-distribution", func(t *testing.T) {
+		// This tests the response structure, not the cluster behavior.
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/cluster/resize/abort", nil))
-		if w.Code != gohttp.StatusInternalServerError {
-			bod, err := ioutil.ReadAll(w.Body)
-			t.Fatalf("unexpected status code: %d, bod: %s, readerr: %v", w.Code, bod, err)
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/shard-distribution", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		// TODO need to test aborting a cluster resize job. this may not be the right place
+
+		ret := mustJSONDecode(t, w.Body)
+
+		for indexName := range ret {
+			indexData := ret[indexName].(map[string]interface{})
+			for nodeName := range indexData {
+				nodeData := indexData[nodeName].(map[string]interface{})
+				_, hasPrimary := nodeData["primary-shards"]
+				_, hasReplica := nodeData["replica-shards"]
+
+				responseOK := hasPrimary && hasReplica
+				if !responseOK {
+					t.Fatalf("unexpected response structure")
+				}
+			}
+
+		}
+	})
+
+	t.Run("Metrics", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/metrics", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+	})
+
+	t.Run("Metrics.json", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/metrics.json", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		mustJSONDecode(t, w.Body)
 	})
 
 	hldr.SetBit("i0", "f0", 30, (1*pilosa.ShardWidth)+1)
@@ -298,7 +542,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/internal/shards/max", nil))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0}}`+"\n" {
+		} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0,"i2":0}}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})
@@ -384,28 +628,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Row(f0=30)")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != fmt.Sprintf(`{"results":[{"attrs":{},"columns":[%d,%d,%d]}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4)+"\n" {
+		} else if body := w.Body.String(); body != fmt.Sprintf(`{"results":[{"columns":[%d,%d,%d]}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4)+"\n" {
 			t.Fatalf("unexpected body: %s", body)
-		}
-	})
-
-	f0 := i0.Field("f0")
-	if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.ShardWidth)+1, map[string]interface{}{"x": "y"}); err != nil {
-		t.Fatal(err)
-	} else if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.ShardWidth)+2, map[string]interface{}{"y": 123, "z": false}); err != nil {
-		t.Fatal(err)
-	} else if err := f0.RowAttrStore().SetAttrs(30, map[string]interface{}{"a": "b", "c": 1, "d": true}); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("ColumnAttrs_JSON", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?columnAttrs=true", strings.NewReader("Row(f0=30)")))
-		exp := fmt.Sprintf(`{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[%[1]d,%[2]d,%[3]d]}],"columnAttrs":[{"id":%[1]d,"attrs":{"x":"y"}},{"id":%[2]d,"attrs":{"y":123,"z":false}}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4) + "\n"
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d. body: %s", w.Code, w.Body.String())
-		} else if body := w.Body.String(); body != exp {
-			t.Fatalf("unexpected body: \n%s\ngot:\n%s", body, exp)
 		}
 	})
 
@@ -423,62 +647,6 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		} else if columns := resp.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
 			t.Fatalf("unexpected columns: %+v", columns)
-		} else if attrs := resp.Results[0].(*pilosa.Row).Attrs; len(attrs) != 3 {
-			t.Fatalf("unexpected attr length: %d", len(attrs))
-		} else if attrs["a"] != "b" {
-			t.Fatalf("unexpected attr[a]: %v", attrs["a"])
-		} else if attrs["c"] != int64(1) {
-			t.Fatalf("unexpected attr[c]: %v", attrs["c"])
-		} else if !attrs["d"].(bool) {
-			t.Fatalf("unexpected attr[d]: %v", attrs["d"])
-		}
-	})
-
-	t.Run("Row columnattrs protobuf", func(t *testing.T) {
-		// Encode request body.
-		buf, err := cmd.API.Serializer.Marshal(&pilosa.QueryRequest{
-			Query:       "Row(f0=30)",
-			ColumnAttrs: true,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("POST", "/index/i0/query", bytes.NewReader(buf))
-		r.Header.Set("Content-Type", "application/x-protobuf")
-		r.Header.Set("Accept", "application/x-protobuf")
-		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		}
-
-		var resp pilosa.QueryResponse
-		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-			t.Fatal(err)
-		}
-		if columns := resp.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
-			t.Fatalf("unexpected columns: %+v", columns)
-		} else if _, ok := resp.Results[0].(*pilosa.Row); !ok {
-			t.Fatalf("unexpected response type: %#v", resp.Results[0])
-		} else if attrs := resp.Results[0].(*pilosa.Row).Attrs; len(attrs) != 3 {
-			t.Fatalf("unexpected attr length: %d", len(attrs))
-		} else if attrs["a"] != "b" {
-			t.Fatalf("unexpected attr[a]: %v", attrs["a"])
-		} else if attrs["c"] != int64(1) {
-			t.Fatalf("unexpected attr[c]: %v", attrs["c"])
-		} else if !attrs["d"].(bool) {
-			t.Fatalf("unexpected attr[d]: %v", attrs["d"])
-		}
-
-		if a := resp.ColumnAttrSets; len(a) != 2 {
-			t.Fatalf("unexpected column attributes length: %d", len(a))
-		} else if a[0].ID != pilosa.ShardWidth+1 {
-			t.Fatalf("unexpected id: %d", a[0].ID)
-		} else if len(a[0].Attrs) != 1 {
-			t.Fatalf("unexpected column attr length: %d", len(a))
-		} else if a[0].Attrs["x"] != "y" {
-			t.Fatalf("unexpected attr[x]: %v", a[0].Attrs["x"])
 		}
 	})
 
@@ -487,7 +655,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(f0, n=2)`)))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"results":[[{"id":30,"count":3},{"id":31,"count":1}]]}`+"\n" {
+		} else if body := w.Body.String(); body != `{"results":[[{"id":30,"key":"","count":3},{"id":31,"key":"","count":1}]]}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})
@@ -504,8 +672,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		var resp pilosa.QueryResponse
 		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if a := resp.Results[0].([]pilosa.Pair); len(a) != 2 {
-			t.Fatalf("unexpected pair length: %d", len(a))
+		} else if a := resp.Results[0].(*pilosa.PairsField); len(a.Pairs) != 2 {
+			t.Fatalf("unexpected pair length: %d", len(a.Pairs))
 		}
 	})
 
@@ -514,7 +682,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Row(row=30)`)))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"error":"executing: map reduce: row: field not found"}`+"\n" {
+		} else if body := w.Body.String(); body != `{"error":"executing: translating call: validating value for field \"row\": field not found"}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})
@@ -531,7 +699,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		var resp pilosa.QueryResponse
 		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if s := resp.Err.Error(); s != `executing: map reduce: row: field not found` {
+		} else if s := resp.Err.Error(); s != `executing: translating call: validating value for field "row": field not found` {
 			t.Fatalf("unexpected error: %s", s)
 		}
 	})
@@ -539,7 +707,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Query empty", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("")))
-		if body := w.Body.String(); body != `{"results":[]}`+"\n" {
+		if body := w.Body.String(); body != `{"results":[]}`+"\n" && body != `{"results":null}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})
@@ -565,11 +733,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if math.MinInt64 != field.Options.Min {
-			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
-		}
-		if math.MaxInt64 != field.Options.Max {
-			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
+				t.Fatalf("field min %v != %v", int64(math.MinInt64), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
+				t.Fatalf("field max %v != %v", int64(math.MaxInt64), field.Options.Max)
+			}
 		}
 	})
 
@@ -594,11 +764,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if math.MinInt64 != field.Options.Min {
-			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
-		}
-		if 10 != field.Options.Max {
-			t.Fatalf("field max %d != %d", 10, field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
+				t.Fatalf("field min %v != %v", int64(math.MinInt64), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(1, -1), field.Options.Max) {
+				t.Fatalf("field max %v != %v", 10, field.Options.Max)
+			}
 		}
 	})
 
@@ -623,11 +795,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if -10 != field.Options.Min {
-			t.Fatalf("field min %d != %d", 10, field.Options.Min)
-		}
-		if math.MaxInt64 != field.Options.Max {
-			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(-1, -1), field.Options.Min) {
+				t.Fatalf("field min %v != %v", 10, field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
+				t.Fatalf("field max %v != %v", int64(math.MaxInt64), field.Options.Max)
+			}
 		}
 	})
 
@@ -636,9 +810,116 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-int-ubound-err"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"int", "min": 10, "max": -10}}`)))
-		fmt.Println("body", w.Body.String())
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+	})
+
+	t.Run("Query decimal field unbounded", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-ubound"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal", "scale": 0}}`)))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
+				t.Fatalf("field min %v != %v", int64(math.MinInt64), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
+				t.Fatalf("field max %v != %v", int64(math.MaxInt64), field.Options.Max)
+			}
+		}
+	})
+
+	t.Run("Query decimal field unbounded min", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-ubound-min"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal", "scale": 1, "max": 10.5}}`)))
+		if w.Code != gohttp.StatusOK {
+			fmt.Println(w.Body.String())
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 1), field.Options.Min) {
+				t.Fatalf("field min %v != %v", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(105, 1), field.Options.Max) {
+				t.Fatalf("field max %v != %v", pql.NewDecimal(105, 1), field.Options.Max)
+			}
+		}
+	})
+	t.Run("Query decimal field scale only", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-scale-only"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal", "scale": 2}}`)))
+		if w.Code != gohttp.StatusOK {
+			fmt.Println(w.Body.String())
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if field != nil { // happy linter
+			if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 2), field.Options.Min) {
+				t.Fatalf("field min %v != %v", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
+			}
+			if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 2), field.Options.Max) {
+				t.Fatalf("field min %v != %v", pql.NewDecimal(math.MaxInt64, 2), field.Options.Max)
+			}
+		}
+	})
+
+	// Ensure that decimal fields error when scale is not provided.
+	t.Run("Query decimal field scale error", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-ubound"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal"}}`)))
+		expErr := "decimal field requires a scale argument"
+		if w.Code != gohttp.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if !strings.Contains(w.Body.String(), expErr) {
+			t.Fatalf("expected error to contain: %s, but got: %s", expErr, w.Body.String())
 		}
 	})
 
@@ -666,8 +947,15 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i", strings.NewReader("")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected response body: %s", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 		// Verify index is gone.
 		if hldr.Index("i") != nil {
@@ -684,90 +972,22 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i/field/f1", strings.NewReader("")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		} else if body := w.Body.String(); body != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %s", body)
-		} else if f := hldr.Index("i").Field("f1"); f != nil {
-			t.Fatal("expected nil field")
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
+
+			if f := hldr.Index("i").Field("f1"); f != nil {
+				t.Fatal("expected nil field")
+			}
 		}
 	})
 
-	i := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	if err := i.ColumnAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
-		t.Fatal(err)
-	} else if err := i.ColumnAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
-		t.Fatal(err)
-	} else if err := i.ColumnAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("AttrStore Diff", func(t *testing.T) {
-		blks, err := i.ColumnAttrStore().Blocks()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		blks = blks[1:]
-		blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
-
-		// Send block checksums to determine diff.
-		req := test.MustNewHTTPRequest(
-			"POST",
-			"/internal/index/i/attr/diff",
-			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
-		)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, req)
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		}
-
-		// Read and validate body.
-		if w.Body.String() != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-			t.Fatalf("unexpected body: %s", w.Body.String())
-		}
-	})
-
-	meta, err := i.CreateFieldIfNotExists("meta", pilosa.OptFieldTypeDefault())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := meta.RowAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
-		t.Fatal(err)
-	} else if err := meta.RowAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
-		t.Fatal(err)
-	} else if err := meta.RowAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("field attrstore diff", func(t *testing.T) {
-		blks, err := meta.RowAttrStore().Blocks()
-		if err != nil {
-			t.Fatal(err)
-		}
-		blks = blks[1:]
-		blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
-
-		// Send block checksums to determine diff.
-		req := test.MustNewHTTPRequest(
-			"POST",
-			"/internal/index/i/field/meta/attr/diff",
-			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
-		)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, req)
-		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		}
-
-		// Read and validate body.
-		if w.Body.String() != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-			t.Fatalf("unexpected body: %s", w.Body.String())
-		}
-	})
+	hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 
 	t.Run("Version", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -790,8 +1010,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		body := mustJSONDecodeSlice(t, w.Body)
 		bmap := body[0].(map[string]interface{})
-		if bmap["isCoordinator"] != true {
-			t.Fatalf("expected true coordinator")
+		if bmap["isPrimary"] != true {
+			t.Fatalf("expected true primary, got: %+v", bmap)
 		}
 
 		// invalid argument should return BadRequest
@@ -845,8 +1065,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		defer clus.Close()
 		w = httptest.NewRecorder()
-		h := clus[0].Handler.(*http.Handler).Handler
-		h.ServeHTTP(w, req)
+		h1 := clus.GetNode(0).Handler.(*pilosa.Handler).Handler
+		h1.ServeHTTP(w, req)
 		result = w.Result()
 
 		if result.StatusCode != 200 {
@@ -859,14 +1079,21 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("index handlers", func(t *testing.T) {
+
 		// create index
 		w := httptest.NewRecorder()
 		r := test.MustNewHTTPRequest("POST", "/index/idx1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create index again
@@ -875,8 +1102,16 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusConflict {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"creating index: index already exists"}}`+"\n" {
-			t.Errorf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success   bool   `json:"success"`
+				Name      string `json:"name,omitempty"`
+				CreatedAt int64  `json:"createdAt,omitempty"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success || resp.Name == "" || resp.CreatedAt == 0 {
+				t.Errorf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create field
@@ -885,8 +1120,16 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success   bool   `json:"success"`
+				Name      string `json:"name,omitempty"`
+				CreatedAt int64  `json:"createdAt,omitempty"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success || resp.Name == "" || resp.CreatedAt == 0 {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create field again
@@ -895,8 +1138,16 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusConflict {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"creating field: field already exists"}}`+"\n" {
-			t.Errorf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success   bool   `json:"success"`
+				Name      string `json:"name,omitempty"`
+				CreatedAt int64  `json:"createdAt,omitempty"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success || resp.Name == "" || resp.CreatedAt == 0 {
+				t.Errorf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// delete field
@@ -905,8 +1156,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// delete field again
@@ -925,8 +1182,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// delete index again
@@ -935,8 +1198,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusNotFound {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting index: idx1: index not found"}}`+"\n" {
-			t.Errorf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 	})
 
@@ -947,8 +1216,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create field
@@ -957,8 +1232,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// set some bits
@@ -986,7 +1267,12 @@ func TestHandler_Endpoints(t *testing.T) {
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		target := []uint64{1, 2, 3}
+		var target []uint64
+		if pilosa.ShardWidth == 1<<22 {
+			target = []uint64{650117121, 637534209, 641728513}
+		} else {
+			target = []uint64{162529281, 159383553, 160432129}
+		}
 		resp := pilosa.TranslateKeysResponse{}
 		err = cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp)
 		if err != nil {
@@ -1024,38 +1310,82 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("%v != %v", target, resp.IDs)
 		}
 	})
+
+	t.Run("grpc-web-cors", func(t *testing.T) {
+		req := test.MustNewHTTPRequest("OPTIONS", "/pilosa.Pilosa/QueryPQL", nil)
+		req.Header.Add("Origin", "http://test/")
+		req.Header.Add("Access-Control-Request-Method", "POST")
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		result := w.Result()
+
+		// Fail CORS preflight
+		if result.Header["Access-Control-Allow-Origin"] != nil {
+			t.Fatalf("CORS preflight includes Access-Control-Allow-Origin but should not.")
+		}
+
+		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
+		defer clus.Close()
+		w = httptest.NewRecorder()
+		h := clus.GetNode(0).Handler.(*pilosa.Handler).Handler
+		h.ServeHTTP(w, req)
+		result = w.Result()
+
+		if result.Header["Access-Control-Allow-Origin"] == nil {
+			t.Fatalf("CORS preflight does not include Access-Control-Allow-Origin.")
+		}
+
+		if result.Header["Access-Control-Allow-Origin"][0] != "http://test/" {
+			t.Fatal("CORS header not present")
+		}
+	})
+}
+
+func TestCluster_TranslateStore(t *testing.T) {
+	cluster := test.MustNewCluster(t, 1)
+	cluster.Nodes[0] = test.NewCommandNode(t,
+		server.OptCommandServerOptions(
+			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
+		),
+	)
+
+	if err := cluster.Start(); err != nil {
+		t.Fatalf("starting node 0: %v", err)
+	}
+	defer cluster.GetIdleNode(0).Close() // nolint: errcheck
+
+	test.Do(t, "POST", cluster.GetIdleNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 }
 
 func TestClusterTranslator(t *testing.T) {
-	cluster := make(test.Cluster, 2)
-	cluster[0] = test.NewCommandNode(true)
-	cluster[0].Config.Gossip.Port = "0"
-	err := cluster[0].Start()
-	if err != nil {
-		t.Fatalf("starting cluster 1: %v", err)
-	}
-	cluster[1] = test.NewCommandNode(false,
-		server.OptCommandServerOptions(
-			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
-		),
+	cluster := test.MustRunCluster(t, 3,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			)},
 	)
-	cluster[1].Config.Gossip.Port = "0"
-	cluster[1].Config.Gossip.Seeds = []string{cluster[0].GossipAddress()}
-	err = cluster[1].Start()
-	if err != nil {
-		t.Fatalf("starting cluster 1: %v", err)
-	}
+	defer cluster.Close()
 
-	test.MustDo("POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
-	test.MustDo("POST", cluster[0].URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
 
-	test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
+	test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
 
 	var result0, result1 string
 	if err := test.RetryUntil(2*time.Second, func() error {
-		result0 = test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
-		result1 = test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result0 = test.Do(t, "POST", cluster.GetNode(0).URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result1 = test.Do(t, "POST", cluster.GetNode(1).URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
 		if result0 != result1 {
 			return fmt.Errorf("`%s` != `%s`", result0, result1)
 		}
@@ -1083,6 +1413,94 @@ func TestClusterTranslator(t *testing.T) {
 		}
 	}
 }
+
+// func TestQueryHistory(t *testing.T) {
+// 	cluster := test.MustRunCluster(t, 3,
+// 		[]server.CommandOption{
+// 			server.OptCommandServerOptions(
+// 				pilosa.OptServerNodeID("1"),
+// 			)},
+// 		[]server.CommandOption{
+// 			server.OptCommandServerOptions(
+// 				pilosa.OptServerNodeID("0"),
+// 			)},
+// 		[]server.CommandOption{
+// 			server.OptCommandServerOptions(
+// 				pilosa.OptServerNodeID("2"),
+// 			)},
+// 	)
+// 	defer cluster.Close()
+
+// 	cmd := cluster.GetNode(0)
+// 	h := cmd.Handler.(*pilosa.Handler).Handler
+
+// 	w := httptest.NewRecorder()
+
+// 	test.Do(t, "POST", cmd.URL()+"/index/i0", "")
+// 	test.Do(t, "POST", cmd.URL()+"/index/i0/field/f0", "")
+
+// 	gh := server.NewGRPCHandler(cmd.API)
+// 	stream := &MockServerTransportStream{}
+// 	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
+// 	_, err := gh.QuerySQLUnary(ctx, &pb.QuerySQLRequest{
+// 		Sql: `select * from i0`,
+// 	})
+
+// 	if err != nil {
+// 		t.Fatalf("QuerySQLUnary failed: %v", err)
+// 	}
+
+// 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(0, f0=0)")
+// 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(3000000, f0=0)")
+// 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "TopN(f0)")
+
+// 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
+// 	if w.Code != gohttp.StatusOK {
+// 		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
+// 	}
+
+// 	ret := make([]pilosa.PastQueryStatus, 4)
+// 	b, err := ioutil.ReadAll(w.Body)
+// 	if err != nil {
+// 		t.Fatalf("reading: %v", err)
+// 	}
+// 	err = json.Unmarshal(b, &ret)
+// 	if err != nil {
+// 		t.Fatalf("unmarshalling: %v", err)
+// 	}
+
+// 	// verify result length
+// 	if len(ret) != 4 {
+// 		// each set query executes on both nodes once
+// 		// topn query gets added to history on node0 once, node1 twice
+// 		t.Fatalf("expected list of length 4, got %d\n%+v", len(ret), ret)
+// 	}
+
+// 	// verify sort order
+// 	if !sort.SliceIsSorted(ret, func(i, j int) bool {
+// 		// must match the sort in api.PastQueries
+// 		return ret[i].Start.After(ret[j].Start)
+// 	}) {
+// 		t.Fatalf("response list not sorted correctly")
+// 	}
+
+// 	// verify some response values
+// 	if ret[0].Index != "i0" {
+// 		t.Fatalf("response value for 'Index' was '%s', expected 'i0'", ret[0].Index)
+// 	}
+// 	if ret[0].Node != cluster.GetNode(0).Server.NodeID() {
+// 		t.Fatalf("response value for 'Node' was '%s', expected '%s'", ret[0].Node, cluster.GetNode(0).Server.NodeID())
+// 	}
+// 	if ret[3].PQL != "Extract(All(),Rows(f0))" {
+// 		t.Fatalf("response value for 'PQL' was '%s', expected 'Extract(All(),Rows(f0))'", ret[0].PQL)
+// 	}
+// 	if ret[3].SQL != "select * from i0" {
+// 		t.Fatalf("response value for 'SQL' was '%s', expected 'select * from i0'", ret[0].SQL)
+// 	}
+// 	if ret[0].PQL != "TopN(f0)" {
+// 		t.Fatalf("response value for 'PQL' was '%s', expected 'TopN(f0)'", ret[0].PQL)
+// 	}
+// }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {
 	dec := json.NewDecoder(r)

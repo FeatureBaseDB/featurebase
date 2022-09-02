@@ -1,28 +1,52 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
-var Enterprise = "0"
-var EnterpriseEnabled = false
-var Version = "v0.0.0"
-var BuildTime = "not recorded"
+import (
+	"runtime"
+	"time"
+)
 
-// init sets the EnterpriseEnabled bool, based on the Enterprise string.
-// This is needed because bools cannot be set with ldflags.
-func init() { // nolint: gochecknoinits
-	if Enterprise == "1" {
-		EnterpriseEnabled = true
+var Version string
+var Commit string
+var Variant string
+var BuildTime string
+var GoVersion string = runtime.Version()
+var TrialDeadline string
+
+func VersionInfo(rename bool) string {
+	var prefix string
+	if Variant != "" {
+		prefix = Variant + " "
 	}
+	var suffix string
+	if Version != "" {
+		suffix = " " + Version
+	} else {
+		suffix = " v3.x"
+	}
+	buildTime := BuildTime
+	if buildTime != "" {
+		// Normalize the build time into a friendly format in the user's time zone.
+		if t, err := time.Parse("2006-01-02T15:04:05+0000", BuildTime); err == nil {
+			buildTime = t.Local().Format("Jan _2 2006 3:04PM")
+		}
+	}
+	switch {
+	case Commit != "" && buildTime != "":
+		suffix += " (" + buildTime + ", " + Commit + ")"
+	case Commit != "":
+		suffix += " (" + Commit + ")"
+	case buildTime != "":
+		suffix += " (" + buildTime + ")"
+	}
+	suffix += " " + GoVersion
+	if TrialDeadline != "" {
+		suffix += " limited time trial ends on: " + TrialDeadline
+	}
+	productName := "Pilosa"
+	if rename {
+		productName = "FeatureBase"
+	}
+	return prefix + productName + suffix
 }

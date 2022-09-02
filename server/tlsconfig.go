@@ -1,16 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 //
 // This file contains source code from bridge
 // (https://github.com/robustirc/bridge); which is governed by the following
@@ -48,13 +37,14 @@ package server
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
@@ -65,7 +55,7 @@ type keypairReloader struct {
 	keyPath  string
 }
 
-func NewKeypairReloader(certPath, keyPath string, logger *log.Logger) (*keypairReloader, error) {
+func NewKeypairReloader(certPath, keyPath string, logger logger.Logger) (*keypairReloader, error) {
 	result := &keypairReloader{
 		certPath: certPath,
 		keyPath:  keyPath,
@@ -79,9 +69,9 @@ func NewKeypairReloader(certPath, keyPath string, logger *log.Logger) (*keypairR
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGHUP)
 		for range c {
-			logger.Printf("Received SIGHUP, reloading TLS certificate and key from %q and %q", certPath, keyPath)
+			logger.Infof("Received SIGHUP, reloading TLS certificate and key from %q and %q", certPath, keyPath)
 			if err := result.maybeReload(); err != nil {
-				logger.Printf("Keeping old TLS certificate because the new one could not be loaded: %v", err)
+				logger.Printf("ERROR: Keeping old TLS certificate because the new one could not be loaded: %v", err)
 			}
 		}
 	}()
@@ -115,12 +105,28 @@ func (kpr *keypairReloader) GetClientCertificateFunc() func(*tls.CertificateRequ
 	}
 }
 
-func GetTLSConfig(tlsConfig *TLSConfig, logger *log.Logger) (TLSConfig *tls.Config, err error) {
-	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
+func GetTLSConfig(tlsConfig *TLSConfig, logger logger.Logger) (TLSConfig *tls.Config, err error) {
+	if tlsConfig == nil {
+		return nil, fmt.Errorf("cannot parse nil tls config")
+	}
+
+	hasCA := len(tlsConfig.CACertPath) > 0
+	hasCert := len(tlsConfig.CertificatePath) > 0 && len(tlsConfig.CertificateKeyPath) > 0
+
+	if hasCA && tlsConfig.SkipVerify {
+		return nil, fmt.Errorf("cannot specify root certificate and disable server certificate verification")
+	}
+
+	if hasCert && tlsConfig.SkipVerify {
+		return nil, fmt.Errorf("cannot specify TLS certificate and disable server certificate verification")
+	}
+
+	if hasCert {
 		kpr, err := NewKeypairReloader(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath, logger)
 		if err != nil {
 			return nil, errors.Wrap(err, "loading keypair")
 		}
+
 		TLSConfig = &tls.Config{
 			InsecureSkipVerify:       tlsConfig.SkipVerify,
 			PreferServerCipherSuites: true,
@@ -128,7 +134,8 @@ func GetTLSConfig(tlsConfig *TLSConfig, logger *log.Logger) (TLSConfig *tls.Conf
 			GetCertificate:           kpr.GetCertificateFunc(),
 			GetClientCertificate:     kpr.GetClientCertificateFunc(),
 		}
-		if tlsConfig.CACertPath != "" {
+
+		if hasCA {
 			b, err := ioutil.ReadFile(tlsConfig.CACertPath)
 			if err != nil {
 				return nil, errors.Wrap(err, "loading tls ca key")
@@ -142,6 +149,7 @@ func GetTLSConfig(tlsConfig *TLSConfig, logger *log.Logger) (TLSConfig *tls.Conf
 			TLSConfig.ClientCAs = certPool
 			TLSConfig.RootCAs = certPool
 		}
+
 		if tlsConfig.EnableClientVerification {
 			TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
 		}

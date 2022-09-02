@@ -1,0 +1,139 @@
+{
+    "namespace": "org.test",
+    "type": "record",
+    "name": "user_traits",
+    "doc": "User Specific Traits",
+    "fields": [
+        {
+            "name": "abc",
+            "doc": "The ABC",
+            "type": "string"
+        },
+        {
+            "name": "db",
+            "doc": "TE DB Number",
+            "type": "string"
+        },
+        {
+            "name": "user_id",
+            "doc": "User ID",
+            "type": "int"
+        },
+        {
+            "name": "all_users",
+            "doc": "All Users Trait",
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        {
+            "name": "has_deleted_date",
+            "doc": "has_deleted_date",
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        {
+            "name": "central_group",
+            "doc": "central_group",
+            "type": [
+                "null",
+                "string"
+            ]
+        },
+        {
+            "name": "custom_audiences",
+            "doc": "custom_audiences NOTE: uuid maps to string internally?",
+            "type": [
+                "null",
+                {
+                    "type": "array",
+                    "items": "string"
+                }
+            ]
+        },
+        {
+            "name": "desktop_boolean",
+            "doc": "desktop_boolean",
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        {
+            "name": "desktop_frequency",
+            "doc": "desktop_frequency",
+            "type": [
+                "null",
+                "int"
+            ]
+        },
+        {
+            "name": "desktop_recency",
+            "doc": "desktop_recency NOTE: Should be DateTime type?",
+            "type": [
+                "null",
+                "int"
+            ]
+        },
+        {
+            "name": "product_boolean_historical_forestry_cravings_or_bugles",
+            "doc": "product_boolean_historical_forestry_cravings_or_bugles",
+            "type": [
+                "null",
+                "boolean"
+            ]
+        },
+        {
+            "name": "ddd_category_total_current_rhinocerous_checking",
+            "doc": "ddd_category_total_current_rhinocerous_checking NOTE: float? use decimal?",
+            "type": [
+                "null",
+                {"type": "float", "scale": 2}
+            ]
+        },
+        {
+            "name": "ddd_category_total_current_rhinocerous_thedog_cheetah",
+            "doc": "ddd_category_total_current_rhinocerous_thedog_cheetah NOTE: float? use decimal?",
+            "type": [
+                "null",
+                "float"
+            ]
+        },
+        {
+            "name": "survey1234",
+            "doc": "Answers for Survey Question 1234",
+            "type": [
+                "null",
+                {
+                    "type": "enum",
+		    "name": "survey1234",
+                    "symbols": [
+                        "yes",
+                        "no",
+                        "seen",
+                        "skipped"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "days_since_last_logon",
+            "doc": "Number of days since the user last logged on NOTE: float? decimal?",
+            "type": [
+                "null",
+                "float"
+            ]
+        },
+        {
+            "name": "elephant_added_for_account",
+            "doc": "Has a elephant been added",
+            "type": [
+                "null",
+                "boolean"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,47 @@
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pages {
+  display: flex;
+  align-items: center;
+
+  .perPageSelector {
+    width: 80px;
+  }
+}
+
+.page {
+  padding: 0 8px;
+  transition: color 0.3s ease, background-color 0.3s ease;
+
+  &:hover {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  &.active {
+    color: var(--primary);
+    &:hover {
+      cursor: default;
+    }
+  }
+}
+
+.overflow {
+  padding: 0 3px;
+  opacity: 0.7;
+  user-select: none;
+}
+
+.total {
+  font-size: 0.75rem;
+  color: rgba(var(--contrast-rgb), 0.54);
+}
+
+.tooMany {
+    vertical-align: middle;
+    margin-right: .5em;
+}

@@ -1,24 +1,13 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package test
 
 import (
-	"io/ioutil"
-	"os"
+	"context"
+	"testing"
 
-	"github.com/pilosa/pilosa/v2"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // Index represents a test wrapper for pilosa.Index.
@@ -27,12 +16,19 @@ type Index struct {
 }
 
 // newIndex returns a new instance of Index.
-func newIndex() *Index {
-	path, err := ioutil.TempDir("", "pilosa-index-")
+func newIndex(tb testing.TB) *Index {
+	path, err := testhook.TempDir(tb, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
-	index, err := pilosa.NewIndex(path, "i")
+	cfg := pilosa.DefaultHolderConfig()
+	cfg.StorageConfig.FsyncEnabled = false
+	cfg.RBFConfig.FsyncEnabled = false
+	h := pilosa.NewHolder(path, cfg)
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
+	index, err := h.CreateIndex("i", pilosa.IndexOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -40,37 +36,26 @@ func newIndex() *Index {
 }
 
 // MustOpenIndex returns a new, opened index at a temporary path. Panic on error.
-func MustOpenIndex() *Index {
-	index := newIndex()
-	if err := index.Open(); err != nil {
-		panic(err)
-	}
+func MustOpenIndex(tb testing.TB) *Index {
+	index := newIndex(tb)
 	return index
 }
 
 // Close closes the index and removes the underlying data.
 func (i *Index) Close() error {
-	defer os.RemoveAll(i.Path())
 	return i.Index.Close()
 }
 
 // Reopen closes the index and reopens it.
 func (i *Index) Reopen() error {
-	var err error
 	if err := i.Index.Close(); err != nil {
 		return err
 	}
-
-	path, name := i.Path(), i.Name()
-	i.Index, err = pilosa.NewIndex(path, name)
+	schema, err := i.Schemator.Schema(context.Background())
 	if err != nil {
 		return err
 	}
-
-	if err := i.Open(); err != nil {
-		return err
-	}
-	return nil
+	return i.OpenWithSchema(schema[i.Name()])
 }
 
 // CreateField creates a field with the given options.

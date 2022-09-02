@@ -1,0 +1,4 @@
+user-groups:
+  "group-id-test":
+    "test": "write"
+admin: "group-id-test"

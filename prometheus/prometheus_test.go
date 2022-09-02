@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package prometheus_test
 
 import (
@@ -19,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	pilosaPrometheus "github.com/pilosa/pilosa/v2/prometheus"
+	pilosaPrometheus "github.com/molecula/featurebase/v3/prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -47,7 +35,9 @@ func TestPrometheusClient_WithTags(t *testing.T) {
 
 func TestPrometheusClient_Methods(t *testing.T) {
 	// Create a new client.
-	c, err := pilosaPrometheus.NewPrometheusClient()
+	c, err := pilosaPrometheus.NewPrometheusClient(
+		pilosaPrometheus.OptClientNamespace("testns"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +54,7 @@ func TestPrometheusClient_Methods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, metricName := range []string{"pilosa_ct", "pilosa_cc", "pilosa_gg", "pilosa_hh", "pilosa_tt"} {
+	for _, metricName := range []string{"testns_ct", "testns_cc", "testns_gg", "testns_hh", "testns_tt"} {
 		if metricExists(metricName, metricFams) {
 			continue
 		}

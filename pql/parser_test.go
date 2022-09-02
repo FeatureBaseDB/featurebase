@@ -1,25 +1,15 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pql_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
-	"github.com/pilosa/pilosa/v2/pql"
-	_ "github.com/pilosa/pilosa/v2/test"
+	"github.com/molecula/featurebase/v3/pql"
+	_ "github.com/molecula/featurebase/v3/test"
 )
 
 // Ensure the parser can parse PQL.
@@ -75,12 +65,12 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with only arguments.
 	t.Run("ArgumentsOnly", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall( key= value, foo='bar', age = 12 , bool0=true, bool1=false, x=null, escape="\" \\escape\n\\\\"  )`)
+		q, err := pql.ParseString(`Row( key= value, foo='bar', age = 12 , bool0=true, bool1=false, x=null, escape="\" \\escape\n\\\\"  )`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"key":    "value",
 					"foo":    "bar",
@@ -96,19 +86,19 @@ func TestParser_Parse(t *testing.T) {
 		}
 	})
 
-	// Parse with float arguments.
-	t.Run("WithFloatArgs", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall( key=12.25, foo= 13.167, bar=2., baz=0.9)`)
+	// Parse with decimal arguments.
+	t.Run("WithDecimalArgs", func(t *testing.T) {
+		q, err := pql.ParseString(`Row( key=12.25, foo= 13.167, bar=2., baz=0.9)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
-					"key": 12.25,
-					"foo": 13.167,
-					"bar": 2.,
-					"baz": 0.9,
+					"key": pql.NewDecimal(1225, 2),
+					"foo": pql.NewDecimal(13167, 3),
+					"bar": pql.NewDecimal(2, 0),
+					"baz": pql.NewDecimal(9, 1),
 				},
 			},
 		) {
@@ -118,14 +108,14 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with float arguments.
 	t.Run("WithNegativeArgs", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall( key=-12.25, foo= -13)`)
+		q, err := pql.ParseString(`Row( key=-12.25, foo= -13)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
-					"key": -12.25,
+					"key": pql.NewDecimal(-1225, 2),
 					"foo": int64(-13),
 				},
 			},
@@ -173,18 +163,19 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with condition arguments.
 	t.Run("WithCondition", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null)`)
+		q, err := pql.ParseString(`Row(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null, n == null)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"key": "foo",
-					"x":   &pql.Condition{Op: pql.EQ, Value: 12.25},
+					"x":   &pql.Condition{Op: pql.EQ, Value: pql.NewDecimal(1225, 2)},
 					"y":   &pql.Condition{Op: pql.GTE, Value: int64(100)},
 					"z":   &pql.Condition{Op: pql.BETWEEN, Value: []interface{}{int64(4), int64(8)}},
 					"m":   &pql.Condition{Op: pql.NEQ, Value: nil},
+					"n":   &pql.Condition{Op: pql.EQ, Value: nil},
 				},
 			},
 		) {
@@ -192,4 +183,126 @@ func TestParser_Parse(t *testing.T) {
 		}
 	})
 
+	t.Run("MixedCase", func(t *testing.T) {
+		q, err := pql.ParseString(`roW(x=3)`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"x": int64(3),
+				},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
+	t.Run("Timestamp", func(t *testing.T) {
+		twos := "2022-02-22T22:22:22Z"
+		date, err := time.Parse(time.RFC3339, twos)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q, err := pql.ParseString(`Row(x>'2022-02-22T22:22:22Z')`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"x": &pql.Condition{Op: pql.GT, Value: date},
+				},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+		q, err = pql.ParseString(`Row(x>'2024-04-24T24:24:24Z')`)
+		if err == nil {
+			t.Fatal("no error parsing invalid date")
+		} else if !strings.Contains(err.Error(), "not a valid timestamp") {
+			t.Fatalf("expected error for invalid timestamp, got: %s", err.Error())
+		}
+	})
+
+	t.Run("VariousSpaces", func(t *testing.T) {
+		q, err := pql.ParseString(`TopN( x )`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "TopN",
+				Args: map[string]interface{}{"_field": "x"},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
+}
+
+func TestUnquote(t *testing.T) {
+	tests := []struct {
+		name   string
+		value  string
+		exp    string
+		expErr string
+	}{
+		{
+			name:  "simple double",
+			value: `"hello"`,
+			exp:   "hello",
+		},
+		{
+			name:  "simple single",
+			value: `'hello'`,
+			exp:   "hello",
+		},
+		{
+			name:  "double with esc",
+			value: `"he\"llo"`,
+			exp:   "he\"llo",
+		},
+		{
+			name:  "single with esc",
+			value: `'he\'llo'`,
+			exp:   "he'llo",
+		},
+		{
+			name:  "single with backslash and esc",
+			value: `'he\\\'llo'`,
+			exp:   `he\'llo`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := pql.Unquote(test.value)
+			if testErr(t, test.expErr, err) {
+				return
+			}
+			if got != test.exp {
+				t.Errorf("exp: '%s'\ngot: '%s'", test.exp, got)
+			}
+		})
+	}
+
+}
+
+func testErr(t *testing.T, exp string, actual error) (done bool) {
+	t.Helper()
+	if exp == "" && actual == nil {
+		return false
+	}
+	if exp == "" && actual != nil {
+		t.Fatalf("unexpected error: %v", actual)
+	}
+	if exp != "" && actual == nil {
+		t.Fatalf("expected error like '%s'", exp)
+	}
+	if !strings.Contains(actual.Error(), exp) {
+		t.Fatalf("unmatched errs exp/got\n%s\n%v", exp, actual)
+	}
+	return true
 }

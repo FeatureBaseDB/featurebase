@@ -1,0 +1,20 @@
+.layout {
+  display: grid;
+  grid-template-columns: 300px 300px;
+  grid-gap: 8px 32px;
+}
+
+.droppable {
+  max-height: 400;
+  overflow-y: scroll;
+  transition: background-color 0.3s ease;
+
+  &.isDraggingOver {
+    background-color: rgba(var(--primary-rgb), 0.1);
+  }
+}
+
+.dragHandle {
+  font-size: 1rem;
+  margin-right: 4px;
+}

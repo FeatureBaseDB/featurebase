@@ -1,0 +1,11 @@
+name: "Intersect() Load Testing"
+
+main: "pilosa server --data-dir ~/pilosa.query.${STORAGE_BACKEND} --storage.backend ${STORAGE_BACKEND}"
+load: "pilosa-bench -type intersect -rate 100 -n 3000"
+
+health_url:    "http://localhost:10101/status"
+health_regexp: "NORMAL"
+
+vars_urls:
+  - http://localhost:10101/debug/vars
+  - http://localhost:7070/debug/vars

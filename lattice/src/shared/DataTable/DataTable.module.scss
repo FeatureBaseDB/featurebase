@@ -1,0 +1,62 @@
+.export {
+  float: right;
+}
+
+.tableWrapper {
+  overflow-x: scroll;
+
+  .tableHeader {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 400;
+    border-bottom: 1px solid rgba(var(--contrast-rgb), 0.1);
+    white-space: nowrap;
+  }
+
+  .sortable {
+    display: flex;
+    align-items: center;
+
+    .sortArrow {
+      font-size: 1rem;
+    }
+
+    &:hover {
+      cursor: pointer;
+    }
+  }
+
+  .currentSort {
+    color: var(--primary);
+
+    .asc {
+      transform: rotate(180deg);
+    }
+  }
+
+  .tableBody {
+    background-color: var(--nav-background);
+  }
+
+  .altBg {
+    background-color: rgba(var(--surface-rgb), 0.32);
+  }
+
+  .preFormat {
+    font-size: 11px;
+    margin: 0;
+  }
+
+  .fillWidth {
+    width: 100%;
+    padding: 0;
+  }
+
+  .tableCell {
+    white-space: nowrap;
+  }
+}
+
+.pagination {
+  margin: 12px 0;
+}

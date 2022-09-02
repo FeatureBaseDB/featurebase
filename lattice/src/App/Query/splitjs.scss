@@ -1,0 +1,32 @@
+.gutter {
+  &:hover {
+    cursor: col-resize;
+  }
+}
+
+// kinda hacky, but unable to disable adjustments if one pane gets
+// collapsed
+.hide-gutter {
+  .gutter {
+    display: none;
+  }
+}
+
+.gutter-margin-top {
+  margin-top: 16px;
+}
+
+.dragBars {
+  width: 4px;
+  height: 100%;
+  margin: 0 3px;
+  border-left: 1px solid rgba(var(--contrast-rgb), 0.1);
+  border-right: 1px solid rgba(var(--contrast-rgb), 0.1);
+}
+
+.dragBar {
+  width: 1px;
+  height: 100%;
+  margin: 0 4px;
+  border-right: 1px solid rgba(var(--contrast-rgb), 0.1);
+}

@@ -1,0 +1,66 @@
+.builderColumn,
+.results {
+  height: calc(100vh - 64px);
+  overflow: scroll;
+  position: relative;
+
+  .openClose {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+  }
+}
+
+.split {
+  display: flex;
+}
+
+.collapsedBuilder {
+  border-right: 1px solid rgba(var(--contrast-rgb), 0.1);
+  text-align: center;
+  padding-top: 10px;
+}
+
+.resultsBlock {
+  height: 100%;
+}
+
+.resultsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .download {
+    display: flex;
+    align-items: center;
+  }
+
+  .downloadInfo {
+    margin-right: 8px;
+  }
+}
+
+.infoMessage {
+  padding: 16px;
+  border: 1px solid rgba(var(--primary-rgb), 0.5);
+  background: rgba(var(--primary-rgb), 0.1);
+  border-radius: 4px;
+  margin: 4px 0 16px;
+}
+
+.spacer{
+  padding-bottom: 16px;
+}
+
+.resultsLoading {
+  margin-left: 8px;
+}
+
+.savedQueries {
+  margin-top: 48px;
+}
+
+.noTables {
+  margin-top: 20px;
+  padding: 12px 16px;
+}

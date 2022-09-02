@@ -1,0 +1,61 @@
+fields:
+  - name: "a_random_string"
+    type: "string" # (default StringField (non-mutex))
+    generator_type: "random-string" # used to generate random strings rather than pulling from known set
+    min_len: 8
+    max_len: 12
+    charset: "AB" # set of possible characters to pull from when generating random string
+  - name: "id"
+    type: "uint"
+    distribution: "sequential"
+    min: 0
+    max: 1000 # 2%24
+    step: 1
+    repeat: false
+  - name: "type"
+    type: "int" # (default IntField)
+    min: 0
+    max: 3
+    distribution: "zipfian"
+    s: 1.1
+    v: 5.1
+  - name: "ts"
+    type: "timestamp"
+    min_date: 2006-01-02T15:04:05.001Z # RFC3339Nano
+    max_date: 2007-01-02T15:04:05.001Z # RFC3339Nano
+    distribution: "increasing" # only "increasing" is supported right now
+    min_step_duration: "10ns"
+    max_step_duration: "200ms"
+  - name: "slice"
+    type: "uint-set" # (default IDArrayField)
+    min: 0
+    max: 35000
+    distribution: "zipfian"
+    s: 1.1
+    v: 5.1
+    min_num: 1
+    max_num: 50
+
+# idk_params describe how data from "fields" should be ingested by IDK
+idk_params:
+  primary_key_config:
+    field: "a_random_string" # if this is a single field named "id" then we'll use uint IDs, if it's empty we'll autogen ids, and if it's anything else we'll do string keys... yes this is a bit hacky, needs to be cleaned up.
+  # fields is keyed by names of fields from top level "fields". It is
+  # not required that all fields appear here, those that don't will
+  # use the default ingestion.
+  fields:
+    id:
+      - type: "ID"
+    type:
+      - type: "ID"
+    a_decimal_field:
+      - type: "Decimal"
+        scale: 4
+    ts:
+      - type: "RecordTime"
+        layout: "2006-01-02T15:04:05Z"
+        epoch: 1970-01-01T00:00:00.0Z
+        name: "na"
+    slice:
+      - type: "IDArray"
+        time_quantum: "YMD"

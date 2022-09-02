@@ -19,25 +19,37 @@ func _() {
 	_ = x[apiFragmentBlockData-8]
 	_ = x[apiFragmentBlocks-9]
 	_ = x[apiFragmentData-10]
-	_ = x[apiField-11]
-	_ = x[apiFieldAttrDiff-12]
-	_ = x[apiImport-13]
-	_ = x[apiImportValue-14]
-	_ = x[apiIndex-15]
-	_ = x[apiIndexAttrDiff-16]
+	_ = x[apiTranslateData-11]
+	_ = x[apiFieldTranslateData-12]
+	_ = x[apiField-13]
+	_ = x[apiImport-14]
+	_ = x[apiImportValue-15]
+	_ = x[apiIndex-16]
 	_ = x[apiQuery-17]
 	_ = x[apiRecalculateCaches-18]
-	_ = x[apiRemoveNode-19]
-	_ = x[apiResizeAbort-20]
-	_ = x[apiSetCoordinator-21]
-	_ = x[apiShardNodes-22]
-	_ = x[apiViews-23]
-	_ = x[apiApplySchema-24]
+	_ = x[apiSchema-19]
+	_ = x[apiShardNodes-20]
+	_ = x[apiState-21]
+	_ = x[apiViews-22]
+	_ = x[apiApplySchema-23]
+	_ = x[apiStartTransaction-24]
+	_ = x[apiFinishTransaction-25]
+	_ = x[apiTransactions-26]
+	_ = x[apiGetTransaction-27]
+	_ = x[apiActiveQueries-28]
+	_ = x[apiPastQueries-29]
+	_ = x[apiIDReserve-30]
+	_ = x[apiIDCommit-31]
+	_ = x[apiIDReset-32]
+	_ = x[apiPartitionNodes-33]
+	_ = x[apiIngestOperations-34]
+	_ = x[apiIngestNodeOperations-35]
+	_ = x[apiMutexCheck-36]
 }
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiViewsapiApplySchema"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldTranslateDataapiFieldapiImportapiImportValueapiIndexapiQueryapiRecalculateCachesapiSchemaapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDResetapiPartitionNodesapiIngestOperationsapiIngestNodeOperationsapiMutexCheck"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 181, 197, 206, 220, 228, 244, 252, 272, 285, 299, 316, 329, 337, 351}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 210, 218, 227, 241, 249, 257, 277, 286, 299, 307, 315, 329, 348, 368, 383, 400, 416, 430, 442, 453, 463, 480, 499, 522, 535}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {

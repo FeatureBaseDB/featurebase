@@ -1,0 +1,19 @@
+{
+    "namespace": "org.test",
+    "type": "record",
+    "name": "deletes",
+    "doc": "",
+    "fields": [
+        {
+            "name": "pk",
+            "type": "long"
+        },
+        {
+            "name": "fields",
+            "type": {
+                    "type": "array",
+                    "items": "string"
+                }
+        }
+    ]
+}

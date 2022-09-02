@@ -1,86 +1,129 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package ctl
 
 import (
 	"time"
 
-	"github.com/pilosa/pilosa/v2/server"
+	"github.com/molecula/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/storage"
 	"github.com/spf13/cobra"
 )
 
 // BuildServerFlags attaches a set of flags to the command for a server instance.
 func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags := cmd.Flags()
-	flags.StringVarP(&srv.Config.DataDir, "data-dir", "d", srv.Config.DataDir, "Directory to store pilosa data files.")
-	flags.StringVarP(&srv.Config.Bind, "bind", "b", srv.Config.Bind, "Default URI on which pilosa should listen.")
+	flags.StringVar(&srv.Config.Name, "name", srv.Config.Name, "Name of the node in the cluster.")
+	flags.StringVarP(&srv.Config.DataDir, "data-dir", "d", srv.Config.DataDir, "Directory to store FeatureBase data files.")
+	flags.StringVarP(&srv.Config.Bind, "bind", "b", srv.Config.Bind, "Default URI on which FeatureBase should listen.")
+	flags.StringVar(&srv.Config.BindGRPC, "bind-grpc", srv.Config.BindGRPC, "URI on which FeatureBase should listen for gRPC requests.")
 	flags.StringVar(&srv.Config.Advertise, "advertise", srv.Config.Advertise, "Address to advertise externally.")
-	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
+	flags.StringVar(&srv.Config.AdvertiseGRPC, "advertise-grpc", srv.Config.AdvertiseGRPC, "Address to advertise externally for gRPC.")
+	flags.IntVar(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", srv.Config.LogPath, "Log path")
 	flags.BoolVar(&srv.Config.Verbose, "verbose", srv.Config.Verbose, "Enable verbose logging")
-	flags.Uint64Var(&srv.Config.MaxMapCount, "max-map-count", srv.Config.MaxMapCount, "Limits the maximum number of active mmaps. Pilosa will fall back to reading files once this is exhausted. Set below your system's vm.max_map_count.")
-	flags.Uint64Var(&srv.Config.MaxFileCount, "max-file-count", srv.Config.MaxFileCount, "Soft limit on the maximum number of fragment files Pilosa keeps open simultaneously.")
+	flags.Uint64Var(&srv.Config.MaxMapCount, "max-map-count", srv.Config.MaxMapCount, "Limits the maximum number of active mmaps. FeatureBase will fall back to reading files once this is exhausted. Set below your system's vm.max_map_count.")
+	flags.Uint64Var(&srv.Config.MaxFileCount, "max-file-count", srv.Config.MaxFileCount, "Soft limit on the maximum number of fragment files FeatureBase keeps open simultaneously.")
+	flags.DurationVar((*time.Duration)(&srv.Config.LongQueryTime), "long-query-time", time.Duration(srv.Config.LongQueryTime), "Duration that will trigger log and stat messages for slow queries. Zero to disable.")
+	flags.IntVar(&srv.Config.QueryHistoryLength, "query-history-length", srv.Config.QueryHistoryLength, "Number of queries to remember in history.")
+	flags.Int64Var(&srv.Config.MaxQueryMemory, "max-query-memory", srv.Config.MaxQueryMemory, "Maximum memory allowed per Extract() or SELECT query.")
 
 	// TLS
-	SetTLSConfig(flags, &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.CACertPath, &srv.Config.TLS.SkipVerify, &srv.Config.TLS.EnableClientVerification)
+	SetTLSConfig(flags, "", &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.CACertPath, &srv.Config.TLS.SkipVerify, &srv.Config.TLS.EnableClientVerification)
 
 	// Handler
-	flags.StringSliceVarP(&srv.Config.Handler.AllowedOrigins, "handler.allowed-origins", "", []string{}, "Comma separated list of allowed origin URIs (for CORS/WebUI).")
+	flags.StringSliceVar(&srv.Config.Handler.AllowedOrigins, "handler.allowed-origins", []string{}, "Comma separated list of allowed origin URIs (for CORS/Web UI).")
 
 	// Cluster
-	flags.BoolVarP(&srv.Config.Cluster.Disabled, "cluster.disabled", "", srv.Config.Cluster.Disabled, "Disabled multi-node cluster communication (used for testing)")
-	flags.BoolVarP(&srv.Config.Cluster.Coordinator, "cluster.coordinator", "", srv.Config.Cluster.Coordinator, "Host that will act as cluster coordinator during startup and resizing.")
-	flags.IntVarP(&srv.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number of hosts each piece of data should be stored on.")
-	flags.StringSliceVarP(&srv.Config.Cluster.Hosts, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster. Only used for testing.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", "", time.Minute, "Duration that will trigger log and stat messages for slow queries.")
+	flags.IntVar(&srv.Config.Cluster.ReplicaN, "cluster.replicas", 1, "Number of hosts each piece of data should be stored on.")
+	flags.DurationVar((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", time.Duration(srv.Config.Cluster.LongQueryTime), "RENAMED TO 'long-query-time': Duration that will trigger log and stat messages for slow queries.") // negative duration indicates invalid value because 0 is meaningful
+	flags.StringVar(&srv.Config.Cluster.Name, "cluster.name", srv.Config.Cluster.Name, "Human-readable name for the cluster.")
+	flags.StringVar(&srv.Config.Cluster.PartitionToNodeAssignment, "cluster.partition-to-node-assignment", srv.Config.Cluster.PartitionToNodeAssignment, "How to assign partitions to nodes. jmp-hash or modulus")
 
 	// Translation
-	flags.StringVarP(&srv.Config.Translation.PrimaryURL, "translation.primary-url", "", srv.Config.Translation.PrimaryURL, "DEPRECATED: URL for primary translation node for replication.")
-	flags.IntVarP(&srv.Config.Translation.MapSize, "translation.map-size", "", srv.Config.Translation.MapSize, "Size in bytes of mmap to allocate for key translation.")
+	flags.StringVar(&srv.Config.Translation.PrimaryURL, "translation.primary-url", srv.Config.Translation.PrimaryURL, "DEPRECATED: URL for primary translation node for replication.")
+	flags.IntVar(&srv.Config.Translation.MapSize, "translation.map-size", srv.Config.Translation.MapSize, "Size in bytes of mmap to allocate for key translation.")
 
-	// Gossip
-	flags.StringVarP(&srv.Config.Gossip.Port, "gossip.port", "", srv.Config.Gossip.Port, "Port to which pilosa should bind for internal state sharing.")
-	flags.StringVarP(&srv.Config.Gossip.AdvertiseHost, "gossip.advertise-host", "", srv.Config.Gossip.AdvertiseHost, "Host on which memberlist should advertise.")
-	flags.StringVarP(&srv.Config.Gossip.AdvertisePort, "gossip.advertise-port", "", srv.Config.Gossip.AdvertisePort, "Port on which memberlist should advertise.")
+	// Etcd
+	// Etcd.Name used Config.Name for its value.
+	flags.StringVar(&srv.Config.Etcd.Dir, "etcd.dir", srv.Config.Etcd.Dir, "Directory to store etcd data files. If not provided, a directory will be created under the main data-dir directory.")
+	// Etcd.ClusterName uses Cluster.Name for its value
+	flags.StringVar(&srv.Config.Etcd.LClientURL, "etcd.listen-client-address", srv.Config.Etcd.LClientURL, "Listen client address.")
+	flags.StringVar(&srv.Config.Etcd.AClientURL, "etcd.advertise-client-address", srv.Config.Etcd.AClientURL, "Advertise client address. If not provided, uses the listen client address.")
+	flags.StringVar(&srv.Config.Etcd.LPeerURL, "etcd.listen-peer-address", srv.Config.Etcd.LPeerURL, "Listen peer address.")
+	flags.StringVar(&srv.Config.Etcd.APeerURL, "etcd.advertise-peer-address", srv.Config.Etcd.APeerURL, "Advertise peer address. If not provided, uses the listen peer address.")
+	flags.StringVar(&srv.Config.Etcd.ClusterURL, "etcd.cluster-url", srv.Config.Etcd.ClusterURL, "Cluster URL to join.")
+	flags.StringVar(&srv.Config.Etcd.InitCluster, "etcd.initial-cluster", srv.Config.Etcd.InitCluster, "Initial cluster name1=apurl1,name2=apurl2")
+	flags.Int64Var(&srv.Config.Etcd.HeartbeatTTL, "etcd.heartbeat-ttl", srv.Config.Etcd.HeartbeatTTL, "Timeout used to determine cluster status")
 
-	flags.StringSliceVarP(&srv.Config.Gossip.Seeds, "gossip.seeds", "", srv.Config.Gossip.Seeds, "Host with which to seed the gossip membership.")
-	flags.StringVarP(&srv.Config.Gossip.Key, "gossip.key", "", srv.Config.Gossip.Key, "The path to file of the encryption key for gossip. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.StreamTimeout), "gossip.stream-timeout", "", (time.Duration)(srv.Config.Gossip.StreamTimeout), "Timeout for establishing a stream connection with a remote node for a full state sync.")
-	flags.IntVarP(&srv.Config.Gossip.SuspicionMult, "gossip.suspicion-mult", "", srv.Config.Gossip.SuspicionMult, "Multiplier for determining the time an inaccessible node is considered suspect before declaring it dead.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.PushPullInterval), "gossip.push-pull-interval", "", (time.Duration)(srv.Config.Gossip.PushPullInterval), "Interval between complete state syncs.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.ProbeTimeout), "gossip.probe-timeout", "", (time.Duration)(srv.Config.Gossip.ProbeTimeout), "Timeout to wait for an ack from a probed node before assuming it is unhealthy.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.ProbeInterval), "gossip.probe-interval", "", (time.Duration)(srv.Config.Gossip.ProbeInterval), "Interval between random node probes.")
-	flags.IntVarP(&srv.Config.Gossip.Nodes, "gossip.nodes", "", srv.Config.Gossip.Nodes, "Number of random nodes to send gossip messages to per GossipInterval.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.Interval), "gossip.interval", "", (time.Duration)(srv.Config.Gossip.Interval), "Interval between sending messages that need to be gossiped that haven't piggybacked on probing messages.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.ToTheDeadTime), "gossip.to-the-dead-time", "", (time.Duration)(srv.Config.Gossip.ToTheDeadTime), "Interval after which a node has died that we will still try to gossip to it.")
+	flags.StringVar(&srv.Config.Etcd.Cluster, "etcd.static-cluster", srv.Config.Etcd.Cluster, "EXPERIMENTAL static featurebase cluster name1=apurl1,name2=apurl2")
+	flags.MarkHidden("etcd.static-cluster")
+	flags.StringVar(&srv.Config.Etcd.EtcdHosts, "etcd.etcd-hosts", srv.Config.Etcd.EtcdHosts, "EXPERIMENTAL etcd server host:port comma separated list")
+	flags.MarkHidden("etcd.etcd-hosts") // TODO (twg) expose when ready for public consumption
+
+	// External postgres database for ExternalLookup
+	flags.StringVar(&srv.Config.LookupDBDSN, "lookup-db-dsn", "", "external (postgres) database DSN to use for ExternalLookup calls")
 
 	// AntiEntropy
-	flags.DurationVarP((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", "", (time.Duration)(srv.Config.AntiEntropy.Interval), "Interval at which to run anti-entropy routine.")
+	flags.DurationVar((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", (time.Duration)(srv.Config.AntiEntropy.Interval), "Interval at which to run anti-entropy routine.")
 
 	// Metric
-	flags.StringVarP(&srv.Config.Metric.Service, "metric.service", "", srv.Config.Metric.Service, "Where to send stats: can be expvar (in-memory served at /debug/vars), statsd or none.")
-	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", srv.Config.Metric.Host, "URI to send metrics when metric.service is statsd.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollInterval), "metric.poll-interval", "", (time.Duration)(srv.Config.Metric.PollInterval), "Polling interval metrics.")
-	flags.BoolVarP((&srv.Config.Metric.Diagnostics), "metric.diagnostics", "", srv.Config.Metric.Diagnostics, "Enabled diagnostics reporting.")
+	flags.StringVar(&srv.Config.Metric.Service, "metric.service", srv.Config.Metric.Service, "Where to send stats: can be expvar (in-memory served at /debug/vars), prometheus, statsd or none.")
+	flags.StringVar(&srv.Config.Metric.Host, "metric.host", srv.Config.Metric.Host, "URI to send metrics when metric.service is statsd.")
+	flags.DurationVar((*time.Duration)(&srv.Config.Metric.PollInterval), "metric.poll-interval", (time.Duration)(srv.Config.Metric.PollInterval), "Polling interval metrics.")
+	flags.BoolVar((&srv.Config.Metric.Diagnostics), "metric.diagnostics", srv.Config.Metric.Diagnostics, "Enabled diagnostics reporting.")
 
 	// Tracing
-	flags.StringVarP(&srv.Config.Tracing.AgentHostPort, "tracing.agent-host-port", "", srv.Config.Tracing.AgentHostPort, "Jaeger agent host:port.")
-	flags.StringVarP(&srv.Config.Tracing.SamplerType, "tracing.sampler-type", "", srv.Config.Tracing.SamplerType, "Jaeger sampler type or 'off' to disable tracing completely.")
-	flags.Float64VarP(&srv.Config.Tracing.SamplerParam, "tracing.sampler-param", "", srv.Config.Tracing.SamplerParam, "Jaeger sampler parameter.")
+	flags.StringVar(&srv.Config.Tracing.AgentHostPort, "tracing.agent-host-port", srv.Config.Tracing.AgentHostPort, "Jaeger agent host:port.")
+	flags.StringVar(&srv.Config.Tracing.SamplerType, "tracing.sampler-type", srv.Config.Tracing.SamplerType, "Jaeger sampler type (remote, const, probabilistic, ratelimiting) or 'off' to disable tracing completely.")
+	flags.Float64Var(&srv.Config.Tracing.SamplerParam, "tracing.sampler-param", srv.Config.Tracing.SamplerParam, "Jaeger sampler parameter.")
 
 	// Profiling
 	flags.IntVar(&srv.Config.Profile.BlockRate, "profile.block-rate", srv.Config.Profile.BlockRate, "Sampling rate for goroutine blocking profiler. One sample per <rate> ns.")
 	flags.IntVar(&srv.Config.Profile.MutexFraction, "profile.mutex-fraction", srv.Config.Profile.MutexFraction, "Sampling fraction for mutex contention profiling. Sample 1/<rate> of events.")
+
+	flags.StringVar(&srv.Config.Storage.Backend, "storage.backend", storage.DefaultBackend, "Storage backend to use: 'rbf' is only supported value.")
+	flags.BoolVar(&srv.Config.Storage.FsyncEnabled, "storage.fsync", true, "enable fsync fully safe flush-to-disk")
+
+	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
+	srv.Config.RBFConfig.DefineFlags(flags)
+
+	// Postgres endpoint
+	flags.StringVar(&srv.Config.Postgres.Bind, "postgres.bind", srv.Config.Postgres.Bind, "Address to which to bind a postgres endpoint (leave blank to disable)")
+	SetTLSConfig(flags, "postgres.", &srv.Config.Postgres.TLS.CertificatePath, &srv.Config.Postgres.TLS.CertificateKeyPath, &srv.Config.Postgres.TLS.CACertPath, &srv.Config.Postgres.TLS.SkipVerify, &srv.Config.Postgres.TLS.EnableClientVerification)
+	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.StartupTimeout), "postgres.startup-timeout", time.Duration(srv.Config.Postgres.StartupTimeout), "Timeout for postgres connection startup. (set 0 to disable)")
+	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.ReadTimeout), "postgres.read-timeout", time.Duration(srv.Config.Postgres.ReadTimeout), "Timeout for reads on a postgres connection. (set 0 to disable; does not include connection idling)")
+	flags.DurationVar((*time.Duration)(&srv.Config.Postgres.WriteTimeout), "postgres.write-timeout", time.Duration(srv.Config.Postgres.WriteTimeout), "Timeout for writes on a postgres connection. (set 0 to disable)")
+	flags.Uint32Var(&srv.Config.Postgres.MaxStartupSize, "postgres.max-startup-size", srv.Config.Postgres.MaxStartupSize, "Maximum acceptable size of a postgres startup packet, in bytes. (set 0 to disable)")
+	flags.Uint16Var(&srv.Config.Postgres.ConnectionLimit, "postgres.connection-limit", srv.Config.Postgres.ConnectionLimit, "Maximum number of simultaneous postgres connections to allow. (set 0 to disable)")
+	flags.Uint16Var(&srv.Config.Postgres.SqlVersion, "postgres.sql-version", srv.Config.Postgres.SqlVersion, "Molecula Sql Handling Version (default 1)")
+
+	// Future flags.
+	flags.BoolVar(&srv.Config.Future.Rename, "future.rename", false, "Present application name as FeatureBase. Defaults to false, will default to true in an upcoming release.")
+
+	// OAuth2.0 identity provider configuration
+	flags.BoolVar(&srv.Config.Auth.Enable, "auth.enable", false, "Enable AuthN/AuthZ of featurebase, disabled by default.")
+	flags.StringVar(&srv.Config.Auth.ClientId, "auth.client-id", srv.Config.Auth.ClientId, "Identity Provider's Application/Client ID.")
+	flags.StringVar(&srv.Config.Auth.ClientSecret, "auth.client-secret", srv.Config.Auth.ClientSecret, "Identity Provider's Client Secret.")
+	flags.StringVar(&srv.Config.Auth.AuthorizeURL, "auth.authorize-url", srv.Config.Auth.AuthorizeURL, "Identity Provider's Authorize URL.")
+	flags.StringVar(&srv.Config.Auth.RedirectBaseURL, "auth.redirect-base-url", srv.Config.Auth.RedirectBaseURL, "Base URL of the featurebase instance used to redirect IDP.")
+	flags.StringVar(&srv.Config.Auth.TokenURL, "auth.token-url", srv.Config.Auth.TokenURL, "Identity Provider's Token URL.")
+	flags.StringVar(&srv.Config.Auth.GroupEndpointURL, "auth.group-endpoint-url", srv.Config.Auth.GroupEndpointURL, "Identity Provider's Group endpoint URL.")
+	flags.StringVar(&srv.Config.Auth.LogoutURL, "auth.logout-url", srv.Config.Auth.LogoutURL, "Identity Provider's Logout URL.")
+	flags.StringSliceVar(&srv.Config.Auth.Scopes, "auth.scopes", srv.Config.Auth.Scopes, "Comma separated list of scopes obtained from IdP")
+	flags.StringVar(&srv.Config.Auth.SecretKey, "auth.secret-key", srv.Config.Auth.SecretKey, "Secret key used for auth.")
+	flags.StringVar(&srv.Config.Auth.PermissionsFile, "auth.permissions", srv.Config.Auth.PermissionsFile, "Permissions' file with group authorization.")
+	flags.StringVar(&srv.Config.Auth.QueryLogPath, "auth.query-log-path", srv.Config.Auth.QueryLogPath, "Path to log user queries")
+	flags.StringSliceVar(&srv.Config.Auth.ConfiguredIPs, "auth.configured-ips", srv.Config.Auth.ConfiguredIPs, "List of configured IPs allowed for ingest")
+
+	flags.BoolVar(&srv.Config.DataDog.Enable, "datadog.enable", false, "enable continuous profiling with DataDog cloud service, Note you must have DataDog agent installed")
+	flags.StringVar(&srv.Config.DataDog.Service, "datadog.service", "default-service", "The Datadog service name, for example my-web-app")
+	flags.StringVar(&srv.Config.DataDog.Env, "datadog.env", "default-env", "The Datadog environment name, for example, production")
+	flags.StringVar(&srv.Config.DataDog.Version, "datadog.version", "default-version", "The version of your application")
+	flags.StringVar(&srv.Config.DataDog.Tags, "datadog.tags", "molecula", "The tags to apply to an uploaded profile. Must be a list of in the format <KEY1>:<VALUE1>,<KEY2>:<VALUE2>")
+	flags.BoolVar(&srv.Config.DataDog.CPUProfile, "datadog.cpu-profile", true, "golang pprof cpu profile ")
+	flags.BoolVar(&srv.Config.DataDog.HeapProfile, "datadog.heap-profile", true, "golang pprof heap profile")
+	flags.BoolVar(&srv.Config.DataDog.MutexProfile, "datadog.mutex-profile", false, "golang pprof mutex profile")
+	flags.BoolVar(&srv.Config.DataDog.GoroutineProfile, "datadog.goroutine-profile", false, "golang pprof goroutine profile")
+	flags.BoolVar(&srv.Config.DataDog.BlockProfile, "datadog.block-profile", false, "golang pprof goroutine ")
 }

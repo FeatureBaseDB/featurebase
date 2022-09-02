@@ -1,0 +1,18 @@
+[Unit]
+After=network.target
+Description=Service for FeatureBase
+Documentation=https://docs.featurebase.com/
+DefaultDependencies=no
+ConditionPathExists=/etc/featurebase/featurebase.conf
+
+[Service]
+User=featurebase
+Group=featurebase
+WorkingDirectory=/var/lib/featurebase
+EnvironmentFile=
+ExecStart=/usr/bin/featurebase server -c /etc/featurebase/featurebase.conf
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

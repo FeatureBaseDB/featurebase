@@ -1,20 +1,9 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package roaring
 
 import (
+	"math/rand"
 	"reflect"
 	"testing"
 )
@@ -110,13 +99,15 @@ func TestUnionSlice(t *testing.T) {
 }
 
 func TestMaxInSlice(t *testing.T) {
+	// arbitrary, we just want to get the same values every time
+	r := rand.New(rand.NewSource(23))
 	a := []uint64{1, 4, 9, 5, 24, 13}
 	v := maxInSlice(a)
 	if uint64(24) != v {
 		t.Fatalf("expected %v, but got %v", uint64(24), v)
 	}
 
-	for i := uint64(1000); i <= uint64(100000); i++ {
+	for i := uint64(1000); i <= uint64(100000); i += uint64(r.Intn(35)) + 1 {
 		a = append(a, i)
 		if v = maxInSlice(a); v != i {
 			t.Fatalf("expected %v, but got %v", i, v)

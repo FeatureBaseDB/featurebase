@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
@@ -79,6 +67,38 @@ func TestViewsByTime(t *testing.T) {
 		a := viewsByTime("F", ts, mustParseTimeQuantum("D"))
 		if !reflect.DeepEqual(a, []string{"F_20000102"}) {
 			t.Fatalf("unexpected names: %+v", a)
+		}
+	})
+}
+
+func TestViewsByTimeInto(t *testing.T) {
+	ts := time.Date(2000, time.January, 2, 3, 4, 5, 6, time.UTC)
+	s := []byte("F_YYYYMMDDHH")
+	var timeViews [][]byte
+
+	t.Run("YMDH", func(t *testing.T) {
+		a := viewsByTime("F", ts, mustParseTimeQuantum("YMDH"))
+		b := viewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("YMDH"))
+		if len(a) != len(b) {
+			t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+		}
+		for i := range a {
+			if a[i] != string(b[i]) {
+				t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+			}
+		}
+	})
+
+	t.Run("D", func(t *testing.T) {
+		a := viewsByTime("F", ts, mustParseTimeQuantum("D"))
+		b := viewsByTimeInto(s, timeViews, ts, mustParseTimeQuantum("D"))
+		if len(a) != len(b) {
+			t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+		}
+		for i := range a {
+			if a[i] != string(b[i]) {
+				t.Fatalf("mismatch: viewsByTime: %q, viewsByTimeInto: %q", a, b)
+			}
 		}
 	})
 }
@@ -186,6 +206,13 @@ func TestMinMaxViews(t *testing.T) {
 				"std_2022",
 			},
 			{
+				// unordered views should not affect the results
+				[]string{"std_202002", "std_2022073123", "std_2020", "std_202002", "std_2022", "std_2019", "std_2022063023"},
+				mustParseTimeQuantum("Y"),
+				"std_2019",
+				"std_2022",
+			},
+			{
 				[]string{"std_201902", "std_201901"},
 				mustParseTimeQuantum("M"),
 				"std_201901",
@@ -208,6 +235,27 @@ func TestMinMaxViews(t *testing.T) {
 				mustParseTimeQuantum("D"),
 				"",
 				"",
+			},
+			{
+				// quantum is YMDH, views only have "DH" views
+				[]string{"std_20220531", "std_2022063023", "std_20220731", "std_2022073123"},
+				mustParseTimeQuantum("YMDH"),
+				"std_20220531",
+				"std_20220731",
+			},
+			{
+				// quantum is Y, views have D,H but dont have Y views
+				[]string{"std_20220531", "std_2022053123"},
+				mustParseTimeQuantum("Y"),
+				"",
+				"",
+			},
+			{
+				// quantum is M, views ignore Y view, only look at M view
+				[]string{"std_2022", "std_202205", "std_20220531", "std_2022053123"},
+				mustParseTimeQuantum("M"),
+				"std_202205",
+				"std_202205",
 			},
 		}
 		for i, test := range tests {
@@ -318,4 +366,150 @@ func parseTimeQuantum(v string) (TimeQuantum, error) {
 		return "", ErrInvalidTimeQuantum
 	}
 	return q, nil
+}
+
+func TestParsePartialTime(t *testing.T) {
+	// test handling of valud inputs
+	testCases := []struct {
+		userInput    string
+		expectedTime time.Time
+	}{
+		{
+			"2006",
+			time.Date(2006, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07",
+			time.Date(2006, time.July, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07-02",
+			time.Date(2006, time.July, 2, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07-02T15",
+			time.Date(2006, time.July, 2, 15, 0, 0, 0, time.UTC),
+		},
+		{
+			"2006-07-02T15:04",
+			time.Date(2006, time.July, 2, 15, 4, 0, 0, time.UTC),
+		},
+	}
+	for _, tc := range testCases {
+		got, err := parsePartialTime(tc.userInput)
+		if err != nil {
+			t.Errorf("expected nil error given parsing for '%s'", tc.userInput)
+		}
+		if got != tc.expectedTime {
+			t.Errorf("expected %v, got %v", tc.expectedTime, got)
+		}
+	}
+
+	// test handling of invalid inputs
+	invalidInputs := []string{
+		"  2006-01-02 ",
+		" foo-bar ",
+		"2006-",
+		"2006-01-",
+		"2006-01-02T",
+		"2006T",
+		"2006T04",
+		"01-02",
+		"2006-01T04",
+		"2006-01T04:",
+		"2006-01T:04",
+	}
+	for _, invalidInput := range invalidInputs {
+		_, err := parsePartialTime(invalidInput)
+		if err == nil {
+			t.Errorf("for input '%s', error on parse expected", invalidInput)
+		}
+	}
+
+}
+
+func TestViewTimePart(t *testing.T) {
+	for input, want := range map[string]string{
+		"standard":         "",
+		"standard_1234567": "1234567",
+		"standard1234567":  "",
+	} {
+		if got := viewTimePart(input); got != want {
+			t.Errorf("expected %v got %v", want, got)
+		}
+	}
+}
+
+func TestGetLowestGranularityQuantum(t *testing.T) {
+	tests := []struct {
+		name       string
+		views      []string
+		expQuantum TimeQuantum
+	}{
+		{
+			name:       "Y",
+			views:      []string{"std_2022", "std_202205", "std_20220531", "std_2022053123"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "empty",
+			views:      []string{},
+			expQuantum: TimeQuantum(""),
+		},
+		{
+			name:       "empty, not number",
+			views:      []string{"std_abc"},
+			expQuantum: TimeQuantum(""),
+		},
+		{
+			name:       "duplicate",
+			views:      []string{"std_2022", "std_202205", "std_20220531", "std_2022053123", "std_2022", "std_202205", "std_20220531", "std_2022053123"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "only Y",
+			views:      []string{"std_2022"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "only M",
+			views:      []string{"std_202205"},
+			expQuantum: TimeQuantum("M"),
+		},
+		{
+			name:       "only D",
+			views:      []string{"std_20220531"},
+			expQuantum: TimeQuantum("D"),
+		},
+		{
+			name:       "only H",
+			views:      []string{"std_2022053123"},
+			expQuantum: TimeQuantum("H"),
+		},
+		{
+			name:       "Y unordered",
+			views:      []string{"std_202205", "std_20220531", "std_2022053123", "std_2022"},
+			expQuantum: TimeQuantum("Y"),
+		},
+		{
+			name:       "M unordered",
+			views:      []string{"std_2022053123", "std_202205", "std_20220531"},
+			expQuantum: TimeQuantum("M"),
+		},
+		{
+			name:       "D unordered",
+			views:      []string{"std_2022053123", "std_20220531"},
+			expQuantum: TimeQuantum("D"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			quantum := getLowestGranularityQuantum(test.views)
+
+			if quantum.String() != test.expQuantum.String() {
+				t.Errorf("expected field: '%v', got: '%v'", test.expQuantum.String(), quantum.String())
+			}
+		})
+	}
 }

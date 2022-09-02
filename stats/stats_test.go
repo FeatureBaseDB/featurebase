@@ -1,37 +1,25 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package stats_test
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/http"
-	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/stats"
-	"github.com/pilosa/pilosa/v2/test"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 // TestMultiStatClient_Expvar run the multistat client with exp var
 // since the EXPVAR data is stored in a global we should run these in one test function
 func TestMultiStatClient_Expvar(t *testing.T) {
-	hldr := test.MustOpenHolder()
+	hldr := test.MustOpenHolder(t)
 	defer hldr.Close()
 
 	c := stats.NewExpvarStatsClient()
@@ -45,39 +33,41 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
 	hldr.ClearBit("d", "f", 0, 1)
 
-	if stats.Expvar.String() != `{"index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
+	indexStats := fmt.Sprintf(`{"%s": %d, "%s": %d}`, pilosa.MetricClearBit, 1, pilosa.MetricSetBit, 4)
+
+	if stats.Expvar.String() != `{"index:d": `+indexStats+`}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	hldr.Stats.CountWithCustomTags("cc", 1, 1.0, []string{"foo:bar"})
-	if stats.Expvar.String() != `{"cc": 1, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
+	if stats.Expvar.String() != `{"cc": 1, "index:d": `+indexStats+`}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Gauge creates a unique key, subsequent Gauge calls will overwrite
 	hldr.Stats.Gauge("g", 5, 1.0)
 	hldr.Stats.Gauge("g", 8, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": `+indexStats+`}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Set creates a unique key, subsequent sets will overwrite
 	hldr.Stats.Set("s", "4", 1.0)
 	hldr.Stats.Set("s", "7", 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7"}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": `+indexStats+`, "s": "7"}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Record timing duration and a uniquely Set key/value
 	dur, _ := time.ParseDuration("123us")
 	hldr.Stats.Timing("tt", dur, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7", "tt": 123µs}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": `+indexStats+`, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Expvar histogram is implemented as a gauge
 	hldr.Stats.Histogram("hh", 3, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7", "tt": 123µs}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": `+indexStats+`, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
@@ -90,29 +80,30 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 func TestStatsCount_TopN(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
+
+	// Execute query.
+	called := false
+	hldr.Holder.Stats = &MockStats{
+		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
+			if name != "query_topn_total" {
+				t.Errorf("Expected query_topn_total, Results %s", name)
+			}
+
+			if tags[0] != "index:d" {
+				t.Errorf("Expected index, Results %s", tags[0])
+			}
+
+			called = true
+		},
+	}
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
 	hldr.SetBit("d", "f", 0, pilosa.ShardWidth)
 	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
 
-	// Execute query.
-	called := false
-	hldr.Holder.Stats = &MockStats{
-		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "TopN" {
-				t.Errorf("Expected TopN, Results %s", name)
-			}
-
-			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
-			}
-
-			called = true
-		},
-	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -123,25 +114,25 @@ func TestStatsCount_TopN(t *testing.T) {
 func TestStatsCount_Bitmap(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
 	called := false
 	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "Row" {
-				t.Errorf("Expected Row, Results %s", name)
+			if name != pilosa.MetricRow {
+				t.Errorf("Expected %s, Results %s", pilosa.MetricRow, name)
 			}
 
 			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 
 			called = true
 		},
 	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `Row(f=0)`}); err != nil {
+	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `Row(f=0)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -149,72 +140,11 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetColumnAttrs(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
-
-	hldr.SetBit("d", "f", 10, 0)
-	hldr.SetBit("d", "f", 10, 1)
-
-	called := false
-	field := hldr.Field("d", "f")
-	if field == nil {
-		t.Fatal("field not found")
-	}
-
-	field.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetRowAttrs" {
-				t.Errorf("Expected SetRowAttrs, Results %s", name)
-			}
-			called = true
-		},
-	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
-		t.Fatal(err)
-	}
-	if !called {
-		t.Error("Count isn't called")
-	}
-}
-
-func TestStatsCount_SetProfileAttrs(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
-
-	hldr.SetBit("d", "f", 10, 0)
-	hldr.SetBit("d", "f", 10, 1)
-
-	called := false
-	idx := hldr.Holder.Index("d")
-	if idx == nil {
-		t.Fatal("idex not found")
-	}
-
-	idx.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetProfileAttrs" {
-				t.Errorf("Expected SetProfilepAttrs, Results %s", name)
-			}
-
-			called = true
-		},
-	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetColumnAttrs(10, foo="bar")`}); err != nil {
-		t.Fatal(err)
-	}
-	if !called {
-		t.Error("Count isn't called")
-	}
-}
-
 func TestStatsCount_APICalls(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()
-	cmd := cluster[0]
-	h := cmd.Handler.(*http.Handler).Handler
+	cmd := cluster.GetNode(0)
+	h := cmd.Handler.(*pilosa.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
@@ -222,8 +152,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCount: func(name string, value int64, rate float64) {
-				if name != "createIndex" {
-					t.Errorf("Expected createIndex, Results %s", name)
+				if name != pilosa.MetricCreateIndex {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricCreateIndex, name)
 				}
 				called = true
 			},
@@ -239,8 +169,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-				if name != "createField" {
-					t.Errorf("Expected createField, Results %s", name)
+				if name != pilosa.MetricCreateField {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricCreateField, name)
 				}
 				if index[0] != "index:i" {
 					t.Errorf("Expected index:i, Results %s", index)
@@ -260,8 +190,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-				if name != "deleteField" {
-					t.Errorf("Expected deleteField, Results %s", name)
+				if name != pilosa.MetricDeleteField {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricDeleteField, name)
 				}
 				if index[0] != "index:i" {
 					t.Errorf("Expected index:i, Results %s", index)
@@ -281,8 +211,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCount: func(name string, value int64, rate float64) {
-				if name != "deleteIndex" {
-					t.Errorf("Expected deleteIndex, Results %s", name)
+				if name != pilosa.MetricDeleteIndex {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricDeleteIndex, name)
 				}
 
 				called = true

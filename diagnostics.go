@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
@@ -24,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
@@ -125,7 +113,7 @@ func (d *diagnosticsCollector) CheckVersion() error {
 
 	d.lastVersion = rsp.Version
 	if err := d.compareVersion(rsp.Version); err != nil {
-		d.Logger.Printf("%s\n", err.Error())
+		d.Logger.Infof("%s\n", err.Error())
 	}
 
 	return nil
@@ -137,11 +125,11 @@ func (d *diagnosticsCollector) compareVersion(value string) error {
 	localVersion := versionSegments(d.version)
 
 	if localVersion[0] < currentVersion[0] { //Major
-		return fmt.Errorf("you are running Pilosa %s, a newer version (%s) is available: https://github.com/pilosa/pilosa/releases", d.version, value)
+		return fmt.Errorf("you are running Pilosa %s, a newer version (%s) is available: https://github.com/molecula/featurebase/releases", d.version, value)
 	} else if localVersion[1] < currentVersion[1] && localVersion[0] == currentVersion[0] { // Minor
-		return fmt.Errorf("you are running Pilosa %s, the latest minor release is %s: https://github.com/pilosa/pilosa/releases", d.version, value)
+		return fmt.Errorf("you are running Pilosa %s, the latest minor release is %s: https://github.com/molecula/featurebase/releases", d.version, value)
 	} else if localVersion[2] < currentVersion[2] && localVersion[0] == currentVersion[0] && localVersion[1] == currentVersion[1] { // Patch
-		return fmt.Errorf("there is a new patch release of Pilosa available: %s: https://github.com/pilosa/pilosa/releases", value)
+		return fmt.Errorf("there is a new patch release of Pilosa available: %s: https://github.com/molecula/featurebase/releases", value)
 	}
 
 	return nil
@@ -169,7 +157,7 @@ func (d *diagnosticsCollector) Set(name string, value interface{}) {
 // logErr logs the error and returns true if an error exists
 func (d *diagnosticsCollector) logErr(err error) bool {
 	if err != nil {
-		d.Logger.Printf("%v", err)
+		d.Logger.Errorf("%v", err)
 		return true
 	}
 	return false
@@ -229,11 +217,11 @@ func (d *diagnosticsCollector) EnrichWithSchemaProperties() {
 	timeQuantumEnabled := false
 
 	for _, index := range d.server.holder.Indexes() {
-		numShards += index.AvailableShards().Count()
+		numShards += index.AvailableShards(includeRemote).Count()
 		numIndexes++
 		for _, field := range index.Fields() {
 			numFields++
-			if field.Type() == FieldTypeInt {
+			if field.Type() == FieldTypeInt || field.Type() == FieldTypeDecimal || field.Type() == FieldTypeTimestamp {
 				bsiFieldCount++
 			}
 			if field.TimeQuantum() != "" {
@@ -275,6 +263,7 @@ type SystemInfo interface {
 	CPUCores() (physical int, logical int, err error)
 	CPUMHz() (int, error)
 	CPUArch() string
+	DiskCapacity(string) (uint64, error)
 }
 
 // newNopSystemInfo creates a no-op implementation of SystemInfo.
@@ -344,4 +333,9 @@ func (n *nopSystemInfo) CPUMHz() (int, error) {
 // CPUCores returns the number of CPU cores (physical or logical)
 func (n *nopSystemInfo) CPUCores() (physical, logical int, err error) {
 	return 0, 0, nil
+}
+
+// DiskCapacity returns the disk capacity
+func (n *nopSystemInfo) DiskCapacity(path string) (uint64, error) {
+	return 0, nil
 }

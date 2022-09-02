@@ -1,0 +1,32 @@
+{
+    "indexes": [
+        {
+            "name": "repository",
+            "options": {
+                "keys": false,
+                "trackExistence": true
+            },
+            "fields": [
+                {
+                    "name": "language",
+                    "options": {
+                        "type": "set",
+                        "cacheType": "ranked",
+                        "cacheSize": 50000,
+                        "keys": false
+                    }
+                },
+                {
+                    "name": "stargazer",
+                    "options": {
+                        "type": "time",
+                        "timeQuantum": "YMD",
+                        "keys": false,
+                        "noStandardView": false
+                    }
+                }
+            ],
+            "shardWidth": 1048576
+        }
+    ]
+}

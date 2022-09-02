@@ -1,32 +1,21 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
-	"io/ioutil"
 	"testing"
 	"time"
 
+	"github.com/molecula/featurebase/v3/testhook"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"golang.org/x/sync/errgroup"
 )
 
 // mustOpenView returns a new instance of View with a temporary path.
-func mustOpenView(index, field, name string) *view {
-	path, err := ioutil.TempDir(*TempDir, "pilosa-view-")
+func mustOpenView(tb testing.TB, index, field, name string) *view {
+	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-view-")
 	if err != nil {
-		panic(err)
+		PanicOn(err)
 	}
 
 	fo := FieldOptions{
@@ -34,19 +23,32 @@ func mustOpenView(index, field, name string) *view {
 		CacheSize: DefaultCacheSize,
 	}
 
-	v := newView(path, index, field, name, fo)
-	if err := v.open(); err != nil {
-		panic(err)
+	h := NewHolder(path, mustHolderConfig())
+	// h needs an *Index so we can call h.Index() and get Index.Txf, in TestView_DeleteFragment
+
+	cim := &CreateIndexMessage{
+		Index:     index,
+		CreatedAt: 0,
+		Meta:      IndexOptions{},
 	}
-	v.rowAttrStore = &memAttrStore{
-		store: make(map[uint64]map[string]interface{}),
+
+	idx, err := h.createIndex(cim, false)
+	testhook.Cleanup(tb, func() {
+		h.Close()
+	})
+	PanicOn(err)
+
+	v := newView(h, path, index, field, name, fo)
+	v.idx = idx
+	if err := v.openEmpty(); err != nil {
+		PanicOn(err)
 	}
 	return v
 }
 
 // Ensure view can open and retrieve a fragment.
 func TestView_DeleteFragment(t *testing.T) {
-	v := mustOpenView("i", "f", "v")
+	v := mustOpenView(t, "i", "f", "v")
 	defer v.close()
 
 	shard := uint64(9)
@@ -81,7 +83,7 @@ func TestView_DeleteFragment(t *testing.T) {
 // if the broadcast operation takes a bit of time.
 func TestView_CreateFragmentRace(t *testing.T) {
 	var creates errgroup.Group
-	v := mustOpenView("i", "f", "v")
+	v := mustOpenView(t, "i", "f", "v")
 	defer v.close()
 
 	// Use a broadcaster which intentionally fails.

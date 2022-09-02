@@ -1,0 +1,22 @@
+[
+    {
+        "name": "language",
+        "path": [
+            "language"
+        ],
+        "type": "id",
+        "config": {
+            "Mutex": false
+        }
+    },
+    {
+        "name": "project_id",
+        "path": [
+            "project_id"
+        ],
+        "type": "id",
+        "config": {
+            "Mutex": false
+        }
+    }
+]

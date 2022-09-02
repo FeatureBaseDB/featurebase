@@ -1,17 +1,6 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
+//go:build gofuzz
 // +build gofuzz
 
 package roaring
@@ -191,14 +180,14 @@ func FuzzRoaringOps(data []byte) int {
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInSlice(s1, func(v uint64) { expected = append(expected, v) })
-	bm1.ForEach(func(v uint64) { actual = append(actual, v) })
+	bm1.ForEach(func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each:\n expected %v\n got %v", expected, actual))
 	}
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInSlice(s2, func(v uint64) { expected = append(expected, v) })
-	bm2.ForEach(func(v uint64) { actual = append(actual, v) })
+	bm2.ForEach(func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each:\n expected %v\n got %v", expected, actual))
 	}
@@ -206,14 +195,14 @@ func FuzzRoaringOps(data []byte) int {
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInRangeSlice(s1, start, end, func(v uint64) { expected = append(expected, v) })
-	bm1.ForEachRange(start, end, func(v uint64) { actual = append(actual, v) })
+	bm1.ForEachRange(start, end, func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each in range:\n expected %v\n got %v", expected, actual))
 	}
 	expected = make([]uint64, 0)
 	actual = make([]uint64, 0)
 	forEachInRangeSlice(s2, start, end, func(v uint64) { expected = append(expected, v) })
-	bm2.ForEachRange(start, end, func(v uint64) { actual = append(actual, v) })
+	bm2.ForEachRange(start, end, func(v uint64) error { actual = append(actual, v); return nil })
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("for each in range:\n expected %v\n got %v", expected, actual))
 	}
@@ -304,7 +293,7 @@ func bytesToUint64s(data []byte) []uint64 {
 // make sure filename is not already in the corpus.
 func addSliceToCorpus(slice []uint64, filename, path string) {
 	data := uint64sToBytes(slice)
-	err := ioutil.WriteFile(path+"/"+filename, data, 0777)
+	err := ioutil.WriteFile(path+"/"+filename, data, 0750)
 	if err != nil {
 		fmt.Printf("could not write to file: %v\n", err)
 	}

@@ -1,0 +1,53 @@
+[
+    {
+        "name": "i",
+        "path": [
+            "i"
+        ],
+        "type": "int"
+    },
+    {
+        "name": "d",
+        "path": [
+            "d"
+        ],
+        "type": "decimal",
+        "config": {
+            "Scale": 2
+        }
+    },
+    {
+        "name": "s",
+        "path": [
+            "@s"
+        ],
+        "type": "string"
+    },
+    {
+        "name": "st",
+        "path": [
+            "@st"
+        ],
+        "type": "string",
+        "Config": {
+            "Quantum": "DH"
+        }
+    },
+    {
+        "name": "rt",
+        "path": [
+            "unixtime"
+        ],
+        "type": "recordTime",
+        "Config": {
+            "Unit": "s"
+        }
+    },
+    {
+        "name": "e",
+        "path": [
+            "e"
+        ],
+        "type": "lookupText"
+    }
+]

@@ -1,230 +1,259 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package roaring
 
 import (
-	"encoding/binary"
-	"fmt"
+	"bytes"
+	"errors"
+	"io"
 	"unsafe"
-
-	"github.com/pkg/errors"
 )
 
-// UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
-// either official roaring format or Pilosa's roaring format.
-func (b *Bitmap) UnmarshalBinary(data []byte) error {
+// UnmarshalBinary reads Pilosa's format, or upstream roaring (mostly;
+// it may not handle some edge cases), and decodes them into the given
+// bitmap, replacing the existing contents.
+func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 	if data == nil {
-		// Nothing to unmarshal
-		return nil
+		return errors.New("no roaring bitmap provided")
 	}
-	statsHit("Bitmap/UnmarshalBinary")
-	b.opN = 0 // reset opN since we're reading new data.
-	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
-	if fileMagic == MagicNumber { // if pilosa roaring
-		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
-	}
+	var itr RoaringIterator
+	var itrKey uint64
+	var itrCType byte
+	var itrN int
+	var itrLen int
+	var itrPointer *uint16
+	var itrErr error
 
-	keyN, containerTyper, header, pos, haveRuns, err := readOfficialHeader(data)
+	itr, err = NewRoaringIterator(data)
 	if err != nil {
-		return errors.Wrap(err, "reading roaring header")
+		return err
 	}
-	// Only the Pilosa roaring format has flags. The official Roaring format
-	// hasn't got space in its header for flags.
-	b.Flags = 0
-
-	b.Containers.ResetN(int(keyN))
-	// Descriptive header section: Read container keys and cardinalities.
-	for i, buf := uint(0), data[header:]; i < uint(keyN); i, buf = i+1, buf[4:] {
-		card := int(binary.LittleEndian.Uint16(buf[2:4])) + 1
-		b.Containers.PutContainerValues(
-			uint64(binary.LittleEndian.Uint16(buf[0:2])),
-			containerTyper(i, card), /// container type voodo with isRunBitmap
-			card,
-			true)
+	if itr == nil {
+		return errors.New("failed to create roaring iterator, but don't know why")
 	}
 
-	// Read container offsets and attach data.
-	if haveRuns {
-		err := readWithRuns(b, data, pos, keyN)
-		if err != nil {
-			return errors.Wrap(err, "reading offsets from official roaring format")
-		}
-	} else {
-		err := readOffsets(b, data, pos, keyN)
-		if err != nil {
-			return errors.Wrap(err, "reading official roaring format")
-		}
-	}
-	return nil
-}
+	b.Containers.Reset()
 
-func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
-
-	citer, _ := b.Containers.Iterator(0)
-	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
-		// Verify the offset is fully formed
-		if len(buf) < 4 {
-			return fmt.Errorf("insufficient data for offsets: len=%d", len(buf))
-		}
-		offset := binary.LittleEndian.Uint32(buf[0:4])
-		// Verify the offset is within the bounds of the input data.
-		if int(offset) >= len(data) {
-			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
-		}
-
-		// Map byte slice directly to the container data.
-		citer.Next()
-		_, c := citer.Value()
-		switch c.typ() {
-		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.N():c.N()])
-		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN:bitmapN])
+	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	for itrErr == nil {
+		var newC *Container
+		switch itrCType {
+		case ContainerArray:
+			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
+		case ContainerRun:
+			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
+		case ContainerBitmap:
+			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
 		default:
-			return fmt.Errorf("unsupported container type %d", c.typ())
+			panic("invalid container type")
 		}
-	}
-	return nil
-}
-
-func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) error {
-	if len(data) < pos+runCountHeaderSize {
-		return fmt.Errorf("insufficient data for offsets(run): len=%d", len(data))
-	}
-	citer, _ := b.Containers.Iterator(0)
-	for i := 0; i < int(keyN); i++ {
-		citer.Next()
-		_, c := citer.Value()
-		switch c.typ() {
-		case containerRun:
-			runCount := binary.LittleEndian.Uint16(data[pos : pos+runCountHeaderSize])
-			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount:runCount])
-			runs := c.runs()
-
-			for o := range runs { // must convert from start:length to start:end :(
-				runs[o].last = runs[o].start + runs[o].last
-			}
-			pos += int((runCount * interval16Size) + runCountHeaderSize)
-		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[pos]))[:c.N():c.N()])
-			pos += int(c.N() * 2)
-		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN:bitmapN])
-			pos += bitmapN * 8
+		// If we're using the iterator's pointer, we're "mapped". But
+		// for instance, small arrays may use their own data structures,
+		// which is fine.
+		newC.setMapped(newC.pointer == itrPointer)
+		if !b.preferMapping {
+			newC = newC.unmapOrClone()
 		}
+		b.Containers.Put(itrKey, newC)
+		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
 	}
-	return nil
-}
-
-func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
-	if len(data) < headerBaseSize {
-		return errors.New("data too small")
-	}
-
-	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
-	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
-	fileVersion := uint32(data[2])
-	b.Flags = data[3]
-	if fileMagic != MagicNumber {
-		return fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
-	}
-
-	if fileVersion != storageVersion {
-		return fmt.Errorf("wrong roaring version, file is v%d, server requires v%d", fileVersion, storageVersion)
-	}
-
-	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
-	keyN := binary.LittleEndian.Uint32(data[3+1 : 8])
-	if int64(len(data)) < headerBaseSize+int64(keyN)*12 {
-		return fmt.Errorf("insufficient data for header + offsets: key-cardinality not provided for %d containers", keyN)
-	}
-
-	headerSize := headerBaseSize
-	b.Containers.ResetN(int(keyN))
-	// Descriptive header section: Read container keys and cardinalities.
-	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
-		b.Containers.PutContainerValues(
-			binary.LittleEndian.Uint64(buf[0:8]),
-			byte(binary.LittleEndian.Uint16(buf[8:10])),
-			int(binary.LittleEndian.Uint16(buf[10:12]))+1,
-			true)
-	}
-	opsOffset := int64(headerSize) + int64(keyN)*12
-
-	// Read container offsets and attach data.
-	citer, _ := b.Containers.Iterator(0)
-	// if you have enough containers that the *headers alone* exceed 4GB, we
-	// need to start with a higher cycle offset.
-	cycleOffset := opsOffset &^ ((1 << 32) - 1)
-	prevOffset32 := uint32(opsOffset)
-	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
-		offset32 := binary.LittleEndian.Uint32(buf[0:4])
-		if offset32 < prevOffset32 {
-			cycleOffset += (1 << 32)
-		}
-		prevOffset32 = offset32
-		offset := int64(offset32) + cycleOffset
-		// Verify the offset is within the bounds of the input data.
-		if offset >= int64(len(data)) {
-			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
-		}
-
-		// Map byte slice directly to the container data.
-		citer.Next()
-		_, c := citer.Value()
-
-		// this shouldn't happen, since we don't normally store nils.
-		if c == nil {
-			continue
-		}
-		switch c.typ() {
-		case containerRun:
-			runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
-			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount:runCount])
-			opsOffset = offset + runCountHeaderSize + int64(len(c.runs()))*interval16Size
-		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.N():c.N()])
-			opsOffset = offset + int64(len(c.array()))*2 // sizeof(uint32)
-		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN:bitmapN])
-			opsOffset = offset + int64(len(c.bitmap()))*8 // sizeof(uint64)
-		}
+	// note: if we get a non-EOF err, it's possible that we made SOME
+	// changes but didn't log them. I don't have a good solution to this.
+	if itrErr != io.EOF {
+		return itrErr
 	}
 
 	// Read ops log until the end of the file.
-	buf := data[opsOffset:]
-
+	b.ops = 0
+	b.opN = 0
+	buf, lastValidOffset := itr.Remaining()
 	for {
 		// Exit when there are no more ops to parse.
 		if len(buf) == 0 {
 			break
 		}
+
 		// Unmarshal the op and apply it.
 		var opr op
 		if err := opr.UnmarshalBinary(buf); err != nil {
-			// FIXME(benbjohnson): return error with position so file can be trimmed.
-			return err
+			return newFileShouldBeTruncatedError(err, int64(lastValidOffset))
 		}
+
 		opr.apply(b)
+
 		// Increase the op count.
 		b.ops++
 		b.opN += opr.count()
-		opsOffset += int64(opr.size())
+
 		// Move the buffer forward.
-		buf = buf[opr.size():]
+		opSize := opr.size()
+		buf = buf[opSize:]
+		lastValidOffset += int64(opSize)
+	}
+	return nil
+}
+
+func (b *Bitmap) MarshalBinary() ([]byte, error) {
+	var buf bytes.Buffer
+	_, err := b.WriteTo(&buf)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	return buf.Bytes(), nil
+}
+
+// InspectBinary reads a roaring bitmap, plus a possible ops log,
+// and reports back on the contents, including distinguishing between
+// the original ops log and the post-ops-log contents.
+func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappedAny bool, err error) {
+	b = NewFileBitmap()
+	b.PreferMapping(mapped)
+	if data == nil {
+		return b, mappedAny, errors.New("no roaring bitmap provided")
+	}
+	var itr RoaringIterator
+	var itrKey uint64
+	var itrCType byte
+	var itrN int
+	var itrLen int
+	var itrPointer *uint16
+	var itrErr error
+
+	itr, err = NewRoaringIterator(data)
+	if err != nil {
+		return b, mappedAny, err
+	}
+	if itr == nil {
+		return b, mappedAny, errors.New("failed to create roaring iterator, but don't know why")
+	}
+	keys := itr.Len()
+	info.Containers = make([]ContainerInfo, 0, keys)
+
+	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	for itrErr == nil {
+		var size int
+		switch itrCType {
+		case ContainerArray:
+			size = int(itrN) * 2
+		case ContainerBitmap:
+			size = 8192
+		case ContainerRun:
+			size = itrLen*interval16Size + runCountHeaderSize
+		}
+		var newC *Container
+		switch itrCType {
+		case ContainerArray:
+			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
+		case ContainerRun:
+			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
+		case ContainerBitmap:
+			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
+		default:
+			panic("invalid container type")
+		}
+		// If our pointer isn't itrPointer, we aren't actually mapped.
+		newC.setMapped(newC.pointer == itrPointer)
+		if !mapped {
+			newC = newC.unmapOrClone()
+		}
+		// Pristine means this is the original object read in from
+		// roaring data, even if it's not mapped, which this is for
+		// now.
+		newC.flags |= flagPristine
+		if newC.flags&flagMapped != 0 {
+			mappedAny = true
+		}
+		info.Containers = append(info.Containers, ContainerInfo{
+			N:       newC.n,
+			Mapped:  newC.flags&flagMapped != 0,
+			Type:    containerTypeNames[itrCType],
+			Alloc:   size,
+			Pointer: uintptr(unsafe.Pointer(newC.pointer)),
+			Key:     itrKey,
+			Flags:   newC.flags.String(),
+		})
+		info.ContainerCount++
+		info.BitCount += uint64(newC.n)
+		b.Containers.Put(itrKey, newC)
+		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	}
+	// note: if we get a non-EOF err, it's possible that we made SOME
+	// changes but didn't log them. I don't have a good solution to this.
+	if itrErr != io.EOF {
+		return b, mappedAny, itrErr
+	}
+	// stash pointer ranges
+	info.From = uintptr(unsafe.Pointer(&data[0]))
+	info.To = info.From + uintptr(len(data))
+
+	// Read ops log until the end of the file.
+	b.ops = 0
+	b.opN = 0
+	buf, lastValidOffset := itr.Remaining()
+	// if there's no ops log, we're done and can just return the
+	// info so far.
+	if len(buf) == 0 {
+		return b, mappedAny, err
+	}
+	for {
+		// Exit when there are no more ops to parse.
+		if len(buf) == 0 {
+			break
+		}
+
+		// Unmarshal the op and apply it.
+		var opr op
+		if err = opr.UnmarshalBinary(buf); err != nil {
+			// we break out here, but we continue on to
+			// return the bitmap as-is, along with data about
+			// it, and the error. this lets us share the
+			// "is anything mapped" check with that code.
+			break
+		}
+		opr.apply(b)
+
+		// Increase the op count.
+		if info != nil {
+			info.Ops++
+			info.OpN += opr.count()
+			info.OpDetails = append(info.OpDetails, opr.info())
+		}
+		// Move the buffer forward.
+		opSize := opr.size()
+		buf = buf[opSize:]
+		lastValidOffset += int64(opSize)
+	}
+	citer, _ := b.Containers.Iterator(0)
+	// it's possible the ops log unmapped every mapped container, so we recheck.
+	mappedAny = false
+	if info == nil {
+		for citer.Next() {
+			_, c := citer.Value()
+			if c.Mapped() {
+				mappedAny = true
+				break
+			}
+		}
+		return b, mappedAny, err
+	}
+	// now we want to compute the actual container and bit counts after
+	// ops, and create a report of just the containers which got changed.
+	info.ContainerCount = 0
+	info.BitCount = 0
+	for citer.Next() {
+		k, c := citer.Value()
+		if c.Mapped() {
+			mappedAny = true
+		}
+		info.ContainerCount++
+		info.BitCount += uint64(c.N())
+		if c.flags&flagPristine != 0 {
+			continue
+		}
+		ci := c.info()
+		ci.Key = k
+		info.OpContainers = append(info.OpContainers, ci)
+	}
+	return b, mappedAny, err
 }

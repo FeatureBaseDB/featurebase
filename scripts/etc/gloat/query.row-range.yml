@@ -1,0 +1,11 @@
+name: "Time-based Row() Load Testing"
+
+main: "pilosa server --data-dir ~/pilosa.query.${STORAGE_BACKEND} --storage.backend ${STORAGE_BACKEND}"
+load: "pilosa-bench -type row-range -rate 10 -n 300 -from 2020-01-01T00:00:00Z -to 2020-01-31T23:00:00Z"
+
+health_url:    "http://localhost:10101/status"
+health_regexp: "NORMAL"
+
+vars_urls:
+  - http://localhost:10101/debug/vars
+  - http://localhost:7070/debug/vars

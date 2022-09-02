@@ -1,0 +1,134 @@
+syntax = "proto3";
+package pilosa;
+
+//import "public.proto";
+
+option go_package = "github.com/pilosa/pilosa/v2/proto";
+
+message QueryPQLRequest {
+  string index = 1;
+  string pql = 2;
+}
+
+message QuerySQLRequest {
+  string sql = 1;
+}
+
+message StatusError{
+  uint32 Code = 1;
+  string Message = 2;
+}
+
+message RowResponse{
+  repeated ColumnInfo headers = 1;
+  repeated ColumnResponse columns = 2;
+  StatusError StatusError = 3;
+  int64 duration = 4;
+}
+
+message Row {
+  repeated ColumnResponse columns = 1;
+}
+
+message TableResponse{
+  repeated ColumnInfo headers = 1;
+  repeated Row rows = 2;
+  StatusError StatusError = 3;
+  int64 duration = 4;
+}
+
+message ColumnInfo {
+  string name = 1;
+  string datatype = 2;
+}
+
+message ColumnResponse{
+  oneof columnVal {
+    string stringVal = 1;
+    uint64 uint64Val = 2;
+    int64 int64Val = 3;
+    bool boolVal = 4;
+    bytes blobVal = 5;
+    Uint64Array uint64ArrayVal = 6;
+    StringArray stringArrayVal = 7;
+    double float64Val = 8;
+    Decimal decimalVal = 9;
+    string timestampVal = 10;
+  }
+}
+
+message Decimal {
+  int64 value = 1;
+  int64 scale = 2;
+}
+
+message InspectRequest {
+  string index = 1;
+  IdsOrKeys columns = 2;
+  repeated string filterFields = 3;
+  uint64 limit = 4;
+  uint64 offset = 5;
+  string query = 6;
+}
+
+message Uint64Array {
+  repeated uint64 vals = 1;
+}
+
+message StringArray {
+  repeated string vals = 1;
+}
+
+message IdsOrKeys {
+  oneof type {
+    Uint64Array ids = 1;
+    StringArray keys = 2;
+  }
+}
+
+message Index {
+   string name = 1;
+}
+
+message CreateIndexRequest {
+   string name = 1;
+   bool keys = 2;
+}
+
+message CreateIndexResponse {
+}
+
+message GetIndexRequest {
+    string name = 1;
+}
+
+message GetIndexResponse {
+    Index index = 1;
+}
+
+message GetIndexesRequest {
+}
+
+message GetIndexesResponse {
+    repeated Index indexes = 1;
+}
+
+message DeleteIndexRequest {
+    string name = 1;
+}
+
+message DeleteIndexResponse {
+}
+
+service Pilosa {
+  rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse) {};
+  rpc GetIndexes(GetIndexesRequest) returns (GetIndexesResponse) {};
+  rpc GetIndex(GetIndexRequest) returns (GetIndexResponse) {};
+  rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse) {};
+  rpc QuerySQL(QuerySQLRequest) returns (stream RowResponse) {};
+  rpc QuerySQLUnary(QuerySQLRequest) returns (TableResponse) {};
+  rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {};
+  rpc QueryPQLUnary(QueryPQLRequest) returns (TableResponse) {};
+  rpc Inspect(InspectRequest) returns (stream RowResponse) {};
+  //rpc ImportAtomicRecord(stream AtomicRecord) returns (AtomicImportResponse) {};
+}

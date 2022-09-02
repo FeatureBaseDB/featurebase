@@ -1,17 +1,5 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pql
 
 import (
@@ -19,34 +7,32 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 func TestPEG(t *testing.T) {
 	p := PQL{Buffer: `
 SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9.com=\\'hello' and \"hello\"")), Hitmap(row=ag-bee)), a="4z", b=5) Count(Union(Witmap(row=5.73, frame=.10), Row(zztop><[2, 9]))) TopN(blah, fields=["hello", "goodbye", "zero"])`[1:]}
-	p.Init()
-	err := p.Parse()
+	err := p.Init()
+	if err != nil {
+		t.Fatal(errors.Wrap(err, "creating parser"))
+	}
+	err = p.Parse()
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
 	p.Execute()
 
-	p = PQL{Buffer: `SetRowAttrs(attr="http://zoo9.com=\\'hello' "and \"hello\"")`}
-	p.Init()
-	err = p.Parse()
-	if err == nil {
-		t.Fatalf("should have been an error because of the interior unescaped double quote")
-	}
-
 	q, err := ParseString("TopN(blah, Bitmap(id==other), field=f, n=0)")
 	if err != nil {
 		t.Fatalf("should have parsed: %v", err)
 	}
-	if q.String() != `TopN(Bitmap(id == "other"), _field="blah", field="f", n=0)` {
+	if q.String() != `TopN(Bitmap(id=="other"), _field="blah", field="f", n=0)` {
 		t.Fatalf("Failed, got: %s", q)
 	}
 
-	_, err = ParseString("C(a=falsen0)")
+	_, err = ParseString("Row(a=falsen0)")
 	if err != nil {
 		t.Fatalf("falsen0 should have been parsed as a string")
 	}
@@ -55,8 +41,7 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 	if err != nil {
 		t.Fatalf("should have parsed: %v", err)
 	}
-
-	if q.String() != `Bitmap(did == "other", row=4)` {
+	if q.String() != `Bitmap(did=="other", row=4)` {
 		t.Fatalf("got %s", q)
 	}
 
@@ -109,15 +94,15 @@ func TestPEGWorking(t *testing.T) {
 			ncalls: 2},
 		{
 			name:   "SetWithArbCall",
-			input:  "Set(1, a=4)Blerg(z=ha)",
+			input:  "Set(1, a=4)Row(z=ha)",
 			ncalls: 2},
 		{
 			name:   "SetArbSet",
-			input:  "Set(1, a=4)Blerg(z=ha)Set(2, z=99)",
+			input:  "Set(1, a=4)Row(z=ha)Set(2, z=99)",
 			ncalls: 3},
 		{
 			name:   "ArbSetArb",
-			input:  "Arb(q=1, a=4)Set(1, z=9)Arb(z=99)",
+			input:  "Row(q=1, a=4)Set(1, z=9)Row(z=99)",
 			ncalls: 3},
 		{
 			name:   "SetStringArg",
@@ -134,6 +119,22 @@ func TestPEGWorking(t *testing.T) {
 		{
 			name:   "SetTimestamp",
 			input:  "Set(1, a=4, 2017-04-03T19:34)",
+			ncalls: 1},
+		{
+			name:   "SetTimestampField",
+			input:  "Set(1, a='2017-04-03T19:34:00Z')",
+			ncalls: 1},
+		{
+			name:   "SetTimestampTZField",
+			input:  "Set(1, a='2017-04-03T19:34:00-07:00')",
+			ncalls: 1},
+		{
+			name:   "SetTimestampTZField",
+			input:  "Set(1, a='2017-04-03T19:34:00+07:00')",
+			ncalls: 1},
+		{
+			name:   "SetTimestampNanoField",
+			input:  "Set(1, a='2017-04-03T19:34:00.000000Z')",
 			ncalls: 1},
 		{
 			name:   "Union()",
@@ -161,43 +162,11 @@ func TestPEGWorking(t *testing.T) {
 			ncalls: 1},
 		{
 			name:   "double quoted args",
-			input:  `B(a="zm''e")`,
+			input:  `Row(a="zm''e")`,
 			ncalls: 1},
 		{
 			name:   "single quoted args",
-			input:  `B(a='zm""e')`,
-			ncalls: 1},
-		{
-			name:   "SetRowAttrs",
-			input:  "SetRowAttrs(blah, 9, a=47)",
-			ncalls: 1},
-		{
-			name:   "SetRowAttrs2args",
-			input:  "SetRowAttrs(blah, 9, a=47, b=bval)",
-			ncalls: 1},
-		{
-			name:   "SetRowAttrsWithRowKeySingleQuote",
-			input:  "SetRowAttrs(blah, 'rowKey', a=47)",
-			ncalls: 1},
-		{
-			name:   "SetRowAttrsWithRowKeyDoubleQuote",
-			input:  `SetRowAttrs(blah, "rowKey", a=47)`,
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrs",
-			input:  "SetColumnAttrs(9, a=47)",
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrs2args",
-			input:  "SetColumnAttrs(9, a=47, b=bval)",
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrsWithColKeySingleQuote",
-			input:  "SetColumnAttrs('colKey', a=47)",
-			ncalls: 1},
-		{
-			name:   "SetColumnAttrsWithColKeyDoubleQuote",
-			input:  `SetColumnAttrs("colKey", a=47)`,
+			input:  `Row(a='zm""e')`,
 			ncalls: 1},
 		{
 			name:   "Clear",
@@ -236,7 +205,15 @@ func TestPEGWorking(t *testing.T) {
 			input:  "Row(a == 4)",
 			ncalls: 1},
 		{
+			name:   "RangeEQNULL",
+			input:  "Row(a == null)",
+			ncalls: 1},
+		{
 			name:   "RangeNEQ",
+			input:  "Row(a != 4)",
+			ncalls: 1},
+		{
+			name:   "RangeNEQNull",
 			input:  "Row(a != null)",
 			ncalls: 1},
 		{
@@ -320,10 +297,7 @@ func TestPEGErrors(t *testing.T) {
 			input: "Set(, 1, a=4)"},
 		{
 			name:  "StartinCommaArb",
-			input: "Zeeb(, a=4)"},
-		{
-			name:  "SetRowAttrs0args",
-			input: "SetRowAttrs(blah, 9)"},
+			input: "Row(, a=4)"},
 		{
 			name:  "Clear0args",
 			input: "Clear(9)"},
@@ -369,66 +343,89 @@ func TestPQLDeepEquality(t *testing.T) {
 				},
 			}},
 		{
-			name: "SetRowAttrs",
-			call: "SetRowAttrs(myfield, 9, z=4)",
+			name: "SetWithUnicode",
+			call: `Set(0, unicode="Æ�漢д ☮♬ ♞🜻💣")`,
 			exp: &Call{
-				Name: "SetRowAttrs",
+				Name: "Set",
 				Args: map[string]interface{}{
-					"z":      int64(4),
+					"_col":    int64(0),
+					"unicode": `Æ�漢д ☮♬ ♞🜻💣`,
+				},
+			}},
+		{
+			name: "RowWithUnicode",
+			call: `Row(unicode="Æ�漢д ☮♬ ♞🜻💣")`,
+			exp: &Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"unicode": `Æ�漢д ☮♬ ♞🜻💣`,
+				},
+			}},
+		{
+			name: "RowsWithUnicode",
+			call: `Rows(job, previous="💣")`,
+			exp: &Call{
+				Name: "Rows",
+				Args: map[string]interface{}{
+					"_field":   "job",
+					"previous": `💣`,
+				},
+			}},
+		{
+			name: "TopNWithUnicode",
+			call: `TopN(stargazer, Row(unicode="Æ�漢д ☮♬ ♞🜻💣"), a="∑")`,
+			exp: &Call{
+				Name: "TopN",
+				Args: map[string]interface{}{
+					"_field": "stargazer",
+					"a":      "∑",
+				},
+				Children: []*Call{
+					{Name: "Row", Args: map[string]interface{}{"unicode": "Æ�漢д ☮♬ ♞🜻💣"}},
+				},
+			}},
+		{
+			name: "TopK",
+			call: "TopK(myfield, Row(), k=7)",
+			exp: &Call{
+				Name: "TopK",
+				Args: map[string]interface{}{
 					"_field": "myfield",
-					"_row":   int64(9),
+					"k":      int64(7),
+				},
+				Children: []*Call{
+					{Name: "Row"},
 				},
 			}},
 		{
-			name: "SetRowAttrsWithRowKeySingleQuote",
-			call: "SetRowAttrs(myfield, 'rowKey', z=4)",
+			name: "TopKWithField=",
+			call: "TopK(field=myfield, Row(), k=7)",
 			exp: &Call{
-				Name: "SetRowAttrs",
+				Name: "TopK",
 				Args: map[string]interface{}{
-					"z":      int64(4),
 					"_field": "myfield",
-					"_row":   "rowKey",
+					"k":      int64(7),
+				},
+				Children: []*Call{
+					{Name: "Row"},
 				},
 			}},
 		{
-			name: "SetRowAttrsWithRowKeyDoubleQuote",
-			call: `SetRowAttrs(myfield, "rowKey", z=4)`,
+			name: "Rows",
+			call: "Rows(myfield)",
 			exp: &Call{
-				Name: "SetRowAttrs",
+				Name: "Rows",
 				Args: map[string]interface{}{
-					"z":      int64(4),
 					"_field": "myfield",
-					"_row":   "rowKey",
 				},
 			}},
 		{
-			name: "SetColumnAttrs",
-			call: "SetColumnAttrs(9, z=4)",
+			name: "RowsWithField=",
+			call: "Rows(field=myfield)",
 			exp: &Call{
-				Name: "SetColumnAttrs",
+				Name: "Rows",
 				Args: map[string]interface{}{
-					"z":    int64(4),
-					"_col": int64(9),
-				},
-			}},
-		{
-			name: "SetColumnAttrsWithColKeySingleQuote",
-			call: "SetColumnAttrs('colKey', z=4)",
-			exp: &Call{
-				Name: "SetColumnAttrs",
-				Args: map[string]interface{}{
-					"z":    int64(4),
-					"_col": "colKey",
-				},
-			}},
-		{
-			name: "SetColumnAttrsWithColKeyDoubleQuote",
-			call: `SetColumnAttrs("colKey", z=4)`,
-			exp: &Call{
-				Name: "SetColumnAttrs",
-				Args: map[string]interface{}{
-					"z":    int64(4),
-					"_col": "colKey",
+					"_field": "myfield",
 				},
 			}},
 		{
@@ -444,6 +441,19 @@ func TestPQLDeepEquality(t *testing.T) {
 		{
 			name: "TopN",
 			call: "TopN(myfield, Row(), a=7)",
+			exp: &Call{
+				Name: "TopN",
+				Args: map[string]interface{}{
+					"a":      int64(7),
+					"_field": "myfield",
+				},
+				Children: []*Call{
+					{Name: "Row"},
+				},
+			}},
+		{
+			name: "TopNwithField=",
+			call: "TopN(field=myfield, Row(), a=7)",
 			exp: &Call{
 				Name: "TopN",
 				Args: map[string]interface{}{
@@ -533,8 +543,8 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
-						Op:    BETWEEN,
-						Value: []interface{}{int64(4), int64(8)},
+						Op:    BTWN_LTE_LT,
+						Value: []interface{}{int64(4), int64(9)},
 					},
 				},
 			}},
@@ -545,8 +555,8 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
-						Op:    BETWEEN,
-						Value: []interface{}{int64(5), int64(8)},
+						Op:    BTWN_LT_LT,
+						Value: []interface{}{int64(4), int64(9)},
 					},
 				},
 			}},
@@ -569,9 +579,18 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
-						Op:    BETWEEN,
-						Value: []interface{}{int64(5), int64(9)},
+						Op:    BTWN_LT_LTE,
+						Value: []interface{}{int64(4), int64(9)},
 					},
+				},
+			}},
+		{
+			name: "Sum",
+			call: "Sum(f)",
+			exp: &Call{
+				Name: "Sum",
+				Args: map[string]interface{}{
+					"_field": "f",
 				},
 			}},
 		{
@@ -580,16 +599,52 @@ func TestPQLDeepEquality(t *testing.T) {
 			exp: &Call{
 				Name: "Sum",
 				Args: map[string]interface{}{
-					"field": "f",
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Max",
+			call: "Max(f)",
+			exp: &Call{
+				Name: "Max",
+				Args: map[string]interface{}{
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Max",
+			call: "Max(field=f)",
+			exp: &Call{
+				Name: "Max",
+				Args: map[string]interface{}{
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Min",
+			call: "Min(f)",
+			exp: &Call{
+				Name: "Min",
+				Args: map[string]interface{}{
+					"_field": "f",
+				},
+			}},
+		{
+			name: "Min",
+			call: "Min(field=f)",
+			exp: &Call{
+				Name: "Min",
+				Args: map[string]interface{}{
+					"_field": "f",
 				},
 			}},
 		{
 			name: "Weird dash",
-			call: "Sum(field-=f)",
+			call: "Count(dashy-=f)",
 			exp: &Call{
-				Name: "Sum",
+				Name: "Count",
 				Args: map[string]interface{}{
-					"field-": "f",
+					"dashy-": "f",
 				},
 			}},
 		{
@@ -599,6 +654,18 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Sum",
 				Args: map[string]interface{}{
 					"field": "f",
+				},
+				Children: []*Call{
+					{Name: "Row"},
+				},
+			}},
+		{
+			name: "SumChild",
+			call: "Sum(f, Row())",
+			exp: &Call{
+				Name: "Sum",
+				Args: map[string]interface{}{
+					"_field": "f",
 				},
 				Children: []*Call{
 					{Name: "Row"},
@@ -630,11 +697,15 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "OptionsWrapper",
-			call: "Options(Row(f1=123), excludeRowAttrs=true)",
+			call: "Options(Row(f1=123), shards=[1,2,3])",
 			exp: &Call{
 				Name: "Options",
 				Args: map[string]interface{}{
-					"excludeRowAttrs": true,
+					"shards": []interface{}{
+						int64(1),
+						int64(2),
+						int64(3),
+					},
 				},
 				Children: []*Call{
 					{
@@ -672,14 +743,32 @@ func TestPQLDeepEquality(t *testing.T) {
 						Name: "Row",
 						Args: map[string]interface{}{
 							"a": &Condition{
-								Op:    BETWEEN,
-								Value: []interface{}{int64(5), int64(8)},
+								Op:    BTWN_LT_LT,
+								Value: []interface{}{int64(4), int64(9)},
 							},
 						},
 					},
 				},
 				Children: []*Call{
 					{Name: "Rows"},
+				},
+			}},
+		{
+			name: "Variable",
+			call: "Row(f=$my_VAR123)",
+			exp: &Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"f": &Variable{Name: "my_VAR123"},
+				},
+			}},
+		{
+			name: "RowsWithVariable",
+			call: `Rows($var)`,
+			exp: &Call{
+				Name: "Rows",
+				Args: map[string]interface{}{
+					"_field": &Variable{Name: "var"},
 				},
 			}},
 	}

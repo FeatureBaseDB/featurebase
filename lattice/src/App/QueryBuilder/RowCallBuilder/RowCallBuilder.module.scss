@@ -1,0 +1,40 @@
+.newGroup,
+.operator {
+  display: flex;
+  align-items: center;
+  width: 100%;
+
+  .line {
+    flex-grow: 1;
+    height: 1px;
+    background: var(--divider);
+  }
+
+  .addButton {
+    margin: 0 8px;
+  }
+}
+
+.groupBy {
+  .line {
+    flex-grow: 1;
+    height: 1px;
+    background: var(--divider);
+  }
+
+  .fieldSelector {
+    margin-top: 16px;
+  }
+
+  .filterHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+
+  .filterInfo {
+    vertical-align: text-top;
+    margin-left: 4px;
+  }
+}

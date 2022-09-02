@@ -1,6 +1,6 @@
 // Copyright 2014 The b Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// license that can be found in the NOTICE file.
 
 package roaring
 
@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"path"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -398,6 +399,7 @@ func BenchmarkBtreeSetSeq1e6(b *testing.B) {
 
 func benchmarkSetSeq(b *testing.B, n int) {
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		r := treeNew()
@@ -435,9 +437,10 @@ func benchmarkGetSeq(b *testing.B, n int) {
 	}
 	debug.FreeOSMemory()
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < n; j++ {
-			r.Get(uint64(j))
+			_, _ = r.Get(uint64(j))
 		}
 	}
 	b.StopTimer()
@@ -467,6 +470,7 @@ func benchmarkSetRnd(b *testing.B, n int) {
 		a[i] = rng.Next()
 	}
 	b.ResetTimer()
+	b.ReportAllocs()
 	c := getDummyC(1)
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
@@ -511,9 +515,10 @@ func benchmarkGetRnd(b *testing.B, n int) {
 	}
 	debug.FreeOSMemory()
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for _, v := range a {
-			r.Get(uint64(v))
+			_, _ = r.Get(uint64(v))
 		}
 	}
 	b.StopTimer()
@@ -688,7 +693,7 @@ func TestBtreeDelete0(t *testing.T) {
 }
 
 func TestBtreeDelete1(t *testing.T) {
-	const N = 130000
+	const N = 13000
 	for _, x := range []int{0, -1, 0x555555, 0xaaaaaa, 0x333333, 0xcccccc, 0x314159} {
 		r := treeNew()
 		set := r.Set
@@ -787,7 +792,7 @@ func benchmarkDelRnd(b *testing.B, n int) {
 }
 
 func TestBtreeDelete2(t *testing.T) {
-	const N = 100000
+	const N = 10000
 	for _, x := range []int{0, -1, 0x555555, 0xaaaaaa, 0x333333, 0xcccccc, 0x314159} {
 		r := treeNew()
 		set := r.Set
@@ -995,6 +1000,28 @@ func TestBtreeEnumeratorPrevSanity(t *testing.T) {
 		if g, e := v, test.valueOut; g != e {
 			t.Fatal(i, g, e)
 		}
+	}
+}
+
+// TestBtreeEnumeratorEveryRegression is a regression test for a "use-after-free" bug.
+// Previously, deleting a container would cause some values to be skipped (and sometimes trigger a race condition).
+func TestBtreeEnumeratorEveryRegression(t *testing.T) {
+	r := treeNew()
+
+	r.Set(uint64(10), getDummyC(100))
+	r.Set(uint64(20), getDummyC(200))
+	r.Set(uint64(30), getDummyC(300))
+
+	e, _ := r.Seek(0)
+	expect := []uint64{10, 20, 30}
+	var found []uint64
+	_ = e.Every(func(key uint64, oldV *Container, exists bool) (*Container, bool) {
+		found = append(found, key)
+		return nil, true
+	})
+
+	if !reflect.DeepEqual(expect, found) { // Before the fix, this skipped the 20.
+		t.Errorf("had %v in bitmap; only found %v", expect, found)
 	}
 }
 
@@ -1445,7 +1472,7 @@ func TestBtreePut(t *testing.T) {
 }
 
 func TestBtreeSeek(t *testing.T) {
-	const N = 1 << 13
+	const N = 1 << 11
 	tr := treeNew()
 	for i := 0; i < N; i++ {
 		k := 2*i + 1

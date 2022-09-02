@@ -1,0 +1,26 @@
+# names of files which we do not expect to have our license header
+./apimethod_string.go
+./pql/pql.peg.go
+./pb/private.pb.go
+./pb/public.pb.go
+./lru/lru.go
+./roaring/btree.go
+./roaring/btree_test.go
+./roaring/containerarchetype_string.go
+./proto/pilosa.pb.go
+./logger/filewriter.go
+./logger/filewriter_test.go
+./vprint.go
+./vprint_test.go
+./rbf/vprint.go
+./rbf/page_map.go
+./cmd/slurp/vprint.go
+./cmd/badloader/vprint.go
+./gid.go
+./synthload/vprint.go
+./proto/vdsm/vdsm.proto
+./proto/vdsm/vdsm.pb.go
+./cmd/pilosa-fsck/vprint.go
+./cmd/random-query/vprint.go
+./barrier.go
+./barrier_test.go

@@ -1,29 +1,20 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// Copyright 2022 Molecula Corp. (DBA FeatureBase).
+// SPDX-License-Identifier: Apache-2.0
 package pilosa
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/lru"
-	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/molecula/featurebase/v3/lru"
+	pb "github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -52,6 +43,9 @@ type cache interface {
 
 	// SetStats defines the stats client used in the cache.
 	SetStats(s stats.StatsClient)
+
+	// Clear removes everything from the cache. If possible it should leave allocated structures in place to be reused.
+	Clear()
 }
 
 // lruCache represents a least recently used Cache implementation.
@@ -59,14 +53,17 @@ type lruCache struct {
 	cache  *lru.Cache
 	counts map[uint64]uint64
 	stats  stats.StatsClient
+	// maxEntries is saved to support Clear which recreates the cache.
+	maxEntries uint32
 }
 
 // newLRUCache returns a new instance of LRUCache.
 func newLRUCache(maxEntries uint32) *lruCache {
 	c := &lruCache{
-		cache:  lru.New(int(maxEntries)),
-		counts: make(map[uint64]uint64),
-		stats:  stats.NopStatsClient,
+		cache:      lru.New(int(maxEntries)),
+		counts:     make(map[uint64]uint64),
+		stats:      stats.NopStatsClient,
+		maxEntries: maxEntries,
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
@@ -118,13 +115,21 @@ func (c *lruCache) Top() []bitmapPair {
 			Count: n,
 		})
 	}
-	sort.Sort(bitmapPairs(a))
+	pairs := bitmapPairs(a)
+	sort.Sort(&pairs)
 	return a
 }
 
 // SetStats defines the stats client used in the cache.
 func (c *lruCache) SetStats(s stats.StatsClient) {
 	c.stats = s
+}
+
+func (c *lruCache) Clear() {
+	for k := range c.counts {
+		delete(c.counts, k)
+	}
+	c.cache = lru.New(int(c.maxEntries))
 }
 
 func (c *lruCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
@@ -134,9 +139,12 @@ var _ cache = &lruCache{}
 
 // rankCache represents a cache with sorted entries.
 type rankCache struct {
-	mu       sync.Mutex
-	entries  map[uint64]uint64
-	rankings []bitmapPair // cached, ordered list
+	// TODO why does this have a lock and lruCache doesn't?
+	mu           sync.Mutex
+	entries      map[uint64]uint64
+	rankings     bitmapPairs // cached, ordered list
+	rankingsRead bool
+	dirty        bool
 
 	updateN    int
 	updateTime time.Time
@@ -164,14 +172,35 @@ func NewRankCache(maxEntries uint32) *rankCache {
 	}
 }
 
+func (c *rankCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k := range c.entries {
+		delete(c.entries, k)
+	}
+	c.rankings = c.rankings[:0]
+	c.rankingsRead = false
+	c.dirty = false
+
+	c.updateN = 0
+	c.updateTime = time.Time{}
+	c.thresholdValue = 0
+}
+
 // Add adds a count to the cache.
 func (c *rankCache) Add(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Flag the cache as dirty.
+	// This forces recalculation if top is called before the cache is recalculated.
+	c.dirty = true
+
 	// Ignore if the column count is below the threshold,
 	// unless the count is 0, which is effectively used
 	// to clear the cache value.
 	if n < c.thresholdValue && n > 0 {
+		delete(c.entries, id)
 		return
 	}
 
@@ -184,11 +213,25 @@ func (c *rankCache) Add(id uint64, n uint64) {
 func (c *rankCache) BulkAdd(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Flag the cache as dirty.
+	// This forces recalculation if top is called before the cache is recalculated.
+	c.dirty = true
+
 	if n < c.thresholdValue {
+		delete(c.entries, id)
 		return
 	}
 
 	c.entries[id] = n
+
+	// FB-1206: Periodically invalidate the cache when we are bulk loading
+	// as this can take up an upbounded amount of memory. This is especially
+	// true when restoring shards as all rows will be added.
+	if len(c.entries) > int(2*c.maxEntries) {
+		c.stats.Count(MetricRecalculateCache, 1, 1.0)
+		c.recalculate()
+	}
 }
 
 // Get returns a count for a given id.
@@ -209,12 +252,15 @@ func (c *rankCache) Len() int {
 func (c *rankCache) IDs() []uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	a := make([]uint64, 0, len(c.entries))
-	for id := range c.entries {
-		a = append(a, id)
+	if len(c.entries) == 0 {
+		return nil
 	}
-	sort.Sort(uint64Slice(a))
-	return a
+	ids := make([]uint64, 0, len(c.entries))
+	for id := range c.entries {
+		ids = append(ids, id)
+	}
+	sort.Sort(uint64Slice(ids))
+	return ids
 }
 
 // Invalidate recalculates the entries by rank.
@@ -228,7 +274,7 @@ func (c *rankCache) Invalidate() {
 func (c *rankCache) Recalculate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.stats.Count("cache.recalculate", 1, 1.0)
+	c.stats.Count(MetricRecalculateCache, 1, 1.0)
 	c.recalculate()
 }
 
@@ -236,27 +282,42 @@ func (c *rankCache) invalidate() {
 	// Don't invalidate more than once every X seconds.
 	// TODO: consider making this configurable.
 	if time.Since(c.updateTime).Seconds() < 10 {
+		// Skipping recalculation means that the ranked cache's growth is unbounded.
+		// This is somewhat necessary for now since recalculation is not cheap.
+		// The cache will remain flagged as dirty and will be recalculated if Top is called.
+		// This may cause unexpected memory growth, so record it in metrics for debugging purposes.
+		c.stats.Count(MetricInvalidateCacheSkipped, 1, 1.0)
+		// Ensure that we're marked as dirty even if we weren't otherwise.
+		c.dirty = true
 		return
 	}
-	c.stats.Count("cache.invalidate", 1, 1.0)
+	c.stats.Count(MetricInvalidateCache, 1, 1.0)
 	c.recalculate()
 }
 
 func (c *rankCache) recalculate() {
+	if c.rankingsRead {
+		c.rankings = nil
+		c.rankingsRead = false
+	}
+
 	// Convert cache to a sorted list.
-	rankings := make([]bitmapPair, 0, len(c.entries))
+	rankings := c.rankings[:0]
+	if cap(rankings) < len(c.entries) {
+		rankings = make([]bitmapPair, 0, len(c.entries))
+	}
 	for id, cnt := range c.entries {
 		rankings = append(rankings, bitmapPair{
 			ID:    id,
 			Count: cnt,
 		})
 	}
-	sort.Sort(bitmapPairs(rankings))
+	c.rankings = rankings
+	sort.Sort(&c.rankings)
 
 	// Store the count of the item at the threshold index.
-	c.rankings = rankings
 	length := len(c.rankings)
-	c.stats.Gauge("RankCache", float64(length), 1.0)
+	c.stats.Gauge(MetricRankCacheLength, float64(length), 1.0)
 
 	var removeItems []bitmapPair // cached, ordered list
 	if length > int(c.maxEntries) {
@@ -272,11 +333,14 @@ func (c *rankCache) recalculate() {
 
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.thresholdBuffer {
-		c.stats.Count("cache.threshold", 1, 1.0)
+		c.stats.Count(MetricCacheThresholdReached, 1, 1.0)
 		for _, pair := range removeItems {
 			delete(c.entries, pair.ID)
 		}
 	}
+
+	// The cache is no longer dirty.
+	c.dirty = false
 }
 
 // SetStats defines the stats client used in the cache.
@@ -285,7 +349,19 @@ func (c *rankCache) SetStats(s stats.StatsClient) {
 }
 
 // Top returns an ordered list of pairs.
-func (c *rankCache) Top() []bitmapPair { return c.rankings }
+func (c *rankCache) Top() []bitmapPair {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.dirty {
+		// The cache is dirty, so we need to recalculate it to get a consistent view.
+		c.stats.Count(MetricReadDirtyCache, 1, 1.0)
+		c.recalculate()
+	}
+
+	c.rankingsRead = true
+	return c.rankings
+}
 
 // WriteTo writes the cache to w.
 func (c *rankCache) WriteTo(w io.Writer) (n int64, err error) {
@@ -309,15 +385,66 @@ type bitmapPair struct {
 // bitmapPairs is a sortable list of BitmapPair objects.
 type bitmapPairs []bitmapPair
 
-func (p bitmapPairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p bitmapPairs) Len() int           { return len(p) }
-func (p bitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
+func (p *bitmapPairs) Swap(i, j int)      { (*p)[i], (*p)[j] = (*p)[j], (*p)[i] }
+func (p *bitmapPairs) Len() int           { return len(*p) }
+func (p *bitmapPairs) Less(i, j int) bool { return (*p)[i].Count > (*p)[j].Count }
 
 // Pair holds an id/count pair.
 type Pair struct {
 	ID    uint64 `json:"id"`
-	Key   string `json:"key,omitempty"`
+	Key   string `json:"key"`
 	Count uint64 `json:"count"`
+}
+
+// PairField is a Pair with its associated field.
+type PairField struct {
+	Pair  Pair
+	Field string
+}
+
+func (p PairField) Clone() (r PairField) {
+	return PairField{
+		Pair:  p.Pair,
+		Field: p.Field,
+	}
+}
+
+// ToTable implements the ToTabler interface.
+func (p PairField) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(p, 1)
+}
+
+// ToRows implements the ToRowser interface.
+func (p PairField) ToRows(callback func(*pb.RowResponse) error) error {
+	if p.Pair.Key != "" {
+		return callback(&pb.RowResponse{
+			Headers: []*pb.ColumnInfo{
+				{Name: p.Field, Datatype: "string"},
+				{Name: "count", Datatype: "uint64"},
+			},
+			Columns: []*pb.ColumnResponse{
+				{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: p.Pair.Key}},
+				{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
+			},
+		})
+	} else {
+		return callback(&pb.RowResponse{
+			Headers: []*pb.ColumnInfo{
+				{Name: p.Field, Datatype: "uint64"},
+				{Name: "count", Datatype: "uint64"},
+			},
+			Columns: []*pb.ColumnResponse{
+				{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.ID}},
+				{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
+			},
+		})
+	}
+}
+
+// MarshalJSON marshals PairField into a JSON-encoded byte slice,
+// excluding `Field`.
+func (p PairField) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.Pair)
 }
 
 // Pairs is a sortable slice of Pair objects.
@@ -395,72 +522,88 @@ func (p Pairs) String() string {
 	return buf.String()
 }
 
+// PairsField is a Pairs object with its associated field.
+type PairsField struct {
+	Pairs []Pair
+	Field string
+}
+
+func (p *PairsField) Clone() (r *PairsField) {
+	r = &PairsField{
+		Pairs: make([]Pair, len(p.Pairs)),
+		Field: p.Field,
+	}
+	copy(r.Pairs, p.Pairs)
+	return
+}
+
+// ToTable implements the ToTabler interface.
+func (p *PairsField) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(p, len(p.Pairs))
+}
+
+// ToRows implements the ToRowser interface.
+func (p *PairsField) ToRows(callback func(*pb.RowResponse) error) error {
+	// Determine if the ID has string keys.
+	var stringKeys bool
+	if len(p.Pairs) > 0 {
+		if p.Pairs[0].Key != "" {
+			stringKeys = true
+		}
+	}
+
+	dtype := "uint64"
+	if stringKeys {
+		dtype = "string"
+	}
+	ci := []*pb.ColumnInfo{
+		{Name: p.Field, Datatype: dtype},
+		{Name: "count", Datatype: "uint64"},
+	}
+	for _, pair := range p.Pairs {
+		if stringKeys {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: pair.Key}},
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+		} else {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.ID)}},
+					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+		}
+		ci = nil //only send on the first
+	}
+	return nil
+}
+
+// MarshalJSON marshals PairsField into a JSON-encoded byte slice,
+// excluding `Field`.
+func (p PairsField) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.Pairs)
+}
+
+// int64Slice represents a sortable slice of int64 numbers.
+type int64Slice []int64
+
+func (p int64Slice) Len() int           { return len(p) }
+func (p int64Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p int64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
 // uint64Slice represents a sortable slice of uint64 numbers.
 type uint64Slice []uint64
 
 func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
-
-// merge combines p and other to a unique sorted set of values.
-// p and other must both have unique sets and be sorted.
-func (p uint64Slice) merge(other []uint64) []uint64 {
-	ret := make([]uint64, 0, len(p))
-
-	i, j := 0, 0
-	for i < len(p) && j < len(other) {
-		a, b := p[i], other[j]
-		if a == b {
-			ret = append(ret, a)
-			i, j = i+1, j+1
-		} else if a < b {
-			ret = append(ret, a)
-			i++
-		} else {
-			ret = append(ret, b)
-			j++
-		}
-	}
-
-	if i < len(p) {
-		ret = append(ret, p[i:]...)
-	} else if j < len(other) {
-		ret = append(ret, other[j:]...)
-	}
-
-	return ret
-}
-
-// bitmapCache provides an interface for caching full bitmaps.
-type bitmapCache interface {
-	Fetch(id uint64) (*Row, bool)
-	Add(id uint64, b *Row)
-}
-
-// simpleCache implements BitmapCache
-// it is meant to be a short-lived cache for cases where writes are continuing to access
-// the same row within a short time frame (i.e. good for write-heavy loads)
-// A read-heavy use case would cause the cache to get bigger, potentially causing the
-// node to run out of memory.
-type simpleCache struct {
-	cache map[uint64]*Row
-}
-
-// Fetch retrieves the bitmap at the id in the cache.
-func (s *simpleCache) Fetch(id uint64) (*Row, bool) {
-	m, ok := s.cache[id]
-	return m, ok
-}
-
-// Add adds the bitmap to the cache, keyed on the id. A nil row means
-// deleting the row from the cache.
-func (s *simpleCache) Add(id uint64, b *Row) {
-	if b != nil {
-		s.cache[id] = b
-	} else {
-		delete(s.cache, id)
-	}
-}
 
 // nopCache represents a no-op Cache implementation.
 type nopCache struct {
@@ -481,6 +624,7 @@ func (c nopCache) Invalidate()                {}
 func (c nopCache) Len() int                   { return 0 }
 func (c nopCache) Recalculate()               {}
 func (c nopCache) SetStats(stats.StatsClient) {}
+func (c nopCache) Clear()                     {}
 
 func (c nopCache) Top() []bitmapPair {
 	return []bitmapPair{}
