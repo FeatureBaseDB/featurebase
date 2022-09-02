@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/test"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/test"
+	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 func TestAPI_SimplerOneNode_ImportColumnKey(t *testing.T) {

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/parser"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 type createTableField struct {

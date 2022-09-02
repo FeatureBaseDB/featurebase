@@ -3,7 +3,7 @@ package sql3_test
 import (
 	"time"
 
-	"github.com/molecula/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 func expectedCastTime() time.Time {

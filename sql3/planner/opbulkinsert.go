@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // PlanOpBulkInsert plan operator to handle INSERT.

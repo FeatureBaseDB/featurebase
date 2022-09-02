@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	_ "net/http/pprof"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/boltdb"
 	"github.com/featurebasedb/featurebase/v3/ctl"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -33,16 +33,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
+	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/google/go-cmp/cmp"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/ctl"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/proto"
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/testhook"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 

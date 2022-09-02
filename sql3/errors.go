@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 const (

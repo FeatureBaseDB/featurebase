@@ -5,8 +5,8 @@ import (
 	"context"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	planner_types "github.com/molecula/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // MustQueryRows returns the row results as a slice of []interface{}, along with the columns.

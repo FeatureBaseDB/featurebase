@@ -2,7 +2,7 @@
 
 package planner
 
-import "github.com/molecula/featurebase/v3/sql3/planner/types"
+import "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 
 // RowCache is a cache of rows used during row iteration
 type RowCache interface {

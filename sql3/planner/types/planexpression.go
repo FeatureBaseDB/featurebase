@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 //TODO(pok) we can get rid of this - we have expression types for all of these now...

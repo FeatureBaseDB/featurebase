@@ -5,7 +5,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 const (

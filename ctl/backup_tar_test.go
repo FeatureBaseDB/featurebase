@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/test"
 )
 
 func TestBackupTarCommand_Run(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/molecula/featurebase/v3/disco"
-	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
