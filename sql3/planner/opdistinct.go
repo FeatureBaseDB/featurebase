@@ -5,7 +5,7 @@ package planner
 import (
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // PlanOpDistinct plan operator handles DISTINCT

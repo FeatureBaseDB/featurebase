@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 // PlanOperator is a node in an execution plan.

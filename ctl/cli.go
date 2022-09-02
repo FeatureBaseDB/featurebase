@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/chzyer/readline"
+	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/jedib0t/go-pretty/text"
-	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/pkg/errors"
 )
 

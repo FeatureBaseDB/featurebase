@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 // glue lets us make a thing which isn't a testing.TB, but can be passed

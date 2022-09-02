@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 const intervalYear = "YY"

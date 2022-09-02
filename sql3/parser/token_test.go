@@ -4,7 +4,7 @@ package parser_test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 func TestPos_String(t *testing.T) {

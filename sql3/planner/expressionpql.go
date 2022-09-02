@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/parser"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // generatePQLCallFromExpr returns a *pql.Call tree for a given plan expression

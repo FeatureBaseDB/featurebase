@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/go-test/deep"
-	"github.com/molecula/featurebase/v3/sql3/parser"
 )
 
 func TestExprString(t *testing.T) {
