@@ -93,9 +93,6 @@ max-map-count=900000
 
 long-query-time = "10s"
 
-[postgres]
-    bind = "localhost:55432"
-
 [cluster]
     name = "${DEPLOYED_CLUSTER_PREFIX}"
     replicas = ${DEPLOYED_CLUSTER_REPLICA_COUNT}
@@ -150,9 +147,6 @@ max-file-count=900000
 max-map-count=900000
 
 long-query-time = "10s"
-
-[postgres]
-    bind = "localhost:55432"
 
 [cluster]
     name = "${DEPLOYED_CLUSTER_PREFIX}"
