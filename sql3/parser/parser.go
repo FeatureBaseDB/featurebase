@@ -1404,7 +1404,112 @@ func (p *Parser) parseBulkInsertStatement() (_ *BulkInsertStatement, err error) 
 		return nil, p.errorExpected(p.pos, p.tok, "literal")
 	}
 
+	if p.peek() == WITH {
+		stmt.With, _, _ = p.scan()
+		if !isBulkInsertOptionStartToken(p.peek(), p) {
+			return nil, p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT or MAP")
+		}
+		for {
+			err := p.parseBulkInsertOption(&stmt)
+			if err != nil {
+				return nil, err
+			}
+			if !isBulkInsertOptionStartToken(p.peek(), p) {
+				break
+			}
+		}
+	}
+
 	return &stmt, nil
+}
+
+func (p *Parser) parseBulkInsertOption(stmt *BulkInsertStatement) error {
+	switch p.peek() {
+	case IDENT:
+		ident, err := p.parseIdent("bulk insert option")
+		if err != nil {
+			return err
+		}
+		switch strings.ToUpper(ident.Name) {
+		case "BATCHSIZE":
+			if isLiteralToken(p.peek()) {
+				stmt.BatchSize = p.mustParseLiteral()
+				return nil
+			} else {
+				return p.errorExpected(p.pos, p.tok, "literal")
+			}
+
+		case "ROWSLIMIT":
+			if isLiteralToken(p.peek()) {
+				stmt.RowsLimit = p.mustParseLiteral()
+				return nil
+			} else {
+				return p.errorExpected(p.pos, p.tok, "literal")
+			}
+
+		case "FORMAT":
+			if isLiteralToken(p.peek()) {
+				stmt.Format = p.mustParseLiteral()
+				return nil
+			} else {
+				return p.errorExpected(p.pos, p.tok, "literal")
+			}
+
+		case "MAP":
+			if p.peek() == IDENT {
+				ident, err := p.parseIdent("bulk insert option")
+				if err != nil {
+					return err
+				}
+				switch strings.ToUpper(ident.Name) {
+				case "_ID":
+					stmt.MapId = &BulkInsertIDMap{}
+					if p.peek() != TO {
+						return p.errorExpected(p.pos, p.tok, "TO")
+					}
+					_, _, _ = p.scan()
+
+					if p.peek() == AUTOINCREMENT {
+						stmt.MapId.Auto, _, _ = p.scan()
+						return nil
+					}
+
+					stmt.MapId.ColumnExprs, err = p.parseExprList()
+					if err != nil {
+						return err
+					}
+					return nil
+
+				case "OFFSET":
+					columnMapItem := &BulkInsertMappedColumn{}
+					if isLiteralToken(p.peek()) {
+						columnMapItem.SourceColumnOffset = p.mustParseLiteral()
+					} else {
+						return p.errorExpected(p.pos, p.tok, "literal")
+					}
+					if p.peek() != TO {
+						return p.errorExpected(p.pos, p.tok, "TO")
+					}
+					_, _, _ = p.scan()
+
+					if p.peek() != IDENT {
+						return p.errorExpected(p.pos, p.tok, "IDENTIFIER")
+					}
+					columnMapItem.TargetColumn, err = p.parseIdent("bulk insert map offset option")
+					if err != nil {
+						return err
+					}
+					if stmt.ColumnMap == nil {
+						stmt.ColumnMap = []*BulkInsertMappedColumn{}
+					}
+					stmt.ColumnMap = append(stmt.ColumnMap, columnMapItem)
+					return nil
+				}
+			}
+			return p.errorExpected(p.pos, p.tok, "_ID or OFFSET")
+		}
+	}
+	return p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT or MAP")
 }
 
 func (p *Parser) parseInsertStatement(withClause *WithClause) (_ *InsertStatement, err error) {
@@ -1656,7 +1761,12 @@ func (p *Parser) parseUpdateStatement(withClause *WithClause) (_ *UpdateStatemen
 		}
 	}
 
-	if stmt.Table, err = p.parseQualifiedTableName(); err != nil {
+	ident, err := p.parseIdent("table name")
+	if err != nil {
+		return &stmt, err
+	}
+	stmt.Table, err = p.parseQualifiedTableName(ident)
+	if err != nil {
 		return &stmt, err
 	}
 
@@ -1702,7 +1812,13 @@ func (p *Parser) parseDeleteStatement(withClause *WithClause) (_ *DeleteStatemen
 		return &stmt, p.errorExpected(p.pos, p.tok, "FROM")
 	}
 	stmt.From, _, _ = p.scan()
-	if stmt.Table, err = p.parseQualifiedTableName(); err != nil {
+
+	ident, err := p.parseIdent("table name")
+	if err != nil {
+		return &stmt, err
+	}
+	stmt.Table, err = p.parseQualifiedTableName(ident)
+	if err != nil {
 		return &stmt, err
 	}
 
@@ -2089,7 +2205,14 @@ func (p *Parser) parseUnarySource() (source Source, err error) {
 	case LP:
 		return p.parseParenSource()
 	case IDENT, QIDENT:
-		return p.parseQualifiedTableName()
+		ident, err := p.parseIdent("table or function")
+		if err != nil {
+			return nil, err
+		}
+		if p.peek() == LP {
+			return p.parseTableValuedFunction(ident)
+		}
+		return p.parseQualifiedTableName(ident)
 	default:
 		return nil, p.errorExpected(p.pos, p.tok, "table name or left paren")
 	}
@@ -2216,13 +2339,10 @@ func (p *Parser) parseParenSource() (_ *ParenSource, err error) {
 	return &source, nil
 }
 
-func (p *Parser) parseQualifiedTableName() (_ *QualifiedTableName, err error) {
+func (p *Parser) parseQualifiedTableName(ident *Ident) (_ *QualifiedTableName, err error) {
 	var tbl QualifiedTableName
 
-	if !isIdentToken(p.peek()) {
-		return &tbl, p.errorExpected(p.pos, p.tok, "table name")
-	}
-	tbl.Name, _ = p.parseIdent("table name")
+	tbl.Name = ident
 
 	// Parse optional table alias ("AS alias" or just "alias").
 	if tok := p.peek(); tok == AS || isIdentToken(tok) {
@@ -2254,6 +2374,28 @@ func (p *Parser) parseQualifiedTableName() (_ *QualifiedTableName, err error) {
 		tbl.NotIndexed, _, _ = p.scan()
 	}*/
 
+	return &tbl, nil
+}
+
+func (p *Parser) parseTableValuedFunction(ident *Ident) (_ *TableValuedFunction, err error) {
+	var tbl TableValuedFunction
+
+	tbl.Name = ident
+
+	tbl.Call, err = p.parseCall(ident)
+	if err != nil {
+		return &tbl, err
+	}
+
+	// Parse optional table alias ("AS alias" or just "alias").
+	if tok := p.peek(); tok == AS || isIdentToken(tok) {
+		if p.peek() == AS {
+			tbl.As, _, _ = p.scan()
+		}
+		if tbl.Alias, err = p.parseIdent("table alias"); err != nil {
+			return &tbl, err
+		}
+	}
 	return &tbl, nil
 }
 
@@ -2397,6 +2539,9 @@ func (p *Parser) parseOperand() (expr Expr, err error) {
 	case LB:
 		p.unscan()
 		return p.parseSetLiteralExpr()
+	case LBR:
+		p.unscan()
+		return p.parseTupleLiteralExpr()
 	case CAST:
 		p.unscan()
 		return p.parseCastExpr()
@@ -2860,6 +3005,29 @@ func (p *Parser) parseSetLiteralExpr() (_ *SetLiteralExpr, err error) {
 	return &expr, nil
 }
 
+func (p *Parser) parseTupleLiteralExpr() (_ *TupleLiteralExpr, err error) {
+	var expr TupleLiteralExpr
+	expr.Lbrace, _, _ = p.scan()
+
+	for p.peek() != RBR {
+		x, err := p.ParseExpr()
+		if err != nil {
+			return &expr, err
+		}
+		expr.Members = append(expr.Members, x)
+
+		if p.peek() == RBR {
+			break
+		} else if p.peek() != COMMA {
+			return &expr, p.errorExpected(p.pos, p.tok, "comma or right brace")
+		}
+		p.scan()
+	}
+
+	expr.Rbrace, _, _ = p.scan()
+	return &expr, nil
+}
+
 func (p *Parser) parseCastExpr() (_ *CastExpr, err error) {
 	assert(p.peek() == CAST)
 
@@ -3173,6 +3341,23 @@ func isTableOptionStartToken(tok Token) bool {
 	default:
 		return false
 	}
+}
+
+// isBulkInsertOptionStartToken returns true if tok is the initial token of a bulk insert option.
+func isBulkInsertOptionStartToken(tok Token, p *Parser) bool {
+	switch tok {
+	case IDENT:
+		ident, err := p.parseIdent("bulk insert option")
+		defer p.unscan()
+		if err != nil {
+			return false
+		}
+		switch strings.ToUpper(ident.Name) {
+		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "MAP":
+			return true
+		}
+	}
+	return false
 }
 
 // isConstraintStartToken returns true if tok is the initial token of a constraint.

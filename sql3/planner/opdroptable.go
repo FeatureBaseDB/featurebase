@@ -19,8 +19,9 @@ type PlanOpDropTable struct {
 
 func NewPlanOpDropTable(p *ExecutionPlanner, index *pilosa.IndexInfo) *PlanOpDropTable {
 	return &PlanOpDropTable{
-		planner: p,
-		index:   index,
+		planner:  p,
+		index:    index,
+		warnings: make([]string, 0),
 	}
 }
 

@@ -31,9 +31,9 @@ func PlanWalk(v PlanVisitor, op types.PlanOperator) {
 	v.VisitOperator(nil)
 }
 
-type planInspector func(types.PlanOperator) bool
+type planInspectionFunction func(types.PlanOperator) bool
 
-func (f planInspector) VisitOperator(op types.PlanOperator) PlanVisitor {
+func (f planInspectionFunction) VisitOperator(op types.PlanOperator) PlanVisitor {
 	if f(op) {
 		return f
 	}
@@ -43,7 +43,7 @@ func (f planInspector) VisitOperator(op types.PlanOperator) PlanVisitor {
 // InspectPlan traverses the plan op graph depth-first order
 // if f(op) returns true, InspectPlan invokes f recursively for each of the children of op,
 // followed by a call of f(nil).
-func InspectPlan(op types.PlanOperator, f planInspector) {
+func InspectPlan(op types.PlanOperator, f planInspectionFunction) {
 	PlanWalk(f, op)
 }
 
@@ -78,10 +78,10 @@ func (f exprInspector) VisitExpr(e types.PlanExpression) ExprVisitor {
 	return nil
 }
 
-// WalkExpressions traverses the plan and calls sql.Walk on any expression it finds.
-func WalkExpressions(v ExprVisitor, node types.PlanOperator) {
-	InspectPlan(node, func(node types.PlanOperator) bool {
-		if n, ok := node.(types.ContainsExpressions); ok {
+// WalkExpressions traverses the plan and calls ExprWalk on any expression it finds
+func WalkExpressions(v ExprVisitor, op types.PlanOperator) {
+	InspectPlan(op, func(operator types.PlanOperator) bool {
+		if n, ok := operator.(types.ContainsExpressions); ok {
 			for _, e := range n.Expressions() {
 				ExprWalk(v, e)
 			}
@@ -92,8 +92,13 @@ func WalkExpressions(v ExprVisitor, node types.PlanOperator) {
 
 // InspectExpressions traverses the plan and calls WalkExpressions on any
 // expression it finds.
-func InspectExpressions(node types.PlanOperator, f exprInspector) {
-	WalkExpressions(f, node)
+func InspectExpressions(op types.PlanOperator, f exprInspector) {
+	WalkExpressions(f, op)
+}
+
+// InspectExpression traverses expressoins in depth-first order
+func InspectExpression(expr types.PlanExpression, f func(expr types.PlanExpression) bool) {
+	ExprWalk(exprInspector(f), expr)
 }
 
 //-----------------------------------------------------------------------------
@@ -103,19 +108,19 @@ func InspectExpressions(node types.PlanOperator, f exprInspector) {
 type PlanOpExprVisitor interface {
 	// VisitPlanOpExpr method is invoked for each expr encountered by Walk. If the result Visitor is not nil, Walk visits each of
 	// the children of the expr with that visitor, followed by a call of VisitPlanOpExpr(nil, nil) to the returned visitor.
-	VisitPlanOpExpr(node types.PlanOperator, expression types.PlanExpression) PlanOpExprVisitor
+	VisitPlanOpExpr(op types.PlanOperator, expression types.PlanExpression) PlanOpExprVisitor
 }
 
 // ExprWithPlanOpWalk traverses the expression tree in depth-first order. It starts by calling v.VisitPlanOpExpr(op, expr); expr must
 // not be nil. If the visitor returned by v.VisitPlanOpExpr(op, expr) is not nil, Walk is invoked recursively with the returned
 // visitor for each children of the expr, followed by a call of v.VisitPlanOpExpr(nil, nil) to the returned visitor.
-func ExprWithPlanOpWalk(v PlanOpExprVisitor, n types.PlanOperator, expr types.PlanExpression) {
-	if v = v.VisitPlanOpExpr(n, expr); v == nil {
+func ExprWithPlanOpWalk(v PlanOpExprVisitor, op types.PlanOperator, expr types.PlanExpression) {
+	if v = v.VisitPlanOpExpr(op, expr); v == nil {
 		return
 	}
 
 	for _, child := range expr.Children() {
-		ExprWithPlanOpWalk(v, n, child)
+		ExprWithPlanOpWalk(v, op, child)
 	}
 
 	v.VisitPlanOpExpr(nil, nil)
@@ -123,19 +128,19 @@ func ExprWithPlanOpWalk(v PlanOpExprVisitor, n types.PlanOperator, expr types.Pl
 
 type exprWithNodeInspector func(types.PlanOperator, types.PlanExpression) bool
 
-func (f exprWithNodeInspector) VisitPlanOpExpr(n types.PlanOperator, e types.PlanExpression) PlanOpExprVisitor {
-	if f(n, e) {
+func (f exprWithNodeInspector) VisitPlanOpExpr(op types.PlanOperator, expr types.PlanExpression) PlanOpExprVisitor {
+	if f(op, expr) {
 		return f
 	}
 	return nil
 }
 
 // WalkExpressionsWithPlanOp traverses the plan and calls ExprWithPlanOpWalk on any expression it finds.
-func WalkExpressionsWithPlanOp(v PlanOpExprVisitor, n types.PlanOperator) {
-	InspectPlan(n, func(n types.PlanOperator) bool {
-		if expressioner, ok := n.(types.ContainsExpressions); ok {
+func WalkExpressionsWithPlanOp(v PlanOpExprVisitor, op types.PlanOperator) {
+	InspectPlan(op, func(operator types.PlanOperator) bool {
+		if expressioner, ok := operator.(types.ContainsExpressions); ok {
 			for _, e := range expressioner.Expressions() {
-				ExprWithPlanOpWalk(v, n, e)
+				ExprWithPlanOpWalk(v, operator, e)
 			}
 		}
 		return true
@@ -143,25 +148,23 @@ func WalkExpressionsWithPlanOp(v PlanOpExprVisitor, n types.PlanOperator) {
 }
 
 // InspectExpressionsWithPlanOp traverses the plan and calls f on any expression it finds.
-func InspectExpressionsWithPlanOp(node types.PlanOperator, f exprWithNodeInspector) {
-	WalkExpressionsWithPlanOp(f, node)
+func InspectExpressionsWithPlanOp(op types.PlanOperator, f exprWithNodeInspector) {
+	WalkExpressionsWithPlanOp(f, op)
 }
 
-// PlanOpFunc is a function that given a plan op will return either a transformed plan op or the original plan op.
+// PlanOpTransformFunc is a function that given a plan op will return either a transformed plan op or the original plan op.
 // If there was a transformation, the bool will be true, and an error if there was an error
-type PlanOpFunc func(n types.PlanOperator) (types.PlanOperator, bool, error)
+type PlanOpTransformFunc func(op types.PlanOperator) (types.PlanOperator, bool, error)
 
 // TransformPlanOp applies a transformation function to the given plan op graph
-func TransformPlanOp(op types.PlanOperator, f PlanOpFunc) (types.PlanOperator, bool, error) {
+func TransformPlanOp(op types.PlanOperator, f PlanOpTransformFunc) (types.PlanOperator, bool, error) {
 
 	children := op.Children()
 	if len(children) == 0 {
 		return f(op)
 	}
 
-	var (
-		newChildren []types.PlanOperator
-	)
+	var newChildren []types.PlanOperator
 
 	for i := range children {
 		child := children[i]
@@ -179,56 +182,117 @@ func TransformPlanOp(op types.PlanOperator, f PlanOpFunc) (types.PlanOperator, b
 	}
 
 	var err error
-	sameC := true
+	sameChildren := true
 	if len(newChildren) > 0 {
-		sameC = false
+		sameChildren = false
 		op, err = op.WithChildren(newChildren...)
 		if err != nil {
 			return nil, true, err
 		}
 	}
 
-	op, sameN, err := f(op)
+	op, sameOperator, err := f(op)
 	if err != nil {
 		return nil, true, err
 	}
-	return op, sameC && sameN, nil
+	return op, sameChildren && sameOperator, nil
+}
+
+// ParentContext is a struct that enables transformation functions to include a parent operator
+type ParentContext struct {
+	Operator   types.PlanOperator
+	Parent     types.PlanOperator
+	ChildCount int
+}
+
+type ParentContextFunc func(c ParentContext) (types.PlanOperator, bool, error)
+
+type ParentSelectorFunc func(c ParentContext) bool
+
+func TransformPlanOpWithParent(op types.PlanOperator, s ParentSelectorFunc, f ParentContextFunc) (types.PlanOperator, bool, error) {
+	return planOpWithParentHelper(ParentContext{op, nil, -1}, s, f)
+}
+
+func planOpWithParentHelper(c ParentContext, s ParentSelectorFunc, f ParentContextFunc) (types.PlanOperator, bool, error) {
+	operator := c.Operator
+
+	children := operator.Children()
+	if len(children) == 0 {
+		return f(c)
+	}
+
+	var (
+		newChildren []types.PlanOperator
+		err         error
+	)
+	for i := range children {
+		child := children[i]
+		cc := ParentContext{child, operator, i}
+		if s == nil || s(cc) {
+			child, same, err := planOpWithParentHelper(cc, s, f)
+			if err != nil {
+				return nil, true, err
+			}
+			if !same {
+				if newChildren == nil {
+					newChildren = make([]types.PlanOperator, len(children))
+					copy(newChildren, children)
+				}
+				newChildren[i] = child
+			}
+		}
+	}
+
+	sameChildren := true
+	if len(newChildren) > 0 {
+		sameChildren = false
+		operator, err = operator.WithChildren(newChildren...)
+		if err != nil {
+			return nil, true, err
+		}
+	}
+
+	operator, sameOperator, err := f(ParentContext{operator, c.Parent, c.ChildCount})
+	if err != nil {
+		return nil, true, err
+	}
+	return operator, sameChildren && sameOperator, nil
 }
 
 // ExprWithPlanOpFunc is a function that given an expression and the node
 // that contains it, will return that expression as is or transformed
 // along with an error, if any.
-type ExprWithPlanOpFunc func(types.PlanOperator, types.PlanExpression) (types.PlanExpression, bool, error)
+type ExprWithPlanOpFunc func(op types.PlanOperator, expr types.PlanExpression) (types.PlanExpression, bool, error)
 
 // ExprFunc is a function that given an expression will return that
 // expression as is or transformed, or bool to indicate
 // whether the expression was modified, and an error or nil.
-type ExprFunc func(e types.PlanExpression) (types.PlanExpression, bool, error)
+type ExprFunc func(expr types.PlanExpression) (types.PlanExpression, bool, error)
 
 // TransformPlanOpExprsWithPlanOp applies a transformation function to all expressions on the given plan operator from the bottom up in the context of the plan operator
 func TransformPlanOpExprsWithPlanOp(op types.PlanOperator, f ExprWithPlanOpFunc) (types.PlanOperator, bool, error) {
 	return TransformPlanOp(op, func(n types.PlanOperator) (types.PlanOperator, bool, error) {
-		return SinglePlanOpExprsWithPlanOp(n, f)
+		return TransformSinglePlanOpExprsInPlanOpContext(n, f)
 	})
 }
 
 // TransformPlanOpExprs applies a transformation function to all expressions on the given plan operator from the bottom up
 func TransformPlanOpExprs(op types.PlanOperator, f ExprFunc) (types.PlanOperator, bool, error) {
-	return TransformPlanOpExprsWithPlanOp(op, func(n types.PlanOperator, e types.PlanExpression) (types.PlanExpression, bool, error) {
-		return f(e)
+	return TransformPlanOpExprsWithPlanOp(op, func(operator types.PlanOperator, expr types.PlanExpression) (types.PlanExpression, bool, error) {
+		return f(expr)
 	})
 }
 
-// SinglePlanOpExprsWithPlanOp applies a transformation function to all expressions on a given plan operator in the context of that plan operator
-func SinglePlanOpExprsWithPlanOp(n types.PlanOperator, f ExprWithPlanOpFunc) (types.PlanOperator, bool, error) {
-	ne, ok := n.(types.ContainsExpressions)
+// TransformSinglePlanOpExprsInPlanOpContext applies a transformation function to all expressions on a given plan operator in the context of that plan operator
+func TransformSinglePlanOpExprsInPlanOpContext(op types.PlanOperator, f ExprWithPlanOpFunc) (types.PlanOperator, bool, error) {
+	ne, ok := op.(types.ContainsExpressions)
 	if !ok {
-		return n, true, nil
+		return op, true, nil
 	}
 
 	exprs := ne.Expressions()
 	if len(exprs) == 0 {
-		return n, true, nil
+		return op, true, nil
 	}
 
 	var (
@@ -238,7 +302,7 @@ func SinglePlanOpExprsWithPlanOp(n types.PlanOperator, f ExprWithPlanOpFunc) (ty
 
 	for i := range exprs {
 		e := exprs[i]
-		e, same, err := TransformExprWithPlanOp(n, e, f)
+		e, same, err := TransformExprWithPlanOp(op, e, f)
 		if err != nil {
 			return nil, true, err
 		}
@@ -252,25 +316,25 @@ func SinglePlanOpExprsWithPlanOp(n types.PlanOperator, f ExprWithPlanOpFunc) (ty
 	}
 
 	if len(newExprs) > 0 {
-		n, err = ne.WithExpressions(newExprs...)
+		op, err = ne.NewWithExpressions(newExprs...)
 		if err != nil {
 			return nil, true, err
 		}
-		return n, false, nil
+		return op, false, nil
 	}
-	return n, true, nil
+	return op, true, nil
 }
 
 // TransformSinglePlanOpExpressions applies a transformation function to all expressions on the given plan operator
-func TransformSinglePlanOpExpressions(o types.PlanOperator, f ExprFunc) (types.PlanOperator, bool, error) {
-	e, ok := o.(types.ContainsExpressions)
+func TransformSinglePlanOpExpressions(op types.PlanOperator, f ExprFunc) (types.PlanOperator, bool, error) {
+	e, ok := op.(types.ContainsExpressions)
 	if !ok {
-		return o, true, nil
+		return op, true, nil
 	}
 
 	exprs := e.Expressions()
 	if len(exprs) == 0 {
-		return o, true, nil
+		return op, true, nil
 	}
 
 	var newExprs []types.PlanExpression
@@ -289,20 +353,20 @@ func TransformSinglePlanOpExpressions(o types.PlanOperator, f ExprFunc) (types.P
 		}
 	}
 	if len(newExprs) > 0 {
-		n, err := e.WithExpressions(newExprs...)
+		n, err := e.NewWithExpressions(newExprs...)
 		if err != nil {
 			return nil, true, err
 		}
 		return n, false, nil
 	}
-	return o, true, nil
+	return op, true, nil
 }
 
 // TransformExpr applies a transformation function to an expression
-func TransformExpr(e types.PlanExpression, f ExprFunc) (types.PlanExpression, bool, error) {
-	children := e.Children()
+func TransformExpr(expr types.PlanExpression, f ExprFunc) (types.PlanExpression, bool, error) {
+	children := expr.Children()
 	if len(children) == 0 {
-		return f(e)
+		return f(expr)
 	}
 
 	var (
@@ -325,20 +389,20 @@ func TransformExpr(e types.PlanExpression, f ExprFunc) (types.PlanExpression, bo
 		}
 	}
 
-	sameC := true
+	sameChildren := true
 	if len(newChildren) > 0 {
-		sameC = false
-		e, err = e.WithChildren(newChildren...)
+		sameChildren = false
+		expr, err = expr.WithChildren(newChildren...)
 		if err != nil {
 			return nil, true, err
 		}
 	}
 
-	e, sameN, err := f(e)
+	expr, sameExpr, err := f(expr)
 	if err != nil {
 		return nil, true, err
 	}
-	return e, sameC && sameN, nil
+	return expr, sameChildren && sameExpr, nil
 }
 
 // TransformExprWithPlanOp applies a transformation function to an expression in the context of a plan operator
@@ -355,11 +419,11 @@ func TransformExprWithPlanOp(n types.PlanOperator, e types.PlanExpression, f Exp
 
 	for i := 0; i < len(children); i++ {
 		c := children[i]
-		c, sameC, err := TransformExprWithPlanOp(n, c, f)
+		c, same, err := TransformExprWithPlanOp(n, c, f)
 		if err != nil {
 			return nil, true, err
 		}
-		if !sameC {
+		if !same {
 			if newChildren == nil {
 				newChildren = make([]types.PlanExpression, len(children))
 				copy(newChildren, children)
@@ -368,18 +432,18 @@ func TransformExprWithPlanOp(n types.PlanOperator, e types.PlanExpression, f Exp
 		}
 	}
 
-	sameC := true
+	sameChilren := true
 	if len(newChildren) > 0 {
-		sameC = false
+		sameChilren = false
 		e, err = e.WithChildren(newChildren...)
 		if err != nil {
 			return nil, true, err
 		}
 	}
 
-	e, sameN, err := f(n, e)
+	e, sameExpr, err := f(n, e)
 	if err != nil {
 		return nil, true, err
 	}
-	return e, sameC && sameN, nil
+	return e, sameChilren && sameExpr, nil
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
-//TODO(pok) we can get rid of this - we have expression types for all of these now...
+// TODO(pok) we can get rid of this - we have expression types for all of these now...
 type AggregateFunctionType int
 
 // The list of AggregateFunction.
@@ -56,7 +56,7 @@ type Aggregable interface {
 	AggAdditionalExpr() []PlanExpression
 }
 
-// Interface to an expression that is a reference to a schema object
-type SchemaIdentifiable interface {
+// Interface to something that can be identified by a name
+type IdentifiableByName interface {
 	Name() string
 }

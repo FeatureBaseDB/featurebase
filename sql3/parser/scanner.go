@@ -54,6 +54,10 @@ func (s *Scanner) Scan() (pos Pos, token Token, lit string) {
 			return pos, LB, "["
 		case ']':
 			return pos, RB, "]"
+		case '{':
+			return pos, LBR, "{"
+		case '}':
+			return pos, RBR, "}"
 		case ',':
 			return pos, COMMA, ","
 		case '!':

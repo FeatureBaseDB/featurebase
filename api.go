@@ -1793,6 +1793,8 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 				subreq.Values = req.Values[start:i]
 			} else if req.FloatValues != nil {
 				subreq.FloatValues = req.FloatValues[start:i]
+			} else if req.TimestampValues != nil {
+				subreq.TimestampValues = req.TimestampValues[start:i]
 			}
 			guard <- struct{}{} // would block if guard channel is already filled
 			eg.Go(func() error {
