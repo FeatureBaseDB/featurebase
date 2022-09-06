@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/molecula/featurebase/v3/idk/csv"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/idk/csv"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 func main() {

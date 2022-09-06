@@ -15,10 +15,10 @@ RUN ["make", "install"]
 
 FROM build_base
 
-WORKDIR /go/src/github.com/molecula/featurebase/
+WORKDIR /go/src/github.com/featurebasedb/featurebase/
 
 COPY . .
 
-WORKDIR /go/src/github.com/molecula/featurebase/idk/
+WORKDIR /go/src/github.com/featurebasedb/featurebase/idk/
 
 CMD ["go","test","-v","-mod=vendor","-tags=odbc,dynamic","./..."]

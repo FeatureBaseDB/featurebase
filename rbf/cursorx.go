@@ -9,7 +9,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

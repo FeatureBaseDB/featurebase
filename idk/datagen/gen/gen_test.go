@@ -3,7 +3,7 @@ package gen_test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v3/idk/datagen/gen"
+	"github.com/featurebasedb/featurebase/v3/idk/datagen/gen"
 )
 
 func TestGen(t *testing.T) {

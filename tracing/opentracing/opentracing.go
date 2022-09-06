@@ -6,8 +6,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/tracing"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 )

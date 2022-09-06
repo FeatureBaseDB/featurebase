@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/pkg/errors"
 	"sigs.k8s.io/yaml"
 )

@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/boltdb"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/mock"
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/test"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/boltdb"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/mock"
+	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

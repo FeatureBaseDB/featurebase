@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/etcd"
-	"github.com/molecula/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/etcd"
+	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/pkg/errors"
 )
 

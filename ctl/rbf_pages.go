@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/rbf"
-	"github.com/molecula/featurebase/v3/txkey"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/txkey"
 )
 
 // RBFPagesCommand represents a command for printing a list of RBF page metadata.

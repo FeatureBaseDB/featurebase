@@ -8,9 +8,9 @@ import (
 	"io"
 	"strconv"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/ctl"
-	"github.com/molecula/featurebase/v3/pql"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/spf13/cobra"
 )
 

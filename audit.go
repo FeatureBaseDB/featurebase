@@ -3,7 +3,7 @@
 package pilosa
 
 import (
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 var NewAuditor func() testhook.Auditor = NewNopAuditor

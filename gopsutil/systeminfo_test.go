@@ -5,8 +5,8 @@ package gopsutil_test
 import (
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/gopsutil"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/gopsutil"
 )
 
 func TestSystemInfo(t *testing.T) {

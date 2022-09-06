@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"

@@ -8,9 +8,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/jaffee/commandeer/pflag"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/idk/api"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk/api"
 	"github.com/pkg/errors"
 )
 

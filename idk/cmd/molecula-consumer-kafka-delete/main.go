@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/molecula/featurebase/v3/idk/kafka"
+	"github.com/featurebasedb/featurebase/v3/idk/kafka"
 )
 
 func main() {

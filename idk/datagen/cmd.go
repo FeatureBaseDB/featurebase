@@ -12,13 +12,13 @@ import (
 	"sync"
 
 	"github.com/glycerine/vprint"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/logger"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 
-	"github.com/molecula/featurebase/v3/idk/common"
-	"github.com/molecula/featurebase/v3/idk/kafka"
+	"github.com/featurebasedb/featurebase/v3/idk/common"
+	"github.com/featurebasedb/featurebase/v3/idk/kafka"
 )
 
 const (
@@ -227,7 +227,7 @@ func (m *Main) Preload() error {
 	// TODO: this is a little hacky because of the complexity around
 	// PrimaryKeyFields and IDField, and the fact that those are
 	// currently being set before having a schema.
-	// See: https://github.com/molecula/featurebase/v3/idk/issues/147
+	// See: https://github.com/featurebasedb/featurebase/v3/idk/issues/147
 	switch {
 	case len(pks) == 1 && pks[0] == "id":
 		m.idkMain.IDField = "id"

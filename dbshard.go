@@ -11,12 +11,12 @@ import (
 	"strings"
 	"sync"
 
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
-	"github.com/molecula/featurebase/v3/storage"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
+	txkey "github.com/featurebasedb/featurebase/v3/short_txkey"
+	"github.com/featurebasedb/featurebase/v3/storage"
 	"github.com/pkg/errors"
 
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 )
 
 var _ = sort.Sort

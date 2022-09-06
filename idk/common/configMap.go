@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/pkg/errors"
 )
 

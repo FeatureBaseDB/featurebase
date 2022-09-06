@@ -6,7 +6,7 @@ import (
 	"context"
 	"io"
 
-	pilosa "github.com/molecula/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 )
 
 type TranslateStore struct {

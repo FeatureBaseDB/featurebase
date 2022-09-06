@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/authn"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/authn"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

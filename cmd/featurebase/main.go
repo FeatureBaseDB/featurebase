@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/molecula/featurebase/v3/cmd"
-	"github.com/molecula/featurebase/v3/monitor"
+	"github.com/featurebasedb/featurebase/v3/cmd"
+	"github.com/featurebasedb/featurebase/v3/monitor"
 )
 
 func main() {

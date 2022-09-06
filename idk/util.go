@@ -1,7 +1,7 @@
 package idk
 
 import (
-	"github.com/molecula/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 func scaledStringToInt(scale int64, num string) (int64, error) {

@@ -8,7 +8,7 @@ import (
 	"math/bits"
 	"sort"
 
-	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
 )
 
 type OpType uint8

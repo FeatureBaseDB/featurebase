@@ -13,14 +13,14 @@ import (
 	"strings"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/pg"
-	"github.com/molecula/featurebase/v3/sql2"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/pg"
+	"github.com/featurebasedb/featurebase/v3/sql2"
 
-	//"github.com/molecula/featurebase/v3/pg"
-	"github.com/molecula/featurebase/v3/pql"
-	pb "github.com/molecula/featurebase/v3/proto"
+	//"github.com/featurebasedb/featurebase/v3/pg"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	pb "github.com/featurebasedb/featurebase/v3/proto"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

@@ -16,9 +16,9 @@ import (
 	"unsafe"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/shardwidth"
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 )
 
 const (

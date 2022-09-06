@@ -23,15 +23,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/ingest"
-	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/ingest"
+	"github.com/featurebasedb/featurebase/v3/rbf"
 
-	//"github.com/molecula/featurebase/v3/pg"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/stats"
-	"github.com/molecula/featurebase/v3/tracing"
+	//"github.com/featurebasedb/featurebase/v3/pg"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/stats"
+	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/molecula/featurebase/v3/idk/kinesis"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/idk/kinesis"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 func logFailure(errorType kinesis.ErrorType, m *kinesis.Main, v interface{}) {

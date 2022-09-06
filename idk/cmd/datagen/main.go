@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/molecula/featurebase/v3/idk/datagen"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/idk/datagen"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 

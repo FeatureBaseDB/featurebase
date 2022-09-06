@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/pql"
-	_ "github.com/molecula/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	_ "github.com/featurebasedb/featurebase/v3/test"
 )
 
 // Ensure the parser can parse PQL.

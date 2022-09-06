@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/server"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )

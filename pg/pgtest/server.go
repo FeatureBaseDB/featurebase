@@ -8,7 +8,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/pg"
+	"github.com/featurebasedb/featurebase/v3/pg"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

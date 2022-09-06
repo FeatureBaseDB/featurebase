@@ -15,12 +15,12 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/authn"
-	boltdb "github.com/molecula/featurebase/v3/boltdb"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/encoding/proto"
-	"github.com/molecula/featurebase/v3/net"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/authn"
+	boltdb "github.com/featurebasedb/featurebase/v3/boltdb"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/encoding/proto"
+	"github.com/featurebasedb/featurebase/v3/net"
 	"github.com/pkg/errors"
 )
 

@@ -12,10 +12,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/rbf"
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 var quickCheckN *int = flag.Int("quickchecks", 10, "The number of iterations for each quickcheck")

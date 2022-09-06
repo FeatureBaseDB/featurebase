@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/idk/internal"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk/internal"
 	"github.com/segmentio/kafka-go"
 )
 

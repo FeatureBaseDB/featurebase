@@ -4,7 +4,7 @@ package gcnotify
 
 import (
 	"github.com/CAFxX/gcnotifier"
-	pilosa "github.com/molecula/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 )
 
 // Ensure ActiveGCNotifier implements interface.

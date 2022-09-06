@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/server"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/pkg/errors"
 )
 

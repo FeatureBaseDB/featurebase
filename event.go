@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package pilosa
 
-import "github.com/molecula/featurebase/v3/disco"
+import "github.com/featurebasedb/featurebase/v3/disco"
 
 // NodeEventType are the types of node events.
 type NodeEventType int

@@ -9,7 +9,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/featurebasedb/featurebase/v3/ctl"
 	"github.com/spf13/cobra"
 )
 

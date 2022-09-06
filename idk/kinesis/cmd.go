@@ -5,7 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 )
 
 // Main is the holder of all configurations for a Kinesis stream consumer.

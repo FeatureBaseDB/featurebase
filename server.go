@@ -17,14 +17,14 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/logger"
-	pnet "github.com/molecula/featurebase/v3/net"
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/sql2"
-	"github.com/molecula/featurebase/v3/stats"
-	"github.com/molecula/featurebase/v3/storage"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/sql2"
+	"github.com/featurebasedb/featurebase/v3/stats"
+	"github.com/featurebasedb/featurebase/v3/storage"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 

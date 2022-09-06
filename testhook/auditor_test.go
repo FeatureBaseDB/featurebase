@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 func TestAuditor_CatchError(t *testing.T) {

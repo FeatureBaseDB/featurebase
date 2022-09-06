@@ -8,11 +8,11 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/pkg/errors"
 
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/pql"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 func IngestJSON(index *pilosaclient.Index, m idk.Main, in io.Reader) error {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package pg
 
-import "github.com/molecula/featurebase/v3/pg/message"
+import "github.com/featurebasedb/featurebase/v3/pg/message"
 
 // Type represents a postgres type.
 type Type struct {

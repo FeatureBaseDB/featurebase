@@ -11,9 +11,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/ingest"
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/ingest"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

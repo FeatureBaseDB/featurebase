@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 
-	"github.com/molecula/featurebase/v3/cmd"
-	"github.com/molecula/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/cmd"
+	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 func TestImportHelp(t *testing.T) {

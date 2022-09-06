@@ -30,7 +30,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 // TestReopenAppend -- make sure we always append to an existing file

@@ -8,7 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/molecula/featurebase/v3/authn"
+	"github.com/featurebasedb/featurebase/v3/authn"
 
 	"gopkg.in/yaml.v2"
 )

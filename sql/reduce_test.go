@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	pproto "github.com/molecula/featurebase/v3/proto"
+	pproto "github.com/featurebasedb/featurebase/v3/proto"
 	"github.com/pkg/errors"
 )
 

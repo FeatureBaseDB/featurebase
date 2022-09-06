@@ -26,16 +26,16 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/boltdb"
-	"github.com/molecula/featurebase/v3/ctl"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/proto"
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/testhook"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/boltdb"
+	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/proto"
+	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/testhook"
+	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 )
 

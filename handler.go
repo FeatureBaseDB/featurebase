@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/molecula/featurebase/v3/ingest"
-	"github.com/molecula/featurebase/v3/tracing"
+	"github.com/featurebasedb/featurebase/v3/ingest"
+	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 )
 

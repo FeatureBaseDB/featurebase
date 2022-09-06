@@ -10,13 +10,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/molecula/featurebase/v3/rbf"
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
-	"github.com/molecula/featurebase/v3/roaring"
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
-	"github.com/molecula/featurebase/v3/storage"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	txkey "github.com/featurebasedb/featurebase/v3/short_txkey"
+	"github.com/featurebasedb/featurebase/v3/storage"
 
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 

@@ -6,8 +6,8 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
 )
 
 const (

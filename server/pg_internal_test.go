@@ -5,8 +5,8 @@ package server
 import (
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/pg"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/pg"
 )
 
 // pg_internal_test.go tests unexported methods from server/pg.go

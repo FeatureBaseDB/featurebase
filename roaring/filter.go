@@ -8,7 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
 )
 
 // We want BitmapScanner to be accessible from both the pilosa package, and

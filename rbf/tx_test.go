@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/rbf"
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
 func TestTx_CommitRollback(t *testing.T) {

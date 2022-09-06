@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/felixge/fgprof"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 )
 
 func TestGetIDKFields(t *testing.T) {

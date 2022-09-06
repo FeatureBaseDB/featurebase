@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/generator"
+	"github.com/featurebasedb/featurebase/v3/generator"
 	"github.com/pkg/errors"
 )
 

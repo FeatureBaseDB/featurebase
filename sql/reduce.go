@@ -5,9 +5,9 @@ package sql
 import (
 	"sort"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/pql"
-	pproto "github.com/molecula/featurebase/v3/proto"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	pproto "github.com/featurebasedb/featurebase/v3/proto"
 	"github.com/pkg/errors"
 )
 

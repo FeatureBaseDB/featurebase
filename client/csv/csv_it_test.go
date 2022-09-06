@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/client/csv"
+	"github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/client/csv"
 )
 
 func TestCSVIterate(t *testing.T) {

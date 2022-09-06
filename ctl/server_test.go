@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/spf13/cobra"
 )
 

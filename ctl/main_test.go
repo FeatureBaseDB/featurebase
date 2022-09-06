@@ -10,7 +10,7 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 func TestMain(m *testing.M) {

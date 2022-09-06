@@ -47,6 +47,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
-      - "go test -v -count=1 github.com/molecula/featurebase/internal/clustertests"
+      - "go test -v -count=1 github.com/featurebasedb/featurebase/internal/clustertests"
 networks:
   pilosanet:

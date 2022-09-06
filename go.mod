@@ -1,4 +1,4 @@
-module github.com/molecula/featurebase/v3
+module github.com/featurebasedb/featurebase/v3
 
 replace github.com/go-avro/avro => github.com/pilosa/avro v0.0.0-20200626214113-bc1bf9fd41c1
 

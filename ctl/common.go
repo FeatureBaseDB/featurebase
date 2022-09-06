@@ -5,10 +5,10 @@ package ctl
 import (
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/encoding/proto"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/server"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/encoding/proto"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )

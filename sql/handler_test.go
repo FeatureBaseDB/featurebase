@@ -7,9 +7,9 @@ import (
 	"math"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/sql"
-	"github.com/molecula/featurebase/v3/test"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/sql"
+	"github.com/featurebasedb/featurebase/v3/test"
 	"vitess.io/vitess/go/vt/sqlparser"
 )
 

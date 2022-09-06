@@ -10,7 +10,7 @@ package statik
 import (
 	"net/http"
 
-	pilosa "github.com/molecula/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/rakyll/statik/fs"
 )
 

@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/server"
 )
 
 func TestGetTLSConfig(t *testing.T) {

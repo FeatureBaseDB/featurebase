@@ -5,7 +5,7 @@ package pilosa
 import (
 	"io"
 
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // CmdIO holds standard unix inputs and outputs.

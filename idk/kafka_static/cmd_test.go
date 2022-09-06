@@ -16,8 +16,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/segmentio/kafka-go"
 
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk/idktest"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/idk/idktest"
 )
 
 var pilosaHost string

@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/molecula/featurebase/v3/disco"
-	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/testhook"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+	"github.com/featurebasedb/featurebase/v3/disco"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/testhook"
+	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 // newHolderWithTempPath returns a new instance of Holder.

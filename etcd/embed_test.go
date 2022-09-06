@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 

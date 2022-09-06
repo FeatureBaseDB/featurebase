@@ -16,9 +16,9 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v3/logger"
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
-	"github.com/molecula/featurebase/v3/syswrap"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
+	"github.com/featurebasedb/featurebase/v3/syswrap"
 )
 
 var (

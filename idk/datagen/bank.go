@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/idk/datagen/gen"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk/datagen/gen"
 )
 
 // Ensure Bank implements interface.

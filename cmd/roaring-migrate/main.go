@@ -14,13 +14,13 @@ import (
 	"strings"
 	"syscall"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/rbf"
-	"github.com/molecula/featurebase/v3/rbf/cfg"
-	"github.com/molecula/featurebase/v3/roaring"
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
-	"github.com/molecula/featurebase/v3/vprint"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/rbf/cfg"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	txkey "github.com/featurebasedb/featurebase/v3/short_txkey"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/spf13/cobra"
 )
 

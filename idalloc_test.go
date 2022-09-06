@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 	bolt "go.etcd.io/bbolt"
 )
 

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/rbf"
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
 func TestCursor_FirstNext(t *testing.T) {

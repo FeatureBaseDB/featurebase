@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/monitor"
+	"github.com/featurebasedb/featurebase/v3/monitor"
 )
 
 const RFC3339UsecTz0 = "2006-01-02T15:04:05.000000Z07:00"

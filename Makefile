@@ -12,7 +12,7 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/molecula/featurebase/v3.Version=$(VERSION) -X github.com/molecula/featurebase/v3.BuildTime=$(BUILD_TIME) -X github.com/molecula/featurebase/v3.Variant=$(VARIANT) -X github.com/molecula/featurebase/v3.Commit=$(COMMIT) -X github.com/molecula/featurebase/v3.TrialDeadline=$(TRIAL_DEADLINE)"
+LDFLAGS="-X github.com/featurebasedb/featurebase/v3.Version=$(VERSION) -X github.com/featurebasedb/featurebase/v3.BuildTime=$(BUILD_TIME) -X github.com/featurebasedb/featurebase/v3.Variant=$(VARIANT) -X github.com/featurebasedb/featurebase/v3.Commit=$(COMMIT) -X github.com/featurebasedb/featurebase/v3.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.19
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
@@ -68,7 +68,7 @@ testv-race: testvsub-race
 #
 testvsub:
 	@set -e; for pkg in $(GOPACKAGES); do \
-			if [ $${pkg:0:38} == "github.com/molecula/featurebase/v3/idk" ]; then \
+			if [ $${pkg:0:38} == "github.com/featurebasedb/featurebase/v3/idk" ]; then \
 				echo; echo "___ skipping subpkg $$pkg"; \
 				continue; \
 			fi; \
@@ -161,7 +161,7 @@ clustertests: vendor
 	$(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
 # Run the cluster tests with authentication enabled
-AUTH_ARGS="-c /go/src/github.com/molecula/featurebase/internal/clustertests/testdata/featurebase.conf"
+AUTH_ARGS="-c /go/src/github.com/featurebasedb/featurebase/internal/clustertests/testdata/featurebase.conf"
 authclustertests: vendor
 	CLUSTERTESTS_FB_ARGS=$(AUTH_ARGS) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 	CLUSTERTESTS_FB_ARGS=$(AUTH_ARGS) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml build
@@ -187,11 +187,11 @@ build-lattice:
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
-	$(GO) generate github.com/molecula/featurebase/v3/pb
+	$(GO) generate github.com/featurebasedb/featurebase/v3/pb
 
 # `go generate` statik assets (lattice UI)
 generate-statik: build-lattice require-statik
-	$(GO) generate github.com/molecula/featurebase/v3/statik
+	$(GO) generate github.com/featurebasedb/featurebase/v3/statik
 
 # `go generate` statik assets (lattice UI) in Docker
 generate-statik-docker: build-lattice
@@ -199,7 +199,7 @@ generate-statik-docker: build-lattice
 
 # `go generate` stringers
 generate-stringer:
-	$(GO) generate github.com/molecula/featurebase/v3
+	$(GO) generate github.com/featurebasedb/featurebase/v3
 
 generate-pql: require-peg
 	cd pql && peg -inline pql.peg && cd ..
@@ -210,7 +210,7 @@ generate-proto-grpc: require-protoc require-protoc-gen-go
 	# TODO: Modify above commands and remove the below mv if possible.
 	# See https://go-review.googlesource.com/c/protobuf/+/219298/ for info on --go-opt
 	# I couldn't get it to work during development - Cody
-	cp -r proto/github.com/molecula/featurebase/v3/proto/ proto/
+	cp -r proto/github.com/featurebasedb/featurebase/v3/proto/ proto/
 	rm -rf proto/github.com
 
 # `go generate` all needed packages

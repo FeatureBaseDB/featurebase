@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/stretchr/testify/assert"
 )
 

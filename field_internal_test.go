@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/shardwidth"
-	"github.com/molecula/featurebase/v3/testhook"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/testhook"
+	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 // CorruptAMutex breaks a mutex in order to test the mutex-corruption stuff.

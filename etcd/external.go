@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/disco"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 

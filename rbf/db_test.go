@@ -16,8 +16,8 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/felixge/fgprof"
-	"github.com/molecula/featurebase/v3/rbf"
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
 	"golang.org/x/sync/errgroup"
 )
 

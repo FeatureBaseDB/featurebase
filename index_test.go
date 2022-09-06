@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/testhook"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 )
 

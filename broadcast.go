@@ -5,7 +5,7 @@ package pilosa
 import (
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/pkg/errors"
 )
 

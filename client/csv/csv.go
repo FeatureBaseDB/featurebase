@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/client"
 )
 
 // Format is the format of the data in the CSV file.

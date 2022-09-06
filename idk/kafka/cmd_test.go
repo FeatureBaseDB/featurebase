@@ -18,10 +18,10 @@ import (
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
 	liavro "github.com/linkedin/goavro/v2"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/idk/kafka/csrc"
-	"github.com/molecula/featurebase/v3/logger"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 var pilosaHost string

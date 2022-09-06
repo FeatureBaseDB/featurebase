@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/server"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/server"
 	"golang.org/x/oauth2"
 )
 

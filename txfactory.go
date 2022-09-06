@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/molecula/featurebase/v3/task"
-	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/task"
+	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 

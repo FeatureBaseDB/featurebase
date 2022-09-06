@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/authn"
-	"github.com/molecula/featurebase/v3/authz"
+	"github.com/featurebasedb/featurebase/v3/authn"
+	"github.com/featurebasedb/featurebase/v3/authz"
 )
 
 func TestAuth_ReadPermissionsFile(t *testing.T) {

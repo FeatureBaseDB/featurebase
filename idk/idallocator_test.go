@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	pilosacore "github.com/molecula/featurebase/v3"
+	pilosacore "github.com/featurebasedb/featurebase/v3"
 	"github.com/pkg/errors"
 )
 

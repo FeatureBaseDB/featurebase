@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/storage"
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/storage"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 func TestMonitorAntiEntropyZero(t *testing.T) {

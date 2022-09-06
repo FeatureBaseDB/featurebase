@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/pg/message"
-	"github.com/molecula/featurebase/v3/sql"
+	"github.com/featurebasedb/featurebase/v3/pg/message"
+	"github.com/featurebasedb/featurebase/v3/sql"
 	"github.com/pkg/errors"
 	"vitess.io/vitess/go/vt/sqlparser"
 )

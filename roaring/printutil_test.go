@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
 )
 
 func TestAsContainerMatrixString(t *testing.T) {

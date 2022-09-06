@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
 )
 
 // For each container key i from 1 to (shard width in containers), we

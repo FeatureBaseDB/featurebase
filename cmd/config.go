@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/molecula/featurebase/v3/ctl"
-	"github.com/molecula/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/featurebasedb/featurebase/v3/server"
 )
 
 var conf *ctl.ConfigCommand

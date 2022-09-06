@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/stats"
-	"github.com/molecula/featurebase/v3/test"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/stats"
+	"github.com/featurebasedb/featurebase/v3/test"
 )
 
 // TestMultiStatClient_Expvar run the multistat client with exp var

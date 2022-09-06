@@ -3,9 +3,9 @@
 package pilosa
 
 import (
-	"github.com/molecula/featurebase/v3/roaring"
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	txkey "github.com/featurebasedb/featurebase/v3/short_txkey"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 )
 
 // catcher is useful to report error locations with a

@@ -15,10 +15,10 @@ import (
 	"time"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/idk/common"
-	"github.com/molecula/featurebase/v3/idk/idktest"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk/common"
+	"github.com/featurebasedb/featurebase/v3/idk/idktest"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

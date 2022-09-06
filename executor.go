@@ -18,14 +18,14 @@ import (
 	"unsafe"
 
 	"github.com/lib/pq"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/proto"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/shardwidth"
-	"github.com/molecula/featurebase/v3/task"
-	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/tracing"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/proto"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/task"
+	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -669,7 +669,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	}
 
 	// Fixes #2009
-	// See: https://github.com/molecula/featurebase/issues/2009
+	// See: https://github.com/featurebasedb/featurebase/issues/2009
 	// TODO: Remove at version 2.0
 	if e.detectRangeCall(c) {
 		e.Holder.Logger.Infof("DEPRECATED: Range() is deprecated, please use Row() instead.")

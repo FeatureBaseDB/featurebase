@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/ingest"
-	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/pb"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/roaring"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/ingest"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/pb"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

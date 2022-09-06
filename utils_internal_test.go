@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/etcd"
-	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/etcd"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 // utilities used by tests

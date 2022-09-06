@@ -1,7 +1,7 @@
 package datagen
 
 import (
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 )
 
 // SourceGenerator is an interface for anything which can generate

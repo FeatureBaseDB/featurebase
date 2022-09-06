@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/felixge/fgprof"
-	"github.com/molecula/featurebase/v3/cmd"
-	_ "github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/toml"
+	"github.com/featurebasedb/featurebase/v3/cmd"
+	_ "github.com/featurebasedb/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/toml"
 	"github.com/pkg/errors"
 )
 

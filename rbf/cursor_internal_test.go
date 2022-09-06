@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/roaring"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 func getRoaringIter(bitsToSet ...uint64) roaring.RoaringIterator {

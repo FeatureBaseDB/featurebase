@@ -9,8 +9,8 @@ import (
 	"io"
 	"strings"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/rbf"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/rbf"
 )
 
 // RBFDumpCommand represents a command for dumping raw data for an RBF page.

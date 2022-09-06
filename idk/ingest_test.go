@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	"github.com/molecula/featurebase/v3/authn"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk/idktest"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/authn"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/idk/idktest"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 

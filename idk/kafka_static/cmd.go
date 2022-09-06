@@ -3,7 +3,7 @@ package kafka_static
 import (
 	"time"
 
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/pkg/errors"
 )
 

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/molecula/featurebase/v3/disco"
-	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
 	"github.com/pkg/errors"
 )
 

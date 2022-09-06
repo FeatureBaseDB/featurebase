@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	pilosacore "github.com/molecula/featurebase/v3"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/pql"
+	pilosacore "github.com/featurebasedb/featurebase/v3"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/pkg/errors"
 )
 

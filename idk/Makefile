@@ -32,8 +32,8 @@ else
 	IS_MAC := 0
 endif
 
-LDFLAGS="-X 'github.com/molecula/featurebase/v3/idk.Version=$(VERSION)' -X 'github.com/molecula/featurebase/v3/idk.BuildTime=$(BUILD_TIME)'"
-LDFLAGS_STATIC="-linkmode external -extldflags \"-static\" -X 'github.com/molecula/featurebase/v3/idk.Version=$(VERSION)' -X 'github.com/molecula/featurebase/v3/idk.BuildTime=$(BUILD_TIME)' "
+LDFLAGS="-X 'github.com/featurebasedb/featurebase/v3/idk.Version=$(VERSION)' -X 'github.com/featurebasedb/featurebase/v3/idk.BuildTime=$(BUILD_TIME)'"
+LDFLAGS_STATIC="-linkmode external -extldflags \"-static\" -X 'github.com/featurebasedb/featurebase/v3/idk.Version=$(VERSION)' -X 'github.com/featurebasedb/featurebase/v3/idk.BuildTime=$(BUILD_TIME)' "
 export GOPRIVATE=github.com/molecula
 export CGO_ENABLED=1
 
@@ -222,7 +222,7 @@ TPKG ?= ./...
 test-run: testenv vendor
 	$(DOCKER_COMPOSE) build idk-test
 	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v -mod=vendor -tags=odbc,dynamic $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -json -coverprofile=/testdata/$(PROJECT)_coverage.out  | tee /testdata/$(PROJECT)_report.out"
-	$(DOCKER_COMPOSE) run -T idk-test /go/src/github.com/molecula/featurebase/idk/reingest_test.sh
+	$(DOCKER_COMPOSE) run -T idk-test /go/src/github.com/featurebasedb/featurebase/idk/reingest_test.sh
 
 
 test-run-race: testenv vendor

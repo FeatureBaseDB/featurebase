@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package test
 
-import pilosa "github.com/molecula/featurebase/v3"
+import pilosa "github.com/featurebasedb/featurebase/v3"
 
 // Field represents a test wrapper for pilosa.Field.
 type Field struct {

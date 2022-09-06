@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/beevik/ntp"
-	pilosa "github.com/molecula/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 )
 
 // handleTrialDeadline checks to see if this is a trial version of Molecula that expires at some point.

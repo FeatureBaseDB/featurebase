@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/test"
 )
 
 func TestIngestAPIBatchAdd(t *testing.T) {

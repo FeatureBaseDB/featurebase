@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/idk/kafka/csrc"
+	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 )
 
 func TestPostGet(t *testing.T) {

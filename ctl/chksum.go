@@ -9,8 +9,8 @@ import (
 	"io"
 
 	"github.com/cespare/xxhash"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/server"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/server"
 )
 
 // ChkSumCommand represents a command for backing up a Pilosa node.

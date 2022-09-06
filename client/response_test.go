@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/pb"
+	"github.com/featurebasedb/featurebase/v3/pb"
 )
 
 func TestNewRowResultFromInternal(t *testing.T) {

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/test"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/test"
 
 	"github.com/pkg/errors"
 )

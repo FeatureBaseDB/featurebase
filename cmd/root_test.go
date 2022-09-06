@@ -13,8 +13,8 @@ import (
 
 	"time"
 
-	"github.com/molecula/featurebase/v3/cmd"
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/cmd"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/spf13/cobra"
 )
 

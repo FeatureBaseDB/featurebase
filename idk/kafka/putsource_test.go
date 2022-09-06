@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-avro/avro"
-	"github.com/molecula/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk"
 )
 
 func TestIdkSchemaToAvroRecordSchema(t *testing.T) {

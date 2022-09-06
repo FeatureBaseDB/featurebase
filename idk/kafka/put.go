@@ -9,10 +9,10 @@ import (
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
 	liavro "github.com/linkedin/goavro/v2"
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/idk/common"
-	"github.com/molecula/featurebase/v3/idk/kafka/csrc"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/idk/common"
+	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 

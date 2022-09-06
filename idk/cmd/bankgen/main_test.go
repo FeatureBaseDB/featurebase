@@ -6,7 +6,7 @@ import (
 
 	"github.com/jaffee/commandeer"
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/molecula/featurebase/v3/idk/bankgen"
+	"github.com/featurebasedb/featurebase/v3/idk/bankgen"
 	pflag13 "github.com/spf13/pflag"
 )
 

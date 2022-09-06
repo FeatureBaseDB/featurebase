@@ -5,8 +5,8 @@ package ctl
 import (
 	"time"
 
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/storage"
+	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/storage"
 	"github.com/spf13/cobra"
 )
 

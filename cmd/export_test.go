@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/cmd"
+	"github.com/featurebasedb/featurebase/v3/cmd"
 )
 
 func TestExportHelp(t *testing.T) {

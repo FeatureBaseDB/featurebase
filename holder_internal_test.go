@@ -5,8 +5,8 @@ package pilosa
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 // mustHolderConfig sets up a default holder config for tests.

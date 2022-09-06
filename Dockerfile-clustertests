@@ -5,7 +5,7 @@ FROM golang:1.19
 
 LABEL maintainer "dev@pilosa.com"
 
-COPY . /go/src/github.com/molecula/featurebase/
+COPY . /go/src/github.com/featurebasedb/featurebase/
 
 
 # download pumba for fault injection
@@ -22,9 +22,9 @@ RUN chmod +x /usr/local/bin/docker-compose
 
 # generate an instrumented binary to allow for calculating code coverage for clustertests
 # the entrypoint for the binary is TestRunMain, which is wrapper for main
-RUN cd /go/src/github.com/molecula/featurebase/cmd/featurebase && \
+RUN cd /go/src/github.com/featurebasedb/featurebase/cmd/featurebase && \
     go test -covermode=atomic -coverpkg=../../... -c -tags testrunmain -o featurebase && \
-    cp /go/src/github.com/molecula/featurebase/cmd/featurebase/featurebase /featurebase
+    cp /go/src/github.com/featurebasedb/featurebase/cmd/featurebase/featurebase /featurebase
 
 COPY NOTICE /NOTICE
 

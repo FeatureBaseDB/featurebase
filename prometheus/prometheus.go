@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/stats"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

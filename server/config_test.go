@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/toml"
+	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/toml"
 )
 
 func Test_ValidateConfig(t *testing.T) {

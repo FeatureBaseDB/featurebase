@@ -5,7 +5,7 @@ package disco
 import (
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/net"
 )
 
 // Node represents a node in the cluster.

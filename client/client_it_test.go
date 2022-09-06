@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/disco"
-	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/shardwidth"
-	"github.com/molecula/featurebase/v3/test"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
+	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -227,7 +227,7 @@ func TestClientAgainstCluster(t *testing.T) {
 				_, err = cli.Query(qry)
 				require.NoErrorf(t, err, "BatchQuery")
 
-				// XXX: The following is required to make this test pass. See: https://github.com/molecula/featurebase/issues/625
+				// XXX: The following is required to make this test pass. See: https://github.com/featurebasedb/featurebase/issues/625
 				_, _, err = cli.HTTPRequest("POST", "/recalculate-caches", nil, nil)
 				require.NoErrorf(t, err, "POST /recalculate-caches")
 

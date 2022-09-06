@@ -7,8 +7,8 @@ import (
 	"os"
 	"reflect"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/testhook"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 
 // AuditLeaksOn is a global switch to turn on resource

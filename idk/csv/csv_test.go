@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/idk/idktest"
+	"github.com/featurebasedb/featurebase/v3/idk/idktest"
 )
 
 const TestName = "csvtest"

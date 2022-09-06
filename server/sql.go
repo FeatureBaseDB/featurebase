@@ -5,10 +5,10 @@ package server
 import (
 	"context"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/logger"
-	pb "github.com/molecula/featurebase/v3/proto"
-	"github.com/molecula/featurebase/v3/sql"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	pb "github.com/featurebasedb/featurebase/v3/proto"
+	"github.com/featurebasedb/featurebase/v3/sql"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/pg/message"
+	"github.com/featurebasedb/featurebase/v3/pg/message"
 	"github.com/pkg/errors"
 )
 

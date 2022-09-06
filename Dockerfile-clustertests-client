@@ -5,7 +5,7 @@ FROM golang:1.19
 
 LABEL maintainer "dev@pilosa.com"
 
-COPY . /go/src/github.com/molecula/featurebase/
+COPY . /go/src/github.com/featurebasedb/featurebase/
 
 # download pumba for fault injection
 ADD https://github.com/alexei-led/pumba/releases/download/0.6.0/pumba_linux_amd64 /pumba
@@ -19,14 +19,14 @@ RUN apt install -y docker.io
 ADD https://github.com/docker/compose/releases/latest/download/docker-compose-Linux-x86_64 /usr/local/bin/docker-compose
 RUN chmod +x /usr/local/bin/docker-compose
 
-RUN cd /go/src/github.com/molecula/featurebase/cmd/featurebase && \
+RUN cd /go/src/github.com/featurebasedb/featurebase/cmd/featurebase && \
     go test -covermode=atomic -coverpkg=../../... -c -tags testrunmain -o featurebase && \
-    cp /go/src/github.com/molecula/featurebase/cmd/featurebase/featurebase /featurebase
+    cp /go/src/github.com/featurebasedb/featurebase/cmd/featurebase/featurebase /featurebase
 
 
 COPY NOTICE /NOTICE
 
-COPY ./internal/clustertests /go/src/github.com/molecula/featurebase/internal/clustertests
+COPY ./internal/clustertests /go/src/github.com/featurebasedb/featurebase/internal/clustertests
 
 EXPOSE 10101
 VOLUME /data

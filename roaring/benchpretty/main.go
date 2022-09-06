@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
 var pattern = regexp.MustCompile(`^BenchmarkCtOps/([^/]+)/([^/]+)/([^-]+)-([0-9]+)\s*([0-9]+)\s*([0-9.]+) ns/op`)

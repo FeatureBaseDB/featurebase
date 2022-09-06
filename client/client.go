@@ -21,14 +21,14 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
-	pilosa "github.com/molecula/featurebase/v3"
-	fbproto "github.com/molecula/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
-	"github.com/molecula/featurebase/v3/logger"
-	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/pb"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/stats"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	fbproto "github.com/featurebasedb/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
+	"github.com/featurebasedb/featurebase/v3/logger"
+	pnet "github.com/featurebasedb/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/pb"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

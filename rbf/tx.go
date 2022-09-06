@@ -12,9 +12,9 @@ import (
 	"sync"
 
 	"github.com/benbjohnson/immutable"
-	"github.com/molecula/featurebase/v3/roaring"
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/roaring"
+	txkey "github.com/featurebasedb/featurebase/v3/short_txkey"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 
