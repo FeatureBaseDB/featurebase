@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. ./config.sh
+
 ifErr() {
     RESCODE=$?
     if [[ $RESCODE != 0 ]]; then
@@ -8,13 +10,13 @@ ifErr() {
     fi
 }
 
-/data/datagen_linux_arm64 -s custom --custom-config=./fb-1371-datagen.yaml --pilosa.index=fb1371 --pilosa.batch-size=100 --pilosa.hosts=$1
+$DATAGEN -s custom --custom-config=./fb-1371-datagen.yaml --pilosa.index=fb1371 --pilosa.batch-size=100 --pilosa.hosts=$1
 ifErr "datagenning fb1371"
 
-RES1=$( curl $1/index/fb1371/query -d 'Max(ts)' | jq '.results[0].timestampValue' )
+RES1=$( authcurl $1/index/fb1371/query -d 'Max(ts)' | jq '.results[0].timestampValue' )
 ifErr "getting Max 1"
 
-RES2=$( curl $1/index/fb1371/query -d 'Max(ts)' | jq '.results[0].timestampValue' )
+RES2=$( authcurl $1/index/fb1371/query -d 'Max(ts)' | jq '.results[0].timestampValue' )
 ifErr "getting Max 2"
 
 if [[ $RES1 != $RES2 ]]; then
