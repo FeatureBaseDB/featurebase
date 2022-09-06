@@ -1319,7 +1319,11 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 
 	// empty string id should generate an id
 	if id == "" {
-		id = uuid.NewV4().String()
+		uid, err := uuid.NewV4()
+		if err != nil {
+			return nil, errors.Wrap(err, "creating id")
+		}
+		id = uid.String()
 	}
 	trns, err := srv.holder.StartTransaction(ctx, id, timeout, exclusive)
 	if err != nil {
