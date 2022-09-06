@@ -639,3 +639,51 @@ setupConsumerNode(){
     ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o StrictHostKeyChecking=no ec2-user@${IP} "sudo yum install jq htop tmux nc -y"
     setupDatadog $IP "ingest" $BRANCH_NAME
 }
+
+# get_value [file] [var] [nodes] checks for a value stored in [nodes];
+# for instance, `get_value file foo a b` checks for [a][b] in the JSON
+# in file, and stores the result in $foo. it exits with a non-zero status
+# if this fails.
+# e.g., `get_value output.json INGESTNODE0 .ingest_ips 0 '"value"' 0` sets 
+# $INGESTNODE0 to the value of [.ingest_ips][0]["value"][0], or fails to
+# do so and returns a non-zero status. Note the quoting to get the double
+# quotes around "value".
+get_value() {
+    file=$1
+    var=$2
+    shift 2
+    # assemble [a][b][c] from "a" "b" "c"
+    expr="["
+    infix=""
+    for word; do
+        expr="$expr$infix$word"
+        infix="]["
+    done
+    expr="$expr]"
+    tmp=$(jq -r "$expr" < $file)
+    if [ $? -ne 0 ]; then
+        echo >&2 "jq failed parsing input file"
+        return 1
+    fi
+    case $tmp in
+    null)
+      echo >&2 "reading IPs for ${node}: got null"
+      return 1
+      ;;
+    *)
+      eval $var=\$tmp
+      return 0
+      ;;
+    esac
+}
+
+# must_get_value [file] [var] [nodes] checks for the contents of [nodes], and stores
+# the result in $var. if it fails, it causes the *calling script* to exit. do not
+# use this if you need to handle the error more gracefully.
+# e.g., `must_get_value output.json INGESTNODE0 ingest_ips 0 "value" 0` sets $INGESTNODE0
+# to the value of [.ingest_ips][0]["value"][0].
+must_get_value() {
+    if ! get_value "$@"; then
+        exit 1
+    fi
+}
