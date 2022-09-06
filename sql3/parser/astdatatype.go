@@ -9,14 +9,16 @@ import (
 )
 
 const (
-	FieldTypeBool      = "BOOL"
-	FieldTypeDecimal   = "DECIMAL"
-	FieldTypeID        = "ID"
-	FieldTypeIDSet     = "IDSET"
-	FieldTypeInt       = "INT"
-	FieldTypeString    = "STRING"
-	FieldTypeStringSet = "STRINGSET"
-	FieldTypeTimestamp = "TIMESTAMP"
+	FieldTypeBool             = "BOOL"
+	FieldTypeDecimal          = "DECIMAL"
+	FieldTypeID               = "ID"
+	FieldTypeIDSet            = "IDSET"
+	FieldTypeIDSetQuantum     = "IDSETQ"
+	FieldTypeInt              = "INT"
+	FieldTypeString           = "STRING"
+	FieldTypeStringSet        = "STRINGSET"
+	FieldTypeStringSetQuantum = "STRINGSETQ"
+	FieldTypeTimestamp        = "TIMESTAMP"
 )
 
 func IsValidTypeName(typeName string) bool {
@@ -40,16 +42,20 @@ type ExprDataType interface {
 	TypeName() string
 }
 
-func (*DataTypeVoid) exprDataType()      {}
-func (*DataTypeRange) exprDataType()     {}
-func (*DataTypeBool) exprDataType()      {}
-func (*DataTypeDecimal) exprDataType()   {}
-func (*DataTypeID) exprDataType()        {}
-func (*DataTypeIDSet) exprDataType()     {}
-func (*DataTypeInt) exprDataType()       {}
-func (*DataTypeString) exprDataType()    {}
-func (*DataTypeStringSet) exprDataType() {}
-func (*DataTypeTimestamp) exprDataType() {}
+func (*DataTypeVoid) exprDataType()             {}
+func (*DataTypeRange) exprDataType()            {}
+func (*DataTypeTuple) exprDataType()            {}
+func (*DataTypeSubtable) exprDataType()         {}
+func (*DataTypeBool) exprDataType()             {}
+func (*DataTypeDecimal) exprDataType()          {}
+func (*DataTypeID) exprDataType()               {}
+func (*DataTypeIDSet) exprDataType()            {}
+func (*DataTypeIDSetQuantum) exprDataType()     {}
+func (*DataTypeInt) exprDataType()              {}
+func (*DataTypeString) exprDataType()           {}
+func (*DataTypeStringSet) exprDataType()        {}
+func (*DataTypeStringSetQuantum) exprDataType() {}
+func (*DataTypeTimestamp) exprDataType()        {}
 
 type DataTypeVoid struct {
 }
@@ -74,6 +80,53 @@ func NewDataTypeRange(subscriptType ExprDataType) *DataTypeRange {
 
 func (dt *DataTypeRange) TypeName() string {
 	return fmt.Sprintf("RANGE(%s)", dt.SubscriptType.TypeName())
+}
+
+type DataTypeTuple struct {
+	Members []ExprDataType
+}
+
+func NewDataTypeTuple(members []ExprDataType) *DataTypeTuple {
+	return &DataTypeTuple{
+		Members: members,
+	}
+}
+
+func (dt *DataTypeTuple) TypeName() string {
+	ms := ""
+	for idx, m := range dt.Members {
+		ms = ms + m.TypeName()
+		if idx+1 < len(dt.Members) {
+			ms = ms + ", "
+		}
+	}
+	return fmt.Sprintf("TUPLE(%s)", ms)
+}
+
+type SubtableColumn struct {
+	Name     string
+	DataType ExprDataType
+}
+
+type DataTypeSubtable struct {
+	Columns []*SubtableColumn
+}
+
+func NewDataTypeSubtable(columns []*SubtableColumn) *DataTypeSubtable {
+	return &DataTypeSubtable{
+		Columns: columns,
+	}
+}
+
+func (dt *DataTypeSubtable) TypeName() string {
+	ms := ""
+	for idx, m := range dt.Columns {
+		ms = ms + m.DataType.TypeName()
+		if idx+1 < len(dt.Columns) {
+			ms = ms + ", "
+		}
+	}
+	return fmt.Sprintf("SUBTABLE(%s)", ms)
 }
 
 type DataTypeBool struct {
@@ -123,6 +176,17 @@ func (*DataTypeIDSet) TypeName() string {
 	return FieldTypeIDSet
 }
 
+type DataTypeIDSetQuantum struct {
+}
+
+func NewDataTypeIDSetQuantum() *DataTypeIDSetQuantum {
+	return &DataTypeIDSetQuantum{}
+}
+
+func (*DataTypeIDSetQuantum) TypeName() string {
+	return FieldTypeIDSetQuantum
+}
+
 type DataTypeInt struct {
 }
 
@@ -154,6 +218,17 @@ func NewDataTypeStringSet() *DataTypeStringSet {
 
 func (*DataTypeStringSet) TypeName() string {
 	return FieldTypeStringSet
+}
+
+type DataTypeStringSetQuantum struct {
+}
+
+func NewDataTypeStringSetQuantum() *DataTypeStringSetQuantum {
+	return &DataTypeStringSetQuantum{}
+}
+
+func (*DataTypeStringSetQuantum) TypeName() string {
+	return FieldTypeStringSetQuantum
 }
 
 type DataTypeTimestamp struct {

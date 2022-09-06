@@ -57,7 +57,14 @@ func fieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
 	case pilosa.FieldTypeDecimal:
 		return parser.NewDataTypeDecimal(f.Options.Scale)
 
-	case pilosa.FieldTypeTime, pilosa.FieldTypeTimestamp:
+	case pilosa.FieldTypeTime:
+		if f.Options.Keys {
+			return parser.NewDataTypeStringSetQuantum()
+		} else {
+			return parser.NewDataTypeIDSetQuantum()
+		}
+
+	case pilosa.FieldTypeTimestamp:
 		return parser.NewDataTypeTimestamp()
 
 	default:
@@ -253,9 +260,63 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 		default:
 			return false
 		}
+	case *parser.DataTypeStringSetQuantum:
+		switch source := sourceType.(type) {
+		case *parser.DataTypeStringSetQuantum:
+			return true
+		case *parser.DataTypeStringSet:
+			return true
+		case *parser.DataTypeTuple:
+			// if we are assigning to a time quantum, a tuple is allowed, but members
+			// have to be a timestamp (or coercable to a timestamp) and and stringset
+			if len(source.Members) != 2 {
+				return false
+			}
+			_, ok := source.Members[0].(*parser.DataTypeTimestamp)
+			if !ok {
+				_, ok = source.Members[0].(*parser.DataTypeString)
+				if !ok {
+					return false
+				}
+			}
+			_, ok = source.Members[1].(*parser.DataTypeStringSet)
+			if !ok {
+				return false
+			}
+			return true
+		default:
+			return false
+		}
 	case *parser.DataTypeIDSet:
 		switch sourceType.(type) {
 		case *parser.DataTypeIDSet:
+			return true
+		default:
+			return false
+		}
+	case *parser.DataTypeIDSetQuantum:
+		switch source := sourceType.(type) {
+		case *parser.DataTypeIDSetQuantum:
+			return true
+		case *parser.DataTypeIDSet:
+			return true
+		case *parser.DataTypeTuple:
+			// if we are assigning to a time quantum, a tuple is allowed, but members
+			// have to be a timestamp (or coercable to a timestamp) and and idset
+			if len(source.Members) != 2 {
+				return false
+			}
+			_, ok := source.Members[0].(*parser.DataTypeTimestamp)
+			if !ok {
+				_, ok = source.Members[0].(*parser.DataTypeString)
+				if !ok {
+					return false
+				}
+			}
+			_, ok = source.Members[1].(*parser.DataTypeIDSet)
+			if !ok {
+				return false
+			}
 			return true
 		default:
 			return false
@@ -363,6 +424,18 @@ func typeIsSet(testType parser.ExprDataType) (bool, parser.ExprDataType) {
 		return true, parser.NewDataTypeID()
 	case *parser.DataTypeStringSet:
 		return true, parser.NewDataTypeString()
+	default:
+		return false, nil
+	}
+}
+
+// returns true if the type is a timequantum type
+func typeIsTimeQuantum(testType parser.ExprDataType) (bool, parser.ExprDataType) {
+	switch testType.(type) {
+	case *parser.DataTypeIDSetQuantum:
+		return true, parser.NewDataTypeIDSet()
+	case *parser.DataTypeStringSet:
+		return true, parser.NewDataTypeStringSet()
 	default:
 		return false, nil
 	}

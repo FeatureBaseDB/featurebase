@@ -16,6 +16,7 @@ statement = show_tables
       | alter_table_stmt
       | select_stmt
       | insert_stmt
+      | bulk_insert_stmt
       | delete_stmt ;
 
 (*
@@ -111,7 +112,28 @@ rename_column = "RENAME", [ "COLUMN" ], identifier, "TO", identifier ;
   Inserts data into a FeatureBase table.
 
 *)
-insert_stmt = "INSERT", "INTO", identifier, "(", identifier, { identifier, "," }, ")", "VALUES", "(", expr, { expr, "," }, ")" ;
+insert_stmt = ( "INSERT" | "REPLACE" ), "INTO", identifier, [ "(", identifier, { identifier, "," }, ")" ], "VALUES", "(", expr, { expr, "," }, ")" ;
+
+(*
+
+  BULK INSERT
+  ----------------
+  Bulk inserts data into a FeatureBase table.
+
+*)
+bulk_insert_stmt = "BULK", "INSERT", identifier, "FROM", string_literal, [ "WITH", bulk_insert_option, { bulk_insert_option } ];
+
+bulk_insert_option = 
+      "BATCHSIZE", integer_literal
+    | "ROWSLIMIT", integer_literal
+    | "FORMAT", "CSV"
+    | bulk_insert_map_option ;
+
+bulk_insert_map_option = "MAP", map_id_option | map_column_option ;
+
+map_id_option = "_ID", "TO", ( "AUTOINCREMENT" | expr, { ",", expr } );
+
+map_column_option = "OFFSET", integer_literal, "TO", column_name ;
 
 (*
 
@@ -141,7 +163,8 @@ column_alias = identifier ;
 
 from_clause = "FROM", table_or_subquery, { ",", table_or_subquery } ;
 
-table_or_subquery = identifier, [ [ "AS" ], table_alias ], [ table_option ]
+table_or_subquery = 
+      ( identifier | table_valued_function ), [ [ "AS" ], table_alias ], [ table_option ]
       | "(", select_stmt, ")", [ [ "AS" ], table_alias ] ;
 
 table_alias = identifier ;
@@ -156,39 +179,13 @@ group_by_clause = "GROUP", "BY", expr, { ",", expr }, [ "HAVING", expr ] ;
 
   Expressions
   ----------------
-
-  timequantums - modelling
-
-  * let stringsetcolq refer to a set with a timequantum column
-  * the expression stringsetcolq is an array/table? of tuple of (timestamp, set)
-  * when you refer to stringsetcolq by name, this is shorthand for 
-    "the set value for the latest timestamp"
-  * if we were to use dotted notation to refer to the components of the tuple,
-    we could refer to the components of the tuple e.g.
-      - stringsetcolq.timestamp
-      - stringsetcolq.value
-  * but stringsetcolq is an array of tuples, so assuming some array type notation
-    - stringsetcolq[subscript].timestamp
-    - stringsetcolq[subscript].value
-  * this is dumb
-  * what if, when you refer to stringsetcolq by name, this is shorthand for 
-    "the set value for the latest timestamp" - the tuple not the array
-  * the underlying 'table' could be modelled as (_id, timestamp, set)
-  * if you want access to that table, we could use a table valued function that would enable us to use
-    cross apply etc.
-  
-  
-  * you want to do range queries on the timestamp
-  * you want to be able to see what timestamps you have
-  * you want to be able to see what sets and set values you have
-  * do we ever want to be able to do this with any arbitary range queryable type, right 
-    now we have one additional dimension, would we ever want more? would we want additional values?
   
 *)
 expr = integer_literal
     | string_literal
     | decimal_literal
     | set_literal
+    | tuple_literal
     | date_literal
     | [ table_name, "." ], column_name
     | unary_op, expr
@@ -228,6 +225,8 @@ binary_op = "="
   
 set_literal = "[", expr, { ",", expr }, "]" ;
 
+tuple_literal = "{", expr, { ",", expr }, "}" ;
+
 date_literal = rfc_3339
     | "CURRENT_DATE"
     | "CURRENT_TIMESTAMP" ;
@@ -237,7 +236,8 @@ table_name = identifier ;
 column_name = identifier ;
 
 function_call = agg_function
-    | non_agg_function ;
+    | non_agg_function
+    | table_valued_function ;
 
 agg_function = ( "AVG" | "COUNT" | "MAX" | "MIN" | "SUM" ), "(", ( ( [ "DISTINCT" ], expr ) | "*" ), ")"
     | "PERCENTILE", "(", expr, ",", expr, ")" ;
@@ -247,6 +247,10 @@ non_agg_function =
     | "SETCONTAINSALL" , "(", expr, ",", expr, ")" 
     | "SETCONTAINSANY" , "(", expr, ",", expr, ")" 
     | "DATEPART" , "(", expr, ",", expr, ")" ;
+
+table_valued_function = 
+      "SUBTABLE" , "(", table_name, ".", column_name, ")"; 
+
 
 identifier = letter , { letter | digit | "_" } ;
 

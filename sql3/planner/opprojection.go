@@ -21,6 +21,7 @@ func NewPlanOpProjection(expressions []types.PlanExpression, child types.PlanOpe
 	return &PlanOpProjection{
 		ChildOp:     child,
 		Projections: expressions,
+		warnings:    make([]string, 0),
 	}
 }
 
@@ -96,16 +97,16 @@ func (p *PlanOpProjection) Warnings() []string {
 
 func ExpressionToColumn(e types.PlanExpression) *types.PlannerColumn {
 	var name string
-	if n, ok := e.(types.SchemaIdentifiable); ok {
+	if n, ok := e.(types.IdentifiableByName); ok {
 		name = n.Name()
 	} else {
-		//TODO(pok) - work out what this should be
+		//TODO(pok) - implement this
 		name = "" //e.String()
 	}
 
 	var table string
-	if t, ok := e.(types.SchemaObject); ok {
-		table = t.ObjectName()
+	if t, ok := e.(types.IdentifiableByName); ok {
+		table = t.Name()
 	}
 
 	return &types.PlannerColumn{

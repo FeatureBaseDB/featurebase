@@ -48,6 +48,7 @@ func NewPlanOpOrderBy(orderByFields []*OrderByExpression, child types.PlanOperat
 	return &PlanOpOrderBy{
 		ChildOp:       child,
 		orderByFields: orderByFields,
+		warnings:      make([]string, 0),
 	}
 }
 

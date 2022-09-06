@@ -49,6 +49,8 @@ const (
 	RP     // )
 	LB     // [
 	RB     // ]
+	LBR    // {
+	RBR    // }
 	COMMA  // ,
 	NE     // !=
 	EQ     // =
@@ -267,6 +269,8 @@ var tokens = [...]string{
 	RP:     ")",
 	LB:     "[",
 	RB:     "]",
+	LBR:    "{",
+	RBR:    "}",
 	COMMA:  ",",
 	NE:     "!=",
 	EQ:     "=",

@@ -91,6 +91,31 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 		switch targetType.(type) {
 		case *parser.DataTypeIDSet:
 			return value, nil
+		case *parser.DataTypeIDSetQuantum:
+			return []interface{}{
+				nil, //no timestamp
+				value,
+			}, nil
+		}
+
+	case *parser.DataTypeStringSet:
+		switch targetType.(type) {
+		case *parser.DataTypeStringSet:
+			return value, nil
+		case *parser.DataTypeStringSetQuantum:
+			return []interface{}{
+				nil, //no timestamp
+				value,
+			}, nil
+		}
+
+	case *parser.DataTypeTuple:
+		switch targetType.(type) {
+		case *parser.DataTypeIDSetQuantum:
+			return value, nil
+
+		case *parser.DataTypeStringSetQuantum:
+			return value, nil
 		}
 
 	default:
@@ -1381,7 +1406,7 @@ func (n *callPlanExpression) WithChildren(children ...types.PlanExpression) (typ
 
 // aliasPlanExpression is a alias ref
 type aliasPlanExpression struct {
-	types.SchemaIdentifiable
+	types.IdentifiableByName
 	aliasName string
 	expr      types.PlanExpression
 }
@@ -1397,12 +1422,12 @@ func (n *aliasPlanExpression) Name() string {
 	return n.aliasName
 }
 
-//evaluates expression based on current row and column
+// evaluates expression based on current row and column
 func (n *aliasPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
 	return n.expr.Evaluate(currentRow)
 }
 
-//returns the type of the expression
+// returns the type of the expression
 func (n *aliasPlanExpression) Type() parser.ExprDataType {
 	return n.expr.Type()
 }
@@ -1431,7 +1456,7 @@ func (n *aliasPlanExpression) WithChildren(children ...types.PlanExpression) (ty
 
 // qualifiedRefPlanExpression is a qualified ref
 type qualifiedRefPlanExpression struct {
-	types.SchemaIdentifiable
+	types.IdentifiableByName
 	tableName   string
 	columnName  string
 	columnIndex int
@@ -2049,6 +2074,81 @@ func (n *exprSetLiteralPlanExpression) WithChildren(children ...types.PlanExpres
 	return newExprSetLiteralPlanExpression(children, n.dataType), nil
 }
 
+// exprTupleLiteralPlanExpression is a tuple literal
+type exprTupleLiteralPlanExpression struct {
+	members  []types.PlanExpression
+	dataType parser.ExprDataType
+}
+
+func newExprTupleLiteralPlanExpression(members []types.PlanExpression, dataType parser.ExprDataType) *exprTupleLiteralPlanExpression {
+	return &exprTupleLiteralPlanExpression{
+		members:  members,
+		dataType: dataType,
+	}
+}
+
+func (n *exprTupleLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+	timestampEval, err := n.members[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	//if it is a string, do a coercion
+	val, ok := timestampEval.(string)
+	if ok {
+		if tm, err := time.ParseInLocation(time.RFC3339Nano, val, time.UTC); err == nil {
+			timestampEval = tm
+		} else if tm, err := time.ParseInLocation(time.RFC3339, val, time.UTC); err == nil {
+			timestampEval = tm
+		} else if tm, err := time.ParseInLocation("2006-01-02", val, time.UTC); err == nil {
+			timestampEval = tm
+		} else {
+			return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, n.members[0].Type().TypeName())
+		}
+	}
+
+	setEval, err := n.members[1].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// nil if anything is nil
+	if timestampEval == nil || setEval == nil {
+		return nil, nil
+	}
+
+	return []interface{}{
+		timestampEval,
+		setEval,
+	}, nil
+}
+
+func (n *exprTupleLiteralPlanExpression) Type() parser.ExprDataType {
+	return n.dataType
+}
+
+func (n *exprTupleLiteralPlanExpression) Plan() map[string]interface{} {
+	result := make(map[string]interface{})
+	result["_expr"] = fmt.Sprintf("%T", n)
+	ps := make([]interface{}, 0)
+	for _, e := range n.members {
+		ps = append(ps, e.Plan())
+	}
+	result["members"] = ps
+	return result
+}
+
+func (n *exprTupleLiteralPlanExpression) Children() []types.PlanExpression {
+	return n.members
+}
+
+func (n *exprTupleLiteralPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
+	if len(children) != len(n.members) {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newExprTupleLiteralPlanExpression(children, n.dataType), nil
+}
+
 // compileExpr returns a types.PlanExpression tree for a given parser.Expr
 func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression, err error) {
 	if expr == nil {
@@ -2100,6 +2200,17 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 			exprList = append(exprList, listExpr)
 		}
 		return newExprSetLiteralPlanExpression(exprList, expr.DataType()), nil
+
+	case *parser.TupleLiteralExpr:
+		exprList := []types.PlanExpression{}
+		for _, e := range expr.Members {
+			listExpr, err := p.compileExpr(e)
+			if err != nil {
+				return nil, err
+			}
+			exprList = append(exprList, listExpr)
+		}
+		return newExprTupleLiteralPlanExpression(exprList, expr.DataType()), nil
 
 	case *parser.Ident:
 		return nil, sql3.NewErrInternal("identifiers are not supported")

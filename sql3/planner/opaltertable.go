@@ -29,6 +29,7 @@ func NewPlanOpAlterTable(p *ExecutionPlanner, tableName string, operation alterO
 		oldColumnName: oldColumnName,
 		newColumnName: newColumnName,
 		columnDef:     columnDef,
+		warnings:      make([]string, 0),
 	}
 }
 

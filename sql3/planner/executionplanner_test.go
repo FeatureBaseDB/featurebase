@@ -589,6 +589,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 
 }
+
 func TestPlanner_DropTable(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()

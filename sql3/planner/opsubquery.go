@@ -17,7 +17,8 @@ type PlanOpSubquery struct {
 
 func NewPlanOpSubquery(child types.PlanOperator) *PlanOpSubquery {
 	return &PlanOpSubquery{
-		ChildOp: child,
+		ChildOp:  child,
+		warnings: make([]string, 0),
 	}
 }
 
@@ -67,5 +68,8 @@ func (p *PlanOpSubquery) Warnings() []string {
 		w = append(w, p.ChildOp.Warnings()...)
 	}
 	return w
+}
 
+func (p *PlanOpSubquery) Name() string {
+	return ""
 }

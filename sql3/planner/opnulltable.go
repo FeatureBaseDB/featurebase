@@ -16,7 +16,9 @@ type PlanOpNullTable struct {
 }
 
 func NewPlanOpNullTable() *PlanOpNullTable {
-	return &PlanOpNullTable{}
+	return &PlanOpNullTable{
+		warnings: make([]string, 0),
+	}
 }
 
 func (p *PlanOpNullTable) Schema() types.Schema {

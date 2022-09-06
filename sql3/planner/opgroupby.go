@@ -25,6 +25,7 @@ func NewPlanOpGroupBy(aggregates []types.PlanExpression, groupByExprs []types.Pl
 		ChildOp:      child,
 		Aggregates:   aggregates,
 		GroupByExprs: groupByExprs,
+		warnings:     make([]string, 0),
 	}
 }
 

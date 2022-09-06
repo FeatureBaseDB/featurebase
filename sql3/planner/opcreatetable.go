@@ -30,6 +30,7 @@ func NewPlanOpCreateTable(p *ExecutionPlanner, tableName string, failIfExists bo
 		isKeyed:       isKeyed,
 		keyPartitions: keyPartitions,
 		columns:       columns,
+		warnings:      make([]string, 0),
 	}
 }
 

@@ -18,8 +18,9 @@ type PlanOpTop struct {
 
 func NewPlanOpTop(expr types.PlanExpression, child types.PlanOperator) *PlanOpTop {
 	return &PlanOpTop{
-		ChildOp: child,
-		expr:    expr,
+		ChildOp:  child,
+		expr:     expr,
+		warnings: make([]string, 0),
 	}
 }
 

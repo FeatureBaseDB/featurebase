@@ -42,6 +42,7 @@ const (
 	ErrIntegerLiteral                   errors.Code = "ErrIntegerLiteral"
 	ErrStringLiteral                    errors.Code = "ErrStringLiteral"
 	ErrLiteralEmptySetNotAllowed        errors.Code = "ErrLiteralEmptySetNotAllowed"
+	ErrLiteralEmptyTupleNotAllowed      errors.Code = "ErrLiteralEmptyTupleNotAllowed"
 	ErrSetLiteralMustContainIntOrString errors.Code = "ErrSetLiteralMustContainIntOrString"
 
 	ErrTypeAssignmentIncompatible errors.Code = "ErrTypeAssignmentIncompatible"
@@ -176,6 +177,13 @@ func NewErrSetLiteralMustContainIntOrString(line, col int) error {
 	return errors.New(
 		ErrSetLiteralMustContainIntOrString,
 		fmt.Sprintf("[%d:%d] set literal must contain ints or strings", line, col),
+	)
+}
+
+func NewErrLiteralEmptyTupleNotAllowed(line, col int) error {
+	return errors.New(
+		ErrLiteralEmptyTupleNotAllowed,
+		fmt.Sprintf("[%d:%d] tuple literal must contain at least one member", line, col),
 	)
 }
 

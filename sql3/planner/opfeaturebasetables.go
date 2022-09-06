@@ -22,6 +22,7 @@ type PlanOpFeatureBaseTables struct {
 func NewPlanOpFeatureBaseTables(indexInfo []*pilosa.IndexInfo) *PlanOpFeatureBaseTables {
 	return &PlanOpFeatureBaseTables{
 		indexInfo: indexInfo,
+		warnings:  make([]string, 0),
 	}
 }
 

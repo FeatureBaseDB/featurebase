@@ -165,10 +165,6 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 			return err
 		}
 
-		if !e.IsLiteral() {
-			return sql3.NewErrLiteralExpected(expr.Pos().Line, expr.Pos().Column)
-		}
-
 		// Type check against same ordinal position in column type list.
 		if !typesAreAssignmentCompatible(typeNames[i], e.DataType()) {
 			return sql3.NewErrTypeAssignmentIncompatible(expr.Pos().Line, expr.Pos().Column, e.DataType().TypeName(), typeNames[i].TypeName())

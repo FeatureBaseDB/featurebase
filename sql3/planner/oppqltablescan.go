@@ -24,12 +24,12 @@ type PlanOpPQLTableScan struct {
 	warnings  []string
 }
 
-func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []types.PlanExpression, filter types.PlanExpression) *PlanOpPQLTableScan {
+func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []types.PlanExpression) *PlanOpPQLTableScan {
 	return &PlanOpPQLTableScan{
 		planner:   p,
 		tableName: tableName,
 		columns:   columns,
-		filter:    filter,
+		warnings:  make([]string, 0),
 	}
 }
 
@@ -71,10 +71,19 @@ func (p *PlanOpPQLTableScan) Warnings() []string {
 	return p.warnings
 }
 
+func (p *PlanOpPQLTableScan) Name() string {
+	return p.tableName
+}
+
+func (p *PlanOpPQLTableScan) UpdateFilters(filterCondition types.PlanExpression) (types.PlanOperator, error) {
+	p.filter = filterCondition
+	return p, nil
+}
+
 func (p *PlanOpPQLTableScan) Schema() types.Schema {
 	result := make(types.Schema, 0)
 	for _, col := range p.columns {
-		si, ok := col.(types.SchemaIdentifiable)
+		si, ok := col.(types.IdentifiableByName)
 		if ok {
 			result = append(result, &types.PlannerColumn{
 				Name:  si.Name(),
@@ -105,7 +114,6 @@ func (p *PlanOpPQLTableScan) WithChildren(children ...types.PlanOperator) (types
 }
 
 // TODO(pok) remove the name mapping here and do it by ordinal position
-
 type tableScanRowIter struct {
 	planner   *ExecutionPlanner
 	tableName string
@@ -172,7 +180,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 
 		call := &pql.Call{Name: "Extract", Children: []*pql.Call{cond}}
 		for _, c := range i.columns {
-			col, ok := c.(types.SchemaIdentifiable)
+			col, ok := c.(types.IdentifiableByName)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected column type '%T'", c)
 			}
@@ -210,7 +218,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		for _, c := range i.columns {
 			result := i.result[0]
 
-			col, ok := c.(types.SchemaIdentifiable)
+			col, ok := c.(types.IdentifiableByName)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected column type '%T'", c)
 			}

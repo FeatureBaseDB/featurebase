@@ -20,6 +20,7 @@ func NewPlanOpPQLMultiAggregate(p *ExecutionPlanner, operators []*PlanOpPQLAggre
 	return &PlanOpPQLMultiAggregate{
 		planner:   p,
 		operators: operators,
+		warnings:  make([]string, 0),
 	}
 }
 

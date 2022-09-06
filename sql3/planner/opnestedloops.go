@@ -15,13 +15,15 @@ import (
 type PlanOpNestedLoops struct {
 	top      types.PlanOperator
 	bottom   types.PlanOperator
+	cond     types.PlanExpression
 	warnings []string
 }
 
 func NewPlanOpNestedLoops(top, bottom types.PlanOperator) *PlanOpNestedLoops {
 	return &PlanOpNestedLoops{
-		top:    top,
-		bottom: bottom,
+		top:      top,
+		bottom:   bottom,
+		warnings: make([]string, 0),
 	}
 }
 
@@ -81,31 +83,20 @@ func (p *PlanOpNestedLoops) WithChildren(children ...types.PlanOperator) (types.
 	return NewPlanOpNestedLoops(children[0], children[1]), nil
 }
 
+func (p *PlanOpNestedLoops) NewWithExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
+	if len(exprs) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
+	}
+	p.cond = exprs[0]
+	return p, nil
+}
+
 type joinType byte
 
 const (
 	joinTypeInner joinType = iota
 	joinTypeLeft
 	joinTypeRight
-)
-
-// joinMode defines the mode in which a join will be performed.
-type joinMode byte
-
-const (
-	// unknownMode is the default mode. It will start iterating without really
-	// knowing in which mode it will end up computing the join. If it
-	// iterates the right side fully one time and so far it fits in memory,
-	// then it will switch to memory mode. Otherwise, if at some point during
-	// this first iteration it finds that it does not fit in memory, will
-	// switch to multipass mode.
-	unknownMode joinMode = iota
-	// memoryMode computes all the join directly in memory iterating each
-	// side of the join exactly once.
-	//memoryMode
-	// multipassMode computes the join by iterating the left side once,
-	// and the right side one time for each row in the left side.
-	multipassMode
 )
 
 type nestedLoopsIter struct {
@@ -116,35 +107,33 @@ type nestedLoopsIter struct {
 	ctx    context.Context
 	cond   types.PlanExpression
 
-	secondaryProvider types.RowIterable
+	bottomProvider types.RowIterable
 
-	primaryRow types.Row
+	topRow     types.Row
 	foundMatch bool
 	rowSize    int
 
 	originalRow types.Row
 	scopeLen    int
 
-	mode          joinMode
-	secondaryRows RowCache
+	bottomRows RowCache
 }
 
 func newNestedLoopsIter(ctx context.Context, jt joinType, top types.RowIterator, bottom types.RowIterable, scopeRow types.Row, joinCondition types.PlanExpression, rowWidth int, originalRow types.Row) *nestedLoopsIter {
 	return &nestedLoopsIter{
-		typ:               jt,
-		top:               top,
-		secondaryProvider: bottom,
-		cond:              joinCondition,
-		rowSize:           rowWidth,
-		originalRow:       originalRow,
-		secondaryRows:     newInMemoryRowCache(),
-		ctx:               ctx,
+		typ:            jt,
+		top:            top,
+		bottomProvider: bottom,
+		cond:           joinCondition,
+		rowSize:        rowWidth,
+		originalRow:    originalRow,
+		bottomRows:     newInMemoryRowCache(),
+		ctx:            ctx,
 	}
 }
 
-func (i *nestedLoopsIter) loadPrimary(ctx context.Context) error {
-	// If primary has already been loaded, it's safe to no-op.
-	if i.primaryRow != nil {
+func (i *nestedLoopsIter) loadTop(ctx context.Context) error {
+	if i.topRow != nil {
 		return nil
 	}
 
@@ -152,119 +141,35 @@ func (i *nestedLoopsIter) loadPrimary(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	i.primaryRow = i.originalRow.Append(r)
+	i.topRow = i.originalRow.Append(r)
 	i.foundMatch = false
 
 	return nil
 }
 
-/*func (i *nestedLoopsIter) loadSecondaryInMemory(ctx context.Context) error {
-	iter, err := i.secondaryProvider.Iterator(ctx, i.primaryRow)
-	if err != nil {
-		return err
-	}
-
-	for {
-		row, err := iter.Next(ctx)
-		if err == types.ErrNoMoreRows {
-			break
-		}
-		if err != nil {
-			//iter.Close(ctx)
-			return err
-		}
-
-		if err := i.secondaryRows.Add(row); err != nil {
-			//iter.Close(ctx)
-			return err
-		}
-	}
-
-	//err = iter.Close(ctx)
-	//if err != nil {
-	//	return err
-	//}
-
-	if len(i.secondaryRows.Get()) == 0 {
-		return types.ErrNoMoreRows
-	}
-
-	return nil
-}*/
-
-func (i *nestedLoopsIter) loadSecondary(ctx context.Context) (row types.Row, err error) {
-	/*if i.mode == memoryMode {
-		if len(i.secondaryRows.Get()) == 0 {
-			if err = i.loadSecondaryInMemory(ctx); err != nil {
-				if err == types.ErrNoMoreRows {
-					i.primaryRow = nil
-					i.pos = 0
-				}
-				return nil, err
-			}
-		}
-
-		if i.pos >= len(i.secondaryRows.Get()) {
-			i.primaryRow = nil
-			i.pos = 0
-			return nil, types.ErrNoMoreRows
-		}
-
-		row := i.secondaryRows.Get()[i.pos]
-		i.pos++
-		return row, nil
-	}*/
-
+func (i *nestedLoopsIter) loadBottom(ctx context.Context) (row types.Row, err error) {
 	if i.bottom == nil {
 		var iter types.RowIterator
-		iter, err = i.secondaryProvider.Iterator(ctx, i.primaryRow)
+		iter, err = i.bottomProvider.Iterator(ctx, i.topRow)
 		if err != nil {
 			return nil, err
 		}
 
 		i.bottom = iter
 	}
-
 	rightRow, err := i.bottom.Next(ctx)
 	if err != nil {
 		if err == types.ErrNoMoreRows {
-			//err = i.bottom.Close(ctx)
 			i.bottom = nil
-			//if err != nil {
-			//	return nil, err
-			//}
-			i.primaryRow = nil
-
-			// If we got to this point and the mode is still unknown it means
-			// the right side fits in memory, so the mode changes to memory
-			// join.
-			//if i.mode == unknownMode {
-			//	i.mode = memoryMode
-			//}
-
+			i.topRow = nil
 			return nil, types.ErrNoMoreRows
 		}
 		return nil, err
 	}
-
-	if i.mode == unknownMode {
-		var switchToMultipass bool
-		//if !ctx.Memory.HasAvailable() {
-		//switchToMultipass = true
-		//} else {
-		err := i.secondaryRows.Add(rightRow)
-		if err != nil { //&& !sql.ErrNoMemoryAvailable.Is(err) {
-			return nil, err
-		}
-		//}
-
-		if switchToMultipass {
-			//i.Dispose()
-			i.secondaryRows = nil
-			i.mode = multipassMode
-		}
+	err = i.bottomRows.Add(rightRow)
+	if err != nil {
+		return nil, err
 	}
-
 	return rightRow, nil
 }
 
@@ -307,12 +212,12 @@ func conditionIsTrue(ctx context.Context, row types.Row, cond types.PlanExpressi
 
 func (i *nestedLoopsIter) Next(ctx context.Context) (types.Row, error) {
 	for {
-		if err := i.loadPrimary(ctx); err != nil {
+		if err := i.loadTop(ctx); err != nil {
 			return nil, err
 		}
 
-		primary := i.primaryRow
-		secondary, err := i.loadSecondary(ctx)
+		primary := i.topRow
+		secondary, err := i.loadBottom(ctx)
 		if err != nil {
 			if err == types.ErrNoMoreRows {
 				if !i.foundMatch && (i.typ == joinTypeLeft || i.typ == joinTypeRight) {

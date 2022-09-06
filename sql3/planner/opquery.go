@@ -26,7 +26,8 @@ var _ types.PlanOperator = (*PlanOpQuery)(nil)
 
 func NewPlanOpQuery(child types.PlanOperator, sql string) *PlanOpQuery {
 	return &PlanOpQuery{
-		ChildOp: child,
+		ChildOp:  child,
+		warnings: make([]string, 0),
 	}
 }
 
@@ -52,7 +53,10 @@ func (p *PlanOpQuery) WithChildren(children ...types.PlanOperator) (types.PlanOp
 	if len(children) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return NewPlanOpQuery(children[0], p.sql), nil
+	op := NewPlanOpQuery(children[0], p.sql)
+	op.warnings = append(op.warnings, p.warnings...)
+	return op, nil
+
 }
 
 func (p *PlanOpQuery) Plan() map[string]interface{} {

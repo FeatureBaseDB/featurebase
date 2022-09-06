@@ -17,8 +17,9 @@ type PlanOpDistinct struct {
 
 func NewPlanOpDistinct(p *ExecutionPlanner, source types.PlanOperator) *PlanOpDistinct {
 	return &PlanOpDistinct{
-		planner: p,
-		source:  source,
+		planner:  p,
+		source:   source,
+		warnings: make([]string, 0),
 	}
 }
 

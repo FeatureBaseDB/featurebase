@@ -31,6 +31,7 @@ func NewPlanOpPQLGroupBy(p *ExecutionPlanner, tableName string, groupByExprs []t
 		groupByExprs: groupByExprs,
 		filter:       filter,
 		aggregate:    aggregate,
+		warnings:     make([]string, 0),
 	}
 }
 
@@ -146,7 +147,7 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 			Args: map[string]interface{}{},
 		}
 		for _, c := range i.groupByColumns {
-			ref, ok := c.(types.SchemaIdentifiable)
+			ref, ok := c.(types.IdentifiableByName)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected expression type in group by list '%T'", c)
 			}

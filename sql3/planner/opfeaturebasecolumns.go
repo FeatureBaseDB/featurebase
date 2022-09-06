@@ -20,7 +20,8 @@ type PlanOpFeatureBaseColumns struct {
 
 func NewPlanOpFeatureBaseColumns(index *pilosa.IndexInfo) *PlanOpFeatureBaseColumns {
 	node := &PlanOpFeatureBaseColumns{
-		index: index,
+		index:    index,
+		warnings: make([]string, 0),
 	}
 	return node
 }
