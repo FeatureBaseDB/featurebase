@@ -184,12 +184,26 @@ type response struct {
 	ExecutionTime int64                 `json:"exec_time"`
 }
 
+func (r *response) WriteWarnings(w io.Writer) error {
+	if len(r.Warnings) > 0 {
+		if _, err := w.Write([]byte("\n")); err != nil {
+			return errors.Wrapf(err, "writing warning: %s", r.Error)
+		}
+		for _, warning := range r.Warnings {
+			if _, err := w.Write([]byte("Warning: " + warning + "\n")); err != nil {
+				return errors.Wrapf(err, "writing warning: %s", r.Error)
+			}
+		}
+	}
+	return nil
+}
+
 func (r *response) WriteOut(w io.Writer) error {
 	if r.Error != "" {
 		if _, err := w.Write([]byte("Error: " + r.Error + "\n")); err != nil {
 			return errors.Wrapf(err, "writing error: %s", r.Error)
 		}
-		return nil
+		return r.WriteWarnings(w)
 	}
 
 	t := table.NewWriter()
@@ -211,15 +225,9 @@ func (r *response) WriteOut(w io.Writer) error {
 	}
 	t.Render()
 
-	if len(r.Warnings) > 0 {
-		if _, err := w.Write([]byte("\n")); err != nil {
-			return errors.Wrapf(err, "writing warning: %s", r.Error)
-		}
-		for _, warning := range r.Warnings {
-			if _, err := w.Write([]byte("Warning: " + warning + "\n")); err != nil {
-				return errors.Wrapf(err, "writing warning: %s", r.Error)
-			}
-		}
+	err := r.WriteWarnings(w)
+	if err != nil {
+		return err
 	}
 	lifeAffirmingMessage := ""
 	if r.ExecutionTime < 1000000 {

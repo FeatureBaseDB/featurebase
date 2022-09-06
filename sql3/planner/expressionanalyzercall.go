@@ -239,6 +239,9 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 	case "DATEPART":
 		return p.analyzeFunctionDatePart(call, scope)
 
+	case "SUBTABLE":
+		return p.analyzeFunctionSubtable(call, scope)
+
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

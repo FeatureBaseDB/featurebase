@@ -25,6 +25,7 @@ func NewPlanOpPQLMultiGroupBy(p *ExecutionPlanner, operators []*PlanOpPQLGroupBy
 		planner:      p,
 		operators:    operators,
 		groupByExprs: groupByExprs,
+		warnings:     make([]string, 0),
 	}
 }
 

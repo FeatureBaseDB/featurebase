@@ -30,6 +30,7 @@ func NewPlanOpInsert(p *ExecutionPlanner, tableName string, targetColumns []*qua
 		tableName:     tableName,
 		targetColumns: targetColumns,
 		insertValues:  insertValues,
+		warnings:      make([]string, 0),
 	}
 }
 
@@ -281,6 +282,51 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 				return nil, err
 			}
 
+		case *parser.DataTypeIDSetQuantum:
+			rowIDs := make([]uint64, 0)
+			timestamps := make([]int64, 0)
+
+			coercedVal, err := coerceValue(sourceType, targetType, eval, parser.Pos{Line: 0, Column: 0})
+			if err != nil {
+				return nil, err
+			}
+
+			record := coercedVal.([]interface{})
+			rowSet := record[1].([]int64)
+			for k := range rowSet {
+				err = addColID(columnID)
+				if err != nil {
+					return nil, err
+				}
+				rowIDs = append(rowIDs, uint64(rowSet[k]))
+			}
+
+			if record[0] == nil {
+				timestamps = nil
+			} else {
+				timestamp, ok := record[0].(time.Time)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unexpected type '%T'", record[0])
+				}
+				for range rowSet {
+					timestamps = append(timestamps, timestamp.Unix())
+				}
+			}
+
+			req := &pilosa.ImportRequest{
+				Index:      i.tableName,
+				Field:      targetColumn.columnName,
+				Shard:      0, //TODO: handle non-0 shards
+				ColumnIDs:  colIDs,
+				ColumnKeys: colKeys,
+				RowIDs:     rowIDs,
+				Timestamps: timestamps,
+			}
+			err = i.planner.computeAPI.Import(ctx, qcx, req)
+			if err != nil {
+				return nil, err
+			}
+
 		case *parser.DataTypeString:
 			err = addColID(columnID)
 			if err != nil {
@@ -327,6 +373,51 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 				return nil, err
 			}
 
+		case *parser.DataTypeStringSetQuantum:
+			rowKeys := make([]string, 0)
+			timestamps := make([]int64, 0)
+
+			coercedVal, err := coerceValue(sourceType, targetType, eval, parser.Pos{Line: 0, Column: 0})
+			if err != nil {
+				return nil, err
+			}
+
+			record := coercedVal.([]interface{})
+			rowSet := record[1].([]string)
+			for k := range rowSet {
+				err = addColID(columnID)
+				if err != nil {
+					return nil, err
+				}
+				rowKeys = append(rowKeys, rowSet[k])
+			}
+
+			if record[0] == nil {
+				timestamps = nil
+			} else {
+				timestamp, ok := record[0].(time.Time)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unexpected type '%T'", record[0])
+				}
+				for range rowSet {
+					timestamps = append(timestamps, timestamp.Unix())
+				}
+			}
+
+			req := &pilosa.ImportRequest{
+				Index:      i.tableName,
+				Field:      targetColumn.columnName,
+				Shard:      0, //TODO: handle non-0 shards
+				ColumnIDs:  colIDs,
+				ColumnKeys: colKeys,
+				RowKeys:    rowKeys,
+				Timestamps: timestamps,
+			}
+			err = i.planner.computeAPI.Import(ctx, qcx, req)
+			if err != nil {
+				return nil, err
+			}
+
 		case *parser.DataTypeTimestamp:
 			err = addColID(columnID)
 			if err != nil {
@@ -356,7 +447,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 			}
 
 		default:
-			return nil, sql3.NewErrInternalf("unhandled data type '%T'", iv.Type())
+			return nil, sql3.NewErrInternalf("unhandled data type '%T'", targetType)
 		}
 	}
 

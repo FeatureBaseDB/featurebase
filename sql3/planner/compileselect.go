@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strings"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -15,10 +16,9 @@ import (
 // compileSelectStatment compiles a parser.SelectStatment AST into a PlanOperator
 func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, isSubquery bool) (types.PlanOperator, error) {
 	query := NewPlanOpQuery(NewPlanOpNullTable(), p.sql)
-	//p.pushPlannerScope(query)
 	p.scopeStack.push(query)
 
-	// handle select list
+	// handle projections
 	projections := make([]types.PlanExpression, 0)
 	for _, c := range stmt.Columns {
 		planExpr, err := p.compileExpr(c.Expr)
@@ -52,13 +52,24 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		query.AddWarning("DISTINCT not yet implemented")
 	}
 
-	// source expression last
-	source, err := p.compileSelectSource(query, stmt.WhereExpr, stmt.Source)
+	// handle the where clause
+	where, err := p.compileExpr(stmt.WhereExpr)
 	if err != nil {
 		return nil, err
 	}
 
-	//do we have straight projection or a group by?
+	// source expression
+	source, err := p.compileSelectSource(query, stmt.Source)
+	if err != nil {
+		return nil, err
+	}
+
+	// if we did have a where, insert the filter op
+	if where != nil {
+		source = NewPlanOpFilter(p, where, source)
+	}
+
+	// do we have straight projection or a group by?
 	var compiledOp types.PlanOperator
 	if len(query.aggregates) > 0 {
 		compiledOp = NewPlanOpProjection(projections, NewPlanOpGroupBy(query.aggregates, groupByExprs, source))
@@ -86,7 +97,7 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		compiledOp = NewPlanOpOrderBy(orderByFields, compiledOp)
 	}
 
-	//insert the top operator if it exists
+	// insert the top operator if it exists
 	if stmt.Top.IsValid() {
 		topExpr, err := p.compileExpr(stmt.TopExpr)
 		if err != nil {
@@ -95,11 +106,10 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		compiledOp = NewPlanOpTop(topExpr, compiledOp)
 	}
 
-	//pop the scope
-	//p.popPlannerScope()
+	// pop the scope
 	_ = p.scopeStack.pop()
 
-	//if it is a subquery, don't wrap in a PlanOpQuery
+	// if it is a subquery, don't wrap in a PlanOpQuery
 	if isSubquery {
 		return compiledOp, nil
 	}
@@ -109,18 +119,18 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 	return query.WithChildren(children...)
 }
 
-func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, whereExpr parser.Expr, source parser.Source) (types.PlanOperator, error) {
+func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser.Source) (types.PlanOperator, error) {
 	if source == nil {
 		return NewPlanOpNullTable(), nil
 	}
 
 	switch sourceExpr := source.(type) {
 	case *parser.JoinClause:
-		topOp, err := p.compileSelectSource(scope, whereExpr, sourceExpr.X)
+		topOp, err := p.compileSelectSource(scope, sourceExpr.X)
 		if err != nil {
 			return nil, err
 		}
-		bottomOp, err := p.compileSelectSource(scope, whereExpr, sourceExpr.Y)
+		bottomOp, err := p.compileSelectSource(scope, sourceExpr.Y)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +141,7 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, whereExpr par
 		return NewPlanOpNestedLoops(topOp, bottomOp), nil
 
 	case *parser.QualifiedTableName:
-		//get all the qualified refs that refer to this table
+		// get all the qualified refs that refer to this table
 		extractColumns := []types.PlanExpression{}
 
 		for _, r := range scope.referenceList {
@@ -140,19 +150,39 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, whereExpr par
 			}
 		}
 
-		// handle the where clause
-		where, err := p.compileExpr(whereExpr)
+		tableName := parser.IdentName(sourceExpr.Name)
+
+		if sourceExpr.Alias != nil {
+			aliasName := parser.IdentName(sourceExpr.Alias)
+			return NewPlanOpRelAlias(aliasName, NewPlanOpPQLTableScan(p, tableName, extractColumns)), nil
+		}
+
+		return NewPlanOpPQLTableScan(p, tableName, extractColumns), nil
+
+	case *parser.TableValuedFunction:
+		callExpr, err := p.compileCallExpr(sourceExpr.Call)
 		if err != nil {
 			return nil, err
 		}
 
-		//get for the table name
-		tableName := parser.IdentName(sourceExpr.Name)
+		if sourceExpr.Alias != nil {
+			aliasName := parser.IdentName(sourceExpr.Alias)
+			return NewPlanOpRelAlias(aliasName, NewPlanOpTableValuedFunction(p, callExpr)), nil
+		}
 
-		return NewPlanOpPQLTableScan(p, tableName, extractColumns, where), nil
+		return NewPlanOpTableValuedFunction(p, callExpr), nil
 
 	case *parser.ParenSource:
-		return p.compileSelectSource(scope, whereExpr, sourceExpr.X)
+		if sourceExpr.Alias != nil {
+			aliasName := parser.IdentName(sourceExpr.Alias)
+			op, err := p.compileSelectSource(scope, sourceExpr.X)
+			if err != nil {
+				return nil, err
+			}
+			return NewPlanOpRelAlias(aliasName, op), nil
+		}
+
+		return p.compileSelectSource(scope, sourceExpr.X)
 
 	case *parser.SelectStatement:
 		subQuery, err := p.compileSelectStatement(sourceExpr, true)
@@ -166,31 +196,31 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, whereExpr par
 	}
 }
 
-func (p *ExecutionPlanner) analyzeSource(source parser.Source) error {
+func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Statement) error {
 	if source == nil {
 		return nil
 	}
 	switch source := source.(type) {
 	case *parser.JoinClause:
-		err := p.analyzeSource(source.X)
+		err := p.analyzeSource(source.X, scope)
 		if err != nil {
 			return err
 		}
-		err = p.analyzeSource(source.Y)
+		err = p.analyzeSource(source.Y, scope)
 		if err != nil {
 			return err
 		}
 		return nil
 
 	case *parser.ParenSource:
-		err := p.analyzeSource(source.X)
+		err := p.analyzeSource(source.X, scope)
 		if err != nil {
 			return err
 		}
 		return nil
 
 	case *parser.QualifiedTableName:
-		//check table exists
+		// check table exists
 		tableName := parser.IdentName(source.Name)
 		table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
 		if err != nil {
@@ -213,6 +243,37 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source) error {
 
 		return nil
 
+	case *parser.TableValuedFunction:
+		//check it actually is a table valued function - we only support one right now; subtable()
+		switch strings.ToUpper(source.Name.Name) {
+		case "SUBTABLE":
+			_, err := p.analyzeCallExpression(source.Call, scope)
+			if err != nil {
+				return err
+			}
+
+			tvfResultType, ok := source.Call.ResultDataType.(*parser.DataTypeSubtable)
+			if !ok {
+				return sql3.NewErrInternalf("unexepected tvf return type")
+			}
+
+			// populate the output columns from the source
+			for idx, member := range tvfResultType.Columns {
+				soc := &parser.SourceOutputColumn{
+					TableName:   "", // TODO (pok) use the tq column actually referenced as the table name
+					ColumnName:  member.Name,
+					ColumnIndex: idx,
+					Datatype:    member.DataType,
+				}
+				source.OutputColumns = append(source.OutputColumns, soc)
+			}
+
+		default:
+			return sql3.NewErrInternalf("table valued function expected")
+		}
+
+		return nil
+
 	case *parser.SelectStatement:
 		err := p.analyzeSelectStatement(source)
 		if err != nil {
@@ -226,8 +287,8 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source) error {
 }
 
 func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) error {
-	//analyze source first - needed for name resolution
-	err := p.analyzeSource(stmt.Source)
+	// analyze source first - needed for name resolution
+	err := p.analyzeSource(stmt.Source, stmt)
 	if err != nil {
 		return err
 	}

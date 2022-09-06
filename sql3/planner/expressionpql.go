@@ -169,6 +169,14 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 				},
 			}, nil
 
+		case *parser.DataTypeTimestamp:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: pqlValue,
+				},
+			}, nil
+
 		default:
 			return nil, sql3.NewErrInternalf("unsupported type for binary expression: %v (%T)", typ, typ)
 		}
@@ -219,6 +227,8 @@ func planExprToValue(expr types.PlanExpression) (interface{}, error) {
 	case *intLiteralPlanExpression:
 		return strconv.ParseInt(expr.value, 10, 64)
 	case *stringLiteralPlanExpression:
+		return expr.value, nil
+	case *dateLiteralPlanExpression:
 		return expr.value, nil
 	default:
 		return nil, sql3.NewErrInternalf("cannot convert SQL expression %T to a literal value", expr)

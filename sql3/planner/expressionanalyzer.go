@@ -148,6 +148,24 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 
 		return e, nil
 
+	case *parser.TupleLiteralExpr:
+		memberTypes := make([]parser.ExprDataType, 0)
+		for i, ex := range e.Members {
+			memberExpr, err := p.analyzeExpression(ex, scope)
+			if err != nil {
+				return nil, err
+			}
+			e.Members[i] = memberExpr
+			memberTypes = append(memberTypes, memberExpr.DataType())
+		}
+
+		if len(e.Members) == 0 {
+			return nil, sql3.NewErrLiteralEmptyTupleNotAllowed(e.Lbrace.Line, e.Lbrace.Column)
+		}
+		e.ResultDataType = parser.NewDataTypeTuple(memberTypes)
+
+		return e, nil
+
 	case *parser.QualifiedRef:
 		switch sc := scope.(type) {
 		case *parser.SelectStatement:
@@ -358,6 +376,19 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 	case parser.LT, parser.LE, parser.GT, parser.GE:
 		if !typeIsCompatibleWithComparisonOperator(x.DataType()) {
 			return nil, sql3.NewErrTypeIncompatibleWithComparisonOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+		}
+		if typeIsTimestamp(x.DataType()) && y.IsLiteral() && typeIsString(y.DataType()) {
+			// we have a string literal on the rhs being compared to a date so
+			// try to convert to a date literal
+			rhs, ok := y.(*parser.StringLit)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected expression type '%T'", y)
+			}
+			newRhs := rhs.ConvertToTimestamp()
+			if newRhs != nil {
+				expr.Y = newRhs
+				y = newRhs
+			}
 		}
 		if !typeIsCompatibleWithComparisonOperator(y.DataType()) {
 			return nil, sql3.NewErrTypeIncompatibleWithComparisonOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())

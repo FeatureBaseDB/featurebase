@@ -41,13 +41,8 @@ type ContainsExpressions interface {
 	// returns the list of expressions contained by the plan operator
 	Expressions() []PlanExpression
 
-	// WithExpressions returns a new operator with expressions replaced
-	WithExpressions(...PlanExpression) (PlanOperator, error)
-}
-
-// SchemaObject exposes an ObjectName() for operators that iterate on schema objects
-type SchemaObject interface {
-	ObjectName() string
+	// NewWithExpressions returns a new operator with expressions replaced
+	NewWithExpressions(exprs ...PlanExpression) (PlanOperator, error)
 }
 
 // PlannerColumn is the definition of a column returned as a set from each operator
@@ -55,6 +50,17 @@ type PlannerColumn struct {
 	Name  string
 	Table string
 	Type  parser.ExprDataType
+}
+
+// Relation is an interface to something that can be treated as a relation
+type Relation interface {
+	Name() string
+}
+
+// FilteredRelation is an interface to something that can be treated as a relation that can be filtered
+type FilteredRelation interface {
+	Relation
+	UpdateFilters(filterCondition PlanExpression) (PlanOperator, error)
 }
 
 // Schema is the definition a set of columns from each operator

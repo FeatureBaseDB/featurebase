@@ -29,6 +29,7 @@ func NewPlanOpPQLAggregate(p *ExecutionPlanner, tableName string, aggregate type
 		tableName: tableName,
 		filter:    filter,
 		aggregate: aggregate,
+		warnings:  make([]string, 0),
 	}
 }
 

@@ -77,8 +77,10 @@ func (*SavepointStatement) node()     {}
 func (*SelectStatement) node()        {}
 func (*ShardWidthOption) node()       {}
 func (*StringLit) node()              {}
+func (*TableValuedFunction) node()    {}
 func (*TimeUnitConstraint) node()     {}
 func (*TimeQuantumConstraint) node()  {}
+func (*TupleLiteralExpr) node()       {}
 func (*Type) node()                   {}
 func (*UnaryExpr) node()              {}
 func (*UniqueConstraint) node()       {}
@@ -204,26 +206,27 @@ type Expr interface {
 	Pos() Pos
 }
 
-func (*BinaryExpr) expr()      {}
-func (*BoolLit) expr()         {}
-func (*Call) expr()            {}
-func (*CaseExpr) expr()        {}
-func (*CaseBlock) expr()       {}
-func (*CastExpr) expr()        {}
-func (*DateLit) expr()         {}
-func (*Exists) expr()          {}
-func (*ExprList) expr()        {}
-func (*Ident) expr()           {}
-func (*NullLit) expr()         {}
-func (*IntegerLit) expr()      {}
-func (*FloatLit) expr()        {}
-func (*ParenExpr) expr()       {}
-func (*SetLiteralExpr) expr()  {}
-func (*QualifiedRef) expr()    {}
-func (*Range) expr()           {}
-func (*StringLit) expr()       {}
-func (*UnaryExpr) expr()       {}
-func (*SelectStatement) expr() {}
+func (*BinaryExpr) expr()       {}
+func (*BoolLit) expr()          {}
+func (*Call) expr()             {}
+func (*CaseExpr) expr()         {}
+func (*CaseBlock) expr()        {}
+func (*CastExpr) expr()         {}
+func (*DateLit) expr()          {}
+func (*Exists) expr()           {}
+func (*ExprList) expr()         {}
+func (*Ident) expr()            {}
+func (*NullLit) expr()          {}
+func (*IntegerLit) expr()       {}
+func (*FloatLit) expr()         {}
+func (*ParenExpr) expr()        {}
+func (*SetLiteralExpr) expr()   {}
+func (*TupleLiteralExpr) expr() {}
+func (*QualifiedRef) expr()     {}
+func (*Range) expr()            {}
+func (*StringLit) expr()        {}
+func (*UnaryExpr) expr()        {}
+func (*SelectStatement) expr()  {}
 
 // CloneExpr returns a deep copy expr.
 func CloneExpr(expr Expr) Expr {
@@ -343,10 +346,11 @@ type Source interface {
 	OutputColumnQualifierNamed(qualifier string, name string) (*SourceOutputColumn, error)
 }
 
-func (*JoinClause) source()         {}
-func (*ParenSource) source()        {}
-func (*QualifiedTableName) source() {}
-func (*SelectStatement) source()    {}
+func (*JoinClause) source()          {}
+func (*ParenSource) source()         {}
+func (*QualifiedTableName) source()  {}
+func (*TableValuedFunction) source() {}
+func (*SelectStatement) source()     {}
 
 // CloneSource returns a deep copy src.
 func CloneSource(src Source) Source {
@@ -2715,15 +2719,30 @@ func (s *DropTriggerStatement) String() string {
 	return buf.String()
 }
 
+type BulkInsertIDMap struct {
+	Auto        Pos // position of AUTO
+	ColumnExprs *ExprList
+}
+
+type BulkInsertMappedColumn struct {
+	SourceColumnOffset Expr
+	TargetColumn       *Ident
+}
+
 type BulkInsertStatement struct {
 	Bulk   Pos // position of BULK keyword
 	Insert Pos // position of INSERT keyword
 
 	Table *Ident // table name
 
-	From     Pos  // position of FROM keyword
-	DataFile Expr // data file name
-	With     Pos  // position of WITH keyword
+	From      Pos  // position of FROM keyword
+	DataFile  Expr // data file name
+	With      Pos  // position of WITH keyword
+	BatchSize Expr
+	RowsLimit Expr
+	Format    Expr
+	MapId     *BulkInsertIDMap
+	ColumnMap []*BulkInsertMappedColumn
 }
 
 func (s *BulkInsertStatement) String() string {
@@ -3520,6 +3539,79 @@ func (c *QualifiedTableName) OutputColumnQualifierNamed(qualifier string, name s
 	return nil, nil
 }
 
+type TableValuedFunction struct {
+	Name          *Ident                // table name
+	As            Pos                   // position of AS keyword
+	Alias         *Ident                // optional table alias
+	Call          *Call                 // call
+	OutputColumns []*SourceOutputColumn // output columns - populated during analysis
+}
+
+// TableName returns the name used to identify n.
+// Returns the alias, if one is specified. Otherwise returns the name.
+func (n *TableValuedFunction) TableName() string {
+	if s := IdentName(n.Alias); s != "" {
+		return s
+	}
+	return IdentName(n.Name)
+}
+
+func (n *TableValuedFunction) MatchesTablenameOrAlias(match string) bool {
+	return strings.EqualFold(IdentName(n.Alias), match) || strings.EqualFold(IdentName(n.Name), match)
+}
+
+// Clone returns a deep copy of n.
+func (n *TableValuedFunction) Clone() *TableValuedFunction {
+	if n == nil {
+		return nil
+	}
+	other := *n
+	other.Name = n.Name.Clone()
+	other.Alias = n.Alias.Clone()
+	return &other
+}
+
+// String returns the string representation of the table name.
+func (n *TableValuedFunction) String() string {
+	var buf bytes.Buffer
+	buf.WriteString(n.Name.String())
+	if n.Alias != nil {
+		fmt.Fprintf(&buf, " AS %s", n.Alias.String())
+	}
+
+	return buf.String()
+}
+
+func (c *TableValuedFunction) SourceFromAlias(alias string) Source {
+	if strings.EqualFold(IdentName(c.Alias), alias) {
+		return c
+	}
+	if strings.EqualFold(IdentName(c.Name), alias) {
+		return c
+	}
+	return nil
+}
+
+func (c *TableValuedFunction) PossibleOutputColumns() []*SourceOutputColumn {
+	return c.OutputColumns
+}
+
+func (c *TableValuedFunction) OutputColumnNamed(name string) (*SourceOutputColumn, error) {
+	for _, oc := range c.OutputColumns {
+		if strings.EqualFold(oc.ColumnName, name) {
+			return oc, nil
+		}
+	}
+	return nil, nil
+}
+
+func (c *TableValuedFunction) OutputColumnQualifierNamed(qualifier string, name string) (*SourceOutputColumn, error) {
+	if strings.EqualFold(IdentName(c.Alias), qualifier) || strings.EqualFold(IdentName(c.Name), qualifier) {
+		return c.OutputColumnNamed(name)
+	}
+	return nil, nil
+}
+
 type ParenSource struct {
 	Lparen Pos    // position of left paren
 	X      Source // nested source
@@ -3906,6 +3998,54 @@ func (expr *SetLiteralExpr) String() string {
 			buf.WriteString(col.String())
 		}
 		buf.WriteString("]")
+	}
+
+	return buf.String()
+}
+
+type TupleLiteralExpr struct {
+	Lbrace  Pos    // position of left brace
+	Members []Expr // bracketed expression
+	Rbrace  Pos    // position of right brace
+
+	ResultDataType ExprDataType
+}
+
+func (expr *TupleLiteralExpr) IsLiteral() bool {
+	return true
+}
+
+func (expr *TupleLiteralExpr) DataType() ExprDataType {
+	return expr.ResultDataType
+}
+
+func (expr *TupleLiteralExpr) Pos() Pos {
+	return expr.Lbrace
+}
+
+// Clone returns a deep copy of expr.
+func (expr *TupleLiteralExpr) Clone() *TupleLiteralExpr {
+	if expr == nil {
+		return nil
+	}
+	other := *expr
+	other.Members = cloneExprs(expr.Members)
+	return &other
+}
+
+// String returns the string representation of the expression.
+func (expr *TupleLiteralExpr) String() string {
+	var buf bytes.Buffer
+
+	if len(expr.Members) != 0 {
+		buf.WriteString("{")
+		for i, col := range expr.Members {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(col.String())
+		}
+		buf.WriteString("}")
 	}
 
 	return buf.String()
