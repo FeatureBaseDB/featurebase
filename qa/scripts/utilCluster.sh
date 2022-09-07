@@ -123,6 +123,10 @@ long-query-time = "10s"
     permissions = "/etc/permissions.yml"
     query-log-path = "/data/featurebase/query.log"
     configured-ips = ["${DEPLOYED_INGEST_IPS}"]
+
+[sql]
+    endpoint-enabled = true
+
 EOT
 
     echo "writing the permissions file"
@@ -159,6 +163,9 @@ long-query-time = "10s"
 
 [metric]
     service = "prometheus"
+
+[sql]
+    endpoint-enabled = true
 
 EOT
     fi
