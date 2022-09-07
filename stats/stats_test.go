@@ -116,9 +116,6 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	c := test.MustRunUnsharedCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c.GetNode(0).Server.Holder()}
-
-	hldr.SetBit("d", "f", 0, 0)
-	hldr.SetBit("d", "f", 0, 1)
 	called := false
 	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
@@ -133,6 +130,10 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			called = true
 		},
 	}
+
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
+
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `Row(f=0)`}); err != nil {
 		t.Fatal(err)
 	}
