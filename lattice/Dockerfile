@@ -1,4 +1,4 @@
-FROM moleculacorp/nodejs:latest as build
+FROM ghcr.io/featurebasedb/nodejs:0.0.1 as build
 # make sure that your docker settings allow for at least like 4gb of ram, it
 # takes a lot to build this
 WORKDIR /lattice

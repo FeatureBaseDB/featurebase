@@ -4,7 +4,7 @@ ARG GO_VERSION=latest
 ### Lattice builder ###
 #######################
 
-FROM moleculacorp/nodejs:latest as lattice-builder
+FROM ghcr.io/featurebasedb/nodejs:0.0.1 as lattice-builder
 WORKDIR /lattice
 
 COPY lattice/package.json ./
