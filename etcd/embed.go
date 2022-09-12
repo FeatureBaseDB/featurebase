@@ -370,7 +370,7 @@ func (e *Etcd) parseOptions() (*embed.Config, error) {
 	if e.options.InitCluster != "" {
 		// Checks if FB is running the single-node free version or the multi-node
 		// enterprise version. Sentry.io is enabled on single-node.
-		if AllowCluster() == false {
+		if !AllowCluster() {
 			// %% begin sonarcloud ignore %%
 
 			monitor.InitErrorMonitor(e.version)
