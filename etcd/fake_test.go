@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
@@ -43,21 +44,42 @@ func (f *fakeCluster) BringUp() error {
 
 // AwaitClusterState verifies that node 0 thinks the cluster is in the
 // requested state, or tells you why it failed.
-func (f *fakeCluster) AwaitClusterState(expected disco.ClusterState) (err error) {
-	state := disco.ClusterState("")
+func (f *fakeCluster) AwaitClusterState(expected disco.ClusterState, timeout time.Duration) (err error) {
+	// You might reasonably ask why we don't use context.WithTimeout for this.
+	// The answer is that "context deadline exceeded" would be ambiguous as to
+	// whether it was an internal error produced by the etcd stuff, or an error
+	// introduced by this function.
+	now := time.Now()
+	state, err := f.nodes[0].ClusterState(context.Background())
+	if err != nil {
+		return err
+	}
 	for state != expected {
+		// wait a bit to see if it recovered
+		time.Sleep(50 * time.Millisecond)
 		state, err = f.nodes[0].ClusterState(context.Background())
 		if err != nil {
 			return err
 		}
+		if state != expected {
+			nodes := f.nodes[0].Nodes()
+			for _, n := range nodes {
+				f.tb.Logf("  %s: %s", n.ID, n.State)
+			}
+		}
+		elapsed := time.Since(now)
+		if elapsed >= timeout {
+			return fmt.Errorf("cluster did not reach state %q after %v", expected, timeout)
+		}
+		f.tb.Logf("cluster state after %v: %q", elapsed, state)
 	}
 	return nil
 }
 
 // MustAwaitClusterState verifies that node 0 thinks the cluster is in the
 // requested state, or fails a test.
-func (f *fakeCluster) MustAwaitClusterState(expected disco.ClusterState) {
-	err := f.AwaitClusterState(expected)
+func (f *fakeCluster) MustAwaitClusterState(expected disco.ClusterState, timeout time.Duration) {
+	err := f.AwaitClusterState(expected, timeout)
 	if err != nil {
 		f.tb.Fatalf("awaiting cluster state %s: %v", expected, err)
 	}
