@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
@@ -25,19 +24,6 @@ import (
 // from a call from tx.OffsetRange() by requesting [0, LeftShifted16MaxContainerKey)
 // with an offset of 0.
 const LeftShifted16MaxContainerKey = uint64(0xffffffffffff0000) // or math.MaxUint64 - (1<<16 - 1), or 18446744073709486080
-
-// NilInside checks if the provided iface is nil or
-// contains a nil pointer, slice, array, map, or channel.
-func NilInside(iface interface{}) bool {
-	if iface == nil {
-		return true
-	}
-	switch reflect.TypeOf(iface).Kind() {
-	case reflect.Ptr, reflect.Slice, reflect.Array, reflect.Map, reflect.Chan:
-		return reflect.ValueOf(iface).IsNil()
-	}
-	return false
-}
 
 //////////////////////////////////
 // helper utility functions
