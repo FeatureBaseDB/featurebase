@@ -271,7 +271,9 @@ func OptFieldTypeTimestamp(epoch time.Time, timeUnit string) FieldOption {
 // scale = -2:
 // min : [-922337203685477580800, -100]
 // GAPs: [-99, -1], [-199, -101] ... [-922337203685477580799, -922337203685477580701]
-//       0
+//
+//	0
+//
 // max : [100, 922337203685477580700]
 // GAPs: [1, 99], [101, 199] ... [922337203685477580601, 922337203685477580699]
 //
@@ -282,7 +284,6 @@ func OptFieldTypeTimestamp(epoch time.Time, timeUnit string) FieldOption {
 //
 // min : [-922337203685477580800, -922337203685477580800+(2^64)]
 // max : [922337203685477580700-(2^64), 922337203685477580700]
-//
 func OptFieldTypeDecimal(scale int64, minmax ...pql.Decimal) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -1258,8 +1259,6 @@ func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx, details bool, limit in
 
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: colID / ShardWidth})
-	defer finisher(&err)
 	viewName := viewStandard
 	if !f.options.NoStandardView {
 		// Retrieve view. Exit if it doesn't exist.
@@ -1269,7 +1268,7 @@ func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed boo
 		}
 
 		// Set non-time bit.
-		if v, err := view.setBit(tx, rowID, colID); err != nil {
+		if v, err := view.setBit(qcx, rowID, colID); err != nil {
 			return changed, errors.Wrap(err, "setting on view")
 		} else if v {
 			changed = v
@@ -1288,7 +1287,7 @@ func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed boo
 			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
 
-		if c, err := view.setBit(tx, rowID, colID); err != nil {
+		if c, err := view.setBit(qcx, rowID, colID); err != nil {
 			return changed, errors.Wrapf(err, "setting on view %s", subname)
 		} else if c {
 			changed = true
@@ -1300,8 +1299,6 @@ func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed boo
 
 // ClearBit clears a bit within the field.
 func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: colID / ShardWidth})
-	defer finisher(&err)
 	viewName := viewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
@@ -1311,7 +1308,7 @@ func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error
 	}
 
 	// Clear non-time bit.
-	if v, err := view.clearBit(tx, rowID, colID); err != nil {
+	if v, err := view.clearBit(qcx, rowID, colID); err != nil {
 		return false, errors.Wrap(err, "clearing on view")
 	} else if v {
 		changed = changed || v
@@ -1329,7 +1326,7 @@ func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error
 			level--
 		}
 		if level < skipAbove {
-			cleared, err := view.clearBit(tx, rowID, colID)
+			cleared, err := view.clearBit(qcx, rowID, colID)
 			changed = changed || cleared
 			if err != nil {
 				return changed, errors.Wrapf(err, "clearing on view %s", view.name)
@@ -1428,8 +1425,6 @@ func (f *Field) StringValue(qcx *Qcx, columnID uint64) (value string, exists boo
 
 // Value reads a field value for a column.
 func (f *Field) Value(qcx *Qcx, columnID uint64) (value int64, exists bool, err error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: columnID / ShardWidth})
-	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return 0, false, ErrBSIGroupNotFound
@@ -1441,7 +1436,7 @@ func (f *Field) Value(qcx *Qcx, columnID uint64) (value int64, exists bool, err 
 		return 0, false, nil
 	}
 
-	v, exists, err := view.value(tx, columnID, bsig.BitDepth)
+	v, exists, err := view.value(qcx, columnID, bsig.BitDepth)
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
@@ -1452,8 +1447,6 @@ func (f *Field) Value(qcx *Qcx, columnID uint64) (value int64, exists bool, err 
 
 // SetValue sets a field value for a column.
 func (f *Field) SetValue(qcx *Qcx, columnID uint64, value int64) (changed bool, err error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: columnID / ShardWidth})
-	defer finisher(&err)
 	// Fetch bsiGroup & validate min/max.
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1501,13 +1494,11 @@ func (f *Field) SetValue(qcx *Qcx, columnID uint64, value int64) (changed bool, 
 	}
 	view.holder.addIndex(view.idx)
 
-	return view.setValue(tx, columnID, bsig.BitDepth, baseValue)
+	return view.setValue(qcx, columnID, bsig.BitDepth, baseValue)
 }
 
 // ClearValue removes a field value for a column.
 func (f *Field) ClearValue(qcx *Qcx, columnID uint64) (changed bool, err error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: columnID / ShardWidth})
-	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
@@ -1517,12 +1508,12 @@ func (f *Field) ClearValue(qcx *Qcx, columnID uint64) (changed bool, err error) 
 	if view == nil {
 		return false, nil
 	}
-	value, exists, err := view.value(tx, columnID, bsig.BitDepth)
+	value, exists, err := view.value(qcx, columnID, bsig.BitDepth)
 	if err != nil {
 		return false, err
 	}
 	if exists {
-		return view.clearValue(tx, columnID, bsig.BitDepth, value)
+		return view.clearValue(qcx, columnID, bsig.BitDepth, value)
 	}
 	return false, nil
 }
@@ -1545,15 +1536,7 @@ func (f *Field) MaxForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, erro
 		return ValCount{}, nil
 	}
 
-	var localTx Tx
-	if NilInside(tx) {
-		localTx = f.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
-		defer localTx.Rollback()
-	} else {
-		localTx = tx
-	}
-
-	max, cnt, err := fragment.max(localTx, filter, bsig.BitDepth)
+	max, cnt, err := fragment.max(tx, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.max")
 	}
@@ -1583,15 +1566,7 @@ func (f *Field) MinForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, erro
 		return ValCount{}, nil
 	}
 
-	var localTx Tx
-	if NilInside(tx) {
-		localTx = f.idx.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
-		defer localTx.Rollback()
-	} else {
-		localTx = tx
-	}
-
-	min, cnt, err := fragment.min(localTx, filter, bsig.BitDepth)
+	min, cnt, err := fragment.min(tx, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.min")
 	}
@@ -2426,13 +2401,5 @@ func (f *Field) SortShardRow(tx Tx, shard uint64, filter *Row, sort_desc bool) (
 		return nil, errors.New("fragment is nil")
 	}
 
-	var localTx Tx
-	if NilInside(tx) {
-		localTx = f.holder.txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: fragment, Shard: fragment.shard})
-		defer localTx.Rollback()
-	} else {
-		localTx = tx
-	}
-
-	return fragment.sortBsiData(localTx, filter, bsig.BitDepth, sort_desc)
+	return fragment.sortBsiData(tx, filter, bsig.BitDepth, sort_desc)
 }

@@ -525,8 +525,10 @@ func (v *view) mutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int
 }
 
 // setBit sets a bit within the view.
-func (v *view) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) setBit(qcx *Qcx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
+	defer finisher(&err)
 	var frag *fragment
 	frag, err = v.CreateFragmentIfNotExists(shard)
 	if err != nil {
@@ -537,8 +539,10 @@ func (v *view) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 }
 
 // clearBit clears a bit within the view.
-func (v *view) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) clearBit(qcx *Qcx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
+	defer finisher(&err)
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
@@ -548,8 +552,10 @@ func (v *view) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err error)
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(tx Tx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
+func (v *view) value(qcx *Qcx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
+	defer finisher(&err)
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return value, exists, err
@@ -559,8 +565,10 @@ func (v *view) value(tx Tx, columnID uint64, bitDepth uint64) (value int64, exis
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(tx Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
+func (v *view) setValue(qcx *Qcx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
+	defer finisher(&err)
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
@@ -570,8 +578,10 @@ func (v *view) setValue(tx Tx, columnID uint64, bitDepth uint64, value int64) (c
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(tx Tx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
+func (v *view) clearValue(qcx *Qcx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
+	defer finisher(&err)
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil

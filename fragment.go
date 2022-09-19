@@ -693,20 +693,9 @@ func (f *fragment) positionsForValue(columnID uint64, bitDepth uint64, value int
 }
 
 // TODO get rid of this and use positionsForValue to generate a single write op, and set that with importPositions.
-func (f *fragment) setValueBase(txOrig Tx, columnID uint64, bitDepth uint64, value int64, clear bool) (changed bool, err error) {
+func (f *fragment) setValueBase(tx Tx, columnID uint64, bitDepth uint64, value int64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	tx := txOrig
-	if NilInside(tx) {
-		tx = f.idx.holder.txf.NewTx(Txo{Write: writable, Index: f.idx, Fragment: f, Shard: f.shard})
-		defer func() {
-			if err == nil {
-				vprint.PanicOn(tx.Commit())
-			} else {
-				tx.Rollback()
-			}
-		}()
-	}
 
 	err = func() error {
 		// Convert value to an unsigned representation.

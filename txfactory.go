@@ -571,9 +571,6 @@ func (g *TxGroup) AddTx(tx Tx, o Txo) {
 	if g.finished {
 		vprint.PanicOn("in TxGroup.Finish(): TxGroup already finished")
 	}
-	if NilInside(tx) {
-		vprint.PanicOn("Cannot add nil Tx to TxGroup")
-	}
 
 	g.reads = append(g.reads, tx)
 
