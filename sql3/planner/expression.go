@@ -28,7 +28,11 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 			return value, nil
 
 		case *parser.DataTypeID:
-			return value, nil
+			val, ok := value.(int64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
+			}
+			return val, nil
 
 		case *parser.DataTypeDecimal:
 			val, ok := value.(int64)

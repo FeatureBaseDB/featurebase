@@ -5,7 +5,7 @@ import (
 	"github.com/molecula/featurebase/v3/sql3/parser"
 )
 
-//aggregate function tests
+// aggregate function tests
 var countTests = tableTest{
 	table: tbl(
 		"count_test",
@@ -47,6 +47,19 @@ var countTests = tableTest{
 			),
 			expRows: rows(
 				row(int64(6)),
+			),
+			compare: compareExactUnordered,
+		},
+		{
+			sqls: sqls(
+				"SELECT COUNT(i1) as a, COUNT(i2) as b FROM count_test",
+			),
+			expHdrs: hdrs(
+				hdr("a", fldTypeInt),
+				hdr("b", fldTypeInt),
+			),
+			expRows: rows(
+				row(int64(6), int64(2)),
 			),
 			compare: compareExactUnordered,
 		},

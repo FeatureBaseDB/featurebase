@@ -1379,7 +1379,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	// Write response back to client.
 	w.Header().Set("Content-Type", "application/json")
 
-	// the pandas data frame format in json per https://molecula.atlassian.net/wiki/spaces/MOLECULA/pages/540999700/Queries
+	// the pandas data frame format in json
 
 	// Opening bracket.
 	w.Write([]byte("{"))
