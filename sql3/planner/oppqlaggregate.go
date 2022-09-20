@@ -140,14 +140,39 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 
 		case types.AGGREGATE_COUNT:
 			if cond == nil {
-				cond = &pql.Call{Name: "All"}
+				// COUNT() should ignore null values
+				// if the data type of the expression supports an existence bitmap for
+				// the underlying FeatureBase data type use it to eliminate nulls from the aggregate
+				switch expr.dataType.(type) {
+				case *parser.DataTypeInt, *parser.DataTypeTimestamp, *parser.DataTypeDecimal:
+					cond = &pql.Call{
+						Name: "Row",
+						Args: map[string]interface{}{
+							expr.columnName: &pql.Condition{Op: pql.NEQ, Value: nil},
+						},
+					}
+				default:
+					cond = &pql.Call{Name: "All"}
+				}
 			}
-
 			call = &pql.Call{Name: "Count", Children: []*pql.Call{cond}}
 
 		case types.AGGREGATE_AVG:
 			if cond == nil {
-				cond = &pql.Call{Name: "All"}
+				// COUNT() should ignore null values
+				// if the data type of the expression supports an existence bitmap for
+				// the underlying FeatureBase data type use it to eliminate nulls from the aggregate
+				switch expr.dataType.(type) {
+				case *parser.DataTypeInt, *parser.DataTypeTimestamp, *parser.DataTypeDecimal:
+					cond = &pql.Call{
+						Name: "Row",
+						Args: map[string]interface{}{
+							expr.columnName: &pql.Condition{Op: pql.NEQ, Value: nil},
+						},
+					}
+				default:
+					cond = &pql.Call{Name: "All"}
+				}
 			}
 
 			call = &pql.Call{
