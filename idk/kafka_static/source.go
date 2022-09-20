@@ -206,7 +206,7 @@ func (s *Source) Open() error {
 	for _, topic := range s.Topics {
 		config := config
 		config.Topic = topic
-		readers[topic] = internal.RetryReader{segmentio.NewReader(config)} //nolint:govet
+		readers[topic] = internal.RetryReader{Reader: segmentio.NewReader(config)}
 	}
 
 	// Throw the readers into a blender.
