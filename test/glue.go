@@ -2,7 +2,6 @@
 package test
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -73,9 +72,7 @@ func (w *wholeTestRun) Teardown() {
 	for _, fn := range w.cleanupFuncs {
 		fn()
 	}
-	fmt.Fprintf(os.Stderr, "tearing down: %d directories\n", len(w.tempDirs))
 	for _, path := range w.tempDirs {
-		fmt.Fprintf(os.Stderr, "tearing down: deleting %s\n", path)
 		// disregard errors because we don't care that much about them;
 		// we assume RemoveAll probably works unless something's wrong.
 		// see the comments on the testing package's internal removeAll,
