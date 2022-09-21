@@ -21,8 +21,6 @@ jobs:
       # - name: test
       #   run: go test ./...
 
-      
-
   release:
     runs_on: ubuntu-latest
     matrix:
