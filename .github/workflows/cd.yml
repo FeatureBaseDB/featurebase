@@ -1,0 +1,39 @@
+name: CD
+
+on:
+  push:
+    branches: ["master"]
+
+jobs:
+  build:
+    runs_on: ubuntu-latest
+    
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      - name: open workspace
+        run: cd $GITHUB_WORKSPACE
+
+      - name: go vet
+        run: go vet ./...
+
+      # - name: test
+      #   run: go test ./...
+
+      
+
+  release:
+    runs_on: ubuntu-latest
+    matrix:
+      goos: 
+        - "darwin"
+        - "linux"
+        - "windows"
+      goarch:
+        - "amd64"
+        - "arm64"
+    
+    steps:
+      - name: build
+          run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
