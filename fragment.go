@@ -69,33 +69,13 @@ const (
 	bsiExistsBit = 0
 	bsiSignBit   = 1
 	bsiOffsetBit = 2
-
-	// Roaring bitmap flags.
-	roaringFlagBSIv2 = 0x01 // indicates version using low bit for existence
 )
-
-// fragSpec saves a ton of duplicated strings for
-// path, and index, field, view name strings.
-type fragSpec struct {
-	index    *Index
-	field    *Field
-	fieldstr string
-	view     *view
-}
 
 func (f *fragment) index() string {
 	return f.idx.name
 }
 
 func (f *fragment) field() string {
-	// initialization of _field *Field can
-	// go missing during tests that do incomplete setup.
-	// Hence we must keep fieldstr as a backup.
-	if f.fld == nil {
-		return f.fieldstr
-	} else {
-		f.fieldstr = ""
-	}
 	return f.fld.name
 }
 
@@ -113,9 +93,8 @@ type fragment struct {
 	// We save 20GB worth strings on some data sets by not duplicating
 	// the path, index, field, view strings on every fragment.
 	// Instead assemble strings on demand in field(), view(), path(), index().
-	fld      *Field
-	fieldstr string
-	_view    *view
+	fld   *Field
+	_view *view
 
 	shard uint64
 
@@ -151,19 +130,18 @@ type fragment struct {
 }
 
 // newFragment returns a new instance of fragment.
-func newFragment(holder *Holder, spec fragSpec, shard uint64, flags byte) *fragment {
-	idx := holder.Index(spec.index.name)
+func newFragment(holder *Holder, idx *Index, fld *Field, vw *view, shard uint64) *fragment {
+	checkIdx := holder.Index(idx.name)
 
-	if idx == nil {
-		vprint.PanicOn(fmt.Sprintf("got nil idx back for '%v' from holder!", spec.index))
+	if checkIdx == nil {
+		vprint.PanicOn(fmt.Sprintf("got nil idx back for '%v' from holder!", idx.Name()))
 	}
 
 	f := &fragment{
-		_view:    spec.view,
-		fieldstr: spec.fieldstr,
-		fld:      spec.field,
-		shard:    shard,
-		idx:      idx,
+		_view: vw,
+		fld:   fld,
+		shard: shard,
+		idx:   idx,
 
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,

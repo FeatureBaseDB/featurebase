@@ -16,12 +16,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/stats"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -85,7 +84,6 @@ type Field struct {
 
 	broadcaster broadcaster
 	Stats       stats.StatsClient
-	schemator   disco.Schemator
 	serializer  Serializer
 
 	// Field options.
@@ -379,21 +377,6 @@ func OptFieldTypeBool() FieldOption {
 	}
 }
 
-// NewField returns a new instance of field.
-// NOTE: This function is only used in tests, which is why
-// it only takes a single `FieldOption` (the assumption being
-// that it's of the type `OptFieldType*`). This means
-// this function couldn't be used to set, for example,
-// `FieldOptions.Keys`.
-func NewField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
-	err := ValidateName(name)
-	if err != nil {
-		return nil, errors.Wrap(err, "validating name")
-	}
-
-	return newField(holder, path, index, name, opts)
-}
-
 // newField returns a new instance of field (without name validation).
 func newField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
 	// Apply functional option.
@@ -413,7 +396,6 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 
 		broadcaster: NopBroadcaster,
 		Stats:       stats.NopStatsClient,
-		schemator:   disco.NopSchemator,
 		serializer:  NopSerializer,
 
 		options: applyDefaultOptions(&fo),
@@ -1197,7 +1179,7 @@ func (f *Field) deleteView(name string) error {
 	}
 
 	// Delete the view from etcd as the system of record.
-	if err := f.schemator.DeleteView(context.TODO(), f.index, f.name, name); err != nil {
+	if err := f.holder.Schemator.DeleteView(context.TODO(), f.index, f.name, name); err != nil {
 		return errors.Wrapf(err, "deleting view from etcd: %s/%s/%s", f.index, f.name, name)
 	}
 
@@ -2332,7 +2314,7 @@ func (f *Field) persistView(ctx context.Context, cvm *CreateViewMessage) error {
 		return ErrViewRequired
 	}
 
-	return f.schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View)
+	return f.holder.Schemator.CreateView(ctx, cvm.Index, cvm.Field, cvm.View)
 }
 
 // Timestamp field ranges.

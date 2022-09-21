@@ -6,18 +6,16 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/shardwidth"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
 // CorruptAMutex breaks a mutex in order to test the mutex-corruption stuff.
@@ -184,7 +182,7 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 }
 
 func TestField_ValCountize(t *testing.T) {
-	f := OpenField(t, OptFieldTypeDefault())
+	_, _, f := newTestField(t)
 	// check that you get an empty val count and err
 	// BSIGroupNotFound on nil bsig from
 	// f.bsiGroup(f.name)
@@ -201,7 +199,7 @@ func TestField_ValCountize(t *testing.T) {
 
 // Ensure field can open and retrieve a view.
 func TestField_DeleteView(t *testing.T) {
-	f := OpenField(t, OptFieldTypeDefault())
+	_, _, f := newTestField(t)
 
 	viewName := viewStandard + "_v"
 
@@ -231,93 +229,47 @@ func TestField_DeleteView(t *testing.T) {
 	}
 }
 
-// TestField represents a test wrapper for Field.
-type TestField struct {
-	*Field
-	parent *Index
-	tb     testing.TB
-}
-
-// NewTestField returns a new instance of TestField d/0.
-func NewTestField(t testing.TB, opts FieldOption) *TestField {
-	path, err := testhook.TempDirInDir(t, *TempDir, "pilosa-field-")
+// reopenTestField closes the field's parent index, then
+// reopens it using its cached schema, and returns the corresponding
+// field data structure from the reopened index.
+func reopenTestField(t testing.TB, f *Field) (*Field, error) {
+	name := f.Name()
+	if err := f.idx.Close(); err != nil {
+		f.idx = nil
+		return nil, err
+	}
+	schema, err := f.holder.Schemator.Schema(context.Background())
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-
-	cfg := DefaultHolderConfig()
-	cfg.StorageConfig.FsyncEnabled = false
-	cfg.RBFConfig.FsyncEnabled = false
-	h := NewHolder(path, cfg)
-	PanicOn(h.Open())
-
-	idx, err := h.CreateIndex("i", IndexOptions{})
-	if err != nil {
-		panic(err)
+	if err := f.idx.OpenWithSchema(schema[f.idx.name]); err != nil {
+		f.idx = nil
+		return nil, err
 	}
-	field, err := idx.CreateField("f", opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tf := &TestField{Field: field, parent: idx, tb: t}
-	testhook.Cleanup(t, func() {
-		h.Close()
-	})
-	return tf
+	return f.idx.Field(name), nil
 }
 
-// OpenField returns a new, opened field at a temporary path.
-func OpenField(t testing.TB, opts FieldOption) *TestField {
-	f := NewTestField(t, opts)
-	return f
-}
-
-// Close closes the field and removes the underlying data.
-func (f *TestField) Close() error {
-	if f.idx != nil {
-		PanicOn(f.idx.holder.txf.CloseIndex(f.idx))
-	}
-	defer os.RemoveAll(f.Path())
-	return f.Field.Close()
-}
-
-// Reopen closes the index and reopens it.
-func (f *TestField) Reopen() error {
-	name := f.Field.Name()
-	if err := f.parent.Close(); err != nil {
-		f.parent = nil
-		return err
-	}
-	schema, err := f.parent.Schemator.Schema(context.Background())
-	if err != nil {
-		return err
-	}
-	if err := f.parent.OpenWithSchema(schema[f.parent.name]); err != nil {
-		f.parent = nil
-		return err
-	}
-	f.Field = f.parent.Field(name)
-	return nil
-}
-
-func (f *TestField) MustSetBit(qcx *Qcx, row, col uint64, ts ...time.Time) {
+// testFieldSetBit sets a bit and checks for an error, using a provided qcx and an
+// optional timestamp or series of timestamps. if multiple times are provided,
+// the underlying set bit operation is repeated for all of them.
+func testFieldSetBit(tb testing.TB, qcx *Qcx, f *Field, row, col uint64, ts ...time.Time) {
 	if len(ts) == 0 {
-		_, err := f.Field.SetBit(qcx, row, col, nil)
+		_, err := f.SetBit(qcx, row, col, nil)
 		if err != nil {
-			panic(err)
+			tb.Fatalf("setting bit: %v", err)
 		}
 	}
 	for _, t := range ts {
-		_, err := f.Field.SetBit(qcx, row, col, &t)
+		_, err := f.SetBit(qcx, row, col, &t)
 		if err != nil {
-			panic(err)
+			tb.Fatalf("setting bit: %v", err)
 		}
 	}
 }
 
 // Ensure field can open and retrieve a view.
 func TestField_CreateViewIfNotExists(t *testing.T) {
-	f := OpenField(t, OptFieldTypeDefault())
+	_, _, f := newTestField(t)
 
 	// Create view.
 	view, err := f.createViewIfNotExists("v")
@@ -341,7 +293,7 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 }
 
 func TestField_SetTimeQuantum(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
+	_, _, f := newTestField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
 
 	// Retrieve time quantum.
 	if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
@@ -349,7 +301,8 @@ func TestField_SetTimeQuantum(t *testing.T) {
 	}
 
 	// Reload field and verify that it is persisted.
-	if err := f.Reopen(); err != nil {
+	f, err := reopenTestField(t, f)
+	if err != nil {
 		t.Fatal(err)
 	} else if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum (reopen): %s", q)
@@ -357,27 +310,27 @@ func TestField_SetTimeQuantum(t *testing.T) {
 }
 
 func TestField_RowTime(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
+	_, _, f := newTestField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
 
 	// Obtain transaction.
-	qcx := f.idx.Txf().NewWritableQcx()
+	qcx := f.holder.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
-	f.MustSetBit(qcx, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(qcx, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(qcx, 1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(qcx, 1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(qcx, 1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
+	testFieldSetBit(t, qcx, f, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
+	testFieldSetBit(t, qcx, f, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
+	testFieldSetBit(t, qcx, f, 1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
+	testFieldSetBit(t, qcx, f, 1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
+	testFieldSetBit(t, qcx, f, 1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
 
 	// Warning: Right now this is misleading, and doesn't really do anything. We
 	// already committed each change as we got there. SOME DAY we will fix this.
 	PanicOn(qcx.Finish())
 
-	qcx = f.idx.Txf().NewQcx()
+	qcx = f.holder.Txf().NewQcx()
 	defer qcx.Abort()
 
 	// obtain 2nd transaction to read it back.
-	qcx = f.idx.Txf().NewQcx()
+	qcx = f.holder.Txf().NewQcx()
 	defer qcx.Abort()
 
 	if r, err := f.RowTime(qcx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
@@ -414,7 +367,7 @@ func TestField_RowTime(t *testing.T) {
 
 func TestField_PersistAvailableShards(t *testing.T) {
 	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
-	f := OpenField(t, OptFieldTypeDefault())
+	_, _, f := newTestField(t)
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -425,7 +378,8 @@ func TestField_PersistAvailableShards(t *testing.T) {
 	time.Sleep(2 * availableShardFileFlushDuration.Get())
 
 	// Reload field and verify that shard data is persisted.
-	if err := f.Reopen(); err != nil {
+	f, err := reopenTestField(t, f)
+	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(f.protectedRemoteAvailableShards().Slice(), bm.Slice()) {
 		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.protectedRemoteAvailableShards().Slice())
@@ -500,7 +454,7 @@ func TestField_ApplyOptions(t *testing.T) {
 // into consideration. This would cause an import of 1/8/1
 // to result in a value of 9 instead of 1.
 func TestBSIGroup_importValue(t *testing.T) {
-	f := OpenField(t, OptFieldTypeInt(-100, 200))
+	_, _, f := newTestField(t, OptFieldTypeInt(-100, 200))
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -548,7 +502,7 @@ func TestBSIGroup_importValue(t *testing.T) {
 
 // benchmarkImportValues is a helper function to explore, very roughly, the cost
 // of setting values using the special setter used for imports.
-func benchmarkFieldImportValues(b *testing.B, qcx *Qcx, bitDepth uint64, f *TestField, cfunc func(uint64) uint64) {
+func benchmarkFieldImportValues(b *testing.B, qcx *Qcx, bitDepth uint64, f *Field, cfunc func(uint64) uint64) {
 	batches := makeBenchmarkImportValueData(b, bitDepth, cfunc)
 	for _, req := range batches {
 		// NOTE: We assume everything's in Shard 0 for now.
@@ -564,7 +518,7 @@ func BenchmarkField_ImportValue(b *testing.B) {
 	depths := []uint64{4, 8, 16, 32}
 
 	for _, bitDepth := range depths {
-		f := OpenField(b, OptFieldTypeInt(0, 1<<bitDepth))
+		_, _, f := newTestField(b, OptFieldTypeInt(0, 1<<bitDepth))
 
 		qcx := f.idx.holder.txf.NewQcx()
 		defer qcx.Abort()
@@ -579,7 +533,7 @@ func BenchmarkField_ImportValue(b *testing.B) {
 }
 
 func TestIntField_MinMaxForShard(t *testing.T) {
-	f := OpenField(t, OptFieldTypeInt(-100, 200))
+	_, _, f := newTestField(t, OptFieldTypeInt(-100, 200))
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -721,7 +675,7 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 		},
 	} {
 		t.Run("minmax"+strconv.Itoa(i), func(t *testing.T) {
-			_, err := NewField(th, "no-path", "i", "f", OptFieldTypeDecimal(test.scale, test.min, test.max))
+			_, err := newField(th, "no-path", "i", "f", OptFieldTypeDecimal(test.scale, test.min, test.max))
 			if err != nil && test.expErr {
 				if !strings.Contains(err.Error(), "is not supported") {
 					t.Fatal(err)
@@ -736,7 +690,7 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 }
 
 func TestDecimalField_MinMaxForShard(t *testing.T) {
-	f := OpenField(t, OptFieldTypeDecimal(3))
+	_, _, f := newTestField(t, OptFieldTypeDecimal(3))
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -810,7 +764,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 }
 
 func TestBSIGroup_TxReopenDB(t *testing.T) {
-	f := OpenField(t, OptFieldTypeInt(-100, 200))
+	_, _, f := newTestField(t, OptFieldTypeInt(-100, 200))
 
 	qcx := f.idx.holder.txf.NewQcx()
 	defer qcx.Abort()
@@ -857,19 +811,22 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 	} // loop
 
 	// the test: can we re-open a BSI fragment under Tx store
-	_ = f.Reopen()
+	f, err := reopenTestField(t, f)
+	if err != nil {
+		t.Fatalf("reopening test field: %v", err)
+	}
 }
 
 // Ensure that an integer field has the same BitDepth after reopening.
 func TestField_SaveMeta(t *testing.T) {
-	f := OpenField(t, OptFieldTypeInt(-10, 1000))
+	_, _, f := newTestField(t, OptFieldTypeInt(-10, 1000))
 
 	colID := uint64(1)
 	val := int64(88)
 	expBitDepth := uint64(7)
 
 	// Obtain transaction.
-	qcx := f.idx.Txf().NewWritableQcx()
+	qcx := f.holder.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
 	if changed, err := f.SetValue(qcx, colID, val); err != nil {
@@ -895,11 +852,12 @@ func TestField_SaveMeta(t *testing.T) {
 	}
 
 	// Reload field and verify that it is persisted.
-	if err := f.Reopen(); err != nil {
+	f, err := reopenTestField(t, f)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	qcx = f.idx.Txf().NewQcx()
+	qcx = f.holder.Txf().NewQcx()
 	defer qcx.Abort()
 
 	if f.options.BitDepth != expBitDepth {
@@ -916,7 +874,7 @@ func TestField_SaveMeta(t *testing.T) {
 }
 
 func TestFieldViewsByTimeRange(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTime("YMD", "0", false))
+	_, _, f := newTestField(t, OptFieldTypeTime("YMD", "0", false))
 	for _, date := range []string{
 		// a handful of YMD parameters describing dates that we could have data for
 		"2021",
