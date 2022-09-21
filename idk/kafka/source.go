@@ -211,7 +211,7 @@ func (r *Record) Commit(ctx context.Context) error {
 		return errors.New("cannot commit a record that has already been committed")
 	}
 	section, remaining := r.src.spool[:idx-base], r.src.spool[idx-base:]
-	
+
 	sort.Slice(section, func(i, j int) bool {
 		if *section[i].Topic != *section[j].Topic {
 			return *section[i].Topic < *section[j].Topic
@@ -232,7 +232,7 @@ func (r *Record) Commit(ctx context.Context) error {
 		s = *x.Topic
 		p = x.Partition
 	}
-	
+
 	r.src.spool = remaining
 	r.src.spoolBase = idx
 	return nil
@@ -305,12 +305,10 @@ func (s *Source) Open() error {
 		return errors.Wrap(err, "new consumer")
 	}
 
-
 	err = cl.SubscribeTopics(s.Topics, nil)
 	if err != nil {
 		return errors.Wrap(err, "subscribe topics")
 	}
-
 
 	s.client = cl
 	s.opened = true
