@@ -23,10 +23,10 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: open workspace
-        run: cd $GITHUB_WORKSPACE
+        run: cd ${{ GITHUB_WORKSPACE }}
 
       - name: rebase
-        run: git rebase master
+        run: git rebase ${{ env.GITHUB_BASE_REF }}
 
       # - name: lint
       #   run: go lint go cilint, etc.
