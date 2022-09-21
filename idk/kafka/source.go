@@ -232,11 +232,7 @@ func (r *Record) Commit(ctx context.Context) error {
 		s = *x.Topic
 		p = x.Partition
 	}
-	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)
-	if err != nil {
-		return errors.Wrap(err, "failed to commit messages")
-	}
-
+	
 	r.src.spool = remaining
 	r.src.spoolBase = idx
 	return nil
@@ -302,7 +298,6 @@ func (s *Source) Open() error {
 			return err
 		}
 		s.Log.Debugf(buf.String())
-		stv, iv := confluent.LibraryVersion()
 
 	}
 	cl, err := confluent.NewConsumer(s.ConfigMap)
