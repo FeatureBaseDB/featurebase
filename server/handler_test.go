@@ -15,7 +15,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -1337,33 +1336,18 @@ func TestHandler_Endpoints(t *testing.T) {
 }
 
 func TestCluster_TranslateStore(t *testing.T) {
-	cluster := test.MustNewCluster(t, 1)
-	cluster.Nodes[0] = test.NewCommandNode(t,
+	cluster := test.MustRunUnsharedCluster(t, 1, []server.CommandOption{
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
 		),
-	)
-
-	if err := cluster.Start(); err != nil {
-		t.Fatalf("starting node 0: %v", err)
-	}
-	defer cluster.GetIdleNode(0).Close() // nolint: errcheck
+	})
+	defer cluster.Close() // nolint: errcheck
 
 	test.Do(t, "POST", cluster.GetIdleNode(0).URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 }
 
 func TestClusterTranslator(t *testing.T) {
-	cluster := test.MustRunCluster(t, 3,
-		[]server.CommandOption{
-			server.OptCommandServerOptions(
-				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			)},
-		[]server.CommandOption{
-			server.OptCommandServerOptions(
-				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(nil, &sync.Mutex{})),
-			)},
+	cluster := test.MustRunUnsharedCluster(t, 3,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),

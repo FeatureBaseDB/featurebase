@@ -64,7 +64,7 @@ type Holder struct {
 	opened lockedChan
 
 	broadcaster broadcaster
-	schemator   disco.Schemator
+	Schemator   disco.Schemator
 	sharder     disco.Sharder
 	serializer  Serializer
 
@@ -173,14 +173,14 @@ type lockedChan struct {
 
 func (lc *lockedChan) Close() {
 	lc.mu.RLock()
+	defer lc.mu.RUnlock()
 	close(lc.ch)
-	lc.mu.RUnlock()
 }
 
 func (lc *lockedChan) Recv() {
 	lc.mu.RLock()
+	defer lc.mu.RUnlock()
 	<-lc.ch
-	lc.mu.RUnlock()
 }
 
 // HolderConfig holds configuration details that need to be set up at
@@ -208,6 +208,10 @@ type HolderConfig struct {
 	LookupDBDSN string
 }
 
+// DefaultHolderConfig provides a holder config with reasonable
+// defaults. Note that a production server would almost certainly
+// need to override these; that's usually handled by server options
+// such as OptServerOpenTranslateStore.
 func DefaultHolderConfig() *HolderConfig {
 	return &HolderConfig{
 		PartitionN:           disco.DefaultPartitionN,
@@ -225,6 +229,20 @@ func DefaultHolderConfig() *HolderConfig {
 		StorageConfig:        storage.NewDefaultConfig(),
 		RBFConfig:            rbfcfg.NewDefaultConfig(),
 	}
+}
+
+// TestHolderConfig provides a holder config with reasonable
+// defaults for tests. This means it tries to disable fsync
+// and sets significantly smaller file size limits for RBF,
+// for instance. Do not use this outside of the test
+// infrastructure.
+func TestHolderConfig() *HolderConfig {
+	cfg := DefaultHolderConfig()
+	cfg.StorageConfig.FsyncEnabled = false
+	cfg.RBFConfig.FsyncEnabled = false
+	cfg.RBFConfig.MaxSize = (1 << 28)
+	cfg.RBFConfig.MaxWALSize = (1 << 28)
+	return cfg
 }
 
 // NewHolder returns a new instance of Holder for the given path.
@@ -257,7 +275,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		translationSyncer:    cfg.TranslationSyncer,
 		serializer:           cfg.Serializer,
 		sharder:              cfg.Sharder,
-		schemator:            cfg.Schemator,
+		Schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
 		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend},
 
@@ -294,7 +312,7 @@ func (h *Holder) deletePerShard(index *Index, shard uint64) error {
 		return nil
 	}
 
-	tx := index.Txf().NewTx(Txo{Write: !writable, Index: index, Shard: shard})
+	tx := h.Txf().NewTx(Txo{Write: !writable, Index: index, Shard: shard})
 	defer tx.Rollback()
 
 	// filter rows based on having _exists>=1, which is used to flag delete in-flight
@@ -394,7 +412,7 @@ func (h *Holder) Open() error {
 	}
 
 	// Load schema from etcd.
-	schema, err := h.schemator.Schema(context.Background())
+	schema, err := h.Schemator.Schema(context.Background())
 	if err != nil {
 		return errors.Wrap(err, "getting schema")
 	}
@@ -643,9 +661,9 @@ func (h *Holder) limitedSchema() ([]*IndexInfo, error) {
 }
 
 func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, error) {
-	schema, err := h.schemator.Schema(ctx)
+	schema, err := h.Schemator.Schema(ctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting schema via schemator")
+		return nil, errors.Wrapf(err, "getting schema via Schemator")
 	}
 
 	a := make([]*IndexInfo, 0, len(schema))
@@ -783,7 +801,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 // latest schema from etcd.
 type LoadSchemaMessage struct{}
 
-// LoadSchema creates all indexes based on the information stored in schemator.
+// LoadSchema creates all indexes based on the information stored in Schemator.
 // It does not return an error if an index already exists. The thinking is that
 // this method will load all indexes that don't already exist. We likely want to
 // revisit this; for example, we might want to confirm that the createdAt
@@ -795,7 +813,7 @@ func (h *Holder) LoadSchema() error {
 	return h.loadSchema()
 }
 
-// LoadIndex creates an index based on the information stored in schemator.
+// LoadIndex creates an index based on the information stored in Schemator.
 // An error is returned if the index already exists.
 func (h *Holder) LoadIndex(name string) (*Index, error) {
 	h.mu.Lock()
@@ -808,7 +826,7 @@ func (h *Holder) LoadIndex(name string) (*Index, error) {
 	return h.loadIndex(name)
 }
 
-// LoadField creates a field based on the information stored in schemator.
+// LoadField creates a field based on the information stored in Schemator.
 // An error is returned if the field already exists.
 func (h *Holder) LoadField(index, field string) (*Field, error) {
 	// Ensure field doesn't already exist.
@@ -822,7 +840,7 @@ func (h *Holder) LoadField(index, field string) (*Field, error) {
 	return h.loadField(index, field)
 }
 
-// LoadView creates a view based on the information stored in schemator. Unlike
+// LoadView creates a view based on the information stored in Schemator. Unlike
 // index and field, it is not considered an error if the view already exists.
 func (h *Holder) LoadView(index, field, view string) (*view, error) {
 	// If the view already exists, just return with it here.
@@ -892,7 +910,7 @@ func (h *Holder) persistIndex(ctx context.Context, cim *CreateIndexMessage) erro
 
 	if b, err := h.serializer.Marshal(cim); err != nil {
 		return errors.Wrap(err, "marshaling")
-	} else if err := h.schemator.CreateIndex(ctx, cim.Index, b); err != nil {
+	} else if err := h.Schemator.CreateIndex(ctx, cim.Index, b); err != nil {
 		return errors.Wrapf(err, "writing index to disco: %s", cim.Index)
 	}
 	return nil
@@ -937,7 +955,7 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 }
 
 func (h *Holder) loadSchema() error {
-	schema, err := h.schemator.Schema(context.TODO())
+	schema, err := h.Schemator.Schema(context.TODO())
 	if err != nil {
 		return errors.Wrap(err, "getting schema")
 	}
@@ -945,7 +963,7 @@ func (h *Holder) loadSchema() error {
 	// TODO: This is kind of inefficient because we're ignoring the index.Data
 	// and field.Data values, which contains the index and field information,
 	// and only using the map key to call loadIndex() and loadField(). These
-	// make another call to schemator to get the same index and field
+	// make another call to Schemator to get the same index and field
 	// information that we already have in the map. It probably makes sense to
 	// either copy the parts of the loadIndex and loadField methods here (like
 	// decodeCreateIndexMessage) or split loadIndex and loadField into smaller
@@ -973,7 +991,7 @@ func (h *Holder) loadSchema() error {
 }
 
 func (h *Holder) loadIndex(indexName string) (*Index, error) {
-	b, err := h.schemator.Index(context.TODO(), indexName)
+	b, err := h.Schemator.Index(context.TODO(), indexName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting index: %s", indexName)
 	}
@@ -987,7 +1005,7 @@ func (h *Holder) loadIndex(indexName string) (*Index, error) {
 }
 
 func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
-	b, err := h.schemator.Field(context.TODO(), indexName, fieldName)
+	b, err := h.Schemator.Field(context.TODO(), indexName, fieldName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting field: %s/%s", indexName, fieldName)
 	}
@@ -1007,7 +1025,7 @@ func (h *Holder) loadField(indexName, fieldName string) (*Field, error) {
 }
 
 func (h *Holder) loadView(indexName, fieldName, viewName string) (*view, error) {
-	b, err := h.schemator.View(context.Background(), indexName, fieldName, viewName)
+	b, err := h.Schemator.View(context.Background(), indexName, fieldName, viewName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting view: %s/%s/%s", indexName, fieldName, viewName)
 	} else if !b {
@@ -1031,7 +1049,6 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
 	index.serializer = h.serializer
-	index.Schemator = h.schemator
 	index.OpenTranslateStore = h.OpenTranslateStore
 	index.translationSyncer = h.translationSyncer
 	return index, nil
@@ -1049,7 +1066,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	}
 
 	// Delete the index from etcd as the system of record.
-	if err := h.schemator.DeleteIndex(context.TODO(), name); err != nil {
+	if err := h.Schemator.DeleteIndex(context.TODO(), name); err != nil {
 		return errors.Wrapf(err, "deleting index from etcd: %s", name)
 	}
 
@@ -1060,7 +1077,7 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// remove any backing store.
 	if err := h.txf.DeleteIndex(name); err != nil {
-		return errors.Wrap(err, "index.Txf.DeleteIndex")
+		return errors.Wrap(err, "h.Txf.DeleteIndex")
 	}
 
 	// Delete index directory.

@@ -152,8 +152,10 @@ func (c *ShareableCluster) QueryGRPC(t testing.TB, index, query string) *proto.T
 // sorted order. In other words, this method can only be used to retrieve a node
 // when order doesn't matter. An example is if you need to do something like
 // this:
-//   c.GetNode(0).Config.Cluster.ReplicaN = 2
-//   c.GetNode(1).Config.Cluster.ReplicaN = 2
+//
+//	c.GetNode(0).Config.Cluster.ReplicaN = 2
+//	c.GetNode(1).Config.Cluster.ReplicaN = 2
+//
 // In this example, the test needs the replication factor to be set to 2 before
 // starting; it's ok to reference each node by its index in the pre-sorted node
 // list. It's also safe to use this method after `MustRunCluster()` if the
@@ -422,7 +424,7 @@ type KeyID struct {
 	ID  uint64
 }
 
-//ImportIDKey imports data into an unkeyed set field in a keyed index.
+// ImportIDKey imports data into an unkeyed set field in a keyed index.
 func (c *ShareableCluster) ImportIDKey(t testing.TB, index, field string, pairs []KeyID) {
 	t.Helper()
 	importRequest := &pilosa.ImportRequest{
@@ -790,10 +792,7 @@ func prependOpts(opts [][]server.CommandOption, size int) [][]server.CommandOpti
 // tweaks to initial startup delay, and storage config to disable fsync and
 // specify a smaller RBF size.
 func prependTestServerOpts(opts []server.CommandOption) []server.CommandOption {
-	cfg := pilosa.DefaultHolderConfig()
-	cfg.RBFConfig.FsyncEnabled = false
-	cfg.RBFConfig.MaxSize = (1 << 28)
-	cfg.RBFConfig.MaxWALSize = (1 << 28)
+	cfg := pilosa.TestHolderConfig()
 	defaultOpts := []server.CommandOption{
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore),

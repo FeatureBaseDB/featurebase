@@ -14,7 +14,8 @@ import (
 // Holder is a test wrapper for pilosa.Holder.
 type Holder struct {
 	*pilosa.Holder
-	tb testing.TB
+	tb     testing.TB
+	closed bool
 }
 
 // NewHolder returns a new instance of Holder with a temporary path.
@@ -24,10 +25,7 @@ func NewHolder(tb testing.TB) *Holder {
 		panic(err)
 	}
 
-	cfg := pilosa.DefaultHolderConfig()
-	cfg.StorageConfig.FsyncEnabled = false
-	cfg.RBFConfig.FsyncEnabled = false
-	cfg.RBFConfig.MaxSize = (1 << 28)
+	cfg := pilosa.TestHolderConfig()
 	h := &Holder{Holder: pilosa.NewHolder(path, cfg), tb: tb}
 
 	return h
@@ -39,11 +37,22 @@ func MustOpenHolder(tb testing.TB) *Holder {
 	if err := h.Open(); err != nil {
 		tb.Fatalf("opening holder: %v", err)
 	}
+	tb.Cleanup(func() {
+		err := h.Close()
+		if err != nil {
+			tb.Fatalf("closing holder after test: %v", err)
+		}
+	})
 	return h
 }
 
-// Close closes the holder. The data should be removed by the
+// Close closes the holder. The data should be removed by the cleanup
+// registered when we created the initial tempdir.
 func (h *Holder) Close() error {
+	if h.closed {
+		h.tb.Fatal("double-closed holder")
+	}
+	h.closed = true
 	return h.Holder.Close()
 }
 
@@ -69,7 +78,7 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	if err != nil {
 		panic(err)
 	}
-	qcx := idx.Txf().NewQcx()
+	qcx := h.Txf().NewQcx()
 	defer qcx.Abort()
 
 	row, err := f.Row(qcx, rowID)
@@ -92,7 +101,7 @@ func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 	if f == nil {
 		h.tb.Fatalf("read row from field %q/%q: field not found", index, field)
 	}
-	qcx := idx.Txf().NewQcx()
+	qcx := h.Txf().NewQcx()
 	defer qcx.Abort()
 
 	row, err := f.Row(qcx, rowID)
@@ -111,7 +120,7 @@ func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum
 	if err != nil {
 		panic(err)
 	}
-	qcx := idx.Txf().NewQcx()
+	qcx := h.Txf().NewQcx()
 	defer qcx.Abort()
 
 	row, err := f.RowTime(qcx, rowID, t, quantum)
@@ -137,7 +146,7 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 		panic(err)
 	}
 
-	qcx := idx.Txf().NewWritableQcx()
+	qcx := h.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
 	_, err = f.SetBit(qcx, rowID, columnID, t)
@@ -158,7 +167,7 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 		panic(err)
 	}
 
-	qcx := idx.Txf().NewWritableQcx()
+	qcx := h.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
 	_, err = f.ClearBit(qcx, rowID, columnID)
@@ -187,7 +196,7 @@ func (h *Holder) SetValue(index, field string, columnID uint64, value int64) *In
 		panic(err)
 	}
 
-	qcx := idx.Txf().NewWritableQcx()
+	qcx := h.Txf().NewWritableQcx()
 	defer qcx.Abort()
 	_, err = f.SetValue(qcx, columnID, value)
 	if err != nil {
@@ -209,7 +218,7 @@ func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 		panic(err)
 	}
 
-	qcx := idx.Txf().NewQcx()
+	qcx := h.Txf().NewQcx()
 	defer qcx.Abort()
 
 	val, exists, err := f.Value(qcx, columnID)

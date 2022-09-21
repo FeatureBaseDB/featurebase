@@ -11,29 +11,23 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/pkg/errors"
 )
-
-// mustHolderConfig provides a default test-friendly holder config.
-func mustHolderConfig() *pilosa.HolderConfig {
-	cfg := pilosa.DefaultHolderConfig()
-	cfg.StorageConfig.Backend = "rbf"
-	cfg.StorageConfig.FsyncEnabled = false
-	cfg.RBFConfig.FsyncEnabled = false
-	cfg.Schemator = disco.InMemSchemator
-	cfg.Sharder = disco.InMemSharder
-	return cfg
-}
 
 func TestHolder_Open(t *testing.T) {
 	t.Run("ErrIndexPermission", func(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
-		h := test.MustOpenHolder(t)
+		// Manual open because MustOpenHolder closes automatically and fails the test on
+		// double-close.
+		h := test.NewHolder(t)
+		err := h.Open()
+		if err != nil {
+			t.Fatalf("opening holder: %v", err)
+		}
 		// no automatic close here, because we manually close this, and then
 		// *fail* to reopen it.
 
@@ -55,7 +49,6 @@ func TestHolder_Open(t *testing.T) {
 	t.Run("ForeignIndex", func(t *testing.T) {
 		t.Run("ErrForeignIndexNotFound", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
-			defer h.Close()
 
 			if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
@@ -72,7 +65,6 @@ func TestHolder_Open(t *testing.T) {
 		// Foreign index zzz is opened after foo/bar.
 		t.Run("ForeignIndexNotOpenYet", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
-			defer h.Close()
 
 			if _, err := h.CreateIndex("zzz", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
@@ -92,7 +84,6 @@ func TestHolder_Open(t *testing.T) {
 		// Foreign index aaa is opened before foo/bar.
 		t.Run("ForeignIndexIsOpen", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
-			defer h.Close()
 
 			if _, err := h.CreateIndex("aaa", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
@@ -112,7 +103,6 @@ func TestHolder_Open(t *testing.T) {
 		// Try to re-create existing index
 		t.Run("CreateIndexIfNotExists", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
-			defer h.Close()
 
 			idx1, err := h.CreateIndexIfNotExists("aaa", pilosa.IndexOptions{})
 			if err != nil {
@@ -140,7 +130,6 @@ func TestHolder_Open(t *testing.T) {
 func TestHolder_HasData(t *testing.T) {
 	t.Run("IndexDirectory", func(t *testing.T) {
 		h := test.MustOpenHolder(t)
-		defer h.Close()
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)
@@ -157,7 +146,6 @@ func TestHolder_HasData(t *testing.T) {
 
 	t.Run("Peek", func(t *testing.T) {
 		h := test.MustOpenHolder(t)
-		defer h.Close()
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)
@@ -179,7 +167,7 @@ func TestHolder_HasData(t *testing.T) {
 		// Note that we are intentionally not using test.NewHolder,
 		// because we want to create a Holder object with an invalid path,
 		// rather than creating a valid holder with a temporary path.
-		h := pilosa.NewHolder("bad-path", mustHolderConfig())
+		h := pilosa.NewHolder("bad-path", pilosa.TestHolderConfig())
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)
@@ -191,7 +179,6 @@ func TestHolder_HasData(t *testing.T) {
 func TestHolder_DeleteIndex(t *testing.T) {
 
 	hldr := test.MustOpenHolder(t)
-	defer hldr.Close()
 
 	// Write bits to separate indexes.
 	hldr.SetBit("i0", "f", 100, 200)

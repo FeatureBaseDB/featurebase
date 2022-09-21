@@ -2737,7 +2737,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 
 	idx := api.holder.Index(indexName)
 	//need to get a dbShard
-	dbs, err := idx.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
+	dbs, err := api.holder.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
 	if err != nil {
 		return err
 	}
@@ -2903,14 +2903,15 @@ func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, 
 // MutexCheck checks a named field for mutex violations, returning a
 // map of record IDs to values for records that have multiple values in the
 // field. The return will be one of:
-//     details true:
-//     map[uint64][]uint64 // unkeyed index, unkeyed field
-//     map[uint64][]string // unkeyed index, keyed field
-//     map[string][]uint64 // keyed index, unkeyed field
-//     map[string][]string // keyed index, keyed field
-//     details false:
-//     []uint64            // unkeyed index
-//     []string            // keyed index
+//
+//	details true:
+//	map[uint64][]uint64 // unkeyed index, unkeyed field
+//	map[uint64][]string // unkeyed index, keyed field
+//	map[string][]uint64 // keyed index, unkeyed field
+//	map[string][]string // keyed index, keyed field
+//	details false:
+//	[]uint64            // unkeyed index
+//	[]string            // keyed index
 func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (result interface{}, err error) {
 	if err = api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")

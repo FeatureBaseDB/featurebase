@@ -38,7 +38,6 @@ type Index struct {
 	fields map[string]*Field
 
 	broadcaster broadcaster
-	Schemator   disco.Schemator
 	serializer  Serializer
 	Stats       stats.StatsClient
 
@@ -83,7 +82,6 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		holder:         holder,
 		trackExistence: true,
 
-		Schemator:  disco.NewInMemSchemator(),
 		serializer: NopSerializer,
 
 		translateStores: make(map[int]TranslateStore),
@@ -714,7 +712,7 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 
 	if b, err := i.serializer.Marshal(cfm); err != nil {
 		return errors.Wrap(err, "marshaling")
-	} else if err := i.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldExists {
+	} else if err := i.holder.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldExists {
 		return ErrFieldExists
 	} else if err != nil {
 		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
@@ -731,7 +729,7 @@ func (i *Index) persistUpdateField(ctx context.Context, cfm *CreateFieldMessage)
 
 	if b, err := i.serializer.Marshal(cfm); err != nil {
 		return errors.Wrap(err, "marshaling")
-	} else if err := i.Schemator.UpdateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldDoesNotExist {
+	} else if err := i.holder.Schemator.UpdateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldDoesNotExist {
 		return ErrFieldNotFound
 	} else if err != nil {
 		return errors.Wrapf(err, "writing field to disco: %s/%s", cfm.Index, cfm.Field)
@@ -741,7 +739,7 @@ func (i *Index) persistUpdateField(ctx context.Context, cfm *CreateFieldMessage)
 
 func (i *Index) UpdateField(ctx context.Context, name string, update FieldUpdate) (*CreateFieldMessage, error) {
 	// Get field from etcd
-	buf, err := i.Schemator.Field(ctx, i.name, name)
+	buf, err := i.holder.Schemator.Field(ctx, i.name, name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting field '%s' from etcd", name)
 	}
@@ -878,7 +876,6 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
-	f.schemator = i.Schemator
 	f.serializer = i.serializer
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
@@ -901,7 +898,7 @@ func (i *Index) DeleteField(name string) error {
 	}
 
 	// Delete the field from etcd as the system of record.
-	if err := i.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
+	if err := i.holder.Schemator.DeleteField(context.TODO(), i.name, name); err != nil {
 		return errors.Wrapf(err, "deleting field from etcd: %s/%s", i.name, name)
 	}
 
@@ -969,8 +966,4 @@ type importData struct {
 // FormatQualifiedIndexName generates a qualified name for the index to be used with Tx operations.
 func FormatQualifiedIndexName(index string) string {
 	return fmt.Sprintf("%s\x00", index)
-}
-
-func (i *Index) Txf() *TxFactory {
-	return i.holder.txf
 }

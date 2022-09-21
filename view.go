@@ -279,15 +279,6 @@ func (v *view) flushCaches() {
 	}
 }
 
-// flags returns a set of flags for the underlying fragments.
-func (v *view) flags() byte {
-	var flag byte
-	if v.fieldType == FieldTypeInt || v.fieldType == FieldTypeDecimal || v.fieldType == FieldTypeTimestamp {
-		flag |= roaringFlagBSIv2
-	}
-	return flag
-}
-
 // availableShards returns a bitmap of shards which contain data.
 func (v *view) availableShards() *roaring.Bitmap {
 	// A read lock prevents anything with the write lock from being
@@ -401,19 +392,7 @@ func (v *view) notifyIfNewShard(shard uint64) {
 }
 
 func (v *view) newFragment(shard uint64) *fragment {
-	fld := v.fld
-	spec := fragSpec{
-		index: v.idx,
-		field: fld,
-		view:  v,
-	}
-	if fld == nil {
-		// The backup plan.
-		// For tests that do incomplete setup, like making
-		// a view without a field.
-		spec.fieldstr = v.field
-	}
-	frag := newFragment(v.holder, spec, shard, v.flags())
+	frag := newFragment(v.holder, v.idx, v.fld, v, shard)
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
 	frag.stats = v.stats

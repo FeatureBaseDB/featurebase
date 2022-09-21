@@ -19,7 +19,6 @@ import (
 // since the EXPVAR data is stored in a global we should run these in one test function
 func TestMultiStatClient_Expvar(t *testing.T) {
 	hldr := test.MustOpenHolder(t)
-	defer hldr.Close()
 
 	c := stats.NewExpvarStatsClient()
 	ms := make(stats.MultiStatsClient, 1)

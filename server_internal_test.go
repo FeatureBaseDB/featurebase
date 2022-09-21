@@ -11,7 +11,7 @@ import (
 
 func TestMonitorAntiEntropyZero(t *testing.T) {
 
-	td, err := testhook.TempDirInDir(t, *TempDir, "")
+	td, err := testhook.TempDir(t, "")
 	if err != nil {
 		t.Fatalf("getting temp dir: %v", err)
 	}

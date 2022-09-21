@@ -8705,14 +8705,19 @@ func (e *executor) executeDeleteRecords(ctx context.Context, qcx *Qcx, index str
 }
 
 func transactExistRow(ctx context.Context, idx *Index, shard uint64, frag *fragment, src *Row) (uint64, error) {
-	tx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	holder := idx.Holder()
+	tx := holder.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	rows, err := frag.rows(ctx, tx, 1)
 	if err != nil {
 		tx.Rollback()
 		return 0, err
 
 	}
-	rowID := uint64(len(rows) + 1)
+	// obtain a rowID which is higher than any currently present row ID.
+	rowID := uint64(1)
+	if len(rows) > 0 {
+		rowID = rows[len(rows)-1] + 1
+	}
 	_, err = frag.setRow(tx, src, rowID)
 	if err != nil {
 		tx.Rollback()
@@ -8730,7 +8735,7 @@ func (e *executor) executeDeleteRecordFromShard(ctx context.Context, index strin
 		err = newNotFoundError(ErrIndexNotFound, index)
 		return
 	}
-	qcx := idx.Txf().NewQcx()
+	qcx := e.Holder.Txf().NewQcx()
 	// bmCall is a bitmap
 	row, err := e.executeBitmapCallShard(ctx, qcx, index, bmCall, shard)
 	qcx.Abort()
@@ -8756,9 +8761,10 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 	var existenceFragment *fragment
 	var deletedRowID uint64
 	var commitor Commitor = &NopCommitor{}
-	var err error   // store columns in exits field ToBeDelete row commited
+	var err error // store columns in exits field ToBeDelete row commited
+	holder := idx.Holder()
 	if normalFlow { // normalFlow is the standard path, "not normal" is recoverory
-		existenceFragment = idx.Holder().fragment(idx.Name(), existenceFieldName, viewStandard, shard)
+		existenceFragment = holder.fragment(idx.Name(), existenceFieldName, viewStandard, shard)
 		if existenceFragment == nil {
 			// no exists field
 			return false, errors.New("can't bulk delete without existence field")
@@ -8773,7 +8779,7 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 	if err != nil {
 		return false, err
 	}
-	writeTx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	writeTx := holder.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	if err != nil {
 		return false, err
 	}
@@ -8798,7 +8804,7 @@ func DeleteRowsWithFlowWithKeys(ctx context.Context, columns *roaring.Bitmap, id
 			err = er
 		}
 		if err != nil {
-			idx.Holder().Logger.Errorf("problems committing delete in rbf %v shard %v", err, shard)
+			holder.Logger.Errorf("problems committing delete in rbf %v shard %v", err, shard)
 		}
 	}()
 
@@ -8838,7 +8844,8 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 	var existenceFragment *fragment
 	var deletedRowID uint64
 	var commitor Commitor = &NopCommitor{}
-	writeTx := idx.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
+	holder := idx.Holder()
+	writeTx := holder.Txf().NewTx(Txo{Write: writable, Index: idx, Shard: shard})
 	defer writeTx.Rollback()
 	defer func() {
 		// if there is an error in the key commit, then rollback the delete

@@ -56,10 +56,9 @@ type Server struct { // nolint: maligned
 	serializer       Serializer
 
 	// Distributed Consensus
-	disCo     disco.DisCo
-	noder     disco.Noder
-	sharder   disco.Sharder
-	schemator disco.Schemator
+	disCo   disco.DisCo
+	noder   disco.Noder
+	sharder disco.Sharder
 
 	// External
 	systemInfo  SystemInfo
@@ -409,7 +408,7 @@ func OptServerDisCo(disCo disco.DisCo,
 		s.disCo = disCo
 		s.noder = noder
 		s.sharder = sharder
-		s.schemator = schemator
+		s.holderConfig.Schemator = schemator
 		return nil
 	}
 }
@@ -457,7 +456,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		disCo:      disco.NopDisCo,
 		noder:      disco.NewEmptyLocalNoder(),
 		sharder:    disco.NopSharder,
-		schemator:  disco.NopSchemator,
 		serializer: NopSerializer,
 
 		confirmDownRetries: defaultConfirmDownRetries,
@@ -542,7 +540,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.confirmDownRetries = s.confirmDownRetries
 	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
-	s.holder.schemator = s.schemator
 	s.holder.sharder = s.sharder
 	s.holder.serializer = s.serializer
 

@@ -16,7 +16,7 @@ import (
 
 // Shard per db evaluation
 func TestShardPerDB_SetBit(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, "i", "f", viewStandard, 0, "")
+	f, idx, tx := mustOpenFragment(t)
 	_ = idx
 	defer f.Clean(t)
 
@@ -71,9 +71,7 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 	}
 
 	for _, src := range []string{"rbf"} {
-		cfg := mustHolderConfig()
-		cfg.StorageConfig.Backend = src
-		holder := NewHolder(tmpdir, cfg)
+		holder := newTestHolder(t)
 
 		index := "rick"
 		idx := makeSampleRoaringDir(t, tmpdir, index, src, 1, holder, v2s)
@@ -109,12 +107,10 @@ func Test_DBPerShard_GetShardsForIndex_LocalOnly(t *testing.T) {
 			}
 			tx.Rollback()
 		}
-		holder.Close()
 	}
 }
 
 // data for Test_DBPerShard_GetShardsForIndex
-//
 var sampleRoaringDirList = map[string]string{"roaring": `
 rick/fields/f/views/standard/fragments/215.cache
 rick/fields/f/views/standard/fragments/221.cache
@@ -251,27 +247,15 @@ func makeTxTestDBWithViewsShards(tb testing.TB, holder *Holder, idx *Index, exp 
 
 // test that rbf can give us a map[view]*shardSet
 func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
-	tmpdir, err := testhook.TempDir(t, "Test_DBPerShard_GetFieldView2Shards_map_from_RBF")
-	PanicOn(err)
-	defer os.RemoveAll(tmpdir)
-
-	cfg := mustHolderConfig()
-	cfg.StorageConfig.Backend = "rbf"
-	cfg.StorageConfig.FsyncEnabled = false
-	holder := NewHolder(tmpdir, cfg)
-	defer holder.Close()
+	holder := newTestHolder(t)
 
 	index := "rick"
 	field := "f"
 
-	cim := &CreateIndexMessage{
-		Index:     index,
-		CreatedAt: 0,
-		Meta:      IndexOptions{},
+	idx, err := holder.CreateIndex(index, IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
 	}
-
-	idx, err := holder.createIndex(cim, false)
-	PanicOn(err)
 
 	exp := NewFieldView2Shards()
 

@@ -56,7 +56,7 @@ func requireCountRangeSampleData(tb testing.TB) (*fragment, Tx) {
 		countRangeSampleData = asBytes.Bytes()
 		tb.Logf("creating bitmap: %d containers, %d bytes of data", countRangeMaxN, n)
 	})
-	f, idx, tx := mustOpenFragment(tb, "i", "f", viewStandard, 0, "")
+	f, idx, tx := mustOpenFragment(tb)
 	// Properly close this transaction, but not the next one we create that the
 	// caller will be responsible for. The deferred callback will
 	// be a nop if the Commit happened.
@@ -93,7 +93,7 @@ func TestTx_CountRange(t *testing.T) {
 		}
 		// Every other bit gets set, for a total of i bits in container
 		// i, so they're all in the first (i*2) bits of the container.
-		got, err := tx.CountRange("i", "f", viewStandard, 0, uint64(j)<<16, (uint64(i)<<16)+(i*2))
+		got, err := tx.CountRange("i", "f", "v", 0, uint64(j)<<16, (uint64(i)<<16)+(i*2))
 		if err != nil {
 			t.Fatalf("counting range: %v", err)
 		}
@@ -119,7 +119,7 @@ func BenchmarkTx_CountRange(b *testing.B) {
 				expected -= (j * 7) + 21
 				j += 7
 			}
-			got, err := tx.CountRange("i", "f", viewStandard, 0, uint64(j)<<16, uint64(i)<<16)
+			got, err := tx.CountRange("i", "f", "v", 0, uint64(j)<<16, uint64(i)<<16)
 			if err != nil {
 				b.Fatalf("counting range: %v", err)
 			}

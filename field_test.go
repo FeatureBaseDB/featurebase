@@ -13,21 +13,20 @@ import (
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 )
 
 // Ensure a field can set & read a bsiGroup value.
 func TestField_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		idx := test.MustOpenIndex(t)
+		h, idx := test.MustOpenIndex(t)
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		qcx := idx.Txf().NewWritableQcx()
+		qcx := h.Txf().NewWritableQcx()
 		defer qcx.Abort()
 		// You're going to note the lack of any commits here. That's
 		// because, when you have a writable Qcx, *every individual
@@ -61,14 +60,14 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("Overwrite", func(t *testing.T) {
-		idx := test.MustOpenIndex(t)
+		h, idx := test.MustOpenIndex(t)
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		qcx := idx.Txf().NewWritableQcx()
+		qcx := h.Txf().NewWritableQcx()
 		defer qcx.Abort()
 
 		// Set value.
@@ -96,14 +95,14 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
-		idx := test.MustOpenIndex(t)
+		h, idx := test.MustOpenIndex(t)
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
+		f, err := idx.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		qcx := idx.Txf().NewWritableQcx()
+		qcx := h.Txf().NewWritableQcx()
 		defer qcx.Abort()
 
 		// Set value.
@@ -113,13 +112,13 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
-		idx := test.MustOpenIndex(t)
+		h, idx := test.MustOpenIndex(t)
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
-		qcx := idx.Txf().NewWritableQcx()
+		qcx := h.Txf().NewWritableQcx()
 		defer qcx.Abort()
 		// Set value.
 		if _, err := f.SetValue(qcx, 100, 15); !errors.Is(err, pilosa.ErrBSIGroupValueTooLow) {
@@ -128,14 +127,14 @@ func TestField_SetValue(t *testing.T) {
 	})
 
 	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
-		idx := test.MustOpenIndex(t)
+		h, idx := test.MustOpenIndex(t)
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		qcx := idx.Txf().NewWritableQcx()
+		qcx := h.Txf().NewWritableQcx()
 		defer qcx.Abort()
 
 		// Set value.
@@ -143,17 +142,6 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
-}
-
-func TestField_NameRestriction(t *testing.T) {
-	path, err := testhook.TempDir(t, "pilosa-field-")
-	if err != nil {
-		panic(err)
-	}
-	field, err := pilosa.NewField(pilosa.NewHolder(path, mustHolderConfig()), path, "i", ".meta", pilosa.OptFieldTypeDefault())
-	if field != nil {
-		t.Fatalf("unexpected field name %s", err)
-	}
 }
 
 // Ensure that field name validation is consistent.
@@ -175,21 +163,19 @@ func TestField_NameValidation(t *testing.T) {
 		"abc def",
 		"camelCase",
 		"UPPERCASE",
+		".meta",
 		"charact23112345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901",
 	}
 
-	path, err := testhook.TempDir(t, "pilosa-field-")
-	if err != nil {
-		panic(err)
-	}
+	_, idx := test.MustOpenIndex(t)
 	for _, name := range validFieldNames {
-		_, err := pilosa.NewField(pilosa.NewHolder(path, mustHolderConfig()), path, "i", name, pilosa.OptFieldTypeDefault())
+		_, err := idx.CreateField(name)
 		if err != nil {
 			t.Fatalf("unexpected field name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFieldNames {
-		_, err := pilosa.NewField(pilosa.NewHolder(path, mustHolderConfig()), path, "i", name, pilosa.OptFieldTypeDefault())
+		_, err := idx.CreateField(name)
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}
@@ -200,14 +186,14 @@ const includeRemote = false // for calls to Index.AvailableShards(localOnly bool
 
 // Ensure can update and delete available shards.
 func TestField_AvailableShards(t *testing.T) {
-	idx := test.MustOpenIndex(t)
+	h, idx := test.MustOpenIndex(t)
 
-	f, err := idx.CreateField("fld-shards", pilosa.OptFieldTypeDefault())
+	f, err := idx.CreateField("fld-shards")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	qcx := idx.Txf().NewWritableQcx()
+	qcx := h.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
 	// Set values on shards 0 & 2, and verify.
@@ -241,13 +227,13 @@ func TestField_AvailableShards(t *testing.T) {
 
 func TestField_ClearValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		idx := test.MustOpenIndex(t)
+		h, idx := test.MustOpenIndex(t)
 
 		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
-		qcx := idx.Txf().NewWritableQcx()
+		qcx := h.Txf().NewWritableQcx()
 		defer qcx.Abort()
 
 		// Set value on field.

@@ -5,50 +5,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/testhook"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"golang.org/x/sync/errgroup"
 )
 
 // mustOpenView returns a new instance of View with a temporary path.
-func mustOpenView(tb testing.TB, index, field, name string) *view {
-	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-view-")
-	if err != nil {
-		PanicOn(err)
-	}
-
-	fo := FieldOptions{
-		CacheType: DefaultCacheType,
-		CacheSize: DefaultCacheSize,
-	}
-
-	h := NewHolder(path, mustHolderConfig())
-	// h needs an *Index so we can call h.Index() and get Index.Txf, in TestView_DeleteFragment
-
-	cim := &CreateIndexMessage{
-		Index:     index,
-		CreatedAt: 0,
-		Meta:      IndexOptions{},
-	}
-
-	idx, err := h.createIndex(cim, false)
-	testhook.Cleanup(tb, func() {
-		h.Close()
-	})
-	PanicOn(err)
-
-	v := newView(h, path, index, field, name, fo)
-	v.idx = idx
+func mustOpenView(tb testing.TB) *view {
+	_, _, _, v := newTestView(tb)
 	if err := v.openEmpty(); err != nil {
-		PanicOn(err)
+		tb.Fatalf("opening empty test view: %v", err)
 	}
 	return v
 }
 
 // Ensure view can open and retrieve a fragment.
 func TestView_DeleteFragment(t *testing.T) {
-	v := mustOpenView(t, "i", "f", "v")
-	defer v.close()
+	v := mustOpenView(t)
 
 	shard := uint64(9)
 
@@ -82,8 +53,7 @@ func TestView_DeleteFragment(t *testing.T) {
 // if the broadcast operation takes a bit of time.
 func TestView_CreateFragmentRace(t *testing.T) {
 	var creates errgroup.Group
-	v := mustOpenView(t, "i", "f", "v")
-	defer v.close()
+	v := mustOpenView(t)
 
 	// Use a broadcaster which intentionally fails.
 	v.broadcaster = delayBroadcaster{delay: 10 * time.Millisecond}
