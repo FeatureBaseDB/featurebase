@@ -216,19 +216,23 @@ func (r *Record) Commit(ctx context.Context) error {
 		}
 	}
 	sort.Slice(section, func(i, j int) bool {
-		if section[i].Partition != section[j].Partition {
+		if *section[i].Topic != *section[j].Topic {
+			return *section[i].Topic < *section[j].Topic
+		} else if section[i].Partition != section[j].Partition {
 			return section[i].Partition < section[j].Partition
 		}
 		return section[i].Offset > section[j].Offset
 	})
 	p := int32(-1)
+	s := ""
 	r.src.highmarks = r.src.highmarks[:0]
 	// sort by increasing partition, decreasing offset
 
 	for _, x := range section {
-		if p != x.Partition {
+		if s != *x.Topic || p != x.Partition {
 			r.src.highmarks = append(r.src.highmarks, x)
 		}
+		s = *x.Topic
 		p = x.Partition
 	}
 	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)
