@@ -210,11 +210,7 @@ func (r *Record) Commit(ctx context.Context) error {
 		return errors.New("cannot commit a record that has already been committed")
 	}
 	section, remaining := r.src.spool[:idx-base], r.src.spool[idx-base:]
-	if r.src.Verbose {
-		for _, o := range section {
-			r.src.Log.Debugf("raw p: %v o: %v", o.Partition, o.Offset)
-		}
-	}
+	
 	sort.Slice(section, func(i, j int) bool {
 		if *section[i].Topic != *section[j].Topic {
 			return *section[i].Topic < *section[j].Topic
@@ -238,13 +234,6 @@ func (r *Record) Commit(ctx context.Context) error {
 	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)
 	if err != nil {
 		return errors.Wrap(err, "failed to commit messages")
-	}
-
-	if r.src.Verbose {
-		r.src.Log.Debugf("COMMIT")
-		for _, o := range committedOffsets {
-			r.src.Log.Debugf("p: %v o: %v", o.Partition, o.Offset)
-		}
 	}
 
 	r.src.spool = remaining
@@ -308,7 +297,6 @@ func (s *Source) Open() error {
 		}
 		s.Log.Debugf(buf.String())
 		stv, iv := confluent.LibraryVersion()
-		s.Log.Debugf("version:(%v) %v", iv, stv)
 
 	}
 	cl, err := confluent.NewConsumer(s.ConfigMap)
@@ -316,18 +304,12 @@ func (s *Source) Open() error {
 		return errors.Wrap(err, "new consumer")
 	}
 
-	if s.Verbose {
-		s.Log.Debugf("consumer started")
-	}
 
 	err = cl.SubscribeTopics(s.Topics, nil)
 	if err != nil {
 		return errors.Wrap(err, "subscribe topics")
 	}
 
-	if s.Verbose {
-		s.Log.Debugf("subscribed to %v", s.Topics)
-	}
 
 	s.client = cl
 	s.opened = true
@@ -360,9 +342,6 @@ func (c *Source) generator() {
 	defer func() {
 		close(c.recordChannel)
 		c.wg.Done()
-		if c.Verbose {
-			c.Log.Debugf("generator")
-		}
 	}()
 
 	for {
@@ -436,11 +415,6 @@ func (c *Source) generator() {
 				}
 			case confluent.OffsetsCommitted:
 				c.Log.Debugf("commited %s", e)
-				if c.Verbose {
-					for _, r := range e.Offsets {
-						c.Log.Debugf("p: %v o: %v", r.Partition, r.Offset)
-					}
-				}
 			default:
 				if c.Verbose {
 					c.Log.Debugf("ignored %#v", ev)
