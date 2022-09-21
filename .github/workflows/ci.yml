@@ -13,7 +13,7 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
-  build:
+  validate:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
@@ -22,8 +22,17 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      - name: CD
+      - name: open workspace
         run: cd $GITHUB_WORKSPACE
+
+      - name: rebase
+        run: git rebase master
+
+      # - name: lint
+      #   run: go lint go cilint, etc.
 
       - name: go vet
         run: go vet ./...
+
+      # - name: test
+      #   run: go test ./...
