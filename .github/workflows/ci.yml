@@ -26,7 +26,7 @@ jobs:
         run: cd $GITHUB_WORKSPACE
 
       - name: rebase
-        run: git rebase origin/${{ github.base_ref }}
+        run: git rebase origin ${{ github.base_ref }}
 
       # - name: lint
       #   run: go lint go cilint, etc.
