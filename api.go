@@ -2643,7 +2643,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 
 	idx := api.holder.Index(indexName)
 	//need to get a dbShard
-	dbs, err := idx.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
+	dbs, err := api.holder.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
 	if err != nil {
 		return err
 	}

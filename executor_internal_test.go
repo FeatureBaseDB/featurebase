@@ -12,9 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	"github.com/stretchr/testify/assert"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 // AssertEqual checks a given RowIdentifiers against expected values.
@@ -42,16 +40,11 @@ func (r *RowIdentifiers) AssertEqual(tb testing.TB, other *RowIdentifiers) {
 }
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
-	path, _ := testhook.TempDirInDir(t, *TempDir, "pilosa-executor-")
-	holder := NewHolder(path, mustHolderConfig())
-	defer holder.Close()
+	holder := newTestHolder(t)
 
 	e := &executor{
 		Holder:  holder,
 		Cluster: NewTestCluster(t, 1),
-	}
-	if err := e.Holder.Open(); err != nil {
-		t.Fatalf("opening holder: %v", err)
 	}
 
 	idx, err := e.Holder.CreateIndex("i", IndexOptions{})
@@ -59,7 +52,7 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 		t.Fatalf("creating index: %v", err)
 	}
 
-	qcx := idx.Txf().NewWritableQcx()
+	qcx := holder.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
 	fb, errb := idx.CreateField("b", OptFieldTypeBool())
@@ -513,10 +506,10 @@ func TestExecutorSafeCopyDistinctTimestamp(t *testing.T) {
 }
 
 func TestGetScaledInt(t *testing.T) {
-	f := OpenField(t, OptFieldTypeTimestamp(time.Now(), "ms"))
+	_, _, f := newTestField(t, OptFieldTypeTimestamp(time.Now(), "ms"))
 	// check that fields with type timestamp return the int64 passed in to getScaledInt with nil err
 	v := time.Now().Unix()
-	res, err := getScaledInt(f.Field, v)
+	res, err := getScaledInt(f, v)
 	if err != nil {
 		t.Errorf("got error %v, expected nil", err)
 	}
@@ -568,25 +561,19 @@ func TestDistinctTimestampUnion(t *testing.T) {
 }
 
 func TestExecutor_DeleteRows(t *testing.T) {
-	path, _ := testhook.TempDir(t, "pilosa-executor-")
-	holder := NewHolder(path, mustHolderConfig())
-	defer holder.Close()
-
-	if err := holder.Open(); err != nil {
-		t.Fatalf("opening holder: %v", err)
-	}
+	holder := newTestHolder(t)
 
 	idx, err := holder.CreateIndex("i", IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
 
-	f, err := idx.CreateField("f", OptFieldTypeDefault())
+	f, err := idx.CreateField("f")
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}
 
-	qcx := idx.Txf().NewWritableQcx()
+	qcx := holder.Txf().NewWritableQcx()
 	defer qcx.Abort()
 	if _, err = f.SetBit(qcx, 1, 1, nil); err != nil {
 		t.Fatalf("setting bit: %v", err)

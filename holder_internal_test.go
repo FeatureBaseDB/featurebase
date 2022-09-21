@@ -4,33 +4,20 @@ package pilosa
 
 import (
 	"testing"
-
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/testhook"
 )
-
-// mustHolderConfig sets up a default holder config for tests.
-func mustHolderConfig() *HolderConfig {
-	cfg := DefaultHolderConfig()
-	cfg.StorageConfig.FsyncEnabled = false
-	cfg.RBFConfig.FsyncEnabled = false
-	cfg.Schemator = disco.NewInMemSchemator()
-	cfg.Sharder = disco.InMemSharder
-	return cfg
-}
 
 func setupTest(t *testing.T, h *Holder, rowCol []rowCols, indexName string) (*Index, *Field) {
 	idx, err := h.CreateIndexIfNotExists(indexName, IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatalf("failed to create index %v: %v", indexName, err)
 	}
-	f, err := idx.CreateFieldIfNotExists("f", OptFieldTypeDefault())
+	f, err := idx.CreateFieldIfNotExists("f")
 	if err != nil {
 		t.Fatalf("failed to create field in index %v: %v", indexName, err)
 	}
 	existencefield := idx.existenceFld
 
-	qcx := idx.Txf().NewWritableQcx()
+	qcx := h.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
 	for _, r := range rowCol {
@@ -62,14 +49,7 @@ type rowCols struct {
 }
 
 func TestHolder_ProcessDeleteInflight(t *testing.T) {
-	path, _ := testhook.TempDir(t, "delete-inflight")
-	h := NewHolder(path, mustHolderConfig())
-	defer h.Close()
-
-	err := h.Open()
-	if err != nil {
-		t.Fatalf("failed to open holder: %v", err)
-	}
+	h := newTestHolder(t)
 
 	rowCol := []rowCols{
 		{1, 1},
@@ -81,7 +61,7 @@ func TestHolder_ProcessDeleteInflight(t *testing.T) {
 	idx1, f1 := setupTest(t, h, rowCol, "idxdelete1")
 	idx2, f2 := setupTest(t, h, rowCol, "idxdelete2")
 
-	err = h.processDeleteInflight()
+	err := h.processDeleteInflight()
 	if err != nil {
 		t.Fatalf("failed to delete: %v", err)
 	}
@@ -97,7 +77,7 @@ func TestHolder_ProcessDeleteInflight(t *testing.T) {
 	for _, test := range tests {
 		func() {
 			idx, f := test.idx, test.f
-			qcx := idx.Txf().NewQcx()
+			qcx := h.Txf().NewQcx()
 			defer qcx.Abort()
 			for _, r := range rowCol {
 				row, err := f.Row(qcx, r.row)

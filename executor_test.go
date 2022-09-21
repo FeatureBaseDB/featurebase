@@ -1447,7 +1447,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			if _, err := idx.CreateField("f"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1464,7 +1464,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 
 		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
 			idx := hldr.MustCreateIndexIfNotExists(c.Idx("inokey"), pilosa.IndexOptions{})
-			if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+			if _, err := idx.CreateField("f", pilosa.OptFieldKeys()); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx("inokey"), Query: `Set(2, f=1.2)`}); err == nil || !strings.Contains(err.Error(), "invalid value") {
@@ -1635,7 +1635,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{})
 		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 			t.Fatal(err)
-		} else if _, err := index.CreateFieldIfNotExists("xxx", pilosa.OptFieldTypeDefault()); err != nil {
+		} else if _, err := index.CreateFieldIfNotExists("xxx"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1647,8 +1647,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		// Obtain transaction.
-		idx := index.Index
-		qcx := idx.Txf().NewQcx()
+		qcx := hldr.Txf().NewQcx()
 		defer qcx.Abort()
 
 		f := hldr.Field(c.Idx(), "f")
@@ -1707,7 +1706,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{})
 		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds)); err != nil {
 			t.Fatal(err)
-		} else if _, err := index.CreateFieldIfNotExists("xxx", pilosa.OptFieldTypeDefault()); err != nil {
+		} else if _, err := index.CreateFieldIfNotExists("xxx"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1719,8 +1718,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		// Obtain transaction.
-		idx := index.Index
-		qcx := idx.Txf().NewQcx()
+		qcx := hldr.Txf().NewQcx()
 		defer qcx.Abort()
 
 		f := hldr.Field(c.Idx(), "f")
@@ -1847,9 +1845,9 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 		// Set columns for rows 0, 10, & 20 across two shards.
 		if idx, err := hldr.CreateIndex(c.Idx(), pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+		} else if _, err := idx.CreateField("f"); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("other", pilosa.OptFieldTypeDefault()); err != nil {
+		} else if _, err := idx.CreateField("other"); err != nil {
 			t.Fatal(err)
 		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `
 			Set(0, f=0)
@@ -1981,9 +1979,9 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 		// Set columns for rows 0, 10, & 20 across two shards.
 		if idx, err := hldr.CreateIndex(c.Idx(), pilosa.IndexOptions{Keys: true}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldKeys()); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("other", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+		} else if _, err := idx.CreateField("other", pilosa.OptFieldKeys()); err != nil {
 			t.Fatal(err)
 		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `
 			Set("a", f="foo")
@@ -2027,7 +2025,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 		// Set data on the "f" field.
 		if idx, err := hldr.CreateIndex(c.Idx(), pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+		} else if _, err := idx.CreateField("f"); err != nil {
 			t.Fatal(err)
 		} else if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `
 			Set(0, f=0)
@@ -2327,7 +2325,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			// This extra field exists to make there be shards which are present,
 			// but have no decimal values set, to make sure they don't break
 			// the results.
-			if _, err := idx.CreateFieldIfNotExists("z", pilosa.OptFieldTypeDefault()); err != nil {
+			if _, err := idx.CreateFieldIfNotExists("z"); err != nil {
 				t.Fatal(err)
 			}
 			if res, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Set(1, z=0)`}); err != nil {
@@ -2508,7 +2506,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := idx.CreateField("x"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2572,7 +2570,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := idx.CreateField("x"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2665,7 +2663,7 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := idx.CreateField("f"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2785,7 +2783,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := idx.CreateField("x"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -2919,7 +2917,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := idx.CreateField("x"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -3010,7 +3008,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+	if _, err := idx.CreateField("f"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3310,7 +3308,7 @@ func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+	if _, err := idx.CreateField("f"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3937,7 +3935,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
 
-		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		_, err := index.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4339,7 +4337,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
-		fld, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		fld, err := index.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4431,7 +4429,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true, Keys: true})
-		fld, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		fld, err := index.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4496,7 +4494,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		_, err := index.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4540,7 +4538,7 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		_, err := index.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4620,10 +4618,10 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
-		if _, err := index.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := index.CreateField("f"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := index.CreateField("tmp", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := index.CreateField("tmp"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -4675,7 +4673,7 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		idx := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
-		_, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
+		_, err := idx.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4728,7 +4726,7 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		_, err := index.CreateField("f")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4769,7 +4767,7 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 		defer c.Close()
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{TrackExistence: true})
-		if _, err := index.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+		if _, err := index.CreateField("f", pilosa.OptFieldKeys()); err != nil {
 			t.Fatal(err)
 		}
 
@@ -4817,7 +4815,7 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 func benchmarkExistence(nn bool, b *testing.B) {
 	c := test.MustUnsharedCluster(b, 1)
 	var err error
-	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkExistence")
+	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDir(b, "benchmarkExistence")
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}
@@ -6445,7 +6443,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 func BenchmarkGroupBy(b *testing.B) {
 	c := test.MustUnsharedCluster(b, 1)
 	var err error
-	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDirInDir(b, *TempDir, "benchmarkGroupBy-")
+	c.GetIdleNode(0).Config.DataDir, err = testhook.TempDir(b, "benchmarkGroupBy-")
 	if err != nil {
 		b.Fatalf("getting temp dir: %v", err)
 	}
@@ -6634,7 +6632,7 @@ func TestExecutor_Execute_IncludesColumn(t *testing.T) {
 		cmd := c.GetNode(0)
 		hldr := c.GetHolder(0)
 		index := hldr.MustCreateIndexIfNotExists(c.Idx(), pilosa.IndexOptions{Keys: true})
-		if _, err := index.CreateField("general", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+		if _, err := index.CreateField("general", pilosa.OptFieldKeys()); err != nil {
 			t.Fatal(err)
 		}
 
@@ -6705,7 +6703,7 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
+	if _, err := idx.CreateField("x"); err != nil {
 		t.Fatal(err)
 	}
 

@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/testhook"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // Index represents a test wrapper for pilosa.Index.
@@ -15,17 +15,9 @@ type Index struct {
 	*pilosa.Index
 }
 
-// newIndex returns a new instance of Index.
-func newIndex(tb testing.TB) *Index {
-	path, err := testhook.TempDir(tb, "pilosa-index-")
-	if err != nil {
-		panic(err)
-	}
-	cfg := pilosa.DefaultHolderConfig()
-	cfg.StorageConfig.FsyncEnabled = false
-	cfg.RBFConfig.FsyncEnabled = false
-	cfg.RBFConfig.MaxSize = (1 << 28)
-	h := pilosa.NewHolder(path, cfg)
+// newIndex returns a new instance of Index, and the parent holder.
+func newIndex(tb testing.TB) (*Holder, *Index) {
+	h := NewHolder(tb)
 	testhook.Cleanup(tb, func() {
 		h.Close()
 	})
@@ -33,13 +25,13 @@ func newIndex(tb testing.TB) *Index {
 	if err != nil {
 		panic(err)
 	}
-	return &Index{Index: index}
+	return h, &Index{Index: index}
 }
 
-// MustOpenIndex returns a new, opened index at a temporary path. Panic on error.
-func MustOpenIndex(tb testing.TB) *Index {
-	index := newIndex(tb)
-	return index
+// MustOpenIndex returns a new, opened index at a temporary path, or
+// fails the test. It also returns the holder containing the index.
+func MustOpenIndex(tb testing.TB) (*Holder, *Index) {
+	return newIndex(tb)
 }
 
 // Close closes the index and removes the underlying data.
@@ -52,7 +44,7 @@ func (i *Index) Reopen() error {
 	if err := i.Index.Close(); err != nil {
 		return err
 	}
-	schema, err := i.Schemator.Schema(context.Background())
+	schema, err := i.Holder().Schemator.Schema(context.Background())
 	if err != nil {
 		return err
 	}
