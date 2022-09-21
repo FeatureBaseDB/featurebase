@@ -23,10 +23,10 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: open workspace
-        run: |
-        pwd
-        cd $GITHUB_WORKSPACE
-        pwd
+        run: cd $GITHUB_WORKSPACE
+
+      - name: status
+        run: pwd && git status
 
       # - name: rebase
       #   run: git rebase origin ${{ github.base_ref }}
