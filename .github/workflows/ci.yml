@@ -20,8 +20,8 @@ jobs:
         id: semrel
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          dry: true
 
-  # This workflow contains a single job called "build"
   validate:
     name: Code Checks
     runs-on: ubuntu-latest
@@ -34,9 +34,6 @@ jobs:
       - uses: actions/setup-go@v3
       - run: go version
 
-      # - name: rebase
-      #   run: git rebase origin ${{ github.base_ref }}
-
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
@@ -45,5 +42,5 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # - name: test
-      #   run: go test ./...
+      - name: test
+        run: go test ./...

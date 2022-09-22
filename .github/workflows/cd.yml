@@ -25,22 +25,11 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # - name: test
-      #   run: go test ./...
-
-  release:
-    needs: validate
-    runs_on: ubuntu-latest
-      
-    steps:
-      - name: go-semantic-release
-        uses: go-semantic-release/action@v1.17.0
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: test
+        run: go test ./...
 
   build:
-    needs: [validate, release]
+    needs: validate
     runs_on: ubuntu-latest
     matrix:
       goos: 
@@ -55,5 +44,16 @@ jobs:
       - name: build
         run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
 
-      - name: upload
+      # - name: upload artifacts
+      #   uses: upload artifacts
 
+  release:
+    needs: [validate, build]
+    runs_on: ubuntu-latest
+      
+    steps:
+      - name: go-semantic-release
+        uses: go-semantic-release/action@v1.17.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          dry: true
