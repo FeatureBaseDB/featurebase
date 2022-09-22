@@ -34,14 +34,11 @@ jobs:
       - uses: actions/setup-go@v3
       - run: go version
 
-      - name: open workspace
-        run: cd $GITHUB_WORKSPACE
-
       # - name: rebase
       #   run: git rebase origin ${{ github.base_ref }}
 
-      - name: lint
-        run: golangci-lint run -v --timeout=8m
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
 
       - name: go vet
         run: go vet ./...
