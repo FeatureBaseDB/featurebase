@@ -12,6 +12,14 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  validate-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # This workflow contains a single job called "build"
   validate:
     # The type of runner that the job will run on
@@ -24,9 +32,6 @@ jobs:
 
       - name: open workspace
         run: cd $GITHUB_WORKSPACE
-
-      - name: status
-        run: pwd && git status
 
       # - name: rebase
       #   run: git rebase origin ${{ github.base_ref }}
