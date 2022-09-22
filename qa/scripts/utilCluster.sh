@@ -649,6 +649,12 @@ setupConsumerNode(){
 # do so and returns a non-zero status. Note the quoting to get the double
 # quotes around "value".
 get_value() {
+    flags=$-
+    set +x
+    case $flags in
+    *x*)	restore="set -x";;
+    *)		restore="";;
+    esac
     file=$1
     var=$2
     shift 2
@@ -663,15 +669,18 @@ get_value() {
     tmp=$(jq -r "$expr" < $file)
     if [ $? -ne 0 ]; then
         echo >&2 "jq failed parsing input file"
+	$restore
         return 1
     fi
     case $tmp in
     null)
       echo >&2 "reading IPs for ${node}: got null"
+      $restore
       return 1
       ;;
     *)
       eval $var=\$tmp
+      $restore
       return 0
       ;;
     esac

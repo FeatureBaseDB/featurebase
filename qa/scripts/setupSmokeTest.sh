@@ -1,5 +1,7 @@
 #!/bin/bash
 set -x
+# how often should we try to do our terraform setup?
+max_tries=3
 
 # To run script: ./setupSmokeTest.sh <BRANCH_NAME>
 ADMIN_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiYWRtaW4ifQ.I1iCgk1VU7m6e-En4ACTHIs6V2dZpy_8j2blSSo7K3U
@@ -19,7 +21,35 @@ pushd ./qa/tf/ci/smoketest
 echo "Running terraform init..."
 terraform init -input=false
 echo "Running terraform apply..."
-terraform apply -input=false -auto-approve
+
+okay=false
+# This logic is gratuitously complicated because I want visibility
+# into how it's working, or not-working. The chances are this should
+# just be a test against the exit status of terraform apply.
+tries=1
+while ! $okay && [ $tries -le $max_tries ] ; do
+	echo "Try $tries/$max_tries, running terraform..."
+	terraform apply -input=false -auto-approve
+	tf=$?
+	terraform output -json > outputs.json
+	echo "Outputs:"
+	cat outputs.json
+	must_get_value outputs.json TMP_I .ingest_ips 0 '"value"' 0
+	must_get_value outputs.json TMP_D .data_node_ips 0 '"value"' 0
+	echo "TF status: $tf, ingest_ips $TMP_I, data_node_ips $TMP_D"
+	case $TMP_I.$TMP_D in
+	*null*)	echo >&2 "looks like we failed, null in IPs."
+		tries=$(expr $tries + 1)
+		;;
+	*)	okay=true
+		;;
+	esac
+done
+echo "okay $okay, tries $tries"
+if ! $okay; then
+	echo >&2 "didn't start terraform successfully, giving up"
+	exit 1
+fi
 terraform output -json > outputs.json
 echo "Outputs:"
 cat outputs.json
