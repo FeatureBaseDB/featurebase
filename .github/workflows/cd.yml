@@ -1,0 +1,77 @@
+name: CD
+
+on:
+  push:
+    branches: ["master"]
+
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "^1.19.1"
+
+      - run: go version
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout=5m
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: test
+        run: go test ./...
+
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.semrel.outputs.version }}
+
+    steps:
+      - name: go-semantic-release
+        id: semrel
+        uses: go-semantic-release/action@v1.17.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos:
+          - "darwin"
+          - "linux"
+          - "windows"
+        goarch:
+          - "amd64"
+          - "arm64"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "^1.19.1"
+
+      - name: build
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+          asset_name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          tag: ${{ github.ref }}
+

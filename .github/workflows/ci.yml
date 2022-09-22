@@ -1,0 +1,49 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the workflow will run
+on:
+  pull_request:
+    branches: ["master"]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  validate-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: go-semantic-release/action@v1
+        id: semrel
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          dry: true
+
+  validate:
+    name: Code Checks
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "^1.19.1"
+
+      - run: go version
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout=5m
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: test
+        run: go test ./...
