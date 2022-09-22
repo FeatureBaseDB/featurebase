@@ -31,6 +31,9 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
+      - uses: actions/setup-go@v3
+      - run: go version
+
       - name: open workspace
         run: cd $GITHUB_WORKSPACE
 
