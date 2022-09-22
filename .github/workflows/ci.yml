@@ -23,7 +23,7 @@ jobs:
 
   # This workflow contains a single job called "build"
   validate:
-    # The type of runner that the job will run on
+    name: Code Checks
     runs-on: ubuntu-latest
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -39,6 +39,8 @@ jobs:
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout=5m
 
       - name: go vet
         run: go vet ./...

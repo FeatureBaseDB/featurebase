@@ -14,11 +14,13 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      - name: open workspace
-        run: cd $GITHUB_WORKSPACE
+      - uses: actions/setup-go@v3
+      - run: go version
 
-      - name: lint
-        run: golangci-lint run -v --timeout=8m
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout=5m
 
       - name: go vet
         run: go vet ./...
