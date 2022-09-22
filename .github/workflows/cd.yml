@@ -4,8 +4,10 @@ on:
   push:
     branches: ["master"]
 
+  workflow_dispatch:
+
 jobs:
-  build:
+  validate:
     runs_on: ubuntu-latest
     
     steps:
@@ -15,6 +17,9 @@ jobs:
       - name: open workspace
         run: cd $GITHUB_WORKSPACE
 
+      - name: lint
+        run: golangci-lint run -v --timeout=8m
+
       - name: go vet
         run: go vet ./...
 
@@ -22,6 +27,18 @@ jobs:
       #   run: go test ./...
 
   release:
+    needs: validate
+    runs_on: ubuntu-latest
+      
+    steps:
+      - name: go-semantic-release
+        uses: go-semantic-release/action@v1.17.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+
+  build:
+    needs: [validate, release]
     runs_on: ubuntu-latest
     matrix:
       goos: 
@@ -34,4 +51,7 @@ jobs:
     
     steps:
       - name: build
-          run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: upload
+

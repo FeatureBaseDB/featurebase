@@ -16,9 +16,10 @@ jobs:
     name: Validate PR title
     runs-on: ubuntu-latest
     steps:
-      - uses: amannn/action-semantic-pull-request@v4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: go-semantic-release/action@v1
+        id: semrel
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   # This workflow contains a single job called "build"
   validate:
@@ -36,8 +37,8 @@ jobs:
       # - name: rebase
       #   run: git rebase origin ${{ github.base_ref }}
 
-      # - name: lint
-      #   run: go lint go cilint, etc.
+      - name: lint
+        run: golangci-lint run -v --timeout=8m
 
       - name: go vet
         run: go vet ./...
