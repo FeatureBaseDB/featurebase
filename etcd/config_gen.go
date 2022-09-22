@@ -49,6 +49,15 @@ func GenEtcdConfigs(dc DirCleaner, n int) (clusterName string, cfgs []Options) {
 	for i := 0; i < n; i++ {
 		name := fmt.Sprintf("server%d", i)
 		discoDir := dc.TempDir()
+		d, err := os.Open(discoDir)
+		if err != nil {
+			dc.Fatalf("creating temp directory: %v", err)
+		}
+		defer d.Close()
+		err = d.Chmod(0o700)
+		if err != nil {
+			dc.Fatalf("fixing temp directory mode: %v", err)
+		}
 		clientURL := unixSocket(dc)
 		peerURL := unixSocket(dc)
 		cfgs[i] = Options{
