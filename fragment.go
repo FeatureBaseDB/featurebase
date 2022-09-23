@@ -3617,10 +3617,6 @@ func (f *fragment) sortBsiData(tx Tx, filter *Row, bitDepth uint64, sort_desc bo
 		return nil, err
 	}
 	pos := consider.Difference(row)
-	row, err = f.row(tx, 0)
-	if err != nil {
-		return nil, err
-	}
 	neg := consider.Difference(pos)
 
 	var sortedRowIds []RowKV
