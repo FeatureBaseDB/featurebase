@@ -722,8 +722,6 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			return
 		}
 
-		ctx := r.Context()
-
 		// check if IP is in allowed networks, if yes give it admin permissions
 		allowedNetwork, ctx := h.chkAllowedNetworks(r)
 		if allowedNetwork {

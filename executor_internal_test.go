@@ -591,6 +591,9 @@ func TestExecutor_DeleteRows(t *testing.T) {
 	}
 
 	changed, err = DeleteRows(ctx, row, idx, 0)
+	if err != nil {
+		t.Fatalf("deleting rows: %v", err)
+	}
 	if changed {
 		t.Fatalf("expected delete to not clear bit but it did")
 	}

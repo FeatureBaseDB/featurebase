@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	gohttp "net/http"
 	"os"
 	"path"
 	"reflect"
@@ -176,13 +175,13 @@ func TestUpdateFieldTTL(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			c.CreateField(t, indexName, pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), test.ttl))
 			nodeURL := fmt.Sprintf("%s/index/%s/field/%s", c.Nodes[0].URL(), c, test.field)
-			req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(test.ttlOption))
+			req, err := http.NewRequest("PATCH", nodeURL, strings.NewReader(test.ttlOption))
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			req.Header.Set("Content-Type", "application/json")
-			resp, err := gohttp.DefaultClient.Do(req)
+			resp, err := http.DefaultClient.Do(req)
 
 			if err != nil {
 				t.Fatalf("doing option request: %v", err)
@@ -292,13 +291,13 @@ func TestUpdateFieldNoStandardView(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			c.CreateField(t, indexName, pilosa.IndexOptions{}, test.name, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), "0"))
 			nodeURL := fmt.Sprintf("%s/index/%s/field/%s", c.Nodes[0].URL(), c, test.field)
-			req, err := gohttp.NewRequest("PATCH", nodeURL, strings.NewReader(test.fieldOption))
+			req, err := http.NewRequest("PATCH", nodeURL, strings.NewReader(test.fieldOption))
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			req.Header.Set("Content-Type", "application/json")
-			resp, err := gohttp.DefaultClient.Do(req)
+			resp, err := http.DefaultClient.Do(req)
 
 			if err != nil {
 				t.Fatalf("doing option request: %v", err)
@@ -421,12 +420,12 @@ func TestIngestSchemaHandler(t *testing.T) {
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != gohttp.StatusOK {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 	// now, try again, expecting a failure:
 	resp = test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != gohttp.StatusConflict {
+	if resp.StatusCode != http.StatusConflict {
 		t.Errorf("invalid status: expected 409, got %d, body=%s", resp.StatusCode, resp.Body)
 	}
 }
@@ -447,7 +446,7 @@ func TestPostFieldWithTTL(t *testing.T) {
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != gohttp.StatusOK {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 
@@ -563,7 +562,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != gohttp.StatusOK {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 
@@ -573,7 +572,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	Set(1,test_view=1,2001-02-03T04:05)
 	`
 	respQuery := test.Do(t, "POST", postQueryUrl, string(queryOption))
-	if respQuery.StatusCode != gohttp.StatusOK {
+	if respQuery.StatusCode != http.StatusOK {
 		t.Errorf("posting query, status: %d, body=%s", respQuery.StatusCode, respQuery.Body)
 	}
 
@@ -589,7 +588,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	// Call view to get data
 	viewUrl := fmt.Sprintf("%s/index/%s/field/test_view/view", m.URL(), c)
 	respView := test.Do(t, "GET", viewUrl, "")
-	if respView.StatusCode != gohttp.StatusOK {
+	if respView.StatusCode != http.StatusOK {
 		t.Errorf("view handler, status: %d, body=%s", respView.StatusCode, respView.Body)
 	}
 
@@ -619,7 +618,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	// call delete on view standard_2001020304
 	deleteViewUrl := fmt.Sprintf("%s/index/%s/field/test_view/view/standard_2001020304", m.URL(), c)
 	respDelete := test.Do(t, "DELETE", deleteViewUrl, "")
-	if respDelete.StatusCode != gohttp.StatusOK {
+	if respDelete.StatusCode != http.StatusOK {
 		t.Errorf("delete handler, status: %d, body=%s", respDelete.StatusCode, respDelete.Body)
 	}
 
@@ -629,7 +628,7 @@ func TestGetViewAndDelete(t *testing.T) {
 	// call view again
 	viewUrl = fmt.Sprintf("%s/index/%s/field/test_view/view", m.URL(), c)
 	respView = test.Do(t, "GET", viewUrl, "")
-	if respView.StatusCode != gohttp.StatusOK {
+	if respView.StatusCode != http.StatusOK {
 		t.Errorf("view handler after delete, status: %d, body=%s", respView.StatusCode, respView.Body)
 	}
 
@@ -680,7 +679,7 @@ func TestTranslationHandlers(t *testing.T) {
 	m := c.GetPrimary()
 	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
 	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != gohttp.StatusOK {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 	baseURLs := []string{
@@ -696,11 +695,11 @@ func TestTranslationHandlers(t *testing.T) {
 
 		if expectFailure {
 			resp := test.Do(t, "POST", findURL, names)
-			if resp.StatusCode != gohttp.StatusInternalServerError {
+			if resp.StatusCode != http.StatusInternalServerError {
 				t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 			}
 			resp = test.Do(t, "POST", createURL, names)
-			if resp.StatusCode != gohttp.StatusInternalServerError {
+			if resp.StatusCode != http.StatusInternalServerError {
 				t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 			}
 			continue
@@ -708,7 +707,7 @@ func TestTranslationHandlers(t *testing.T) {
 
 		// try to find them when they don't exist
 		resp := test.Do(t, "POST", findURL, names)
-		if resp.StatusCode != gohttp.StatusOK {
+		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 		}
 		err := json.Unmarshal([]byte(resp.Body), &results)
@@ -721,13 +720,13 @@ func TestTranslationHandlers(t *testing.T) {
 
 		// try to create them, but malformed, so we expect an error
 		resp = test.Do(t, "POST", createURL, names[:6])
-		if resp.StatusCode != gohttp.StatusBadRequest {
+		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("invalid status: expected 400, got %d, body=%s", resp.StatusCode, resp.Body)
 		}
 
 		// try to create them
 		resp = test.Do(t, "POST", createURL, names)
-		if resp.StatusCode != gohttp.StatusOK {
+		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 		}
 		err = json.Unmarshal([]byte(resp.Body), &results)
@@ -740,7 +739,7 @@ func TestTranslationHandlers(t *testing.T) {
 
 		// try to find them now that they exist
 		resp = test.Do(t, "POST", findURL, names)
-		if resp.StatusCode != gohttp.StatusOK {
+		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 		}
 		err = json.Unmarshal([]byte(resp.Body), &results)
@@ -900,14 +899,14 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 	for _, ipTest := range IPTests {
 		for _, test := range tests {
 			t.Run(ipTest.TestName+"-"+test.testName, func(t *testing.T) {
-				var req *gohttp.Request
+				var req *http.Request
 				if test.body != "" {
-					req, err = gohttp.NewRequest(test.method, test.url, strings.NewReader(test.body))
+					req, err = http.NewRequest(test.method, test.url, strings.NewReader(test.body))
 					if err != nil {
 						t.Fatal(err)
 					}
 				} else {
-					req, err = gohttp.NewRequest(test.method, test.url, nil)
+					req, err = http.NewRequest(test.method, test.url, nil)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -915,7 +914,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("X-Forwarded-For", ipTest.ClientIP)
-				resp, err := gohttp.DefaultClient.Do(req)
+				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
 					t.Fatalf("failed to send request: %v", err)
 				}

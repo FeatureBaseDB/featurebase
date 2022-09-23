@@ -291,7 +291,7 @@ func TestFieldInfoMarshal(t *testing.T) {
 		t.Fatalf("unexpected error marshalling index info,  %v", err)
 	}
 	expected := []byte(`{"name":"timestamp","createdAt":1649270079233541000,"options":{"type":"timestamp","epoch":"1970-01-01T00:00:00Z","bitDepth":0,"min":-4294967296,"max":4294967296,"timeUnit":"s"}}`)
-	if bytes.Compare(a, expected) != 0 {
+	if !bytes.Equal(a, expected) {
 		t.Fatalf("expected %s, got %s", expected, a)
 	}
 }

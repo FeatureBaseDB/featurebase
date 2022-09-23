@@ -134,63 +134,6 @@ func (c *cluster) unprotectedPrimaryNode() *disco.Node {
 	return snap.PrimaryFieldTranslationNode()
 }
 
-func (c *cluster) applySchemaWithNewShards(schema *Schema) error {
-	if schema == nil || len(schema.Indexes) == 0 {
-		return nil
-	}
-
-	if err := c.holder.applySchema(schema); err != nil {
-		return errors.Wrap(err, "applying schema")
-	}
-
-	// Get and set the shards for each field.
-	for _, idx := range c.holder.indexes {
-		for _, fld := range idx.fields {
-			err := fld.loadAvailableShards()
-			if err != nil {
-				return errors.Wrapf(err, "getting shards for field: %s/%s", idx.name, fld.name)
-			}
-		}
-	}
-
-	return nil
-}
-
-// unprotectedStatus returns the the cluster's status including what nodes it contains, its ID, and current state.
-func (c *cluster) unprotectedStatus() (*ClusterStatus, error) {
-	state, err := c.noder.ClusterState(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	indexes, err := c.holder.Schema()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting schema")
-	}
-
-	return &ClusterStatus{
-		State:  string(state),
-		Nodes:  c.Nodes(),
-		Schema: &Schema{Indexes: indexes},
-	}, nil
-}
-
-func (c *cluster) remoteSchema() (*Schema, error) {
-	for _, n := range c.noder.Nodes() {
-		if c.disCo.ID() == n.ID {
-			continue
-		}
-
-		ii, err := c.InternalClient.SchemaNode(context.Background(), &n.URI, true)
-		if err != nil {
-			return nil, errors.Wrapf(err, "getting schema from %s (%v)", n.ID, n.URI)
-		}
-
-		return &Schema{ii}, nil
-	}
-	return nil, nil
-}
-
 // nodeIDs returns the list of IDs in the cluster.
 func (c *cluster) nodeIDs() []string {
 	return disco.Nodes(c.Nodes()).IDs()

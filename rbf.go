@@ -67,7 +67,6 @@ func (w *RbfDBWrapper) CleanupTx(tx Tx) {
 // rbfDBRegistrar also allows opening the same path twice to
 // result in sharing the same open database handle, and
 // thus the same transactional guarantees.
-//
 type rbfDBRegistrar struct {
 	mu sync.Mutex
 	mp map[*RbfDBWrapper]bool
@@ -222,11 +221,6 @@ func (tx *RBFTx) Remove(index, field, view string, shard uint64, a ...uint64) (c
 // sortedParanoia is a flag to enable a check for unsorted inputs to addOrRemove,
 // which is expensive in practice and only really useful occasionally.
 const sortedParanoia = false
-
-type countResults struct {
-	changeCount int
-	err         error
-}
 
 func (tx *RBFTx) addOrRemove(index, field, view string, shard uint64, remove bool, a ...uint64) (changeCount int, err error) {
 	if len(a) == 0 {

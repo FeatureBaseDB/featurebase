@@ -6320,7 +6320,6 @@ type job struct {
 	ctx             context.Context
 	memoryAvailable *int64 // shared, atomic value
 	resultChan      chan mapResponse
-	idleHands       bool
 }
 
 // doOneJob had one job. *disappointed sigh*
@@ -6338,24 +6337,6 @@ func (e *executor) doOneJob() {
 	}
 	result, err := j.mapFn(j.ctx, j.shard, &mapOptions{memoryAvailable: j.memoryAvailable})
 	j.resultChan <- mapResponse{result: result, err: err}
-}
-
-func (e *executor) worker(work chan job) {
-	for j := range work {
-		e.Holder.Stats.Count("job_total", 1, 0)
-		if j.idleHands {
-			return
-		}
-		// Skip out early if the context is done, but still send
-		// an ack so mapperLocal can be sure we aren't about to
-		// work on something it sent us.
-		if err := j.ctx.Err(); err != nil {
-			j.resultChan <- mapResponse{result: nil, err: err}
-			continue
-		}
-		result, err := j.mapFn(j.ctx, j.shard, &mapOptions{memoryAvailable: j.memoryAvailable})
-		j.resultChan <- mapResponse{result: result, err: err}
-	}
 }
 
 var errShutdown = errors.New("executor has shut down")

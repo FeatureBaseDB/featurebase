@@ -676,14 +676,6 @@ func dirExists(name string) bool {
 	return false
 }
 
-func fileSize(name string) (int64, error) {
-	fi, err := os.Stat(name)
-	if err != nil {
-		return -1, err
-	}
-	return fi.Size(), nil
-}
-
 var _ = anyGlobalDBWrappersStillOpen // happy linter
 
 func anyGlobalDBWrappersStillOpen() bool {
