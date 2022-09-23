@@ -811,7 +811,7 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 	} // loop
 
 	// the test: can we re-open a BSI fragment under Tx store
-	f, err := reopenTestField(t, f)
+	_, err := reopenTestField(t, f)
 	if err != nil {
 		t.Fatalf("reopening test field: %v", err)
 	}

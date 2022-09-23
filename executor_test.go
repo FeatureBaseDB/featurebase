@@ -7567,8 +7567,7 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 	}
 
 	type testCase struct {
-		query string
-		// qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
+		query       string
 		csvVerifier string
 	}
 
@@ -7602,9 +7601,6 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
 			// resp := c.Query(t, "users2", tst.query)
 			tr := c.QueryGRPC(t, "users2", tst.query)
-			// if tst.qrVerifier != nil {
-			// 	tst.qrVerifier(t, resp)
-			// }
 			csvString, err := tableResponseToCSVString(tr)
 			if err != nil {
 				t.Fatal(err)
@@ -7673,7 +7669,6 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 
 	type testCase struct {
 		query       string
-		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
 		csvVerifier string
 	}
 
@@ -7724,11 +7719,7 @@ func variousQueriesOnTimeFields(t *testing.T, c *test.Cluster) {
 
 	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
-			resp := c.Query(t, "t_index", tst.query)
 			tr := c.QueryGRPC(t, "t_index", tst.query)
-			if tst.qrVerifier != nil {
-				tst.qrVerifier(t, resp)
-			}
 			csvString, err := tableResponseToCSVString(tr)
 			if err != nil {
 				t.Fatal(err)
@@ -7795,7 +7786,6 @@ func variousQueriesOnIntFields(t *testing.T, c *test.Cluster) {
 
 	type testCase struct {
 		query       string
-		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
 		csvVerifier string
 	}
 
@@ -7813,11 +7803,7 @@ userG,-1,10,10,10
 
 	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tst.query), func(t *testing.T) {
-			resp := c.Query(t, index, tst.query)
 			tr := c.QueryGRPC(t, index, tst.query)
-			if tst.qrVerifier != nil {
-				tst.qrVerifier(t, resp)
-			}
 			csvString, err := tableResponseToCSVString(tr)
 			if err != nil {
 				t.Fatal(err)
@@ -7888,7 +7874,6 @@ func variousQueriesOnTimestampFields(t *testing.T, c *test.Cluster) {
 
 	type testCase struct {
 		query       string
-		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
 		csvVerifier string
 	}
 
@@ -8136,7 +8121,6 @@ func variousQueriesOnLargeEpoch(t *testing.T, c *test.Cluster) {
 
 	type testCase struct {
 		query       string
-		qrVerifier  func(t *testing.T, resp pilosa.QueryResponse)
 		csvVerifier string
 	}
 
