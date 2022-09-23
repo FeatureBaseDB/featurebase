@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"sync"
 	"time"
@@ -257,5 +256,5 @@ func (b *bufferLogger) Panicf(format string, v ...interface{}) {
 func (b *bufferLogger) ReadAll() ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return ioutil.ReadAll(b.buf)
+	return io.ReadAll(b.buf)
 }

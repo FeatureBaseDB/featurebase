@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -233,7 +232,7 @@ func testQueries(t *testing.T, ctx context.Context, cmd *test.Command, index str
 
 // testOneIngestTestcase runs a set of actions, then cleans up after itself
 func testOneIngestTestcase(t *testing.T, ctx context.Context, cmd *test.Command, tcpath string) {
-	data, err := ioutil.ReadFile(tcpath)
+	data, err := os.ReadFile(tcpath)
 	if err != nil {
 		t.Fatalf("reading %q: %v", tcpath, err)
 	}

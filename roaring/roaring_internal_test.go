@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -2021,7 +2021,7 @@ func TestXorArrayRun(t *testing.T) {
 
 }
 
-//special case that didn't fit the xorrunrun table testing below.
+// special case that didn't fit the xorrunrun table testing below.
 func TestXorRunRun1(t *testing.T) {
 	a := NewContainerRun([]Interval16{{Start: 4, Last: 10}})
 	b := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
@@ -3778,7 +3778,7 @@ func TestContainerCombinations(t *testing.T) {
 	}
 }
 
-//func getFunc(func(a, b *container) *container, m, n *container) *container {
+// func getFunc(func(a, b *container) *container, m, n *container) *container {
 func runContainerFunc(f interface{}, c ...*Container) *Container {
 	switch f := f.(type) {
 	case func(*Container) *Container:
@@ -3821,7 +3821,7 @@ func TestUnmarshalRoaringWithNoErrors(t *testing.T) {
 				t.Fatalf("hex decode %s", err)
 			}
 		} else {
-			testContainer, _ = ioutil.ReadFile(testCase.roaringFileName)
+			testContainer, _ = os.ReadFile(testCase.roaringFileName)
 		}
 		bm := NewBitmap()
 		err = bm.UnmarshalBinary(testContainer)
@@ -3889,24 +3889,25 @@ func newTestBitmapContainer() *Container {
 /*
 // This function exercises an arcane edge case in dead code.
 // It doesn't need to be run right now.
-func TestEquals(t *testing.T) {
-	bma := NewBitmap()
-	bmr := NewBitmap()
-	for i := uint64(0); i < 30; i++ {
-		bma.Add(i)
-		bmr.Add(i)
+
+	func TestEquals(t *testing.T) {
+		bma := NewBitmap()
+		bmr := NewBitmap()
+		for i := uint64(0); i < 30; i++ {
+			bma.Add(i)
+			bmr.Add(i)
+		}
+		bmr.Optimize()
+		bmi := bma.Intersect(bmr)
+		err := bitmapsEqual(bmi, bma)
+		if err != nil {
+			t.Fatalf("expected intersection to equal array")
+		}
+		err = bitmapsEqual(bmi, bmr)
+		if err != nil {
+			t.Fatalf("expected intersection to equal run")
+		}
 	}
-	bmr.Optimize()
-	bmi := bma.Intersect(bmr)
-	err := bitmapsEqual(bmi, bma)
-	if err != nil {
-		t.Fatalf("expected intersection to equal array")
-	}
-	err = bitmapsEqual(bmi, bmr)
-	if err != nil {
-		t.Fatalf("expected intersection to equal run")
-	}
-}
 */
 func TestShiftArray(t *testing.T) {
 	tests := []struct {
@@ -4563,7 +4564,6 @@ func TestRoaringIteratorSkip(t *testing.T) {
 // large an run container, which was causing problems when
 // we write to the transactional backends. Verify that
 // unionRunRunInPlace() converts to bitmap if its too large.
-//
 func TestContainer_unionRunRunInPlace_TwoBigRunArrays(t *testing.T) {
 
 	a := NewContainerRun(nil)

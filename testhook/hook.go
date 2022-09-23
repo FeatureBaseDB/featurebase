@@ -3,7 +3,6 @@ package testhook
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
@@ -85,7 +84,7 @@ func RunTestsWithHooks(m *testing.M) {
 // TempDir creates a temp directory that will be automatically deleted when
 // this test completes, using go1.14's [TB].Cleanup() if available.
 func TempDir(tb testing.TB, pattern string) (path string, err error) {
-	path, err = ioutil.TempDir("", pattern)
+	path, err = os.MkdirTemp("", pattern)
 	if err == nil {
 		Cleanup(tb, func() {
 			os.RemoveAll(path)
@@ -97,7 +96,7 @@ func TempDir(tb testing.TB, pattern string) (path string, err error) {
 // TempFile creates a temp file that will be automatically deleted when
 // this test completes, using go1.14's [TB].Cleanup() if available.
 func TempFile(tb testing.TB, pattern string) (file *os.File, err error) {
-	file, err = ioutil.TempFile("", pattern)
+	file, err = os.CreateTemp("", pattern)
 	if err == nil {
 		path := file.Name()
 		Cleanup(tb, func() {
@@ -113,7 +112,7 @@ func TempFile(tb testing.TB, pattern string) (file *os.File, err error) {
 // path instead of the default Go TMPDIR. Only some tests use this, which is
 // possibly an error...
 func TempDirInDir(tb testing.TB, dir string, pattern string) (path string, err error) {
-	path, err = ioutil.TempDir(dir, pattern)
+	path, err = os.MkdirTemp(dir, pattern)
 	if err == nil {
 		Cleanup(tb, func() {
 			os.RemoveAll(path)
@@ -127,7 +126,7 @@ func TempDirInDir(tb testing.TB, dir string, pattern string) (path string, err e
 // path instead of the default Go TMPDIR. Only some tests use this, which is
 // possibly an error...
 func TempFileInDir(tb testing.TB, dir string, pattern string) (file *os.File, err error) {
-	file, err = ioutil.TempFile(dir, pattern)
+	file, err = os.CreateTemp(dir, pattern)
 	if err == nil {
 		path := file.Name()
 		Cleanup(tb, func() {

@@ -37,7 +37,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"sync"
@@ -135,7 +134,7 @@ func GetTLSConfig(tlsConfig *TLSConfig, logger logger.Logger) (TLSConfig *tls.Co
 		}
 
 		if hasCA {
-			b, err := ioutil.ReadFile(tlsConfig.CACertPath)
+			b, err := os.ReadFile(tlsConfig.CACertPath)
 			if err != nil {
 				return nil, errors.Wrap(err, "loading tls ca key")
 			}

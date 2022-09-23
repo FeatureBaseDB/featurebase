@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -188,7 +187,7 @@ func (cmd *CLICommand) executeCommands(ctx context.Context) error {
 		}
 
 		var sqlResponse response
-		fullbod, err := ioutil.ReadAll(resp.Body)
+		fullbod, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Wrap(err, "reading response")
 		}

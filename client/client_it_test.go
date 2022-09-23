@@ -4,7 +4,7 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"testing"
 	"time"
 
@@ -670,7 +670,7 @@ func TestClientAgainstCluster(t *testing.T) {
 				r, err := cli.ExportField(testFieldExport)
 				require.NoErrorf(t, err, "ExportField")
 
-				b, err := ioutil.ReadAll(r)
+				b, err := io.ReadAll(r)
 				require.NoError(t, err)
 
 				target := "1,1\n1,10\n2,1048577\n"
@@ -695,7 +695,7 @@ func TestClientAgainstCluster(t *testing.T) {
 				r, err := cli.ExportField(testFieldExport)
 				require.NoErrorf(t, err, "ExportField")
 
-				b, err := ioutil.ReadAll(r)
+				b, err := io.ReadAll(r)
 				require.NoError(t, err)
 
 				target := "1,one\n1,ten\n2,big-number\n"

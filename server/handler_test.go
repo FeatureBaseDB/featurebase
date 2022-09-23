@@ -8,9 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
-	gohttp "net/http"
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"sort"
@@ -37,8 +36,8 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 	t.Run("PostSchema", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
-		if w.Code != gohttp.StatusNoContent {
-			bod, err := ioutil.ReadAll(w.Result().Body)
+		if w.Code != http.StatusNoContent {
+			bod, err := io.ReadAll(w.Result().Body)
 			if err != nil {
 				t.Errorf("reading body: %v", err)
 			}
@@ -80,7 +79,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Not Found", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/no_such_path", nil))
-		if w.Code != gohttp.StatusNotFound {
+		if w.Code != http.StatusNotFound {
 			t.Fatalf("invalid status: %d", w.Code)
 		}
 	})
@@ -88,7 +87,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("SchemaEmpty", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		body := w.Body.String()
@@ -101,7 +100,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("SchemaDetailsEmpty", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		body := w.Body.String()
@@ -114,8 +113,8 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("PostSchema", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
-		if w.Code != gohttp.StatusNoContent {
-			bod, err := ioutil.ReadAll(w.Result().Body)
+		if w.Code != http.StatusNoContent {
+			bod, err := io.ReadAll(w.Result().Body)
 			if err != nil {
 				t.Errorf("reading body: %v", err)
 			}
@@ -143,7 +142,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Info", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/info", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		var details map[string]interface{}
@@ -207,7 +206,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Schema", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -291,7 +290,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("SchemaDetails", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema/details", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -465,7 +464,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Status", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		ret := mustJSONDecode(t, w.Body)
@@ -481,7 +480,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		// This tests the response structure, not the cluster behavior.
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/ui/shard-distribution", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -506,7 +505,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Metrics", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/metrics", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 	})
@@ -514,7 +513,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Metrics.json", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/metrics.json", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		mustJSONDecode(t, w.Body)
@@ -533,7 +532,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Max Shard", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/internal/shards/max", nil))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0,"i2":0}}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
@@ -543,7 +542,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Shards args", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?shards=0,1", strings.NewReader("Count(Row(f0=30))")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
 		} else if body := w.Body.String(); body != `{"results":[2]}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
@@ -567,7 +566,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, req)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"results":[2]}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
@@ -580,7 +579,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Query args error", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?shards=a,b", strings.NewReader("Count(Row(f0=30))")))
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"invalid shard argument"}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
@@ -590,7 +589,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Query params err", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?shards=0,1&db=sample", strings.NewReader("Count(Row(f0=30))")))
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"db is not a valid argument"}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
@@ -602,7 +601,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Count(Row(f0=30))"))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -619,7 +618,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Row JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Row(f0=30)")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != fmt.Sprintf(`{"results":[{"columns":[%d,%d,%d]}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4)+"\n" {
 			t.Fatalf("unexpected body: %s", body)
@@ -631,7 +630,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Row(f0=30)"))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -646,7 +645,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Query Pairs JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(f0, n=2)`)))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"results":[[{"id":30,"key":"","count":3},{"id":31,"key":"","count":1}]]}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
@@ -658,7 +657,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(f0, n=2)`))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -673,7 +672,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Query err JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Row(row=30)`)))
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"executing: translating call: validating value for field \"row\": field not found"}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
@@ -685,7 +684,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Row(row=30)`))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -710,12 +709,12 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-int-ubound"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"int"}}`)))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
@@ -741,12 +740,12 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-int-ubound-min"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"int", "max": 10}}`)))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
@@ -772,12 +771,12 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-int-ubound-max"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"int", "min": -10}}`)))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
@@ -803,7 +802,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-int-ubound-err"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"int", "min": 10, "max": -10}}`)))
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 	})
@@ -813,12 +812,12 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-decimal-ubound"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"decimal", "scale": 0}}`)))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
@@ -844,13 +843,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-decimal-ubound-min"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"decimal", "scale": 1, "max": 10.5}}`)))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			fmt.Println(w.Body.String())
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
@@ -875,13 +874,13 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-decimal-scale-only"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"decimal", "scale": 2}}`)))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			fmt.Println(w.Body.String())
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
@@ -909,7 +908,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"decimal"}}`)))
 		expErr := "decimal field requires a scale argument"
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if !strings.Contains(w.Body.String(), expErr) {
 			t.Fatalf("expected error to contain: %s, but got: %s", expErr, w.Body.String())
@@ -919,7 +918,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Method not allowed", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/i0/query", nil))
-		if w.Code != gohttp.StatusMethodNotAllowed {
+		if w.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("invalid status: %d", w.Code)
 		}
 	})
@@ -927,7 +926,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Err Parse", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?shards=0,1", strings.NewReader("bad_fn(")))
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"parsing: parsing: \nparse error near IDENT (line 1 symbol 1 - line 1 symbol 4):\n\"bad\"\n"}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
@@ -938,7 +937,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
 		} else {
 			var resp struct {
@@ -963,7 +962,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i/field/f1", strings.NewReader("")))
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
 		} else {
 			var resp struct {
@@ -987,7 +986,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		r := test.MustNewHTTPRequest("GET", "/version", nil)
 		h.ServeHTTP(w, r)
 		version := strings.TrimPrefix(pilosa.Version, "v")
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if w.Body.String() != `{"version":"`+version+`"}`+"\n" {
 			t.Fatalf("unexpected body: %q", w.Body.String())
@@ -998,7 +997,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := test.MustNewHTTPRequest("GET", "/internal/fragment/nodes?index=i&shard=0", nil)
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		body := mustJSONDecodeSlice(t, w.Body)
@@ -1011,7 +1010,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("GET", "/internal/fragment/nodes?db=X&shard=0", nil)
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -1019,7 +1018,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("GET", "/internal/fragment/nodes?shard=0", nil)
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusBadRequest {
+		if w.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 	})
@@ -1028,7 +1027,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := test.MustNewHTTPRequest("GET", "/debug/vars", nil)
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 	})
@@ -1036,7 +1035,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Recalculate Caches", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculate-caches", nil))
-		if w.Code != gohttp.StatusNoContent {
+		if w.Code != http.StatusNoContent {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 	})
@@ -1077,7 +1076,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := test.MustNewHTTPRequest("POST", "/index/idx1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1093,7 +1092,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("POST", "/index/idx1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusConflict {
+		if w.Code != http.StatusConflict {
 			t.Errorf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1111,7 +1110,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("POST", "/index/idx1/field/fld1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1129,7 +1128,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("POST", "/index/idx1/field/fld1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusConflict {
+		if w.Code != http.StatusConflict {
 			t.Errorf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1147,7 +1146,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("DELETE", "/index/idx1/field/fld1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1163,7 +1162,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("DELETE", "/index/idx1/field/fld1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusNotFound {
+		if w.Code != http.StatusNotFound {
 			t.Errorf("unexpected status code: %d", w.Code)
 		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting field: fld1: field not found"}}`+"\n" {
 			t.Errorf("unexpected body: %q", w.Body.String())
@@ -1173,7 +1172,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("DELETE", "/index/idx1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1189,7 +1188,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("DELETE", "/index/idx1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusNotFound {
+		if w.Code != http.StatusNotFound {
 			t.Errorf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1207,7 +1206,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := test.MustNewHTTPRequest("POST", "/index/i1-tr", strings.NewReader(`{"options":{"keys":true}}`))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1223,7 +1222,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("POST", "/index/i1-tr/field/f1", strings.NewReader(`{"options":{"keys":true}}`))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else {
 			var resp struct {
@@ -1239,7 +1238,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		r = test.MustNewHTTPRequest("POST", "/index/i1-tr/query", strings.NewReader(`Set("col1", f1="row1")`))
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
@@ -1257,7 +1256,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		r.Header.Set("Content-Type", "application/x-protobuf")
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		var target []uint64
@@ -1290,7 +1289,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		r.Header.Set("Content-Type", "application/x-protobuf")
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
-		if w.Code != gohttp.StatusOK {
+		if w.Code != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		target = []uint64{1, 2}
@@ -1433,12 +1432,12 @@ func TestQueryHistory(t *testing.T) {
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "TopN(f0)")
 
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
-	if w.Code != gohttp.StatusOK {
+	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
 	}
 
 	ret := make([]pilosa.PastQueryStatus, 4)
-	b, err := ioutil.ReadAll(w.Body)
+	b, err := io.ReadAll(w.Body)
 	if err != nil {
 		t.Fatalf("reading: %v", err)
 	}

@@ -10,10 +10,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	_ "net/http/pprof"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -6884,7 +6884,7 @@ func TestExecutor_Execute_NoIndex(t *testing.T) {
 func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	// This schema has indexes named e, p, and s. We can then
 	// use c.Idx(e) or Sprintf(%e, idx) to match these names up.
-	data, err := ioutil.ReadFile("testdata/schema.json")
+	data, err := os.ReadFile("testdata/schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7124,7 +7124,7 @@ func TestExecutor_BareDistinct(t *testing.T) {
 }
 
 func TestExecutor_Execute_TopNDistinct(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/schema.json")
+	data, err := os.ReadFile("testdata/schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7204,7 +7204,7 @@ func Test_Executor_Execute_UnionRows(t *testing.T) {
 }
 
 func TestTimelessClearRegression(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/timeRegressionSchema.json")
+	data, err := os.ReadFile("testdata/timeRegressionSchema.json")
 	if err != nil {
 		t.Fatal(err)
 	}

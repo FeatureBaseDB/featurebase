@@ -3,7 +3,6 @@ package pb
 
 import (
 	"io"
-	"io/ioutil"
 
 	"github.com/gogo/protobuf/proto"
 )
@@ -51,7 +50,7 @@ func NewDecoder(r io.Reader) *Decoder {
 
 // Decode reads all bytes from the reader and unmarshals them into pb.
 func (dec *Decoder) Decode(pb proto.Message) error {
-	buf, err := ioutil.ReadAll(dec.r)
+	buf, err := io.ReadAll(dec.r)
 	if err != nil {
 		return err
 	}

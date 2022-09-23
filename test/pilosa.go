@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	gohttp "net/http"
 	"os"
 	"reflect"
@@ -19,7 +19,7 @@ import (
 	"github.com/molecula/featurebase/v3/server"
 )
 
-////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////
 // Command represents a test wrapper for server.Command.
 type Command struct {
 	*server.Command
@@ -47,7 +47,7 @@ func newCommand(tb DirCleaner, opts ...server.CommandOption) *Command {
 	}, opts...)
 
 	m := &Command{commandOptions: opts}
-	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
+	m.Command = server.NewCommand(bytes.NewReader(nil), io.Discard, io.Discard, opts...)
 	// pick etcd ports using a socket rather than a real port
 	err := GetPortsGenConfigs(tb, []*Command{m})
 	if err != nil {
@@ -109,7 +109,7 @@ func (m *Command) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Command.Config
-	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, m.commandOptions...)
+	m.Command = server.NewCommand(bytes.NewReader(nil), io.Discard, io.Discard, m.commandOptions...)
 	m.Command.Config = config
 
 	// Run new program.
@@ -235,7 +235,7 @@ func (m *Command) QueryProtobuf(indexName string, query string) (*pilosa.QueryRe
 	}
 	defer resp.Body.Close()
 
-	buf, err := ioutil.ReadAll(resp.Body)
+	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func Do(t testing.TB, method, urlStr string, body string) *httpResponse {
 	}
 	defer resp.Body.Close()
 
-	buf, err := ioutil.ReadAll(resp.Body)
+	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}

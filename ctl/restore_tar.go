@@ -9,7 +9,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil"
 	gohttp "net/http"
 	"os"
 	"strconv"
@@ -171,7 +170,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 				return fmt.Errorf("no fragmentNodes available")
 			}
 
-			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
+			shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
 			if err != nil {
 				return err
 			}
@@ -200,7 +199,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			if err != nil {
 				return err
 			}
-			shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
+			shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
 			if err != nil {
 				return err
 			}
@@ -228,7 +227,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
 				//needs to go to all nodes
-				shardBytes, err := ioutil.ReadAll(tarReader) // this feels wrong but works for now
+				shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
 				if err != nil {
 					return err
 				}

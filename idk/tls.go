@@ -3,7 +3,6 @@ package idk
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -148,7 +147,7 @@ func getCertPool(capath string) (*x509.CertPool, error) {
 		)
 		caCertData = []byte(capath)
 	} else {
-		caCertData, err = ioutil.ReadFile(capath)
+		caCertData, err = os.ReadFile(capath)
 		if err != nil {
 			return nil, errors.Wrap(err, "loading tls ca key")
 		}

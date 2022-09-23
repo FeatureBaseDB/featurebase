@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sort"
 	"sync"
 
@@ -34,13 +33,14 @@ var (
 
 // TranslateStore is the storage for translation string-to-uint64 values.
 // For BoltDB implementation an empty string will be converted into the sentinel byte slice:
-// var emptyKey = []byte{
-// 	0x00, 0x00, 0x00,
-// 	0x4d, 0x54, 0x4d, 0x54, // MTMT
-// 	0x00,
-// 	0xc2, 0xa0, // NO-BREAK SPACE
-// 	0x00,
-// }
+//
+//	var emptyKey = []byte{
+//		0x00, 0x00, 0x00,
+//		0x4d, 0x54, 0x4d, 0x54, // MTMT
+//		0x00,
+//		0xc2, 0xa0, // NO-BREAK SPACE
+//		0x00,
+//	}
 type TranslateStore interface { // TODO: refactor this interface; readonly should be part of the type and replication should be an impl detail
 	io.Closer
 
@@ -584,7 +584,7 @@ func (s *InMemTranslateStore) ReadFrom(r io.Reader) (count int64, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var bytes []byte
-	bytes, err = ioutil.ReadAll(r)
+	bytes, err = io.ReadAll(r)
 	count = int64(len(bytes))
 	if err != nil {
 		return count, err

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/bits"
 	"os"
@@ -227,7 +226,7 @@ func (f *fragment) openCache() error {
 
 	// Read cache data from disk.
 	path := f.cachePath()
-	buf, err := ioutil.ReadFile(path)
+	buf, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
@@ -2578,7 +2577,7 @@ func (f *fragment) flushCache() error {
 		return errors.Wrap(err, "mkdir")
 	}
 	// Write to disk.
-	if err := ioutil.WriteFile(f.cachePath(), buf, 0600); err != nil {
+	if err := os.WriteFile(f.cachePath(), buf, 0600); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 
@@ -2641,7 +2640,7 @@ func (f *fragment) writeCacheToArchive(tw *tar.Writer) error {
 	defer f.mu.Unlock()
 
 	// Read cache into buffer.
-	buf, err := ioutil.ReadFile(f.cachePath())
+	buf, err := os.ReadFile(f.cachePath())
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
@@ -2710,9 +2709,9 @@ func (f *fragment) fillFragmentFromArchive(tx Tx, r io.Reader) error {
 
 	// this is reading from inside a tarball, so definitely no need
 	// to close it here.
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
-		return errors.Wrap(err, "fillFragmentFromArchive ioutil.ReadAll(r)")
+		return errors.Wrap(err, "fillFragmentFromArchive io.ReadAll(r)")
 	}
 	if len(data) == 0 {
 		return nil
@@ -2737,10 +2736,10 @@ func (f *fragment) fillFragmentFromArchive(tx Tx, r io.Reader) error {
 
 func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	// Slurp data from reader and write to disk.
-	buf, err := ioutil.ReadAll(r)
+	buf, err := io.ReadAll(r)
 	if err != nil {
 		return errors.Wrap(err, "reading")
-	} else if err := ioutil.WriteFile(f.cachePath(), buf, 0600); err != nil {
+	} else if err := os.WriteFile(f.cachePath(), buf, 0600); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 

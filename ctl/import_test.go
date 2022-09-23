@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -302,7 +301,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 
 			// Read body and unmarshal response.
 			exp := `{"results":[50]}` + "\n"
-			if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			if body, err := io.ReadAll(resp.Body); err != nil {
 				return fmt.Errorf("reading: %s", err)
 			} else if !reflect.DeepEqual(body, []byte(exp)) {
 				return fmt.Errorf("expected: %s, but got: %s", exp, body)

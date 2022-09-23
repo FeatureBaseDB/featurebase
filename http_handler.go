@@ -3438,7 +3438,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 
 	// Read entire body.
-	span, _ := tracing.StartSpanFromContext(ctx, "ioutil.ReadAll-Body")
+	span, _ := tracing.StartSpanFromContext(ctx, "io.ReadAll-Body")
 	body, err := readBody(r)
 	span.LogKV("bodySize", len(body))
 	span.Finish()
@@ -3511,7 +3511,7 @@ func (h *Handler) handlePostShardImportRoaring(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 
 	// Read entire body.
-	span, _ := tracing.StartSpanFromContext(ctx, "ioutil.ReadAll-Body")
+	span, _ := tracing.StartSpanFromContext(ctx, "io.ReadAll-Body")
 	body, err := readBody(r)
 	span.LogKV("bodySize", len(body))
 	span.Finish()
@@ -3580,7 +3580,7 @@ func (h *Handler) handlePostIngestNode(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Read entire body.
-	span, _ := tracing.StartSpanFromContext(ctx, "ioutil.ReadAll-Body")
+	span, _ := tracing.StartSpanFromContext(ctx, "io.ReadAll-Body")
 	body, err := readBody(r)
 	span.LogKV("bodySize", len(body))
 	span.Finish()
