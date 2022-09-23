@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	_ "net/http/pprof"
@@ -6887,7 +6886,7 @@ func TestExecutor_Execute_NoIndex(t *testing.T) {
 func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	// This schema has indexes named e, p, and s. We can then
 	// use c.Idx(e) or Sprintf(%e, idx) to match these names up.
-	data, err := ioutil.ReadFile("testdata/schema.json")
+	data, err := os.ReadFile("testdata/schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}

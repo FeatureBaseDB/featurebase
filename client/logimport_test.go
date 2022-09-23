@@ -92,7 +92,6 @@ func TestEncodeDecode(t *testing.T) {
 
 		})
 	}
-
 	buf, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("getting temp file: %v", err)
