@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
-	"github.com/gogo/protobuf/proto"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
@@ -35,6 +34,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/featurebasedb/featurebase/v3/vprint"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -3652,7 +3652,7 @@ func (f *fragment) sortBsiData(tx Tx, filter *Row, bitDepth uint64, sort_desc bo
 		return nil, err
 	}
 	pos := consider.Difference(row)
-	row, err = f.row(tx, 0)
+	_, err = f.row(tx, 0)
 	if err != nil {
 		return nil, err
 	}

@@ -27,9 +27,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/felixge/fgprof"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/authz"
 	"github.com/featurebasedb/featurebase/v3/disco"
@@ -40,6 +37,9 @@ import (
 	"github.com/featurebasedb/featurebase/v3/rbf"
 	"github.com/featurebasedb/featurebase/v3/storage"
 	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/felixge/fgprof"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
@@ -703,8 +703,6 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			return
 		}
 
-		ctx := r.Context()
-
 		// check if IP is in allowed networks, if yes give it admin permissions
 		allowedNetwork, ctx := h.chkAllowedNetworks(r)
 		if allowedNetwork {
@@ -720,9 +718,6 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		access, refresh := getTokens(r)
 
 		uinfo, err := h.auth.Authenticate(access, refresh)
-
-		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
-		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
 
 		if err != nil {
 			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
@@ -1512,7 +1507,7 @@ type postIndexRequest struct {
 	Options IndexOptions `json:"options"`
 }
 
-//_postIndexRequest is necessary to avoid recursion while decoding.
+// _postIndexRequest is necessary to avoid recursion while decoding.
 type _postIndexRequest postIndexRequest
 
 // Custom Unmarshal JSON to validate request body when creating a new index.
