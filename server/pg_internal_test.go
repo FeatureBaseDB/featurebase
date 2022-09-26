@@ -7,6 +7,7 @@ import (
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/pg"
+	"github.com/stretchr/testify/assert"
 )
 
 // pg_internal_test.go tests unexported methods from server/pg.go
@@ -35,7 +36,9 @@ func (t *TestQueryResultWriter) Tag(tag string) {
 func TestPgWriteDistinctTimestamp(t *testing.T) {
 	w := TestQueryResultWriter{}
 	expected := pilosa.DistinctTimestamp{Name: "test", Values: []string{"date1", "date2", "date3"}}
-	pgWriteDistinctTimestamp(&w, expected)
+	err := pgWriteDistinctTimestamp(&w, expected)
+	assert.Nil(t, err)
+
 	if w.Header[0].Name != expected.Name {
 		t.Fatalf("Header Name is wrong. got %v, want %v", w.Header[0], expected.Name)
 	}

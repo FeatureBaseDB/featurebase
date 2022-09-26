@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/authz"
@@ -27,7 +26,9 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/featurebasedb/featurebase/v3/vprint"
+	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -1894,7 +1895,8 @@ func writeTestFile(t *testing.T, filename, content string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	io.WriteString(f, content)
+	_, err = io.WriteString(f, content)
+	assert.Nil(t, err)
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -1919,11 +1921,7 @@ func Test_ChainUnaryInterceptor(t *testing.T) {
 	interceptors0 := []grpc.UnaryServerInterceptor{}
 	interceptors1 := []grpc.UnaryServerInterceptor{salt}
 	interceptors2 := []grpc.UnaryServerInterceptor{salt, pepper}
-	// interceptors5 := []grpc.UnaryServerInterceptor{interceptor, interceptor, interceptor, interceptor, interceptor}
 
-	type args struct {
-		interceptors []grpc.UnaryServerInterceptor
-	}
 	tests := []struct {
 		name         string
 		interceptors []grpc.UnaryServerInterceptor
@@ -2001,13 +1999,15 @@ func Test_ChainStreamInterceptor(t *testing.T) {
 	salt := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		md := fromIncomingContext(ss.Context())
 		md.Append("ingredient", "with salt")
-		ss.SetHeader(md)
+		err := ss.SetHeader(md)
+		assert.Nil(t, err)
 		return handler(srv, ss)
 	}
 	pepper := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		md := fromIncomingContext(ss.Context())
 		md.Append("ingredient", "and pepper")
-		ss.SetHeader(md)
+		err := ss.SetHeader(md)
+		assert.Nil(t, err)
 		return handler(srv, ss)
 	}
 
@@ -2015,9 +2015,6 @@ func Test_ChainStreamInterceptor(t *testing.T) {
 	interceptors1 := []grpc.StreamServerInterceptor{salt}
 	interceptors2 := []grpc.StreamServerInterceptor{salt, pepper}
 
-	type args struct {
-		interceptors []grpc.StreamServerInterceptor
-	}
 	tests := []struct {
 		name         string
 		interceptors []grpc.StreamServerInterceptor
@@ -2042,7 +2039,8 @@ func Test_ChainStreamInterceptor(t *testing.T) {
 		}
 		t.Run(tt.name, func(t *testing.T) {
 			chained := server.ChainStreamInterceptors(tt.interceptors...)
-			chained(srv, ss, info, handler)
+			err := chained(srv, ss, info, handler)
+			assert.Nil(t, err)
 			if !reflect.DeepEqual(result, tt.want) {
 				t.Errorf("ChainStreamInterceptor() = %v, want %v", result, tt.want)
 			}
