@@ -1,6 +1,5 @@
-// Copyright 2022 Molecula Corp. (DBA FeatureBase).
-// SPDX-License-Identifier: Apache-2.0
-package pilosa_test
+// Copyright 2021 Molecula Corp. All rights reserved.
+package planner_test
 
 import (
 	"fmt"
@@ -10,7 +9,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/testhook"
 )
 
 func TestMain(m *testing.M) {
@@ -19,7 +18,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	port := l.Addr().(*net.TCPAddr).Port
-	fmt.Printf("featurebase/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+	fmt.Printf("sql3/planner/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
 		err := http.Serve(l, nil)
 		if err != nil {
