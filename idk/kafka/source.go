@@ -232,9 +232,15 @@ func (r *Record) Commit(ctx context.Context) error {
 		p = x.Partition
 	}
 
-	_, err := r.src.CommitMessages(r.src.highmarks)
+	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)
 	if err != nil {
 		return errors.Wrap(err, "failed to commit messages")
+	}
+
+	if r.src.Verbose {
+		for _, o := range committedOffsets {
+			r.src.Log.Debugf("p: %v o: %v t: %v", o.Partition, o.Offset, o.Topic)
+		}
 	}
 
 	r.src.spool = remaining
@@ -308,6 +314,10 @@ func (s *Source) Open() error {
 	err = cl.SubscribeTopics(s.Topics, nil)
 	if err != nil {
 		return errors.Wrap(err, "subscribe topics")
+	}
+
+	if s.Verbose {
+		s.Log.Debugf("subscribed to %v", s.Topics)
 	}
 
 	s.client = cl
