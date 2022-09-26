@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package pilosa_test
+package stats_test
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	port := l.Addr().(*net.TCPAddr).Port
-	fmt.Printf("featurebase/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
+	fmt.Printf("stats/ TestMain: online stack-traces: curl http://localhost:%v/debug/pprof/goroutine?debug=2\n", port)
 	go func() {
 		err := http.Serve(l, nil)
 		if err != nil {
