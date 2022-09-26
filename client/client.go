@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	fbproto "github.com/featurebasedb/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -29,6 +28,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/stats"
+	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -39,8 +39,6 @@ const PQLVersion = "1.0"
 
 // DefaultShardWidth is used if an index doesn't have it defined.
 const DefaultShardWidth = pilosa.ShardWidth
-
-const maxHosts = 10
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {

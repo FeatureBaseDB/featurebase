@@ -7,6 +7,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIngestAPIBatchAdd(t *testing.T) {
@@ -148,7 +149,7 @@ func TestIngestAPIBatch(t *testing.T) {
 	}
 	defer cli.Close()
 
-	cli.IngestSchema(map[string]interface{}{
+	_, err = cli.IngestSchema(map[string]interface{}{
 		"index-name":       "test-1",
 		"index-action":     "create",
 		"primary-key-type": "uint",
@@ -197,6 +198,7 @@ func TestIngestAPIBatch(t *testing.T) {
 			},
 		},
 	})
+	assert.Nil(t, err)
 
 	schema, err := cli.Schema()
 	if err != nil {
