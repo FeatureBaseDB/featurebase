@@ -22,6 +22,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHandlerOptions(t *testing.T) {
@@ -195,7 +196,8 @@ func TestUpdateFieldTTL(t *testing.T) {
 			if resp.StatusCode == 400 || resp.StatusCode == 404 {
 				// unmarshal error message to check against expErr
 				var respBody map[string]interface{}
-				json.NewDecoder(resp.Body).Decode(&respBody)
+				err := json.NewDecoder(resp.Body).Decode(&respBody)
+				assert.Nil(t, err)
 				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
 
 				if !strings.Contains(errMsg, test.expErr) {
@@ -300,7 +302,8 @@ func TestUpdateFieldNoStandardView(t *testing.T) {
 			if resp.StatusCode == 400 {
 				// unmarshal error message to check against expErr
 				var respBody map[string]interface{}
-				json.NewDecoder(resp.Body).Decode(&respBody)
+				err := json.NewDecoder(resp.Body).Decode(&respBody)
+				assert.Nil(t, err)
 				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
 
 				if !strings.Contains(errMsg, test.expErr) {
