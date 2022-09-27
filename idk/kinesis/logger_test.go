@@ -217,8 +217,7 @@ func TestSinkErrorQueueFromFailEmptyStreamNameDoesNotCausePanic(t *testing.T) {
 		StreamName:     "",
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, "", queue.sinkId) // Keeps invalid sink ID around for downstream logging purposes.
 	assert.Equal(t, "valid-queue-88888888888", queue.name)
@@ -246,8 +245,7 @@ func TestSinkErrorQueueFromFailSQSGetQueueUrlErrored(t *testing.T) {
 		StreamName:     streamName,
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, validUuid, queue.sinkId) // Keeps valid sink ID around for downstream logging purposes.
 	assert.Equal(t, "queue-that-we-stole-962463", queue.name)
