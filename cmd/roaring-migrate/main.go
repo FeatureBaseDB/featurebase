@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -294,7 +293,7 @@ func Migrate(dataDir, backupPath string, verbose bool) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(filepath.Join(backupPath, "schema"), schema, 0644)
+	err = os.WriteFile(filepath.Join(backupPath, "schema"), schema, 0644)
 	if err != nil {
 		return err
 	}

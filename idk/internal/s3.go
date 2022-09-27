@@ -2,7 +2,6 @@ package internal
 
 import (
 	"bytes"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
@@ -91,7 +90,7 @@ func WriteFileOrURL(name string, contents []byte, s3client s3iface.S3API) error 
 			return errors.Wrapf(err, "putting S3 object %v", name)
 		}
 	} else {
-		err = ioutil.WriteFile(name, contents, 0644)
+		err = os.WriteFile(name, contents, 0644)
 		if err != nil {
 			return errors.Wrapf(err, "reading file %v", name)
 		}

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/bits"
 	"os"
@@ -2612,7 +2611,7 @@ func (f *fragment) flushCache() error {
 		return errors.Wrap(err, "mkdir")
 	}
 	// Write to disk.
-	if err := ioutil.WriteFile(f.cachePath(), buf, 0600); err != nil {
+	if err := os.WriteFile(f.cachePath(), buf, 0600); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 
@@ -2774,7 +2773,7 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	buf, err := io.ReadAll(r)
 	if err != nil {
 		return errors.Wrap(err, "reading")
-	} else if err := ioutil.WriteFile(f.cachePath(), buf, 0600); err != nil {
+	} else if err := os.WriteFile(f.cachePath(), buf, 0600); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	gohttp "net/http"
@@ -744,7 +743,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 	tmpDir := t.TempDir()
 	permissionsPath := path.Join(tmpDir, "test-permissions.yaml")
-	err := ioutil.WriteFile(permissionsPath, []byte(permissions1), 0600)
+	err := os.WriteFile(permissionsPath, []byte(permissions1), 0600)
 	if err != nil {
 		t.Fatalf("failed to write permissions file: %v", err)
 	}
