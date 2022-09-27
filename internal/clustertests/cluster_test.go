@@ -15,15 +15,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/ctl"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
 )
+
+type ClusterSuite struct {
+	suite.Suite
+
+	Directory string
+}
+
+func TestClusterSuite(t *testing.T) {
+	s := new(ClusterSuite)
+	suite.Run(t, s)
+}
 
 // container turns a docker-compose service name into a container ID
 // by calling "docker-compose ps"
@@ -83,7 +95,9 @@ func GetAuthToken(t *testing.T) string {
 
 	return token
 }
-func TestClusterStuff(t *testing.T) {
+func (s *ClusterSuite) TestClusterStuff() {
+	t := s.T()
+
 	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
 		t.Skip("pilosa cluster tests are not enabled")
 	}
