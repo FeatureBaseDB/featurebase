@@ -185,11 +185,6 @@ func (r *Record) Commit(ctx context.Context) error {
 	return nil
 }
 
-// Assuming committed msgs are in order
-func calOffsetDiff(section, committed []confluent.TopicPartition) []confluent.TopicPartition {
-	return section[len(committed):]
-}
-
 func (r *Record) Data() []interface{} {
 	return r.data
 }

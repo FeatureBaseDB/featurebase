@@ -252,11 +252,6 @@ func (r *Record) Data() []interface{} {
 	return r.data
 }
 
-// Assuming committed msgs are in order
-func calOffsetDiff(section, committed []confluent.TopicPartition) []confluent.TopicPartition {
-	return section[len(committed):]
-}
-
 func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.TopicPartition, error) {
 	return s.client.CommitOffsets(recs)
 }
