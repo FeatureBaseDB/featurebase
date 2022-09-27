@@ -57,7 +57,7 @@ func ReadFileOrURL(name string, s3client s3iface.S3API) ([]byte, error) {
 		}
 		content = buf.Bytes()
 	} else {
-		content, err = ioutil.ReadFile(name)
+		content, err = os.ReadFile(name)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil, FileOrURLNotFound

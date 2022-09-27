@@ -20,13 +20,13 @@ import (
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/glycerine/vprint"
-	"github.com/go-avro/avro"
-	liavro "github.com/linkedin/goavro/v2"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/common"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/glycerine/vprint"
+	"github.com/go-avro/avro"
+	liavro "github.com/linkedin/goavro/v2"
 )
 
 func configureSourceTestFlags(source *Source) {
@@ -251,7 +251,7 @@ func decodeTestSchema(t *testing.T, filename string) avro.Schema {
 }
 
 func readTestSchema(t *testing.T, filename string) string {
-	bytes, err := ioutil.ReadFile("./testdata/schemas/" + filename)
+	bytes, err := os.ReadFile("./testdata/schemas/" + filename)
 	if err != nil {
 		t.Fatalf("reading schema file: %v", err)
 	}

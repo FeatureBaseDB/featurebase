@@ -250,7 +250,7 @@ func (f *fragment) openCache() error {
 
 	// Read cache data from disk.
 	path := f.cachePath()
-	buf, err := ioutil.ReadFile(path)
+	buf, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
@@ -2675,7 +2675,7 @@ func (f *fragment) writeCacheToArchive(tw *tar.Writer) error {
 	defer f.mu.Unlock()
 
 	// Read cache into buffer.
-	buf, err := ioutil.ReadFile(f.cachePath())
+	buf, err := os.ReadFile(f.cachePath())
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {

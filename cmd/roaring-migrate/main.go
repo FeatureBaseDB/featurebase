@@ -146,7 +146,7 @@ func BuildSchema(dataDir string) ([]byte, error) {
 				t := strings.Split(pathX, "/")
 				index := t[1]
 				src := dataDir + pathX
-				content, err := ioutil.ReadFile(src)
+				content, err := os.ReadFile(src)
 				if err != nil {
 					return err
 				}
@@ -198,7 +198,7 @@ func Extract(filename string) (index, field, view string, shard uint64) {
 	return parts[1], parts[2], parts[4], shard
 }
 
-//just a way to collect all the open dbs
+// just a way to collect all the open dbs
 type rbfFile struct {
 	working *rbf.DB
 	last    string
@@ -342,7 +342,7 @@ func Migrate(dataDir, backupPath string, verbose bool) error {
 		if verbose {
 			glogger.Infof("processing: %v", dataDir+filename)
 		}
-		content, err := ioutil.ReadFile(dataDir + filename)
+		content, err := os.ReadFile(dataDir + filename)
 		if err != nil {
 			return err
 		}
