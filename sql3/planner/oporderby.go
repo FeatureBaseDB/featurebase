@@ -86,7 +86,7 @@ func (n *PlanOpOrderBy) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", n)
 	sc := make([]string, 0)
 	for _, e := range n.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 

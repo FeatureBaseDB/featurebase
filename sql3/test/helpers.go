@@ -47,8 +47,8 @@ func MustQueryRows(tb testing.TB, svr *pilosa.Server, q string) ([][]interface{}
 	cols := make([]*planner_types.PlannerColumn, 0)
 	for _, oc := range ocolumns {
 		cols = append(cols, &planner_types.PlannerColumn{
-			Name: oc.Name,
-			Type: oc.Type,
+			ColumnName: oc.ColumnName,
+			Type:       oc.Type,
 		})
 	}
 	return results, cols, nil

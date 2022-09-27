@@ -305,7 +305,7 @@ func TestSQL_Execute(t *testing.T) {
 							// make a map of column name to header index
 							m := make(map[string]int)
 							for i := range headers {
-								m[headers[i].Name] = i
+								m[headers[i].ColumnName] = i
 							}
 
 							// Put the expRows in the same column order as the headers returned
@@ -314,7 +314,7 @@ func TestSQL_Execute(t *testing.T) {
 							for i := range sqltest.expRows {
 								exp[i] = make([]interface{}, len(headers))
 								for j := range sqltest.expHdrs {
-									targetIdx := m[sqltest.expHdrs[j].Name]
+									targetIdx := m[sqltest.expHdrs[j].ColumnName]
 									if !assert.GreaterOrEqual(t, len(sqltest.expRows[i]), len(headers)) {
 										t.Fatalf("expected row set has fewer columns than returned headers")
 									}
@@ -453,8 +453,8 @@ func hdrs(hdrs ...*planner_types.PlannerColumn) []*planner_types.PlannerColumn {
 // hdr is just a helper function to make the test definition look cleaner.
 func hdr(name string, typ fldType) *planner_types.PlannerColumn {
 	return &planner_types.PlannerColumn{
-		Name: name,
-		Type: typ,
+		ColumnName: name,
+		Type:       typ,
 	}
 }
 

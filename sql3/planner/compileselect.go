@@ -72,6 +72,39 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 	// do we have straight projection or a group by?
 	var compiledOp types.PlanOperator
 	if len(query.aggregates) > 0 {
+		//check that any projections that are not aggregates are in the group by list
+		var nonAggregateReferences []*qualifiedRefPlanExpression
+		for _, expr := range projections {
+			InspectExpression(expr, func(expr types.PlanExpression) bool {
+				switch ex := expr.(type) {
+				case *sumPlanExpression:
+					return false
+				case *qualifiedRefPlanExpression:
+					nonAggregateReferences = append(nonAggregateReferences, ex)
+					return false
+				}
+				return true
+			})
+		}
+
+		for _, nae := range nonAggregateReferences {
+			found := false
+			for _, pe := range groupByExprs {
+				gbe, ok := pe.(*qualifiedRefPlanExpression)
+				if !ok {
+					continue
+				}
+				if strings.EqualFold(nae.columnName, gbe.columnName) &&
+					strings.EqualFold(nae.tableName, gbe.tableName) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, sql3.NewErrInvalidUngroupedColumnReference(0, 0, nae.columnName)
+			}
+		}
+
 		compiledOp = NewPlanOpProjection(projections, NewPlanOpGroupBy(query.aggregates, groupByExprs, source))
 	} else {
 		compiledOp = NewPlanOpProjection(projections, source)
@@ -126,6 +159,25 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser
 
 	switch sourceExpr := source.(type) {
 	case *parser.JoinClause:
+		scope.AddWarning("🦖 here there be dragons! JOINS are experimental.")
+
+		var joinCondition types.PlanExpression
+		if sourceExpr.Constraint == nil {
+			scope.AddWarning("⚠️  cartesian products are never a good idea - are you missing a join constraint?")
+			joinCondition = nil
+		} else {
+			switch join := sourceExpr.Constraint.(type) {
+			case *parser.OnConstraint:
+				expr, err := p.compileExpr(join.X)
+				if err != nil {
+					return nil, err
+				}
+				joinCondition = expr
+			default:
+				return nil, sql3.NewErrInternalf("unexecpted constraint type '%T'", join)
+			}
+		}
+
 		topOp, err := p.compileSelectSource(scope, sourceExpr.X)
 		if err != nil {
 			return nil, err
@@ -134,19 +186,23 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser
 		if err != nil {
 			return nil, err
 		}
-		scope.AddWarning("🦖 here there be dragons! JOINS are experimental.")
-		if sourceExpr.Constraint == nil {
-			scope.AddWarning("⚠️  cartesian products are never a good idea - are you missing a join constraint?")
-		}
-		return NewPlanOpNestedLoops(topOp, bottomOp), nil
+		return NewPlanOpNestedLoops(topOp, bottomOp, joinCondition), nil
 
 	case *parser.QualifiedTableName:
 		// get all the qualified refs that refer to this table
-		extractColumns := []types.PlanExpression{}
-
+		extractColumns := make([]string, 0)
 		for _, r := range scope.referenceList {
 			if sourceExpr.MatchesTablenameOrAlias(r.tableName) {
-				extractColumns = append(extractColumns, r)
+				found := false
+				for _, c := range extractColumns {
+					if strings.EqualFold(c, r.columnName) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					extractColumns = append(extractColumns, r.columnName)
+				}
 			}
 		}
 
@@ -209,6 +265,18 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		err = p.analyzeSource(source.Y, scope)
 		if err != nil {
 			return err
+		}
+		if source.Constraint != nil {
+			switch join := source.Constraint.(type) {
+			case *parser.OnConstraint:
+				ex, err := p.analyzeExpression(join.X, scope)
+				if err != nil {
+					return err
+				}
+				join.X = ex
+			default:
+				return sql3.NewErrInternalf("unexpected constraint type '%T'", join)
+			}
 		}
 		return nil
 
