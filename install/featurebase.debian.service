@@ -3,7 +3,6 @@ Description="Service for FeatureBase"
 After=network.target
 
 [Service]
-RestartSec=30
 Restart=on-failure
 EnvironmentFile=
 User=molecula
