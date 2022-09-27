@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	"github.com/featurebasedb/featurebase/v3/authn"
+	"github.com/golang-jwt/jwt"
 	"golang.org/x/oauth2"
 
 	"github.com/featurebasedb/featurebase/v3/authz"
@@ -668,7 +668,7 @@ func TestChkAuthN(t *testing.T) {
 	expiredToken = "Bearer " + expiredToken
 
 	testingHandler := func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("good"))
+		_, _ = w.Write([]byte("good"))
 	}
 
 	cases := []struct {
