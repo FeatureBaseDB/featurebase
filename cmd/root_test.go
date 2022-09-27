@@ -5,7 +5,6 @@ package cmd_test
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -34,7 +33,7 @@ func tExec(t *testing.T, cmd *cobra.Command, out io.Reader, w io.WriteCloser) (o
 	done := make(chan struct{})
 	var readErr error
 	go func() {
-		output, readErr = ioutil.ReadAll(out)
+		output, readErr = io.ReadAll(out)
 		close(done)
 	}()
 	err = cmd.Execute()
@@ -143,7 +142,7 @@ func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 	os.Setenv("PILOSA_POSTGRES_BIND", "")
 
 	// make command and set args
-	rc := cmd.NewRootCommand(strings.NewReader(""), ioutil.Discard, ioutil.Discard)
+	rc := cmd.NewRootCommand(strings.NewReader(""), io.Discard, io.Discard)
 	rc.SetArgs(ct.args)
 
 	err = cfgFile.Close()
