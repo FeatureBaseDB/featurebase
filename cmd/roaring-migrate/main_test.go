@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -39,7 +38,7 @@ func TestMainProgram(t *testing.T) {
 	if realMain() == 0 {
 		t.Fatal("should fail and it succeeded")
 	}
-	dir, err := ioutil.TempDir("", "backup")
+	dir, err := os.MkdirTemp("", "backup")
 	if err != nil {
 		t.Fatal(err)
 	}
