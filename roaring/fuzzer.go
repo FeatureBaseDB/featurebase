@@ -8,7 +8,6 @@ package roaring
 import (
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"reflect"
 )
 

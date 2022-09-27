@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"math/rand"
 	"os"
@@ -81,7 +80,7 @@ func TestAvroToPDKSchema(t *testing.T) {
 	}
 
 	// check that we've covered all the test schemas
-	files, err := ioutil.ReadDir("./testdata/schemas")
+	files, err := os.ReadDir("./testdata/schemas")
 	if err != nil {
 		t.Fatalf("reading directory: %v", err)
 	}

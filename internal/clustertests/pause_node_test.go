@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -103,7 +102,7 @@ func readIndexTranslateData(ctx context.Context, client *pilosa.InternalClient, 
 	if err != nil {
 		return err
 	}
-	buf, err := io.ReadAll(r)
+	buf, err := ioutil.ReadAll(r)
 	if err != nil {
 		return err
 	}
@@ -131,6 +130,8 @@ func readIndexTranslateData(ctx context.Context, client *pilosa.InternalClient, 
 }
 
 func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, error) {
+	//TODO lint - uses the fs.FileInfo.Mode to filter out directories later
+	// this does not exist in the os.DirEntry elements returned by os.ReadDir
 	dirEntries, err := ioutil.ReadDir(dirPath)
 	if err != nil {
 		return nil, err
