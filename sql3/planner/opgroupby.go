@@ -5,7 +5,10 @@ package planner
 import (
 	"context"
 	"fmt"
+	"hash/maphash"
+	"log"
 
+	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
@@ -38,18 +41,18 @@ func (p *PlanOpGroupBy) Schema() types.Schema {
 			continue
 		}
 		s := &types.PlannerColumn{
-			Name:  ref.columnName,
-			Table: ref.tableName,
-			Type:  expr.Type(),
+			ColumnName:   ref.columnName,
+			RelationName: ref.tableName,
+			Type:         expr.Type(),
 		}
 		result[idx] = s
 	}
 	offset := len(p.GroupByExprs)
 	for idx, agg := range p.Aggregates {
 		s := &types.PlannerColumn{
-			Name:  "",
-			Table: "",
-			Type:  agg.Type(),
+			ColumnName:   "",
+			RelationName: "",
+			Type:         agg.Type(),
 		}
 		result[idx+offset] = s
 	}
@@ -58,15 +61,15 @@ func (p *PlanOpGroupBy) Schema() types.Schema {
 }
 
 func (p *PlanOpGroupBy) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
-	// TODO(pok) implement group by with group by expressions
 	i, err := p.ChildOp.Iterator(ctx, row)
 	if err != nil {
 		return nil, err
 	}
-	aggs := []types.PlanExpression{}
-	aggs = append(aggs, p.GroupByExprs...)
-	aggs = append(aggs, p.Aggregates...)
-	return newGroupByIter(ctx, aggs, i), nil
+	if len(p.GroupByExprs) == 0 {
+		return newGroupByIter(ctx, p.Aggregates, i), nil
+	} else {
+		return newGroupByGroupingIter(ctx, p.Aggregates, p.GroupByExprs, i), nil
+	}
 }
 
 func (p *PlanOpGroupBy) Children() []types.PlanOperator {
@@ -82,12 +85,26 @@ func (p *PlanOpGroupBy) WithChildren(children ...types.PlanOperator) (types.Plan
 	return NewPlanOpGroupBy(p.Aggregates, p.GroupByExprs, children[0]), nil
 }
 
+func (p *PlanOpGroupBy) Expressions() []types.PlanExpression {
+	result := []types.PlanExpression{}
+	result = append(result, p.GroupByExprs...)
+	return result
+}
+
+func (p *PlanOpGroupBy) WithUpdatedExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
+	if len(exprs) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
+	}
+	p.GroupByExprs = exprs
+	return p, nil
+}
+
 func (p *PlanOpGroupBy) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 	result["child"] = p.ChildOp.Plan()
@@ -120,11 +137,11 @@ func (p *PlanOpGroupBy) Warnings() []string {
 }
 
 type groupByIter struct {
-	aggregates []types.PlanExpression
-	child      types.RowIterator
-	ctx        context.Context
-	buf        []types.AggregationBuffer
-	done       bool
+	aggregates         []types.PlanExpression
+	child              types.RowIterator
+	ctx                context.Context
+	aggregationBuffers *keysAndAggregations
+	done               bool
 }
 
 func newGroupByIter(ctx context.Context, aggregates []types.PlanExpression, child types.RowIterator) *groupByIter {
@@ -132,7 +149,9 @@ func newGroupByIter(ctx context.Context, aggregates []types.PlanExpression, chil
 		aggregates: aggregates,
 		child:      child,
 		ctx:        ctx,
-		buf:        make([]types.AggregationBuffer, len(aggregates)),
+		aggregationBuffers: &keysAndAggregations{
+			buffers: make([]types.AggregationBuffer, len(aggregates)),
+		},
 	}
 }
 
@@ -145,7 +164,7 @@ func (i *groupByIter) Next(ctx context.Context) (types.Row, error) {
 
 	var err error
 	for j, a := range i.aggregates {
-		i.buf[j], err = newAggregationBuffer(a)
+		i.aggregationBuffers.buffers[j], err = newAggregationBuffer(a)
 		if err != nil {
 			return nil, err
 		}
@@ -160,12 +179,115 @@ func (i *groupByIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, err
 		}
 
-		if err := updateBuffers(ctx, i.buf, row); err != nil {
+		if err := updateBuffers(ctx, i.aggregationBuffers, row); err != nil {
 			return nil, err
 		}
 	}
 
-	return evalBuffers(ctx, i.buf)
+	return evalBuffers(ctx, i.aggregationBuffers)
+}
+
+type keysAndAggregations struct {
+	groupByKeys []interface{}
+	buffers     []types.AggregationBuffer
+}
+
+type groupByGroupingIter struct {
+	aggregates   []types.PlanExpression
+	groupByExprs []types.PlanExpression
+	aggregations ObjectCache
+	keys         []uint64
+	child        types.RowIterator
+}
+
+func newGroupByGroupingIter(ctx context.Context, aggregates, groupByExprs []types.PlanExpression, child types.RowIterator) *groupByGroupingIter {
+	return &groupByGroupingIter{
+		aggregates:   aggregates,
+		groupByExprs: groupByExprs,
+		child:        child,
+	}
+}
+
+func (i *groupByGroupingIter) Next(ctx context.Context) (types.Row, error) {
+	if i.aggregations == nil {
+		i.aggregations = NewMapObjectCache()
+		if err := i.compute(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(i.keys) > 0 {
+		buffers, err := i.get(i.keys[0])
+		if err != nil {
+			return nil, err
+		}
+
+		i.keys = i.keys[1:]
+
+		aggRow, err := evalBuffers(ctx, buffers)
+		if err != nil {
+			return nil, err
+		}
+
+		var row = make(types.Row, len(i.groupByExprs)+len(aggRow))
+		copy(row, buffers.groupByKeys)
+		copy(row[len(buffers.groupByKeys):], aggRow)
+		return row, nil
+	}
+	return nil, types.ErrNoMoreRows
+}
+
+func (i *groupByGroupingIter) compute(ctx context.Context) error {
+	for {
+		row, err := i.child.Next(ctx)
+		if err != nil {
+			if err == types.ErrNoMoreRows {
+				break
+			}
+			return err
+		}
+
+		key, keyValues, err := groupingKeyHash(ctx, i.groupByExprs, row)
+		if err != nil {
+			return err
+		}
+
+		b, err := i.get(key)
+		if errors.Is(err, sql3.ErrCacheKeyNotFound) {
+			b = &keysAndAggregations{}
+			b.buffers = make([]types.AggregationBuffer, len(i.aggregates))
+			for j, a := range i.aggregates {
+				b.buffers[j], err = newAggregationBuffer(a)
+				if err != nil {
+					return err
+				}
+			}
+			b.groupByKeys = keyValues
+			if err := i.aggregations.PutObject(key, b); err != nil {
+				return err
+			}
+			i.keys = append(i.keys, key)
+		} else if err != nil {
+			return err
+		}
+
+		err = updateBuffers(ctx, b, row)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *groupByGroupingIter) get(key uint64) (*keysAndAggregations, error) {
+	v, err := i.aggregations.GetObject(key)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	return v.(*keysAndAggregations), err
 }
 
 func newAggregationBuffer(expr types.PlanExpression) (types.AggregationBuffer, error) {
@@ -177,8 +299,8 @@ func newAggregationBuffer(expr types.PlanExpression) (types.AggregationBuffer, e
 	}
 }
 
-func updateBuffers(ctx context.Context, buffers []types.AggregationBuffer, row types.Row) error {
-	for _, b := range buffers {
+func updateBuffers(ctx context.Context, buffers *keysAndAggregations, row types.Row) error {
+	for _, b := range buffers.buffers {
 		if err := b.Update(ctx, row); err != nil {
 			return err
 		}
@@ -186,14 +308,34 @@ func updateBuffers(ctx context.Context, buffers []types.AggregationBuffer, row t
 	return nil
 }
 
-func evalBuffers(ctx context.Context, buffers []types.AggregationBuffer) (types.Row, error) {
-	var row = make(types.Row, len(buffers))
+func evalBuffers(ctx context.Context, aggregationBuffers *keysAndAggregations) (types.Row, error) {
+	var row = make(types.Row, len(aggregationBuffers.buffers))
 	var err error
-	for i, b := range buffers {
+	for i, b := range aggregationBuffers.buffers {
 		row[i], err = b.Eval(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return row, nil
+}
+
+func groupingKeyHash(ctx context.Context, groupByExprs []types.PlanExpression, row types.Row) (uint64, types.Row, error) {
+	rowKeys := make([]interface{}, len(groupByExprs))
+	var hash maphash.Hash
+	hash.SetSeed(prototypeHash.Seed())
+	for i, expr := range groupByExprs {
+		v, err := expr.Evaluate(row)
+		if err != nil {
+			return 0, nil, err
+		}
+		_, err = hash.Write(([]byte)(fmt.Sprintf("%#v,", v)))
+		if err != nil {
+			return 0, nil, err
+		}
+		rowKeys[i] = v
+	}
+	result := hash.Sum64()
+	log.Printf("Hash %v, %v", result, rowKeys)
+	return result, rowKeys, nil
 }

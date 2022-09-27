@@ -31,7 +31,7 @@ func (p *PlanOpFeatureBaseTables) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	ps := make([]string, 0)
 	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = ps
 	return result
@@ -52,29 +52,29 @@ func (p *PlanOpFeatureBaseTables) Warnings() []string {
 func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 	return types.Schema{
 		&types.PlannerColumn{
-			Table: "fb$tables",
-			Name:  "name",
-			Type:  parser.NewDataTypeString(),
+			RelationName: "fb$tables",
+			ColumnName:   "name",
+			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			Table: "fb$tables",
-			Name:  "created_at",
-			Type:  parser.NewDataTypeTimestamp(),
+			RelationName: "fb$tables",
+			ColumnName:   "created_at",
+			Type:         parser.NewDataTypeTimestamp(),
 		},
 		&types.PlannerColumn{
-			Table: "fb$tables",
-			Name:  "track_existence",
-			Type:  parser.NewDataTypeBool(),
+			RelationName: "fb$tables",
+			ColumnName:   "track_existence",
+			Type:         parser.NewDataTypeBool(),
 		},
 		&types.PlannerColumn{
-			Table: "fb$tables",
-			Name:  "keys",
-			Type:  parser.NewDataTypeBool(),
+			RelationName: "fb$tables",
+			ColumnName:   "keys",
+			Type:         parser.NewDataTypeBool(),
 		},
 		&types.PlannerColumn{
-			Table: "fb$tables",
-			Name:  "shard_width",
-			Type:  parser.NewDataTypeInt(),
+			RelationName: "fb$tables",
+			ColumnName:   "shard_width",
+			Type:         parser.NewDataTypeInt(),
 		},
 	}
 }

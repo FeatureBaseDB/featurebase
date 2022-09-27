@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -196,13 +197,15 @@ func (n *countDistinctPlanExpression) WithChildren(children ...types.PlanExpress
 
 // aggregator for the SUM function
 type aggregateSum struct {
-	isnil bool
-	sum   float64
-	expr  types.PlanExpression
+	sum  float64
+	expr types.PlanExpression
 }
 
 func NewAggSumBuffer(child types.PlanExpression) *aggregateSum {
-	return &aggregateSum{true, float64(0), child}
+	return &aggregateSum{
+		sum:  float64(0),
+		expr: child,
+	}
 }
 
 func (m *aggregateSum) Update(ctx context.Context, row types.Row) error {
@@ -211,27 +214,30 @@ func (m *aggregateSum) Update(ctx context.Context, row types.Row) error {
 		return err
 	}
 
+	//if null, skip
 	if v == nil {
 		return nil
 	}
 
-	var val interface{} = 0
-
-	if m.isnil {
-		m.sum = 0
-		m.isnil = false
+	sumExpr, ok := m.expr.(*sumPlanExpression)
+	if !ok {
+		return sql3.NewErrInternalf("unexpected aggregate expression type '%T'", m.expr)
 	}
 
-	m.sum += val.(float64)
-
-	//return nil
-	return sql3.NewErrInternalf("implement me")
+	switch dataType := sumExpr.arg.Type().(type) {
+	case *parser.DataTypeDecimal:
+		val, ok := v.(pql.Decimal)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+		m.sum += val.Float64()
+	default:
+		return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
+	}
+	return nil
 }
 
 func (m *aggregateSum) Eval(ctx context.Context) (interface{}, error) {
-	if m.isnil {
-		return nil, nil
-	}
 	return m.sum, nil
 }
 
@@ -646,7 +652,7 @@ func (n *percentilePlanExpression) WithChildren(children ...types.PlanExpression
 	return n, nil
 }
 
-//aggregator for last
+// aggregator for last
 type aggregateLast struct {
 	val  interface{}
 	expr types.PlanExpression

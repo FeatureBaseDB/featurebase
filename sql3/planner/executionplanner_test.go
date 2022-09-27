@@ -54,11 +54,11 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "name", Type: parser.NewDataTypeString()},
-			{Name: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{Name: "track_existence", Type: parser.NewDataTypeBool()},
-			{Name: "keys", Type: parser.NewDataTypeBool()},
-			{Name: "shard_width", Type: parser.NewDataTypeInt()},
+			{ColumnName: "name", Type: parser.NewDataTypeString()},
+			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
+			{ColumnName: "track_existence", Type: parser.NewDataTypeBool()},
+			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
+			{ColumnName: "shard_width", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -74,20 +74,20 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "name", Type: parser.NewDataTypeString()},
-			{Name: "type", Type: parser.NewDataTypeString()},
-			{Name: "internal_type", Type: parser.NewDataTypeString()},
-			{Name: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{Name: "keys", Type: parser.NewDataTypeBool()},
-			{Name: "cache_type", Type: parser.NewDataTypeString()},
-			{Name: "cache_size", Type: parser.NewDataTypeInt()},
-			{Name: "scale", Type: parser.NewDataTypeInt()},
-			{Name: "min", Type: parser.NewDataTypeInt()},
-			{Name: "max", Type: parser.NewDataTypeInt()},
-			{Name: "timeunit", Type: parser.NewDataTypeString()},
-			{Name: "epoch", Type: parser.NewDataTypeInt()},
-			{Name: "timequantum", Type: parser.NewDataTypeString()},
-			{Name: "ttl", Type: parser.NewDataTypeString()},
+			{ColumnName: "name", Type: parser.NewDataTypeString()},
+			{ColumnName: "type", Type: parser.NewDataTypeString()},
+			{ColumnName: "internal_type", Type: parser.NewDataTypeString()},
+			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
+			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
+			{ColumnName: "cache_type", Type: parser.NewDataTypeString()},
+			{ColumnName: "cache_size", Type: parser.NewDataTypeInt()},
+			{ColumnName: "scale", Type: parser.NewDataTypeInt()},
+			{ColumnName: "min", Type: parser.NewDataTypeInt()},
+			{ColumnName: "max", Type: parser.NewDataTypeInt()},
+			{ColumnName: "timeunit", Type: parser.NewDataTypeString()},
+			{ColumnName: "epoch", Type: parser.NewDataTypeInt()},
+			{ColumnName: "timequantum", Type: parser.NewDataTypeString()},
+			{ColumnName: "ttl", Type: parser.NewDataTypeString()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -103,20 +103,20 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "name", Type: parser.NewDataTypeString()},
-			{Name: "type", Type: parser.NewDataTypeString()},
-			{Name: "internal_type", Type: parser.NewDataTypeString()},
-			{Name: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{Name: "keys", Type: parser.NewDataTypeBool()},
-			{Name: "cache_type", Type: parser.NewDataTypeString()},
-			{Name: "cache_size", Type: parser.NewDataTypeInt()},
-			{Name: "scale", Type: parser.NewDataTypeInt()},
-			{Name: "min", Type: parser.NewDataTypeInt()},
-			{Name: "max", Type: parser.NewDataTypeInt()},
-			{Name: "timeunit", Type: parser.NewDataTypeString()},
-			{Name: "epoch", Type: parser.NewDataTypeInt()},
-			{Name: "timequantum", Type: parser.NewDataTypeString()},
-			{Name: "ttl", Type: parser.NewDataTypeString()},
+			{ColumnName: "name", Type: parser.NewDataTypeString()},
+			{ColumnName: "type", Type: parser.NewDataTypeString()},
+			{ColumnName: "internal_type", Type: parser.NewDataTypeString()},
+			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
+			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
+			{ColumnName: "cache_type", Type: parser.NewDataTypeString()},
+			{ColumnName: "cache_size", Type: parser.NewDataTypeInt()},
+			{ColumnName: "scale", Type: parser.NewDataTypeInt()},
+			{ColumnName: "min", Type: parser.NewDataTypeInt()},
+			{ColumnName: "max", Type: parser.NewDataTypeInt()},
+			{ColumnName: "timeunit", Type: parser.NewDataTypeString()},
+			{ColumnName: "epoch", Type: parser.NewDataTypeInt()},
+			{ColumnName: "timequantum", Type: parser.NewDataTypeString()},
+			{ColumnName: "ttl", Type: parser.NewDataTypeString()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -483,20 +483,20 @@ func TestPlanner_CreateTable(t *testing.T) {
 			t.Fatal(err)
 		}
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "name", Type: parser.NewDataTypeString()},
-			{Name: "type", Type: parser.NewDataTypeString()},
-			{Name: "internal_type", Type: parser.NewDataTypeString()},
-			{Name: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{Name: "keys", Type: parser.NewDataTypeBool()},
-			{Name: "cache_type", Type: parser.NewDataTypeString()},
-			{Name: "cache_size", Type: parser.NewDataTypeInt()},
-			{Name: "scale", Type: parser.NewDataTypeInt()},
-			{Name: "min", Type: parser.NewDataTypeInt()},
-			{Name: "max", Type: parser.NewDataTypeInt()},
-			{Name: "timeunit", Type: parser.NewDataTypeString()},
-			{Name: "epoch", Type: parser.NewDataTypeInt()},
-			{Name: "timequantum", Type: parser.NewDataTypeString()},
-			{Name: "ttl", Type: parser.NewDataTypeString()},
+			{ColumnName: "name", Type: parser.NewDataTypeString()},
+			{ColumnName: "type", Type: parser.NewDataTypeString()},
+			{ColumnName: "internal_type", Type: parser.NewDataTypeString()},
+			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
+			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
+			{ColumnName: "cache_type", Type: parser.NewDataTypeString()},
+			{ColumnName: "cache_size", Type: parser.NewDataTypeInt()},
+			{ColumnName: "scale", Type: parser.NewDataTypeInt()},
+			{ColumnName: "min", Type: parser.NewDataTypeInt()},
+			{ColumnName: "max", Type: parser.NewDataTypeInt()},
+			{ColumnName: "timeunit", Type: parser.NewDataTypeString()},
+			{ColumnName: "epoch", Type: parser.NewDataTypeInt()},
+			{ColumnName: "timequantum", Type: parser.NewDataTypeString()},
+			{ColumnName: "ttl", Type: parser.NewDataTypeString()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -665,8 +665,8 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "", Type: parser.NewDataTypeBool()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "", Type: parser.NewDataTypeBool()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -686,8 +686,8 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "", Type: parser.NewDataTypeBool()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "", Type: parser.NewDataTypeBool()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -744,8 +744,8 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "", Type: parser.NewDataTypeBool()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "", Type: parser.NewDataTypeBool()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -765,8 +765,8 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -786,8 +786,8 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -807,8 +807,8 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "", Type: parser.NewDataTypeDecimal(2)},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "", Type: parser.NewDataTypeDecimal(2)},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -828,8 +828,8 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "", Type: parser.NewDataTypeString()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "", Type: parser.NewDataTypeString()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -886,9 +886,9 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "b", Type: parser.NewDataTypeInt()},
-			{Name: "", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -908,9 +908,9 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "b", Type: parser.NewDataTypeInt()},
-			{Name: "", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -969,9 +969,9 @@ func TestPlanner_Select(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -991,9 +991,9 @@ func TestPlanner_Select(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1013,9 +1013,9 @@ func TestPlanner_Select(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "foo", Type: parser.NewDataTypeInt()},
-			{Name: "bar", Type: parser.NewDataTypeInt()},
-			{Name: "baz", Type: parser.NewDataTypeID()},
+			{ColumnName: "foo", Type: parser.NewDataTypeInt()},
+			{ColumnName: "bar", Type: parser.NewDataTypeInt()},
+			{ColumnName: "baz", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1035,9 +1035,9 @@ func TestPlanner_Select(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "_id", Type: parser.NewDataTypeID()},
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1057,9 +1057,9 @@ func TestPlanner_Select(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "_id", Type: parser.NewDataTypeID()},
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1079,9 +1079,9 @@ func TestPlanner_Select(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "_id", Type: parser.NewDataTypeID()},
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1101,8 +1101,8 @@ func TestPlanner_Select(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1157,9 +1157,9 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1207,9 +1207,9 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1229,9 +1229,9 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1304,7 +1304,7 @@ func TestPlanner_In(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "count", Type: parser.NewDataTypeInt()},
+			{ColumnName: "count", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1434,7 +1434,7 @@ func TestPlanner_Distinct(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1456,7 +1456,7 @@ func TestPlanner_Distinct(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "parentid", Type: parser.NewDataTypeInt()},
+			{ColumnName: "parentid", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1477,8 +1477,8 @@ func TestPlanner_Distinct(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "_id", Type: parser.NewDataTypeID()},
-			{Name: "parentid", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "parentid", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1529,9 +1529,9 @@ func TestPlanner_SelectTop(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "_id", Type: parser.NewDataTypeID()},
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1552,9 +1552,9 @@ func TestPlanner_SelectTop(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "_id", Type: parser.NewDataTypeID()},
-			{Name: "a", Type: parser.NewDataTypeInt()},
-			{Name: "b", Type: parser.NewDataTypeInt()},
+			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+			{ColumnName: "a", Type: parser.NewDataTypeInt()},
+			{ColumnName: "b", Type: parser.NewDataTypeInt()},
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}

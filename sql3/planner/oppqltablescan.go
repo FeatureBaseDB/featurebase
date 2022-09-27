@@ -5,6 +5,7 @@ package planner
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/pql"
@@ -18,13 +19,13 @@ import (
 type PlanOpPQLTableScan struct {
 	planner   *ExecutionPlanner
 	tableName string
-	columns   []types.PlanExpression
+	columns   []string
 	filter    types.PlanExpression
 	topExpr   types.PlanExpression
 	warnings  []string
 }
 
-func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []types.PlanExpression) *PlanOpPQLTableScan {
+func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []string) *PlanOpPQLTableScan {
 	return &PlanOpPQLTableScan{
 		planner:   p,
 		tableName: tableName,
@@ -38,7 +39,7 @@ func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 
@@ -51,11 +52,7 @@ func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 		result["filter"] = p.filter.Plan()
 	}
 
-	ps := make([]interface{}, 0)
-	for _, c := range p.columns {
-		ps = append(ps, c.Plan())
-	}
-	result["columns"] = ps
+	result["columns"] = p.columns
 	return result
 }
 
@@ -82,15 +79,18 @@ func (p *PlanOpPQLTableScan) UpdateFilters(filterCondition types.PlanExpression)
 
 func (p *PlanOpPQLTableScan) Schema() types.Schema {
 	result := make(types.Schema, 0)
-	for _, col := range p.columns {
-		si, ok := col.(types.IdentifiableByName)
-		if ok {
-			result = append(result, &types.PlannerColumn{
-				Name:  si.Name(),
-				Table: p.tableName,
-				Type:  col.Type(),
-			})
-		}
+
+	table, err := p.planner.schemaAPI.IndexInfo(context.Background(), p.tableName)
+	if err != nil {
+		return result
+	}
+
+	for _, col := range table.Fields {
+		result = append(result, &types.PlannerColumn{
+			ColumnName:   col.Name,
+			RelationName: p.tableName,
+			Type:         fieldSQLDataType(col),
+		})
 	}
 	return result
 }
@@ -113,18 +113,23 @@ func (p *PlanOpPQLTableScan) WithChildren(children ...types.PlanOperator) (types
 	return nil, nil
 }
 
-// TODO(pok) remove the name mapping here and do it by ordinal position
+type targetColumn struct {
+	columnIdx    int
+	srcColumnIdx int
+	columnName   string
+	dataType     parser.ExprDataType
+}
+
 type tableScanRowIter struct {
 	planner   *ExecutionPlanner
 	tableName string
-	columns   []types.PlanExpression
+	columns   []string
 	predicate types.PlanExpression
 	topExpr   types.PlanExpression
 
-	result          []pilosa.ExtractedTableColumn
-	rowWidth        int
-	sourceColumnMap map[string]int
-	targetColumnMap map[string]int
+	result    []pilosa.ExtractedTableColumn
+	rowWidth  int
+	columnMap map[string]*targetColumn
 }
 
 var _ types.RowIterator = (*tableScanRowIter)(nil)
@@ -146,9 +151,14 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 		i.rowWidth = len(table.Fields)
 
-		i.targetColumnMap = make(map[string]int)
+		i.columnMap = make(map[string]*targetColumn)
 		for idx, fld := range table.Fields {
-			i.targetColumnMap[fld.Name] = idx
+			i.columnMap[fld.Name] = &targetColumn{
+				columnIdx:    idx,
+				srcColumnIdx: -1,
+				columnName:   fld.Name,
+				dataType:     fieldSQLDataType(fld),
+			}
 		}
 
 		var cond *pql.Call
@@ -180,23 +190,19 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 
 		call := &pql.Call{Name: "Extract", Children: []*pql.Call{cond}}
 		for _, c := range i.columns {
-			col, ok := c.(types.IdentifiableByName)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unexpected column type '%T'", c)
-			}
 
-			// Skip the _id field.
-			if col.Name() == "_id" {
+			// skip the _id field
+			if strings.EqualFold(c, "_id") {
 				continue
 			}
+
 			call.Children = append(call.Children,
 				&pql.Call{
 					Name: "Rows",
-					Args: map[string]interface{}{"field": col.Name()},
+					Args: map[string]interface{}{"field": c},
 				},
 			)
 		}
-
 		queryResponse, err := i.planner.executor.Execute(ctx, i.tableName, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err
@@ -206,9 +212,14 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, sql3.NewErrInternalf("unexpected Extract() result type: %T", queryResponse.Results[0])
 		}
 		i.result = tbl.Columns
-		i.sourceColumnMap = make(map[string]int)
+
+		//set the source index
 		for idx, fld := range tbl.Fields {
-			i.sourceColumnMap[fld.Name] = idx
+			mappedColumn, ok := i.columnMap[fld.Name]
+			if !ok {
+				return nil, sql3.NewErrInternalf("mapped column not found for column named '%s'", fld.Name)
+			}
+			mappedColumn.srcColumnIdx = idx
 		}
 	}
 
@@ -218,55 +229,47 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		for _, c := range i.columns {
 			result := i.result[0]
 
-			col, ok := c.(types.IdentifiableByName)
+			mappedColumn, ok := i.columnMap[c]
 			if !ok {
-				return nil, sql3.NewErrInternalf("unexpected column type '%T'", c)
+				return nil, sql3.NewErrInternalf("mapped column not found for column named '%s'", c)
 			}
+			mappedColIdx := mappedColumn.columnIdx
+			mappedSrcColIdx := mappedColumn.srcColumnIdx
 
-			targetColIdx, ok := i.targetColumnMap[col.Name()]
-			if !ok {
-				return nil, sql3.NewErrInternalf("target index not found for column named %s", col.Name())
-			}
-
-			if col.Name() == "_id" {
+			if strings.EqualFold(c, "_id") {
 				if result.Column.Keyed {
-					row[targetColIdx] = result.Column.Key
+					row[mappedColIdx] = result.Column.Key
 				} else {
-					row[targetColIdx] = int64(result.Column.ID)
+					row[mappedColIdx] = int64(result.Column.ID)
 				}
 			} else {
-
-				sourceColIdx, ok := i.sourceColumnMap[col.Name()]
-				if !ok {
-					return nil, sql3.NewErrInternalf("source index not found for column named %s", col.Name())
-				}
-				switch c.Type().(type) {
+				switch mappedColumn.dataType.(type) {
 				case *parser.DataTypeIDSet:
 					//empty sets are null
-					val, ok := result.Rows[sourceColIdx].([]uint64)
+					val, ok := result.Rows[mappedSrcColIdx].([]uint64)
 					if !ok {
-						return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result.Rows[sourceColIdx])
+						return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result.Rows[mappedSrcColIdx])
 					}
 					if len(val) == 0 {
-						row[targetColIdx] = nil
+						row[mappedColIdx] = nil
 					} else {
-						row[targetColIdx] = val
+						row[mappedColIdx] = val
 					}
 
 				case *parser.DataTypeStringSet:
 					//empty sets are null
-					val, ok := result.Rows[sourceColIdx].([]string)
+					val, ok := result.Rows[mappedSrcColIdx].([]string)
 					if !ok {
-						return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result.Rows[sourceColIdx])
+						return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result.Rows[mappedSrcColIdx])
 					}
 					if len(val) == 0 {
-						row[targetColIdx] = nil
+						row[mappedColIdx] = nil
 					} else {
-						row[targetColIdx] = val
+						row[mappedColIdx] = val
 					}
 
 				default:
-					row[targetColIdx] = result.Rows[sourceColIdx]
+					row[mappedColIdx] = result.Rows[mappedSrcColIdx]
 				}
 			}
 		}

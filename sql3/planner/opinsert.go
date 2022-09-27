@@ -39,7 +39,7 @@ func (p *PlanOpInsert) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 	result["tableName"] = p.tableName
@@ -242,7 +242,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 			}
 
 			vals := make([]uint64, 1)
-			vals[0] = coercedVal.(uint64)
+			vals[0] = uint64(coercedVal.(int64))
 
 			req := &pilosa.ImportRequest{
 				Index:      i.tableName,

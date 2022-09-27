@@ -19,10 +19,11 @@ type PlanOpNestedLoops struct {
 	warnings []string
 }
 
-func NewPlanOpNestedLoops(top, bottom types.PlanOperator) *PlanOpNestedLoops {
+func NewPlanOpNestedLoops(top, bottom types.PlanOperator, condition types.PlanExpression) *PlanOpNestedLoops {
 	return &PlanOpNestedLoops{
 		top:      top,
 		bottom:   bottom,
+		cond:     condition,
 		warnings: make([]string, 0),
 	}
 }
@@ -32,7 +33,7 @@ func (p *PlanOpNestedLoops) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	ps := make([]string, 0)
 	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = ps
 	result["top"] = p.top.Plan()
@@ -73,17 +74,26 @@ func (p *PlanOpNestedLoops) Iterator(ctx context.Context, row types.Row) (types.
 	}
 
 	rowWidth := len(row) + len(p.top.Schema()) + len(p.bottom.Schema())
-	return newNestedLoopsIter(ctx, joinTypeInner, topIter, p.bottom, row, nil, rowWidth, row), nil
+	return newNestedLoopsIter(ctx, joinTypeInner, topIter, p.bottom, row, p.cond, rowWidth, row), nil
 }
 
 func (p *PlanOpNestedLoops) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
 	if len(children) != 2 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return NewPlanOpNestedLoops(children[0], children[1]), nil
+	return NewPlanOpNestedLoops(children[0], children[1], p.cond), nil
 }
 
-func (p *PlanOpNestedLoops) NewWithExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
+func (p *PlanOpNestedLoops) Expressions() []types.PlanExpression {
+	if p.cond != nil {
+		return []types.PlanExpression{
+			p.cond,
+		}
+	}
+	return []types.PlanExpression{}
+}
+
+func (p *PlanOpNestedLoops) WithUpdatedExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
 	if len(exprs) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
 	}
@@ -114,7 +124,6 @@ type nestedLoopsIter struct {
 	rowSize    int
 
 	originalRow types.Row
-	scopeLen    int
 
 	bottomRows RowCache
 }
@@ -174,10 +183,8 @@ func (i *nestedLoopsIter) loadBottom(ctx context.Context) (row types.Row, err er
 }
 
 func (i *nestedLoopsIter) buildRow(primary, secondary types.Row) types.Row {
-	toCut := len(i.originalRow) - i.scopeLen
-	row := make(types.Row, i.rowSize-toCut)
+	row := make(types.Row, i.rowSize)
 
-	scope := primary[:i.scopeLen]
 	primary = primary[len(i.originalRow):]
 
 	var first, second types.Row
@@ -190,11 +197,10 @@ func (i *nestedLoopsIter) buildRow(primary, secondary types.Row) types.Row {
 	default:
 		first = primary
 		second = secondary
-		secondOffset = i.scopeLen + len(first)
+		secondOffset = len(first)
 	}
 
-	copy(row, scope)
-	copy(row[i.scopeLen:], first)
+	copy(row, first)
 	copy(row[secondOffset:], second)
 	return row
 }
@@ -240,6 +246,8 @@ func (i *nestedLoopsIter) Next(ctx context.Context) (types.Row, error) {
 		}
 
 		i.foundMatch = true
+
+		//DEBUG log.Printf("Join result %v", row)
 		return row, nil
 	}
 }

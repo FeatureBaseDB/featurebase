@@ -40,7 +40,7 @@ func (p *PlanOpPQLGroupBy) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 	result["tableName"] = p.tableName
@@ -77,16 +77,16 @@ func (p *PlanOpPQLGroupBy) Schema() types.Schema {
 			continue
 		}
 		s := &types.PlannerColumn{
-			Name:  ref.columnName,
-			Table: ref.tableName,
-			Type:  expr.Type(),
+			ColumnName:   ref.columnName,
+			RelationName: ref.tableName,
+			Type:         expr.Type(),
 		}
 		result[idx] = s
 	}
 	s := &types.PlannerColumn{
-		Name:  "",
-		Table: "",
-		Type:  p.aggregate.AggExpression().Type(),
+		ColumnName:   "",
+		RelationName: "",
+		Type:         p.aggregate.AggExpression().Type(),
 	}
 	result[len(p.groupByExprs)] = s
 

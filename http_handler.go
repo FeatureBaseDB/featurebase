@@ -1441,7 +1441,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, col := range columns {
 		schema.Fields[i] = &SQLField{
-			Name: col.Name,
+			Name: col.ColumnName,
 			Type: col.Type.TypeName(),
 		}
 	}

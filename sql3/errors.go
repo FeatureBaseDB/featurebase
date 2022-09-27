@@ -11,6 +11,8 @@ import (
 const (
 	ErrInternal errors.Code = "ErrInternal"
 
+	ErrCacheKeyNotFound errors.Code = "ErrCacheKeyNotFound"
+
 	ErrDuplicateColumn errors.Code = "ErrDuplicateColumn"
 	ErrUnknownType     errors.Code = "ErrUnknownType"
 
@@ -46,6 +48,8 @@ const (
 	ErrSetLiteralMustContainIntOrString errors.Code = "ErrSetLiteralMustContainIntOrString"
 
 	ErrTypeAssignmentIncompatible errors.Code = "ErrTypeAssignmentIncompatible"
+
+	ErrInvalidUngroupedColumnReference errors.Code = "ErrInvalidUngroupedColumnReference"
 
 	ErrInvalidTimeUnit    errors.Code = "ErrInvalidTimeUnit"
 	ErrInvalidTimeEpoch   errors.Code = "ErrInvalidTimeEpoch"
@@ -124,10 +128,24 @@ func NewErrInternalf(format string, a ...interface{}) error {
 	)
 }
 
+func NewErrCacheKeyNotFound(key uint64) error {
+	return errors.New(
+		ErrCacheKeyNotFound,
+		fmt.Sprintf("key '%d' not found", key),
+	)
+}
+
 func NewErrTypeAssignmentIncompatible(line, col int, type1, type2 string) error {
 	return errors.New(
 		ErrTypeAssignmentIncompatible,
 		fmt.Sprintf("[%d:%d] an expression of type '%s' cannot be assigned to type '%s'", line, col, type1, type2),
+	)
+}
+
+func NewErrInvalidUngroupedColumnReference(line, col int, column string) error {
+	return errors.New(
+		ErrInvalidUngroupedColumnReference,
+		fmt.Sprintf("[%d:%d] column '%s' invalid in select list because it is not aggregated or grouped", line, col, column),
 	)
 }
 

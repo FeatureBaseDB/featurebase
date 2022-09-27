@@ -38,7 +38,7 @@ func (p *PlanOpPQLAggregate) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	ps := make([]string, 0)
 	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = ps
 	result["tableName"] = p.tableName
@@ -65,9 +65,9 @@ func (p *PlanOpPQLAggregate) Warnings() []string {
 func (p *PlanOpPQLAggregate) Schema() types.Schema {
 	result := make(types.Schema, 1)
 	s := &types.PlannerColumn{
-		Name:  "",
-		Table: "",
-		Type:  p.aggregate.AggExpression().Type(),
+		ColumnName:   "",
+		RelationName: "",
+		Type:         p.aggregate.AggExpression().Type(),
 	}
 	result[0] = s
 	return result
