@@ -149,8 +149,7 @@ func TestSinkErrorQueueFromSuccess(t *testing.T) {
 		StreamName:     streamName,
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, validUuid, queue.sinkId)
 	assert.Equal(t, "my-queue-01234", queue.name)
@@ -166,8 +165,7 @@ func TestSinkErrorQueueFromFailMissingQueueName(t *testing.T) {
 	streamName := fmt.Sprintf("sink-%s", validUuid) // Structure mimics how cloud ECS instance names its Kinesis stream.
 	source := &Source{StreamName: streamName}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, "", queue.sinkId)
 	assert.Equal(t, "", queue.name)
@@ -194,8 +192,7 @@ func TestSinkErrorQueueFromFailMalformedSinkId(t *testing.T) {
 		StreamName:     streamName,
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, malformedUuid, queue.sinkId) // Keeps invalid sink ID around for downstream logging purposes.
 	assert.Equal(t, "valid-queue-90123", queue.name)
