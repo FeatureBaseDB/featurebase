@@ -57,9 +57,9 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.Int64Var(&srv.Config.Etcd.HeartbeatTTL, "etcd.heartbeat-ttl", srv.Config.Etcd.HeartbeatTTL, "Timeout used to determine cluster status")
 
 	flags.StringVar(&srv.Config.Etcd.Cluster, "etcd.static-cluster", srv.Config.Etcd.Cluster, "EXPERIMENTAL static featurebase cluster name1=apurl1,name2=apurl2")
-	flags.MarkHidden("etcd.static-cluster")
+	_ = flags.MarkHidden("etcd.static-cluster")
 	flags.StringVar(&srv.Config.Etcd.EtcdHosts, "etcd.etcd-hosts", srv.Config.Etcd.EtcdHosts, "EXPERIMENTAL etcd server host:port comma separated list")
-	flags.MarkHidden("etcd.etcd-hosts") // TODO (twg) expose when ready for public consumption
+	_ = flags.MarkHidden("etcd.etcd-hosts") // TODO (twg) expose when ready for public consumption
 
 	// External postgres database for ExternalLookup
 	flags.StringVar(&srv.Config.LookupDBDSN, "lookup-db-dsn", "", "external (postgres) database DSN to use for ExternalLookup calls")

@@ -25,6 +25,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+type AuthContextKey string
+
 const (
 	// AccessCookieName is the name of the cookie that holds the access token.
 	AccessCookieName = "molecula-chip"
@@ -36,10 +38,10 @@ const (
 	RefreshHeaderName = "X-Molecula-Refresh-Token"
 
 	// ContextValueAccessToken is the key used to set AccessTokens in a ctx.
-	ContextValueAccessToken = "Access"
+	ContextValueAccessToken = AuthContextKey("Access")
 
 	// ContextValueRefreshToken is the key used to set RefreshTokens in a ctx.
-	ContextValueRefreshToken = "Refresh"
+	ContextValueRefreshToken = AuthContextKey("Refresh")
 )
 
 // cachedGroups is used to hold groups and when they were last cached
