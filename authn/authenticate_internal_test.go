@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/golang-jwt/jwt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -67,7 +67,7 @@ func TestSetGRPCMetadata(t *testing.T) {
 		"otherCookies": {"cookie": []string{a.accessCookieName + "=something", "blah=blah"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			ogCookies, _ := md["cookie"]
+			ogCookies := md["cookie"]
 			ctx := grpc.NewContextWithServerTransportStream(
 				metadata.NewIncomingContext(context.TODO(),
 					md,
@@ -280,8 +280,7 @@ func TestAuthenticate(t *testing.T) {
 				a.groupsCache[token] = cachedGroups{time.Now(), test.groups}
 			}
 			if test.refresh {
-				var srv *httptest.Server
-				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if err := r.ParseForm(); err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}

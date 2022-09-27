@@ -171,7 +171,7 @@ func (a *Auth) refreshToken(access, refresh string) (string, string, error) {
 // it is caller's responsibility to inform the user that the access token has been refreshed
 func (a *Auth) Authenticate(access, refresh string) (*UserInfo, error) {
 	// clean up the cache every 30 minutes or so
-	if time.Now().Sub(a.lastCacheClean) >= 30*time.Minute {
+	if time.Since(a.lastCacheClean) >= 30*time.Minute {
 		a.cleanCache()
 	}
 
@@ -237,7 +237,7 @@ func (a *Auth) Authenticate(access, refresh string) (*UserInfo, error) {
 func (a *Auth) cleanCache() {
 	for access, tkn := range a.groupsCache {
 		// if it's been more than 24 hours since the groups were cached
-		if time.Now().Sub(tkn.cacheTime) >= 24*time.Hour {
+		if time.Since(tkn.cacheTime) >= 24*time.Hour {
 			// remove it from our cache
 			delete(a.groupsCache, access)
 		}
@@ -300,7 +300,7 @@ func (a *Auth) getGroups(token string) ([]Group, error) {
 	var groups Groups
 
 	gc, ok := a.groupsCache[token]
-	if ok && (time.Now().Sub(gc.cacheTime) < a.cacheTTL) && len(gc.groups) > 0 {
+	if ok && (time.Since(gc.cacheTime) < a.cacheTTL) && len(gc.groups) > 0 {
 		return gc.groups, nil
 	}
 
