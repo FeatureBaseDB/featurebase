@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -114,7 +114,7 @@ func unmarshalRespErr(resp *http.Response, err error, into interface{}) error {
 		return errors.Wrap(err, "making http request")
 	}
 	if resp.StatusCode != 200 {
-		bod, err := ioutil.ReadAll(resp.Body)
+		bod, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Wrap(err, "reading body")
 		}

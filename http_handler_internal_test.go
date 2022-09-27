@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -187,7 +187,7 @@ func TestFieldOptionValidation(t *testing.T) {
 func readResponse(w *httptest.ResponseRecorder) ([]byte, error) {
 	res := w.Result()
 	defer res.Body.Close()
-	return ioutil.ReadAll(res.Body)
+	return io.ReadAll(res.Body)
 }
 
 // common variables used for testing auth
@@ -704,7 +704,7 @@ func TestChkAuthN(t *testing.T) {
 			r.Header.Add("Authorization", test.token)
 			test.handler(w, r)
 			resp := w.Result()
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			defer resp.Body.Close()
 			if err != nil {
 				t.Fatal(err)

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -102,7 +103,7 @@ func readIndexTranslateData(ctx context.Context, client *pilosa.InternalClient, 
 	if err != nil {
 		return err
 	}
-	buf, err := ioutil.ReadAll(r)
+	buf, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

@@ -3,7 +3,7 @@ package idktest
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -62,7 +62,7 @@ func DoExtractQuery(pql, index string) (ExtractResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	s, err := ioutil.ReadAll(resp.Body)
+	s, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return eResp, errors.Errorf("reading response: %v", err)
 	}

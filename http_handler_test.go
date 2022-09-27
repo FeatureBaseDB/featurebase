@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -905,7 +906,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				}
 
 				if ipTest.StatusCode == 200 {
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					if err != nil {
 						t.Fatalf("reading resp body :%v", err)
 					}

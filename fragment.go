@@ -2744,9 +2744,9 @@ func (f *fragment) fillFragmentFromArchive(tx Tx, r io.Reader) error {
 
 	// this is reading from inside a tarball, so definitely no need
 	// to close it here.
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
-		return errors.Wrap(err, "fillFragmentFromArchive ioutil.ReadAll(r)")
+		return errors.Wrap(err, "fillFragmentFromArchive io.ReadAll(r)")
 	}
 	if len(data) == 0 {
 		return nil
@@ -2771,7 +2771,7 @@ func (f *fragment) fillFragmentFromArchive(tx Tx, r io.Reader) error {
 
 func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	// Slurp data from reader and write to disk.
-	buf, err := ioutil.ReadAll(r)
+	buf, err := io.ReadAll(r)
 	if err != nil {
 		return errors.Wrap(err, "reading")
 	} else if err := ioutil.WriteFile(f.cachePath(), buf, 0600); err != nil {

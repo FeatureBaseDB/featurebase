@@ -7,7 +7,7 @@ import (
 	"expvar"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -72,7 +72,7 @@ func run(ctx context.Context, args []string) (err error) {
 	// Clear time prefix on log.
 	log.SetFlags(0)
 	if !*verbose {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	}
 
 	// Setup PRNG to have consistent values for the same set of data.

@@ -15,9 +15,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jaffee/commandeer/pflag"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/jaffee/commandeer/pflag"
 	"github.com/pkg/errors"
 )
 
@@ -384,7 +384,7 @@ func (m *Main) openURLReader(t time.Time) (io.ReadCloser, error) {
 	}
 
 	// If cache enabled, write to file first and then return.
-	if buf, err := ioutil.ReadAll(resp.Body); err != nil {
+	if buf, err := io.ReadAll(resp.Body); err != nil {
 		return nil, err
 	} else if err := ioutil.WriteFile(cachePath+".tmp", buf, 0666); err != nil {
 		return nil, err

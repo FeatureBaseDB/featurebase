@@ -6,7 +6,6 @@ package authz
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"github.com/featurebasedb/featurebase/v3/authn"
 
@@ -43,7 +42,7 @@ func (p Permission) Satisfies(b Permission) bool {
 }
 
 func (p *GroupPermissions) ReadPermissionsFile(permsFile io.Reader) (err error) {
-	permsData, err := ioutil.ReadAll(permsFile)
+	permsData, err := io.ReadAll(permsFile)
 
 	if err != nil {
 		return fmt.Errorf("reading permissions failed with error: %s", err)
