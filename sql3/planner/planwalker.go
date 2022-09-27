@@ -316,7 +316,7 @@ func TransformSinglePlanOpExprsInPlanOpContext(op types.PlanOperator, f ExprWith
 	}
 
 	if len(newExprs) > 0 {
-		op, err = ne.NewWithExpressions(newExprs...)
+		op, err = ne.WithUpdatedExpressions(newExprs...)
 		if err != nil {
 			return nil, true, err
 		}
@@ -353,7 +353,7 @@ func TransformSinglePlanOpExpressions(op types.PlanOperator, f ExprFunc) (types.
 		}
 	}
 	if len(newExprs) > 0 {
-		n, err := e.NewWithExpressions(newExprs...)
+		n, err := e.WithUpdatedExpressions(newExprs...)
 		if err != nil {
 			return nil, true, err
 		}

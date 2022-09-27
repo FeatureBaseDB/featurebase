@@ -34,7 +34,7 @@ func (p *PlanOpPQLMultiGroupBy) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 
@@ -71,18 +71,18 @@ func (p *PlanOpPQLMultiGroupBy) Schema() types.Schema {
 			continue
 		}
 		s := &types.PlannerColumn{
-			Name:  ref.columnName,
-			Table: ref.tableName,
-			Type:  expr.Type(),
+			ColumnName:   ref.columnName,
+			RelationName: ref.tableName,
+			Type:         expr.Type(),
 		}
 		result[idx] = s
 	}
 	offset := len(p.groupByExprs)
 	for idx, aggOp := range p.operators {
 		s := &types.PlannerColumn{
-			Name:  "",
-			Table: "",
-			Type:  aggOp.aggregate.AggExpression().Type(),
+			ColumnName:   "",
+			RelationName: "",
+			Type:         aggOp.aggregate.AggExpression().Type(),
 		}
 		result[idx+offset] = s
 	}
@@ -125,7 +125,7 @@ type pqlMultiGroupByRowIter struct {
 	iterators      []types.RowIterator
 	groupCache     KeyedRowCache
 
-	groupKeys []string
+	groupKeys []uint64
 }
 
 var _ types.RowIterator = (*pqlMultiGroupByRowIter)(nil)
@@ -168,7 +168,7 @@ func (i *pqlMultiGroupByRowIter) computeMultiGroupBy(ctx context.Context) error 
 
 		for {
 			//build a key for the group by columns for this row
-			key, err := groupingKey(ctx, i.groupByColumns, irow)
+			key, _, err := groupingKeyHash(ctx, i.groupByColumns, irow)
 			if err != nil {
 				return err
 			}
@@ -215,16 +215,4 @@ func (i *pqlMultiGroupByRowIter) computeMultiGroupBy(ctx context.Context) error 
 	}
 
 	return nil
-}
-
-func groupingKey(ctx context.Context, exprs []types.PlanExpression, row types.Row) (string, error) {
-	key := ""
-	for _, expr := range exprs {
-		v, err := expr.Evaluate(row)
-		if err != nil {
-			return "", err
-		}
-		key += fmt.Sprintf(":%v", v)
-	}
-	return key, nil
 }

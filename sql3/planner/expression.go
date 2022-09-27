@@ -1498,7 +1498,7 @@ func (n *qualifiedRefPlanExpression) Evaluate(currentRow []interface{}) (interfa
 		return result, nil
 
 	case *parser.DataTypeID:
-		//TODO(pok) why are we trying two underlying types here?
+		//this could be an int64 or a uint64 internally
 		iv, iok := currentRow[n.columnIndex].(int64)
 		if iok {
 			return iv, nil

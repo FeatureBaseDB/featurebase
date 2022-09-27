@@ -338,6 +338,11 @@ var tableTests []tableTest = []tableTest{
 	//create table tests
 	createTable,
 
+	//joins
+	joinTestsUsers,
+	joinTestsOrders,
+	joinTests,
+
 	//time quantums
 	// Skip for now - timeQuantumInsertTest,
 }

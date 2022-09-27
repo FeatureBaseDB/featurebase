@@ -41,15 +41,16 @@ type ContainsExpressions interface {
 	// returns the list of expressions contained by the plan operator
 	Expressions() []PlanExpression
 
-	// NewWithExpressions returns a new operator with expressions replaced
-	NewWithExpressions(exprs ...PlanExpression) (PlanOperator, error)
+	// WithUpdatedExpressions returns a the operator with expressions updated
+	WithUpdatedExpressions(exprs ...PlanExpression) (PlanOperator, error)
 }
 
 // PlannerColumn is the definition of a column returned as a set from each operator
 type PlannerColumn struct {
-	Name  string
-	Table string
-	Type  parser.ExprDataType
+	ColumnName   string
+	RelationName string
+	AliasName    string
+	Type         parser.ExprDataType
 }
 
 // Relation is an interface to something that can be treated as a relation

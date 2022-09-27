@@ -63,7 +63,7 @@ func (p *PlanOpProjection) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 
@@ -110,9 +110,9 @@ func ExpressionToColumn(e types.PlanExpression) *types.PlannerColumn {
 	}
 
 	return &types.PlannerColumn{
-		Name:  name,
-		Type:  e.Type(),
-		Table: table,
+		ColumnName:   name,
+		Type:         e.Type(),
+		RelationName: table,
 	}
 }
 

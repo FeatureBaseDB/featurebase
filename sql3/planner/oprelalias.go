@@ -26,7 +26,11 @@ func NewPlanOpRelAlias(alias string, child types.PlanOperator) *PlanOpRelAlias {
 }
 
 func (p *PlanOpRelAlias) Schema() types.Schema {
-	return p.ChildOp.Schema()
+	schema := p.ChildOp.Schema()
+	for _, s := range schema {
+		s.RelationName = p.alias
+	}
+	return schema
 }
 
 func (p *PlanOpRelAlias) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
@@ -51,7 +55,7 @@ func (p *PlanOpRelAlias) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.Name, e.Table, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = sc
 
