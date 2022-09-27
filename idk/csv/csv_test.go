@@ -257,7 +257,7 @@ func tim(t *testing.T, tstr string) time.Time {
 }
 
 func writeTempFile(t *testing.T, data string) string {
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("getting temp file: %v", err)
 	}
