@@ -198,7 +198,7 @@ func TestIngestAPIBatch(t *testing.T) {
 			},
 		},
 	})
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	schema, err := cli.Schema()
 	if err != nil {

@@ -595,7 +595,7 @@ func TestCursor_BitmapBitN(t *testing.T) {
 		t.Fatalf("expected count %d, got %d", c2, c1)
 	}
 	err = tx.Commit()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestCursor_RLEConversion(t *testing.T) {

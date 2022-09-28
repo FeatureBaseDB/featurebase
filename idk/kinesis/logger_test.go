@@ -102,7 +102,7 @@ func TestNewSinkErrorQueueSuccess(t *testing.T) {
 
 	queue, err := NewSinkErrorQueue(mockSQS, "dummy-123", "a-b-c")
 
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "a-b-c", queue.sinkId)
 	assert.Equal(t, "dummy-123", queue.name)
 	assert.Equal(t, "https://unit-test.queue.dummy-123.url", queue.url)
@@ -271,7 +271,7 @@ func TestSinkErrorQueuePushWhenQueueNotAvailableDoesNotThrowErrorAndNoOps(t *tes
 
 	// Logger is nil.
 	err := emptySeq.Push(RecoverableErrorType, "werqw zxcw7228323974", nil)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// Logger is not nil; check that a warning is issued using the Logger instance.
 	logger := NewMapStashLogger()
@@ -308,7 +308,7 @@ func TestSinkErrorQueuePushSuccess(t *testing.T) {
 
 	errMsg := "079 cxmn, 198sfakjl"
 	err := seq.Push(PanicErrorType, errMsg, nil)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// Verify queue URL.
 	assert.Equal(t, seq.url, actualQueueUrl)

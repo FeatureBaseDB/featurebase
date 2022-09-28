@@ -1752,10 +1752,10 @@ func mutexNilClearID(t *testing.T, c *test.Cluster, client *Client) {
 			Clears: map[int]interface{}{0: nil},
 		},
 	)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	err = b.Import()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	items = items[1:]
 	// confirm record removed
 	resp, err = client.Query(idx.RawQuery("Row(mut=0)"))
@@ -1822,7 +1822,7 @@ func mutexNilClearKey(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("importing: %v", err)
 	}
 	resp, err := client.Query(idx.RawQuery(`Row(mut="a")`))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	errorIfNotEqual(t, resp.Result().Row().Keys, []string{"0", "2"})
 
 	r.ID = "2"

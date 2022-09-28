@@ -1896,7 +1896,7 @@ func writeTestFile(t *testing.T, filename, content string) string {
 		t.Fatal(err)
 	}
 	_, err = io.WriteString(f, content)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -2000,14 +2000,14 @@ func Test_ChainStreamInterceptor(t *testing.T) {
 		md := fromIncomingContext(ss.Context())
 		md.Append("ingredient", "with salt")
 		err := ss.SetHeader(md)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		return handler(srv, ss)
 	}
 	pepper := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		md := fromIncomingContext(ss.Context())
 		md.Append("ingredient", "and pepper")
 		err := ss.SetHeader(md)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		return handler(srv, ss)
 	}
 
@@ -2040,7 +2040,7 @@ func Test_ChainStreamInterceptor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			chained := server.ChainStreamInterceptors(tt.interceptors...)
 			err := chained(srv, ss, info, handler)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			if !reflect.DeepEqual(result, tt.want) {
 				t.Errorf("ChainStreamInterceptor() = %v, want %v", result, tt.want)
 			}

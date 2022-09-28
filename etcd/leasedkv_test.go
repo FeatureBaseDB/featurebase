@@ -43,18 +43,18 @@ func TestClusterKv(t *testing.T) {
 	}
 	ctx := context.TODO()
 	err = c.nodes[0].SetState(ctx, disco.NodeStateStarting)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	err = c.nodes[1].SetState(ctx, disco.NodeStateStarting)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	c.MustAwaitClusterState(disco.ClusterStateStarting)
 
 	err = c.nodes[0].SetState(ctx, disco.NodeStateStarted)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	err = c.nodes[1].SetState(ctx, disco.NodeStateStarted)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// Two of three nodes are up, one is down, we have 2 replicas, so
 	// we should be able to handle reads but not writes, so we're in

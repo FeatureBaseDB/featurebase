@@ -197,7 +197,7 @@ func TestUpdateFieldTTL(t *testing.T) {
 				// unmarshal error message to check against expErr
 				var respBody map[string]interface{}
 				err := json.NewDecoder(resp.Body).Decode(&respBody)
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
 
 				if !strings.Contains(errMsg, test.expErr) {
@@ -303,7 +303,7 @@ func TestUpdateFieldNoStandardView(t *testing.T) {
 				// unmarshal error message to check against expErr
 				var respBody map[string]interface{}
 				err := json.NewDecoder(resp.Body).Decode(&respBody)
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
 
 				if !strings.Contains(errMsg, test.expErr) {

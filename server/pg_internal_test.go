@@ -37,7 +37,7 @@ func TestPgWriteDistinctTimestamp(t *testing.T) {
 	w := TestQueryResultWriter{}
 	expected := pilosa.DistinctTimestamp{Name: "test", Values: []string{"date1", "date2", "date3"}}
 	err := pgWriteDistinctTimestamp(&w, expected)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	if w.Header[0].Name != expected.Name {
 		t.Fatalf("Header Name is wrong. got %v, want %v", w.Header[0], expected.Name)

@@ -158,19 +158,19 @@ func TestStreamReaderStartFetchCommitWithoutOffsets(t *testing.T) {
 	}
 
 	err := reader.Start()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	var records []ShardRecord
 	for i := 0; i < testShardCount; i++ {
 		rec, err := reader.FetchMessage(context.Background())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, rec.SequenceNumber, aws.String("1"))
 		records = append(records, rec)
 	}
 	assert.Empty(t, reader.offsets.Shards)
 
 	err = reader.CommitMessages(context.Background(), records...)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	assert.Len(t, reader.offsets.Shards, 2)
 	for i := 0; i < testShardCount; i++ {
@@ -253,12 +253,12 @@ func TestStreamReaderStartFetchCommitFromExistingOffsets(t *testing.T) {
 	}
 
 	err := reader.Start()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	var records []ShardRecord
 	for i := 0; i < testShardCount; i++ {
 		rec, err := reader.FetchMessage(context.Background())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, rec.SequenceNumber, aws.String("1"))
 		records = append(records, rec)
 	}
@@ -270,7 +270,7 @@ func TestStreamReaderStartFetchCommitFromExistingOffsets(t *testing.T) {
 	}
 
 	err = reader.CommitMessages(context.Background(), records...)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	assert.Len(t, reader.offsets.Shards, 2)
 	for i := 0; i < testShardCount; i++ {
@@ -389,17 +389,17 @@ func TestStreamOrderlyReadsAfterResharding(t *testing.T) {
 	).Return(getRecordsOutput, nil).Once()
 
 	err := reader.Start()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	for i := 1; i <= recordsBeforeClose; i++ {
 		rec, err := reader.FetchMessage(context.Background())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, strconv.Itoa(i), *rec.SequenceNumber)
 		assert.Equal(t, rec.ShardID, shardName(0))
 	}
 
 	rec, err := reader.FetchMessage(context.Background())
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "1", *rec.SequenceNumber)
 	assert.Equal(t, rec.ShardID, shardName(1))
 

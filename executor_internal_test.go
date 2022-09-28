@@ -593,7 +593,7 @@ func TestExecutor_DeleteRows(t *testing.T) {
 	}
 
 	changed, err = DeleteRows(ctx, row, idx, shard)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	if changed {
 		t.Fatalf("expected delete to not clear bit but it did")
 	}
