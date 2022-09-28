@@ -25,6 +25,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// AuthContextKey is a unique type to prevent collisions when using context.WithValue()
 type AuthContextKey string
 
 const (
