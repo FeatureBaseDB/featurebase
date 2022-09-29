@@ -12,7 +12,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -27,7 +26,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/ingest"
 	"github.com/featurebasedb/featurebase/v3/rbf"
 
-	//"github.com/featurebasedb/featurebase/v3/pg"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/stats"
@@ -803,7 +801,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) (_ []byte
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	reqBytes, err := ioutil.ReadAll(body)
+	reqBytes, err := io.ReadAll(body)
 	if err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
 	}
@@ -1016,7 +1014,7 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	}
 
 	// Read entire body.
-	body, err := ioutil.ReadAll(reqBody)
+	body, err := io.ReadAll(reqBody)
 	if err != nil {
 		return errors.Wrap(err, "reading body")
 	}
@@ -2398,7 +2396,7 @@ func (api *API) TranslateIndexIDs(ctx context.Context, indexName string, ids []u
 // ErrTranslatingKeyNotFound error will be swallowed here, so the empty response will be returned.
 func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err error) {
 	var req TranslateKeysRequest
-	buf, err := ioutil.ReadAll(r)
+	buf, err := io.ReadAll(r)
 	if err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read translate keys request error"))
 	} else if err := api.Serializer.Unmarshal(buf, &req); err != nil {
@@ -2435,7 +2433,7 @@ func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err e
 // TranslateIDs handles a TranslateIDRequest.
 func (api *API) TranslateIDs(ctx context.Context, r io.Reader) (_ []byte, err error) {
 	var req TranslateIDsRequest
-	if buf, err := ioutil.ReadAll(r); err != nil {
+	if buf, err := io.ReadAll(r); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read translate ids request error"))
 	} else if err := api.Serializer.Unmarshal(buf, &req); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal translate ids request error"))
@@ -2884,14 +2882,15 @@ func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, 
 // MutexCheck checks a named field for mutex violations, returning a
 // map of record IDs to values for records that have multiple values in the
 // field. The return will be one of:
-//     details true:
-//     map[uint64][]uint64 // unkeyed index, unkeyed field
-//     map[uint64][]string // unkeyed index, keyed field
-//     map[string][]uint64 // keyed index, unkeyed field
-//     map[string][]string // keyed index, keyed field
-//     details false:
-//     []uint64            // unkeyed index
-//     []string            // keyed index
+//
+//	details true:
+//	map[uint64][]uint64 // unkeyed index, unkeyed field
+//	map[uint64][]string // unkeyed index, keyed field
+//	map[string][]uint64 // keyed index, unkeyed field
+//	map[string][]string // keyed index, keyed field
+//	details false:
+//	[]uint64            // unkeyed index
+//	[]string            // keyed index
 func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (result interface{}, err error) {
 	if err = api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")

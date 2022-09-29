@@ -1,7 +1,6 @@
 package datagen
 
 import (
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"strings"
@@ -148,7 +147,7 @@ func TestGetIDKFields(t *testing.T) {
 }
 
 func TestNewCustomUnmarshalling(t *testing.T) {
-	tmp, err := ioutil.TempFile("", "")
+	tmp, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("creating temp file: %v", err)
 	}

@@ -102,7 +102,7 @@ func TestNewSinkErrorQueueSuccess(t *testing.T) {
 
 	queue, err := NewSinkErrorQueue(mockSQS, "dummy-123", "a-b-c")
 
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "a-b-c", queue.sinkId)
 	assert.Equal(t, "dummy-123", queue.name)
 	assert.Equal(t, "https://unit-test.queue.dummy-123.url", queue.url)
@@ -149,8 +149,7 @@ func TestSinkErrorQueueFromSuccess(t *testing.T) {
 		StreamName:     streamName,
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, validUuid, queue.sinkId)
 	assert.Equal(t, "my-queue-01234", queue.name)
@@ -166,8 +165,7 @@ func TestSinkErrorQueueFromFailMissingQueueName(t *testing.T) {
 	streamName := fmt.Sprintf("sink-%s", validUuid) // Structure mimics how cloud ECS instance names its Kinesis stream.
 	source := &Source{StreamName: streamName}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, "", queue.sinkId)
 	assert.Equal(t, "", queue.name)
@@ -194,8 +192,7 @@ func TestSinkErrorQueueFromFailMalformedSinkId(t *testing.T) {
 		StreamName:     streamName,
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, malformedUuid, queue.sinkId) // Keeps invalid sink ID around for downstream logging purposes.
 	assert.Equal(t, "valid-queue-90123", queue.name)
@@ -220,8 +217,7 @@ func TestSinkErrorQueueFromFailEmptyStreamNameDoesNotCausePanic(t *testing.T) {
 		StreamName:     "",
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, "", queue.sinkId) // Keeps invalid sink ID around for downstream logging purposes.
 	assert.Equal(t, "valid-queue-88888888888", queue.name)
@@ -249,8 +245,7 @@ func TestSinkErrorQueueFromFailSQSGetQueueUrlErrored(t *testing.T) {
 		StreamName:     streamName,
 	}
 
-	var queue *SinkErrorQueue
-	queue = SinkErrorQueueFrom(mockSQS, source)
+	queue := SinkErrorQueueFrom(mockSQS, source)
 
 	assert.Equal(t, validUuid, queue.sinkId) // Keeps valid sink ID around for downstream logging purposes.
 	assert.Equal(t, "queue-that-we-stole-962463", queue.name)
@@ -276,7 +271,7 @@ func TestSinkErrorQueuePushWhenQueueNotAvailableDoesNotThrowErrorAndNoOps(t *tes
 
 	// Logger is nil.
 	err := emptySeq.Push(RecoverableErrorType, "werqw zxcw7228323974", nil)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// Logger is not nil; check that a warning is issued using the Logger instance.
 	logger := NewMapStashLogger()
@@ -313,7 +308,7 @@ func TestSinkErrorQueuePushSuccess(t *testing.T) {
 
 	errMsg := "079 cxmn, 198sfakjl"
 	err := seq.Push(PanicErrorType, errMsg, nil)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// Verify queue URL.
 	assert.Equal(t, seq.url, actualQueueUrl)

@@ -25,6 +25,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// AuthContextKey is a unique type to prevent collisions when using context.WithValue()
+type AuthContextKey string
+
 const (
 	// AccessCookieName is the name of the cookie that holds the access token.
 	AccessCookieName = "molecula-chip"
@@ -36,10 +39,10 @@ const (
 	RefreshHeaderName = "X-Molecula-Refresh-Token"
 
 	// ContextValueAccessToken is the key used to set AccessTokens in a ctx.
-	ContextValueAccessToken = "Access"
+	ContextValueAccessToken = AuthContextKey("Access")
 
 	// ContextValueRefreshToken is the key used to set RefreshTokens in a ctx.
-	ContextValueRefreshToken = "Refresh"
+	ContextValueRefreshToken = AuthContextKey("Refresh")
 )
 
 // cachedGroups is used to hold groups and when they were last cached
@@ -171,7 +174,7 @@ func (a *Auth) refreshToken(access, refresh string) (string, string, error) {
 // it is caller's responsibility to inform the user that the access token has been refreshed
 func (a *Auth) Authenticate(access, refresh string) (*UserInfo, error) {
 	// clean up the cache every 30 minutes or so
-	if time.Now().Sub(a.lastCacheClean) >= 30*time.Minute {
+	if time.Since(a.lastCacheClean) >= 30*time.Minute {
 		a.cleanCache()
 	}
 
@@ -237,7 +240,7 @@ func (a *Auth) Authenticate(access, refresh string) (*UserInfo, error) {
 func (a *Auth) cleanCache() {
 	for access, tkn := range a.groupsCache {
 		// if it's been more than 24 hours since the groups were cached
-		if time.Now().Sub(tkn.cacheTime) >= 24*time.Hour {
+		if time.Since(tkn.cacheTime) >= 24*time.Hour {
 			// remove it from our cache
 			delete(a.groupsCache, access)
 		}
@@ -300,7 +303,7 @@ func (a *Auth) getGroups(token string) ([]Group, error) {
 	var groups Groups
 
 	gc, ok := a.groupsCache[token]
-	if ok && (time.Now().Sub(gc.cacheTime) < a.cacheTTL) && len(gc.groups) > 0 {
+	if ok && (time.Since(gc.cacheTime) < a.cacheTTL) && len(gc.groups) > 0 {
 		return gc.groups, nil
 	}
 

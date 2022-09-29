@@ -218,7 +218,7 @@ func TestParser_Parse(t *testing.T) {
 		) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
 		}
-		q, err = pql.ParseString(`Row(x>'2024-04-24T24:24:24Z')`)
+		_, err = pql.ParseString(`Row(x>'2024-04-24T24:24:24Z')`)
 		if err == nil {
 			t.Fatal("no error parsing invalid date")
 		} else if !strings.Contains(err.Error(), "not a valid timestamp") {

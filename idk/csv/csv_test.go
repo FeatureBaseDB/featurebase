@@ -3,7 +3,6 @@ package csv
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -257,7 +256,7 @@ func tim(t *testing.T, tstr string) time.Time {
 }
 
 func writeTempFile(t *testing.T, data string) string {
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("getting temp file: %v", err)
 	}
@@ -321,7 +320,7 @@ func TestStreamFileNames(t *testing.T) {
 }
 
 func testDirTree(tree string) (string, error) {
-	tmp, err := ioutil.TempDir("", "")
+	tmp, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", err
 	}

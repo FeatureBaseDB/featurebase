@@ -23,7 +23,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/felixge/fgprof"
 	pilosacore "github.com/featurebasedb/featurebase/v3"
 	pilosagrpc "github.com/featurebasedb/featurebase/v3/api/client"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
@@ -32,6 +31,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/prometheus"
 	proto "github.com/featurebasedb/featurebase/v3/proto"
 	"github.com/featurebasedb/featurebase/v3/stats"
+	"github.com/felixge/fgprof"
 	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -1500,8 +1500,6 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 					case DeleteSentinel:
 						if hasMutex { //need to clear the mutex
 							rec.Clears[valIdx] = nil //? maybe
-						} else { //TODO(twg) set fields not supported
-
 						}
 					default:
 						rec.Values[valIdx], err = idkField.PilosafyVal(rawRec[i])

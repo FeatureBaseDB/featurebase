@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -15,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/idk/idktest"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
 )
 
@@ -436,7 +435,7 @@ func TestIngesterServesPrometheusEndpoint(t *testing.T) {
 	if err != nil {
 		t.Errorf("request error: %v", err)
 	}
-	contents, err := ioutil.ReadAll(response.Body)
+	contents, err := io.ReadAll(response.Body)
 	defer response.Body.Close()
 	if err != nil {
 		t.Errorf("read error: %v", err)

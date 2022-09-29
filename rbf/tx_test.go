@@ -16,6 +16,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/rbf"
 	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTx_CommitRollback(t *testing.T) {
@@ -1150,37 +1151,37 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 		for pgno, info := range infos {
 			switch info := info.(type) {
 			case *rbf.MetaPageInfo:
-				pf("%-8d ", pgno)
-				pf("%-10s ", "meta")
-				pf("pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
+				_, _ = pf("%-8d ", pgno)
+				_, _ = pf("%-10s ", "meta")
+				_, _ = pf("pageN=%d,walid=%d,rootrec=%d,freelist=%d\n", info.PageN, info.WALID, info.RootRecordPageNo, info.FreelistPageNo)
 
 			case *rbf.RootRecordPageInfo:
-				pf("%-8d ", pgno)
-				pf("%-10s ", "rootrec")
-				pf("next=%d\n", info.Next)
+				_, _ = pf("%-8d ", pgno)
+				_, _ = pf("%-10s ", "rootrec")
+				_, _ = pf("next=%d\n", info.Next)
 
 			case *rbf.LeafPageInfo:
-				pf("%-8d ", pgno)
-				pf("%-10s ", "leaf")
-				pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+				_, _ = pf("%-8d ", pgno)
+				_, _ = pf("%-10s ", "leaf")
+				_, _ = pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			case *rbf.BranchPageInfo:
-				pf("%-8d ", pgno)
-				pf("%-10s ", "branch")
-				pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
+				_, _ = pf("%-8d ", pgno)
+				_, _ = pf("%-10s ", "branch")
+				_, _ = pf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			case *rbf.BitmapPageInfo:
-				pf("%-8d ", pgno)
-				pf("%-10s ", "bitmap")
-				pf("-\n")
+				_, _ = pf("%-8d ", pgno)
+				_, _ = pf("%-10s ", "bitmap")
+				_, _ = pf("-\n")
 
 			case *rbf.FreePageInfo:
-				pf("%-8d ", pgno)
-				pf("%-10s ", "free")
-				pf("-\n")
+				_, _ = pf("%-8d ", pgno)
+				_, _ = pf("%-10s ", "free")
+				_, _ = pf("-\n")
 
 			default:
-				t.Fatal(fmt.Sprintf("unexpected page info type %T", info))
+				t.Fatalf("unexpected page info type %T", info)
 			}
 		}
 
@@ -1212,7 +1213,7 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 	ifError(db.Check())
 
 	tx := MustBegin(t, db, true)
-	tx.DeleteBitmapsWithPrefix(prefix)
+	assert.Nil(t, tx.DeleteBitmapsWithPrefix(prefix))
 	ifError(tx.Commit())
 	ifError(db.Check())
 	checkInfos(pBuf)

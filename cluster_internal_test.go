@@ -14,46 +14,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/disco"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
+	_ "github.com/featurebasedb/featurebase/v3/vprint"
 )
-
-// newHolderWithTempPath returns a new instance of Holder.
-func newHolderWithTempPath(tb testing.TB, backend string) *Holder {
-	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-holder-")
-	if err != nil {
-		panic(err)
-	}
-	cfg := mustHolderConfig()
-	cfg.StorageConfig.Backend = backend
-	h := NewHolder(path, cfg)
-	PanicOn(h.Open())
-	testhook.Cleanup(tb, func() {
-		h.Close()
-	})
-	return h
-}
-
-// newIndexWithTempPath returns a new instance of Index.
-func newIndexWithTempPath(tb testing.TB, name string) *Index {
-	path, err := testhook.TempDirInDir(tb, *TempDir, "pilosa-index-")
-	if err != nil {
-		panic(err)
-	}
-	cfg := DefaultHolderConfig()
-	cfg.StorageConfig.FsyncEnabled = false
-	cfg.RBFConfig.FsyncEnabled = false
-	h := NewHolder(path, cfg)
-	PanicOn(h.Open())
-	index, err := h.CreateIndex(name, IndexOptions{})
-	testhook.Cleanup(tb, func() {
-		h.Close()
-	})
-	if err != nil {
-		panic(err)
-	}
-	return index
-}
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {

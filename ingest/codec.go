@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"sort"
 	"strconv"
@@ -748,7 +747,7 @@ func (codec *JSONCodec) ParseOperation(data []byte, seq int) (op *Operation, err
 // Parse reads a request, but does not sort the results at all or divide
 // them into shards.
 func (codec *JSONCodec) Parse(r io.Reader) (req *Request, err error) {
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}

@@ -49,9 +49,7 @@ func NewExternalEtcd(p *Etcd, o Options) (*ExternalEtcd, error) {
 	// populate parent.sortedNodes
 	hosts := strings.Split(o.EtcdHosts, ",")
 	this.etcdHosts = make([]string, len(hosts))
-	for i := range hosts {
-		this.etcdHosts[i] = hosts[i]
-	}
+	copy(this.etcdHosts, hosts)
 
 	return this, nil
 	// %% end sonarcloud ignore %%

@@ -13,6 +13,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExecutor_TranslateRowsOnBool(t *testing.T) {
@@ -592,6 +593,7 @@ func TestExecutor_DeleteRows(t *testing.T) {
 	}
 
 	changed, err = DeleteRows(ctx, row, idx, shard)
+	assert.NoError(t, err)
 	if changed {
 		t.Fatalf("expected delete to not clear bit but it did")
 	}

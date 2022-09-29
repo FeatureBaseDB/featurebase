@@ -2,7 +2,6 @@ package api
 
 import (
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
@@ -119,13 +118,13 @@ func TestIngest(t *testing.T) {
 			return
 		}
 		defer resp.Body.Close()
-		defer io.Copy(ioutil.Discard, resp.Body) //nolint: errcheck
+		defer io.Copy(io.Discard, resp.Body) //nolint: errcheck
 		if !assert.Equal(t, 200, resp.StatusCode) {
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			t.Logf("request error: %s", body)
 			return
 		}
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		if !assert.NoError(t, err) {
 			return
 		}
@@ -190,13 +189,13 @@ func TestIngest(t *testing.T) {
 			return
 		}
 		defer resp.Body.Close()
-		defer io.Copy(ioutil.Discard, resp.Body) //nolint: errcheck
+		defer io.Copy(io.Discard, resp.Body) //nolint: errcheck
 		if !assert.Equal(t, 200, resp.StatusCode) {
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			t.Logf("request error: %s", body)
 			return
 		}
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		if !assert.NoError(t, err) {
 			return
 		}

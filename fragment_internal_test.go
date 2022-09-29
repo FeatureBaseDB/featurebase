@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"reflect"
@@ -3083,7 +3082,7 @@ func BenchmarkFileWrite(b *testing.B) {
 				// We're deleting these files as we go because
 				// otherwise the benchmark could fill up
 				// $TMPDIR before it finishes running.
-				f, err := ioutil.TempFile(*TempDir, "")
+				f, err := os.CreateTemp(*TempDir, "")
 				if err != nil {
 					b.Fatalf("getting temp file: %v", err)
 				}

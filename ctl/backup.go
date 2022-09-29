@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -194,7 +193,7 @@ func (cmd *BackupCommand) backupSchema(ctx context.Context, schema *pilosa.Schem
 		return fmt.Errorf("marshaling schema: %w", err)
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(cmd.OutputDir, "schema"), buf, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(cmd.OutputDir, "schema"), buf, 0600); err != nil {
 		return fmt.Errorf("writing schema: %w", err)
 	}
 

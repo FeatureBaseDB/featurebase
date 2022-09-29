@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"reflect"
 	"sync"
@@ -109,7 +108,7 @@ func (r *HTTPTranslateEntryReader) Open() error {
 		r.body.Close()
 		return ErrNotImplemented
 	} else if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		r.body.Close()
 		return fmt.Errorf("http: invalid translate store endpoint status: code=%d url=%s body=%q", resp.StatusCode, r.URL, bytes.TrimSpace(body))
 	}

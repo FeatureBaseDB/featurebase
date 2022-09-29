@@ -13,7 +13,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -189,7 +188,7 @@ func (m *Command) doSetupResourceLimits() error {
 	}
 	// We don't have corresponding options for non-Linux right now, but probably should.
 	if runtime.GOOS == "linux" {
-		result, err := ioutil.ReadFile("/proc/sys/vm/max_map_count")
+		result, err := os.ReadFile("/proc/sys/vm/max_map_count")
 		if err != nil {
 			m.logger.Infof("Tried unsuccessfully to check system mmap limit: %w", err)
 		} else {

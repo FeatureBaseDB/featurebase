@@ -6,9 +6,9 @@ package kafka_static
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -68,7 +68,7 @@ func TestKafkaStaticSourceLocal(t *testing.T) {
 			src := NewSource()
 			configureSourceTestFlags(src)
 			{
-				headerData, err := ioutil.ReadFile(test.header)
+				headerData, err := os.ReadFile(test.header)
 				if err != nil {
 					t.Fatalf("reading header file: %v", err)
 				}

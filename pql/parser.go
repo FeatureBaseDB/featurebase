@@ -5,7 +5,6 @@ package pql
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -40,7 +39,7 @@ func ParseString(s string) (*Query, error) {
 
 // Parse parses the next node in the query.
 func (p *parser) Parse() (*Query, error) {
-	buf, err := ioutil.ReadAll(p.r)
+	buf, err := io.ReadAll(p.r)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading buffer to parse")
 	}

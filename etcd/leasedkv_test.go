@@ -12,6 +12,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 
@@ -41,11 +42,20 @@ func TestClusterKv(t *testing.T) {
 		t.Fatalf("trying to cause election: %v", err)
 	}
 	ctx := context.TODO()
-	c.nodes[0].SetState(ctx, disco.NodeStateStarting)
-	c.nodes[1].SetState(ctx, disco.NodeStateStarting)
+	err = c.nodes[0].SetState(ctx, disco.NodeStateStarting)
+	assert.NoError(t, err)
+
+	err = c.nodes[1].SetState(ctx, disco.NodeStateStarting)
+	assert.NoError(t, err)
+
 	c.MustAwaitClusterState(disco.ClusterStateStarting)
-	c.nodes[0].SetState(ctx, disco.NodeStateStarted)
-	c.nodes[1].SetState(ctx, disco.NodeStateStarted)
+
+	err = c.nodes[0].SetState(ctx, disco.NodeStateStarted)
+	assert.NoError(t, err)
+
+	err = c.nodes[1].SetState(ctx, disco.NodeStateStarted)
+	assert.NoError(t, err)
+
 	// Two of three nodes are up, one is down, we have 2 replicas, so
 	// we should be able to handle reads but not writes, so we're in
 	// a Degraded state.
