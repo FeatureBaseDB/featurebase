@@ -12,10 +12,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	_ "net/http/pprof"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -24,8 +24,6 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/boltdb"
 	"github.com/featurebasedb/featurebase/v3/ctl"
@@ -36,6 +34,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 )
 
@@ -6894,7 +6894,7 @@ func TestExecutor_Execute_NoIndex(t *testing.T) {
 }
 
 func TestExecutor_Execute_CountDistinct(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/schema.json")
+	data, err := os.ReadFile("testdata/schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7127,7 +7127,7 @@ func TestExecutor_BareDistinct(t *testing.T) {
 }
 
 func TestExecutor_Execute_TopNDistinct(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/schema.json")
+	data, err := os.ReadFile("testdata/schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7202,7 +7202,7 @@ func Test_Executor_Execute_UnionRows(t *testing.T) {
 }
 
 func TestTimelessClearRegression(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/timeRegressionSchema.json")
+	data, err := os.ReadFile("testdata/timeRegressionSchema.json")
 	if err != nil {
 		t.Fatal(err)
 	}

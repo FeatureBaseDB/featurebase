@@ -8,10 +8,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	nethttp "net/http"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -698,7 +698,7 @@ func TestMain_ImportTimestamp(t *testing.T) {
 	}
 	// Ensure the correct views were created.
 	dir := fmt.Sprintf("%s/%s/%s/%s/%s/views", m.Config.DataDir, pilosa.IndexesDir, indexName, pilosa.FieldsDir, fieldName)
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -754,7 +754,7 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 
 	// Ensure the correct views were created.
 	dir := fmt.Sprintf("%s/%s/%s/%s/%s/views", m.Config.DataDir, pilosa.IndexesDir, indexName, pilosa.FieldsDir, fieldName)
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

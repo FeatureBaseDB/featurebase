@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,13 +17,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/golang-jwt/jwt"
 )
 
 func TestImportCommand_Validation(t *testing.T) {
@@ -305,7 +304,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 
 			// Read body and unmarshal response.
 			exp := `{"results":[1000]}` + "\n"
-			if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			if body, err := io.ReadAll(resp.Body); err != nil {
 				return fmt.Errorf("reading: %s", err)
 			} else if !reflect.DeepEqual(body, []byte(exp)) {
 				return fmt.Errorf("expected: %s, but got: %s", exp, body)

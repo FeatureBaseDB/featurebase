@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -20,13 +19,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/ingest"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
 	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )
@@ -421,7 +420,7 @@ func (c *InternalClient) IngestSchema(ctx context.Context, uri *pnet.URI, buf []
 		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
-	buf, err = ioutil.ReadAll(resp.Body)
+	buf, err = io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
 		if err != nil {
 			return nil, errors.Wrapf(err, "bad status '%s' and err reading body", resp.Status)
@@ -439,7 +438,7 @@ func (c *InternalClient) IngestSchema(ctx context.Context, uri *pnet.URI, buf []
 		}
 		return nil, errors.Errorf("against %s %s: '%s'", req.URL.String(), resp.Status, msg)
 	}
-	// this is the err from ioutil.ReadAll, but in the case where resp.StatusCode
+	// this is the err from io.ReadAll, but in the case where resp.StatusCode
 	// was 2xx, so we don't have a bad status.
 	if err != nil {
 		return nil, errors.Wrapf(err, "error reading response body")
@@ -728,7 +727,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
 	}
@@ -816,7 +815,7 @@ func (c *InternalClient) importNode(ctx context.Context, node *disco.Node, index
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrap(err, "reading")
 	}
@@ -1339,7 +1338,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pnet.URI, index, fi
 
 	// Decode response object.
 	var rsp BlockDataResponse
-	if body, err := ioutil.ReadAll(resp.Body); err != nil {
+	if body, err := io.ReadAll(resp.Body); err != nil {
 		return nil, nil, errors.Wrap(err, "reading")
 	} else if err := c.serializer.Unmarshal(body, &rsp); err != nil {
 		return nil, nil, errors.Wrap(err, "unmarshalling")
@@ -1372,7 +1371,7 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pnet.URI, msg []b
 		return errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
-	_, err = io.Copy(ioutil.Discard, resp.Body)
+	_, err = io.Copy(io.Discard, resp.Body)
 	return errors.Wrap(err, "draining SendMessage response body")
 }
 
@@ -1421,7 +1420,7 @@ func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pnet.URI, i
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
 	}
@@ -1473,7 +1472,7 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pnet.URI, in
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
 	}
@@ -1505,7 +1504,7 @@ func (c *InternalClient) GetPastQueries(ctx context.Context, uri *pnet.URI) ([]P
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
 	}
@@ -1552,7 +1551,7 @@ func (c *InternalClient) FindIndexKeysNode(ctx context.Context, uri *pnet.URI, i
 	}()
 
 	// Read the response body.
-	result, err := ioutil.ReadAll(resp.Body)
+	result, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
@@ -1601,7 +1600,7 @@ func (c *InternalClient) FindFieldKeysNode(ctx context.Context, uri *pnet.URI, i
 	}()
 
 	// Read the response body.
-	result, err := ioutil.ReadAll(resp.Body)
+	result, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
@@ -1651,7 +1650,7 @@ func (c *InternalClient) CreateIndexKeysNode(ctx context.Context, uri *pnet.URI,
 	}()
 
 	// Read the response body.
-	result, err := ioutil.ReadAll(resp.Body)
+	result, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
@@ -1704,7 +1703,7 @@ func (c *InternalClient) CreateFieldKeysNode(ctx context.Context, uri *pnet.URI,
 	}()
 
 	// Read the response body.
-	result, err := ioutil.ReadAll(resp.Body)
+	result, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
@@ -1749,7 +1748,7 @@ func (c *InternalClient) MatchFieldKeysNode(ctx context.Context, uri *pnet.URI, 
 	}()
 
 	// Read the response body.
-	result, err := ioutil.ReadAll(resp.Body)
+	result, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
@@ -1781,7 +1780,7 @@ func (c *InternalClient) Transactions(ctx context.Context) (map[string]*Transact
 		return nil, errors.Wrap(err, "executing request")
 	}
 	defer func() {
-		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 	trnsMap := make(map[string]*Transaction)
@@ -1820,7 +1819,7 @@ func (c *InternalClient) StartTransaction(ctx context.Context, id string, timeou
 		return nil, errors.Wrap(err, "executing request")
 	}
 	defer func() {
-		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 	tr := &TransactionResponse{}
@@ -1855,7 +1854,7 @@ func (c *InternalClient) FinishTransaction(ctx context.Context, id string) (*Tra
 		return nil, errors.Wrap(err, "executing request")
 	}
 	defer func() {
-		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 	tr := &TransactionResponse{}
@@ -1892,7 +1891,7 @@ func (c *InternalClient) GetTransaction(ctx context.Context, id string) (*Transa
 		return nil, errors.Wrap(err, "executing request")
 	}
 	defer func() {
-		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 	tr := &TransactionResponse{}
@@ -1994,7 +1993,7 @@ func (c *InternalClient) handleResponse(req *http.Request, eo *executeOpts, resp
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer resp.Body.Close()
-		buf, err := ioutil.ReadAll(resp.Body)
+		buf, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return resp, errors.Wrapf(err, "bad status '%s' and err reading body", resp.Status)
 		}

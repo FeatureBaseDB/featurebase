@@ -14,6 +14,7 @@ import (
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/pkg/errors"
 )
@@ -1662,8 +1663,7 @@ func mutexClearRegression(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("getting batch: %v", err)
 	}
 
-	col := uint64(0)
-	row := uint64(1)
+	var col, row uint64
 	for i := uint64(0); i <= 21; i++ {
 		col = (i%2+1)*featurebase.ShardWidth + i%5
 		row = i % 3
@@ -1720,8 +1720,7 @@ func mutexNilClearID(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("getting batch: %v", err)
 	}
 
-	col := uint64(0)
-	row := uint64(1)
+	var col, row uint64
 	// populate mutex with some data
 	for i := uint64(0); i < 11; i++ {
 		col = (i%2+1)*featurebase.ShardWidth + i%5
@@ -1746,14 +1745,17 @@ func mutexNilClearID(t *testing.T, c *test.Cluster, client *Client) {
 	}
 	items := resp.Result().Row().Columns
 	// delete item 0
-	b.Add(
+	err = b.Add(
 		Row{
 			ID:     items[0],
 			Values: []interface{}{nil},
 			Clears: map[int]interface{}{0: nil},
 		},
 	)
-	b.Import()
+	assert.NoError(t, err)
+
+	err = b.Import()
+	assert.NoError(t, err)
 	items = items[1:]
 	// confirm record removed
 	resp, err = client.Query(idx.RawQuery("Row(mut=0)"))
@@ -1820,6 +1822,7 @@ func mutexNilClearKey(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("importing: %v", err)
 	}
 	resp, err := client.Query(idx.RawQuery(`Row(mut="a")`))
+	assert.NoError(t, err)
 	errorIfNotEqual(t, resp.Result().Row().Keys, []string{"0", "2"})
 
 	r.ID = "2"

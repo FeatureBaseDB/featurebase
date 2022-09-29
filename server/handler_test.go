@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	gohttp "net/http"
 	"net/http/httptest"
@@ -37,7 +36,7 @@ func TestHandler_PostSchemaCluster(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
 		if w.Code != gohttp.StatusNoContent {
-			bod, err := ioutil.ReadAll(w.Result().Body)
+			bod, err := io.ReadAll(w.Result().Body)
 			if err != nil {
 				t.Errorf("reading body: %v", err)
 			}
@@ -113,7 +112,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
 		if w.Code != gohttp.StatusNoContent {
-			bod, err := ioutil.ReadAll(w.Result().Body)
+			bod, err := io.ReadAll(w.Result().Body)
 			if err != nil {
 				t.Errorf("reading body: %v", err)
 			}
@@ -1413,94 +1412,6 @@ func TestClusterTranslator(t *testing.T) {
 		}
 	}
 }
-
-// func TestQueryHistory(t *testing.T) {
-// 	cluster := test.MustRunCluster(t, 3,
-// 		[]server.CommandOption{
-// 			server.OptCommandServerOptions(
-// 				pilosa.OptServerNodeID("1"),
-// 			)},
-// 		[]server.CommandOption{
-// 			server.OptCommandServerOptions(
-// 				pilosa.OptServerNodeID("0"),
-// 			)},
-// 		[]server.CommandOption{
-// 			server.OptCommandServerOptions(
-// 				pilosa.OptServerNodeID("2"),
-// 			)},
-// 	)
-// 	defer cluster.Close()
-
-// 	cmd := cluster.GetNode(0)
-// 	h := cmd.Handler.(*pilosa.Handler).Handler
-
-// 	w := httptest.NewRecorder()
-
-// 	test.Do(t, "POST", cmd.URL()+"/index/i0", "")
-// 	test.Do(t, "POST", cmd.URL()+"/index/i0/field/f0", "")
-
-// 	gh := server.NewGRPCHandler(cmd.API)
-// 	stream := &MockServerTransportStream{}
-// 	ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
-// 	_, err := gh.QuerySQLUnary(ctx, &pb.QuerySQLRequest{
-// 		Sql: `select * from i0`,
-// 	})
-
-// 	if err != nil {
-// 		t.Fatalf("QuerySQLUnary failed: %v", err)
-// 	}
-
-// 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(0, f0=0)")
-// 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(3000000, f0=0)")
-// 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "TopN(f0)")
-
-// 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
-// 	if w.Code != gohttp.StatusOK {
-// 		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
-// 	}
-
-// 	ret := make([]pilosa.PastQueryStatus, 4)
-// 	b, err := ioutil.ReadAll(w.Body)
-// 	if err != nil {
-// 		t.Fatalf("reading: %v", err)
-// 	}
-// 	err = json.Unmarshal(b, &ret)
-// 	if err != nil {
-// 		t.Fatalf("unmarshalling: %v", err)
-// 	}
-
-// 	// verify result length
-// 	if len(ret) != 4 {
-// 		// each set query executes on both nodes once
-// 		// topn query gets added to history on node0 once, node1 twice
-// 		t.Fatalf("expected list of length 4, got %d\n%+v", len(ret), ret)
-// 	}
-
-// 	// verify sort order
-// 	if !sort.SliceIsSorted(ret, func(i, j int) bool {
-// 		// must match the sort in api.PastQueries
-// 		return ret[i].Start.After(ret[j].Start)
-// 	}) {
-// 		t.Fatalf("response list not sorted correctly")
-// 	}
-
-// 	// verify some response values
-// 	if ret[0].Index != "i0" {
-// 		t.Fatalf("response value for 'Index' was '%s', expected 'i0'", ret[0].Index)
-// 	}
-// 	if ret[0].Node != cluster.GetNode(0).Server.NodeID() {
-// 		t.Fatalf("response value for 'Node' was '%s', expected '%s'", ret[0].Node, cluster.GetNode(0).Server.NodeID())
-// 	}
-// 	if ret[3].PQL != "Extract(All(),Rows(f0))" {
-// 		t.Fatalf("response value for 'PQL' was '%s', expected 'Extract(All(),Rows(f0))'", ret[0].PQL)
-// 	}
-// 	if ret[3].SQL != "select * from i0" {
-// 		t.Fatalf("response value for 'SQL' was '%s', expected 'select * from i0'", ret[0].SQL)
-// 	}
-// 	if ret[0].PQL != "TopN(f0)" {
-// 		t.Fatalf("response value for 'PQL' was '%s', expected 'TopN(f0)'", ret[0].PQL)
-// 	}
-// }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {
 	dec := json.NewDecoder(r)

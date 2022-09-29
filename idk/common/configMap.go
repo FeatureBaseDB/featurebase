@@ -3,7 +3,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"sync/atomic"
 
@@ -47,7 +47,7 @@ func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 	var err error
 	configMap := &confluent.ConfigMap{}
 	if m.KafkaConfiguration != "" {
-		file, er := ioutil.ReadFile(m.KafkaConfiguration)
+		file, er := os.ReadFile(m.KafkaConfiguration)
 		if er != nil {
 			return nil, er
 		}

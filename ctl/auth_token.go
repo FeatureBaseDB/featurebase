@@ -169,7 +169,7 @@ func (cmd *AuthTokenCommand) Run(ctx context.Context) (err error) {
 	}
 
 	// Prompt the user to visit verification_uri and enter code.
-	fmt.Printf(formatPromptBox(dar.VerificationURI, dar.UserCode))
+	fmt.Print(formatPromptBox(dar.VerificationURI, dar.UserCode))
 
 	// Request a token until success or error response, slowing down if requested.
 	interval := dar.Interval

@@ -29,7 +29,6 @@ const (
 // with -2 when the Tx completes.
 //
 // Should be false for production.
-//
 const DetectMemAccessPastTx = false
 
 var sep = string(os.PathSeparator)
@@ -43,11 +42,11 @@ var sep = string(os.PathSeparator)
 // The most common use of Qcx is to call GetTx() to obtain a Tx locally,
 // once the index/shard pair is known:
 //
-//   someFunc(qcx Qcx, idx *Index, shard uint64) (err0 error) {
-//		tx, finisher := qcx.GetTx(Txo{Write: true, Index:idx, Shard:shard, ...})
-//		defer finisher(&err0)
-//      ...
-//   }
+//	  someFunc(qcx Qcx, idx *Index, shard uint64) (err0 error) {
+//			tx, finisher := qcx.GetTx(Txo{Write: true, Index:idx, Shard:shard, ...})
+//			defer finisher(&err0)
+//	     ...
+//	  }
 //
 // Qcx reuses read-only Tx on the same index/shard pair. See
 // the Qcx.GetTx() for further discussion. The caveat is of
@@ -82,7 +81,6 @@ var sep = string(os.PathSeparator)
 // This is then committed at the final, top-level, Qcx.Finish() call.
 //
 // See also the Qcx.GetTx() example and the TxGroup description below.
-//
 type Qcx struct {
 	Grp     *TxGroup
 	Txf     *TxFactory
@@ -203,12 +201,12 @@ var ErrQcxDone = fmt.Errorf("Qcx already Aborted or Finished, so must call reset
 //
 // Note we are tracking the returned err0 error value of someFunc(). An option instead is to say
 //
-//     defer finisher(nil)
+//	defer finisher(nil)
 //
 // This means always Commit writes, ignoring if there were errors. This style
 // is expected to be rare compared to the typical
 //
-//     defer finisher(&err0)
+//	defer finisher(&err0)
 //
 // invocation, where err0 is your return from the enclosing function error.
 // If the Tx is local and not a part of a group, then the finisher
@@ -223,7 +221,6 @@ var ErrQcxDone = fmt.Errorf("Qcx already Aborted or Finished, so must call reset
 // locally by another _, err := f() call. For this reason, it can
 // be clearer (and much safer) to rename the enclosing functions 'err' to 'err0',
 // to make it clear we are referring to the first and final error.
-//
 func (qcx *Qcx) GetTx(o Txo) (tx Tx, finisher func(perr *error), err error) {
 	if qcx.workers != nil {
 		qcx.workers.Block()
@@ -663,14 +660,6 @@ func dirExists(name string) bool {
 		return true
 	}
 	return false
-}
-
-func fileSize(name string) (int64, error) {
-	fi, err := os.Stat(name)
-	if err != nil {
-		return -1, err
-	}
-	return fi.Size(), nil
 }
 
 var _ = anyGlobalDBWrappersStillOpen // happy linter

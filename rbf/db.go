@@ -344,7 +344,7 @@ func (db *DB) checkpoint() (err error) {
 				if IsBitmapHeader(page) {
 					pgno = readPageNo(page)
 					if i+1 < db.walPageN {
-						if page, err = db.readWALPageAt(i + 1); err != nil {
+						if _, err = db.readWALPageAt(i + 1); err != nil {
 							return err
 						}
 					} else {

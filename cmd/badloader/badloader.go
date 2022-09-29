@@ -10,7 +10,6 @@ import (
 
 	"fmt"
 	"io"
-	"io/ioutil"
 	gohttp "net/http"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -92,7 +91,7 @@ func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 
 			}
 		}
-		roaringData, err := ioutil.ReadAll(tarReader)
+		roaringData, err := io.ReadAll(tarReader)
 		if err != nil {
 			return err
 		}

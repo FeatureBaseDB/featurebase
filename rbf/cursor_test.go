@@ -15,6 +15,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/rbf"
 	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCursor_FirstNext(t *testing.T) {
@@ -593,7 +594,8 @@ func TestCursor_BitmapBitN(t *testing.T) {
 	if c1 != c2 {
 		t.Fatalf("expected count %d, got %d", c2, c1)
 	}
-	tx.Commit()
+	err = tx.Commit()
+	assert.NoError(t, err)
 }
 
 func TestCursor_RLEConversion(t *testing.T) {
@@ -1060,7 +1062,7 @@ func TestCursor_RemoveCells(t *testing.T) {
 	//f, err := os.OpenFile("before.dot", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 066)
 }
 
-//These aren't test i'm just using to generate graphs to look at structure
+// These aren't test i'm just using to generate graphs to look at structure
 func TestCursor_PlayContainer(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)

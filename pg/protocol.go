@@ -11,7 +11,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"regexp"
 	"strings"
@@ -1087,7 +1086,7 @@ func (s *Server) handleShutdown(conn net.Conn, w message.Writer, encoder *messag
 	go func() {
 		defer wg.Done()
 
-		io.Copy(ioutil.Discard, conn) //nolint:errcheck
+		io.Copy(io.Discard, conn) //nolint:errcheck
 	}()
 
 	// Attempt to send the shutdown notification.

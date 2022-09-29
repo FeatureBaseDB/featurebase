@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	gohttp "net/http"
@@ -22,6 +22,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHandlerOptions(t *testing.T) {
@@ -195,7 +196,8 @@ func TestUpdateFieldTTL(t *testing.T) {
 			if resp.StatusCode == 400 || resp.StatusCode == 404 {
 				// unmarshal error message to check against expErr
 				var respBody map[string]interface{}
-				json.NewDecoder(resp.Body).Decode(&respBody)
+				err := json.NewDecoder(resp.Body).Decode(&respBody)
+				assert.NoError(t, err)
 				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
 
 				if !strings.Contains(errMsg, test.expErr) {
@@ -300,7 +302,8 @@ func TestUpdateFieldNoStandardView(t *testing.T) {
 			if resp.StatusCode == 400 {
 				// unmarshal error message to check against expErr
 				var respBody map[string]interface{}
-				json.NewDecoder(resp.Body).Decode(&respBody)
+				err := json.NewDecoder(resp.Body).Decode(&respBody)
+				assert.NoError(t, err)
 				errMsg := respBody["error"].(map[string]interface{})["message"].(string)
 
 				if !strings.Contains(errMsg, test.expErr) {
@@ -740,7 +743,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 
 	tmpDir := t.TempDir()
 	permissionsPath := path.Join(tmpDir, "test-permissions.yaml")
-	err := ioutil.WriteFile(permissionsPath, []byte(permissions1), 0600)
+	err := os.WriteFile(permissionsPath, []byte(permissions1), 0600)
 	if err != nil {
 		t.Fatalf("failed to write permissions file: %v", err)
 	}
@@ -902,7 +905,7 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 				}
 
 				if ipTest.StatusCode == 200 {
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					if err != nil {
 						t.Fatalf("reading resp body :%v", err)
 					}

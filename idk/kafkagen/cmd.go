@@ -3,15 +3,14 @@ package kafkagen
 import (
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	liavro "github.com/linkedin/goavro/v2"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/common"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
+	liavro "github.com/linkedin/goavro/v2"
 	"github.com/pkg/errors"
 )
 
@@ -125,7 +124,7 @@ func (m *Main) putRecordKafka(p *confluent.Producer, schemaID int, schema *liavr
 }
 
 func readSchema(filename string) (string, error) {
-	bytes, err := ioutil.ReadFile(filename)
+	bytes, err := os.ReadFile(filename)
 	if err != nil {
 		return "", err
 	}

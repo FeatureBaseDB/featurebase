@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/authz"
@@ -24,6 +23,7 @@ import (
 	vdsm_pb "github.com/featurebasedb/featurebase/v3/proto/vdsm"
 	"github.com/featurebasedb/featurebase/v3/sql"
 	"github.com/featurebasedb/featurebase/v3/stats"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1674,7 +1674,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 
 // LogQuery logs requests
 func LogQuery(ctx context.Context, method string, req interface{}, logger logger.Logger) {
-	uinfo, ok := ctx.Value("userinfo").(*authn.UserInfo)
+	uinfo, _ := ctx.Value("userinfo").(*authn.UserInfo)
 	md, _ := metadata.FromIncomingContext(ctx)
 	p, ok := peer.FromContext(ctx)
 	ip := ""

@@ -8,7 +8,6 @@ package roaring
 import (
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"reflect"
 )
 
@@ -293,7 +292,7 @@ func bytesToUint64s(data []byte) []uint64 {
 // make sure filename is not already in the corpus.
 func addSliceToCorpus(slice []uint64, filename, path string) {
 	data := uint64sToBytes(slice)
-	err := ioutil.WriteFile(path+"/"+filename, data, 0750)
+	err := os.WriteFile(path+"/"+filename, data, 0750)
 	if err != nil {
 		fmt.Printf("could not write to file: %v\n", err)
 	}

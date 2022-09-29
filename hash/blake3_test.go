@@ -5,7 +5,6 @@ package hash
 import (
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -55,19 +54,19 @@ func TestHashOfDir(t *testing.T) {
 	}
 
 	bmessage := []byte("hello B\n")
-	if err := ioutil.WriteFile(path.Join(b, "b_content"), bmessage, 0644); err != nil {
+	if err := os.WriteFile(path.Join(b, "b_content"), bmessage, 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	cmessage := []byte("hello C\n")
-	if err := ioutil.WriteFile(path.Join(c, "c_content"), cmessage, 0644); err != nil {
+	if err := os.WriteFile(path.Join(c, "c_content"), cmessage, 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	hsh := HashOfDir(dir)
 
 	c2message := []byte("hello C2\n")
-	if err := ioutil.WriteFile(path.Join(c, "c_content"), c2message, 0644); err != nil {
+	if err := os.WriteFile(path.Join(c, "c_content"), c2message, 0644); err != nil {
 		t.Fatal(err)
 	}
 

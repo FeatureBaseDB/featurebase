@@ -5,7 +5,7 @@ package kafka
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -17,11 +17,11 @@ import (
 	"time"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	liavro "github.com/linkedin/goavro/v2"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	liavro "github.com/linkedin/goavro/v2"
 )
 
 var pilosaHost string
@@ -673,7 +673,7 @@ func tDoHTTPPost(t *testing.T, url, contentType, body string) string {
 		t.Fatalf("making POST request: %v", err)
 	}
 
-	bod, err := ioutil.ReadAll(resp.Body)
+	bod, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("reading POST response bdoy: %v", err)
 	}

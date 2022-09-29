@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/bits"
 	"net/http"
 	"net/url"
@@ -377,7 +376,7 @@ func (ps *pilosaIDManager) reserve(ctx context.Context, reserveReq pilosacore.ID
 				err = errors.Wrap(cerr, "closing ID reservation request body")
 			}
 		}()
-		body, err = ioutil.ReadAll(resp.Body)
+		body, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, errors.Wrap(err, "reading ID reservation request body")
 		}
@@ -442,7 +441,7 @@ func (ps *pilosaIDManager) commit(ctx context.Context, commitRequest pilosacore.
 				err = errors.Wrap(cerr, "closing ID reservation request body")
 			}
 		}()
-		body, err = ioutil.ReadAll(resp.Body)
+		body, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Wrap(err, "reading ID reservation request body")
 		}

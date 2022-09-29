@@ -3,16 +3,15 @@ package kafka
 import (
 	"context"
 	"encoding/binary"
-	"io/ioutil"
 	"os"
 	"time"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	liavro "github.com/linkedin/goavro/v2"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/common"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	liavro "github.com/linkedin/goavro/v2"
 	"github.com/pkg/errors"
 )
 
@@ -173,7 +172,7 @@ func (p *PutCmd) getSchema() (string, error) {
 	if p.Schema != "" {
 		return p.Schema, nil
 	}
-	bytes, err := ioutil.ReadFile(p.SchemaFile)
+	bytes, err := os.ReadFile(p.SchemaFile)
 	if err != nil {
 		return "", errors.Wrap(err, "reading schema file")
 	}

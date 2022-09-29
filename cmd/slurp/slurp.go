@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	gohttp "net/http"
 	"net/url"
 	"os"
@@ -55,7 +54,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 				return err
 			}
 		}
-		roaringData, err := ioutil.ReadAll(tr)
+		roaringData, err := io.ReadAll(tr)
 		if err != nil {
 			return err
 		}
@@ -91,7 +90,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 
 			}
 
-			byteData, err := ioutil.ReadAll(tr)
+			byteData, err := io.ReadAll(tr)
 			vprint.PanicOn(err)
 			readerFunc := func() (io.Reader, error) {
 				return bytes.NewReader(byteData), nil
@@ -107,7 +106,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			if err != nil {
 				return err
 			}
-			byteData, err := ioutil.ReadAll(tr)
+			byteData, err := io.ReadAll(tr)
 			vprint.PanicOn(err)
 			readerFunc := func() (io.Reader, error) {
 				return bytes.NewReader(byteData), nil
