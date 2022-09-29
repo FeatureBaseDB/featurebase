@@ -18,8 +18,8 @@ DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating 
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 TEST_TAGS = roaringparanoia
 UNAME := $(shell uname -s)
-TEST_TIMEOUT=30m
-RACE_TEST_TIMEOUT=90m
+TEST_TIMEOUT=10m
+RACE_TEST_TIMEOUT=10m
 ifeq ($(UNAME), Darwin)
     IS_MACOS:=1
 else
