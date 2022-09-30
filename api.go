@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -409,99 +408,6 @@ type importJob struct {
 	shard   uint64
 	field   *Field
 	errChan chan error
-}
-
-func importWorker(importWork chan importJob) {
-	for j := range importWork {
-		err := func() (err0 error) {
-			for viewName, viewData := range j.req.Views {
-				// The logic here corresponds to the logic in fragment.cleanViewName().
-				// Unfortunately, the logic in that method is not completely exclusive
-				// (i.e. an "other" view named with format YYYYMMDD would be handled
-				// incorrectly). One way to address this would be to change the logic
-				// overall so there weren't conflicts. For now, we just
-				// rely on the field type to inform the intended view name.
-				if viewName == "" {
-					viewName = viewStandard
-				} else if j.field.Type() == FieldTypeTime {
-					viewName = fmt.Sprintf("%s_%s", viewStandard, viewName)
-				}
-				if len(viewData) == 0 {
-					return fmt.Errorf("no data to import for view: %s", viewName)
-				}
-
-				// TODO: deprecate ImportRoaringRequest.Clear, but
-				// until we do, we need to check its value to provide
-				// backward compatibility.
-				doAction := j.req.Action
-				if doAction == "" {
-					if j.req.Clear {
-						doAction = RequestActionClear
-					} else {
-						doAction = RequestActionSet
-					}
-				}
-
-				if err := func() (err1 error) {
-					tx, finisher, err := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
-					if err != nil {
-						return err
-					}
-					defer finisher(&err1)
-
-					var doClear bool
-					switch doAction {
-					case RequestActionOverwrite:
-						err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block)
-						if err != nil {
-							return errors.Wrap(err, "importing roaring as overwrite")
-						}
-					case RequestActionClear:
-						doClear = true
-						fallthrough
-					case RequestActionSet:
-						fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-						data := viewData
-						if fileMagic != roaring.MagicNumber {
-							// if the view data arrives is in the "standard" roaring format, we must
-							// make a copy of data in order allow for the conversion to the pilosa roaring run format
-							// in field.importRoaring
-							data = make([]byte, len(viewData))
-							copy(data, viewData)
-						}
-						if j.req.UpdateExistence {
-							if ef := j.field.idx.existenceField(); ef != nil {
-								existence, err := combineForExistence(data)
-								if err != nil {
-									return errors.Wrap(err, "merging existence on roaring import")
-								}
-
-								err = ef.importRoaring(j.ctx, tx, existence, j.shard, "standard", false)
-								if err != nil {
-									return errors.Wrap(err, "updating existence on roaring import")
-								}
-							}
-						}
-
-						err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
-
-						if err != nil {
-							return errors.Wrap(err, "importing standard roaring")
-						}
-					}
-					return nil
-				}(); err != nil {
-					return err
-				}
-			}
-			return nil
-		}()
-
-		select {
-		case <-j.ctx.Done():
-		case j.errChan <- err:
-		}
-	}
 }
 
 // combineForExistence unions all rows in the fragment to be imported into a single row to update the existence field. TODO: It would probably be more efficient to only unmarshal the input data once, and use the calculated existence Bitmap directly rather than returning it to bytes, but most of our ingest paths update existence separately, so it's more important that this just be obviously correct at the moment.
@@ -2884,14 +2790,15 @@ func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, 
 // MutexCheck checks a named field for mutex violations, returning a
 // map of record IDs to values for records that have multiple values in the
 // field. The return will be one of:
-//     details true:
-//     map[uint64][]uint64 // unkeyed index, unkeyed field
-//     map[uint64][]string // unkeyed index, keyed field
-//     map[string][]uint64 // keyed index, unkeyed field
-//     map[string][]string // keyed index, keyed field
-//     details false:
-//     []uint64            // unkeyed index
-//     []string            // keyed index
+//
+//	details true:
+//	map[uint64][]uint64 // unkeyed index, unkeyed field
+//	map[uint64][]string // unkeyed index, keyed field
+//	map[string][]uint64 // keyed index, unkeyed field
+//	map[string][]string // keyed index, keyed field
+//	details false:
+//	[]uint64            // unkeyed index
+//	[]string            // keyed index
 func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (result interface{}, err error) {
 	if err = api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
