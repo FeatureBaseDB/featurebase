@@ -5,8 +5,8 @@ package planner
 import (
 	"hash/maphash"
 
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 var prototypeHash maphash.Hash

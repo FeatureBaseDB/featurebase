@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // PlanOpFilter is a filter operator
