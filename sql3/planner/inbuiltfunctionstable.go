@@ -1,8 +1,8 @@
 package planner
 
 import (
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 // TODO (pok) this needs to go somewhere

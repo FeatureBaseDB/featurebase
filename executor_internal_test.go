@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 // AssertEqual checks a given RowIdentifiers against expected values.

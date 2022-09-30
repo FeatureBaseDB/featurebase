@@ -18,13 +18,13 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/boltdb"
-	"github.com/molecula/featurebase/v3/encoding/proto"
-	"github.com/molecula/featurebase/v3/pql"
-	pb "github.com/molecula/featurebase/v3/proto"
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/test"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/boltdb"
+	"github.com/featurebasedb/featurebase/v3/encoding/proto"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	pb "github.com/featurebasedb/featurebase/v3/proto"
+	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/test"
 	"google.golang.org/grpc"
 )
 

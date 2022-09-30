@@ -13,12 +13,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/test"
-	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/google/go-cmp/cmp"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/test"
 	"github.com/pkg/errors"
 )
 
