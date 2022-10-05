@@ -405,10 +405,7 @@ upload to sonarcloud:
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/coverage*out -Dsonar.go.tests.reportPaths=test-report*.out,idk/testdata/report*out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
-    - cd ./idk
-    - ls ./testdata
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=testdata/*coverage.out,idk/testdata/coverage*out -Dsonar.go.tests.reportPaths=testdata/*report.out,idk/testdata/report*out -Dsonar.coverage.exclusions=**/*_test.go -Dsonar.cpd.exclusions=**/*_test.go
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/*coverage.out -Dsonar.go.tests.reportPaths=test-report*.out,idk/testdata/*report.out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests future plg
     - job: run go tests future
