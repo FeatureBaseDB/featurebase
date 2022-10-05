@@ -1702,6 +1702,7 @@ type SchemaOptions struct {
 	TimeUnit       string        `json:"timeUnit"`
 	Base           int64         `json:"base"`
 	Epoch          time.Time     `json:"epoch"`
+	ForeignIndex   string        `json:"foreignIndex"`
 }
 
 func (so SchemaOptions) asIndexOptions() *IndexOptions {
@@ -1728,6 +1729,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		timeUnit:       so.TimeUnit,
 		base:           so.Base,
 		epoch:          so.Epoch,
+		foreignIndex:   so.ForeignIndex,
 	}
 }
 
