@@ -275,9 +275,6 @@ run go tests idk race:
   retry: 1
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
-      changes:
-        - idk
-        - client
   script:
     - echo "Running test-all-race"
     - cd ./idk/
@@ -309,9 +306,6 @@ run go tests idk shard transactional:
   retry: 1
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
-      changes:
-        - idk
-        - client
   script:
     - echo "Running shard transactional tests"
     - cd ./idk/
@@ -352,9 +346,6 @@ run go tests idk 533:
     - make shutdown
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
-      changes:
-        - idk
-        - client
   tags:
     - shell
     - aws
@@ -384,9 +375,6 @@ run go tests idk sasl:
     - make shutdown
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
-      changes:
-        - idk
-        - client
   tags:
     - shell
     - aws
