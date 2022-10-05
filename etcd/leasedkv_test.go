@@ -29,7 +29,7 @@ func TestClusterKv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
-	c.MustAwaitClusterState(disco.ClusterStateDown, 10*time.Second)
+	c.MustAwaitClusterState(disco.ClusterStateStarting, 10*time.Second)
 	err = c.BringUp()
 	if err != nil {
 		t.Fatalf("bringing up cluster: %v", err)
