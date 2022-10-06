@@ -9,18 +9,24 @@ import (
 	"github.com/molecula/featurebase/v3/logger"
 )
 
-func logFailure(errorType kinesis.ErrorType, m *kinesis.Main, v interface{}) {
+func logError(m *kinesis.Main, err error) {
 	log := m.Log()
 
 	if log == nil {
 		log = logger.NewStandardLogger(os.Stderr)
 	}
+	log.Errorf("Error running command: %s", err)
 
-	if errorType == kinesis.RecoverableErrorType {
-		log.Errorf("Error running command: %+v", v)
-	} else {
-		log.Panicf("Panic running command: %+v", v)
+}
+
+func logPanic(m *kinesis.Main, v interface{}) {
+	log := m.Log()
+
+	if log == nil {
+		log = logger.NewStandardLogger(os.Stderr)
 	}
+	log.Panicf("Panic running command: %+v", v)
+
 }
 
 func main() {
@@ -33,7 +39,7 @@ func main() {
 	// Capture any panic and log it before dying.
 	defer func() {
 		if r := recover(); r != nil {
-			logFailure(kinesis.PanicErrorType, m, r)
+			logPanic(m, r)
 			os.Exit(1)
 		}
 	}()
@@ -44,7 +50,7 @@ func main() {
 	}
 
 	if err := m.Run(); err != nil {
-		logFailure(kinesis.RecoverableErrorType, m, err)
+		logError(m, err)
 		os.Exit(1)
 	}
 }

@@ -194,6 +194,64 @@ func TestIngestSignedIntBoolField(t *testing.T) {
 	}
 }
 
+//The following two tests are used to test the functionality of a new feature in which we skip bad records coming into idk and log them.
+//First function checks that we can successfully skip some bad rows coming into idk
+//Second function checks whether we get error if we have more bad records than acceptable errors by idk mentioned by SkipBadRows parameter.
+
+func skipBadRowsTestSource() *testSource {
+	ts := newTestSource([]Field{StringField{NameVal: "rcid"}, SignedIntBoolKeyField{NameVal: "svals"}},
+		[][]interface{}{
+			{"c", "badrecord1"},
+			{"d", "badrecord2"},
+			{"a", "badrecord3"},
+			{"x", int64(66)},
+			{"b", int64(11)},
+			{"b", int64(22)},
+			{"b", int64(-32)},
+			{"b", int64(-44)},
+			{"b", "badrecord4"},
+			{"b", int64(11)},
+			{"b", int64(7)},
+			{"c", int64(5)},
+		})
+	return ts
+
+}
+func ingesterCreationForSkipBadRowsTest(skipbadrows int) *Main {
+	ts := skipBadRowsTestSource()
+	ingester := NewMain()
+	configureTestFlags(ingester)
+	ingester.NewSource = func() (Source, error) { return ts, nil }
+	rand.Seed(time.Now().UTC().UnixNano())
+	ingester.Index = fmt.Sprintf("ingestint%d", rand.Intn(100000))
+	ingester.BatchSize = 2
+	ingester.SkipBadRows = skipbadrows
+	ingester.PrimaryKeyFields = []string{"rcid"}
+	return ingester
+}
+func TestSkipBadRowsFunctionality(t *testing.T) {
+
+	ingester := ingesterCreationForSkipBadRowsTest(3)
+
+	err := ingester.Run()
+	if err != nil {
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
+	}
+}
+
+func TestSkipBadRowsFunctionalityWhenErrorCountIsMore(t *testing.T) {
+
+	ingester := ingesterCreationForSkipBadRowsTest(1)
+
+	err := ingester.Run()
+	if err == nil {
+		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
+	}
+	if !strings.Contains(err.Error(), "consecutive bad records exceeded limit") {
+		t.Fatalf("did not receive expected error from idk %v", err.Error())
+	}
+}
+
 // TestSingleBoolClear essentially creates an import batch which
 // clears a bit in a particular fragment without setting a bit in that
 // same fragment.  There's a potential optimization in the pilosa client

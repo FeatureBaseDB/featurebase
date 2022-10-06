@@ -221,17 +221,17 @@ test-run-local:
 TPKG ?= ./...
 test-run: testenv vendor
 	$(DOCKER_COMPOSE) build idk-test
-	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v -mod=vendor -tags=odbc,dynamic $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -json -coverprofile=/testdata/$(PROJECT)_coverage.out  | tee /testdata/$(PROJECT)_report.out"
+	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v -mod=vendor -tags=odbc,dynamic $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -json -coverprofile=/testdata/$(PROJECT)_base_coverage.out  | tee /testdata/$(PROJECT)_report.out"
 	$(DOCKER_COMPOSE) run -T idk-test /go/src/github.com/molecula/featurebase/idk/reingest_test.sh
 
 
 test-run-race: testenv vendor
 	$(DOCKER_COMPOSE) build idk-test
-	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v -mod=vendor -race -covermode=atomic -tags=dynamic $(TPKG) -coverpkg=$(TPKG) -timeout=30m -json -coverprofile=/testdata/$(PROJECT)_coverage.out  | tee /testdata/$(PROJECT)_report.out"
+	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v -mod=vendor -race -covermode=atomic -tags=dynamic $(TPKG) -coverpkg=$(TPKG) -timeout=30m -json -coverprofile=/testdata/$(PROJECT)_race_coverage.out  | tee /testdata/$(PROJECT)_report.out"
 
 test-run-kafka-sasl: testenv vendor
 	$(DOCKER_COMPOSE) build idk-test
-	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v --tags=kafka_sasl -mod=vendor -race -timeout=30m $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -json -coverprofile=/testdata/$(PROJECT)_coverage.out  | tee /testdata/$(PROJECT)_report.out"
+	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v --tags=kafka_sasl -mod=vendor -race -timeout=30m $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -json -coverprofile=/testdata/$(PROJECT)_sasl_coverage.out  | tee /testdata/$(PROJECT)_report.out"
 
 .pulled:
 	$(DOCKER_COMPOSE) pull 
