@@ -92,6 +92,7 @@ type Main struct {
 	AllowIntOutOfRange       bool          `help:"Allow ingest to continue when it encounters out of range integers in IntFields. (default false)"`
 	AllowDecimalOutOfRange   bool          `help:"Allow ingest to continue when it encounters out of range decimals in DecimalFields. (default false)"`
 	AllowTimestampOutOfRange bool          `help:"Allow ingest to continue when it encounters out of range timestamps in TimestampFields. (default false)"`
+	SkipBadRows              int           `help:"If you fail to process the first n rows without processing one successfully, fail."`
 
 	UseShardTransactionalEndpoint bool `flag:"use-shard-transactional-endpoint" help:"Use alternate import endpoint. Currently unstable/testing"`
 
@@ -325,6 +326,8 @@ func (m *Main) ingest(ctx context.Context, source Source, nexter IDAllocator, so
 	var recordizers []Recordizer
 	var prevRec Record
 	var row *pilosaclient.Row
+	var errorCounter int // keeps track of consecuitive errors across records
+	var anyRecordSuccessful bool
 	if m.progress != nil {
 		source = m.progress.Track(source)
 	}
@@ -480,6 +483,7 @@ initialFetch:
 			}
 		}
 
+		rowHasError := false
 		for _, rdz := range recordizers {
 			err = rdz(data, row)
 			if err != nil {
@@ -487,11 +491,32 @@ initialFetch:
 				// excludes 'out of range' errors so that ingest can continue importing the rest
 				// of the records
 				if !m.allowError(err) {
-					return err
+					rowHasError = true
+					// must return error and exit idk when SkipBadRows is not defined (or set to 0)
+					if m.SkipBadRows == 0 {
+						return err
+					} else {
+						// will handle this error based on errorCounter in the later if block
+						m.Log().Errorf("Bad record: +%v, reason: %v\n", row, err)
+						break
+					}
 				}
 				m.Log().Errorf(err.Error())
 			}
 		}
+
+		if !anyRecordSuccessful && rowHasError {
+			// We cannot allow a certain number of consecutive errors in the beginning of ingest.
+			errorCounter++
+			if errorCounter > m.SkipBadRows {
+				return errors.Wrapf(err, "consecutive bad records exceeded limit, errorCounter: %d\n", errorCounter) // wraps the current recordizer error
+			}
+			err = nil // already logged the recordizer error, no need to propagate the err
+		} else {
+			anyRecordSuccessful = true // after this is set true, we will skip any bad rows in the future
+			err = nil
+		}
+
 		if nexter != nil { // add ID if no id field specified
 			if batchStart {
 				rerr := nexter.Reserve(ctx, uint64(m.BatchSize))
@@ -522,8 +547,13 @@ initialFetch:
 			}
 			row.ID = id
 		}
-		err = batch.Add(*row)
-		m.stats.Count(MetricIngesterRowsAdded, 1, 1)
+
+		// skip bad rows only
+		if !rowHasError {
+			err = batch.Add(*row)
+			m.stats.Count(MetricIngesterRowsAdded, 1, 1)
+		}
+
 		if err == pilosaclient.ErrBatchNowFull || err == pilosaclient.ErrBatchNowStale {
 			batchLen := batch.Len()
 			err = m.importBatch(batch)
