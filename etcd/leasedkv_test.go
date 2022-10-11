@@ -12,7 +12,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 

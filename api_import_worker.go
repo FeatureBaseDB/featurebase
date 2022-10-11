@@ -48,57 +48,60 @@ func importWorkerFunc(job importJob) error {
 			}
 		}
 
-		if err := func() (err1 error) {
-			tx, finisher, err := job.qcx.GetTx(Txo{Write: writable, Index: job.field.idx, Shard: job.shard})
-			if err != nil {
-				return err
-			}
-			defer finisher(&err1)
-
-			var doClear bool
-			switch doAction {
-			case RequestActionOverwrite:
-				err := job.field.importRoaringOverwrite(job.ctx, tx, viewData, job.shard, viewName, job.req.Block)
-				if err != nil {
-					return errors.Wrap(err, "importing roaring as overwrite")
-				}
-			case RequestActionClear:
-				doClear = true
-				fallthrough
-			case RequestActionSet:
-				fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-				data := viewData
-				if fileMagic != roaring.MagicNumber {
-					// if the view data arrives is in the "standard" roaring format, we must
-					// make a copy of data in order allow for the conversion to the pilosa roaring run format
-					// in field.importRoaring
-					data = make([]byte, len(viewData))
-					copy(data, viewData)
-				}
-				if job.req.UpdateExistence {
-					if ef := job.field.idx.existenceField(); ef != nil {
-						existence, err := combineForExistence(data)
-						if err != nil {
-							return errors.Wrap(err, "merging existence on roaring import")
-						}
-
-						err = ef.importRoaring(job.ctx, tx, existence, job.shard, "standard", false)
-						if err != nil {
-							return errors.Wrap(err, "updating existence on roaring import")
-						}
-					}
-				}
-
-				err := job.field.importRoaring(job.ctx, tx, data, job.shard, viewName, doClear)
-
-				if err != nil {
-					return errors.Wrap(err, "importing standard roaring")
-				}
-			}
-			return nil
-		}(); err != nil {
+		if err := importWorkerTx(job, doAction, viewName, viewData); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func importWorkerTx(job importJob, doAction string, viewName string, viewData []byte) (txErr error) {
+	tx, finisher, err := job.qcx.GetTx(Txo{Write: writable, Index: job.field.idx, Shard: job.shard})
+	if err != nil {
+		return err
+	}
+	defer finisher(&txErr)
+
+	var doClear bool
+	switch doAction {
+	case RequestActionOverwrite:
+		err := job.field.importRoaringOverwrite(job.ctx, tx, viewData, job.shard, viewName, job.req.Block)
+		if err != nil {
+			return errors.Wrap(err, "importing roaring as overwrite")
+		}
+	case RequestActionClear:
+		doClear = true
+		fallthrough
+	case RequestActionSet:
+		fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
+		data := viewData
+		if fileMagic != roaring.MagicNumber {
+			// if the view data arrives is in the "standard" roaring format, we must
+			// make a copy of data in order allow for the conversion to the pilosa roaring run format
+			// in field.importRoaring
+			data = make([]byte, len(viewData))
+			copy(data, viewData)
+		}
+		if job.req.UpdateExistence {
+			if ef := job.field.idx.existenceField(); ef != nil {
+				existence, err := combineForExistence(data)
+				if err != nil {
+					return errors.Wrap(err, "merging existence on roaring import")
+				}
+
+				err = ef.importRoaring(job.ctx, tx, existence, job.shard, "standard", false)
+				if err != nil {
+					return errors.Wrap(err, "updating existence on roaring import")
+				}
+			}
+		}
+
+		err := job.field.importRoaring(job.ctx, tx, data, job.shard, viewName, doClear)
+
+		if err != nil {
+			return errors.Wrap(err, "importing standard roaring")
+		}
+	}
+	return nil
+
 }

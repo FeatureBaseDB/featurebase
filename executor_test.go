@@ -31,8 +31,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/featurebasedb/featurebase/v3/testhook"
-	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
-	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
+	_ "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 )
