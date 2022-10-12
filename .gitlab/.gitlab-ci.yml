@@ -24,7 +24,8 @@ gosec-sast:
     - gosec convert gosec.json > gl-sast-report.json
 
 variables:
-  GOVERSION: "1.19.1"
+  GOVERSION: "1.19.2"
+  GOFUTURE: "latest"
 
 stages:
   - lint
@@ -230,7 +231,7 @@ run go tests shardwidth22:
 # run the regular tests twice and also run the future tests.
 run go tests future:
   stage: test
-  image: golang:1.18
+  image: golang:$GOFUTURE
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -248,7 +249,7 @@ run go tests future:
 
 run go tests future plg:
   stage: test
-  image: golang:1.18
+  image: golang:$GOFUTURE
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -983,8 +984,8 @@ samsung-gauntlet:
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - apt update && apt -y install jq wget
-    - wget -q https://go.dev/dl/go1.19.1.linux-amd64.tar.gz
-    - tar -C /usr/local -xzf go1.19.1.linux-amd64.tar.gz
+    - wget -q "https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz"
+    - tar -C /usr/local -xzf "go$GOVERSION.linux-amd64.tar.gz"
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-gauntlet-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
@@ -1045,8 +1046,8 @@ backup-restore-gauntlet:
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - apt update && apt -y install jq wget
-    - wget -q https://go.dev/dl/go1.19.1.linux-amd64.tar.gz
-    - tar -C /usr/local -xzf go1.19.1.linux-amd64.tar.gz
+    - wget -q "https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz"
+    - tar -C /usr/local -xzf "go$GOVERSION.linux-amd64.tar.gz"
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-gauntlet-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
@@ -1170,8 +1171,8 @@ perf_delete:
     - chmod 700 /root/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
     - apt update && apt -y install jq wget
-    - wget -q https://go.dev/dl/go1.19.1.linux-amd64.tar.gz
-    - tar -C /usr/local -xzf go1.19.1.linux-amd64.tar.gz
+    - wget -q "https://go.dev/dl/go$GOVERSION.linux-amd64.tar.gz"
+    - tar -C /usr/local -xzf "go$GOVERSION.linux-amd64.tar.gz"
     - export PATH=$PATH:/usr/local/go/bin
     - TF_VAR_cluster_prefix="pipeline-$CI_PIPELINE_ID-delete-$CI_JOB_ID"
     - echo "Cluster Prefix --> $TF_VAR_cluster_prefix"
