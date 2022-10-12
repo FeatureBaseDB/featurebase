@@ -56,7 +56,7 @@ output:
   # Example: "checkstyle:report.json,colored-line-number"
   #
   # Default: colored-line-number
-  format: json
+  format: colored-line-number
 
   # Print lines of code with issue.
   # Default: true
@@ -119,7 +119,7 @@ linters-settings:
     package-average: 0.5
     # Should ignore tests.
     # Default: false
-    skip-tests: true
+    skip-tests: false
 
   decorder:
     # Required order of `type`, `const`, `var` and `func` declarations inside a file.
@@ -146,24 +146,21 @@ linters-settings:
     # Kind of list is passed in.
     # Allowed values: allowlist|denylist
     # Default: denylist
-    list-type: allowlist
+    list-type: denylist
 
     # Check the list against standard lib.
     # Default: false
-    include-go-root: true
+    include-go-root: false
 
     # A list of packages for the list type specified.
     # Can accept both string prefixes and string glob patterns.
     # Default: []
-    packages:
-      - github.com/sirupsen/logrus
-      - allow/**/pkg
+    packages: []
 
     # A list of packages for the list type specified.
     # Specify an error message to output when a denied package is used.
     # Default: []
-    packages-with-error-message:
-      - github.com/sirupsen/logrus: 'logging is allowed only by logutils.Log'
+    packages-with-error-message: []
 
     # Specify rules by which the linter ignores certain files for consideration.
     # Can accept both string prefixes and string glob patterns.
@@ -171,21 +168,7 @@ linters-settings:
     # which signals that the linter should negate the rule.
     # This allows for more precise control, but it is only available for glob patterns.
     # Default: []
-    ignore-file-rules:
-      - "ignore/**/*.go"
-      - "!**/*_test.go"
-
-    # Create additional guards that follow the same configuration pattern.
-    # Results from all guards are aggregated together.
-    additional-guards:
-      - list-type: denylist
-        include-go-root: false
-        packages:
-          - github.com/stretchr/testify
-        # Specify rules by which the linter ignores certain files for consideration.
-        ignore-file-rules:
-          - "**/*_test.go"
-          - "**/mock/**/*.go"
+    ignore-file-rules: []
 
   dogsled:
     # Checks assignments with too many blank identifiers.
@@ -384,24 +367,7 @@ linters-settings:
 
     # Which checks should be disabled; can't be combined with 'enabled-checks'.
     # Default: []
-    disabled-checks:
-      - regexpMust
-
-    # Enable multiple checks by tags, run `GL_DEBUG=gocritic golangci-lint run` to see all tags and checks.
-    # See https://github.com/go-critic/go-critic#usage -> section "Tags".
-    # Default: []
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-      - experimental
-      - opinionated
-    disabled-tags:
-      - diagnostic
-      - style
-      - performance
-      - experimental
-      - opinionated
+    disabled-checks: []
 
     # Settings passed to gocritic.
     # The settings key is the name of a supported gocritic checker.
@@ -1687,7 +1653,6 @@ linters:
     - containedctx
     - contextcheck
     - cyclop
-    - deadcode
     - decorder
     - depguard
     - dogsled
@@ -1729,7 +1694,6 @@ linters:
     - importas
     - ineffassign
     - interfacebloat
-    - interfacer
     - ireturn
     - lll
     - maintidx
@@ -1744,14 +1708,11 @@ linters:
     - nolintlint
     - nonamedreturns
     - nosprintfhostport
-    - paralleltest
     - prealloc
     - predeclared
     - promlinter
     - reassign
     - revive
-    - rowserrcheck
-    - sqlclosecheck
     - staticcheck
     - stylecheck
     - tagliatelle
@@ -1765,7 +1726,6 @@ linters:
     - unused
     - usestdlibvars
     - varnamelen
-    - wastedassign
     - whitespace
     - wrapcheck
     - wsl
