@@ -383,9 +383,6 @@ linters-settings:
         # The flag is passed to the ruleguard 'debug-group' argument.
         # Default: ""
         debug: 'emptyDecl'
-        # Deprecated, use 'failOn' param.
-        # If set to true, identical to failOn='all', otherwise failOn=''
-        failOnError: false
         # Determines the behavior when an error occurs while parsing ruleguard files.
         # If flag is not set, log error and skip rule files that contain an error.
         # If flag is set, the value must be a comma-separated list of error conditions.
@@ -587,10 +584,6 @@ linters-settings:
       local_replace_directives: false
 
   gosimple:
-    # Select the Go version to target.
-    # Default: 1.13
-    # Deprecated: use the global `run.go` instead.
-    go: "1.15"
     # Sxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
     # Default: ["*"]
     checks: [ "all" ]
@@ -1386,19 +1379,11 @@ linters-settings:
       - github.com/jmoiron/sqlx
 
   staticcheck:
-    # Select the Go version to target.
-    # Default: "1.13"
-    # Deprecated: use the global `run.go` instead.
-    go: "1.15"
     # SAxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
     # Default: ["*"]
     checks: [ "all" ]
 
   stylecheck:
-    # Select the Go version to target.
-    # Default: 1.13
-    # Deprecated: use the global `run.go` instead.
-    go: "1.15"
     # STxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
     # Default: ["*"]
     checks: [ "all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022" ]
