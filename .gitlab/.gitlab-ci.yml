@@ -29,7 +29,6 @@ variables:
 
 stages:
   - lint
-  - pretest # run FB linux amd 64 because it is a dependency for idk tests
   - test
   - build
   - post build
@@ -113,10 +112,8 @@ go mod tidy:
     - go mod tidy
     - git diff --exit-code -- go.mod go.sum
 
-### lattice, build for linux amd64 and build amd fb container are needed for IDK unit testing
-### running them at an earlier stage allows for decreasing run time.
 build lattice:
-  stage: pretest
+  stage: test
   image: node:14
   variables:
     CI: "false"
@@ -135,8 +132,8 @@ build lattice:
     paths:
       - lattice.tar.gz
 
-build for linux amd64:
-  stage: pretest
+build featurebase:
+  stage: test
   image: golang:$GOVERSION
   extends: .go-cache
   rules:
@@ -147,16 +144,20 @@ build for linux amd64:
     - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
-    - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
+    - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
+    - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
+    - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
   artifacts:
     paths:
       - featurebase_linux_amd64
-      - roaring-migrate_linux_amd64
+      - featurebase_linux_arm64
+      - featurebase_darwin_amd64
+      - featurebase_darwin_arm64
   needs:
     - job: build lattice
 
 build amd container fb:
-  stage: pretest
+  stage: test
   tags:
     - shell
   rules:
@@ -169,7 +170,7 @@ build amd container fb:
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
   needs:
-    - job: build for linux amd64
+    - job: build featurebase
 
 run jest tests:
   stage: test
@@ -276,6 +277,9 @@ run go tests idk race:
   retry: 1
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+      changes:
+        - idk/**/*
+        - client/**/*
   script:
     - echo "Running test-all-race"
     - cd ./idk/
@@ -307,6 +311,9 @@ run go tests idk shard transactional:
   retry: 1
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+      changes:
+        - idk/**/*
+        - client/**/*
   script:
     - echo "Running shard transactional tests"
     - cd ./idk/
@@ -347,6 +354,9 @@ run go tests idk 533:
     - make shutdown
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+      changes:
+        - idk/**/*
+        - client/**/*
   tags:
     - shell
     - aws
@@ -376,6 +386,9 @@ run go tests idk sasl:
     - make shutdown
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+      changes:
+        - idk/**/*
+        - client/**/*
   tags:
     - shell
     - aws
@@ -399,7 +412,7 @@ upload to sonarcloud:
     - job: run go tests future plg
     - job: run go tests future
     - job: run jest tests
-    - job: clustertests
+    - job: external lookup tests
     - job: run go tests idk race
       optional: true
     - job: run go tests idk shard transactional
@@ -408,60 +421,6 @@ upload to sonarcloud:
       optional: true
     - job: run go tests idk 533
       optional: true
-
-build for linux arm64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go install github.com/rakyll/statik@v0.1.7
-    - $GOPATH/bin/statik -src=lattice
-    - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
-    - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - featurebase_linux_arm64
-      - roaring-migrate_linux_arm64
-
-build for darwin amd64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go install github.com/rakyll/statik@v0.1.7
-    - $GOPATH/bin/statik -src=lattice
-    - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
-    - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - featurebase_darwin_amd64
-      - roaring-migrate_darwin_amd64
-
-build for darwin arm64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go install github.com/rakyll/statik@v0.1.7
-    - $GOPATH/bin/statik -src=lattice
-    - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
-    - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - featurebase_darwin_arm64
-      - roaring-migrate_darwin_arm64
 
 package for linux amd64:
   stage: build
@@ -499,121 +458,10 @@ package for linux arm64:
       - "*.deb"
       - "*.rpm"
 
-# PLG
-build plg for linux amd64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go install github.com/rakyll/statik@v0.1.7
-    - $GOPATH/bin/statik -src=lattice
-    - GOOS="linux" GOARCH="amd64" make plg FLAGS="-o single_node_featurebase_linux_amd64"
-    - GOOS="linux" GOARCH="amd64" go build -o roaring-migrate_linux_amd64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - single_node_featurebase_linux_amd64
-      - roaring-migrate_linux_amd64
-
-build plg for linux arm64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go install github.com/rakyll/statik@v0.1.7
-    - $GOPATH/bin/statik -src=lattice
-    - GOOS="linux" GOARCH="arm64" make plg FLAGS="-o single_node_featurebase_linux_arm64"
-    - GOOS="linux" GOARCH="arm64" go build -o roaring-migrate_linux_arm64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - single_node_featurebase_linux_arm64
-      - roaring-migrate_linux_arm64
-
-build plg for darwin amd64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go install github.com/rakyll/statik@v0.1.7
-    - $GOPATH/bin/statik -src=lattice
-    - GOOS="darwin" GOARCH="amd64" make plg FLAGS="-o single_node_featurebase_darwin_amd64"
-    - GOOS="darwin" GOARCH="amd64" go build -o roaring-migrate_darwin_amd64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - single_node_featurebase_darwin_amd64
-      - roaring-migrate_darwin_amd64
-
-build plg for darwin arm64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -r lattice
-    - tar -xvf lattice.tar.gz
-    - go install github.com/rakyll/statik@v0.1.7
-    - $GOPATH/bin/statik -src=lattice
-    - GOOS="darwin" GOARCH="arm64" make plg FLAGS="-o single_node_featurebase_darwin_arm64"
-    - GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
-  artifacts:
-    paths:
-      - single_node_featurebase_darwin_arm64
-      - roaring-migrate_darwin_arm64
-
-package plg for linux amd64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  variables:
-    GOOS: "linux"
-    GOARCH: "amd64"
-  script:
-    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
-    - make package
-  artifacts:
-    paths:
-      - "*.deb"
-      - "*.rpm"
-
-package plg for linux arm64:
-  stage: build
-  image: golang:$GOVERSION
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  variables:
-    GOOS: "linux"
-    GOARCH: "arm64"
-  script:
-    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
-    - make package
-  artifacts:
-    paths:
-      - "*.deb"
-      - "*.rpm"
-
-# end PLG
-
 build arm container fb:
   stage: build
   needs:
-    - "build for linux arm64"
+    - "build featurebase"
   tags:
     - shell
   rules:
@@ -628,7 +476,7 @@ build arm container fb:
 
 ### start idk builds ###
 # building them all serially because otherwise you get container name conflicts.
-idk build_all:
+idk build_amd64:
   stage: build
   variables:
     BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
@@ -640,14 +488,16 @@ idk build_all:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - cd ./idk/
+    - date
     - make docker-build GOOS="linux" GOARCH="amd64" BUILD_CGO=1
+    - date
     - make docker-build GOOS="darwin" GOARCH="amd64"
-    - make docker-build GOOS="darwin" GOARCH="arm64"
+    - date
   artifacts:
     paths:
       - ./idk/build/*
 
-idk build_linux_arm64:
+idk build_arm64:
   stage: build
   extends:
     - .setup_ssh
@@ -657,7 +507,11 @@ idk build_linux_arm64:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - cd ./idk/
+    - date
     - make docker-build GOOS="linux" GOARCH="arm64" BUILD_CGO=1 BUILD_NAME="linux-arm64"
+    - date
+    - make docker-build GOOS="darwin" GOARCH="arm64"
+    - date
   artifacts:
     paths:
       - ./idk/build/*
@@ -677,8 +531,8 @@ idk package_docker_all:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - make docker-idk-tag-push GOOS="linux" GOARCH="amd64"
   needs:
-    - job: idk build_all
-    - job: idk build_linux_arm64
+    - job: idk build_amd64
+    - job: idk build_arm64
 
 idk s3 dump:
   stage: post build
@@ -702,8 +556,8 @@ idk s3 dump:
     - aws s3 cp ./idk/build/ s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/ --recursive
     - aws s3 cp ./idk/build/ s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/_latest/ --recursive
   needs:
-    - job: idk build_all
-    - job: idk build_linux_arm64
+    - job: idk build_amd64
+    - job: idk build_arm64
 
 idk s3 dump tag:
   stage: post build
@@ -737,17 +591,20 @@ idk s3 dump tag:
         done
       done
   needs:
-    - job: idk build_all
-    - job: idk build_linux_arm64
+    - job: idk build_amd64
+    - job: idk build_arm64
 ### end idk builds ###
 
-# clustertests doesn't run in docker, and requires several things to be set up on the runner to work:
+# authclustertests doesn't run in docker, and requires several things to be set up on the runner to work:
 # 1. Install Go, make sure it's on the path
 # 2. Make sure "make" is installed
 # 3. make sure docker/docker-compose is installed
 # 4. make sure the git config is done `git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"`
 # 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
-clustertests:
+#
+# there used to be two versions of this, one with auth and one without, but
+# there's no marginal value to running without, we don't think.
+authclustertests:
   variables:
     PROJECT: clustertests_${CI_CONCURRENT_ID}
   stage: integration
@@ -758,25 +615,11 @@ clustertests:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
-    - make clustertests
+    - make authclustertests
     - mv internal/clustertests/results/ results/
   artifacts:
     paths:
       - results/coverage*.out
-
-authclustertests:
-  variables:
-    PROJECT: authclustertests_${CI_CONCURRENT_ID}
-  stage: integration
-  retry: 1
-  tags:
-    - shell
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
-    - make authclustertests
-    - rm -rf internal/clustertests/results
 
 external lookup tests:
   stage: integration
@@ -1084,37 +927,14 @@ s3 dump:
     - aws configure set aws_profile $PROFILE
     - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_amd64
     - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_amd64
-    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_amd64
-    - aws s3 cp roaring-migrate_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_amd64
     - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_arm64
     - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64
-    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_linux_arm64
-    - aws s3 cp roaring-migrate_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_linux_arm64
     - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_amd64
     - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_amd64
-    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_amd64
-    - aws s3 cp roaring-migrate_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_amd64
     - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
     - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
-    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/roaring-migrate_darwin_arm64
-    - aws s3 cp roaring-migrate_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/roaring-migrate_darwin_arm64
-    - aws s3 cp single_node_featurebase_linux_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_linux_amd64
-    - aws s3 cp single_node_featurebase_linux_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_linux_amd64
-    - aws s3 cp single_node_featurebase_linux_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_linux_arm64
-    - aws s3 cp single_node_featurebase_linux_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_linux_arm64
-    - aws s3 cp single_node_featurebase_darwin_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_darwin_amd64
-    - aws s3 cp single_node_featurebase_darwin_amd64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_amd64
-    - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/single_node_featurebase_darwin_arm64
-    - aws s3 cp single_node_featurebase_darwin_arm64 s3://molecula-artifact-storage/single_node_featurebase/${CI_COMMIT_BRANCH}/_latest/single_node_featurebase_darwin_arm64
   needs:
-    - job: build for darwin amd64
-    - job: build for darwin arm64
-    - job: build for linux amd64
-    - job: build for linux arm64
-    - job: build plg for darwin amd64
-    - job: build plg for darwin arm64
-    - job: build plg for linux amd64
-    - job: build plg for linux arm64
+    - job: build featurebase
 
 perf_able:
   stage: performance
@@ -1224,47 +1044,7 @@ s3 dump tag:
       done
 
   needs:
-    - job: build for darwin amd64
-    - job: build for darwin arm64
-    - job: build for linux amd64
-    - job: build for linux arm64
-
-s3 dump plg tag:
-  stage: post build
-  variables:
-    PROFILE: "service-fb-ci"
-    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-    LOCATION: molecula-artifact-storage/single_node_featurebase/_tags
-  tags:
-    - shell
-  rules:
-    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
-  script:
-    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
-    - |
-      for goos in "darwin" "linux"; do
-        for goarch in "amd64" "arm64"; do
-          dir=single_node_featurebase-${CI_COMMIT_TAG}-${goos}-${goarch}
-          echo "Directory ${dir}"
-          mkdir $dir
-          mv single_node_featurebase_${goos}_${goarch} ${dir}/featurebase
-          cp NOTICE install/featurebase.conf install/featurebase.*.service ${dir}/
-          tar cvzf ${dir}.tar.gz ${dir}
-          aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
-          aws s3 cp ${dir}.tar.gz s3://${LOCATION}/${CI_COMMIT_TAG}/
-        done
-      done
-
-  needs:
-    - job: build plg for darwin amd64
-    - job: build plg for darwin arm64
-    - job: build plg for linux amd64
-    - job: build plg for linux arm64
+    - job: build featurebase
 
 cleanup_build_job:
   stage: cleanup_build

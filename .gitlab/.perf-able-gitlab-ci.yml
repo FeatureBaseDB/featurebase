@@ -61,6 +61,4 @@ perf_able:
     - aws autoscaling set-instance-protection --instance-ids "$INSTANCE_ID" --auto-scaling-group-name $ASG_NAME --no-protected-from-scale-in --profile $INFRA_PROFILE
   needs:
     - pipeline: $PARENT_PIPELINE_ID
-      job: build for linux arm64
-    - pipeline: $PARENT_PIPELINE_ID
-      job: build for linux amd64
+      job: build featurebase
