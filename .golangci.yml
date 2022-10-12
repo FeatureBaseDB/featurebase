@@ -12,7 +12,7 @@ run:
 
   # Exit code when at least one issue was found.
   # Default: 1
-  issues-exit-code: 2
+  issues-exit-code: 1
 
   # Include test files or not.
   # Default: true
@@ -189,19 +189,12 @@ linters-settings:
     # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`.
     # Such cases aren't reported by default.
     # Default: false
-    check-blank: true
+    check-blank: false
 
     # To disable the errcheck built-in exclude list.
     # See `-excludeonly` option in https://github.com/kisielk/errcheck#excluding-functions for details.
     # Default: false
     disable-default-exclusions: false
-
-    # List of functions to exclude from checking, where each entry is a single function to exclude.
-    # See https://github.com/kisielk/errcheck#excluding-functions for details.
-    # exclude-functions:
-    #   - io/ioutil.ReadFile
-    #   - io.Copy(*bytes.Buffer)
-    #   - io.Copy(os.Stdout)
 
   errchkjson:
     # With check-error-free-encoding set to true, errchkjson does warn about errors
