@@ -3,10 +3,10 @@ module "able-cluster" {
     cluster_prefix = var.cluster_prefix
     region = var.region
     profile = var.profile
-    fb_data_node_type = "m6g.12xlarge"
+    fb_data_node_type = "c6g.16xlarge"
     fb_data_disk_iops = 10000
     fb_data_node_count = 3
-    fb_ingest_type = "m6g.2xlarge"
+    fb_ingest_type = "c6g.2xlarge"
     fb_ingest_disk_iops = 10000
     fb_ingest_disk_size_gb = 500
     fb_ingest_node_count = 1

@@ -1,12 +1,13 @@
 #!/bin/bash
 
 # get the first ingest host
-INGESTNODE0=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
+must_get_value ./qa/tf/perf/able/outputs.json INGESTNODE0 .ingest_ips 0 '"value"' 0
 echo "using INGESTNODE0 ${INGESTNODE0}"
 
 # get the first data host
-DATANODE0=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
+must_get_value ./qa/tf/perf/able/outputs.json DATANODE0 .data_node_ips 0 '"value"' 0
 echo "using DATANODE0 ${DATANODE0}"
+must_get_value ./qa/tf/perf/able/outputs.json DEPLOYED_DATA_IPS .data_node_ips 0 '"value"' ""
 
 # leaving this here because K6 is timing out and need to work out why
 # ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "wget https://github.com/grafana/k6/releases/download/v0.36.0/k6-v0.36.0-linux-arm64.tar.gz"
@@ -45,7 +46,13 @@ echo "Restoring data"
 ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${INGESTNODE0} "cd /data; featurebase restore --host http://${DATANODE0}:10101 -s /data/data/backup > restore.out"
 if (( $? != 0 ))
 then
-    echo "Restoring failed"
+    echo "restoring failed. trying to dump server logs in case server crashed:"
+    for i in $DEPLOYED_DATA_IPS; do
+    	echo "BEGIN LOGS $i:"
+	ssh -A -i ~/.ssh/gitlab-featurebase-ci.pem -o "StrictHostKeyChecking no" ec2-user@${i} "cat /var/log/molecula/featurebase.log"
+    	echo "END LOGS $i"
+
+    done
     exit 1
 fi
 
