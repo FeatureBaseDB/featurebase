@@ -20,7 +20,35 @@ pushd ./qa/tf/perf/able
 echo "Running terraform init..."
 terraform init -input=false
 echo "Running terraform apply..."
-terraform apply -input=false -auto-approve
+
+okay=false
+# This logic is gratuitously complicated because I want visibility
+# into how it's working, or not-working. The chances are this should
+# just be a test against the exit status of terraform apply.
+tries=1
+while ! $okay && [ $tries -le $max_tries ] ; do
+	echo "Try $tries/$max_tries, running terraform..."
+	terraform apply -input=false -auto-approve
+	tf=$?
+	terraform output -json > outputs.json
+	echo "Outputs:"
+	cat outputs.json
+	must_get_value outputs.json TMP_I .ingest_ips 0 '"value"' 0
+	must_get_value outputs.json TMP_D .data_node_ips 0 '"value"' 0
+	echo "TF status: $tf, ingest_ips $TMP_I, data_node_ips $TMP_D"
+	case $TMP_I.$TMP_D in
+	*null*)	echo >&2 "looks like we failed, null in IPs."
+		tries=$(expr $tries + 1)
+		;;
+	*)	okay=true
+		;;
+	esac
+done
+echo "okay $okay, tries $tries"
+if ! $okay; then
+	echo >&2 "didn't start terraform successfully, giving up"
+	exit 1
+fi
 terraform output -json > outputs.json
 popd
 
@@ -31,28 +59,33 @@ EBS_DEVICE_NAME=/dev/nvme1n1
 FB_BINARY=featurebase_linux_arm64
 
 # get the first ingest host
-INGESTNODE0=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.ingest_ips][0]["value"][0]')
+must_get_value ./qa/tf/perf/able/outputs.json INGESTNODE0 .ingest_ips 0 '"value"' 0
 echo "using INGESTNODE0 ${INGESTNODE0}"
 
 # get the first data host
-DATANODE0=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.data_node_ips][0]["value"][0]')
+must_get_value ./qa/tf/perf/able/outputs.json DATANODE0 .data_node_ips 0 '"value"' 0
 echo "using DATANODE0 ${DATANODE0}"
 
+case ${INGESTNODE0}${DATANODE0} in
+*null*)	echo >&2 "didn't get nodes, giving up early"
+	exit 1
+	;;
+esac
 
-DEPLOYED_CLUSTER_PREFIX=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.cluster_prefix][0]["value"]')
+must_get_value ./qa/tf/perf/able/outputs.json DEPLOYED_CLUSTER_PREFIX .cluster_prefix 0 '"value"'
 echo "Using DEPLOYED_CLUSTER_PREFIX: ${DEPLOYED_CLUSTER_PREFIX}"
 
-DEPLOYED_CLUSTER_REPLICA_COUNT=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.fb_cluster_replica_count][0]["value"]')
+must_get_value ./qa/tf/perf/able/outputs.json DEPLOYED_CLUSTER_REPLICA_COUNT .fb_cluster_replica_count 0 '"value"'
 echo "Using DEPLOYED_CLUSTER_REPLICA_COUNT: ${DEPLOYED_CLUSTDEPLOYED_CLUSTER_REPLICA_COUNTER_PREFIX}"
 
-DEPLOYED_DATA_IPS=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.data_node_ips][0]["value"][]')
+must_get_value ./qa/tf/perf/able/outputs.json DEPLOYED_DATA_IPS .data_node_ips 0 '"value"' ""
 echo "DEPLOYED_DATA_IPS: {"
 echo "${DEPLOYED_DATA_IPS}"
 echo "}"
 
 DEPLOYED_DATA_IPS_LEN=`echo "$DEPLOYED_DATA_IPS" | wc -l`
 
-DEPLOYED_INGEST_IPS=$(cat ./qa/tf/perf/able/outputs.json | jq -r '[.ingest_ips][0]["value"][]')
+must_get_value ./qa/tf/perf/able/outputs.json DEPLOYED_INGEST_IPS .ingest_ips 0 '"value"' ""
 echo "DEPLOYED_INGEST_IPS: {"
 echo "${DEPLOYED_INGEST_IPS}"
 echo "}"
