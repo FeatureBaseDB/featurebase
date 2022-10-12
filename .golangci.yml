@@ -292,8 +292,6 @@ linters-settings:
     statements: -1
 
   gci:
-    # DEPRECATED: use `sections` and `prefix(github.com/org/project)` instead.
-    local-prefixes: github.com/org/project
 
     # Section configuration to compare against.
     # Section names are case-insensitive and may contain parameters in ().
@@ -303,7 +301,7 @@ linters-settings:
     sections:
       - standard                       # Standard section: captures all standard packages.
       - default                        # Default section: contains all imports that could not be matched to another section type.
-      - prefix(github.com/org/project) # Custom section: groups all imports with the specified Prefix.
+      - prefix(github.com/featurebasedb/featurebase) # Custom section: groups all imports with the specified Prefix.
       - blank                          # Blank section: contains all blank imports. This section is not present unless explicitly enabled.
       - dot                            # Dot section: contains all dot imports. This section is not present unless explicitly enabled.
 
