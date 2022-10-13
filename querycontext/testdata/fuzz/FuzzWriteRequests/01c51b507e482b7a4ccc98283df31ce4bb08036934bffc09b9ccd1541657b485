@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("0202x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x2x212x2x2x2x2x2x2x2x2x22202x2x2x2x2x2x2x2x0")
