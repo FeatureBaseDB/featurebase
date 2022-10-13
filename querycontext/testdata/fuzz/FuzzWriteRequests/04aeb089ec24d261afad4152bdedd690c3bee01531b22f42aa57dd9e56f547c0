@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("100128002z0B!8C92018X2288187CbA'10Xc077921")
