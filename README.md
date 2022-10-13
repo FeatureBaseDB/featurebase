@@ -73,13 +73,13 @@ A lot has changed since the days of Pilosa. This list highlights some new capabi
 
 FeatureBase is licensed under the [Apache License, Version 2.0][License]
 
-[Community]: https://www.featurebase.com/community
-[Config]: https://docs.featurebase.com/setting-up-featurebase/enterprise/featurebase-configuration
-[DataModel]: https://docs.featurebase.com/data-modeling-guide/data-modeling
+[Community]: http://www.featurebase.com/community?utm_campaign=Open%20Source&utm_source=GitHub
+[Config]: https://docs.featurebase.com/setting-up-featurebase/enterprise/featurebase-configuration?utm_campaign=Open%20Source&utm_source=GitHub
+[DataModel]: https://docs.featurebase.com/data-modeling-guide/data-modeling?utm_campaign=Open%20Source&utm_source=GitHub
 [Discord]: https://discord.gg/FBn2vEp7Na
-[HomePage]: https://www.featurebase.com
-[Ingest]: https://docs.featurebase.com/data-ingestion/enterprise/ingesters
-[Install]: https://docs.featurebase.com/setting-up-featurebase/enterprise/installing-featurebase
+[HomePage]: http://featurebase.com?utm_campaign=Open%20Source&utm_source=GitHub
+[Ingest]: https://docs.featurebase.com/data-ingestion/enterprise/ingesters?utm_campaign=Open%20Source&utm_source=GitHub
+[Install]: http://docs.featurebase.com/setting-up-featurebase/enterprise/installing-featurebase?utm_campaign=Open%20Source&utm_source=GitHub
 [License]: http://www.apache.org/licenses/LICENSE-2.0
-[PQL]: https://docs.featurebase.com/data-querying/pql/introduction
-[SQL]: https://docs.featurebase.com/data-querying/sql
+[PQL]: http://docs.featurebase.com/data-querying/pql/introduction?utm_campaign=Open%20Source&utm_source=GitHub
+[SQL]: http://docs.featurebase.com/data-querying/sql?utm_campaign=Open%20Source&utm_source=GitHub
