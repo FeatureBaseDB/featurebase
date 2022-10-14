@@ -549,8 +549,6 @@ func TestKafkaSourceTimeout(t *testing.T) {
 // be, but I think it has something to do with kafka rebalancing
 // itself when a new client joins.
 func TestKafkaSourceIntegration(t *testing.T) {
-	t.Parallel()
-
 	if testing.Short() {
 		t.Skip()
 	}

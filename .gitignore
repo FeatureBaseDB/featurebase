@@ -24,6 +24,9 @@ builds/
 *.tfstate.backup
 .vscode
 
+idk/testdata/idk*.out
+idk/testenv/certs/*
+
 # copy of .gitignore from archived idk repo
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o

@@ -22,7 +22,7 @@ FROM golang:${GO_VERSION} as pilosa-builder
 ARG MAKE_FLAGS
 WORKDIR /pilosa
 
-RUN go get github.com/rakyll/statik
+RUN go install github.com/rakyll/statik@v0.1.7
 
 COPY . ./
 COPY --from=lattice-builder /lattice/build /lattice
