@@ -15,6 +15,29 @@ func TestDecimalFieldPilosafy(t *testing.T) {
 
 }
 
+func TestBoolFieldPilosafy(t *testing.T) {
+	f := BoolField{NameVal: "boolcol"}
+	validTrue := []interface{}{true, 1, "t", "true", " T ", " True"}
+	validFalse := []interface{}{false, 0, "f", "false", " F ", " False"}
+	invalid := []interface{}{"boat", " test "}
+
+	for i, v := range validTrue {
+		if ret, err := f.PilosafyVal(v); err != nil || ret != true {
+			t.Errorf("test: %d, got: %v of %[1]T, err: %v", i, ret, err)
+		}
+	}
+	for i, v := range validFalse {
+		if ret, err := f.PilosafyVal(v); err != nil || ret != false {
+			t.Errorf("test: %d, got: %v of %[1]T, err: %v", i, ret, err)
+		}
+	}
+	for i, v := range invalid {
+		if ret, err := f.PilosafyVal(v); err == nil {
+			t.Errorf("test: %d, got: %v of %[1]T, err: %v", i, ret, err)
+		}
+	}
+}
+
 func TestPilosafyVal(t *testing.T) {
 	tests := []struct {
 		field   Field

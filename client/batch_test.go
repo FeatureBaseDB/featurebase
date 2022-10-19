@@ -31,6 +31,7 @@ func TestAgainstCluster(t *testing.T) {
 	client := NewTestClient(t, c)
 	t.Run("string-slice-combos", func(t *testing.T) { testStringSliceCombos(t, c, client) })
 	t.Run("import-batch-ints", func(t *testing.T) { testImportBatchInts(t, c, client) })
+	t.Run("import-batch-bools", func(t *testing.T) { testImportBatchBools(t, c, client) })
 	t.Run("import-batch-sorting", func(t *testing.T) { testImportBatchSorting(t, c, client) })
 	t.Run("test-trim-null", func(t *testing.T) { testTrimNull(t, c, client) })
 	t.Run("test-string-slice-empty-and-nil", func(t *testing.T) { testStringSliceEmptyAndNil(t, c, client) })
@@ -1818,7 +1819,7 @@ func mutexNilClearKey(t *testing.T, c *test.Cluster, client *Client) {
 	if err != nil {
 		t.Fatalf("importing: %v", err)
 	}
-	resp, err := client.Query(idx.RawQuery(`Row(mut="a")`))
+	resp, _ := client.Query(idx.RawQuery(`Row(mut="a")`))
 	errorIfNotEqual(t, resp.Result().Row().Keys, []string{"0", "2"})
 
 	r.ID = "2"
@@ -1837,4 +1838,46 @@ func mutexNilClearKey(t *testing.T, c *test.Cluster, client *Client) {
 		t.Fatalf("importing: %v", err)
 	}
 	errorIfNotEqual(t, resp.Result().Row().Keys, []string{"0"})
+}
+
+func testImportBatchBools(t *testing.T, c *test.Cluster, client *Client) {
+	schema := NewSchema()
+	idx := schema.Index("test-import-batch-bools")
+	field := idx.Field("boolcol", OptFieldTypeBool())
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 3, idx, []*Field{field}, OptUseShardTransactionalEndpoint(true))
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+	r := Row{Values: make([]interface{}, 1)}
+
+	r.ID = uint64(0)
+	r.Values[0] = bool(false)
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding after import: %v", err)
+	}
+	r.ID = uint64(1)
+	r.Values[0] = bool(true)
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding second after import: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+
+	resp, err := client.Query(idx.RawQuery("Count(All())"))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if res := resp.Results()[0]; res.Count() != 2 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
 }

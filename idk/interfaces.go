@@ -1131,11 +1131,16 @@ func toBool(val interface{}) (bool, error) {
 		}
 		return vt != 0, nil
 	case string:
-		switch strings.ToLower(vt) {
+		vt = strings.ToLower(vt)
+		vt = strings.TrimSpace(vt)
+		switch vt {
 		case "", "0", "f", "false":
 			return false, nil
+		case "1", "t", "true":
+			return true, nil
 		}
-		return true, nil
+		return false, errors.Errorf("couldn't convert %v of %[1]T to bool", vt)
+
 	default:
 		if vint, err := toInt64(val); err == nil {
 			return vint != 0, nil
