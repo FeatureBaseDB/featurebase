@@ -20,6 +20,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func configureTestFlags(main *Main) {
@@ -269,6 +270,7 @@ func TestSingleBoolClear(t *testing.T) {
 	ingester.Index = fmt.Sprintf("single_bool_clear%d", rand.Intn(100000))
 	ingester.BatchSize = 1
 	ingester.IDField = "id"
+	ingester.PackBools = "bools"
 
 	if err := ingester.Run(); err != nil {
 		t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
@@ -300,6 +302,7 @@ func TestSingleBoolClear(t *testing.T) {
 	ingester2.NewSource = func() (Source, error) { return ts2, nil }
 	ingester2.Index = ingester.Index
 	ingester2.IDField = "id"
+	ingester2.PackBools = "bools"
 
 	if err := ingester2.Run(); err != nil {
 		t.Fatalf("running ingester2: %v", err)
@@ -566,6 +569,7 @@ func TestDelete(t *testing.T) {
 	deleter := NewMain()
 	configureTestFlags(deleter)
 	deleter.Delete = true
+	deleter.PackBools = "bools"
 	deleter.NewSource = func() (Source, error) { return tsDelete, nil }
 	deleter.Index = indexName
 	deleter.BatchSize = 5
@@ -579,6 +583,7 @@ func TestDelete(t *testing.T) {
 
 	ingester := NewMain()
 	configureTestFlags(ingester)
+	ingester.PackBools = "bools"
 	ingester.NewSource = func() (Source, error) { return tsWrite, nil }
 	ingester.PrimaryKeyFields = primaryKeyFields
 	ingester.Index = indexName
@@ -874,7 +879,6 @@ func TestBatchFromSchema(t *testing.T) {
 			rawRec:  []interface{}{true, uint64(7), false},
 			rowID:   uint64(7),
 			rowVals: []interface{}{true, false},
-			err:     "field type 'bool' is not currently supported through Batch",
 		},
 		{
 			name:    "mutex field",
@@ -1429,6 +1433,7 @@ func TestNilIngest(t *testing.T) {
 		err        string
 		batchErr   string
 		rdzErrs    []string
+		packBools  string
 	}
 	runTest := func(t *testing.T, test testcase, removeIndex bool, server serverInfo, rawRec []interface{}, clearmap map[int]interface{}, values []interface{}) {
 		m := NewMain()
@@ -1437,6 +1442,7 @@ func TestNilIngest(t *testing.T) {
 		m.PrimaryKeyFields = test.pkFields
 		m.BatchSize = 2
 		m.Pprof = ""
+		m.PackBools = test.packBools
 		m.NewSource = func() (Source, error) { return nil, nil }
 		if server.AuthToken != "" {
 			m.AuthToken = server.AuthToken
@@ -1522,12 +1528,13 @@ func TestNilIngest(t *testing.T) {
 			Vals2:      []interface{}{nil, nil},
 			Vals3:      []interface{}{nil, nil},
 		}, {
-			name:     "bools null",
-			pkFields: []string{"user_id"},
-			rawRec1:  []interface{}{"1a", true}, // bool and bool-exists
-			rawRec2:  []interface{}{"1a", DELETE_SENTINEL},
-			rawRec3:  []interface{}{"1a", nil},
-			rowID:    "1a",
+			name:      "bools null",
+			packBools: "bools",
+			pkFields:  []string{"user_id"},
+			rawRec1:   []interface{}{"1a", true}, // bool and bool-exists
+			rawRec2:   []interface{}{"1a", DELETE_SENTINEL},
+			rawRec3:   []interface{}{"1a", nil},
+			rowID:     "1a",
 			schema: []Field{
 				StringField{NameVal: "user_id"},
 				BoolField{NameVal: "bool_val_1"},
@@ -1586,4 +1593,115 @@ func TestNilIngest(t *testing.T) {
 		}
 	}
 
+}
+
+func TestBoolIngest(t *testing.T) {
+	rand.Seed(time.Now().UTC().UnixNano())
+	indexName := fmt.Sprintf("boolingest%d", rand.Intn(100000))
+	primaryKeyFields := []string{"user_id"}
+
+	tests := []struct {
+		src      *testSource
+		expTrue  []string
+		expFalse []string
+		expNull  []string
+	}{
+		{
+			src: newTestSource(
+				[]Field{
+					StringField{NameVal: "user_id"},
+					BoolField{NameVal: "bool_val"},
+				},
+				[][]interface{}{
+					{"a1", true},
+				},
+			),
+			expTrue:  []string{"a1"},
+			expFalse: nil,
+			expNull:  nil,
+		},
+		{
+			src: newTestSource(
+				[]Field{
+					StringField{NameVal: "user_id"},
+					BoolField{NameVal: "bool_val"},
+				},
+				[][]interface{}{
+					{"a1", false},
+				},
+			),
+			expTrue:  nil,
+			expFalse: []string{"a1"},
+			expNull:  nil,
+		},
+		{
+			src: newTestSource(
+				[]Field{
+					StringField{NameVal: "user_id"},
+					BoolField{NameVal: "bool_val"},
+				},
+				[][]interface{}{
+					{"a1", nil},
+				},
+			),
+			expTrue:  nil,
+			expFalse: nil,
+			expNull:  []string{"a1"},
+		},
+	}
+
+	var ing *Main
+	defer func() {
+		ing := ing
+		if err := ing.PilosaClient().DeleteIndexByName(ing.Index); err != nil {
+			t.Logf("%s for index %s: %v", idktest.ErrDeletingIndex, ing.Index, err)
+		}
+	}()
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
+			ingester := NewMain()
+			configureTestFlags(ingester)
+			ingester.PackBools = ""
+			ingester.NewSource = func() (Source, error) { return test.src, nil }
+			ingester.PrimaryKeyFields = primaryKeyFields
+			ingester.Index = indexName
+			ingester.BatchSize = 1
+			ingester.UseShardTransactionalEndpoint = true
+
+			// Set ing so the defer can do cleanup.
+			if i == 0 {
+				ing = ingester
+			}
+
+			if err := ingester.Run(); err != nil {
+				t.Fatalf("%s: %v", idktest.ErrRunningIngest, err)
+			}
+
+			client := ingester.PilosaClient()
+			idx := ingester.index
+			fld := ingester.index.Field("bool_val")
+
+			// Check true.
+			{
+				resp, err := client.Query(fld.Row(true))
+				assert.NoError(t, err)
+				assert.Equal(t, test.expTrue, resp.Result().Row().Keys)
+			}
+
+			// Check false.
+			{
+				resp, err := client.Query(fld.Row(false))
+				assert.NoError(t, err)
+				assert.Equal(t, test.expFalse, resp.Result().Row().Keys)
+			}
+
+			// Check null.
+			{
+				resp, err := client.Query(idx.Difference(idx.All(), idx.Union(fld.Row(true), fld.Row(false))))
+				assert.NoError(t, err)
+				assert.Equal(t, test.expNull, resp.Result().Row().Keys)
+			}
+		})
+	}
 }

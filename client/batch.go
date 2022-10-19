@@ -87,6 +87,7 @@ type agedTranslation struct {
 // | uint64 | set               | any       |
 // | int64  | int               | any       |
 // | float64| decimal           | scale     |
+// | bool   | bool              | any       |
 // | nil    | any               |           |
 //
 // nil values are ignored.
@@ -123,6 +124,15 @@ type Batch struct {
 
 	// values holds the values for each record of an int field
 	values map[string][]int64
+
+	// boolValues is a map[fieldName][idsIndex]bool, which holds the values for
+	// each record of a bool field. It is a map of maps in order to accomodate
+	// nil values (they just aren't recorded in the map[int]).
+	boolValues map[string]map[int]bool
+
+	// boolNulls holds a slice of indices into b.ids for each bool field which
+	// has nil values.
+	boolNulls map[string][]uint64
 
 	// times holds a time for each record. (if any of the fields are time fields)
 	times []QuantizedTime
@@ -233,6 +243,8 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...B
 	headerMap := make(map[string]*Field, len(fields))
 	rowIDs := make(map[int][]uint64, len(fields))
 	values := make(map[string][]int64)
+	boolValues := make(map[string]map[int]bool)
+	boolNulls := make(map[string][]uint64)
 	tt := make(map[int]map[string][]int, len(fields))
 	ttSets := make(map[string]map[string][]int)
 	hasTime := false
@@ -257,6 +269,8 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...B
 				tt[i] = make(map[string][]int)
 			}
 			rowIDs[i] = make([]uint64, 0, size)
+		case FieldTypeBool:
+			boolValues[field.Name()] = make(map[int]bool)
 		default:
 			return nil, errors.Errorf("field type '%s' is not currently supported through Batch", typ)
 		}
@@ -273,6 +287,8 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...B
 		clearRowIDs:           make(map[int]map[int]uint64),
 		rowIDSets:             make(map[string][][]uint64),
 		values:                values,
+		boolValues:            boolValues,
+		boolNulls:             boolNulls,
 		nullIndices:           make(map[string][]uint64),
 		toTranslate:           tt,
 		toTranslateClear:      make(map[int]map[string][]int),
@@ -480,28 +496,8 @@ func (b *Batch) Add(rec Row) error {
 		field := b.header[i]
 		switch val := rec.Values[i].(type) {
 		case string:
-			if field.Opts().Type() != FieldTypeInt {
-				// nil-extend
-				for len(b.rowIDs[i]) < curPos {
-					b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
-				}
-				rowIDs := b.rowIDs[i]
-				// empty string is not a valid value at this point (Pilosa refuses to translate it)
-				if val == "" { //
-					b.rowIDs[i] = append(rowIDs, nilSentinel)
-
-				} else if rowID, ok := b.getRowTranslation(field.Name(), val); ok {
-					b.rowIDs[i] = append(rowIDs, rowID)
-				} else {
-					ints, ok := b.toTranslate[i][val]
-					if !ok {
-						ints = make([]int, 0)
-					}
-					ints = append(ints, curPos)
-					b.toTranslate[i][val] = ints
-					b.rowIDs[i] = append(rowIDs, 0)
-				}
-			} else if field.Opts().Type() == FieldTypeInt {
+			switch field.Opts().Type() {
+			case FieldTypeInt:
 				if val == "" {
 					// copied from the `case nil:` section for ints and decimals
 					b.values[field.Name()] = append(b.values[field.Name()], 0)
@@ -521,6 +517,30 @@ func (b *Batch) Add(rec Row) error {
 					ints = append(ints, curPos)
 					b.toTranslate[i][val] = ints
 					b.values[field.Name()] = append(b.values[field.Name()], 0)
+				}
+			case FieldTypeBool:
+				// If we want to support bools as string values, we would do
+				// that here.
+			default:
+				// nil-extend
+				for len(b.rowIDs[i]) < curPos {
+					b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+				}
+				rowIDs := b.rowIDs[i]
+				// empty string is not a valid value at this point (Pilosa refuses to translate it)
+				if val == "" { //
+					b.rowIDs[i] = append(rowIDs, nilSentinel)
+
+				} else if rowID, ok := b.getRowTranslation(field.Name(), val); ok {
+					b.rowIDs[i] = append(rowIDs, rowID)
+				} else {
+					ints, ok := b.toTranslate[i][val]
+					if !ok {
+						ints = make([]int, 0)
+					}
+					ints = append(ints, curPos)
+					b.toTranslate[i][val] = ints
+					b.rowIDs[i] = append(rowIDs, 0)
 				}
 			}
 		case uint64:
@@ -579,8 +599,8 @@ func (b *Batch) Add(rec Row) error {
 			}
 			b.rowIDSets[field.Name()] = append(rowIDSets, val)
 		case nil:
-			t := field.Opts().Type()
-			if t == FieldTypeInt || t == FieldTypeDecimal || t == FieldTypeTimestamp {
+			switch field.Opts().Type() {
+			case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
 				nullIndices, ok := b.nullIndices[field.Name()]
 				if !ok {
@@ -589,7 +609,15 @@ func (b *Batch) Add(rec Row) error {
 				nullIndices = append(nullIndices, uint64(curPos))
 				b.nullIndices[field.Name()] = nullIndices
 
-			} else {
+			case FieldTypeBool:
+				boolNulls, ok := b.boolNulls[field.Name()]
+				if !ok {
+					boolNulls = make([]uint64, 0)
+				}
+				boolNulls = append(boolNulls, uint64(curPos))
+				b.boolNulls[field.Name()] = boolNulls
+
+			default:
 				// only append nil to rowIDs if this field already has
 				// rowIDs. Otherwise, this could be a []string or
 				// []uint64 field where we've only seen nil values so
@@ -600,6 +628,10 @@ func (b *Batch) Add(rec Row) error {
 					b.rowIDs[i] = append(rowIDs, nilSentinel)
 				}
 			}
+
+		case bool:
+			b.boolValues[field.Name()][curPos] = val
+
 		default:
 			return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
 		}
@@ -712,7 +744,6 @@ func (b *Batch) Import() error {
 		return errors.Wrap(err, "making fragments (flush)")
 	}
 	if b.useShardTransactionalEndpoint {
-		// TODO handle bool?
 		frags, clearFrags, err = b.makeSingleValFragments(frags, clearFrags)
 		if err != nil {
 			return errors.Wrap(err, "making single val fragments")
@@ -1478,6 +1509,60 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			}
 		}
 	}
+	// -------------------------
+	// Boolean fields
+	// -------------------------
+	falseRowOffset := 0 * shardWidth // fragment row 0
+	trueRowOffset := 1 * shardWidth  // fragment row 1
+
+	// For bools which have been set to null, clear both the true and false
+	// values for the record. Because this ends up going through the
+	// API.ImportRoaringShard() method (which handles `bool` fields the same as
+	// `mutex` fields), we don't actually set the true and false rows of the
+	// boolean fragment; rather, we just set the first row to indicate which
+	// records (for all rows) to clear.
+	for fieldname, boolNulls := range b.boolNulls {
+		field := b.headerMap[fieldname]
+		if field.Opts().Type() != featurebase.FieldTypeBool {
+			continue
+		}
+		for _, pos := range boolNulls {
+			recID := b.ids[pos]
+			shard := recID / shardWidth
+			clearBM := clearFrags.GetOrCreate(shard, field.Name(), "standard")
+
+			fragmentColumn := recID % shardWidth
+			clearBM.Add(fragmentColumn)
+		}
+	}
+
+	// For bools which have been set to a non-nil value, set the appropriate
+	// value for the record, and unset the opposing values. For example, if the
+	// bool is set to `false`, then set the bit in the "false" row, and clear
+	// the bit in the "true" row.
+	for fieldname, boolMap := range b.boolValues {
+		field := b.headerMap[fieldname]
+		if field.Opts().Type() != featurebase.FieldTypeBool {
+			continue
+		}
+
+		for pos, boolVal := range boolMap {
+			recID := b.ids[pos]
+
+			shard := recID / shardWidth
+			bitmap := frags.GetOrCreate(shard, field.Name(), "standard")
+			clearBM := clearFrags.GetOrCreate(shard, field.Name(), "standard")
+
+			fragmentColumn := recID % shardWidth
+			clearBM.Add(fragmentColumn)
+
+			if boolVal {
+				bitmap.Add(trueRowOffset + fragmentColumn)
+			} else {
+				bitmap.Add(falseRowOffset + fragmentColumn)
+			}
+		}
+	}
 
 	return frags, clearFrags, nil
 }
@@ -1699,6 +1784,14 @@ func (b *Batch) reset() {
 		for k := range clearMap {
 			delete(clearMap, k)
 		}
+	}
+	for _, boolsMap := range b.boolValues {
+		for k := range boolsMap {
+			delete(boolsMap, k)
+		}
+	}
+	for k := range b.boolNulls {
+		delete(b.boolNulls, k) // TODO pool these slices
 	}
 	for i := range b.toTranslateID {
 		b.toTranslateID[i] = ""
