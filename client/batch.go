@@ -668,7 +668,6 @@ func (b *Batch) Add(rec Row) error {
 				}
 				b.rowIDs[i][len(b.rowIDs[i])-1] = clearSentinel
 			}
-
 		default:
 			return errors.Errorf("Clearing a value '%v' Type %[1]T is not currently supported (field '%s')", val, field.Name())
 		}
