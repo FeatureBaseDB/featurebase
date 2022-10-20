@@ -1648,6 +1648,20 @@ func TestBoolIngest(t *testing.T) {
 			expFalse: nil,
 			expNull:  []string{"a1"},
 		},
+		{
+			src: newTestSource(
+				[]Field{
+					StringField{NameVal: "user_id"},
+					BoolField{NameVal: "bool_val"},
+				},
+				[][]interface{}{
+					{"a1", DELETE_SENTINEL},
+				},
+			),
+			expTrue:  nil,
+			expFalse: nil,
+			expNull:  []string{"a1"},
+		},
 	}
 
 	var ing *Main
@@ -1696,7 +1710,7 @@ func TestBoolIngest(t *testing.T) {
 				assert.Equal(t, test.expFalse, resp.Result().Row().Keys)
 			}
 
-			// Check null.
+			// Check nil. This is used to test the ingestion of nil and null.
 			{
 				resp, err := client.Query(idx.Difference(idx.All(), idx.Union(fld.Row(true), fld.Row(false))))
 				assert.NoError(t, err)

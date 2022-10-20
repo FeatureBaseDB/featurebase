@@ -1539,6 +1539,16 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 					}
 					return errors.Wrapf(err, "converting field %d:%+v, val:%+v", i, idkField, rawRec[i])
 				})
+			case BoolField:
+				recordizers = append(recordizers, func(rawRec []interface{}, rec *pilosaclient.Row) (err error) {
+					switch rawRec[i].(type) {
+					case DeleteSentinel:
+						rec.Values[valIdx] = nil
+					default:
+						rec.Values[valIdx], err = idkField.PilosafyVal(rawRec[i])
+					}
+					return errors.Wrapf(err, "converting field %d:%+v, val:%+v", i, idkField, rawRec[i])
+				})
 			default:
 				recordizers = append(recordizers, func(rawRec []interface{}, rec *pilosaclient.Row) (err error) {
 					rec.Values[valIdx], err = idkField.PilosafyVal(rawRec[i])
@@ -1605,12 +1615,17 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 				fields = append(fields, m.index.Field(fld.DestName(), pilosaclient.OptFieldTypeBool()))
 				valIdx := len(fields) - 1
 				recordizers = append(recordizers, func(rawRec []interface{}, rec *pilosaclient.Row) (err error) {
-					val, err := idkField.PilosafyVal(rawRec[i])
-					if err != nil {
-						return errors.Wrapf(err, "booling '%v' of %[1]T", val)
-					}
-					if b, ok := val.(bool); ok {
-						rec.Values[valIdx] = b
+					switch rawRec[i].(type) {
+					case DeleteSentinel:
+						rec.Values[valIdx] = nil
+					default:
+						val, err := idkField.PilosafyVal(rawRec[i])
+						if err != nil {
+							return errors.Wrapf(err, "booling '%v' of %[1]T", val)
+						}
+						if b, ok := val.(bool); ok {
+							rec.Values[valIdx] = b
+						}
 					}
 					return errors.Wrapf(err, "converting field %d:%+v, val:%+v", i, idkField, rawRec[i])
 				})
