@@ -1,23 +1,10 @@
 name: Release
 
 on:
-  push:
-    branches: ["master"]
-
   workflow_dispatch:
 
 jobs:
-  # release:
-  #   runs-on: ubuntu-latest
-  #   outputs:
-  #     version: ${{ steps.semrel.outputs.version }}
-
-  #   steps:
-  #     - name: get version
-        
-
   build:
-    # needs: release
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -37,12 +24,3 @@ jobs:
 
       - name: build
         run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
-
-      # - name: Upload binaries to release
-      #   uses: svenstaro/upload-release-action@v2
-      #   with:
-      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
-      #     file: ./build/${{ matrix.goos }}-${{ matrix.goarch }}
-      #     asset_name: ${{ matrix.goos }}-${{ matrix.goarch }}
-      #     tag: ${{ github.ref }}
-
