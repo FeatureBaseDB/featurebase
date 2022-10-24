@@ -47,13 +47,6 @@ import (
 	"github.com/zeebo/blake3"
 )
 
-type ContextRequestUserIdKeyType string
-
-const (
-	// ContextRequestUserIdKey is request userid key for a request ctx
-	ContextRequestUserIdKey = ContextRequestUserIdKeyType("request-user-id")
-)
-
 const (
 	// HeaderRequestUserID is request userid header
 	HeaderRequestUserID = "X-Request-Userid"
@@ -690,7 +683,7 @@ func (h *Handler) chkAllowedNetworks(r *http.Request) (bool, context.Context) {
 	// if client IP is in allowed networks
 	// add it to the context for key X-Molecula-Original-IP
 	if h.auth.CheckAllowedNetworks(reqIP) {
-		ctx := context.WithValue(r.Context(), OriginalIPHeader, reqIP)
+		ctx := WithOriginalIP(r.Context(), reqIP)
 		return true, ctx
 	}
 	return false, r.Context()
@@ -702,7 +695,7 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 
 		//if the request is unauthenticated and we have the appropriate header get the userid from the header
 		requestUserID := r.Header.Get(HeaderRequestUserID)
-		ctx = context.WithValue(ctx, ContextRequestUserIdKey, requestUserID)
+		ctx = WithUserID(ctx, requestUserID)
 
 		if h.auth == nil {
 			handler.ServeHTTP(w, r.WithContext(ctx))
@@ -722,12 +715,13 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusUnauthorized)
 			return
 		}
+
 		// prefer the user id from an authenticated request over one in a header
-		ctx = context.WithValue(ctx, ContextRequestUserIdKey, uinfo.UserID)
+		ctx = WithUserID(ctx, uinfo.UserID)
 
 		// just in case it got refreshed
-		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
-		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
+		ctx = authn.WithAccessToken(ctx, "Bearer"+access)
+		ctx = authn.WithRefreshToken(ctx, refresh)
 		h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
 
 		handler.ServeHTTP(w, r.WithContext(ctx))
@@ -740,7 +734,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 
 		//if the request is unauthenticated and we have the appropriate header get the userid from the header
 		requestUserID := r.Header.Get(HeaderRequestUserID)
-		ctx = context.WithValue(ctx, ContextRequestUserIdKey, requestUserID)
+		ctx = WithUserID(ctx, requestUserID)
 
 		// handle the case when auth is not turned on
 		if h.auth == nil {
@@ -769,18 +763,18 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		}
 
 		// prefer the user id from an authenticated request over one in a header
-		ctx = context.WithValue(ctx, ContextRequestUserIdKey, uinfo.UserID)
+		ctx = WithUserID(ctx, uinfo.UserID)
 
-		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
-		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
+		ctx = authn.WithAccessToken(ctx, "Bearer "+access)
+		ctx = authn.WithRefreshToken(ctx, refresh)
 
 		// just in case it got refreshed
 		h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
 
 		// put the user's authN/Z info in the context
 		ctx = context.WithValue(ctx, contextKeyGroupMembership, uinfo.Groups)
-		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+uinfo.Token)
-		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, uinfo.RefreshToken)
+		ctx = authn.WithAccessToken(ctx, "Bearer "+uinfo.Token)
+		ctx = authn.WithRefreshToken(ctx, uinfo.RefreshToken)
 		// unlikely h.permissions will be nil, but we'll check to be safe
 		if h.permissions == nil {
 			h.logger.Errorf("authentication is turned on without authorization permissions set")
@@ -867,7 +861,7 @@ func GetIP(r *http.Request) string {
 	}
 
 	// check if original IP is in the context
-	if ogIP, ok := r.Context().Value(OriginalIPHeader).(string); ok && ogIP != "" {
+	if ogIP, ok := OriginalIPFromContext(r.Context()); ok && ogIP != "" {
 		return ogIP
 	}
 

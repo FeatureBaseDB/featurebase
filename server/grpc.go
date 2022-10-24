@@ -165,8 +165,7 @@ func isAllowed(requested []string, allowed []string) bool {
 // QuerySQL handles the SQL request and sends RowResponses to the stream.
 func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
 	ctx := stream.Context()
-	uinfo, ok := ctx.Value("userinfo").(*authn.UserInfo)
-	if ok && uinfo != nil {
+	if uinfo, ok := authn.GetUserInfo(ctx); ok && uinfo != nil {
 		// authz
 		m := sql.NewMapper()
 		parsed, err := m.MapSQL(req.Sql)
@@ -185,7 +184,7 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 			if !isAllowed(parsed.Tables, allowed) {
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
 			}
-			ctx = context.WithValue(ctx, "indices", allowed)
+			ctx = authn.WithIndexes(ctx, allowed)
 		}
 		LogQuery(ctx, "QuerySQL", req, h.queryLogger)
 	}
@@ -229,8 +228,7 @@ func (h *GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQ
 // https://github.com/molecula/pilosa/pull/644
 func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
 	start := time.Now()
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
+	if uinfo, _ := authn.GetUserInfo(ctx); uinfo != nil {
 		// authz
 		m := sql.NewMapper()
 		parsed, err := m.MapSQL(req.Sql)
@@ -244,12 +242,12 @@ func (h *GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest
 			perm = authz.Admin
 		}
 
-		allowed := h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, perm)
-		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+		allowed := h.perms.GetAuthorizedIndexList(uinfo.Groups, perm)
+		if !h.perms.IsAdmin(uinfo.Groups) {
 			if !isAllowed(parsed.Tables, allowed) {
 				return nil, status.Error(codes.PermissionDenied, "insufficient permissions to access requested tables")
 			}
-			ctx = context.WithValue(ctx, "indices", allowed)
+			ctx = authn.WithIndexes(ctx, allowed)
 		}
 	}
 
@@ -288,8 +286,7 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 	}
 
 	ctx := stream.Context()
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
+	if uinfo, _ := authn.GetUserInfo(ctx); uinfo != nil {
 		lperm := authz.Read
 		q, err := pql.ParseString(req.Pql)
 		if err != nil {
@@ -298,8 +295,8 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 		if q.WriteCallN() > 0 {
 			lperm = authz.Write
 		}
-		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
-			if !isAllowed([]string{req.Index}, h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, lperm)) {
+		if !h.perms.IsAdmin(uinfo.Groups) {
+			if !isAllowed([]string{req.Index}, h.perms.GetAuthorizedIndexList(uinfo.Groups, lperm)) {
 				return status.Error(codes.PermissionDenied, "insufficient permissions to access requested indexes")
 			}
 		}
@@ -357,8 +354,7 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 		Index: req.Index,
 		Query: req.Pql,
 	}
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
+	if uinfo, _ := authn.GetUserInfo(ctx); uinfo != nil {
 		lperm := authz.Read
 		q, err := pql.ParseString(req.Pql)
 		if err != nil {
@@ -367,8 +363,8 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 		if q.WriteCallN() > 0 {
 			lperm = authz.Write
 		}
-		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
-			if !isAllowed([]string{req.Index}, h.perms.GetAuthorizedIndexList(uinfo.(*authn.UserInfo).Groups, lperm)) {
+		if !h.perms.IsAdmin(uinfo.Groups) {
+			if !isAllowed([]string{req.Index}, h.perms.GetAuthorizedIndexList(uinfo.Groups, lperm)) {
 				return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("insufficient permissions for %v", req.Index))
 			}
 		}
@@ -418,9 +414,8 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 
 // CreateIndex creates a new Index
 func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexRequest) (*pb.CreateIndexResponse, error) {
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
-		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+	if uinfo, _ := authn.GetUserInfo(ctx); uinfo != nil {
+		if !h.perms.IsAdmin(uinfo.Groups) {
 			return nil, status.Error(codes.PermissionDenied, "must be admin to create index")
 		}
 	}
@@ -438,13 +433,11 @@ func (h *GRPCHandler) CreateIndex(ctx context.Context, req *pb.CreateIndexReques
 
 // GetIndex returns a single Index given a name
 func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*pb.GetIndexResponse, error) {
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
-		pp, ok := uinfo.(*authn.UserInfo)
+	if uinfo, ok := authn.GetUserInfo(ctx); uinfo != nil {
 		if !ok {
 			return nil, status.Error(codes.InvalidArgument, "malformed auth header")
 		}
-		p, err := h.perms.GetPermissions(pp, req.Name)
+		p, err := h.perms.GetPermissions(uinfo, req.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -470,14 +463,9 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
-	uinfo := ctx.Value("userinfo")
-	var userInfo *authn.UserInfo
-	if uinfo != nil {
-		var ok bool
-		userInfo, ok = uinfo.(*authn.UserInfo)
-		if !ok {
-			return nil, status.Error(codes.InvalidArgument, "malformed auth header")
-		}
+	userInfo, ok := authn.GetUserInfo(ctx)
+	if !ok {
+		return nil, status.Error(codes.InvalidArgument, "malformed auth header")
 	}
 	schema, err := h.api.Schema(ctx, false)
 	if err != nil {
@@ -504,9 +492,8 @@ func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest)
 
 // DeleteIndex deletes an Index
 func (h *GRPCHandler) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
-		if !h.perms.IsAdmin(uinfo.(*authn.UserInfo).Groups) {
+	if uinfo, _ := authn.GetUserInfo(ctx); uinfo != nil {
+		if !h.perms.IsAdmin(uinfo.Groups) {
 			return nil, status.Error(codes.PermissionDenied, "must be admin to delete index")
 		}
 	}
@@ -741,8 +728,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 	})
 
 	ctx := stream.Context()
-	uinfo := ctx.Value("userinfo")
-	if uinfo != nil {
+	if uinfo, _ := authn.GetUserInfo(ctx); uinfo != nil {
 		LogQuery(stream.Context(), "Inspect", req, h.queryLogger)
 	}
 
@@ -1627,7 +1613,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 
 			// reset the molecula-chip cookie just in case the token was refreshed
 			md, ok := metadata.FromIncomingContext(ctx)
-			if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
+			if uinfo, yeah := authn.GetUserInfo(ctx); ok && yeah {
 				server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
 			}
 			return handler(ctx, req)
@@ -1639,7 +1625,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 			}
 			// reset the molecula-chip cookie just in case the token was refreshed
 			md, ok := metadata.FromIncomingContext(ctx)
-			if uinfo, yeah := ctx.Value("userinfo").(*authn.UserInfo); ok && yeah {
+			if uinfo, yeah := authn.GetUserInfo(ctx); ok && yeah {
 				server.auth.SetGRPCMetadata(ctx, md, uinfo.Token, uinfo.RefreshToken)
 			}
 			return handler(srv, &wrappedStream{ss, ctx})
@@ -1673,7 +1659,10 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 
 // LogQuery logs requests
 func LogQuery(ctx context.Context, method string, req interface{}, logger logger.Logger) {
-	uinfo, ok := ctx.Value("userinfo").(*authn.UserInfo)
+	uinfo, ok := authn.GetUserInfo(ctx)
+	if !ok {
+		uinfo = &authn.UserInfo{}
+	}
 	md, _ := metadata.FromIncomingContext(ctx)
 	p, ok := peer.FromContext(ctx)
 	ip := ""
@@ -1728,7 +1717,7 @@ func Valid(ctx context.Context, auth *authn.Auth) (context.Context, error) {
 		return ctx, status.Errorf(codes.Unauthenticated, err.Error())
 	}
 
-	return context.WithValue(ctx, "userinfo", uinfo), nil
+	return authn.WithUserInfo(ctx, uinfo), nil
 }
 
 func getTokensFromMetadata(md metadata.MD) (string, string) {

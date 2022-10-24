@@ -33,12 +33,6 @@ const (
 
 	// RefreshHeaderName is the name of the header that holds the refresh token.
 	RefreshHeaderName = "X-Molecula-Refresh-Token"
-
-	// ContextValueAccessToken is the key used to set AccessTokens in a ctx.
-	ContextValueAccessToken = "Access"
-
-	// ContextValueRefreshToken is the key used to set RefreshTokens in a ctx.
-	ContextValueRefreshToken = "Refresh"
 )
 
 // cachedGroups is used to hold groups and when they were last cached

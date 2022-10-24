@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
 	pproto "github.com/molecula/featurebase/v3/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -48,7 +49,7 @@ func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Sh
 		return nil, errors.Wrap(err, "getting schema")
 	}
 
-	allowed, ok := ctx.Value("indices").([]string)
+	allowed, ok := authn.GetIndexes(ctx)
 
 	result := make(pproto.ConstRowser, 0)
 	for _, ii := range indexInfo {
@@ -82,7 +83,7 @@ func (s *ShowHandler) execShowTables(ctx context.Context, showStmt *sqlparser.Sh
 
 func (s *ShowHandler) execShowFields(ctx context.Context, showStmt *sqlparser.Show) (pproto.ToRowser, error) {
 	indexName := showStmt.OnTable.ToViewName().Name.String()
-	allowed, ok := ctx.Value("indices").([]string)
+	allowed, ok := authn.GetIndexes(ctx)
 	if ok {
 		found := false
 		for _, idx := range allowed {

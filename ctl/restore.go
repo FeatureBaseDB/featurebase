@@ -95,7 +95,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	cmd.client = client
 
 	if cmd.AuthToken != "" {
-		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+cmd.AuthToken)
+		ctx = authn.WithAccessToken(ctx, "Bearer "+cmd.AuthToken)
 	}
 
 	nodes, err := cmd.client.Nodes(ctx)
@@ -156,7 +156,7 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *disco.Nod
 		req = req.WithContext(ctx)
 		req.Header.Add("Accept", "application/json")
 
-		token, ok := ctx.Value(authn.ContextValueAccessToken).(string)
+		token, ok := authn.GetAccessToken(ctx)
 		if ok && token != "" {
 			req.Header.Set("Authorization", token)
 		}
@@ -326,7 +326,7 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 		req = req.WithContext(ctx)
 		req.Header.Set("Content-Type", "application/octet-stream")
 
-		token, ok := ctx.Value(authn.ContextValueAccessToken).(string)
+		token, ok := authn.GetAccessToken(ctx)
 		if ok && token != "" {
 			req.Header.Set("Authorization", token)
 		}

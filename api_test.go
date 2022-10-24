@@ -1402,23 +1402,11 @@ func TestAuth_MultiNode(t *testing.T) {
     "test": "write"
 admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 	adminUser := makeUser(t, []authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin", "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
-	adminCtx := context.WithValue(
-		context.Background(),
-		"userinfo",
-		adminUser,
-	)
+	adminCtx := authn.WithUserInfo(context.Background(), adminUser)
 	readUser := makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readGroup"}}, "reader", "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF")
-	readCtx := context.WithValue(
-		context.Background(),
-		"userinfo",
-		readUser,
-	)
+	readCtx := authn.WithUserInfo(context.Background(), readUser)
 	writeUser := makeUser(t, []authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906f", GroupName: "writeGroup"}}, "writer", "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEED")
-	writeCtx := context.WithValue(
-		context.Background(),
-		"userinfo",
-		writeUser,
-	)
+	writeCtx := authn.WithUserInfo(context.Background(), writeUser)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := r.Header["Authorization"]
 		if !ok || len(token) == 0 {

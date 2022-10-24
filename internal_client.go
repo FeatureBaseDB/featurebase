@@ -226,29 +226,29 @@ func NewInternalClientFromURI(defaultURI *pnet.URI, remoteClient *http.Client, o
 // same for refresh tokens as well.
 func AddAuthToken(ctx context.Context, header *http.Header) {
 	var access, refresh string
-	if token, ok := ctx.Value(authn.ContextValueAccessToken).(string); ok {
+	if token, ok := authn.GetAccessToken(ctx); ok {
 		// the AccessToken value should be prefixed with "Bearer"
 		access = token
 	}
-	if token, ok := ctx.Value(authn.ContextValueRefreshToken).(string); ok {
+	if token, ok := authn.GetRefreshToken(ctx); ok {
 		refresh = token
 	}
 
 	// not combining these ifs so we don't call ctx.Value unless we have to
 	if access == "" || refresh == "" {
-		if uinfo := ctx.Value("userinfo"); uinfo != nil {
+		if uinfo, _ := authn.GetUserInfo(ctx); uinfo != nil {
 			if access == "" {
 				// UserInfo.Token is not prefixed with "Bearer"
-				access = "Bearer " + uinfo.(*authn.UserInfo).Token
+				access = "Bearer " + uinfo.Token
 			}
 			if refresh == "" {
-				refresh = uinfo.(*authn.UserInfo).RefreshToken
+				refresh = uinfo.RefreshToken
 			}
 		}
 	}
 
 	// set ogIP to request for remote calls
-	if ogIP, ok := ctx.Value(OriginalIPHeader).(string); ok && ogIP != "" {
+	if ogIP, ok := OriginalIPFromContext(ctx); ok && ogIP != "" {
 		header.Set(OriginalIPHeader, ogIP)
 	}
 
