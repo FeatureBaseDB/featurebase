@@ -1184,23 +1184,11 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 	}
 
 	user := makeUser([]authn.Group{{GroupID: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe", GroupName: "adminGroup"}}, "admin")
-	adminCtx := context.WithValue(
-		ctx,
-		"userinfo",
-		user,
-	)
+	adminCtx := authn.WithUserInfo(ctx, user)
 	readuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906b", GroupName: "readers"}}, "reader")
-	readCtx := context.WithValue(
-		ctx,
-		"userinfo",
-		readuser,
-	)
+	readCtx := authn.WithUserInfo(ctx, readuser)
 	writeuser := makeUser([]authn.Group{{GroupID: "dca35310-ecda-4f23-86cd-876aee55906f", GroupName: "writers"}}, "admin")
-	writeCtx := context.WithValue(
-		ctx,
-		"userinfo",
-		writeuser,
-	)
+	writeCtx := authn.WithUserInfo(ctx, writeuser)
 
 	sql := "select * from grouper"
 	t.Run("test-auth-with-admin-sqlUnary", func(t *testing.T) {
@@ -1537,11 +1525,11 @@ func TestCRUDIndexes(t *testing.T) {
 
 func TestLogQuery(t *testing.T) {
 	method := "test!"
-	uinfo := authn.UserInfo{
+	uinfo := &authn.UserInfo{
 		UserID:   "ID",
 		UserName: "name",
 	}
-	ctx := context.WithValue(context.Background(), "userinfo", &uinfo)
+	ctx := authn.WithUserInfo(context.Background(), uinfo)
 
 	cases := []struct {
 		name     string
@@ -1963,8 +1951,8 @@ type MockStream struct {
 	context context.Context
 }
 
-func (ms MockStream) SetHeader(md metadata.MD) error {
-	ms.context = context.WithValue(context.Background(), "metadata", md)
+func (ms *MockStream) SetHeader(md metadata.MD) error {
+	ms.context = contextWithMetadata(context.Background(), md)
 	return nil
 }
 
@@ -1977,7 +1965,7 @@ func (ms MockStream) SetTrailer(metadata.MD) {}
 func (ms MockStream) Context() context.Context {
 	if ms.context == nil {
 		md := metadata.New(map[string]string{})
-		ms.context = context.WithValue(context.Background(), "metadata", md)
+		ms.context = contextWithMetadata(context.Background(), md)
 	}
 	return ms.context
 }
@@ -1990,21 +1978,34 @@ func (ms MockStream) RecvMsg(m interface{}) error {
 	return nil
 }
 
-func fromIncomingContext(ctx context.Context) metadata.MD {
-	return ctx.Value("metadata").(metadata.MD)
+type contextKeyMetadata struct{}
+
+func contextWithMetadata(ctx context.Context, metadata metadata.MD) context.Context {
+	return context.WithValue(ctx, contextKeyMetadata{}, metadata)
+}
+
+func metadataFromContext(ctx context.Context) (meta metadata.MD, ok bool) {
+	meta, ok = ctx.Value(contextKeyMetadata{}).(metadata.MD)
+	return
 }
 
 func Test_ChainStreamInterceptor(t *testing.T) {
 
 	salt := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		md := fromIncomingContext(ss.Context())
+		md, ok := metadataFromContext(ss.Context())
+		if !ok {
+			t.Fatal("metadata was not in context")
+		}
 		md.Append("ingredient", "with salt")
 		err := ss.SetHeader(md)
 		assert.NoError(t, err)
 		return handler(srv, ss)
 	}
 	pepper := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		md := fromIncomingContext(ss.Context())
+		md, ok := metadataFromContext(ss.Context())
+		if !ok {
+			t.Fatal("metadata was not in context")
+		}
 		md.Append("ingredient", "and pepper")
 		err := ss.SetHeader(md)
 		assert.NoError(t, err)
@@ -2028,10 +2029,13 @@ func Test_ChainStreamInterceptor(t *testing.T) {
 		result := make([]string, 0)
 		srv := "asdf"
 		md := metadata.New(map[string]string{})
-		ss := MockStream{context: context.WithValue(context.Background(), "metadata", md)}
+		ss := &MockStream{context: contextWithMetadata(context.Background(), md)}
 		info := &grpc.StreamServerInfo{}
 		handler := func(srv interface{}, stream grpc.ServerStream) error {
-			md := fromIncomingContext(stream.Context())
+			md, ok := metadataFromContext(stream.Context())
+			if !ok {
+				t.Fatal("metadata was not in context")
+			}
 			vals := md.Get("ingredient")
 			result = append(result, "Soup")
 			result = append(result, vals...)

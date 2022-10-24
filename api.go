@@ -218,10 +218,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 
 	// get the requestUserID from the context -- assumes the http handler has populated this from
 	// authN/Z info
-	requestUserID, ok := ctx.Value(ContextRequestUserIdKey).(string)
-	if !ok {
-		requestUserID = ""
-	}
+	requestUserID, _ := UserIDFromContext(ctx) // requestUserID is "" if not in ctx
 
 	if err := api.validate(apiCreateIndex); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
@@ -310,10 +307,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 
 	// get the requestUserID from the context -- assumes the http handler has populated this from
 	// authN/Z info
-	requestUserID, ok := ctx.Value(ContextRequestUserIdKey).(string)
-	if !ok {
-		requestUserID = ""
-	}
+	requestUserID, _ := UserIDFromContext(ctx) // requestUserID is "" if not in ctx
 
 	// Apply and validate functional options.
 	fo, err := newFieldOptions(opts...)
@@ -369,7 +363,7 @@ func (api *API) UpdateField(ctx context.Context, indexName, fieldName string, up
 
 	// get the requestUserID from the context -- assumes the http handler has populated this from
 	// authN/Z info
-	requestUserID, _ := ctx.Value(ContextRequestUserIdKey).(string)
+	requestUserID, _ := UserIDFromContext(ctx)
 
 	cfm, err := index.UpdateField(ctx, fieldName, requestUserID, update)
 	if err != nil {

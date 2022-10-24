@@ -177,7 +177,6 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	const shard = 0
 	tx0 := holder.Txf().NewWritableQcx()
 	defer tx0.Abort()
 	if f, err := i0.CreateFieldIfNotExists("f1", "", pilosa.OptFieldTypeDefault()); err != nil {

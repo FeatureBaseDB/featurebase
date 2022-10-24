@@ -94,11 +94,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	cmd.client = client
 
 	if cmd.AuthToken != "" {
-		ctx = context.WithValue(
-			ctx,
-			authn.ContextValueAccessToken,
-			"Bearer "+cmd.AuthToken,
-		)
+		ctx = authn.WithAccessToken(ctx, "Bearer "+cmd.AuthToken)
 	}
 
 	if cmd.CreateSchema {

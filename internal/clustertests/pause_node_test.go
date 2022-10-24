@@ -302,11 +302,7 @@ func TestPauseReplica(t *testing.T) {
 	ctx := context.Background()
 	if auth {
 		token := GetAuthToken(t)
-		ctx = context.WithValue(
-			ctx,
-			authn.ContextValueAccessToken,
-			"Bearer "+token,
-		)
+		ctx = authn.WithAccessToken(ctx, "Bearer "+token)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

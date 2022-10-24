@@ -113,11 +113,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	cmd.client = client
 
 	if cmd.AuthToken != "" {
-		ctx = context.WithValue(
-			ctx,
-			authn.ContextValueAccessToken,
-			"Bearer "+cmd.AuthToken,
-		)
+		ctx = authn.WithAccessToken(ctx, "Bearer "+cmd.AuthToken)
 	}
 
 	// Determine the field type in order to correctly handle the input data.

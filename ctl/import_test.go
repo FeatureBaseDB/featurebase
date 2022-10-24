@@ -722,11 +722,7 @@ func TestImport_AuthOn(t *testing.T) {
 			cm.Field = test.Field
 			cm.CreateSchema = test.CreateSchema
 			cm.Paths = []string{file.Name()}
-			ctx := context.WithValue(
-				context.Background(),
-				authn.ContextValueAccessToken,
-				test.Token,
-			)
+			ctx := authn.WithAccessToken(context.Background(), test.Token)
 			err = cm.Run(ctx)
 			if test.Err != nil {
 				if !strings.Contains(err.Error(), test.Err.Error()) {
