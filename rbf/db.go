@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"sort"
 	"sync"
 	"syscall"
@@ -668,7 +667,6 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 		pageMap:     db.pageMap,
 		walPageN:    db.walPageN,
 		writable:    writable,
-		stack:       debug.Stack(), // DEBUG
 
 		DeleteEmptyContainer: true,
 	}
