@@ -6,6 +6,13 @@ import (
 	"math/bits"
 )
 
+// Exponent controls the size of each shard
+//
+// # Warnings
+// - changing this value WILL corrupt any data sets created with a different value **
+// - both server and client must be compiled with the same Exponent **
+const Exponent = 20
+
 // FindNextShard returns the index of the first item which is not in the
 // same shard as i. The index it returns may be equal to the length of the
 // haystack, indicatincg that the rest of the list is in the same shard.
