@@ -3,7 +3,7 @@ name: Release
 on: workflow_dispatch
 
 jobs:
-  build:
+  build-featurebase:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -22,20 +22,38 @@ jobs:
           go-version: "^1.19.1"
 
       - name: build featurebase
-        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - uses: actions/upload-artifact@v3
         with:
           name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  build-ingest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos:
+          - "darwin"
+          - "linux"
+        goarch:
+          - "amd64"
+          - "arm64"
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "^1.19.1"
 
       - name: navigate to ingest
         run: cd idk
 
       - name: build ingest
-        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/ingest-${{ matrix.goos }}-${{ matrix.goarch }}
       
       - uses: actions/upload-artifact@v3
         with:
           name: ingest-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/ingest-${{ matrix.goos }}-${{ matrix.goarch }}
