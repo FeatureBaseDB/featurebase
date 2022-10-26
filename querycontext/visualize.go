@@ -3,6 +3,8 @@ package querycontext
 import (
 	"fmt"
 	"io"
+	"os"
+	"strings"
 )
 
 // Rendering time!
@@ -279,7 +281,13 @@ func (r *rbfTxStore) dotId() string {
 }
 
 func (r *rbfTxStore) writeNode(w io.Writer) {
-	fmt.Fprintf(w, `[label=<rbfTxStore<BR/>[<FONT POINT-SIZE="12" FACE="courier">%s</FONT>]>]`, r.rootPath)
+	// long root path is annoying to read, so
+	temp := os.TempDir()
+	path := r.rootPath
+	if strings.HasPrefix(r.rootPath, temp+"/") {
+		path = ".../" + strings.TrimPrefix(r.rootPath, temp+"/")
+	}
+	fmt.Fprintf(w, `[label=<rbfTxStore<BR/><FONT POINT-SIZE="10" FACE="courier">%s</FONT>>]`, path)
 }
 
 func (r *rbfDBQueryContexts) dotClass() string {
@@ -298,13 +306,10 @@ func (r *rbfDBQueryContexts) writeNode(w io.Writer) {
 	} else {
 		locked = fmt.Sprintf("<BR/><FONT COLOR=%q>[LOCKED]</FONT>", colorWrite)
 	}
-	// We'll want something like this when we get to adding the RBF backend.
-	if false {
-		if r.db == nil {
-			maybeError = colorError
-		}
+	if r.db == nil {
+		maybeError = colorError
 	}
-	fmt.Fprintf(w, `[label=<rbfDBQueryContexts<BR/><FONT POINT-SIZE="12" FACE="courier">%s</FONT><BR/>[DB %p]%s> color=%q]`, r.key, r.db, locked, maybeError)
+	fmt.Fprintf(w, `[label=<rbfDBQueryContexts<BR/><FONT POINT-SIZE="12" FACE="courier">%s</FONT><BR/><FONT POINT-SIZE="12" FACE="courier">%s</FONT>%s> color=%q]`, r.key, r.dbPath, locked, maybeError)
 }
 
 func (r *rbfTxWrappers) dotClass() string {

@@ -11,15 +11,18 @@ import (
 	"sync"
 
 	"github.com/molecula/featurebase/v3/rbf"
+	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	"github.com/molecula/featurebase/v3/roaring"
 )
 
 // rbfDBQueryContexts represents an actual backend DB, and a map of the
 // rbfQueryContexts associated with that DB. this lets us check for
 // outstanding transactions before closing a database.
 type rbfDBQueryContexts struct {
-	key dbKey
-	db  *rbf.DB
-	mu  sync.Mutex
+	key    dbKey
+	dbPath string // dbPath relative to root
+	db     *rbf.DB
+	mu     sync.Mutex
 	// mutex used to pretend we're using the database even though we're
 	// not wired up to it yet
 	lockCheck sync.Mutex
@@ -38,8 +41,10 @@ func (r *rbfDBQueryContexts) writeTx(rq *rbfQueryContext) (*rbfTxWrappers, error
 	if !ok {
 		return nil, errors.New("locking error: tried for write Tx when it was already held")
 	}
-	// still nil for now
-	var tx *rbf.Tx
+	tx, err := r.db.Begin(true)
+	if err != nil {
+		return nil, err
+	}
 	q := &rbfTxWrappers{db: r, tx: tx, key: r.key, queries: make(map[fragKey]QueryRead), writeTx: true}
 	r.queryContexts[q] = rq
 	return q, nil
@@ -49,7 +54,10 @@ func (r *rbfDBQueryContexts) writeTx(rq *rbfQueryContext) (*rbfTxWrappers, error
 func (r *rbfDBQueryContexts) readTx(rq *rbfQueryContext) (*rbfTxWrappers, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var tx *rbf.Tx
+	tx, err := r.db.Begin(false)
+	if err != nil {
+		return nil, err
+	}
 	q := &rbfTxWrappers{db: r, tx: tx, key: r.key, queries: make(map[fragKey]QueryRead)}
 	r.queryContexts[q] = rq
 	return q, nil
@@ -101,11 +109,21 @@ type rbfTxStore struct {
 	dbs         map[dbKey]*rbfDBQueryContexts
 	writeScopes map[*rbfQueryContext]QueryScope
 	queries     map[*rbfQueryContext]struct{}
+	cfg         *rbfcfg.Config
 	closed      bool
 }
 
-// newRbfTxStore creates a new RBF-backed TxStore in the given directory.
-func newRbfTxStore(path string, splitter KeySplitter) (*rbfTxStore, error) {
+// NewRBFTxStore creates a new RBF-backed TxStore in the given directory. If
+// cfg is nil, it will use a `NewDefaultConfig`. All databases will be opened
+// using the same config. If splitter is nil, it uses an index/shard splitter.
+//
+// With the index/shard key splitter, database directory paths look like
+// `path/indexes/i/shards/00000000`, with each shard directory containing
+// data/wal files.
+func NewRBFTxStore(path string, cfg *rbfcfg.Config, splitter KeySplitter) (*rbfTxStore, error) {
+	if cfg == nil {
+		cfg = rbfcfg.NewDefaultConfig()
+	}
 	if splitter == nil {
 		splitter = &indexShardKeySplitter{}
 	}
@@ -115,15 +133,10 @@ func newRbfTxStore(path string, splitter KeySplitter) (*rbfTxStore, error) {
 		dbs:         make(map[dbKey]*rbfDBQueryContexts),
 		writeScopes: make(map[*rbfQueryContext]QueryScope),
 		queries:     make(map[*rbfQueryContext]struct{}),
+		cfg:         cfg,
 	}
 	r.writeQueue = sync.NewCond(&r.mu)
 	return r, nil
-}
-
-// dbPath yields the filesystem path to be used with a given dbKey to
-// open the underlying database.
-func (r *rbfTxStore) dbPath(d dbKey) string {
-	return filepath.Join(r.rootPath, d.Path())
 }
 
 // getDB gets or creates the db for the given key. call only when you hold
@@ -133,10 +146,21 @@ func (r *rbfTxStore) getDB(dbk dbKey) (*rbfDBQueryContexts, error) {
 	if ok {
 		return db, nil
 	}
-	// if we were opening a database here, it could fail, which is why we return an error here
-	db = &rbfDBQueryContexts{key: dbk, queryContexts: make(map[*rbfTxWrappers]*rbfQueryContext)}
-	// use this function so staticcheck is happy
-	_ = r.dbPath(dbk)
+	dbPath, err := r.dbPath(dbk)
+	if err != nil {
+		return nil, err
+	}
+	db = &rbfDBQueryContexts{key: dbk, dbPath: dbPath, queryContexts: make(map[*rbfTxWrappers]*rbfQueryContext)}
+	path := filepath.Join(r.rootPath, db.dbPath)
+	// note: we don't need to create the directory here, because rbf.Open
+	// creates the directory for us. I was slightly surprised by this and
+	// I'm not sure I like it. Note also that the database path is actually
+	// a directory containing files named "data" and "wal".
+	db.db = rbf.NewDB(path, r.cfg)
+	err = db.db.Open()
+	if err != nil {
+		return nil, err
+	}
 	r.dbs[dbk] = db
 	return db, nil
 }
@@ -246,6 +270,9 @@ func (r *rbfTxStore) NewWriteQueryContext(ctx context.Context, scope QueryScope)
 func (r *rbfTxStore) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return errors.New("double-close of TxStore")
+	}
 	var firstErr error
 	// A QueryContext can be live without having any transactions open yet.
 	if len(r.queries) > 0 {
@@ -256,7 +283,7 @@ func (r *rbfTxStore) Close() error {
 	r.closed = true
 	for key, db := range r.dbs {
 		if len(db.queryContexts) > 0 {
-			firstErr = fmt.Errorf("%d transaction(s) still open", len(db.queryContexts))
+			firstErr = fmt.Errorf("db %q: %d transaction(s) still open", db.dbPath, len(db.queryContexts))
 			continue
 		}
 		if db.db != nil {
@@ -273,9 +300,14 @@ func (r *rbfTxStore) Close() error {
 
 // rbfTxWrappers is the per-dbKey part of a QueryContext, representing the set of
 // fragment-specific query reads (or writes) associated with a given rbf.Tx. The objects
-// are stored here in a map of QueryRead, but they may actually be QueryScope. (We
+// are stored here in a map of QueryRead, but they may actually be QueryWrite. (We
 // have to grab the write transaction initially, because we can only grab a transaction
 // once for each dbKey, and any Allowed fragment could later request a write.)
+//
+// Underlying Tx are internally locked with an RWMutex on the RBF side, so we don't
+// do locking on our side. If multiple QueryRead/QueryWrite are simultaneously
+// operating, that's fine, they'll still be serialized at that point. In theory,
+// though, that's probably a logic error. Possibly we should check for it.
 type rbfTxWrappers struct {
 	key     dbKey
 	db      *rbfDBQueryContexts
@@ -385,10 +417,10 @@ func (rq *rbfQueryContext) NewWrite(index IndexName, field FieldName, view ViewN
 	return queries.writeKey(fk)
 }
 
-func (rq *rbfQueryContext) Error(err error) {
+func (rq *rbfQueryContext) Error(args ...interface{}) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	rq.err = err
+	rq.err = errors.New(fmt.Sprint(args...))
 }
 
 func (rq *rbfQueryContext) Errorf(msg string, args ...interface{}) {
@@ -464,6 +496,46 @@ type rbfQueryRead struct {
 	tx *rbfTxWrappers
 }
 
+func (qr *rbfQueryRead) ContainerIterator(ckey uint64) (citer roaring.ContainerIterator, found bool, err error) {
+	return qr.tx.tx.ContainerIterator(string(qr.fk), ckey)
+}
+
+func (qr *rbfQueryRead) ApplyFilter(ckey uint64, filter roaring.BitmapFilter) (err error) {
+	return qr.tx.tx.ApplyFilter(string(qr.fk), ckey, filter)
+}
+
+func (qr *rbfQueryRead) Container(ckey uint64) (*roaring.Container, error) {
+	return qr.tx.tx.Container(string(qr.fk), ckey)
+}
+
+func (qr *rbfQueryRead) Contains(v uint64) (exists bool, err error) {
+	return qr.tx.tx.Contains(string(qr.fk), v)
+}
+
+func (qr *rbfQueryRead) Count() (uint64, error) {
+	return qr.tx.tx.Count(string(qr.fk))
+}
+
+func (qr *rbfQueryRead) Max() (uint64, error) {
+	return qr.tx.tx.Max(string(qr.fk))
+}
+
+func (qr *rbfQueryRead) Min() (uint64, bool, error) {
+	return qr.tx.tx.Min(string(qr.fk))
+}
+
+func (qr *rbfQueryRead) CountRange(start, end uint64) (uint64, error) {
+	return qr.tx.tx.CountRange(string(qr.fk), start, end)
+}
+
+func (qr *rbfQueryRead) RoaringBitmap() (*roaring.Bitmap, error) {
+	return qr.tx.tx.RoaringBitmap(string(qr.fk))
+}
+
+func (qr *rbfQueryRead) OffsetRange(offset, start, end uint64) (*roaring.Bitmap, error) {
+	return qr.tx.tx.OffsetRange(string(qr.fk), offset, start, end)
+}
+
 var _ QueryRead = &rbfQueryRead{}
 
 // rbfQueryWrite is a fragment-specific write-capable wrapper
@@ -472,6 +544,32 @@ var _ QueryRead = &rbfQueryRead{}
 // inner object and there's no chance of accidentally upgrading.
 type rbfQueryWrite struct {
 	rbfQueryRead
+}
+
+func (qw *rbfQueryWrite) PutContainer(ckey uint64, c *roaring.Container) error {
+	return qw.tx.tx.PutContainer(string(qw.fk), ckey, c)
+}
+
+func (qw *rbfQueryWrite) RemoveContainer(ckey uint64) error {
+	return qw.tx.tx.RemoveContainer(string(qw.fk), ckey)
+}
+
+func (qw *rbfQueryWrite) Add(a ...uint64) (changeCount int, err error) {
+	return qw.tx.tx.Add(string(qw.fk), a...)
+}
+
+func (qw *rbfQueryWrite) Remove(a ...uint64) (changeCount int, err error) {
+	return qw.tx.tx.Remove(string(qw.fk), a...)
+}
+
+func (qw *rbfQueryWrite) ApplyRewriter(ckey uint64, filter roaring.BitmapRewriter) (err error) {
+	return qw.tx.tx.ApplyRewriter(string(qw.fk), ckey, filter)
+}
+
+func (qw *rbfQueryWrite) ImportRoaringBits(rit roaring.RoaringIterator, clear bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
+	// TODO: when we finish replacing Qcx/Tx with this, drop the unused "log"
+	// flag. It was only ever used by the roaring backend.
+	return qw.tx.tx.ImportRoaringBits(string(qw.fk), rit, clear, false, rowSize)
 }
 
 var _ QueryWrite = &rbfQueryWrite{}

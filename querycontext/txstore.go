@@ -4,6 +4,8 @@ package querycontext
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 )
 
 // TxStore represents a transactional database backend, mapping
@@ -36,15 +38,6 @@ var _ TxStore = &rbfTxStore{}
 // dbKey is an identifier which can distinguish backend databases.
 type dbKey string
 
-// Path yields a relative path corresponding to a dbKey. For example
-// this could be something like `indexes/i/shards/0`. The path is
-// a relative path, presumably to be combined with some root path for
-// a txStore
-func (d dbKey) Path() string {
-	// for now, let's just use the path as the dbkey
-	return string(d)
-}
-
 // fragKey is an identifier which can be used to tell a backend database
 // which data to operate on.
 type fragKey string
@@ -69,6 +62,11 @@ type KeySplitter interface {
 	// within the database backend.
 	keys(IndexName, FieldName, ViewName, ShardID) (dbKey, fragKey)
 
+	// dbPath yields a filesystem-friendly string that corresponds to dbKey.
+	// possibly it is identical to dbKey, but you might want a terse dbKey
+	// like "i/0" and a longer path like "indexes/i/shards/0".
+	dbPath(dbKey) (string, error)
+
 	// Scope() yields a new scope which is aware of this KeySplitter
 	// and will give correct results for Overlap calls.
 	Scope() QueryScope
@@ -83,7 +81,7 @@ var _ KeySplitter = &flexibleKeySplitter{}
 type indexShardKeySplitter struct{}
 
 func (*indexShardKeySplitter) keys(index IndexName, field FieldName, view ViewName, shard ShardID) (dbKey, fragKey) {
-	d := dbKey(fmt.Sprintf("%s/%012x", index, shard))
+	d := dbKey(fmt.Sprintf("%s/%08x", index, shard))
 	t := fragKey(fmt.Sprintf("%s:%s", field, view))
 	return d, t
 }
@@ -92,13 +90,42 @@ func (*indexShardKeySplitter) Scope() QueryScope {
 	return &indexShardQueryScope{}
 }
 
+func (*indexShardKeySplitter) dbPath(dbk dbKey) (string, error) {
+	slash := strings.IndexByte(string(dbk), '/')
+	if slash == -1 {
+		return "", fmt.Errorf("malformed dbKey %q", dbk)
+	}
+	paths := [4]string{"indexes", "", "shards", ""}
+	paths[1] = string(dbk)[:slash]
+	paths[3] = string(dbk)[slash+1:]
+	return filepath.Join(paths[:]...), nil
+}
+
 // fieldShardKeySplitter splits the database by field,shard pairs.
 type fieldShardKeySplitter struct{}
 
 func (*fieldShardKeySplitter) keys(index IndexName, field FieldName, view ViewName, shard ShardID) (dbKey, fragKey) {
-	d := dbKey(fmt.Sprintf("%s/%s/%012x", index, field, shard))
+	d := dbKey(fmt.Sprintf("%s/%s/%08x", index, field, shard))
 	t := fragKey(view)
 	return d, t
+}
+
+func (*fieldShardKeySplitter) dbPath(dbk dbKey) (string, error) {
+	slash := strings.IndexByte(string(dbk), '/')
+	if slash == -1 {
+		return "", fmt.Errorf("malformed dbKey %q", dbk)
+	}
+	paths := [6]string{"indexes", "", "fields", "", "shards", ""}
+	paths[1] = string(dbk)[:slash]
+	paths[3] = string(dbk)[slash+1:]
+	slash = strings.IndexByte(paths[3], '/')
+	if slash == -1 {
+		return "", fmt.Errorf("malformed dbKey %q", dbk)
+	}
+	// note order: have to grab the tail of paths[3] before cutting it off
+	paths[5] = paths[3][slash+1:]
+	paths[3] = paths[3][:slash]
+	return filepath.Join(paths[:]...), nil
 }
 
 func (*fieldShardKeySplitter) Scope() QueryScope {
@@ -115,6 +142,10 @@ type flexibleKeySplitter struct {
 	splitIndexes map[IndexName]struct{}
 }
 
+// NewFlexibleKeySplitter creates a KeySplitter which uses index/shard
+// splits by default, but splits things into fields if they're in the
+// indexes provided. This design is experimental, and should be considered
+// pre-deprecated for production use for now.
 func NewFlexibleKeySplitter(indexes ...IndexName) *flexibleKeySplitter {
 	splitIndexes := make(map[IndexName]struct{}, len(indexes))
 	for _, index := range indexes {
@@ -128,6 +159,17 @@ func (f *flexibleKeySplitter) keys(index IndexName, field FieldName, view ViewNa
 		return (&fieldShardKeySplitter{}).keys(index, field, view, shard)
 	}
 	return (&indexShardKeySplitter{}).keys(index, field, view, shard)
+}
+
+func (f *flexibleKeySplitter) dbPath(dbk dbKey) (string, error) {
+	slash := strings.IndexByte(string(dbk), '/')
+	if slash == -1 {
+		return "", fmt.Errorf("malformed dbKey %q", dbk)
+	}
+	if _, ok := f.splitIndexes[IndexName(dbk)[:slash]]; ok {
+		return (&fieldShardKeySplitter{}).dbPath(dbk)
+	}
+	return (&indexShardKeySplitter{}).dbPath(dbk)
 }
 
 func (f *flexibleKeySplitter) Scope() QueryScope {
