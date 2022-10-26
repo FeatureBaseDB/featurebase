@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -1414,109 +1413,6 @@ func (tx *Tx) ApplyFilter(name string, key uint64, filter roaring.BitmapFilter) 
 	f := getContainerFilter(c, name, filter, nil, tx)
 	defer f.Close()
 	return f.ApplyFilter()
-}
-
-func (tx *Tx) ForEach(name string, fn func(i uint64) error) error {
-	return tx.ForEachRange(name, 0, math.MaxUint64, fn)
-}
-
-func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error) error {
-	tx.mu.RLock()
-	defer tx.mu.RUnlock()
-
-	c, err := tx.cursor(name)
-	if err == ErrBitmapNotFound {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	defer c.Close()
-
-	if _, err := c.Seek(highbits(start)); err != nil {
-		return err
-	}
-
-	for {
-		if err := c.Next(); err == io.EOF {
-			return nil
-		} else if err != nil {
-			return err
-		}
-
-		elem := &c.stack.elems[c.stack.top]
-		leafPage, _, err := c.tx.readPage(elem.pgno)
-		if err != nil {
-			return err
-		}
-		cell := readLeafCell(leafPage, elem.index)
-
-		switch cell.Type {
-		case ContainerTypeArray:
-			for _, lo := range toArray16(cell.Data) {
-				v := cell.Key<<16 | uint64(lo)
-				if v < start {
-					continue
-				} else if v > end {
-					return nil
-				} else if err := fn(v); err != nil {
-					return err
-				}
-			}
-		case ContainerTypeRLE:
-			for _, r := range toInterval16(cell.Data) {
-				for lo := int(r.Start); lo <= int(r.Last); lo++ {
-					v := cell.Key<<16 | uint64(lo)
-					if v < start {
-						continue
-					} else if v > end {
-						return nil
-					} else if err := fn(v); err != nil {
-						return err
-					}
-				}
-			}
-		case ContainerTypeBitmap:
-			for i, bits := range toArray64(cell.Data) {
-				for j := uint(0); j < 64; j++ {
-					if bits&(1<<j) == 0 {
-						continue
-					}
-
-					v := cell.Key<<16 | (uint64(i) * 64) | uint64(j)
-					if v < start {
-						continue
-					} else if v > end {
-						return nil
-					} else if err := fn(v); err != nil {
-						return err
-					}
-				}
-			}
-		case ContainerTypeBitmapPtr:
-			_, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
-			if err != nil {
-				return err
-			}
-			for i, bits := range bm {
-				for j := uint(0); j < 64; j++ {
-					if bits&(1<<j) == 0 {
-						continue
-					}
-
-					v := cell.Key<<16 | (uint64(i) * 64) | uint64(j)
-					if v < start {
-						continue
-					} else if v > end {
-						return nil
-					} else if err := fn(v); err != nil {
-						return err
-					}
-				}
-			}
-		default:
-			vprint.PanicOn(fmt.Sprintf("invalid container type: %d", cell.Type))
-		}
-	}
 }
 
 func (tx *Tx) Count(name string) (uint64, error) {

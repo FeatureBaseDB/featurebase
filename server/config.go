@@ -145,6 +145,7 @@ type Config struct {
 		PrimaryURL string `toml:"primary-url"`
 	} `toml:"translation"`
 
+	// AntiEntropy config is now deprecated
 	AntiEntropy struct {
 		Interval toml.Duration `toml:"interval"`
 	} `toml:"anti-entropy"`

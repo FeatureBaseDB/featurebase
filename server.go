@@ -70,7 +70,6 @@ type Server struct { // nolint: maligned
 	nodeID               string
 	uri                  pnet.URI
 	grpcURI              pnet.URI
-	antiEntropyInterval  time.Duration
 	metricInterval       time.Duration
 	diagnosticInterval   time.Duration
 	viewsRemovalInterval time.Duration
@@ -156,15 +155,6 @@ func OptServerReplicaN(n int) ServerOption {
 func OptServerDataDir(dir string) ServerOption {
 	return func(s *Server) error {
 		s.dataDir = dir
-		return nil
-	}
-}
-
-// OptServerAntiEntropyInterval is a functional option on Server
-// used to set the anti-entropy interval.
-func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
-	return func(s *Server) error {
-		s.antiEntropyInterval = interval
 		return nil
 	}
 }
@@ -449,7 +439,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		gcNotifier: NopGCNotifier,
 
-		antiEntropyInterval:  0,
 		metricInterval:       0,
 		diagnosticInterval:   0,
 		viewsRemovalInterval: time.Hour,
@@ -486,7 +475,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
-	s.holderConfig.AntiEntropyInterval = s.antiEntropyInterval
 
 	memTotal, err := s.systemInfo.MemTotal()
 	if err != nil {
@@ -652,10 +640,9 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "setting nodeState")
 	}
 
-	if ok := s.addToWaitGroup(4); !ok {
+	if ok := s.addToWaitGroup(3); !ok {
 		return fmt.Errorf("closing server while opening server is NOT allowed")
 	}
-	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
 	go func() { defer s.wg.Done(); s.monitorViewsRemoval() }()
@@ -805,12 +792,6 @@ func (s *Server) Close() error {
 // NodeID returns the server's node id.
 func (s *Server) NodeID() string { return s.nodeID }
 
-// SyncData manually invokes the anti entropy process which makes sure that this
-// node has the data from all replicas across the cluster.
-func (s *Server) SyncData() error {
-	return errors.Wrap(s.syncer.SyncHolder(), "syncing holder")
-}
-
 // monitorResetTranslationSync is a background process which
 // listens for events indicating the need to reset the translation
 // sync processes.
@@ -915,73 +896,6 @@ func (s *Server) ViewsRemoval(ctx context.Context) {
 			}
 		}
 	}
-}
-
-func (s *Server) monitorAntiEntropy() {
-	// %% begin sonarcloud ignore %%
-	// This code isn't really used anymore because of problems with the design,
-	// but we haven't taken it out yet. But there's no code coverage of it.
-	if s.antiEntropyInterval == 0 || s.cluster.ReplicaN <= 1 {
-		return // anti entropy disabled
-	}
-	s.cluster.initializeAntiEntropy()
-
-	ticker := time.NewTicker(s.antiEntropyInterval)
-	defer ticker.Stop()
-
-	s.logger.Infof("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
-
-	// Initialize syncer with local holder and remote client.
-	for {
-		// Wait for tick or a close.
-		select {
-		case <-s.closing:
-			return
-		case <-s.cluster.abortAntiEntropyCh:
-			// receive here so we don't block resizing
-			// ... note that resizing is gone now, but I don't know whether we still need this.
-			continue
-		case <-ticker.C:
-			s.holder.Stats.Count(MetricAntiEntropy, 1, 1.0)
-		}
-		t := time.Now()
-
-		// We used to check for resizing before doing anti-entropy, but resizing is out
-		// so we don't otherwise care about state.
-		_, err := s.cluster.State()
-		if err != nil {
-			s.logger.Printf("cluster state error: err=%s", err)
-			continue
-		}
-
-		// Sync holders.
-		s.logger.Infof("holder sync beginning")
-		s.cluster.muAntiEntropy.Lock()
-		if err := s.syncer.SyncHolder(); err != nil {
-			s.cluster.muAntiEntropy.Unlock()
-			s.logger.Errorf("holder sync error: err=%s", err)
-			continue
-		}
-		s.cluster.muAntiEntropy.Unlock()
-
-		// Record successful sync in log.
-		s.logger.Infof("holder sync complete")
-		dif := time.Since(t)
-		s.holder.Stats.Timing(MetricAntiEntropyDurationSeconds, dif, 1.0)
-
-		// Drain tick channel since we just finished anti-entropy. If the AE
-		// process took a long time, we don't want them to pile up on each
-		// other.
-		for {
-			select {
-			case <-ticker.C:
-				continue
-			default:
-			}
-			break
-		}
-	}
-	// %% end sonarcloud ignore %%
 }
 
 // receiveMessage represents an implementation of BroadcastHandler.

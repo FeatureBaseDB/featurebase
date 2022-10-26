@@ -66,46 +66,6 @@ func (itr *bufIterator) Unread() {
 	itr.buf.full = true
 }
 
-// limitIterator wraps an Iterator and limits it to a max column/row pair.
-type limitIterator struct {
-	itr         iterator
-	maxRowID    uint64
-	maxColumnID uint64
-
-	eof bool
-}
-
-// newLimitIterator returns a new LimitIterator.
-func newLimitIterator(itr iterator, maxRowID, maxColumnID uint64) *limitIterator { // nolint: unparam
-	return &limitIterator{
-		itr:         itr,
-		maxRowID:    maxRowID,
-		maxColumnID: maxColumnID,
-	}
-}
-
-// Seek moves the underlying iterator to a column/row pair.
-func (itr *limitIterator) Seek(rowID, columnID uint64) { itr.itr.Seek(rowID, columnID) }
-
-// Next returns the next row/column ID pair.
-// If the underlying iterator returns a pair higher than the max then EOF is returned.
-func (itr *limitIterator) Next() (rowID, columnID uint64, eof bool) {
-	// Always return EOF once it is reached by limit or the underlying iterator.
-	if itr.eof {
-		return 0, 0, true
-	}
-
-	// Retrieve pair from underlying iterator.
-	// Mark as EOF if it is beyond the limit (or at EOF).
-	rowID, columnID, eof = itr.itr.Next()
-	if eof || rowID > itr.maxRowID || (rowID == itr.maxRowID && columnID > itr.maxColumnID) {
-		itr.eof = true
-		return 0, 0, true
-	}
-
-	return rowID, columnID, false
-}
-
 // sliceIterator iterates over a pair of row/column ID slices.
 type sliceIterator struct {
 	rowIDs    []uint64
@@ -157,26 +117,4 @@ func (itr *sliceIterator) Next() (rowID, columnID uint64, eof bool) {
 
 	itr.i++
 	return rowID, columnID, false
-}
-
-// roaringIterator converts a roaring.Iterator to output column/row pairs.
-type roaringIterator struct {
-	itr *roaring.Iterator
-}
-
-// newRoaringIterator returns a new iterator wrapping itr.
-func newRoaringIterator(itr *roaring.Iterator) *roaringIterator {
-	return &roaringIterator{itr: itr}
-}
-
-// Seek moves the cursor to a pair matching bseek/pseek.
-// If the pair is not found then it moves to the next pair.
-func (itr *roaringIterator) Seek(bseek, pseek uint64) {
-	itr.itr.Seek((bseek * ShardWidth) + pseek)
-}
-
-// Next returns the next column/row ID pair.
-func (itr *roaringIterator) Next() (rowID, columnID uint64, eof bool) {
-	v, eof := itr.itr.Next()
-	return v / ShardWidth, v % ShardWidth, eof
 }

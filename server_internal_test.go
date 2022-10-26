@@ -17,8 +17,7 @@ func TestMonitorAntiEntropyZero(t *testing.T) {
 		t.Fatalf("getting temp dir: %v", err)
 	}
 	cfg := &storage.Config{FsyncEnabled: false, Backend: storage.DefaultBackend}
-	s, err := NewServer(OptServerDataDir(td),
-		OptServerAntiEntropyInterval(0), OptServerStorageConfig(cfg))
+	s, err := NewServer(OptServerDataDir(td), OptServerStorageConfig(cfg))
 	if err != nil {
 		t.Fatalf("making new server: %v", err)
 	}
@@ -26,7 +25,6 @@ func TestMonitorAntiEntropyZero(t *testing.T) {
 
 	ch := make(chan struct{})
 	go func() {
-		s.monitorAntiEntropy()
 		close(ch)
 	}()
 

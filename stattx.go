@@ -151,8 +151,6 @@ const (
 	kRemove
 	kContains
 	kContainerIterator
-	kForEach
-	kForEachRange
 	kCount
 	kMax
 	kMin
@@ -188,10 +186,6 @@ func (k kall) String() string {
 		return "kContains"
 	case kContainerIterator:
 		return "kContainerIterator"
-	case kForEach:
-		return "kForEach"
-	case kForEachRange:
-		return "kForEachRange"
 	case kCount:
 		return "kCount"
 	case kMax:
@@ -212,16 +206,6 @@ func (k kall) String() string {
 }
 
 var _ Tx = (*statTx)(nil)
-
-func (c *statTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
-	me := kNewTxIterator
-
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-	return c.b.NewTxIterator(index, field, view, shard)
-}
 
 func (c *statTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	me := kImportRoaringBits
@@ -414,40 +398,6 @@ func (c *statTx) ApplyFilter(index, field, view string, shard uint64, ckey uint6
 
 func (c *statTx) ApplyRewriter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapRewriter) (err error) {
 	return c.b.ApplyRewriter(index, field, view, shard, ckey, filter)
-}
-
-func (c *statTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
-	me := kForEach
-
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-
-	defer func() {
-		if r := recover(); r != nil {
-			vprint.AlwaysPrintf("see ForEach() PanicOn '%v' at '%v'", r, vprint.Stack())
-			vprint.PanicOn(r)
-		}
-	}()
-	return c.b.ForEach(index, field, view, shard, fn)
-}
-
-func (c *statTx) ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error {
-	me := kForEachRange
-
-	t0 := time.Now()
-	defer func() {
-		c.stats.add(me, time.Since(t0))
-	}()
-
-	defer func() {
-		if r := recover(); r != nil {
-			vprint.AlwaysPrintf("see ForEachRange() PanicOn '%v' at '%v'", r, vprint.Stack())
-			vprint.PanicOn(r)
-		}
-	}()
-	return c.b.ForEachRange(index, field, view, shard, start, end, fn)
 }
 
 func (c *statTx) Count(index, field, view string, shard uint64) (uint64, error) {

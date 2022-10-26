@@ -405,6 +405,9 @@ func (m *Command) SetupServer() error {
 	if m.Config.Translation.PrimaryURL != "" {
 		m.logger.Infof("DEPRECATED: The primary-url configuration option is no longer used.")
 	}
+	if m.Config.AntiEntropy.Interval != 0 {
+		m.logger.Infof("DEPRECATED: The anti-entropy configuration option is no longer used.")
+	}
 	// Handle renamed and deprecated config parameter
 	longQueryTime := m.Config.LongQueryTime
 	if m.Config.Cluster.LongQueryTime >= 0 {
@@ -446,7 +449,6 @@ func (m *Command) SetupServer() error {
 	}
 
 	serverOptions := []pilosa.ServerOption{
-		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(longQueryTime)),
 		pilosa.OptServerDataDir(m.Config.DataDir),
 		pilosa.OptServerReplicaN(m.Config.Cluster.ReplicaN),

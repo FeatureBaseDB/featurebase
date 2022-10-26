@@ -1181,40 +1181,6 @@ func TestClient_ImportExistence(t *testing.T) {
 	})
 }
 
-// Ensure client can retrieve a list of all checksums for blocks in a fragment.
-func TestClient_FragmentBlocks(t *testing.T) {
-	cluster := test.MustRunCluster(t, 1)
-	defer cluster.Close()
-	cmd := cluster.GetNode(0)
-
-	holder := cmd.Server.Holder()
-	hldr := test.Holder{Holder: holder}
-
-	hldr.SetBit(cluster.Idx(), "f", 0, 1)
-	hldr.SetBit(cluster.Idx(), "f", pilosa.HashBlockSize*3, 100)
-
-	// Set a bit on a different shard.
-	hldr.SetBit(cluster.Idx(), "f", 0, 1)
-	c := MustNewClient(cmd.URL(), pilosa.GetHTTPClient(nil))
-	blocks, err := c.FragmentBlocks(context.Background(), nil, cluster.Idx(), "f", "standard", 0)
-	if err != nil {
-		t.Fatal(err)
-	} else if len(blocks) != 2 {
-		t.Fatalf("unexpected blocks: %s", spew.Sdump(blocks))
-	} else if blocks[0].ID != 0 {
-		t.Fatalf("unexpected block id(0): %d", blocks[0].ID)
-	} else if blocks[1].ID != 3 {
-		t.Fatalf("unexpected block id(1): %d", blocks[1].ID)
-	}
-
-	// Verify data matches local blocks.
-	if a, err := cmd.API.FragmentBlocks(context.Background(), cluster.Idx(), "f", "standard", 0); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(a, blocks) {
-		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
-	}
-}
-
 // Try to request translation data which won't exist.
 func TestClient_IndexTranslateDataReader(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)

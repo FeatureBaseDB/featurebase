@@ -898,7 +898,7 @@ func (b *BitmapMutexDupFilter) ConsiderKey(key FilterKey, n int32) FilterResult 
 
 func (b *BitmapMutexDupFilter) ConsiderData(key FilterKey, data *Container) FilterResult {
 	value, basePos := uint64(key)>>rowExponent, uint64(key&keyMask)<<16
-	containerCallback(data, func(u uint16) {
+	ContainerCallback(data, func(u uint16) {
 		pos := basePos + uint64(u)
 		if b.first[pos] != ^uint64(0) {
 			if b.details {
