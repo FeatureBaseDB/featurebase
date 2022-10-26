@@ -435,14 +435,17 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		// Since we don't have createdAt stored on disk within the data
+		// Since we don't have createdAt and the other metadata stored on disk within the data
 		// directory, we need to populate it from the etcd schema data.
+
 		// TODO: we may no longer need the createdAt value stored in memory on
 		// the index struct; it may only be needed in the schema return value
 		// from the API, which already comes from etcd. In that case, this logic
 		// could be removed, and the createdAt on the index struct could be
 		// removed.
 		index.createdAt = cim.CreatedAt
+		index.owner = cim.Owner
+		index.description = cim.Meta.Description
 
 		err = index.OpenWithSchema(idx)
 		if err != nil {
@@ -677,10 +680,13 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 		di := &IndexInfo{
 			Name:       cim.Index,
 			CreatedAt:  cim.CreatedAt,
+			Owner:      cim.Owner,
 			Options:    cim.Meta,
 			ShardWidth: ShardWidth,
 			Fields:     make([]*FieldInfo, 0, len(index.Fields)),
 		}
+		updatedAt := cim.CreatedAt
+		lastUpdateUser := cim.Owner
 		for fieldName, field := range index.Fields {
 			if fieldName == existenceFieldName {
 				continue
@@ -689,9 +695,14 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 			if err != nil {
 				return nil, errors.Wrap(err, "decoding CreateFieldMessage")
 			}
+			if cfm.CreatedAt > updatedAt {
+				updatedAt = cfm.CreatedAt
+				lastUpdateUser = cfm.Owner
+			}
 			fi := &FieldInfo{
 				Name:      cfm.Field,
 				CreatedAt: cfm.CreatedAt,
+				Owner:     cfm.Owner,
 				Options:   *cfm.Meta,
 			}
 			if includeViews {
@@ -702,6 +713,8 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 			}
 			di.Fields = append(di.Fields, fi)
 		}
+		di.UpdatedAt = updatedAt
+		di.LastUpdateUser = lastUpdateUser
 		sort.Sort(fieldInfoSlice(di.Fields))
 		a = append(a, di)
 	}
@@ -715,14 +728,14 @@ func (h *Holder) applySchema(schema *Schema) error {
 	// We use h.CreateIndex() instead of h.CreateIndexIfNotExists() because we
 	// want to limit the use of this method for now to only new indexes.
 	for _, i := range schema.Indexes {
-		idx, err := h.CreateIndex(i.Name, i.Options)
+		idx, err := h.CreateIndex(i.Name, i.Owner, i.Options)
 		if err != nil {
 			return errors.Wrap(err, "creating index")
 		}
 
 		// Create fields that don't exist.
 		for _, f := range i.Fields {
-			fld, err := idx.CreateFieldIfNotExistsWithOptions(f.Name, &f.Options)
+			fld, err := idx.CreateFieldIfNotExistsWithOptions(f.Name, "", &f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
 			}
@@ -774,7 +787,7 @@ func (h *Holder) Indexes() []*Index {
 
 // CreateIndex creates an index.
 // An error is returned if the index already exists.
-func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
+func (h *Holder) CreateIndex(name string, requestUserID string, opt IndexOptions) (*Index, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -783,9 +796,11 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 		return nil, newConflictError(ErrIndexExists)
 	}
 
+	ts := timestamp()
 	cim := &CreateIndexMessage{
 		Index:     name,
-		CreatedAt: timestamp(),
+		CreatedAt: ts,
+		Owner:     requestUserID,
 		Meta:      opt,
 	}
 
@@ -873,13 +888,15 @@ func (h *Holder) CreateIndexAndBroadcast(ctx context.Context, cim *CreateIndexMe
 
 // CreateIndexIfNotExists returns an index by name.
 // The index is created if it does not already exist.
-func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, error) {
+func (h *Holder) CreateIndexIfNotExists(name string, requestUserID string, opt IndexOptions) (*Index, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	ts := timestamp()
 	cim := &CreateIndexMessage{
 		Index:     name,
-		CreatedAt: timestamp(),
+		CreatedAt: ts,
+		Owner:     requestUserID,
 		Meta:      opt,
 	}
 
@@ -930,6 +947,8 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 	index.keys = cim.Meta.Keys
 	index.trackExistence = cim.Meta.TrackExistence
 	index.createdAt = cim.CreatedAt
+	index.owner = cim.Owner
+	index.description = cim.Meta.Description
 
 	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")

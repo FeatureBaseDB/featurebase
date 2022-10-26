@@ -72,6 +72,7 @@ var availableShardFileFlushDuration = &protected{
 type Field struct {
 	mu            sync.RWMutex
 	createdAt     int64
+	owner         string
 	path          string
 	index         string
 	name          string
@@ -1971,6 +1972,7 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 type FieldInfo struct {
 	Name        string       `json:"name"`
 	CreatedAt   int64        `json:"createdAt,omitempty"`
+	Owner       string       `json:"owner"`
 	Options     FieldOptions `json:"options"`
 	Cardinality *uint64      `json:"cardinality,omitempty"`
 	Views       []*ViewInfo  `json:"views,omitempty"`

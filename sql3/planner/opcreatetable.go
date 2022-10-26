@@ -109,6 +109,7 @@ func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 	}
 
+	// TODO (pok) add ability to add description here
 	if err := i.planner.schemaAPI.CreateIndexAndFields(ctx, i.tableName, options, fields); err != nil {
 		if _, ok := errors.Cause(err).(pilosa.ConflictError); ok {
 			if i.failIfExists {

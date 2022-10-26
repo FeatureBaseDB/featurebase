@@ -853,7 +853,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Load bitmap into cache to ensure cache gets updated.
 		index := hldr.MustCreateIndexIfNotExists(cluster.Idx(), pilosa.IndexOptions{Keys: true})
-		_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+		_, err := index.CreateFieldIfNotExists(fldName, "", pilosa.OptFieldTypeInt(-100, 100))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -932,7 +932,7 @@ func TestClient_ImportIDs(t *testing.T) {
 
 		// Load bitmap into cache to ensure cache gets updated.
 		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{Keys: false})
-		_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-10000, 10000))
+		_, err := index.CreateFieldIfNotExists(fldName, "", pilosa.OptFieldTypeInt(-10000, 10000))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1000,7 +1000,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists(cluster.Idx(), pilosa.IndexOptions{})
-	_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+	_, err := index.CreateFieldIfNotExists(fldName, "", pilosa.OptFieldTypeInt(-100, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1111,7 +1111,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		fldName := "fset"
 
 		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateFieldIfNotExists(fldName)
+		_, err := index.CreateFieldIfNotExists(fldName, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1147,7 +1147,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		fldName := "fint"
 
 		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+		_, err := index.CreateFieldIfNotExists(fldName, "", pilosa.OptFieldTypeInt(-100, 100))
 		if err != nil {
 			t.Fatal(err)
 		}

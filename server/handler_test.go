@@ -179,12 +179,12 @@ func TestHandler_Endpoints(t *testing.T) {
 	const shard = 0
 	tx0 := holder.Txf().NewWritableQcx()
 	defer tx0.Abort()
-	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
+	if f, err := i0.CreateFieldIfNotExists("f1", "", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx0, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f0", "", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx0.Finish(); err != nil {
@@ -194,7 +194,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 	tx1 := holder.Txf().NewWritableQcx()
 	defer tx1.Abort()
-	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
+	if f, err := i1.CreateFieldIfNotExists("f0", "", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx1, 0, 0, nil); err != nil {
 		t.Fatal(err)
@@ -215,9 +215,10 @@ func TestHandler_Endpoints(t *testing.T) {
 			&bodySchema); err != nil {
 			t.Fatalf("unexpected unmarshalling error: %v", err)
 		}
-		// DO NOT COMPARE `CreatedAt` - reset to 0
+		// DO NOT COMPARE `CreatedAt` & 'UpdatedAt' - reset to 0
 		for _, i := range bodySchema.Indexes {
 			i.CreatedAt = 0
+			i.UpdatedAt = 0
 			for _, f := range i.Fields {
 				f.CreatedAt = 0
 			}
@@ -225,8 +226,27 @@ func TestHandler_Endpoints(t *testing.T) {
 		//
 
 		var targetSchema pilosa.Schema
-		if err := json.Unmarshal([]byte(fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)),
-			&targetSchema); err != nil {
+		if err := json.Unmarshal([]byte(fmt.Sprintf(`{"indexes":[
+			{
+				"name":"i0",
+				"options":{"keys":false,"trackExistence":false},
+				"updatedAt": 0,
+				"description": "this is a description",
+				"fields":[
+					{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},
+					{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}
+				],
+				"shardWidth":%d
+			},
+			{
+				"name":"i1",
+				"options":{"keys":false,"trackExistence":false},
+				"updatedAt": 0,
+				"description": "this is a description",
+				"fields":[
+					{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}
+				]
+			}`, pilosa.ShardWidth)), &targetSchema); err != nil {
 			t.Fatalf("unexpected unmarshalling error: %v", err)
 		}
 
@@ -239,13 +259,13 @@ func TestHandler_Endpoints(t *testing.T) {
 	i2 := hldr.MustCreateIndexIfNotExists("i2", pilosa.IndexOptions{})
 	tx2 := holder.Txf().NewWritableQcx()
 	defer tx2.Abort()
-	if f, err := i2.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000)); err != nil {
+	if f, err := i2.CreateFieldIfNotExists("f0", "", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000)); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	f, err := i2.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeInt(-100, 100))
+	f, err := i2.CreateFieldIfNotExists("f1", "", pilosa.OptFieldTypeInt(-100, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +276,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	}
 
-	f, err = i2.CreateFieldIfNotExists("f2", pilosa.OptFieldTypeDecimal(1, pql.NewDecimal(-10, 0), pql.NewDecimal(10, 0)))
+	f, err = i2.CreateFieldIfNotExists("f2", "", pilosa.OptFieldTypeDecimal(1, pql.NewDecimal(-10, 0), pql.NewDecimal(10, 0)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,17 +287,17 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	}
 
-	if f, err := i2.CreateFieldIfNotExists("f3", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0")); err != nil {
+	if f, err := i2.CreateFieldIfNotExists("f3", "", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0")); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i2.CreateFieldIfNotExists("f4", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000)); err != nil {
+	if f, err := i2.CreateFieldIfNotExists("f4", "", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000)); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i2.CreateFieldIfNotExists("f5", pilosa.OptFieldTypeBool()); err != nil {
+	if f, err := i2.CreateFieldIfNotExists("f5", "", pilosa.OptFieldTypeBool()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
 		t.Fatal(err)
@@ -298,9 +318,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &bodySchema); err != nil {
 			t.Fatalf("unexpected unmarshalling error: %v", err)
 		}
-		// DO NOT COMPARE `CreatedAt` - reset to 0
+		// DO NOT COMPARE `CreatedAt` & `UpdatedAt`` - reset to 0
 		for _, i := range bodySchema.Indexes {
 			i.CreatedAt = 0
+			i.UpdatedAt = 0
 			for _, f := range i.Fields {
 				f.CreatedAt = 0
 			}
@@ -308,7 +329,44 @@ func TestHandler_Endpoints(t *testing.T) {
 		//
 
 		var targetSchema pilosa.Schema
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}],"shardWidth":%[1]d},{"name":"i2","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"views":[{"name":"standard"}]},{"name":"f1","options":{"type":"int","base":0,"bitDepth":0,"min":-100,"max":100,"keys":false,"foreignIndex":""},"views":[{"name":"bsig_f1"}]},{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":0,"min":-10,"max":10,"keys":false},"views":[{"name":"bsig_f2"}]},{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"views":[{"name":"standard"}]},{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"views":[{"name":"standard"}]},{"name":"f5","options":{"type":"bool"},"views":[{"name":"standard"}]}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
+		target := fmt.Sprintf(`{"indexes":[
+			{
+				"name":"i0",
+				"options":{"keys":false,"trackExistence":false},
+				"updatedAt": 0,
+				"description": "this is a description",
+				"fields":[
+					{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},
+					{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}
+				],
+				"shardWidth":%[1]d
+			},
+			{
+				"name":"i1",
+				"options":{"keys":false,"trackExistence":false},
+				"updatedAt": 0,
+				"description": "this is a description",
+				"fields":[
+					{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false},"views":[{"name":"standard"}]}
+				],
+				"shardWidth":%[1]d
+			},
+			{
+				"name":"i2",
+				"options":{"keys":false,"trackExistence":false},
+				"updatedAt": 0,
+				"description": "this is a description",
+				"fields":[
+					{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":1000,"keys":false},"views":[{"name":"standard"}]},
+					{"name":"f1","options":{"type":"int","base":0,"bitDepth":0,"min":-100,"max":100,"keys":false,"foreignIndex":""},"views":[{"name":"bsig_f1"}]},
+					{"name":"f2","options":{"type":"decimal","base":0,"scale":1,"bitDepth":0,"min":-10,"max":10,"keys":false},"views":[{"name":"bsig_f2"}]},
+					{"name":"f3","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false},"views":[{"name":"standard"}]},
+					{"name":"f4","options":{"type":"mutex","cacheType":"ranked","cacheSize":5000,"keys":false},"views":[{"name":"standard"}]},
+					{"name":"f5","options":{"type":"bool"},"views":[{"name":"standard"}]}
+				],
+				"shardWidth":%[1]d}
+			]
+		}`, pilosa.ShardWidth)
 		if err := json.Unmarshal([]byte(target), &targetSchema); err != nil {
 			t.Fatalf("unexpected unmarshalling error: %v", err)
 		}
@@ -416,7 +474,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	t.Run("ImportRoaringOverwrite", func(t *testing.T) {
-		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 10)); err != nil {
+		if _, err := i0.CreateFieldIfNotExists("int-field", "", pilosa.OptFieldTypeInt(0, 10)); err != nil {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
@@ -957,7 +1015,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Field delete", func(t *testing.T) {
 		i := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := i.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
+		if _, err := i.CreateFieldIfNotExists("f1", "", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()

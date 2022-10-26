@@ -1387,11 +1387,11 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		// this should never actually get used because we're testing for errors here
 		r := strings.NewReader("")
 		// test index
-		idx, err := api.Holder().CreateIndex(c.Idx(), pilosa.IndexOptions{})
+		idx, err := api.Holder().CreateIndex(c.Idx(), "", pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("%v: could not create test index", err)
 		}
-		if _, err = idx.CreateFieldIfNotExistsWithOptions("field", &pilosa.FieldOptions{Keys: false}); err != nil {
+		if _, err = idx.CreateFieldIfNotExistsWithOptions("field", "", &pilosa.FieldOptions{Keys: false}); err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
 		t.Run("translateIndexDbOnNilIndex",

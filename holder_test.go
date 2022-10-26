@@ -31,7 +31,7 @@ func TestHolder_Open(t *testing.T) {
 		// no automatic close here, because we manually close this, and then
 		// *fail* to reopen it.
 
-		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+		if _, err := h.CreateIndex("test", "", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Close(); err != nil {
 			t.Fatal(err)
@@ -50,10 +50,10 @@ func TestHolder_Open(t *testing.T) {
 		t.Run("ErrForeignIndexNotFound", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
 
-			if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			if idx, err := h.CreateIndex("foo", "", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
 			} else {
-				_, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("nonexistent"))
+				_, err := idx.CreateField("bar", "", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("nonexistent"))
 				if err == nil {
 					t.Fatalf("expected error: %s", pilosa.ErrForeignIndexNotFound)
 				} else if errors.Cause(err) != pilosa.ErrForeignIndexNotFound {
@@ -66,11 +66,11 @@ func TestHolder_Open(t *testing.T) {
 		t.Run("ForeignIndexNotOpenYet", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
 
-			if _, err := h.CreateIndex("zzz", pilosa.IndexOptions{}); err != nil {
+			if _, err := h.CreateIndex("zzz", "", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
-			} else if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			} else if idx, err := h.CreateIndex("foo", "", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
-			} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("zzz")); err != nil {
+			} else if _, err := idx.CreateField("bar", "", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("zzz")); err != nil {
 				t.Fatal(err)
 			} else if err := h.Holder.Close(); err != nil {
 				t.Fatal(err)
@@ -85,11 +85,11 @@ func TestHolder_Open(t *testing.T) {
 		t.Run("ForeignIndexIsOpen", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
 
-			if _, err := h.CreateIndex("aaa", pilosa.IndexOptions{}); err != nil {
+			if _, err := h.CreateIndex("aaa", "", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
-			} else if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			} else if idx, err := h.CreateIndex("foo", "", pilosa.IndexOptions{}); err != nil {
 				t.Fatal(err)
-			} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("aaa")); err != nil {
+			} else if _, err := idx.CreateField("bar", "", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("aaa")); err != nil {
 				t.Fatal(err)
 			} else if err := h.Holder.Close(); err != nil {
 				t.Fatal(err)
@@ -104,18 +104,18 @@ func TestHolder_Open(t *testing.T) {
 		t.Run("CreateIndexIfNotExists", func(t *testing.T) {
 			h := test.MustOpenHolder(t)
 
-			idx1, err := h.CreateIndexIfNotExists("aaa", pilosa.IndexOptions{})
+			idx1, err := h.CreateIndexIfNotExists("aaa", "", pilosa.IndexOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if _, err = h.CreateIndex("aaa", pilosa.IndexOptions{}); err == nil {
+			if _, err = h.CreateIndex("aaa", "", pilosa.IndexOptions{}); err == nil {
 				t.Fatalf("expected: ConflictError, got: nil")
 			} else if _, ok := err.(pilosa.ConflictError); !ok {
 				t.Fatalf("expected: ConflictError, got: %s", err)
 			}
 
-			idx2, err := h.CreateIndexIfNotExists("aaa", pilosa.IndexOptions{})
+			idx2, err := h.CreateIndexIfNotExists("aaa", "", pilosa.IndexOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -135,7 +135,7 @@ func TestHolder_HasData(t *testing.T) {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)
 		}
 
-		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+		if _, err := h.CreateIndex("test", "", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		}
 

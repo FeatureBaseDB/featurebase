@@ -1330,7 +1330,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	index := mustOpenIndex(t, IndexOptions{})
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", OptFieldTypeSet(CacheTypeRanked, cacheSize))
+	field, err := index.CreateFieldIfNotExists("f", "", OptFieldTypeSet(CacheTypeRanked, cacheSize))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3086,11 +3086,11 @@ func newTestField(tb testing.TB, fieldOpts ...FieldOption) (*Holder, *Index, *Fi
 		fieldOpts = []FieldOption{OptFieldTypeDefault()}
 	}
 	h := newTestHolder(tb)
-	idx, err := h.CreateIndex("i", IndexOptions{})
+	idx, err := h.CreateIndex("i", "", IndexOptions{})
 	if err != nil {
 		tb.Fatalf("creating test index: %v", err)
 	}
-	fld, err := idx.CreateField("f", fieldOpts...)
+	fld, err := idx.CreateField("f", "", fieldOpts...)
 	if err != nil {
 		tb.Fatalf("creating test field: %v", err)
 	}

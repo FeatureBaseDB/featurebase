@@ -680,12 +680,14 @@ func (s Serializer) encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *pb.C
 	return &pb.CreateIndexMessage{
 		Index:     m.Index,
 		CreatedAt: m.CreatedAt,
+		Owner:     m.Owner,
 		Meta:      s.encodeIndexMeta(&m.Meta),
 	}
 }
 
 func (s Serializer) encodeIndexMeta(m *pilosa.IndexOptions) *pb.IndexMeta {
 	return &pb.IndexMeta{
+		Description:    m.Description,
 		Keys:           m.Keys,
 		TrackExistence: m.TrackExistence,
 	}
@@ -702,6 +704,7 @@ func (s Serializer) encodeCreateFieldMessage(m *pilosa.CreateFieldMessage) *pb.C
 		Index:     m.Index,
 		Field:     m.Field,
 		CreatedAt: m.CreatedAt,
+		Owner:     m.Owner,
 		Meta:      s.encodeFieldOptions(m.Meta),
 	}
 }
@@ -1056,12 +1059,14 @@ func (s Serializer) decodeCreateShardMessage(pb *pb.CreateShardMessage, m *pilos
 func (s Serializer) decodeCreateIndexMessage(pb *pb.CreateIndexMessage, m *pilosa.CreateIndexMessage) {
 	m.Index = pb.Index
 	m.CreatedAt = pb.CreatedAt
+	m.Owner = pb.Owner
 	m.Meta = pilosa.IndexOptions{}
 	s.decodeIndexMeta(pb.Meta, &m.Meta)
 }
 
 func (s Serializer) decodeIndexMeta(pb *pb.IndexMeta, m *pilosa.IndexOptions) {
 	if pb != nil {
+		m.Description = pb.Description
 		m.Keys = pb.Keys
 		m.TrackExistence = pb.TrackExistence
 	}
@@ -1075,6 +1080,7 @@ func (s Serializer) decodeCreateFieldMessage(pb *pb.CreateFieldMessage, m *pilos
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.CreatedAt = pb.CreatedAt
+	m.Owner = pb.Owner
 	m.Meta = &pilosa.FieldOptions{}
 	s.decodeFieldOptions(pb.Meta, m.Meta)
 }
