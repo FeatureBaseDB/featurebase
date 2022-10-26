@@ -105,16 +105,6 @@ func (db *DB) WALPath() string {
 	return filepath.Join(db.Path, "wal")
 }
 
-func CreateDirIfNotExist(path string) {
-	dir := filepath.Dir(path)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		err = os.MkdirAll(dir, 0755)
-		if err != nil {
-			panic(err)
-		}
-	}
-}
-
 // TxN returns the number of active transactions.
 func (db *DB) TxN() int {
 	db.mu.RLock()
