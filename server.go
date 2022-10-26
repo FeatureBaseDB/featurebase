@@ -1016,6 +1016,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if err := idx.UpdateFieldLocal(&obj.CreateFieldMessage, obj.Update); err != nil {
 			return err
 		}
+
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {

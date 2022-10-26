@@ -49,6 +49,18 @@ import (
 	"github.com/zeebo/blake3"
 )
 
+type ContextRequestUserIdKeyType string
+
+const (
+	// ContextRequestUserIdKey is request userid key for a request ctx
+	ContextRequestUserIdKey = ContextRequestUserIdKeyType("request-user-id")
+)
+
+const (
+	// HeaderRequestUserID is request userid header
+	HeaderRequestUserID = "X-Request-Userid"
+)
+
 // Handler represents an HTTP handler.
 type Handler struct {
 	Handler http.Handler
@@ -692,34 +704,52 @@ func (h *Handler) chkAllowedNetworks(r *http.Request) (bool, context.Context) {
 func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		if h.auth != nil {
-			// if IP is in allowed networks, then serve the request
-			allowedNetwork, ctx := h.chkAllowedNetworks(r)
-			if allowedNetwork {
-				handler.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
 
-			access, refresh := getTokens(r)
-			uinfo, err := h.auth.Authenticate(access, refresh)
-			if err != nil {
-				http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusUnauthorized)
-				return
-			}
-			// just in case it got refreshed
-			ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
-			ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
-			h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
+		//if the request is unauthenticated and we have the appropriate header get the userid from the header
+		requestUserID := r.Header.Get(HeaderRequestUserID)
+		ctx = context.WithValue(ctx, ContextRequestUserIdKey, requestUserID)
+
+		if h.auth == nil {
+			handler.ServeHTTP(w, r.WithContext(ctx))
+			return
 		}
+
+		// if IP is in allowed networks, then serve the request
+		allowedNetwork, ctx := h.chkAllowedNetworks(r)
+		if allowedNetwork {
+			handler.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		access, refresh := getTokens(r)
+		uinfo, err := h.auth.Authenticate(access, refresh)
+		if err != nil {
+			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusUnauthorized)
+			return
+		}
+		// prefer the user id from an authenticated request over one in a header
+		ctx = context.WithValue(ctx, ContextRequestUserIdKey, uinfo.UserID)
+
+		// just in case it got refreshed
+		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
+		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
+		h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
+
 		handler.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
 func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// if auth isn't turned on, just serve the request
+		ctx := r.Context()
+
+		//if the request is unauthenticated and we have the appropriate header get the userid from the header
+		requestUserID := r.Header.Get(HeaderRequestUserID)
+		ctx = context.WithValue(ctx, ContextRequestUserIdKey, requestUserID)
+
+		// handle the case when auth is not turned on
 		if h.auth == nil {
-			handler.ServeHTTP(w, r)
+			handler.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -738,16 +768,22 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		access, refresh := getTokens(r)
 
 		uinfo, err := h.auth.Authenticate(access, refresh)
-
 		if err != nil {
 			http.Error(w, errors.Wrap(err, "authenticating").Error(), http.StatusForbidden)
 			return
 		}
+
+		// prefer the user id from an authenticated request over one in a header
+		ctx = context.WithValue(ctx, ContextRequestUserIdKey, uinfo.UserID)
+
+		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+access)
+		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, refresh)
+
 		// just in case it got refreshed
 		h.auth.SetCookie(w, uinfo.Token, uinfo.RefreshToken, uinfo.Expiry)
 
 		// put the user's authN/Z info in the context
-		ctx = context.WithValue(r.Context(), contextKeyGroupMembership, uinfo.Groups)
+		ctx = context.WithValue(ctx, contextKeyGroupMembership, uinfo.Groups)
 		ctx = context.WithValue(ctx, authn.ContextValueAccessToken, "Bearer "+uinfo.Token)
 		ctx = context.WithValue(ctx, authn.ContextValueRefreshToken, uinfo.RefreshToken)
 		// unlikely h.permissions will be nil, but we'll check to be safe
@@ -825,7 +861,6 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 			}
 		}
 		handler.ServeHTTP(w, r.WithContext(ctx))
-
 	}
 }
 
@@ -1700,6 +1735,7 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 	// Unmarshal expected values.
 	_p := _postIndexRequest{
 		Options: IndexOptions{
+			Description:    "",
 			Keys:           false,
 			TrackExistence: true,
 		},
@@ -1785,6 +1821,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	// Decode request.
 	req := postIndexRequest{
 		Options: IndexOptions{
+			Description:    "",
 			Keys:           false,
 			TrackExistence: true,
 		},

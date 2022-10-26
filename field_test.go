@@ -22,7 +22,7 @@ func TestField_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		h, idx := test.MustOpenIndex(t)
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		f, err := idx.CreateField("f", "", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestField_SetValue(t *testing.T) {
 	t.Run("Overwrite", func(t *testing.T) {
 		h, idx := test.MustOpenIndex(t)
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		f, err := idx.CreateField("f", "", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,7 +98,7 @@ func TestField_SetValue(t *testing.T) {
 	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
 		h, idx := test.MustOpenIndex(t)
 
-		f, err := idx.CreateField("f")
+		f, err := idx.CreateField("f", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func TestField_SetValue(t *testing.T) {
 	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
 		h, idx := test.MustOpenIndex(t)
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
+		f, err := idx.CreateField("f", "", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestField_SetValue(t *testing.T) {
 	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
 		h, idx := test.MustOpenIndex(t)
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
+		f, err := idx.CreateField("f", "", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,13 +170,13 @@ func TestField_NameValidation(t *testing.T) {
 
 	_, idx := test.MustOpenIndex(t)
 	for _, name := range validFieldNames {
-		_, err := idx.CreateField(name)
+		_, err := idx.CreateField(name, "")
 		if err != nil {
 			t.Fatalf("unexpected field name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFieldNames {
-		_, err := idx.CreateField(name)
+		_, err := idx.CreateField(name, "")
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}
@@ -189,7 +189,7 @@ const includeRemote = false // for calls to Index.AvailableShards(localOnly bool
 func TestField_AvailableShards(t *testing.T) {
 	h, idx := test.MustOpenIndex(t)
 
-	f, err := idx.CreateField("fld-shards")
+	f, err := idx.CreateField("fld-shards", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestField_ClearValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		h, idx := test.MustOpenIndex(t)
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		f, err := idx.CreateField("f", "", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -291,7 +291,7 @@ func TestFieldInfoMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error marshalling index info,  %v", err)
 	}
-	expected := []byte(`{"name":"timestamp","createdAt":1649270079233541000,"options":{"type":"timestamp","epoch":"1970-01-01T00:00:00Z","bitDepth":0,"min":-4294967296,"max":4294967296,"timeUnit":"s"}}`)
+	expected := []byte(`{"name":"timestamp","createdAt":1649270079233541000,"owner":"","options":{"type":"timestamp","epoch":"1970-01-01T00:00:00Z","bitDepth":0,"min":-4294967296,"max":4294967296,"timeUnit":"s"}}`)
 	if !bytes.Equal(a, expected) {
 		t.Fatalf("expected %s, got %s", expected, a)
 	}

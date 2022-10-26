@@ -101,8 +101,8 @@ type Schemator interface {
 	CreateIndex(ctx context.Context, name string, val []byte) error
 	DeleteIndex(ctx context.Context, name string) error
 	Field(ctx context.Context, index, field string) ([]byte, error)
-	CreateField(ctx context.Context, index, field string, val []byte) error
-	UpdateField(ctx context.Context, index, field string, val []byte) error
+	CreateField(ctx context.Context, index, field string, fieldVal []byte) error
+	UpdateField(ctx context.Context, index, field string, fieldVal []byte) error
 	DeleteField(ctx context.Context, index, field string) error
 	View(ctx context.Context, index, field, view string) (bool, error)
 	CreateView(ctx context.Context, index, field, view string) error
@@ -186,23 +186,27 @@ func (*nopSchemator) Index(ctx context.Context, name string) ([]byte, error) { r
 func (*nopSchemator) CreateIndex(ctx context.Context, name string, val []byte) error { return nil }
 
 // DeleteIndex is a no-op implementation of the Schemator DeleteIndex method.
-func (*nopSchemator) DeleteIndex(ctx context.Context, name string) error { return nil }
+func (*nopSchemator) DeleteIndex(ctx context.Context, name string) error {
+	return nil
+}
 
 // Field is a no-op implementation of the Schemator Field method.
 func (*nopSchemator) Field(ctx context.Context, index, field string) ([]byte, error) { return nil, nil }
 
 // CreateField is a no-op implementation of the Schemator CreateField method.
-func (*nopSchemator) CreateField(ctx context.Context, index, field string, val []byte) error {
+func (*nopSchemator) CreateField(ctx context.Context, index, field string, fieldVal []byte) error {
 	return nil
 }
 
 // UpdateField is a no-op implementation of the Schemator UpdateField method.
-func (*nopSchemator) UpdateField(ctx context.Context, index, field string, val []byte) error {
+func (*nopSchemator) UpdateField(ctx context.Context, index, field string, fieldVal []byte) error {
 	return nil
 }
 
 // DeleteField is a no-op implementation of the Schemator DeleteField method.
-func (*nopSchemator) DeleteField(ctx context.Context, index, field string) error { return nil }
+func (*nopSchemator) DeleteField(ctx context.Context, index, field string) error {
+	return nil
+}
 
 // View is a no-op implementation of the Schemator View method.
 func (*nopSchemator) View(ctx context.Context, index, field, view string) (bool, error) {
@@ -296,7 +300,7 @@ func (s *inMemSchemator) Field(ctx context.Context, index, field string) ([]byte
 }
 
 // CreateField is an in-memory implementation of the Schemator CreateField method.
-func (s *inMemSchemator) CreateField(ctx context.Context, index, field string, val []byte) error {
+func (s *inMemSchemator) CreateField(ctx context.Context, index, field string, fieldVal []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx, ok := s.schema[index]
@@ -307,17 +311,17 @@ func (s *inMemSchemator) CreateField(ctx context.Context, index, field string, v
 		// The current logic in pilosa doesn't allow us to return ErrFieldExists
 		// here, so for now we just update the Data value if the field already
 		// exists.
-		fld.Data = val
+		fld.Data = fieldVal
 		return nil
 	}
 	idx.Fields[field] = &Field{
-		Data:  val,
+		Data:  fieldVal,
 		Views: make(map[string]struct{}),
 	}
 	return nil
 }
 
-func (s *inMemSchemator) UpdateField(ctx context.Context, index, field string, val []byte) error {
+func (s *inMemSchemator) UpdateField(ctx context.Context, index, field string, fieldVal []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx, ok := s.schema[index]
@@ -328,7 +332,7 @@ func (s *inMemSchemator) UpdateField(ctx context.Context, index, field string, v
 		// The current logic in pilosa doesn't allow us to return ErrFieldExists
 		// here, so for now we just update the Data value if the field already
 		// exists.
-		fld.Data = val
+		fld.Data = fieldVal
 		return nil
 	} else {
 		return ErrFieldDoesNotExist

@@ -7,6 +7,7 @@ import "public.proto";
 message IndexMeta {
 	bool Keys = 3;
 	bool TrackExistence = 4;
+	string Description = 5;
 }
 
 message FieldOptions {
@@ -67,6 +68,7 @@ message CreateIndexMessage {
 	string Index = 1;
 	IndexMeta Meta = 2;
 	int64 CreatedAt  = 3;
+	string Owner = 5;
 }
 
 message CreateFieldMessage {
@@ -74,6 +76,7 @@ message CreateFieldMessage {
 	string Field = 2;
 	FieldOptions Meta = 3;
 	int64 CreatedAt  = 4;
+	string Owner = 5;
 }
 
 message UpdateFieldMessage {

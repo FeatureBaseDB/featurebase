@@ -879,7 +879,9 @@ type CreateShardMessage struct {
 type CreateIndexMessage struct {
 	Index     string
 	CreatedAt int64
-	Meta      IndexOptions
+	Owner     string
+
+	Meta IndexOptions
 }
 
 // DeleteIndexMessage is an internal message indicating index deletion.
@@ -892,6 +894,7 @@ type CreateFieldMessage struct {
 	Index     string
 	Field     string
 	CreatedAt int64
+	Owner     string
 	Meta      *FieldOptions
 }
 

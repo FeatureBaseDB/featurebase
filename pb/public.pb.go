@@ -465,6 +465,7 @@ func (m *KeyList) GetKeys() []string {
 
 type ExtractedTableValue struct {
 	// Types that are valid to be assigned to Value:
+	//
 	//	*ExtractedTableValue_IDs
 	//	*ExtractedTableValue_Keys
 	//	*ExtractedTableValue_BSIValue
@@ -605,6 +606,7 @@ func (*ExtractedTableValue) XXX_OneofWrappers() []interface{} {
 
 type ExtractedTableColumn struct {
 	// Types that are valid to be assigned to KeyOrID:
+	//
 	//	*ExtractedTableColumn_Key
 	//	*ExtractedTableColumn_ID
 	KeyOrID              isExtractedTableColumn_KeyOrID `protobuf_oneof:"KeyOrID"`

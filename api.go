@@ -224,14 +224,23 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	span, _ := tracing.StartSpanFromContext(ctx, "API.CreateIndex")
 	defer span.Finish()
 
+	// get the requestUserID from the context -- assumes the http handler has populated this from
+	// authN/Z info
+	requestUserID, ok := ctx.Value(ContextRequestUserIdKey).(string)
+	if !ok {
+		requestUserID = ""
+	}
+
 	if err := api.validate(apiCreateIndex); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Populate the create index message.
+	ts := timestamp()
 	cim := &CreateIndexMessage{
 		Index:     indexName,
-		CreatedAt: timestamp(),
+		CreatedAt: ts,
+		Owner:     requestUserID,
 		Meta:      options,
 	}
 
@@ -307,6 +316,13 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
+	// get the requestUserID from the context -- assumes the http handler has populated this from
+	// authN/Z info
+	requestUserID, ok := ctx.Value(ContextRequestUserIdKey).(string)
+	if !ok {
+		requestUserID = ""
+	}
+
 	// Apply and validate functional options.
 	fo, err := newFieldOptions(opts...)
 	if err != nil {
@@ -324,11 +340,12 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		Index:     indexName,
 		Field:     fieldName,
 		CreatedAt: timestamp(),
+		Owner:     requestUserID,
 		Meta:      fo,
 	}
 
 	// Create field.
-	field, err := index.CreateField(fieldName, opts...)
+	field, err := index.CreateField(fieldName, requestUserID, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
@@ -358,7 +375,11 @@ func (api *API) UpdateField(ctx context.Context, indexName, fieldName string, up
 		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
-	cfm, err := index.UpdateField(ctx, fieldName, update)
+	// get the requestUserID from the context -- assumes the http handler has populated this from
+	// authN/Z info
+	requestUserID, _ := ctx.Value(ContextRequestUserIdKey).(string)
+
+	cfm, err := index.UpdateField(ctx, fieldName, requestUserID, update)
 	if err != nil {
 		return errors.Wrap(err, "updating field")
 	}

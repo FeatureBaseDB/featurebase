@@ -7,11 +7,11 @@ import (
 )
 
 func setupTest(t *testing.T, h *Holder, rowCol []rowCols, indexName string) (*Index, *Field) {
-	idx, err := h.CreateIndexIfNotExists(indexName, IndexOptions{TrackExistence: true})
+	idx, err := h.CreateIndexIfNotExists(indexName, "", IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatalf("failed to create index %v: %v", indexName, err)
 	}
-	f, err := idx.CreateFieldIfNotExists("f")
+	f, err := idx.CreateFieldIfNotExists("f", "")
 	if err != nil {
 		t.Fatalf("failed to create field in index %v: %v", indexName, err)
 	}
