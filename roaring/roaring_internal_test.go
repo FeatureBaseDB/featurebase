@@ -4658,7 +4658,7 @@ func TestContainerCallback(t *testing.T) {
 			for _, c1 := range ci {
 				got = got[:0]
 				expected = c1.Slice()
-				containerCallback(c1, hit)
+				ContainerCallback(c1, hit)
 				if len(got) != len(expected) {
 					complain(t, "wrong length (%d vs %d)", len(expected), len(got))
 				}

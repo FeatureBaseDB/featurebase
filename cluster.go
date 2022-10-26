@@ -51,9 +51,6 @@ type cluster struct { // nolint: maligned
 	holder      *Holder
 	broadcaster broadcaster
 
-	abortAntiEntropyCh chan struct{}
-	muAntiEntropy      sync.Mutex
-
 	translationSyncer TranslationSyncer
 
 	mu sync.RWMutex
@@ -92,33 +89,6 @@ func newCluster() *cluster {
 
 		disCo: disco.NopDisCo,
 		noder: disco.NewEmptyLocalNoder(),
-	}
-}
-
-// initializeAntiEntropy is called by the anti entropy routine when it starts.
-// If the AE channel is created without a routine reading from it, cluster will
-// block indefinitely when calling abortAntiEntropy().
-func (c *cluster) initializeAntiEntropy() {
-	c.mu.Lock()
-	c.abortAntiEntropyCh = make(chan struct{})
-	c.mu.Unlock()
-}
-
-// abortAntiEntropyQ checks whether the cluster wants to abort the anti entropy
-// process (so that it can resize). It does not block.
-func (c *cluster) abortAntiEntropyQ() bool {
-	select {
-	case <-c.abortAntiEntropyCh:
-		return true
-	default:
-		return false
-	}
-}
-
-// abortAntiEntropy blocks until the anti-entropy routine calls abortAntiEntropyQ
-func (c *cluster) abortAntiEntropy() {
-	if c.abortAntiEntropyCh != nil {
-		c.abortAntiEntropyCh <- struct{}{}
 	}
 }
 

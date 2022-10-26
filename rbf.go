@@ -15,7 +15,6 @@ import (
 	txkey "github.com/molecula/featurebase/v3/short_txkey"
 	"github.com/molecula/featurebase/v3/storage"
 
-	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -361,14 +360,6 @@ func (tx *RBFTx) ContainerIterator(index, field, view string, shard uint64, key 
 	return tx.tx.ContainerIterator(rbfName(index, field, view, shard), key)
 }
 
-func (tx *RBFTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
-	return tx.tx.ForEach(rbfName(index, field, view, shard), fn)
-}
-
-func (tx *RBFTx) ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error {
-	return tx.tx.ForEachRange(rbfName(index, field, view, shard), start, end, fn)
-}
-
 func (tx *RBFTx) Count(index, field, view string, shard uint64) (uint64, error) {
 	return tx.tx.Count(rbfName(index, field, view, shard))
 }
@@ -393,12 +384,6 @@ func (tx *RBFTx) OffsetRange(index, field, view string, shard uint64, offset, st
 
 func (tx *RBFTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	return tx.tx.ImportRoaringBits(rbfName(index, field, view, shard), rit, clear, log, rowSize)
-}
-
-func (tx *RBFTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
-	b, err := tx.RoaringBitmap(index, field, view, shard)
-	vprint.PanicOn(err)
-	return b.Iterator()
 }
 
 func (tx *RBFTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {

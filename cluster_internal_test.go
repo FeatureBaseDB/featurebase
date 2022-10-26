@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"testing"
 	"testing/quick"
-	"time"
 
 	"github.com/molecula/featurebase/v3/disco"
 	pnet "github.com/molecula/featurebase/v3/net"
@@ -176,66 +175,6 @@ func TestCluster_Nodes(t *testing.T) {
 		expected := []pnet.URI{uris[0], uris[1], uris[2]}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
-		}
-	})
-}
-
-func TestAE(t *testing.T) {
-	t.Run("AbortDoesn'tBlockUninitialized", func(t *testing.T) {
-		c := newCluster()
-		ch := make(chan struct{})
-		go func() {
-			c.abortAntiEntropy()
-			close(ch)
-		}()
-		defer c.abortAntiEntropyQ() // avoid leaking a goroutine.
-		select {
-		case <-ch:
-			return
-		case <-time.After(time.Second):
-			t.Fatalf("aborting anti entropy on a new cluster blocked")
-		}
-	})
-
-	t.Run("AbortBlocksInitialized", func(t *testing.T) {
-		c := newCluster()
-		c.initializeAntiEntropy()
-
-		ch := make(chan struct{})
-		go func() {
-			c.abortAntiEntropy()
-			close(ch)
-		}()
-		defer c.abortAntiEntropyQ() // avoid leak of goroutine.
-		select {
-		case <-ch:
-			t.Fatalf("aborting anti entropy on an initialized cluster didn't block")
-		case <-time.After(time.Microsecond * 100):
-		}
-	})
-
-	t.Run("AbortAntiEntropyQ", func(t *testing.T) {
-		c := newCluster()
-		c.initializeAntiEntropy()
-		if c.abortAntiEntropyQ() {
-			t.Fatalf("abortAntiEntropyQ should report false when abort not called")
-		}
-		go func() {
-			for {
-				if c.abortAntiEntropyQ() {
-					break
-				}
-			}
-		}()
-		ch := make(chan struct{})
-		go func() {
-			c.abortAntiEntropy()
-			close(ch)
-		}()
-		select {
-		case <-ch:
-		case <-time.After(time.Second):
-			t.Fatalf("abort should not have blocked this long")
 		}
 	})
 }

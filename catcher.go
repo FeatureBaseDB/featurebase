@@ -26,10 +26,6 @@ func init() {
 
 var _ Tx = (*catcherTx)(nil)
 
-func (c *catcherTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
-	return c.b.NewTxIterator(index, field, view, shard)
-}
-
 func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -147,28 +143,6 @@ func (c *catcherTx) ContainerIterator(index, field, view string, shard uint64, f
 		}
 	}()
 	return c.b.ContainerIterator(index, field, view, shard, firstRoaringContainerKey)
-}
-
-func (c *catcherTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
-
-	defer func() {
-		if r := recover(); r != nil {
-			vprint.AlwaysPrintf("see ForEach() PanicOn '%v' at '%v'", r, vprint.Stack())
-			vprint.PanicOn(r)
-		}
-	}()
-	return c.b.ForEach(index, field, view, shard, fn)
-}
-
-func (c *catcherTx) ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error {
-
-	defer func() {
-		if r := recover(); r != nil {
-			vprint.AlwaysPrintf("see ForEachRange() PanicOn '%v' at '%v'", r, vprint.Stack())
-			vprint.PanicOn(r)
-		}
-	}()
-	return c.b.ForEachRange(index, field, view, shard, start, end, fn)
 }
 
 func (c *catcherTx) Count(index, field, view string, shard uint64) (uint64, error) {

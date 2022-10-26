@@ -761,9 +761,25 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		return cw.Write([]string{rowStr, colStr})
 	}
 
-	// Iterate over each column.
-	if err := f.forEachBit(tx, fn); err != nil {
-		return errors.Wrap(err, "writing CSV")
+	citer, _, err := tx.ContainerIterator(indexName, fieldName, viewStandard, shard, 0)
+	if err != nil {
+		return err
+	}
+	var row, hi uint64
+	var failed error
+	process := func(u uint16) {
+		if err := fn(row, hi|uint64(u)); err != nil {
+			failed = err
+		}
+	}
+	for citer.Next() {
+		key, c := citer.Value()
+		hi = key << 16
+		row, hi = (hi / ShardWidth), (shard*ShardWidth)+(hi%ShardWidth)
+		roaring.ContainerCallback(c, process)
+		if failed != nil {
+			return errors.Wrap(err, "writing CSV")
+		}
 	}
 
 	// Ensure data is flushed.
@@ -801,66 +817,6 @@ func (api *API) PartitionNodes(ctx context.Context, partitionID int) ([]*disco.N
 	snap := api.cluster.NewSnapshot()
 
 	return snap.PartitionNodes(partitionID), nil
-}
-
-// FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
-// return anything useful. Currently it returns protobuf encoded row and column
-// ids from a "block" which is a subdivision of a fragment.
-func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) (_ []byte, err error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentBlockData")
-	defer span.Finish()
-
-	if err := api.validate(apiFragmentBlockData); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	reqBytes, err := io.ReadAll(body)
-	if err != nil {
-		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
-	}
-	var req BlockDataRequest
-	if err := api.Serializer.Unmarshal(reqBytes, &req); err != nil {
-		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
-	}
-
-	// Retrieve fragment from holder.
-	f := api.holder.fragment(req.Index, req.Field, req.View, req.Shard)
-	if f == nil {
-		return nil, ErrFragmentNotFound
-	}
-
-	var resp = BlockDataResponse{}
-	resp.RowIDs, resp.ColumnIDs, err = f.blockData(int(req.Block))
-	if err != nil {
-		return nil, err
-	}
-
-	// Encode response.
-	buf, err := api.Serializer.Marshal(&resp)
-	if err != nil {
-		return nil, errors.Wrap(err, "merge block response encoding error")
-	}
-
-	return buf, nil
-}
-
-// FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(ctx context.Context, indexName, fieldName, viewName string, shard uint64) ([]FragmentBlock, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentBlocks")
-	defer span.Finish()
-
-	if err := api.validate(apiFragmentBlocks); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, viewName, shard)
-	if f == nil {
-		return nil, ErrFragmentNotFound
-	}
-
-	// Retrieve blocks.
-	return f.Blocks()
 }
 
 // FragmentData returns all data in the specified fragment.

@@ -201,9 +201,8 @@ type HolderConfig struct {
 	StatsClient          stats.StatsClient
 	Logger               logger.Logger
 
-	StorageConfig       *storage.Config
-	RBFConfig           *rbfcfg.Config
-	AntiEntropyInterval time.Duration
+	StorageConfig *storage.Config
+	RBFConfig     *rbfcfg.Config
 
 	LookupDBDSN string
 }
@@ -1239,117 +1238,6 @@ type holderSyncer struct {
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}
-}
-
-// IsClosing returns true if the syncer has been asked to close.
-func (s *holderSyncer) IsClosing() bool {
-	if s.Cluster.abortAntiEntropyQ() {
-		return true
-	}
-	select {
-	case <-s.Closing:
-		return true
-	default:
-		return false
-	}
-}
-
-// SyncHolder compares the holder on host with the local holder and resolves differences.
-func (s *holderSyncer) SyncHolder() error {
-	s.mu.Lock() // only allow one instance of SyncHolder to be running at a time
-	defer s.mu.Unlock()
-	ti := time.Now()
-
-	// Create a snapshot of the cluster to use for node/partition calculations.
-	snap := s.Cluster.NewSnapshot()
-
-	schema, err := s.Holder.Schema()
-	if err != nil {
-		return errors.Wrap(err, "getting schema")
-	}
-
-	// Iterate over schema in sorted order.
-	for _, di := range schema {
-		// Verify syncer has not closed.
-		if s.IsClosing() {
-			return nil
-		}
-
-		tf := time.Now()
-		for _, fi := range di.Fields {
-			// Verify syncer has not closed.
-			if s.IsClosing() {
-				return nil
-			}
-
-			for _, vi := range fi.Views {
-				// Verify syncer has not closed.
-				if s.IsClosing() {
-					return nil
-				}
-
-				itr := s.Holder.Index(di.Name).AvailableShards(includeRemote).Iterator()
-				itr.Seek(0)
-				for shard, eof := itr.Next(); !eof; shard, eof = itr.Next() {
-					// Ignore shards that this host doesn't own.
-					if !snap.OwnsShard(s.Node.ID, di.Name, shard) {
-						continue
-					}
-
-					// Verify syncer has not closed.
-					if s.IsClosing() {
-						return nil
-					}
-
-					// Sync fragment if own it.
-					if err := s.syncFragment(di.Name, fi.Name, vi.Name, shard); err != nil {
-						return fmt.Errorf("fragment sync error: index=%s, field=%s, view=%s, shard=%d, err=%s", di.Name, fi.Name, vi.Name, shard, err)
-					}
-				}
-			}
-			s.Stats.Timing(MetricSyncFieldDurationSeconds, time.Since(tf), 1.0)
-			tf = time.Now() // reset tf
-		}
-		s.Stats.Timing(MetricSyncIndexDurationSeconds, time.Since(ti), 1.0)
-		ti = time.Now() // reset ti
-	}
-
-	return nil
-}
-
-// syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) error {
-	// Retrieve local field.
-	f := s.Holder.Field(index, field)
-	if f == nil {
-		return newNotFoundError(ErrFieldNotFound, field)
-	}
-
-	// Ensure view exists locally.
-	v, err := f.createViewIfNotExists(view)
-	if err != nil {
-		return errors.Wrap(err, "creating view")
-	}
-
-	// Ensure fragment exists locally.
-	frag, err := v.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		return errors.Wrap(err, "creating fragment")
-	}
-
-	// Sync fragments together.
-	fs := fragmentSyncer{
-		Fragment:  frag,
-		Node:      s.Node,
-		Cluster:   s.Cluster,
-		FieldType: f.Type(),
-		Closing:   s.Closing,
-	}
-	if err := fs.syncFragment(); err != nil {
-		return errors.Wrap(err, "syncing fragment")
-	}
-
-	return nil
 }
 
 // resetTranslationSync reinitializes streaming sync of translation data.

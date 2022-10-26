@@ -1145,36 +1145,6 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 	}
 }
 
-// Ensure a fragment can iterate over all bits in order.
-func TestFragment_ForEachBit(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
-	defer f.Clean(t)
-
-	// Set bits on the fragment.
-	if _, err := f.setBit(tx, 100, 20); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.setBit(tx, 2, 38); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.setBit(tx, 2, 37); err != nil {
-		t.Fatal(err)
-	}
-
-	// Iterate over bits.
-	var result [][2]uint64
-	if err := f.forEachBit(tx, func(rowID, columnID uint64) error {
-		result = append(result, [2]uint64{rowID, columnID})
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify bits are correct.
-	if !reflect.DeepEqual(result, [][2]uint64{{2, 37}, {2, 38}, {100, 20}}) {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-}
-
 // Ensure a fragment can return the top n results.
 func TestFragment_Top(t *testing.T) {
 	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
@@ -1387,110 +1357,6 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 }
 
-// Ensure fragment can return a checksum for its blocks.
-func TestFragment_Checksum(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
-	defer f.Clean(t)
-	tx.Rollback() // allow f.Checksum to make its read tx.
-
-	// Retrieve checksum and set bits.
-	orig, err := f.Checksum()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
-
-	if _, err := f.setBit(tx, 1, 200); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.setBit(tx, HashBlockSize*2, 200); err != nil {
-		t.Fatal(err)
-	}
-	PanicOn(tx.Commit())
-
-	// Ensure new checksum is different.
-	if chksum, err := f.Checksum(); err != nil {
-		t.Fatal(err)
-	} else if bytes.Equal(chksum, orig) {
-		t.Fatalf("expected checksum to change: %x - %x", chksum, orig)
-	}
-}
-
-// Ensure fragment can return a checksum for a given block.
-func TestFragment_Blocks(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
-	defer f.Clean(t)
-
-	// Retrieve initial checksum.
-	var prev []FragmentBlock
-
-	// Set first bit.
-	if _, err := f.setBit(tx, 0, 0); err != nil {
-		t.Fatal(err)
-	}
-	PanicOn(tx.Commit())
-	blocks, err := f.Blocks() // FAIL: TestFragment_Blocks b/c 0 blocks back
-	if err != nil {
-		t.Fatal(err)
-	} else if blocks[0].Checksum == nil {
-		t.Fatalf("expected checksum: %x", blocks[0].Checksum)
-	}
-	prev = blocks
-
-	tx = idx.holder.txf.NewTx(Txo{Write: true, Index: idx, Fragment: f, Shard: f.shard})
-	// Set bit on different row.
-	if _, err := f.setBit(tx, 20, 0); err != nil {
-		t.Fatal(err)
-	}
-	PanicOn(tx.Commit())
-	blocks, err = f.Blocks()
-	if err != nil {
-		t.Fatal(err)
-	} else if bytes.Equal(blocks[0].Checksum, prev[0].Checksum) {
-		t.Fatalf("expected checksum to change: %x", blocks[0].Checksum)
-	}
-	prev = blocks
-
-	// Set bit on different column.
-	tx = idx.holder.txf.NewTx(Txo{Write: true, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
-	if _, err := f.setBit(tx, 20, 100); err != nil {
-		t.Fatal(err)
-	}
-	PanicOn(tx.Commit())
-	blocks, err = f.Blocks()
-	if err != nil {
-		t.Fatal(err)
-	} else if bytes.Equal(blocks[0].Checksum, prev[0].Checksum) {
-		t.Fatalf("expected checksum to change: %x", blocks[0].Checksum)
-	}
-}
-
-// Ensure fragment returns an empty checksum if no data exists for a block.
-func TestFragment_Blocks_Empty(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
-	defer f.Clean(t)
-
-	// Set bits on a different block.
-	if _, err := f.setBit(tx, 100, 1); err != nil {
-		t.Fatal(err)
-	}
-	PanicOn(tx.Commit()) // f.Blocks() will start a new Tx, so the SetBit needs to be visible before that.
-
-	// Ensure checksum for block 1 is blank.
-	if blocks, err := f.Blocks(); err != nil {
-		t.Fatal(err)
-	} else if len(blocks) != 1 {
-		t.Fatalf("unexpected block count: %d", len(blocks))
-	} else if blocks[0].ID != 1 {
-		t.Fatalf("unexpected block id: %d", blocks[0].ID)
-	}
-}
-
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
 	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeLRU, 0))
@@ -1588,30 +1454,6 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
 	} else if a := f1.mustRow(tx, 1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected columns (reopen): %+v", a)
-	}
-}
-
-func BenchmarkFragment_Blocks(b *testing.B) {
-	if *FragmentPath == "" {
-		b.Skip("no fragment specified")
-	}
-
-	// Open the fragment specified by the path. Note that newFragment
-	// is overriding the usual holder-to-fragment path logic...
-	_, _, _, _, f := newTestFragment(b)
-	if err := f.Open(); err != nil {
-		b.Fatal(err)
-	}
-	defer f.Clean(b)
-
-	// Reset timer and execute benchmark.
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if a, err := f.Blocks(); err != nil {
-			b.Fatal(err)
-		} else if len(a) == 0 {
-			b.Fatal("no blocks in fragment")
-		}
 	}
 }
 

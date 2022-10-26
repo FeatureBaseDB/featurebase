@@ -2761,62 +2761,12 @@ func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
 
 // handleGetFragmentBlockData handles GET /internal/fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
-	buf, err := h.api.FragmentBlockData(r.Context(), r.Body)
-	if err != nil {
-		if _, ok := err.(BadRequestError); ok {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if errors.Cause(err) == ErrFragmentNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Write response.
-	w.Header().Set("Content-Type", "application/protobuf")
-	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
-	_, err = w.Write(buf)
-	if err != nil {
-		h.logger.Errorf("writing fragment/block/data response: %v", err)
-	}
+	http.Error(w, "fragment blocks feature removed", http.StatusNotFound)
 }
 
 // handleGetFragmentBlocks handles GET /internal/fragment/blocks requests.
 func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-	// Read shard parameter.
-	q := r.URL.Query()
-	shard, err := strconv.ParseUint(q.Get("shard"), 10, 64)
-	if err != nil {
-		http.Error(w, "shard required", http.StatusBadRequest)
-		return
-	}
-
-	blocks, err := h.api.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), q.Get("view"), shard)
-	if err != nil {
-		if errors.Cause(err) == ErrFragmentNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(getFragmentBlocksResponse{
-		Blocks: blocks,
-	}); err != nil {
-		h.logger.Errorf("block response encoding error: %s", err)
-	}
-}
-
-type getFragmentBlocksResponse struct {
-	Blocks []FragmentBlock `json:"blocks"`
+	http.Error(w, "fragment blocks feature removed", http.StatusNotFound)
 }
 
 // handleGetFragmentData handles GET /internal/fragment/data requests.
