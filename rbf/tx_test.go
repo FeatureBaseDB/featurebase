@@ -1179,7 +1179,7 @@ func TestTx_DeleteBitmapsWithPrefix(t *testing.T) {
 				pf("-\n")
 
 			default:
-				t.Fatal(fmt.Sprintf("unexpected page info type %T", info))
+				t.Fatalf("unexpected page info type %T", info)
 			}
 		}
 
