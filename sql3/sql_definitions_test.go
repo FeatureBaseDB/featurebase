@@ -376,6 +376,15 @@ var insertTest = tableTest{
 			compare: compareExactUnordered,
 		},
 		{
+			// Replace
+			sqls: sqls(
+				"replace into testinsert (_id, a, b, s, bl, d, event, ievent) values (4, 40, 400, 'foo', false, 10.12, ['A', 'B', 'C'], [1, 2, 3])",
+			),
+			expHdrs: hdrs(),
+			expRows: rows(),
+			compare: compareExactUnordered,
+		},
+		{
 			// Insert with nulls
 			sqls: sqls(
 				"insert into testinsert (_id, a, b, s, bl, d, event, ievent) values (5, null, null, null, null, null, null, null)",
