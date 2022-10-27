@@ -2480,12 +2480,12 @@
   dependencies:
     "@types/react" "*"
 
-"@types/react-dom@^16.9.8":
-  version "16.9.8"
-  resolved "https://registry.yarnpkg.com/@types/react-dom/-/react-dom-16.9.8.tgz#fe4c1e11dfc67155733dfa6aa65108b4971cb423"
-  integrity sha512-ykkPQ+5nFknnlU6lDd947WbQ6TE3NNzbQAkInC2EKY1qeYdTKp7onFusmYZb+ityzx2YviqT6BXSu+LyWWJwcA==
+"@types/react-dom@^17.0.0":
+  version "17.0.18"
+  resolved "https://registry.yarnpkg.com/@types/react-dom/-/react-dom-17.0.18.tgz#8f7af38f5d9b42f79162eea7492e5a1caff70dc2"
+  integrity sha512-rLVtIfbwyur2iFKykP2w0pl/1unw26b5td16d5xMgp7/yjTHomkyxPYChFoCr/FtEX1lN9wY6lFj1qvKdS5kDw==
   dependencies:
-    "@types/react" "*"
+    "@types/react" "^17"
 
 "@types/react-router-dom@^5.1.5":
   version "5.1.5"
@@ -2511,13 +2511,14 @@
   dependencies:
     "@types/react" "*"
 
-"@types/react@*", "@types/react@^16.9.41":
-  version "16.9.41"
-  resolved "https://registry.yarnpkg.com/@types/react/-/react-16.9.41.tgz#925137ee4d2ff406a0ecf29e8e9237390844002e"
-  integrity sha512-6cFei7F7L4wwuM+IND/Q2cV1koQUvJ8iSV+Gwn0c3kvABZ691g7sp3hfEQHOUBJtccl1gPi+EyNjMIl9nGA0ug==
+"@types/react@*", "@types/react@^17", "@types/react@^17.0.0":
+  version "17.0.52"
+  resolved "https://registry.yarnpkg.com/@types/react/-/react-17.0.52.tgz#10d8b907b5c563ac014a541f289ae8eaa9bf2e9b"
+  integrity sha512-vwk8QqVODi0VaZZpDXQCmEmiOuyjEFPY7Ttaw5vjM112LOq37yz1CDJGrRJwA1fYEq4Iitd5rnjd1yWAc/bT+A==
   dependencies:
     "@types/prop-types" "*"
-    csstype "^2.2.0"
+    "@types/scheduler" "*"
+    csstype "^3.0.2"
 
 "@types/resolve@0.0.8":
   version "0.0.8"
@@ -2525,6 +2526,11 @@
   integrity sha512-auApPaJf3NPfe18hSoJkp8EbZzer2ISk7o8mCC3M9he/a04+gbMF97NkpD2S8riMGvm4BMRI59/SZQSaLTKpsQ==
   dependencies:
     "@types/node" "*"
+
+"@types/scheduler@*":
+  version "0.16.2"
+  resolved "https://registry.yarnpkg.com/@types/scheduler/-/scheduler-0.16.2.tgz#1a62f89525723dde24ba1b01b092bf5df8ad4d39"
+  integrity sha512-hppQEBDmlwhFAXKJX2KnWLYu5yMfi91yazPb2l+lbJiwW+wdo1gNeRA+3RgNSO39WYX2euey41KEwnqesU2Jew==
 
 "@types/source-list-map@*":
   version "0.1.2"
@@ -4773,7 +4779,7 @@ cssstyle@^2.2.0:
   dependencies:
     cssom "~0.3.6"
 
-csstype@^2.2.0, csstype@^2.5.2, csstype@^2.6.5, csstype@^2.6.7:
+csstype@^2.5.2, csstype@^2.6.5, csstype@^2.6.7:
   version "2.6.11"
   resolved "https://registry.yarnpkg.com/csstype/-/csstype-2.6.11.tgz#452f4d024149ecf260a852b025e36562a253ffc5"
   integrity sha512-l8YyEC9NBkSm783PFTvh0FmJy7s5pFKrDp49ZL7zBGX3fWkO+N4EEyan1qqp8cwPLDcD0OSdyY6hAMoxp34JFw==
@@ -4782,6 +4788,11 @@ csstype@^2.5.5:
   version "2.6.13"
   resolved "https://registry.yarnpkg.com/csstype/-/csstype-2.6.13.tgz#a6893015b90e84dd6e85d0e3b442a1e84f2dbe0f"
   integrity sha512-ul26pfSQTZW8dcOnD2iiJssfXw0gdNVX9IJDH/X3K5DGPfj+fUYe3kB+swUY6BF3oZDxaID3AJt+9/ojSAE05A==
+
+csstype@^3.0.2:
+  version "3.1.1"
+  resolved "https://registry.yarnpkg.com/csstype/-/csstype-3.1.1.tgz#841b532c45c758ee546a11d5bd7b7b473c8c30b9"
+  integrity sha512-DJR/VvkAvSZW9bTouZue2sSxDwdTN92uHjqeKVm+0dAqdfNykRzQ95tay8aXMBAAPpUiq4Qcug2L7neoRh2Egw==
 
 currently-unhandled@^0.4.1:
   version "0.4.1"
@@ -8504,7 +8515,7 @@ lodash@^4.0.0, lodash@~4.17.10:
   resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.19.tgz#e48ddedbe30b3321783c5b4301fbd353bc1e4a4b"
   integrity sha512-JNvd8XER9GQX0v2qJgsaN/mzFCNA5BRe/j8JN9d+tWyGLSodKQHKFicdwNYzWwI3wjRnaKPsGj1XkBjx/F96DQ==
 
-lodash@^4.17.19:
+lodash@^4.17.19, lodash@^4.17.21:
   version "4.17.21"
   resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz#679591c564c3bffaae8454cf0b3df370c3d6911c"
   integrity sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==
