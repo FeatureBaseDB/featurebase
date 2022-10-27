@@ -113,7 +113,7 @@ export const QueryBuilderContainer = () => {
         type: 'text/plain;charset=utf-8',
       });
       element.href = URL.createObjectURL(file);
-      element.download = `molecula-${results?.index}-${dateTime}.csv`;
+      element.download = `featurebase-${results?.index}-${dateTime}.csv`;
       document.body.appendChild(element);
       element.click();
       exportRows = [];

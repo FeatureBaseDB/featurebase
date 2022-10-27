@@ -2,7 +2,7 @@ import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
 import CardHeader from '@material-ui/core/CardHeader';
 
-import { ReactComponent as MLogo } from 'assets/m-bug-alt.svg';
+import { ReactComponent as FeatureBaseIcon } from 'assets/featurebase-icon.svg';
 import css from './AuthFlow.module.scss';
 import SignInButton from './SignInButton';
 
@@ -20,7 +20,7 @@ function Signin(props) {
     <div className={css.main}>
       <div className={css.loginForm}>
         <div className={css.logoContainer}>
-          <MLogo className={css.logo} />
+          <FeatureBaseIcon className={css.logo} />
         </div>
         {renderLoginForm()}
       </div>
