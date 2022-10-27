@@ -6,7 +6,6 @@ import Fuse from 'fuse.js';
 import Highlighter from 'react-highlight-words';
 import Link from '@material-ui/core/Link';
 import map from 'lodash/map';
-import moment from 'moment';
 import OrderBy from 'lodash/orderBy';
 import Table from '@material-ui/core/Table';
 import TableBody from '@material-ui/core/TableBody';
@@ -131,14 +130,14 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
               <TableCell className={css.tableHeader}>
                 <span
                   className={classNames(css.sortable, {
-                    [css.currentSort]: sort === 'name',
+                    [css.currentSort]: sort === 'name'
                   })}
                   onClick={() => onSortClick('name')}
                 >
                   Name{' '}
                   <ArrowDropDownIcon
                     className={classNames(css.sortArrow, {
-                      [css.asc]: sortDir === 'asc',
+                      [css.asc]: sortDir === 'asc'
                     })}
                   />
                 </span>
@@ -151,7 +150,7 @@ export const MoleculaTable: FC<MoleculaTableProps> = ({
             {filteredFields
               .slice(sliceStart, sliceStart + resultsPerPage)
               .map((field) => {
-                const { name, options, cardinality } = field;
+                const { name, options } = field;
                 const { type, keys, bitDepth, ...rest } = options;
                 const showKeys = ['set', 'time', 'mutex'].includes(type);
 

@@ -1,6 +1,6 @@
 import SignOutButton from "App/AuthFlow/SignOutButton";
-import { ReactComponent as MoleculaLogoDark } from "assets/darkTheme/MoleculaLogo.svg";
-import { ReactComponent as MoleculaLogo } from "assets/lightTheme/MoleculaLogo.svg";
+import { ReactComponent as FeatureBaseLogoDark } from "assets/darkTheme/featurebase-logo.svg";
+import { ReactComponent as FeatureBaseLogo } from "assets/lightTheme/featurebase-logo.svg";
 import { FC } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "services/useAuth";
@@ -32,8 +32,8 @@ export const Header: FC<HeaderProps> = ({ onToggleTheme }) => {
       <Toolbar>
         <div className={css.toolbarLayout}>
           <Link to="/" className={css.homeLink}>
-            {!isDark && <MoleculaLogo className={css.logo} />}
-            {isDark && <MoleculaLogoDark className={css.logo} />}
+            {!isDark && <FeatureBaseLogo className={css.logo} />}
+            {isDark && <FeatureBaseLogoDark className={css.logo} />}
           </Link>
 
           <div className={css.toolbarActions}>

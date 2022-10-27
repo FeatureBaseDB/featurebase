@@ -10,8 +10,8 @@ export const Home: FC = () => (
       <Typography variant="h6" color="textPrimary" align="center" style={{padding: 30, paddingBottom: 0}}>
         Try FeatureBase Cloud at
         <span> </span>
-        <Link href="https://app.molecula.cloud/" underline="always">
-          app.molecula.cloud
+        <Link href="https://cloud.featurebase.com/" underline="always">
+          cloud.featurebase.com
         </Link>
       </Typography>
     <ClusterHealth/>
