@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"hash/maphash"
-	"log"
 
 	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/sql3"
@@ -336,6 +335,5 @@ func groupingKeyHash(ctx context.Context, groupByExprs []types.PlanExpression, r
 		rowKeys[i] = v
 	}
 	result := hash.Sum64()
-	log.Printf("Hash %v, %v", result, rowKeys)
 	return result, rowKeys, nil
 }

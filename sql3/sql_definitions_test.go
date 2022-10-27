@@ -316,6 +316,9 @@ var tableTests []tableTest = []tableTest{
 	nullTests,
 	notNullTests,
 
+	//null filter tests
+	nullFilterTests,
+
 	//between tests
 	betweenTests,
 	notBetweenTests,

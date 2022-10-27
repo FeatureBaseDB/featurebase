@@ -46,6 +46,8 @@ const (
 	ErrLiteralEmptySetNotAllowed        errors.Code = "ErrLiteralEmptySetNotAllowed"
 	ErrLiteralEmptyTupleNotAllowed      errors.Code = "ErrLiteralEmptyTupleNotAllowed"
 	ErrSetLiteralMustContainIntOrString errors.Code = "ErrSetLiteralMustContainIntOrString"
+	ErrInvalidColumnInFilterExpression  errors.Code = "ErrInvalidColumnInFilterExpression"
+	ErrInvalidTypeInFilterExpression    errors.Code = "ErrInvalidTypeInFilterExpression"
 
 	ErrTypeAssignmentIncompatible errors.Code = "ErrTypeAssignmentIncompatible"
 
@@ -195,6 +197,20 @@ func NewErrSetLiteralMustContainIntOrString(line, col int) error {
 	return errors.New(
 		ErrSetLiteralMustContainIntOrString,
 		fmt.Sprintf("[%d:%d] set literal must contain ints or strings", line, col),
+	)
+}
+
+func NewErrInvalidColumnInFilterExpression(line, col int, column string, op string) error {
+	return errors.New(
+		ErrInvalidColumnInFilterExpression,
+		fmt.Sprintf("[%d:%d] '%s' column cannot be used in a %s filter expression", line, col, column, op),
+	)
+}
+
+func NewErrInvalidTypeInFilterExpression(line, col int, typeName string, op string) error {
+	return errors.New(
+		ErrInvalidTypeInFilterExpression,
+		fmt.Sprintf("[%d:%d] unsupported type '%s' for %s filter expression", line, col, typeName, op),
 	)
 }
 
