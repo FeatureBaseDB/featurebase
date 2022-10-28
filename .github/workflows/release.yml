@@ -10,7 +10,7 @@ jobs:
       - run: cd $GITHUB_WORKSPACE
       - run: pwd
       - run: ls -alt
-      - run: git fetch --tags
+      - run: git pull --tags
       - run: git describe --tags
       - run: echo $(sh .github/workflows/version.sh)
       - run: echo "::set-output version=$(sh .github/workflows/version.sh)"
