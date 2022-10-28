@@ -23,7 +23,7 @@
     "get-ip-range": "^4.0.1",
     "google-protobuf": "^3.13.0",
     "lodash": "^4.17.21",
-    "moment": "^2.29.1",
+    "moment": "^2.29.4",
     "moment-timezone": "^0.5.31",
     "react": "^17.0.1",
     "react-beautiful-dnd": "^13.1.0",
