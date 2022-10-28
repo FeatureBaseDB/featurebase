@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - run: cd $GITHUB_WORKSPACE
+      - run: sh .github/workflows/version.sh
       - run: echo "::set-output version=$(sh .github/workflows/version.sh)"
 
   build-featurebase:
