@@ -869,19 +869,20 @@ func (e *Etcd) Field(ctx context.Context, indexName string, name string) ([]byte
 	return e.getKeyBytes(ctx, key)
 }
 
-func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, val []byte) error {
+func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, fieldVal []byte) error {
 	key := schemaPrefix + indexName + "/" + name
 
 	// Set up Op to write field value as bytes.
 	op := clientv3.OpPut(key, "")
-	op.WithValueBytes(val)
+	op.WithValueBytes(fieldVal)
 
 	// Check for key existence, and execute Op within a transaction.
 	var resp *clientv3.TxnResponse
 
 	err := e.retryClient(func(cli *clientv3.Client) (err error) {
 		resp, err = cli.Txn(ctx).
-			If(clientv3util.KeyMissing(key)).
+			If(
+				clientv3util.KeyMissing(key)).
 			Then(op).
 			Commit()
 		return err
@@ -897,19 +898,20 @@ func (e *Etcd) CreateField(ctx context.Context, indexName string, name string, v
 	return nil
 }
 
-func (e *Etcd) UpdateField(ctx context.Context, indexName string, name string, val []byte) error {
+func (e *Etcd) UpdateField(ctx context.Context, indexName string, name string, fieldVal []byte) error {
 	key := schemaPrefix + indexName + "/" + name
 
 	// Set up Op to write field value as bytes.
 	op := clientv3.OpPut(key, "")
-	op.WithValueBytes(val)
+	op.WithValueBytes(fieldVal)
 
 	// Check for key existence, and execute Op within a transaction.
 	var resp *clientv3.TxnResponse
 
 	err := e.retryClient(func(cli *clientv3.Client) (err error) {
 		resp, err = cli.Txn(ctx).
-			If(clientv3util.KeyExists(key)).
+			If(
+				clientv3util.KeyExists(key)).
 			Then(op).
 			Commit()
 		return err
@@ -924,20 +926,31 @@ func (e *Etcd) UpdateField(ctx context.Context, indexName string, name string, v
 	return nil
 }
 
-func (e *Etcd) DeleteField(ctx context.Context, indexname string, name string) (err error) {
-	key := schemaPrefix + indexname + "/" + name
+func (e *Etcd) DeleteField(ctx context.Context, indexName string, name string) (err error) {
+	key := schemaPrefix + indexName + "/" + name
+
+	var resp *clientv3.TxnResponse
+
 	// Deleting field and views in one transaction.
 	err = e.retryClient(func(cli *clientv3.Client) (err error) {
-		_, err = cli.Txn(ctx).
-			If(clientv3.Compare(clientv3.Version(key), ">", -1)).
+		resp, err = cli.Txn(ctx).
+			If(
+				clientv3.Compare(clientv3.Version(key), ">", -1)).
 			Then(
 				clientv3.OpDelete(key+"/", clientv3.WithPrefix()), // deleting field views
 				clientv3.OpDelete(key),                            // deleting field
 			).Commit()
 		return err
 	})
+	if err != nil {
+		return errors.Wrap(err, "executing transaction")
+	}
 
-	return errors.Wrap(err, "DeleteField")
+	if !resp.Succeeded {
+		return errors.New("deleting field from etcd failed")
+	}
+
+	return nil
 }
 
 func (e *Etcd) View(ctx context.Context, indexName, fieldName, name string) (bool, error) {

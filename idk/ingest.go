@@ -1531,6 +1531,19 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 						if hasMutex { //need to clear the mutex
 							rec.Clears[valIdx] = nil //? maybe
 						}
+						// else { //TODO(twg) set fields not supported
+
+						// }
+					default:
+						rec.Values[valIdx], err = idkField.PilosafyVal(rawRec[i])
+					}
+					return errors.Wrapf(err, "converting field %d:%+v, val:%+v", i, idkField, rawRec[i])
+				})
+			case BoolField:
+				recordizers = append(recordizers, func(rawRec []interface{}, rec *pilosaclient.Row) (err error) {
+					switch rawRec[i].(type) {
+					case DeleteSentinel:
+						rec.Values[valIdx] = nil
 					default:
 						rec.Values[valIdx], err = idkField.PilosafyVal(rawRec[i])
 					}
@@ -1602,10 +1615,20 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosaclient.Recor
 				fields = append(fields, m.index.Field(fld.DestName(), pilosaclient.OptFieldTypeBool()))
 				valIdx := len(fields) - 1
 				recordizers = append(recordizers, func(rawRec []interface{}, rec *pilosaclient.Row) (err error) {
-					rec.Values[valIdx], err = idkField.PilosafyVal(rawRec[i])
+					switch rawRec[i].(type) {
+					case DeleteSentinel:
+						rec.Values[valIdx] = nil
+					default:
+						val, err := idkField.PilosafyVal(rawRec[i])
+						if err != nil {
+							return errors.Wrapf(err, "booling '%v' of %[1]T", val)
+						}
+						if b, ok := val.(bool); ok {
+							rec.Values[valIdx] = b
+						}
+					}
 					return errors.Wrapf(err, "converting field %d:%+v, val:%+v", i, idkField, rawRec[i])
 				})
-				// TODO, unpacked bools aren't actually supported by importbatch
 			} else {
 				fields = append(fields, boolField, boolFieldExists)
 				fieldIdx := len(fields) - 2

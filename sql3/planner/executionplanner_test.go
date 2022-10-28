@@ -22,25 +22,25 @@ func TestPlanner_Show(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), pilosa.IndexOptions{TrackExistence: true})
+	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := index.CreateField("f", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := index.CreateField("f", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := index.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := index.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	index2, err := c.GetHolder(0).CreateIndex(c.Idx("l"), pilosa.IndexOptions{TrackExistence: false})
+	index2, err := c.GetHolder(0).CreateIndex(c.Idx("l"), "", pilosa.IndexOptions{TrackExistence: false})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := index2.CreateField("f", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := index2.CreateField("f", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := index2.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := index2.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -532,14 +532,14 @@ func TestPlanner_AlterTable(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), pilosa.IndexOptions{TrackExistence: true})
+	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := index.CreateField("f", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := index.CreateField("f", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := index.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := index.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -594,14 +594,14 @@ func TestPlanner_DropTable(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), pilosa.IndexOptions{TrackExistence: true})
+	index, err := c.GetHolder(0).CreateIndex(c.Idx("i"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := index.CreateField("f", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := index.CreateField("f", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := index.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := index.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -617,25 +617,25 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i0.CreateField("b", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i1.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i1.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i1.CreateField("y", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i1.CreateField("y", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -698,20 +698,20 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i0.CreateField("b", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("d", pilosa.OptFieldTypeDecimal(2)); err != nil {
+	} else if _, err := i0.CreateField("d", "", pilosa.OptFieldTypeDecimal(2)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("ts", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, "s")); err != nil {
+	} else if _, err := i0.CreateField("ts", "", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, "s")); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("str", pilosa.OptFieldTypeMutex(pilosa.CacheTypeLRU, pilosa.DefaultCacheSize), pilosa.OptFieldKeys()); err != nil {
+	} else if _, err := i0.CreateField("str", "", pilosa.OptFieldTypeMutex(pilosa.CacheTypeLRU, pilosa.DefaultCacheSize), pilosa.OptFieldKeys()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -840,20 +840,20 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i0.CreateField("b", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("d", pilosa.OptFieldTypeDecimal(2)); err != nil {
+	} else if _, err := i0.CreateField("d", "", pilosa.OptFieldTypeDecimal(2)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("ts", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, "s")); err != nil {
+	} else if _, err := i0.CreateField("ts", "", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, "s")); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("str", pilosa.OptFieldTypeMutex(pilosa.CacheTypeLRU, pilosa.DefaultCacheSize), pilosa.OptFieldKeys()); err != nil {
+	} else if _, err := i0.CreateField("str", "", pilosa.OptFieldTypeMutex(pilosa.CacheTypeLRU, pilosa.DefaultCacheSize), pilosa.OptFieldKeys()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -921,25 +921,25 @@ func TestPlanner_Select(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i0.CreateField("b", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i1.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i1.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i1.CreateField("y", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i1.CreateField("y", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1120,14 +1120,14 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i0.CreateField("b", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1170,14 +1170,14 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i0.CreateField("b", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1242,23 +1242,23 @@ func TestPlanner_In(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i1.CreateField("parentid", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i1.CreateField("parentid", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i1.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i1.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1373,23 +1373,23 @@ func TestPlanner_Distinct(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), pilosa.IndexOptions{TrackExistence: true})
+	i1, err := c.GetHolder(0).CreateIndex(c.Idx("k"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i1.CreateField("parentid", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i1.CreateField("parentid", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := i1.CreateField("x", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	} else if _, err := i1.CreateField("x", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1489,16 +1489,16 @@ func TestPlanner_SelectTop(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), pilosa.IndexOptions{TrackExistence: true})
+	i0, err := c.GetHolder(0).CreateIndex(c.Idx("j"), "", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("a", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("a", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := i0.CreateField("b", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := i0.CreateField("b", "", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
 		t.Fatal(err)
 	}
 

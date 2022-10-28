@@ -1,9 +1,7 @@
 syntax = "proto3";
-package pilosa;
+package proto;
 
-//import "public.proto";
-
-option go_package = "github.com/pilosa/pilosa/v2/proto";
+option go_package = "../proto";
 
 message QueryPQLRequest {
   string index = 1;
@@ -93,6 +91,7 @@ message Index {
 message CreateIndexRequest {
    string name = 1;
    bool keys = 2;
+   string description = 3;
 }
 
 message CreateIndexResponse {

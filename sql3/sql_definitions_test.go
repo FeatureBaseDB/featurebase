@@ -316,6 +316,9 @@ var tableTests []tableTest = []tableTest{
 	nullTests,
 	notNullTests,
 
+	//null filter tests
+	nullFilterTests,
+
 	//between tests
 	betweenTests,
 	notBetweenTests,
@@ -367,6 +370,15 @@ var insertTest = tableTest{
 			// Insert
 			sqls: sqls(
 				"insert into testinsert (_id, a, b, s, bl, d, event, ievent) values (4, 40, 400, 'foo', false, 10.12, ['A', 'B', 'C'], [1, 2, 3])",
+			),
+			expHdrs: hdrs(),
+			expRows: rows(),
+			compare: compareExactUnordered,
+		},
+		{
+			// Replace
+			sqls: sqls(
+				"replace into testinsert (_id, a, b, s, bl, d, event, ievent) values (4, 40, 400, 'foo', false, 10.12, ['A', 'B', 'C'], [1, 2, 3])",
 			),
 			expHdrs: hdrs(),
 			expRows: rows(),

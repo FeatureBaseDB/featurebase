@@ -205,12 +205,8 @@ generate-pql: require-peg
 
 generate-proto-grpc: require-protoc require-protoc-gen-go
 	protoc -I proto proto/pilosa.proto --go_out=plugins=grpc:proto
-	protoc -I proto proto/vdsm/vdsm.proto --go_out=plugins=grpc:proto
-	# TODO: Modify above commands and remove the below mv if possible.
-	# See https://go-review.googlesource.com/c/protobuf/+/219298/ for info on --go-opt
-	# I couldn't get it to work during development - Cody
-	cp -r proto/github.com/featurebasedb/featurebase/v3/proto/ proto/
-	rm -rf proto/github.com
+#	address re-generation here only if we need to	
+#	protoc -I proto proto/vdsm.proto --go_out=plugins=grpc:proto
 
 # `go generate` all needed packages
 generate: generate-protoc generate-statik generate-stringer generate-pql

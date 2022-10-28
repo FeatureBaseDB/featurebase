@@ -26,7 +26,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 
 			hldr := test.Holder{Holder: primary.Server.Holder()}
 			index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
-			_, err := index.CreateField("f")
+			_, err := index.CreateField("f", "")
 			if err != nil {
 				t.Fatal(err)
 			}

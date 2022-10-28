@@ -65,7 +65,7 @@ func (h *Holder) Reopen() error {
 
 // MustCreateIndexIfNotExists returns a given index. Panic on error.
 func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOptions) *Index {
-	idx, err := h.Holder.CreateIndexIfNotExists(index, opt)
+	idx, err := h.Holder.CreateIndexIfNotExists(index, "", opt)
 	if err != nil {
 		h.tb.Fatalf("creating index: %v", err)
 	}
@@ -75,7 +75,7 @@ func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOption
 // Row returns a Row for a given field.
 func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
+	f, err := idx.CreateFieldIfNotExists(field, "", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
@@ -117,7 +117,7 @@ func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 
 func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum string) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
+	f, err := idx.CreateFieldIfNotExists(field, "", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
@@ -142,7 +142,7 @@ func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
 // SetBitTime sets a bit with timestamp on the given field.
 func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time.Time) {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
+	f, err := idx.CreateFieldIfNotExists(field, "", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
@@ -163,7 +163,7 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 // ClearBit clears a bit on the given field.
 func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
+	f, err := idx.CreateFieldIfNotExists(field, "", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
@@ -192,7 +192,7 @@ func (h *Holder) MustSetBits(index, field string, rowID uint64, columnIDs ...uin
 // SetValue sets an integer value on the given field.
 func (h *Holder) SetValue(index, field string, columnID uint64, value int64) *Index {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	f, err := idx.CreateFieldIfNotExists(field, "", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 	if err != nil {
 		panic(err)
 	}
@@ -214,7 +214,7 @@ func (h *Holder) SetValue(index, field string, columnID uint64, value int64) *In
 // Value returns the integer value for a given column.
 func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	f, err := idx.CreateFieldIfNotExists(field, "", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 	if err != nil {
 		panic(err)
 	}
@@ -233,7 +233,7 @@ func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 // on the given range.
 func (h *Holder) Range(index, field string, op pql.Token, predicate int64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	f, err := idx.CreateFieldIfNotExists(field, "", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 	if err != nil {
 		panic(err)
 	}

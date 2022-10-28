@@ -26,7 +26,7 @@ func TestIndex_CreateFieldIfNotExists(t *testing.T) {
 	_, index := test.MustOpenIndex(t)
 
 	// Create field.
-	f, err := index.CreateFieldIfNotExists("f")
+	f, err := index.CreateFieldIfNotExists("f", "")
 	if err != nil {
 		t.Fatal(err)
 	} else if f == nil {
@@ -34,7 +34,7 @@ func TestIndex_CreateFieldIfNotExists(t *testing.T) {
 	}
 
 	// Retrieve existing field.
-	other, err := index.CreateFieldIfNotExists("f")
+	other, err := index.CreateFieldIfNotExists("f", "")
 	if err != nil {
 		t.Fatal(err)
 	} else if f.Field != other.Field {
@@ -53,7 +53,7 @@ func TestIndex_CreateField(t *testing.T) {
 			_, index := test.MustOpenIndex(t)
 
 			// Create field with explicit quantum.
-			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
+			f, err := index.CreateField("f", "", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
@@ -68,7 +68,7 @@ func TestIndex_CreateField(t *testing.T) {
 			_, index := test.MustOpenIndex(t)
 
 			// Create field with explicit quantum with no standard view
-			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0", true))
+			f, err := index.CreateField("f", "", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0", true))
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
@@ -83,7 +83,7 @@ func TestIndex_CreateField(t *testing.T) {
 			_, index := test.MustOpenIndex(t)
 
 			// Create field with schema and verify it exists.
-			if f, err := index.CreateField("f", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
+			if f, err := index.CreateField("f", "", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
 				t.Fatal(err)
 			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
 				t.Fatalf("unexpected type: %#v", f.Type())
@@ -101,7 +101,7 @@ func TestIndex_CreateField(t *testing.T) {
 			_, index := test.MustOpenIndex(t)
 
 			// Create field with schema and verify it exists.
-			if f, err := index.CreateField("f", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds)); err != nil {
+			if f, err := index.CreateField("f", "", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds)); err != nil {
 				t.Fatal(err)
 			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeTimestamp) {
 				t.Fatalf("unexpected type: %#v", f.Type())
@@ -193,7 +193,7 @@ func TestIndex_CreateField(t *testing.T) {
 		t.Run("IntField", func(t *testing.T) {
 			_, index := test.MustOpenIndex(t)
 
-			_, err := index.CreateField("f", pilosa.OptFieldTypeInt(-1, 1), pilosa.OptFieldKeys())
+			_, err := index.CreateField("f", "", pilosa.OptFieldTypeInt(-1, 1), pilosa.OptFieldKeys())
 			if errors.Cause(err) != pilosa.ErrIntFieldWithKeys {
 				t.Fatal("int field cannot be created with keys=true")
 			}
@@ -203,7 +203,7 @@ func TestIndex_CreateField(t *testing.T) {
 		t.Run("DecimalField", func(t *testing.T) {
 			_, index := test.MustOpenIndex(t)
 
-			_, err := index.CreateField("f", pilosa.OptFieldTypeDecimal(1, pql.NewDecimal(-1, 0), pql.NewDecimal(1, 0)), pilosa.OptFieldKeys())
+			_, err := index.CreateField("f", "", pilosa.OptFieldTypeDecimal(1, pql.NewDecimal(-1, 0), pql.NewDecimal(1, 0)), pilosa.OptFieldKeys())
 			if errors.Cause(err) != pilosa.ErrDecimalFieldWithKeys {
 				t.Fatal("decimal field cannot be created with keys=true")
 			}
@@ -216,7 +216,7 @@ func TestIndex_DeleteField(t *testing.T) {
 	_, index := test.MustOpenIndex(t)
 
 	// Create field.
-	if _, err := index.CreateFieldIfNotExists("f"); err != nil {
+	if _, err := index.CreateFieldIfNotExists("f", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -263,7 +263,7 @@ func TestIndex_RecreateFieldOnRestart(t *testing.T) {
 	// create index
 	indexName := fmt.Sprintf("idx_%d", rand.Uint64())
 	holder := c.GetHolder(0)
-	_, err := holder.CreateIndex(indexName, pilosa.IndexOptions{
+	_, err := holder.CreateIndex(indexName, "", pilosa.IndexOptions{
 		Keys: false,
 	})
 	if err != nil {

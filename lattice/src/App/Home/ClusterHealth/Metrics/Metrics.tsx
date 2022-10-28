@@ -239,7 +239,7 @@ export const Metrics: FC<MetricsProps> = ({ open, node, onClose }) => {
       </DialogTitle>
       <DialogContent>
         <div className={css.infoMessage}>
-          Molecula provides metrics for use with Prometheus. Instantaneous
+          FeatureBase provides metrics for use with Prometheus. Instantaneous
           metrics are shown here for convenience; to take full advantage of this
           feature, consider using a Prometheus instance, perhaps with a{' '}
           <Link

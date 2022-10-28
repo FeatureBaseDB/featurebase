@@ -188,7 +188,7 @@ func makeSampleRoaringDir(t *testing.T, root, index, backend string, minBytes in
 }
 
 func helperCreateDBShard(h *Holder, index string, shard uint64) *Index {
-	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
+	idx, err := h.CreateIndexIfNotExists(index, "", IndexOptions{})
 	PanicOn(err)
 	// TODO: It's not clear that this is actually doing anything.
 	dbs, err := h.txf.dbPerShard.GetDBShard(index, shard, idx)
@@ -253,7 +253,7 @@ func Test_DBPerShard_GetFieldView2Shards_map_from_RBF(t *testing.T) {
 	index := "rick"
 	field := "f"
 
-	idx, err := holder.CreateIndex(index, IndexOptions{})
+	idx, err := holder.CreateIndex(index, "", IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}

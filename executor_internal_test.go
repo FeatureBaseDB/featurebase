@@ -47,7 +47,7 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 		Cluster: NewTestCluster(t, 1),
 	}
 
-	idx, err := e.Holder.CreateIndex("i", IndexOptions{})
+	idx, err := e.Holder.CreateIndex("i", "", IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
@@ -55,8 +55,8 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	qcx := holder.Txf().NewWritableQcx()
 	defer qcx.Abort()
 
-	fb, errb := idx.CreateField("b", OptFieldTypeBool())
-	_, errbk := idx.CreateField("bk", OptFieldTypeBool(), OptFieldKeys())
+	fb, errb := idx.CreateField("b", "", OptFieldTypeBool())
+	_, errbk := idx.CreateField("bk", "", OptFieldTypeBool(), OptFieldKeys())
 	if errb != nil || errbk != nil {
 		t.Fatalf("creating fields %v, %v", errb, errbk)
 	}
@@ -563,12 +563,12 @@ func TestDistinctTimestampUnion(t *testing.T) {
 func TestExecutor_DeleteRows(t *testing.T) {
 	holder := newTestHolder(t)
 
-	idx, err := holder.CreateIndex("i", IndexOptions{TrackExistence: true})
+	idx, err := holder.CreateIndex("i", "", IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
 
-	f, err := idx.CreateField("f")
+	f, err := idx.CreateField("f", "")
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}

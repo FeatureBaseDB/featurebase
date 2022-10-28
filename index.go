@@ -24,8 +24,11 @@ import (
 
 // Index represents a container for fields.
 type Index struct {
-	mu            sync.RWMutex
-	createdAt     int64
+	mu          sync.RWMutex
+	createdAt   int64
+	owner       string
+	description string
+
 	path          string
 	name          string
 	qualifiedName string
@@ -148,6 +151,7 @@ func (i *Index) Options() IndexOptions {
 
 func (i *Index) options() IndexOptions {
 	return IndexOptions{
+		Description:    i.description,
 		Keys:           i.keys,
 		TrackExistence: i.trackExistence,
 	}
@@ -348,6 +352,7 @@ func (i *Index) openExistenceField() error {
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     existenceFieldName,
+		Owner:     "",
 		CreatedAt: 0,
 		Meta:      &FieldOptions{Type: FieldTypeSet, CacheType: CacheTypeNone, CacheSize: 0},
 	}
@@ -524,7 +529,7 @@ func (i *Index) recalculateCaches() {
 }
 
 // CreateField creates a field.
-func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
+func (i *Index) CreateField(name string, requestUserID string, opts ...FieldOption) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
@@ -553,10 +558,12 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 		return nil, errors.Wrap(err, "applying option")
 	}
 
+	ts := timestamp()
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: timestamp(),
+		CreatedAt: ts,
+		Owner:     requestUserID,
 		Meta:      fo,
 	}
 
@@ -585,7 +592,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
-func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field, error) {
+func (i *Index) CreateFieldIfNotExists(name string, requestUserID string, opts ...FieldOption) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
@@ -605,10 +612,12 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 		return nil, errors.Wrap(err, "applying option")
 	}
 
+	ts := timestamp()
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: timestamp(),
+		CreatedAt: ts,
+		Owner:     requestUserID,
 		Meta:      fo,
 	}
 
@@ -629,7 +638,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 // function options, taking a *FieldOptions struct. TODO: This should
 // definintely be refactored so we don't have these virtually equivalent
 // methods, but I'm puttin this here for now just to see if it works.
-func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions) (*Field, error) {
+func (i *Index) CreateFieldIfNotExistsWithOptions(name string, requestUserID string, opt *FieldOptions) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
@@ -680,10 +689,12 @@ func (i *Index) CreateFieldIfNotExistsWithOptions(name string, opt *FieldOptions
 		}
 	}
 
+	ts := timestamp()
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
 		Field:     name,
-		CreatedAt: timestamp(),
+		CreatedAt: ts,
+		Owner:     requestUserID,
 		Meta:      opt,
 	}
 
@@ -712,7 +723,7 @@ func (i *Index) persistField(ctx context.Context, cfm *CreateFieldMessage) error
 	}
 
 	if b, err := i.serializer.Marshal(cfm); err != nil {
-		return errors.Wrap(err, "marshaling")
+		return errors.Wrap(err, "marshaling field")
 	} else if err := i.holder.Schemator.CreateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldExists {
 		return ErrFieldExists
 	} else if err != nil {
@@ -729,7 +740,7 @@ func (i *Index) persistUpdateField(ctx context.Context, cfm *CreateFieldMessage)
 	}
 
 	if b, err := i.serializer.Marshal(cfm); err != nil {
-		return errors.Wrap(err, "marshaling")
+		return errors.Wrap(err, "marshaling field")
 	} else if err := i.holder.Schemator.UpdateField(ctx, cfm.Index, cfm.Field, b); errors.Cause(err) == disco.ErrFieldDoesNotExist {
 		return ErrFieldNotFound
 	} else if err != nil {
@@ -738,7 +749,7 @@ func (i *Index) persistUpdateField(ctx context.Context, cfm *CreateFieldMessage)
 	return nil
 }
 
-func (i *Index) UpdateField(ctx context.Context, name string, update FieldUpdate) (*CreateFieldMessage, error) {
+func (i *Index) UpdateField(ctx context.Context, name string, requestUserID string, update FieldUpdate) (*CreateFieldMessage, error) {
 	// Get field from etcd
 	buf, err := i.holder.Schemator.Field(ctx, i.name, name)
 	if err != nil {
@@ -782,6 +793,9 @@ func (i *Index) UpdateField(ctx context.Context, name string, update FieldUpdate
 	if err := i.persistUpdateField(ctx, cfm); err != nil {
 		return nil, errors.Wrap(err, "persisting updated field")
 	}
+
+	i.mu.Lock()
+	defer i.mu.Unlock()
 
 	return cfm, nil
 }
@@ -843,6 +857,7 @@ func (i *Index) createField(cfm *CreateFieldMessage) (*Field, error) {
 		return nil, errors.Wrap(err, "initializing")
 	}
 	f.createdAt = cfm.CreatedAt
+	f.owner = cfm.Owner
 
 	// Pass holder through to the field for use in looking
 	// up a foreign index.
@@ -928,11 +943,14 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
-	Name       string       `json:"name"`
-	CreatedAt  int64        `json:"createdAt,omitempty"`
-	Options    IndexOptions `json:"options"`
-	Fields     []*FieldInfo `json:"fields"`
-	ShardWidth uint64       `json:"shardWidth"`
+	Name           string       `json:"name"`
+	CreatedAt      int64        `json:"createdAt,omitempty"`
+	UpdatedAt      int64        `json:"updatedAt"`
+	Owner          string       `json:"owner"`
+	LastUpdateUser string       `json:"lastUpdatedUser"`
+	Options        IndexOptions `json:"options"`
+	Fields         []*FieldInfo `json:"fields"`
+	ShardWidth     uint64       `json:"shardWidth"`
 }
 
 // Field returns the FieldInfo the provided field name. If the field does not
@@ -954,9 +972,10 @@ func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
-	Keys           bool `json:"keys"`
-	TrackExistence bool `json:"trackExistence"`
-	PartitionN     int  `json:"partitionN"`
+	Keys           bool   `json:"keys"`
+	TrackExistence bool   `json:"trackExistence"`
+	PartitionN     int    `json:"partitionN"`
+	Description    string `json:"description"`
 }
 
 type importData struct {

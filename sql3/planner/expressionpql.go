@@ -193,6 +193,38 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 	case parser.IN, parser.NOTIN:
 		return nil, sql3.NewErrInternal("IN operator is not supported")
 
+	case parser.IS, parser.ISNOT:
+		lhs, ok := expr.lhs.(*qualifiedRefPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected lhs %T", expr.lhs)
+		}
+
+		pqlOp := pql.EQ
+		if op == parser.ISNOT {
+			pqlOp = pql.NEQ
+		}
+		switch typ := expr.lhs.Type().(type) {
+		case *parser.DataTypeID:
+			if strings.EqualFold(lhs.columnName, "_id") {
+				return nil, sql3.NewErrInvalidColumnInFilterExpression(0, 0, "_id", "is/is not null")
+			}
+			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeName(), "is/is not null")
+
+		case *parser.DataTypeInt, *parser.DataTypeDecimal, *parser.DataTypeTimestamp:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pqlOp,
+						Value: nil,
+					},
+				},
+			}, nil
+
+		default:
+			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeName(), "is/is not null")
+		}
+
 	case parser.BETWEEN, parser.NOTBETWEEN:
 		return nil, sql3.NewErrInternal("BETWEEN operator is not supported")
 
