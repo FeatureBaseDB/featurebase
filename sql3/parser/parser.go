@@ -1584,19 +1584,23 @@ func (p *Parser) parseInsertStatement(withClause *WithClause) (_ *InsertStatemen
 	switch p.peek() {
 	case VALUES:
 		stmt.Values, _, _ = p.scan()
+
+		// Parse out the value tuples.
+		stmt.TupleList = make([]*ExprList, 0)
+
 		for {
-			var list ExprList
+			var tuple ExprList
 			if p.peek() != LP {
 				return &stmt, p.errorExpected(p.pos, p.tok, "left paren")
 			}
-			list.Lparen, _, _ = p.scan()
+			tuple.Lparen, _, _ = p.scan()
 
 			for {
 				expr, err := p.ParseExpr()
 				if err != nil {
 					return &stmt, err
 				}
-				list.Exprs = append(list.Exprs, expr)
+				tuple.Exprs = append(tuple.Exprs, expr)
 
 				if p.peek() == RP {
 					break
@@ -1605,14 +1609,16 @@ func (p *Parser) parseInsertStatement(withClause *WithClause) (_ *InsertStatemen
 				}
 				p.scan()
 			}
-			list.Rparen, _, _ = p.scan()
-			stmt.ValueList = &list
+			tuple.Rparen, _, _ = p.scan()
+
+			stmt.TupleList = append(stmt.TupleList, &tuple)
 
 			if p.peek() != COMMA {
 				break
 			}
 			p.scan()
 		}
+
 	//case SELECT:
 	//	if stmt.Select, err = p.parseSelectStatement(false, nil); err != nil {
 	//		return &stmt, err

@@ -2,9 +2,9 @@
 package sql3_test
 
 import (
-	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -22,18 +22,17 @@ func TestSQL_Execute(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	ctx := context.Background()
-	api := c.GetNode(0).API
 	svr := c.GetNode(0).Server
 
 	for i, test := range tableTests {
 		tableTestName := fmt.Sprintf("table-%d", i)
 		if test.name != "" {
 			tableTestName = test.name
+		} else if test.table.name != "" {
+			tableTestName = test.table.name
 		}
 		t.Run(tableTestName, func(t *testing.T) {
 
-			var err error
 			// Create a table with all field types.
 			if test.table.columns != nil {
 				_, _, err := sql_test.MustQueryRows(t, svr, test.table.createTable())
@@ -41,241 +40,9 @@ func TestSQL_Execute(t *testing.T) {
 			}
 
 			if len(test.table.rows) > 0 {
-
 				// Populate fields with data.
-				qcx := api.Txf().NewQcx()
-
-				// idIdx is the index position of the _id column. If a source provides the
-				// _id somewhere other than column 0, then we need to add logic here to find
-				// its index.
-				idIdx := 0
-				for i, col := range test.table.columns {
-					if col.name == "_id" {
-						continue
-					}
-
-					colIDs := make([]uint64, 0)
-					colKeys := make([]string, 0)
-
-					addColID := func(v interface{}) {
-						switch id := v.(type) {
-						case uint64:
-							colIDs = append(colIDs, id)
-						case int64:
-							colIDs = append(colIDs, uint64(id))
-						case string:
-							colKeys = append(colKeys, id)
-						default:
-							t.Fatalf("unexpected type for colid '%T'", v)
-						}
-					}
-
-					switch col.typ.(type) {
-					case *parser.DataTypeInt:
-						vals := make([]int64, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							addColID(row[idIdx])
-							vals = append(vals, row[i].(int64))
-						}
-						if len(vals) == 0 {
-							continue
-						}
-						req := &pilosa.ImportValueRequest{
-							Index:      test.table.name,
-							Field:      col.name,
-							Shard:      0,
-							ColumnIDs:  colIDs,
-							ColumnKeys: colKeys,
-							Values:     vals,
-						}
-
-						err = api.ImportValue(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					case *parser.DataTypeBool:
-						vals := make([]uint64, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							addColID(row[idIdx])
-							if row[i].(bool) {
-								vals = append(vals, 1)
-							} else {
-								vals = append(vals, 0)
-							}
-						}
-						if len(vals) == 0 {
-							continue
-						}
-						req := &pilosa.ImportRequest{
-							Index:      test.table.name,
-							Field:      col.name,
-							Shard:      0,
-							ColumnIDs:  colIDs,
-							ColumnKeys: colKeys,
-							RowIDs:     vals,
-						}
-
-						err = api.Import(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					case *parser.DataTypeDecimal:
-						vals := make([]float64, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							addColID(row[idIdx])
-							vals = append(vals, row[i].(float64))
-						}
-						if len(vals) == 0 {
-							continue
-						}
-						req := &pilosa.ImportValueRequest{
-							Index:       test.table.name,
-							Field:       col.name,
-							Shard:       0,
-							ColumnIDs:   colIDs,
-							ColumnKeys:  colKeys,
-							FloatValues: vals,
-						}
-
-						err = api.ImportValue(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					case *parser.DataTypeIDSet:
-						rowIDs := make([]uint64, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							rowSet := row[i].([]int64)
-							for k := range rowSet {
-								addColID(row[idIdx])
-								rowIDs = append(rowIDs, uint64(rowSet[k]))
-							}
-						}
-						if len(rowIDs) == 0 {
-							continue
-						}
-						req := &pilosa.ImportRequest{
-							Index:      test.table.name,
-							Field:      col.name,
-							Shard:      0,
-							ColumnIDs:  colIDs,
-							ColumnKeys: colKeys,
-							RowIDs:     rowIDs,
-						}
-						err = api.Import(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					case *parser.DataTypeID:
-						rowIDs := make([]uint64, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							addColID(row[idIdx])
-							rowIDs = append(rowIDs, uint64(row[i].(int64)))
-						}
-
-						if len(rowIDs) == 0 {
-							continue
-						}
-						req := &pilosa.ImportRequest{
-							Index:      test.table.name,
-							Field:      col.name,
-							Shard:      0,
-							ColumnIDs:  colIDs,
-							ColumnKeys: colKeys,
-							RowIDs:     rowIDs,
-						}
-						err = api.Import(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					case *parser.DataTypeString:
-						rowKeys := make([]string, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							addColID(row[idIdx])
-							rowKeys = append(rowKeys, row[i].(string))
-						}
-
-						if len(rowKeys) == 0 {
-							continue
-						}
-						req := &pilosa.ImportRequest{
-							Index:      test.table.name,
-							Field:      col.name,
-							Shard:      0,
-							ColumnIDs:  colIDs,
-							ColumnKeys: colKeys,
-							RowKeys:    rowKeys,
-						}
-						err = api.Import(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					case *parser.DataTypeStringSet:
-						rowKeys := make([]string, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							rowSet := row[i].([]string)
-							for k := range rowSet {
-								addColID(row[idIdx])
-								rowKeys = append(rowKeys, rowSet[k])
-							}
-						}
-
-						if len(rowKeys) == 0 {
-							continue
-						}
-						req := &pilosa.ImportRequest{
-							Index:      test.table.name,
-							Field:      col.name,
-							Shard:      0,
-							ColumnIDs:  colIDs,
-							ColumnKeys: colKeys,
-							RowKeys:    rowKeys,
-						}
-						err = api.Import(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					case *parser.DataTypeTimestamp:
-						vals := make([]time.Time, 0)
-						for _, row := range test.table.rows {
-							if row[i] == nil {
-								continue
-							}
-							addColID(row[idIdx])
-							vals = append(vals, row[i].(time.Time))
-						}
-						if len(vals) == 0 {
-							continue
-						}
-						req := &pilosa.ImportValueRequest{
-							Index:           test.table.name,
-							Field:           col.name,
-							Shard:           0,
-							ColumnIDs:       colIDs,
-							ColumnKeys:      colKeys,
-							TimestampValues: vals,
-						}
-
-						err = api.ImportValue(ctx, qcx, req)
-						assert.NoError(t, err)
-
-					default:
-						t.Fatalf("column type not supported: %s", col.typ)
-					}
-				}
+				_, _, err := sql_test.MustQueryRows(t, svr, test.table.insertInto(t))
+				assert.NoError(t, err)
 			}
 
 			for i, sqltest := range test.sqlTests {
@@ -315,22 +82,25 @@ func TestSQL_Execute(t *testing.T) {
 								exp[i] = make([]interface{}, len(headers))
 								for j := range sqltest.expHdrs {
 									targetIdx := m[sqltest.expHdrs[j].ColumnName]
-									if !assert.GreaterOrEqual(t, len(sqltest.expRows[i]), len(headers)) {
-										t.Fatalf("expected row set has fewer columns than returned headers")
-									}
+									assert.GreaterOrEqual(t, len(sqltest.expRows[i]), len(headers),
+										"expected row set has fewer columns than returned headers")
 									exp[i][targetIdx] = sqltest.expRows[i][j]
 								}
 							}
 
+							if sqltest.sortStringKeys {
+								sortStringKeys(rows)
+							}
+
 							switch sqltest.compare {
 							case compareExactOrdered:
-								assert.EqualValues(t, len(sqltest.expRows), len(rows))
+								assert.Equal(t, len(sqltest.expRows), len(rows))
 								assert.EqualValues(t, exp, rows)
 							case compareExactUnordered:
-								assert.EqualValues(t, len(sqltest.expRows), len(rows))
+								assert.Equal(t, len(sqltest.expRows), len(rows))
 								assert.ElementsMatch(t, exp, rows)
 							case compareIncludedIn:
-								assert.EqualValues(t, sqltest.expRowCount, len(rows))
+								assert.Equal(t, sqltest.expRowCount, len(rows))
 								for _, row := range rows {
 									assert.Contains(t, exp, row)
 								}
@@ -340,6 +110,23 @@ func TestSQL_Execute(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+// sortStringKeys goes through an entire set of rows, and for any []string it
+// finds, it orders the elements. This is obviously only useful in tests, and
+// only in cases where we expect the elements to match, but we don't care what
+// order they're in. It's basically the equivalent of assert.ElementsMatch(),
+// but the way we use that on rows doesn't recurse down into the field values
+// within each row.
+func sortStringKeys(in [][]interface{}) {
+	for i := range in {
+		for j := range in[i] {
+			switch v := in[i][j].(type) {
+			case []string:
+				sort.Strings(v)
+			}
+		}
 	}
 }
 
@@ -375,13 +162,14 @@ type tableTest struct {
 }
 
 type sqlTest struct {
-	name        string
-	sqls        []string
-	expHdrs     []*planner_types.PlannerColumn
-	expRows     [][]interface{}
-	expErr      string
-	compare     compareMethod
-	expRowCount int
+	name           string
+	sqls           []string
+	expHdrs        []*planner_types.PlannerColumn
+	expRows        [][]interface{}
+	expErr         string
+	compare        compareMethod
+	sortStringKeys bool
+	expRowCount    int
 }
 
 // The following "source" types are helpers for creating a test table.
@@ -420,6 +208,63 @@ func srcRow(cells ...interface{}) sourceRow {
 
 type sourceRow []interface{}
 
+type sourceRows []sourceRow
+
+// insertTuples returns the list of tuples (as a single string) to use as the
+// VALUES value in an INSERT INTO statement.
+func (sr sourceRows) insertTuples(t *testing.T) string {
+	var afterFirstRow bool
+	var sb strings.Builder
+	for _, row := range sr {
+		if afterFirstRow {
+			sb.WriteString(",")
+		}
+
+		var afterFirstCell bool
+		sb.WriteString("(")
+
+		for _, cell := range row {
+			if afterFirstCell {
+				sb.WriteString(",")
+			}
+			switch v := cell.(type) {
+			case string:
+				sb.WriteString("'" + v + "'")
+			case int64:
+				sb.WriteString(fmt.Sprintf("%d", v))
+			case float64:
+				sb.WriteString(fmt.Sprintf("%.2f", v))
+			case []int64:
+				strs := make([]string, len(v))
+				for i := range v {
+					strs[i] = fmt.Sprintf("%d", v[i])
+				}
+				sb.WriteString("[" + strings.Join(strs, ",") + "]")
+			case []string:
+				if len(v) == 0 {
+					sb.WriteString("[]")
+				} else {
+					sb.WriteString("['" + strings.Join(v, "','") + "']")
+				}
+			case bool:
+				sb.WriteString(fmt.Sprintf("%v", v))
+			case nil:
+				sb.WriteString("null")
+			case time.Time:
+				sb.WriteString("'" + v.Format(time.RFC3339) + "'")
+
+			default:
+				t.Fatalf("unsupported cell type: %T", cell)
+			}
+			afterFirstCell = true
+		}
+
+		sb.WriteString(")")
+		afterFirstRow = true
+	}
+	return sb.String()
+}
+
 type source struct {
 	name    string
 	columns []sourceColumn
@@ -443,6 +288,12 @@ func (s source) createTable() string {
 
 	log.Printf("CREATE: %s", ct)
 	return ct
+}
+
+func (s source) insertInto(t *testing.T) string {
+	ii := "INSERT INTO " + s.name + " VALUES "
+	ii += sourceRows(s.rows).insertTuples(t)
+	return ii
 }
 
 // hdrs is just a helper function to make the test definition look cleaner.

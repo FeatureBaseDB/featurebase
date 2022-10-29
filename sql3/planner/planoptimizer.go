@@ -5,7 +5,6 @@ package planner
 import (
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 	"strings"
 
@@ -676,11 +675,11 @@ func tryToRewriteSubtableJoins(ctx context.Context, a *ExecutionPlanner, n types
 				// for each of the projection operators, for each of the projections
 				// transform each of the referenced values with a the first arg
 
-				log.Printf("%T", projections)
+				a.logger.Debugf("%T", projections)
 			}
 
 			// there is a join condition, make sure it is one that is permissible (range queries only?)
-			log.Printf("%T", tvf)
+			a.logger.Debugf("%T", tvf)
 
 			return nl, true, nil
 		default:

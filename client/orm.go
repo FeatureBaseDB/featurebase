@@ -209,10 +209,10 @@ func (q PQLRowQuery) Error() error {
 //
 // Usage:
 //
-// 	repo, err := NewIndex("repository")
-// 	stargazer, err := repo.Field("stargazer")
-// 	query := repo.BatchQuery(
-// 		stargazer.Row(5),
+//	repo, err := NewIndex("repository")
+//	stargazer, err := repo.Field("stargazer")
+//	query := repo.BatchQuery(
+//		stargazer.Row(5),
 //		stargazer.Row(15),
 //		repo.Union(stargazer.Row(20), stargazer.Row(25)))
 type PQLBatchQuery struct {
@@ -796,6 +796,10 @@ func (fo FieldOptions) ForeignIndex() string {
 
 func (fo FieldOptions) TimeUnit() string {
 	return fo.timeUnit
+}
+
+func (fo FieldOptions) Base() int64 {
+	return fo.base
 }
 
 // NoStandardView suppresses creating the standard view for supported field types (currently, time)

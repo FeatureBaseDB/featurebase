@@ -4,6 +4,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"math/bits"
 	"sort"
 	"sync"
@@ -19,6 +20,7 @@ import (
 // Batch defaults.
 const (
 	DefaultKeyTranslateBatchSize = 100000
+	existenceFieldName           = "_exists"
 )
 
 // TODO if using column translation, column ids might get way out of
@@ -77,9 +79,9 @@ type agedTranslation struct {
 
 // Batch implements RecordBatch.
 //
-// It supports Values of type string, uint64, int64, or nil. The
-// following table describes what Pilosa field each type of value must
-// map to. Fields are set up when calling "NewBatch".
+// It supports Values of type string, uint64, int64, float64, or nil. The
+// following table describes what Pilosa field each type of value must map to.
+// Fields are set up when calling "NewBatch".
 //
 // | type   | pilosa field type | options   |
 // |--------+-------------------+-----------|
@@ -92,10 +94,10 @@ type agedTranslation struct {
 //
 // nil values are ignored.
 type Batch struct {
-	client    *Client
-	index     *Index
-	header    []*Field
-	headerMap map[string]*Field
+	importer  Importer
+	index     *featurebase.IndexInfo
+	header    []*featurebase.FieldInfo
+	headerMap map[string]*featurebase.FieldInfo
 
 	// prevDuration records the time that each doImport() takes. This
 	// is used to set the timeout for transactions to a reasonable
@@ -231,16 +233,25 @@ func OptUseShardTransactionalEndpoint(use bool) BatchOption {
 	}
 }
 
-// NewBatch initializes a new Batch object which will use the given
-// Pilosa client, index, set of fields, and will take "size" records
-// before returning ErrBatchNowFull. The positions of the Fields in
-// 'fields' correspond to the positions of values in the Row's Values
-// passed to Batch.Add().
-func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...BatchOption) (*Batch, error) {
-	if len(fields) == 0 || size == 0 {
-		return nil, errors.New("can't batch with no fields or batch size")
+func OptImporter(i Importer) BatchOption {
+	return func(b *Batch) error {
+		b.importer = i
+		return nil
 	}
-	headerMap := make(map[string]*Field, len(fields))
+}
+
+// NewBatch initializes a new Batch object which will use the given Importer,
+// index, set of fields, and will take "size" records before returning
+// ErrBatchNowFull. The positions of the Fields in 'fields' correspond to the
+// positions of values in the Row's Values passed to Batch.Add().
+func NewBatch(importer Importer, size int, index *featurebase.IndexInfo, fields []*featurebase.FieldInfo, opts ...BatchOption) (*Batch, error) {
+	if len(fields) == 0 {
+		return nil, errors.New("can't batch with no fields")
+	} else if size == 0 {
+		return nil, errors.New("can't batch with no batch size")
+	}
+
+	headerMap := make(map[string]*featurebase.FieldInfo, len(fields))
 	rowIDs := make(map[int][]uint64, len(fields))
 	values := make(map[string][]int64)
 	boolValues := make(map[string]map[int]bool)
@@ -249,35 +260,43 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...B
 	ttSets := make(map[string]map[string][]int)
 	hasTime := false
 	for i, field := range fields {
-		headerMap[field.Name()] = field
-		opts := field.Opts()
-		switch typ := opts.Type(); typ {
-		case FieldTypeDefault, FieldTypeSet, FieldTypeTime:
-			if opts.Keys() {
+		headerMap[field.Name] = field
+		opts := field.Options
+
+		// The client package has a FieldTypeDefault, but featurebase does not.
+		// When this code was moved from the client package to the batch
+		// package, FieldTypeDefault was no longer available. It probably isn't
+		// necessary, but to ensure backwards compatiblity, we continue to
+		// support it here with an unexported variable.
+		fieldTypeDefault := ""
+
+		switch typ := opts.Type; typ {
+		case fieldTypeDefault, featurebase.FieldTypeSet, featurebase.FieldTypeTime:
+			if opts.Keys {
 				tt[i] = make(map[string][]int)
-				ttSets[field.Name()] = make(map[string][]int)
+				ttSets[field.Name] = make(map[string][]int)
 			}
-			hasTime = typ == FieldTypeTime || hasTime
-		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+			hasTime = typ == featurebase.FieldTypeTime || hasTime
+		case featurebase.FieldTypeInt, featurebase.FieldTypeDecimal, featurebase.FieldTypeTimestamp:
 			// tt line only needed if int field is string foreign key
 			tt[i] = make(map[string][]int)
-			values[field.Name()] = make([]int64, 0, size)
-		case FieldTypeMutex:
+			values[field.Name] = make([]int64, 0, size)
+		case featurebase.FieldTypeMutex:
 			// similar to set/time fields, but no need to support sets
 			// of values (hence no ttSets)
-			if opts.Keys() {
+			if opts.Keys {
 				tt[i] = make(map[string][]int)
 			}
 			rowIDs[i] = make([]uint64, 0, size)
-		case FieldTypeBool:
-			boolValues[field.Name()] = make(map[int]bool)
+		case featurebase.FieldTypeBool:
+			boolValues[field.Name] = make(map[int]bool)
 		default:
 			return nil, errors.Errorf("field type '%s' is not currently supported through Batch", typ)
 		}
 	}
 
 	b := &Batch{
-		client:                client,
+		importer:              importer,
 		header:                fields,
 		headerMap:             headerMap,
 		prevDuration:          time.Minute * 11,
@@ -376,7 +395,7 @@ func (qt *QuantizedTime) Reset() {
 
 // views builds the list of Pilosa views for this particular time,
 // given a quantum.
-func (qt *QuantizedTime) views(q TimeQuantum) ([]string, error) {
+func (qt *QuantizedTime) views(q featurebase.TimeQuantum) ([]string, error) {
 	zero := QuantizedTime{}
 	if *qt == zero {
 		return nil, nil
@@ -496,19 +515,19 @@ func (b *Batch) Add(rec Row) error {
 		field := b.header[i]
 		switch val := rec.Values[i].(type) {
 		case string:
-			switch field.Opts().Type() {
-			case FieldTypeInt:
+			switch field.Options.Type {
+			case featurebase.FieldTypeInt:
 				if val == "" {
 					// copied from the `case nil:` section for ints and decimals
-					b.values[field.Name()] = append(b.values[field.Name()], 0)
-					nullIndices, ok := b.nullIndices[field.Name()]
+					b.values[field.Name] = append(b.values[field.Name], 0)
+					nullIndices, ok := b.nullIndices[field.Name]
 					if !ok {
 						nullIndices = make([]uint64, 0)
 					}
 					nullIndices = append(nullIndices, uint64(curPos))
-					b.nullIndices[field.Name()] = nullIndices
-				} else if intVal, ok := b.getRowTranslation(field.Name(), val); ok {
-					b.values[field.Name()] = append(b.values[field.Name()], int64(intVal))
+					b.nullIndices[field.Name] = nullIndices
+				} else if intVal, ok := b.getRowTranslation(field.Name, val); ok {
+					b.values[field.Name] = append(b.values[field.Name], int64(intVal))
 				} else {
 					ints, ok := b.toTranslate[i][val]
 					if !ok {
@@ -516,9 +535,9 @@ func (b *Batch) Add(rec Row) error {
 					}
 					ints = append(ints, curPos)
 					b.toTranslate[i][val] = ints
-					b.values[field.Name()] = append(b.values[field.Name()], 0)
+					b.values[field.Name] = append(b.values[field.Name], 0)
 				}
-			case FieldTypeBool:
+			case featurebase.FieldTypeBool:
 				// If we want to support bools as string values, we would do
 				// that here.
 			default:
@@ -531,7 +550,7 @@ func (b *Batch) Add(rec Row) error {
 				if val == "" { //
 					b.rowIDs[i] = append(rowIDs, nilSentinel)
 
-				} else if rowID, ok := b.getRowTranslation(field.Name(), val); ok {
+				} else if rowID, ok := b.getRowTranslation(field.Name, val); ok {
 					b.rowIDs[i] = append(rowIDs, rowID)
 				} else {
 					ints, ok := b.toTranslate[i][val]
@@ -550,15 +569,15 @@ func (b *Batch) Add(rec Row) error {
 			}
 			b.rowIDs[i] = append(b.rowIDs[i], val)
 		case int64:
-			b.values[field.Name()] = append(b.values[field.Name()], val)
+			b.values[field.Name] = append(b.values[field.Name], val)
 		case []string:
 			if len(val) == 0 {
 				continue
 			}
-			rowIDSets, ok := b.rowIDSets[field.Name()]
+			rowIDSets, ok := b.rowIDSets[field.Name]
 			if !ok {
 				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
-				b.rowIDSets[field.Name()] = rowIDSets
+				b.rowIDSets[field.Name] = rowIDSets
 			}
 			for len(rowIDSets) < len(b.ids)-1 {
 				rowIDSets = append(rowIDSets, nil) // nil extend
@@ -569,53 +588,53 @@ func (b *Batch) Add(rec Row) error {
 				if k == "" {
 					continue
 				}
-				if rowID, ok := b.getRowTranslation(field.Name(), k); ok {
+				if rowID, ok := b.getRowTranslation(field.Name, k); ok {
 					rowIDs = append(rowIDs, rowID)
 				} else {
-					ttsets, ok := b.toTranslateSets[field.Name()]
+					ttsets, ok := b.toTranslateSets[field.Name]
 					if !ok {
 						ttsets = make(map[string][]int)
-						b.toTranslateSets[field.Name()] = make(map[string][]int)
+						b.toTranslateSets[field.Name] = make(map[string][]int)
 					}
 					ints, ok := ttsets[k]
 					if !ok {
 						ints = make([]int, 0, 1)
 					}
 					ints = append(ints, curPos)
-					b.toTranslateSets[field.Name()][k] = ints
+					b.toTranslateSets[field.Name][k] = ints
 				}
 			}
-			b.rowIDSets[field.Name()] = append(rowIDSets, rowIDs)
+			b.rowIDSets[field.Name] = append(rowIDSets, rowIDs)
 		case []uint64:
 			if len(val) == 0 {
 				continue
 			}
-			rowIDSets, ok := b.rowIDSets[field.Name()]
+			rowIDSets, ok := b.rowIDSets[field.Name]
 			if !ok {
 				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
 			}
 			for len(rowIDSets) < len(b.ids)-1 {
 				rowIDSets = append(rowIDSets, nil) // nil extend
 			}
-			b.rowIDSets[field.Name()] = append(rowIDSets, val)
+			b.rowIDSets[field.Name] = append(rowIDSets, val)
 		case nil:
-			switch field.Opts().Type() {
-			case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
-				b.values[field.Name()] = append(b.values[field.Name()], 0)
-				nullIndices, ok := b.nullIndices[field.Name()]
+			switch field.Options.Type {
+			case featurebase.FieldTypeInt, featurebase.FieldTypeDecimal, featurebase.FieldTypeTimestamp:
+				b.values[field.Name] = append(b.values[field.Name], 0)
+				nullIndices, ok := b.nullIndices[field.Name]
 				if !ok {
 					nullIndices = make([]uint64, 0)
 				}
 				nullIndices = append(nullIndices, uint64(curPos))
-				b.nullIndices[field.Name()] = nullIndices
+				b.nullIndices[field.Name] = nullIndices
 
-			case FieldTypeBool:
-				boolNulls, ok := b.boolNulls[field.Name()]
+			case featurebase.FieldTypeBool:
+				boolNulls, ok := b.boolNulls[field.Name]
 				if !ok {
 					boolNulls = make([]uint64, 0)
 				}
 				boolNulls = append(boolNulls, uint64(curPos))
-				b.boolNulls[field.Name()] = boolNulls
+				b.boolNulls[field.Name] = boolNulls
 
 			default:
 				// only append nil to rowIDs if this field already has
@@ -630,7 +649,10 @@ func (b *Batch) Add(rec Row) error {
 			}
 
 		case bool:
-			b.boolValues[field.Name()][curPos] = val
+			b.boolValues[field.Name][curPos] = val
+
+		case pql.Decimal:
+			b.values[field.Name] = append(b.values[field.Name], val.ToInt64(field.Options.Scale))
 
 		default:
 			return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
@@ -646,7 +668,7 @@ func (b *Batch) Add(rec Row) error {
 		case string:
 			clearRows := b.clearRowIDs[i]
 			// translate val and add to clearRows
-			if rowID, ok := b.getRowTranslation(field.Name(), val); ok {
+			if rowID, ok := b.getRowTranslation(field.Name, val); ok {
 				clearRows[curPos] = rowID
 			} else {
 				_, ok := b.toTranslateClear[i]
@@ -663,14 +685,14 @@ func (b *Batch) Add(rec Row) error {
 		case uint64:
 			b.clearRowIDs[i][curPos] = val
 		case nil:
-			if field.Opts().Type() == FieldTypeMutex {
+			if field.Options.Type == featurebase.FieldTypeMutex {
 				for len(b.rowIDs[i]) <= curPos {
 					b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
 				}
 				b.rowIDs[i][len(b.rowIDs[i])-1] = clearSentinel
 			}
 		default:
-			return errors.Errorf("Clearing a value '%v' Type %[1]T is not currently supported (field '%s')", val, field.Name())
+			return errors.Errorf("Clearing a value '%v' Type %[1]T is not currently supported (field '%s')", val, field.Name)
 		}
 		// nil extend b.rowIDs so we don't run into a horrible bug
 		// where we skip doing clears because b.rowIDs doesn't have a
@@ -694,8 +716,8 @@ func (b *Batch) Add(rec Row) error {
 	return nil
 }
 
-// ErrBatchNowFull, similar to io.EOF, is a marker error to notify the
-// user of a batch that it is time to call Import.
+// ErrBatchNowFull — similar to io.EOF — is a marker error to notify the user of
+// a batch that it is time to call Import.
 var ErrBatchNowFull = errors.New("batch is now full - you cannot add any more records (though the one you just added was accepted)")
 
 // ErrBatchAlreadyFull is a real error saying that Batch.Add did not
@@ -715,17 +737,19 @@ var ErrBatchNowStale = errors.New("batch is stale and needs to be imported (howe
 // continues.  split batch mode DOES NOT CURRENTLY SUPPORT MUTEX
 // OR INT FIELDS!
 func (b *Batch) Import() error {
+	ctx := context.Background()
 	start := time.Now()
-	trns, err := b.client.StartTransaction("", b.prevDuration*10, false, time.Hour)
+	trns, err := b.importer.StartTransaction(ctx, "", b.prevDuration*10, false, time.Hour)
 	if err != nil {
 		return errors.Wrap(err, "starting transaction")
 	}
 	defer func() {
-		trnsl, err := b.client.FinishTransaction(trns.ID)
-		if err != nil {
-			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
+		if trns != nil {
+			if trnsl, err := b.importer.FinishTransaction(ctx, trns.ID); err != nil {
+				b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
+			}
 		}
-		b.client.Stats.Timing(MetricBatchImportDurationSeconds, time.Since(start), 1.0)
+		b.importer.StatsTiming(MetricBatchImportDurationSeconds, time.Since(start), 1.0)
 	}()
 
 	size := len(b.ids)
@@ -782,21 +806,23 @@ func (b *Batch) Import() error {
 // imports the stored data to Pilosa. Otherwise it simply returns
 // nil.
 func (b *Batch) Flush() error {
+	ctx := context.Background()
+
 	if !b.splitBatchMode {
 		return nil
 	}
 	start := time.Now()
 
-	trns, err := b.client.StartTransaction("", b.prevDuration*10, false, time.Hour)
+	trns, err := b.importer.StartTransaction(ctx, "", b.prevDuration*10, false, time.Hour)
 	if err != nil {
 		return errors.Wrap(err, "starting transaction")
 	}
 	defer func() {
-		trnsl, err := b.client.FinishTransaction(trns.ID)
+		trnsl, err := b.importer.FinishTransaction(ctx, trns.ID)
 		if err != nil {
 			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
 		}
-		b.client.Stats.Timing(MetricBatchFlushDurationSeconds, time.Since(start), 1.0)
+		b.importer.StatsTiming(MetricBatchFlushDurationSeconds, time.Since(start), 1.0)
 	}()
 
 	importStart := time.Now()
@@ -887,7 +913,7 @@ func (b *Batch) doTranslation() error {
 
 		// Look up the associated field.
 		field := b.header[i]
-		fieldName := field.Name()
+		fieldName := field.Name
 
 		// Fetch the translation cache.
 		rowCache := b.rowTranslations[fieldName]
@@ -925,8 +951,8 @@ func (b *Batch) doTranslation() error {
 			}
 			rowCacheLock.Unlock()
 
-			switch ftype := field.Opts().Type(); ftype {
-			case FieldTypeSet, FieldTypeMutex, FieldTypeTime:
+			switch ftype := field.Options.Type; ftype {
+			case featurebase.FieldTypeSet, featurebase.FieldTypeMutex, featurebase.FieldTypeTime:
 				// Fill out missing IDs in local batch records with translated IDs.
 				rows := b.rowIDs[i]
 				for key, idxs := range tt {
@@ -953,7 +979,7 @@ func (b *Batch) doTranslation() error {
 					}
 				}
 
-			case FieldTypeInt:
+			case featurebase.FieldTypeInt:
 				// Handle foreign key int fields — fill out b.values instead of b.rows.
 				vals := b.values[fieldName]
 				for key, idxs := range tt {
@@ -1037,10 +1063,12 @@ func (b *Batch) doTranslation() error {
 	return eg.Wait()
 }
 
-func (b *Batch) createIndexKeys(index *Index, keys ...string) (map[string]uint64, error) {
+func (b *Batch) createIndexKeys(index *featurebase.IndexInfo, keys ...string) (map[string]uint64, error) {
+	ctx := context.Background()
+
 	batchSize := b.keyTranslateBatchSize
 	if batchSize <= 0 || len(keys) <= batchSize {
-		return b.client.CreateIndexKeys(index, keys...)
+		return b.importer.CreateIndexKeys(ctx, index, keys...)
 	}
 
 	results := make(map[string]uint64, len(keys))
@@ -1050,7 +1078,7 @@ func (b *Batch) createIndexKeys(index *Index, keys ...string) (map[string]uint64
 			keySlice = keySlice[:batchSize]
 		}
 
-		trans, err := b.client.CreateIndexKeys(index, keySlice...)
+		trans, err := b.importer.CreateIndexKeys(ctx, index, keySlice...)
 		if err != nil {
 			return nil, err
 		} else if len(trans) != len(keySlice) {
@@ -1066,10 +1094,12 @@ func (b *Batch) createIndexKeys(index *Index, keys ...string) (map[string]uint64
 	return results, nil
 }
 
-func (b *Batch) createFieldKeys(field *Field, keys ...string) (map[string]uint64, error) {
+func (b *Batch) createFieldKeys(field *featurebase.FieldInfo, keys ...string) (map[string]uint64, error) {
+	ctx := context.Background()
+
 	batchSize := b.keyTranslateBatchSize
 	if batchSize <= 0 || len(keys) <= batchSize {
-		return b.client.CreateFieldKeys(field, keys...)
+		return b.importer.CreateFieldKeys(ctx, b.index.Name, field, keys...)
 	}
 
 	results := make(map[string]uint64, len(keys))
@@ -1079,7 +1109,7 @@ func (b *Batch) createFieldKeys(field *Field, keys ...string) (map[string]uint64
 			keySlice = keySlice[:batchSize]
 		}
 
-		trans, err := b.client.CreateFieldKeys(field, keySlice...)
+		trans, err := b.importer.CreateFieldKeys(ctx, b.index.Name, field, keySlice...)
 		if err != nil {
 			return nil, err
 		} else if len(trans) != len(keySlice) {
@@ -1096,6 +1126,8 @@ func (b *Batch) createFieldKeys(field *Field, keys ...string) (map[string]uint64
 }
 
 func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
+	ctx := context.Background()
+
 	start := time.Now()
 	requests := make(map[uint64]*featurebase.ImportRoaringShardRequest)
 	getOrCreate := func(requests map[uint64]*featurebase.ImportRoaringShardRequest, shard uint64) *featurebase.ImportRoaringShardRequest {
@@ -1150,24 +1182,25 @@ func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
 		}
 	}
 
-	b.client.Stats.Timing(MetricBatchShardImportBuildRequestsSeconds, time.Since(start), 1.0)
+	b.importer.StatsTiming(MetricBatchShardImportBuildRequestsSeconds, time.Since(start), 1.0)
 	start = time.Now()
 	eg := egpool.Group{PoolSize: 20}
 	for shard, request := range requests {
 		shard := shard
 		request := request
 		eg.Go(func() error {
-			return b.client.ImportRoaringShard(b.index.Name(), shard, request)
+			return b.importer.ImportRoaringShard(ctx, b.index.Name, shard, request)
 		})
 	}
 	err := eg.Wait()
 	dur := time.Since(start)
-	b.client.Stats.Timing(MetricBatchShardImportDurationSeconds, dur, 1.0)
+	b.importer.StatsTiming(MetricBatchShardImportDurationSeconds, dur, 1.0)
 	b.log.Printf("import shard took: %v\n", dur)
 	return errors.Wrap(err, "doing shard-transactional imports")
 }
 
 func (b *Batch) doImport(frags, clearFrags fragments) error {
+	ctx := context.Background()
 
 	start := time.Now()
 	eg := egpool.Group{PoolSize: 20}
@@ -1189,7 +1222,7 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 			clearViewMap := clearFrags.GetViewMap(shard, field)
 			if len(clearViewMap) > 0 {
 				startx := time.Now()
-				err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, clearViewMap, true)
+				err := b.importer.ImportRoaringBitmap(ctx, b.index.Name, b.indexField(field), shard, clearViewMap, true)
 				if err != nil {
 					return errors.Wrapf(err, "import clearing clearing data for %s", field)
 				}
@@ -1197,7 +1230,7 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 			}
 
 			starty := time.Now()
-			err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, viewMap, false)
+			err := b.importer.ImportRoaringBitmap(ctx, b.index.Name, b.indexField(field), shard, viewMap, false)
 			b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
 			return errors.Wrapf(err, "importing data for %s", field)
 		})
@@ -1216,6 +1249,22 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 	return nil
 }
 
+// indexField is a helper function which was introduced when we switched the
+// index and field types from being client types (e.g client.Index,
+// client.Field) to being featurebase types (e.g. featurebase.IndexInfo,
+// featurebase.FieldInfo). Unlike client.Index, featurebase.IndexInfo is not
+// expected to contain the "_exists" field. So calling Field("_exists") on
+// IndexInfo results in a nil field. This method creates an instance of
+// FieldInfo for the "_exists" field.
+func (b *Batch) indexField(field string) *featurebase.FieldInfo {
+	if field == existenceFieldName {
+		return &featurebase.FieldInfo{
+			Name: existenceFieldName,
+		}
+	}
+	return b.index.Field(field)
+}
+
 func anyCause(cause error, errs ...error) error {
 	if cause == nil {
 		return nil
@@ -1230,11 +1279,7 @@ func anyCause(cause error, errs ...error) error {
 }
 
 func (b *Batch) shardWidth() uint64 {
-	shardWidth := b.index.ShardWidth()
-	if shardWidth == 0 {
-		shardWidth = DefaultShardWidth
-	}
-	return shardWidth
+	return featurebase.ShardWidth
 }
 
 // this is kind of bad as it means we can never import column id
@@ -1252,7 +1297,7 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 	emptyClearRows := make(map[int]uint64)
 
 	// create _exists fragments if needed
-	if b.index.Opts().TrackExistence() {
+	if b.index.Options.TrackExistence {
 		var curBM *roaring.Bitmap
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		for _, col := range b.ids {
@@ -1273,8 +1318,8 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 			clearRows = emptyClearRows
 		}
 		field := b.header[i]
-		opts := field.Opts()
-		if opts.Type() == FieldTypeMutex {
+		opts := field.Options
+		if opts.Type == featurebase.FieldTypeMutex {
 			continue // we handle mutex fields separately — they can't use importRoaring
 		}
 		curShard := ^uint64(0) // impossible sentinel value for shard.
@@ -1292,8 +1337,8 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
-				curBM = frags.GetOrCreate(curShard, field.Name(), "")
-				clearBM = clearFrags.GetOrCreate(curShard, field.Name(), "")
+				curBM = frags.GetOrCreate(curShard, field.Name, "")
+				clearBM = clearFrags.GetOrCreate(curShard, field.Name, "")
 			}
 			if row != nilSentinel {
 				// TODO this is super ugly, but we want to avoid setting
@@ -1301,16 +1346,16 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 				// there isn't one. Should probably refactor this whole
 				// loop to be more general w.r.t. views. Also... tests for
 				// the NoStandardView case would be great.
-				if !(opts.Type() == FieldTypeTime && opts.NoStandardView()) {
+				if !(opts.Type == featurebase.FieldTypeTime && opts.NoStandardView) {
 					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
 				}
-				if opts.Type() == FieldTypeTime {
-					views, err := b.times[j].views(opts.TimeQuantum())
+				if opts.Type == featurebase.FieldTypeTime {
+					views, err := b.times[j].views(opts.TimeQuantum)
 					if err != nil {
 						return nil, nil, errors.Wrap(err, "calculating views")
 					}
 					for _, view := range views {
-						tbm := frags.GetOrCreate(curShard, field.Name(), view)
+						tbm := frags.GetOrCreate(curShard, field.Name, view)
 						tbm.DirectAdd(row*shardWidth + (col % shardWidth))
 					}
 				}
@@ -1338,7 +1383,7 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 			rowIDSets = rowIDSets[:len(b.ids)]
 		}
 		field := b.headerMap[fname]
-		opts := field.Opts()
+		opts := field.Options
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
 		for j := range b.ids {
@@ -1355,13 +1400,13 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 			// there isn't one. Should probably refactor this whole
 			// loop to be more general w.r.t. views. Also... tests for
 			// the NoStandardView case would be great.
-			if !(opts.Type() == FieldTypeTime && opts.NoStandardView()) {
+			if !(opts.Type == featurebase.FieldTypeTime && opts.NoStandardView) {
 				for _, row := range rowIDs {
 					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
 				}
 			}
-			if opts.Type() == FieldTypeTime {
-				views, err := b.times[j].views(opts.TimeQuantum())
+			if opts.Type == featurebase.FieldTypeTime {
+				views, err := b.times[j].views(opts.TimeQuantum)
 				if err != nil {
 					return nil, nil, errors.Wrap(err, "calculating views")
 				}
@@ -1410,8 +1455,8 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			sort.Stable(sc)
 		}
 		field := b.headerMap[fieldName]
-		base := field.Options().base
-		if field.Options().Type() == FieldTypeTimestamp {
+		base := field.Options.Base
+		if field.Options.Type == featurebase.FieldTypeTimestamp {
 			base = 0
 		}
 
@@ -1455,7 +1500,7 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 	// -------------------------
 	for findex, rowIDs := range b.rowIDs {
 		field := b.header[findex]
-		if field.Opts().Type() != FieldTypeMutex {
+		if field.Options.Type != featurebase.FieldTypeMutex {
 			continue
 		}
 		ids = ids[:0]
@@ -1484,8 +1529,8 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 		}
 
 		shard := ids[0] / shardWidth
-		bitmap := frags.GetOrCreate(shard, field.Name(), "standard")
-		clearBM := clearFrags.GetOrCreate(shard, field.Name(), "standard")
+		bitmap := frags.GetOrCreate(shard, field.Name, "standard")
+		clearBM := clearFrags.GetOrCreate(shard, field.Name, "standard")
 		for i, id := range ids {
 			if i+1 < len(ids) {
 				// we only want the last value set for each id
@@ -1496,8 +1541,8 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			row := rowIDs[i]
 			if shard != id/shardWidth {
 				shard = id / shardWidth
-				bitmap = frags.GetOrCreate(shard, field.Name(), "standard")
-				clearBM = clearFrags.GetOrCreate(shard, field.Name(), "standard")
+				bitmap = frags.GetOrCreate(shard, field.Name, "standard")
+				clearBM = clearFrags.GetOrCreate(shard, field.Name, "standard")
 			}
 			fragmentColumn := id % shardWidth
 			clearBM.Add(fragmentColumn) // Will use this to clear columns.
@@ -1522,15 +1567,16 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 	// records (for all rows) to clear.
 	for fieldname, boolNulls := range b.boolNulls {
 		field := b.headerMap[fieldname]
-		if field.Opts().Type() != featurebase.FieldTypeBool {
+		if field.Options.Type != featurebase.FieldTypeBool {
 			continue
 		}
 		for _, pos := range boolNulls {
 			recID := b.ids[pos]
 			shard := recID / shardWidth
-			clearBM := clearFrags.GetOrCreate(shard, field.Name(), "standard")
+			clearBM := clearFrags.GetOrCreate(shard, field.Name, "standard")
 
 			fragmentColumn := recID % shardWidth
+
 			clearBM.Add(fragmentColumn)
 		}
 	}
@@ -1541,7 +1587,7 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 	// the bit in the "true" row.
 	for fieldname, boolMap := range b.boolValues {
 		field := b.headerMap[fieldname]
-		if field.Opts().Type() != featurebase.FieldTypeBool {
+		if field.Options.Type != featurebase.FieldTypeBool {
 			continue
 		}
 
@@ -1549,8 +1595,8 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			recID := b.ids[pos]
 
 			shard := recID / shardWidth
-			bitmap := frags.GetOrCreate(shard, field.Name(), "standard")
-			clearBM := clearFrags.GetOrCreate(shard, field.Name(), "standard")
+			bitmap := frags.GetOrCreate(shard, field.Name, "standard")
+			clearBM := clearFrags.GetOrCreate(shard, field.Name, "standard")
 
 			fragmentColumn := recID % shardWidth
 			clearBM.Add(fragmentColumn)
@@ -1583,10 +1629,9 @@ func (v *valsByIDsSortable) Swap(i, j int) {
 
 // importValueData imports data for int fields.
 func (b *Batch) importValueData() error {
-	shardWidth := b.index.ShardWidth()
-	if shardWidth == 0 {
-		shardWidth = DefaultShardWidth
-	}
+	ctx := context.Background()
+
+	shardWidth := uint64(featurebase.ShardWidth)
 	eg := egpool.Group{PoolSize: 20}
 
 	ids := make([]uint64, len(b.ids))
@@ -1631,15 +1676,15 @@ func (b *Batch) importValueData() error {
 				endIdx := i
 				shard := curShard
 				field := b.headerMap[fieldName]
-				path, data, err := b.client.EncodeImportValues(field, shard, bvalues[startIdx:endIdx], ids[startIdx:endIdx], false)
+				path, data, err := b.importer.EncodeImportValues(ctx, b.index.Name, field, shard, bvalues[startIdx:endIdx], ids[startIdx:endIdx], false)
 				if err != nil {
 					return errors.Wrap(err, "encoding import values")
 				}
 				eg.Go(func() error {
 					start := time.Now()
-					err := b.client.DoImportValues(b.index.Name(), shard, path, data)
+					err := b.importer.DoImport(ctx, b.index.Name, field, shard, path, data)
 					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
-					return errors.Wrapf(err, "importing values for field = %s", field)
+					return errors.Wrapf(err, "importing values for field = %s", field.Name)
 				})
 				startIdx = i
 				curShard = recordID / shardWidth
@@ -1674,16 +1719,15 @@ func (v *rowsByIDsSortable) Swap(i, j int) {
 // TODO this should work for bools as well - just need to support them
 // at batch creation time and when calling Add, I think.
 func (b *Batch) importMutexData() error {
-	shardWidth := b.index.ShardWidth()
-	if shardWidth == 0 {
-		shardWidth = DefaultShardWidth
-	}
+	ctx := context.Background()
+
+	shardWidth := uint64(featurebase.ShardWidth)
 
 	eg := egpool.Group{PoolSize: 20}
 	ids := make([]uint64, 0, len(b.ids))
 	for findex, rowIDs := range b.rowIDs {
 		field := b.header[findex]
-		if field.Opts().Type() != FieldTypeMutex {
+		if field.Options.Type != featurebase.FieldTypeMutex {
 			continue
 		}
 		ids = ids[:0]
@@ -1725,15 +1769,15 @@ func (b *Batch) importMutexData() error {
 				endIdx := i
 				shard := curShard
 				field := field
-				path, data, err := b.client.EncodeImport(field, shard, rowIDs[startIdx:endIdx], ids[startIdx:endIdx], false)
+				path, data, err := b.importer.EncodeImport(ctx, b.index.Name, field, shard, rowIDs[startIdx:endIdx], ids[startIdx:endIdx], false)
 				if err != nil {
 					return errors.Wrap(err, "encoding mutex import")
 				}
 				eg.Go(func() error {
 					start := time.Now()
-					err := b.client.DoImport(b.index.Name(), shard, path, data)
-					b.log.Debugf("imp-mux %s,shard:%d,data:%d %v", field.Name(), shard, len(data), time.Since(start))
-					return errors.Wrapf(err, "importing values for field = %s", field)
+					err := b.importer.DoImport(ctx, b.index.Name, field, shard, path, data)
+					b.log.Debugf("imp-mux %s,shard:%d,data:%d %v", field.Name, shard, len(data), time.Since(start))
+					return errors.Wrapf(err, "importing values for field = %s", field.Name)
 				})
 				startIdx = i
 				curShard = recordID / shardWidth

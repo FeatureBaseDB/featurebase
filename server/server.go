@@ -439,9 +439,10 @@ func (m *Command) SetupServer() error {
 	m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
 	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
 
-	executionPlannerFn := func(e pilosa.Executor, a *pilosa.API, s string) sql3.CompilePlanner {
-		fapi := &pilosa.FeatureBaseSchemaAPI{API: a}
-		return planner.NewExecutionPlanner(e, fapi, a, s)
+	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
+		fapi := &pilosa.FeatureBaseSchemaAPI{API: api}
+		fimp := &batch.FeaturebaseImporter{API: api}
+		return planner.NewExecutionPlanner(e, fapi, api, fimp, m.logger, sql)
 	}
 
 	serverOptions := []pilosa.ServerOption{

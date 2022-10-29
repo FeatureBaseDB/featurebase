@@ -275,15 +275,17 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 		if err := walkIdentList(v, n.Columns); err != nil {
 			return node, err
 		}
-		//for i := range n.ValueLists {
-		if list, err := walk(v, n.ValueList); err != nil {
-			return node, err
-		} else if list != nil {
-			n.ValueList = list.(*ExprList)
-		} else {
-			n.ValueList = nil
+
+		for i, tuple := range n.TupleList {
+			if list, err := walk(v, tuple); err != nil {
+				return node, err
+			} else if list != nil {
+				n.TupleList[i] = list.(*ExprList)
+			} else {
+				n.TupleList[i] = nil
+			}
 		}
-		//}
+
 		/*if n.Select != nil {
 			if sel, err := walk(v, n.Select); err != nil {
 				return node, err

@@ -1,0 +1,26 @@
+version: '3'
+
+services:
+  featurebase:
+    build:
+      context: ../.
+      dockerfile: ./Dockerfile
+    environment:
+      PILOSA_DATA_DIR: /data
+      PILOSA_BIND: 0.0.0.0:10101
+      PILOSA_BIND_GRPC: 0.0.0.0:20101
+      PILOSA_ADVERTISE: featurebase:10101
+    volumes:
+      - ./testdata:/testdata
+
+  batch-test:
+    build:
+      context: ../.
+      dockerfile: ./batch/Dockerfile-test
+    volumes:
+      - ./testdata:/testdata
+
+  wait:
+    build:
+      context: .
+      dockerfile: Dockerfile-wait

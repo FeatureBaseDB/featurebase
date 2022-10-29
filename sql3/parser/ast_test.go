@@ -592,10 +592,28 @@ func TestInsertStatement_String(t *testing.T) {
 			{Name: "x"},
 			{Name: "y"},
 		},
-		ValueList: &parser.ExprList{
-			Exprs: []parser.Expr{&parser.NullLit{}, &parser.NullLit{}},
+		TupleList: []*parser.ExprList{
+			{
+				Exprs: []parser.Expr{&parser.NullLit{}, &parser.NullLit{}},
+			},
 		},
 	}, `INSERT INTO "tbl" ("x", "y") VALUES (NULL, NULL)`)
+
+	AssertStatementStringer(t, &parser.InsertStatement{
+		Table: &parser.Ident{Name: "tbl"},
+		Columns: []*parser.Ident{
+			{Name: "x"},
+			{Name: "y"},
+		},
+		TupleList: []*parser.ExprList{
+			{
+				Exprs: []parser.Expr{&parser.IntegerLit{Value: "1"}, &parser.IntegerLit{Value: "2"}},
+			},
+			{
+				Exprs: []parser.Expr{&parser.IntegerLit{Value: "3"}, &parser.IntegerLit{Value: "4"}},
+			},
+		},
+	}, `INSERT INTO "tbl" ("x", "y") VALUES (1, 2), (3, 4)`)
 
 	// AssertStatementStringer(t, &sql.InsertStatement{
 	// 	WithClause: &sql.WithClause{

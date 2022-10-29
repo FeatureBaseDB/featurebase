@@ -2269,15 +2269,50 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 			ColumnsRparen: pos(21),
 			Values:        pos(23),
-			ValueList: &parser.ExprList{
-				Lparen: pos(30),
-				Exprs: []parser.Expr{
-					&parser.IntegerLit{ValuePos: pos(31), Value: "1"},
-					&parser.IntegerLit{ValuePos: pos(34), Value: "2"},
+			TupleList: []*parser.ExprList{
+				{
+					Lparen: pos(30),
+					Exprs: []parser.Expr{
+						&parser.IntegerLit{ValuePos: pos(31), Value: "1"},
+						&parser.IntegerLit{ValuePos: pos(34), Value: "2"},
+					},
+					Rparen: pos(35),
 				},
-				Rparen: pos(35),
 			},
 		})
+
+		// Ensure we can parse multiple tuple values in an INSERT INTO statement.
+		AssertParseStatement(t, `INSERT INTO tbl (x, y) VALUES (1, 2), (3, 4)`, &parser.InsertStatement{
+			Insert:        pos(0),
+			Into:          pos(7),
+			Table:         &parser.Ident{NamePos: pos(12), Name: "tbl"},
+			ColumnsLparen: pos(16),
+			Columns: []*parser.Ident{
+				{NamePos: pos(17), Name: "x"},
+				{NamePos: pos(20), Name: "y"},
+			},
+			ColumnsRparen: pos(21),
+			Values:        pos(23),
+			TupleList: []*parser.ExprList{
+				{
+					Lparen: pos(30),
+					Exprs: []parser.Expr{
+						&parser.IntegerLit{ValuePos: pos(31), Value: "1"},
+						&parser.IntegerLit{ValuePos: pos(34), Value: "2"},
+					},
+					Rparen: pos(35),
+				},
+				{
+					Lparen: pos(38),
+					Exprs: []parser.Expr{
+						&parser.IntegerLit{ValuePos: pos(39), Value: "3"},
+						&parser.IntegerLit{ValuePos: pos(42), Value: "4"},
+					},
+					Rparen: pos(43),
+				},
+			},
+		})
+
 		/*AssertParseStatement(t, `REPLACE INTO tbl (x, y) VALUES (1, 2), (3, 4)`, &parser.InsertStatement{
 			Replace:       pos(0),
 			Into:          pos(8),
@@ -3603,8 +3638,4 @@ func AssertParseExprError(tb testing.TB, s string, want string) {
 // pos is a helper function for generating positions based on offset for one-line parsing.
 func pos(offset int) parser.Pos {
 	return parser.Pos{Offset: offset, Line: 1, Column: offset + 1}
-}
-
-func deepEqual(a, b interface{}) string {
-	return strings.Join(deep.Equal(a, b), "\n")
 }
