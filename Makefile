@@ -45,9 +45,9 @@ vendor: go.mod
 version:
 	@echo $(VERSION)
 
-# We build a list of packages that omits the IDK packages because the IDK
-# packages require fancy environment setup.
-GOPACKAGES := $(shell $(GO) list ./... | grep -v "/idk")
+# We build a list of packages that omits the IDK and batch packages because
+# those packages require fancy environment setup.
+GOPACKAGES := $(shell $(GO) list ./... | grep -v "/idk" | grep -v "/batch")
 
 # Run test suite
 test:

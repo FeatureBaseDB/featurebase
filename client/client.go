@@ -39,8 +39,6 @@ const PQLVersion = "1.0"
 // DefaultShardWidth is used if an index doesn't have it defined.
 const DefaultShardWidth = pilosa.ShardWidth
 
-const maxHosts = 10
-
 // Client is the HTTP client for Pilosa server.
 type Client struct {
 	cluster            *Cluster

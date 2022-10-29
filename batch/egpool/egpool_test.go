@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/client/egpool"
+	"github.com/molecula/featurebase/v3/batch/egpool"
 )
 
 func TestEGPool(t *testing.T) {

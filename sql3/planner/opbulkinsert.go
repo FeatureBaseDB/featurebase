@@ -138,7 +138,11 @@ type bulkInsertCSVRowIter struct {
 	isKeyed   bool
 	options   *bulkInsertOptions
 
-	latch        *struct{}
+	// latch is used to indicate if the CSV has been processed. It will
+	// be set to a non-nil value upon processing. After that, the file
+	// should not be processed again.
+	latch *struct{}
+
 	currentBatch []interface{}
 	lastKeyValue uint64
 }
@@ -146,39 +150,46 @@ type bulkInsertCSVRowIter struct {
 var _ types.RowIterator = (*bulkInsertCSVRowIter)(nil)
 
 func (i *bulkInsertCSVRowIter) Next(ctx context.Context) (types.Row, error) {
-	if i.latch == nil {
-		i.latch = &struct{}{}
-		i.lastKeyValue = 0
+	// If Next has already been called, return early. We only want to process
+	// the file once.
+	if i.latch != nil {
+		return nil, types.ErrNoMoreRows
+	}
 
-		f, err := os.Open(i.options.fileName)
-		if err != nil {
+	// Set latch to indicate that Next() has been called.
+	i.latch = &struct{}{}
+
+	i.lastKeyValue = 0
+
+	f, err := os.Open(i.options.fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	defer f.Close()
+
+	linesRead := 0
+	csvReader := csv.NewReader(f)
+	for {
+		rec, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
 			return nil, err
 		}
 
-		defer f.Close()
+		// do something with read line
+		if err = i.processCSVLine(ctx, rec); err != nil {
+			return nil, err
+		}
+		linesRead += 1
 
-		linesRead := 0
-		csvReader := csv.NewReader(f)
-		for {
-			rec, err := csvReader.Read()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-			// do something with read line
-			err = i.processCSVLine(ctx, rec)
-			if err != nil {
-				return nil, err
-			}
-			linesRead += 1
-			// bail if we have a rows limit and we've hit it
-			if i.options.rowsLimit > 0 && linesRead >= i.options.rowsLimit {
-				break
-			}
+		// bail if we have a rows limit and we've hit it
+		if i.options.rowsLimit > 0 && linesRead >= i.options.rowsLimit {
+			break
 		}
 	}
+
 	return nil, types.ErrNoMoreRows
 }
 

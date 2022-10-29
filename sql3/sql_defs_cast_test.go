@@ -785,7 +785,7 @@ var castStringSet = tableTest{
 				hdr("", fldTypeString),
 			),
 			expRows: rows(
-				row(int64(1), string("[101 102]")),
+				row(int64(1), string(`["101","102"]`)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -800,7 +800,8 @@ var castStringSet = tableTest{
 			expRows: rows(
 				row(int64(1), []string{"101", "102"}),
 			),
-			compare: compareExactUnordered,
+			compare:        compareExactUnordered,
+			sortStringKeys: true,
 		},
 		{
 			sqls: sqls(

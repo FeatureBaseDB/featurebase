@@ -1,0 +1,28 @@
+run go tests batch:
+  extends:
+    - .setup_ssh
+  variables:
+    USERNAME: fb-idk-access
+    PROJECT: batch_${CI_CONCURRENT_ID}
+    GIT_STRATEGY: clone
+  stage: test
+  retry: 1
+  script:
+    - echo "Running test-all"
+    - cd ./batch/
+    - echo $PROJECT
+    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
+  after_script:
+    - make save-pilosa-logs
+    - make shutdown
+  artifacts:
+    paths:
+      - ./batch/testdata/*_coverage.out
+      - ./batch/testdata/*_report.out
+      - ./batch/testdata/*_logs.txt
+  tags:
+    - shell
+    - aws
+  needs:
+    - job: build amd container fb

@@ -51,7 +51,6 @@ type Main struct {
 	Seed int64 `short:"" help:"Seed to use for any random number generation."`
 
 	TrackProgress bool `short:"" help:"Periodically print status updates on how many records have been sourced."`
-	UseIngestAPI  bool `help:"Experimental: use new HTTP/JSON ingest API instead of low-level import API. Probably slow, does not support packed bools."`
 
 	UseShardTransactionalEndpoint bool `flag:"use-shard-transactional-endpoint" help:"Use experimental transactional endpoint"`
 
@@ -281,7 +280,6 @@ func (m *Main) Preload() error {
 		m.idkMain.CacheLength = m.Pilosa.CacheLength
 		m.idkMain.NewSource = m.newSource
 		m.idkMain.TrackProgress = m.TrackProgress
-		m.idkMain.UseIngestAPI = m.UseIngestAPI
 		m.idkMain.AuthToken = m.AuthToken
 		m.idkMain.UseShardTransactionalEndpoint = m.UseShardTransactionalEndpoint
 		if len(m.Pilosa.Hosts) > 0 {

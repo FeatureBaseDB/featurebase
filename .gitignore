@@ -24,6 +24,8 @@ builds/
 *.tfstate.backup
 .vscode
 
+batch/testdata/batch*.out
+
 idk/testdata/idk*.out
 idk/testenv/certs/*
 

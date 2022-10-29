@@ -1,4 +1,5 @@
 include:
+  - local: /.gitlab/batch-ci.yml
   - template: Security/SAST.gitlab-ci.yml
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
@@ -197,7 +198,7 @@ run go tests:
   retry: 1
   script:
     - echo "Running featurebase unit tests..."
-    - go test -v -timeout=10m $(go list ./... | grep -Ev idk)
+    - go test -v -timeout=10m $(go list ./... | grep -Ev 'batch|idk')
   tags:
     - aws
 
@@ -211,7 +212,7 @@ run go tests race:
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
   script:
     - echo "Running featurebase race tests..."
-    - go test -race -v -timeout=10m $(go list ./... | grep -Ev idk)
+    - go test -race -v -timeout=10m $(go list ./... | grep -Ev 'batch|idk')
   tags:
     - aws
 
@@ -223,7 +224,7 @@ run go tests shardwidth22:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase shardwidth22 tests..."
-    - go test -timeout=10m -tags=shardwidth22 -v $(go list ./... | grep -Ev idk)
+    - go test -timeout=10m -tags=shardwidth22 -v $(go list ./... | grep -Ev 'batch|idk')
   tags:
     - aws
 
@@ -239,8 +240,8 @@ run go tests future:
   retry: 1
   script:
     - echo "Running featurebase unit tests..."
-    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev 'idk' | paste -s -d, -)
-    - go test -timeout=10m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev idk) | tee test-report.out
+    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev 'batch|idk' | paste -s -d, -)
+    - go test -timeout=10m -json -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev 'batch|idk') | tee test-report.out
   artifacts:
     paths:
       - coverage.out
@@ -257,8 +258,8 @@ run go tests future plg:
   retry: 1
   script:
     - echo "Running featurebase plg-specific unit tests..."
-    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev 'idk' | paste -s -d, -)
-    - go test -tags=plg -timeout=10m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev idk) | tee test-report-plg.out
+    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev 'batch|idk' | paste -s -d, -)
+    - go test -tags=plg -timeout=10m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev 'batch|idk') | tee test-report-plg.out
   artifacts:
     paths:
       - coverage-plg.out
@@ -399,6 +400,7 @@ run go tests idk sasl:
   needs:
     - job: build amd container fb
 
+
 upload to sonarcloud:
   stage: integration
   image: sonarsource/sonar-scanner-cli:4.6
@@ -407,7 +409,7 @@ upload to sonarcloud:
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/*coverage.out -Dsonar.go.tests.reportPaths=test-report*.out,idk/testdata/*report.out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/*coverage.out,batch/testdata/*coverage.out -Dsonar.go.tests.reportPaths=test-report*.out,idk/testdata/*report.out,batch/testdata/*report.out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests future plg
     - job: run go tests future
@@ -420,6 +422,8 @@ upload to sonarcloud:
     - job: run go tests idk sasl
       optional: true
     - job: run go tests idk 533
+      optional: true
+    - job: run go tests batch
       optional: true
 
 package for linux amd64:

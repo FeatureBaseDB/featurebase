@@ -30,6 +30,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
+	"github.com/molecula/featurebase/v3/batch"
 	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	petcd "github.com/molecula/featurebase/v3/etcd"
@@ -438,9 +439,10 @@ func (m *Command) SetupServer() error {
 	m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
 	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
 
-	executionPlannerFn := func(e pilosa.Executor, a *pilosa.API, s string) sql3.CompilePlanner {
-		fapi := &pilosa.FeatureBaseSchemaAPI{API: a}
-		return planner.NewExecutionPlanner(e, fapi, a, s)
+	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
+		fapi := &pilosa.FeatureBaseSchemaAPI{API: api}
+		fimp := &batch.FeaturebaseImporter{API: api}
+		return planner.NewExecutionPlanner(e, fapi, api, fimp, m.logger, sql)
 	}
 
 	serverOptions := []pilosa.ServerOption{

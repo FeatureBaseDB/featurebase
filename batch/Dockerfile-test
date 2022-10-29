@@ -1,0 +1,11 @@
+ARG GO_VERSION=1.19
+
+FROM golang:${GO_VERSION}
+
+WORKDIR /go/src/github.com/molecula/featurebase/
+
+COPY . .
+
+WORKDIR /go/src/github.com/molecula/featurebase/batch/
+
+CMD ["go","test","-v","-mod=vendor","-tags=odbc,dynamic","./..."]

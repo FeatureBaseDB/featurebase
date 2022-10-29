@@ -1,6 +1,6 @@
 package sql3_test
 
-//IN tests
+// IN tests
 var inTests = tableTest{
 	table: tbl(
 		"in_all_types",
@@ -131,7 +131,7 @@ var inTests = tableTest{
 	},
 }
 
-//NOT IN tests
+// NOT IN tests
 var notInTests = tableTest{
 	table: tbl(
 		"not_in_all_types",

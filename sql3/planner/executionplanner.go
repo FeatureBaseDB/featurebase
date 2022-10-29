@@ -5,9 +5,10 @@ package planner
 import (
 	"context"
 	"encoding/json"
-	"log"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/batch"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -26,15 +27,19 @@ type ExecutionPlanner struct {
 	executor   pilosa.Executor
 	schemaAPI  pilosa.SchemaAPI
 	computeAPI pilosa.ComputeAPI
+	importer   batch.Importer
+	logger     logger.Logger
 	sql        string
 	scopeStack *scopeStack
 }
 
-func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, computeAPI pilosa.ComputeAPI, sql string) *ExecutionPlanner {
+func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, computeAPI pilosa.ComputeAPI, importer batch.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
 	return &ExecutionPlanner{
 		executor:   executor,
 		schemaAPI:  schemaAPI,
 		computeAPI: computeAPI,
+		importer:   importer,
+		logger:     logger,
 		sql:        sql,
 		scopeStack: newScopeStack(),
 	}
@@ -80,10 +85,15 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	}
 
 	// Log the plan. This happens even if an error occurred.
-	if rootOperator != nil {
+	switch rootOperator.(type) {
+	case *PlanOpInsert:
+		// Don't log the insert plan since it can be very large.
+	case nil:
+		// pass
+	default:
 		plan := rootOperator.Plan()
 		a, _ := json.MarshalIndent(plan, "", "    ")
-		log.Println(string(a))
+		p.logger.Debugf(string(a))
 	}
 
 	return rootOperator, err

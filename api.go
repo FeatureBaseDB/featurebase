@@ -3391,6 +3391,11 @@ type ComputeAPI interface {
 	Txf() *TxFactory
 }
 
+// QueryAPI is a subset of the API methods which have to do with query.
+type QueryAPI interface {
+	Query(ctx context.Context, req *QueryRequest) (QueryResponse, error)
+}
+
 // FeatureBaseSchemaAPI is a wrapper around pilosa.API. It implements the
 // SchemaAPI interface with methods which are not a part of pilosa.API.
 type FeatureBaseSchemaAPI struct {

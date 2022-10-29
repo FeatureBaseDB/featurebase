@@ -16,6 +16,7 @@ import (
 
 	"github.com/golang-jwt/jwt"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/batch"
 	pilosaclient "github.com/molecula/featurebase/v3/client"
 	"github.com/molecula/featurebase/v3/idk/idktest"
 	"github.com/molecula/featurebase/v3/logger"
@@ -713,7 +714,7 @@ func TestGetPrimaryKeyRecordizer(t *testing.T) {
 				t.Errorf("unmatched skips exp/got\n%+v\n%+v", test.expSkip, skips)
 			}
 
-			row := &pilosaclient.Row{}
+			row := &batch.Row{}
 			err = rdz(test.rawRec, row)
 			if err != nil {
 				t.Fatalf("unexpected error from recordizer: %v", err)
@@ -750,11 +751,11 @@ func TestBatchFromSchema(t *testing.T) {
 		err             string
 		batchErr        string
 		rdzErrs         []string
-		time            pilosaclient.QuantizedTime
+		time            batch.QuantizedTime
 		lookupWriteIdxs []int
 	}
-	getQuantizedTime := func(t time.Time) pilosaclient.QuantizedTime {
-		qt := pilosaclient.QuantizedTime{}
+	getQuantizedTime := func(t time.Time) batch.QuantizedTime {
+		qt := batch.QuantizedTime{}
 		qt.Set(t)
 		return qt
 	}
@@ -844,13 +845,13 @@ func TestBatchFromSchema(t *testing.T) {
 		{
 			name:    "empty",
 			autogen: true,
-			err:     "can't batch with no fields or batch size",
+			err:     "can't batch with no fields",
 		},
 		{
 			name:    "empty-w/ExtGen",
 			autogen: true,
 			extgen:  true,
-			err:     "can't batch with no fields or batch size",
+			err:     "can't batch with no fields",
 		},
 		{
 			name:    "no id field",
@@ -1275,7 +1276,7 @@ type testSource struct {
 	schema  []Field
 }
 
-func (t *testSource) Close() error {
+func (s *testSource) Close() error {
 	return nil
 }
 

@@ -2018,7 +2018,7 @@ func (l *ExprList) Clone() *ExprList {
 	return &other
 }
 
-/*func cloneExprLists(a []*ExprList) []*ExprList {
+func cloneExprLists(a []*ExprList) []*ExprList {
 	if a == nil {
 		return nil
 	}
@@ -2027,7 +2027,7 @@ func (l *ExprList) Clone() *ExprList {
 		other[i] = a[i].Clone()
 	}
 	return other
-}*/
+}
 
 // String returns the string representation of the expression.
 func (l *ExprList) String() string {
@@ -2775,8 +2775,8 @@ type InsertStatement struct {
 	Columns       []*Ident // optional column list
 	ColumnsRparen Pos      // position of column list right paren
 
-	Values    Pos       // position of VALUES keyword
-	ValueList *ExprList // list of values
+	Values    Pos         // position of VALUES keyword
+	TupleList []*ExprList // multiple tuples
 
 	//	Select *SelectStatement // SELECT statement
 
@@ -2796,7 +2796,7 @@ func (s *InsertStatement) Clone() *InsertStatement {
 	other.Table = s.Table.Clone()
 	other.Alias = s.Alias.Clone()
 	other.Columns = cloneIdents(s.Columns)
-	other.ValueList = s.ValueList.Clone()
+	other.TupleList = cloneExprLists(s.TupleList)
 	//other.Select = s.Select.Clone()
 	//other.UpsertClause = s.UpsertClause.Clone()
 	return &other
@@ -2848,14 +2848,19 @@ func (s *InsertStatement) String() string {
 	//	fmt.Fprintf(&buf, " %s", s.Select.String())
 	//} else {
 	buf.WriteString(" VALUES")
-	buf.WriteString(" (")
-	for j, expr := range s.ValueList.Exprs {
-		if j != 0 {
-			buf.WriteString(", ")
+	for i, tuple := range s.TupleList {
+		if i != 0 {
+			buf.WriteString(",")
 		}
-		buf.WriteString(expr.String())
+		buf.WriteString(" (")
+		for j, expr := range tuple.Exprs {
+			if j != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(expr.String())
+		}
+		buf.WriteString(")")
 	}
-	buf.WriteString(")")
 	//}
 
 	//if s.UpsertClause != nil {

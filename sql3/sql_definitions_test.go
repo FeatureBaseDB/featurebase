@@ -71,7 +71,8 @@ var tableTests []tableTest = []tableTest{
 					row(int64(3), int64(33), []int64{31, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}, pql.NewDecimal(34567, 2)),
 					row(int64(4), int64(44), []int64{41, 42, 43}, int64(401), "str4", []string{"a4", "b4", "c4"}, pql.NewDecimal(45678, 2)),
 				),
-				compare: compareExactUnordered,
+				compare:        compareExactUnordered,
+				sortStringKeys: true,
 			},
 			{
 				// Select all with top.
@@ -92,7 +93,8 @@ var tableTests []tableTest = []tableTest{
 					row(int64(1), int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}, pql.NewDecimal(12345, 2)),
 					row(int64(2), int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}, pql.NewDecimal(23456, 2)),
 				),
-				compare: compareExactUnordered,
+				compare:        compareExactUnordered,
+				sortStringKeys: true,
 			},
 			{
 				// Select all with where on each field.
@@ -114,7 +116,8 @@ var tableTests []tableTest = []tableTest{
 				expRows: rows(
 					row(int64(2), int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}, pql.NewDecimal(23456, 2)),
 				),
-				compare: compareExactOrdered,
+				compare:        compareExactOrdered,
+				sortStringKeys: true,
 			},
 		},
 	},
@@ -158,7 +161,8 @@ var tableTests []tableTest = []tableTest{
 					row("three", int64(33), []int64{31, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
 					row("four", int64(44), []int64{41, 42, 43}, int64(401), "str4", []string{"a4", "b4", "c4"}),
 				),
-				compare: compareExactUnordered,
+				compare:        compareExactUnordered,
+				sortStringKeys: true,
 			},
 			{
 				// Select all with top.
@@ -180,8 +184,9 @@ var tableTests []tableTest = []tableTest{
 					row("three", int64(33), []int64{31, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}),
 					row("four", int64(44), []int64{41, 42, 43}, int64(401), "str4", []string{"a4", "b4", "c4"}),
 				),
-				compare:     compareIncludedIn,
-				expRowCount: 2,
+				compare:        compareIncludedIn,
+				sortStringKeys: true,
+				expRowCount:    2,
 			},
 			{
 				// Select all with where on int field.
@@ -202,7 +207,8 @@ var tableTests []tableTest = []tableTest{
 				expRows: rows(
 					row("two", int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}),
 				),
-				compare: compareExactUnordered,
+				compare:        compareExactUnordered,
+				sortStringKeys: true,
 			},
 		},
 	},
@@ -346,6 +352,9 @@ var tableTests []tableTest = []tableTest{
 	joinTestsOrders,
 	joinTests,
 
+	//bool (batch logic)
+	boolTests,
+
 	//time quantums
 	// Skip for now - timeQuantumInsertTest,
 }
@@ -379,6 +388,15 @@ var insertTest = tableTest{
 			// Replace
 			sqls: sqls(
 				"replace into testinsert (_id, a, b, s, bl, d, event, ievent) values (4, 40, 400, 'foo', false, 10.12, ['A', 'B', 'C'], [1, 2, 3])",
+			),
+			expHdrs: hdrs(),
+			expRows: rows(),
+			compare: compareExactUnordered,
+		},
+		{
+			// Insert multiple tuples
+			sqls: sqls(
+				"insert into testinsert (_id, a, b, s, bl, d, event, ievent) values (4, 40, 400, 'foo', false, 10.12, ['A', 'B', 'C'], [1, 2, 3]), (5, 50, 500, 'var', true, 20.24, ['X', 'Y', 'Z'], [4, 5, 6])",
 			),
 			expHdrs: hdrs(),
 			expRows: rows(),

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1912,8 +1913,27 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		case *parser.DataTypeStringSet:
 			return nl, nil
 		case *parser.DataTypeString:
-			//TODO(pok) come up with a better string representation of string set
-			return fmt.Sprintf("%v", nl), nil
+			sort.Strings(nl)
+
+			var ret strings.Builder
+
+			// open bracket
+			ret.WriteString("[")
+
+			// elements
+			var afterFirst bool
+			for i := range nl {
+				if afterFirst {
+					ret.WriteString(",")
+				}
+				ret.WriteString(`"` + strings.ReplaceAll(nl[i], `"`, `\"`) + `"`)
+				afterFirst = true
+			}
+
+			// close braket
+			ret.WriteString("]")
+
+			return ret.String(), nil
 		}
 
 	case *parser.DataTypeTimestamp:
@@ -2097,17 +2117,12 @@ func (n *exprTupleLiteralPlanExpression) Evaluate(currentRow []interface{}) (int
 		return nil, err
 	}
 
-	//if it is a string, do a coercion
-	val, ok := timestampEval.(string)
-	if ok {
-		if tm, err := time.ParseInLocation(time.RFC3339Nano, val, time.UTC); err == nil {
-			timestampEval = tm
-		} else if tm, err := time.ParseInLocation(time.RFC3339, val, time.UTC); err == nil {
-			timestampEval = tm
-		} else if tm, err := time.ParseInLocation("2006-01-02", val, time.UTC); err == nil {
-			timestampEval = tm
-		} else {
+	// if it is a string, do a coercion
+	if val, ok := timestampEval.(string); ok {
+		if tm, err := timestampFromString(val); err != nil {
 			return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, n.members[0].Type().TypeName())
+		} else {
+			timestampEval = tm
 		}
 	}
 
@@ -2481,4 +2496,18 @@ func wildCardToRegexp(pattern string) string {
 	result.WriteString(rpattern)
 
 	return result.String()
+}
+
+// timeFromString attempts to parse the string to a time.Time using a series of
+// time formats.
+func timestampFromString(s string) (time.Time, error) {
+	if tm, err := time.ParseInLocation(time.RFC3339Nano, s, time.UTC); err == nil {
+		return tm, nil
+	} else if tm, err := time.ParseInLocation(time.RFC3339, s, time.UTC); err == nil {
+		return tm, nil
+	} else if tm, err := time.ParseInLocation("2006-01-02", s, time.UTC); err == nil {
+		return tm, nil
+	}
+
+	return time.Time{}, sql3.NewErrInvalidTypeCoercion(0, 0, s, "time.Time")
 }

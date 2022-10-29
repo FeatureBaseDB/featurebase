@@ -18,7 +18,7 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 	tableName := parser.IdentName(stmt.Table)
 
 	targetColumns := []*qualifiedRefPlanExpression{}
-	insertValues := []types.PlanExpression{}
+	insertValues := [][]types.PlanExpression{}
 
 	table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
 	if err != nil {
@@ -54,12 +54,16 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 	}
 
 	//add expressions from values list
-	for _, expr := range stmt.ValueList.Exprs {
-		e, err := p.compileExpr(expr)
-		if err != nil {
-			return nil, err
+	for _, tuple := range stmt.TupleList {
+		tupleValues := []types.PlanExpression{}
+		for _, expr := range tuple.Exprs {
+			e, err := p.compileExpr(expr)
+			if err != nil {
+				return nil, err
+			}
+			tupleValues = append(tupleValues, e)
 		}
-		insertValues = append(insertValues, e)
+		insertValues = append(insertValues, tupleValues)
 	}
 
 	return NewPlanOpInsert(p, tableName, targetColumns, insertValues), nil
@@ -92,8 +96,10 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 		}
 		// Make sure (implicit) insert list and expression list have the same
 		// number of items.
-		if len(typeNames) != len(stmt.ValueList.Exprs) {
-			return sql3.NewErrInsertExprTargetCountMismatch(stmt.ValueList.Lparen.Line, stmt.ValueList.Lparen.Column)
+		for _, tuple := range stmt.TupleList {
+			if len(typeNames) != len(tuple.Exprs) {
+				return sql3.NewErrInsertExprTargetCountMismatch(tuple.Lparen.Line, tuple.Lparen.Column)
+			}
 		}
 	} else {
 		// Check column list refers to actual columns, and that there are no
@@ -153,24 +159,28 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 		}
 
 		// Make sure insert list and expression list have the same number of items.
-		if len(stmt.Columns) != len(stmt.ValueList.Exprs) {
-			return sql3.NewErrInsertExprTargetCountMismatch(stmt.ValueList.Lparen.Line, stmt.ValueList.Lparen.Column)
+		for _, tuple := range stmt.TupleList {
+			if len(stmt.Columns) != len(tuple.Exprs) {
+				return sql3.NewErrInsertExprTargetCountMismatch(tuple.Lparen.Line, tuple.Lparen.Column)
+			}
 		}
 	}
 
 	// Check each of the expressions.
-	for i, expr := range stmt.ValueList.Exprs {
-		e, err := p.analyzeExpression(expr, stmt)
-		if err != nil {
-			return err
-		}
+	for _, tuple := range stmt.TupleList {
+		for i, expr := range tuple.Exprs {
+			e, err := p.analyzeExpression(expr, stmt)
+			if err != nil {
+				return err
+			}
 
-		// Type check against same ordinal position in column type list.
-		if !typesAreAssignmentCompatible(typeNames[i], e.DataType()) {
-			return sql3.NewErrTypeAssignmentIncompatible(expr.Pos().Line, expr.Pos().Column, e.DataType().TypeName(), typeNames[i].TypeName())
-		}
+			// Type check against same ordinal position in column type list.
+			if !typesAreAssignmentCompatible(typeNames[i], e.DataType()) {
+				return sql3.NewErrTypeAssignmentIncompatible(expr.Pos().Line, expr.Pos().Column, e.DataType().TypeName(), typeNames[i].TypeName())
+			}
 
-		stmt.ValueList.Exprs[i] = e
+			tuple.Exprs[i] = e
+		}
 	}
 
 	return nil
