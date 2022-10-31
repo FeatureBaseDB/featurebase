@@ -16,9 +16,9 @@ jobs:
       - run: ls -alt
       - run: git pull --tags
       - run: git tag -l
-      - run: git describe --tags --always
+      - run: git describe
       - run: .github/workflows/version.sh
-      - run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
+      - run: echo "version=`.github/workflows/version.sh`" >> $GITHUB_OUTPUT
 
   build-lattice:
     runs-on: ubuntu-latest
@@ -84,31 +84,55 @@ jobs:
           name: roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
 
-  # build-ingest:
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     matrix:
-  #       goos:
-  #         - "darwin"
-  #         - "linux"
-  #       goarch:
-  #         - "amd64"
-  #         - "arm64"
+  build-ingest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos:
+          - "darwin"
+          - "linux"
+        goarch:
+          - "amd64"
+          - "arm64"
+
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
     
-    # steps:
-    #   - uses: actions/checkout@v3
+    steps:
+      - uses: actions/checkout@v3
 
-    #   - uses: actions/setup-go@v3
-    #     with:
-    #       go-version: "^1.19.1"
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "^1.19.1"
 
-    #   - name: navigate to ingest
-    #     run: cd idk
+      - name: navigate to ingest
+        run: cd idk
 
-    #   - name: build ingest
-    #     run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/ingest-${{ matrix.goos }}-${{ matrix.goarch }} /cmd/ingester
+      - name: build ingester
+        run: go build -o ./build/ingester-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/ingester
+
+      - name: build consumer-csv
+        run: go build -o ./build/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-csv
       
-    #   - uses: actions/upload-artifact@v3
-    #     with:
-    #       name: ingest-${{ matrix.goos }}-${{ matrix.goarch }}
-    #       path: ./build/ingest-${{ matrix.goos }}-${{ matrix.goarch }}
+      - name: build consumer-kafka-static
+        run: go build -o ./build/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-kafka-static
+
+      - name: build consumer-sql
+        run: go build -o ./build/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-sql
+
+      - name: build consumer-github
+        run: go build -o ./build/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-github
+
+      - name: build consumer-kinesis
+        run: go build -o ./build/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-kinesis
+      
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ingest-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/ingest-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: consumers-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/consumer*
