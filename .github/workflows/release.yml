@@ -17,8 +17,11 @@ jobs:
       - run: git pull --tags
       - run: git tag -l
       - run: git describe
-      - run: .github/workflows/version.sh
-      - run: echo "version=`.github/workflows/version.sh`" >> $GITHUB_OUTPUT
+      - run: |
+          current=$(git describe --tags | grep -Eo '[0-9]*?\.[0-9]*?\.[0-9]*')
+          array=($(echo $current | tr '.' '\n'))
+          array[2]=$((array[2]+1))
+          echo $(IFS="." ; echo "${array[*]}")
 
   build-lattice:
     runs-on: ubuntu-latest
