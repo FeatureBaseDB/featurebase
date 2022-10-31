@@ -9,7 +9,6 @@ on:
 jobs:
   version:
     runs-on: ubuntu-latest
-    id: version
     steps:
       - uses: actions/checkout@v3
       - run: cd $GITHUB_WORKSPACE
