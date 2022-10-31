@@ -15,7 +15,9 @@ jobs:
           fetch-depth: 0
       - run: echo $(git describe --tags)
       - run: echo $(sh .github/workflows/version.sh)
-      - run: echo "version=$(sh ./github/workflows/version.sh)" >> $GITHUB_OUTPUT
+        shell: sh
+      - run: echo "version=$(sh .github/workflows/version.sh)" >> $GITHUB_OUTPUT
+        shell: sh
 
   build-lattice:
     runs-on: ubuntu-latest
