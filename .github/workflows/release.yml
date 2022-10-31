@@ -10,14 +10,15 @@ jobs:
   version:
     runs-on: ubuntu-latest
     steps:
+      - id: version
       - uses: actions/checkout@v3
       - run: cd $GITHUB_WORKSPACE
       - run: pwd
       - run: ls -alt
       - run: git pull --tags
       - run: git describe --tags
-      - run: echo $(sh .github/workflows/version.sh)
-      - run: echo "::set-output version=$(sh .github/workflows/version.sh)"
+      - run: .github/workflows/version.sh
+      - run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
 
   build-lattice:
     runs-on: ubuntu-latest
