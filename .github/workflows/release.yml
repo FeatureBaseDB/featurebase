@@ -63,13 +63,17 @@ jobs:
       - name: build featurebase
         run: |
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/featurebase
-          GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
-
+          GOOS="darwin" GOARCH="arm64" go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/roaring-migrate
 
       - uses: actions/upload-artifact@v3
         with:
           name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
 
   # build-ingest:
   #   runs-on: ubuntu-latest
