@@ -14,6 +14,7 @@ run go tests batch:
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
+    - cd ./batch/
     - make save-pilosa-logs
     - make shutdown
   artifacts:

@@ -289,6 +289,7 @@ run go tests idk race:
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-race
   after_script:
+    - cd ./idk/
     - make save-pilosa-logs
     - make shutdown
   artifacts:
@@ -323,6 +324,7 @@ run go tests idk shard transactional:
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
+    - cd ./idk/
     - make save-pilosa-logs
     - make shutdown
   artifacts:
@@ -351,6 +353,7 @@ run go tests idk 533:
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
     - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
+    - cd ./idk/
     - make save-pilosa-logs
     - make shutdown
   rules:
@@ -383,6 +386,7 @@ run go tests idk sasl:
     - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-kafka-sasl
   after_script:
+    - cd ./idk/
     - make save-pilosa-logs
     - make shutdown
   rules:
