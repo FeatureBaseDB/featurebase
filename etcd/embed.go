@@ -490,7 +490,6 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 	}
 	var (
 		heartbeats int = 0
-		starting   bool
 	)
 	e.nodeMu.Lock()
 	nodes := e.populateNodeStates(ctx)
@@ -500,28 +499,16 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 		return disco.ClusterStateUnknown, err
 	}
 	for _, node := range nodes {
-		switch node.State {
-		case disco.NodeStateStarting:
-			starting = true
-		case disco.NodeStateUnknown:
-			continue
+		if node.State == disco.NodeStateStarted {
+			heartbeats++
 		}
-
-		heartbeats++
 	}
-
-	if starting {
-		return disco.ClusterStateStarting, nil
-	}
-
 	if heartbeats < len(e.knownNodes) {
 		if len(e.knownNodes)-heartbeats >= e.replicas {
 			return disco.ClusterStateDown, nil
 		}
-
 		return disco.ClusterStateDegraded, nil
 	}
-
 	return disco.ClusterStateNormal, nil
 }
 

@@ -118,8 +118,7 @@ func (api *API) SetAPIOptions(opts ...apiOption) error {
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
 var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
-	disco.ClusterStateStarting: methodsCommon,
-	disco.ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
+	disco.ClusterStateNormal: appendMap(methodsCommon, methodsNormal),
 	// Ideally, this would be just `appendMap(methodsCommon, methodsDegraded)`,
 	// but in an attempt to reduce the influence that state (determined by etcd)
 	// has on a node under load, this is set to effectively allow all requests

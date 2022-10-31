@@ -54,7 +54,6 @@ const (
 	InitialClusterStateExisting InitialClusterState = "existing"
 
 	ClusterStateUnknown  ClusterState = "UNKNOWN"  // default cluster state. It is returned when we are not able to get the real actual state.
-	ClusterStateStarting ClusterState = "STARTING" // cluster is starting and some internal services are not ready yet.
 	ClusterStateDegraded ClusterState = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN. Only read queries are allowed.
 	ClusterStateNormal   ClusterState = "NORMAL"   // cluster is up and running.
 	ClusterStateDown     ClusterState = "DOWN"     // cluster is unable to serve queries.
