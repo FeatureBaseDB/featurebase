@@ -106,31 +106,28 @@ jobs:
         with:
           go-version: "^1.19.1"
 
-      - name: navigate to ingest
-        run: cd idk
-
       - name: build ingester
-        run: go build -o ./build/ingester-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/ingester
+        run: go build -o ./build/ingester-${{ matrix.goos }}-${{ matrix.goarch }} ./idk/cmd/ingester
 
       - name: build consumer-csv
-        run: go build -o ./build/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-csv
+        run: go build -o ./build/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} ./idk/cmd/molecula-consumer-csv
       
       - name: build consumer-kafka-static
-        run: go build -o ./build/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-kafka-static
+        run: go build -o ./build/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} ./idk/cmd/molecula-consumer-kafka-static
 
       - name: build consumer-sql
-        run: go build -o ./build/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-sql
+        run: go build -o ./build/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} ./idk/cmd/molecula-consumer-sql
 
       - name: build consumer-github
-        run: go build -o ./build/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-github
+        run: go build -o ./build/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} ./idk/cmd/molecula-consumer-github
 
       - name: build consumer-kinesis
-        run: go build -o ./build/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/molecula-consumer-kinesis
+        run: go build -o ./build/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} ./idk/cmd/molecula-consumer-kinesis
       
       - uses: actions/upload-artifact@v3
         with:
-          name: ingest-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/ingest-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ingester-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/ingester-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - uses: actions/upload-artifact@v3
         with:
