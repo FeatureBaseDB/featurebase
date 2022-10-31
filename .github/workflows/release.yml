@@ -14,7 +14,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: echo $(git describe --tags)
-      - run: echo $(./github/workflows/version.sh)
+      - run: echo $(.github/workflows/version.sh)
       - run: echo "version=$(./github/workflows/version.sh)" >> $GITHUB_OUTPUT
 
   build-lattice:
