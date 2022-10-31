@@ -15,7 +15,8 @@ jobs:
       - run: pwd
       - run: ls -alt
       - run: git pull --tags
-      - run: git describe --tags
+      - run: git tag -l
+      - run: git describe --tags --always
       - run: .github/workflows/version.sh
       - run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
 
