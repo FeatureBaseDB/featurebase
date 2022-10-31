@@ -1,6 +1,10 @@
 name: Release
 
-on: workflow_dispatch
+on: 
+  push:
+    branches:
+      - 'chore/gh2181/release-builds'
+  workflow_dispatch:
 
 jobs:
   version:
