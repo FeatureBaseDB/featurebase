@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/ingest"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
@@ -87,39 +86,6 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	ReadFrom(io.Reader) (int64, error)
 
 	Delete(records *roaring.Bitmap) (Commitor, error)
-}
-
-// This implements ingest's key translator interface, which differs
-// slightly because we want to be able to do fast lookups on arbitrary
-// IDs which are not necessarily contiguous small values, so the []string
-// from TranslateIDs isn't a good fit.
-type ingestKeyTranslator struct {
-	store TranslateStore
-}
-
-var _ ingest.KeyTranslator = &ingestKeyTranslator{}
-
-func (i ingestKeyTranslator) TranslateKeys(keys ...string) (map[string]uint64, error) {
-	return i.store.CreateKeys(keys...)
-}
-
-func (i ingestKeyTranslator) TranslateIDs(ids ...uint64) (map[uint64]string, error) {
-	keys, err := i.store.TranslateIDs(ids)
-	if err != nil {
-		return nil, err
-	}
-	if len(keys) != len(ids) {
-		return nil, fmt.Errorf("translating %d id(s), got %d key(s)", len(ids), len(keys))
-	}
-	out := make(map[uint64]string, len(keys))
-	for i, id := range ids {
-		out[id] = keys[i]
-	}
-	return out, nil
-}
-
-func newIngestKeyTranslatorFromStore(s TranslateStore) *ingestKeyTranslator {
-	return &ingestKeyTranslator{store: s}
 }
 
 // TranslatorSummary is returned, for example from the boltdb string key translators,

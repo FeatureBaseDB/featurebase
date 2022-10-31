@@ -345,110 +345,15 @@ func TestUpdateFieldNoStandardView(t *testing.T) {
 	}
 }
 
-func TestIngestSchemaHandler(t *testing.T) {
-	c := test.MustRunCluster(t, 3)
-	defer c.Close()
-
-	schema := fmt.Sprintf(`
-{
-   "index-name": "%s",
-   "primary-key-type": "string",
-   "index-action": "create",
-   "fields": [
-       {
-           "field-name": "idset",
-           "field-type": "id",
-           "field-options": {
-				"cache-type": "none"
-           }
-       },
-       {
-           "field-name": "id",
-           "field-type": "id",
-           "field-options": {
-               "enforce-mutual-exclusion": true
-           }
-       },
-       {
-           "field-name": "bool",
-           "field-type": "bool"
-       },
-       {
-           "field-name": "stringset",
-           "field-type": "string",
-           "field-options": {
-				"cache-type": "ranked",
-           		"cache-size": 100000
-           }
-       },
-       {
-           "field-name": "string",
-           "field-type": "string",
-           "field-options": {
-               "enforce-mutual-exclusion": true
-           }
-       },
-       {
-           "field-name": "int",
-           "field-type": "int"
-       },
-       {
-           "field-name": "decimal",
-           "field-type": "decimal",
-           "field-options": {
-               "scale": 2
-           }
-       },
-       {
-           "field-name": "timestamp",
-           "field-type": "timestamp",
-           "field-options": {
-               "epoch": "1996-12-19T16:39:57-08:00",
-               "unit": "µs"
-           }
-       },
-       {
-           "field-name": "quantum",
-           "field-type": "string",
-           "field-options": {
-               "time-quantum": "YMDH"
-           }
-       }
-   ]
-}
-`, c)
-	m := c.GetPrimary()
-	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
-	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
-	}
-	// now, try again, expecting a failure:
-	resp = test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != http.StatusConflict {
-		t.Errorf("invalid status: expected 409, got %d, body=%s", resp.StatusCode, resp.Body)
-	}
-}
-
 func TestPostFieldWithTTL(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	indexName := c.Idx("%s")
-
-	schema := fmt.Sprintf(`
-	{
-		"index-name": "%s",
-		"primary-key-type": "string",
-		"index-action": "create",
-		"fields":[]
-	 }
-	`, c)
-	m := c.GetPrimary()
-	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
-	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	indexName := c.Idx("s")
+	_, err := c.GetNode(0).API.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{Keys: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
 	}
+	m := c.GetPrimary()
 
 	tests := []struct {
 		name      string
@@ -543,27 +448,15 @@ func TestGetViewAndDelete(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	schema := fmt.Sprintf(`
-	{
-		"index-name": "%s",
-		"primary-key-type": "string",
-		"index-action": "create",
-		"fields": [
-			{
-				"field-name": "test_view",
-				"field-type": "time",
-				"field-options": {
-					"time-quantum": "YMDH"
-				}
-			}
-		]
-	 }
-	 `, c)
 	m := c.GetPrimary()
-	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
-	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+
+	_, err := m.API.CreateIndex(context.Background(), c.Idx("s"), pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	_, err = m.API.CreateField(context.Background(), c.Idx("s"), "test_view", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0"))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
 	}
 
 	// Send sample data
@@ -658,30 +551,16 @@ func TestTranslationHandlers(t *testing.T) {
 
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-
-	schema := fmt.Sprintf(`
-{
-   "index-name": "%s",
-   "primary-key-type": "string",
-   "index-action": "create",
-   "fields": [
-       {
-           "field-name": "stringset",
-           "field-type": "string",
-           "field-options": {
-				"cache-type": "ranked",
-           		"cache-size": 100000
-           }
-       }
-   ]
-}
-`, c)
 	m := c.GetPrimary()
-	schemaURL := fmt.Sprintf("%s/internal/schema", m.URL())
-	resp := test.Do(t, "POST", schemaURL, string(schema))
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	_, err = m.API.CreateIndex(context.Background(), c.Idx("s"), pilosa.IndexOptions{Keys: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
 	}
+	_, err = m.API.CreateField(context.Background(), c.Idx("s"), "stringset", pilosa.OptFieldTypeSet("ranked", 100000), pilosa.OptFieldKeys())
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
 	baseURLs := []string{
 		fmt.Sprintf("%s/internal/translate/index/%s/", m.URL(), c),
 		fmt.Sprintf("%s/internal/translate/field/%s/stringset/", m.URL(), c),
@@ -802,9 +681,17 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 	defer c.Close()
 
 	m := c.GetPrimary()
-	index := "allowed-networks-index"
-	keyedIndex := "allowed-networks-index-keyed"
+	index := c.Idx("s")
+	keyedIndex := c.Idx("k")
 	field := "field1"
+
+	// This keyed index used to be created by the Post-Schema subtest, but that doesn't
+	// exist anymore, so we create it up here. We don't create the other one because it's
+	// supposed to get created by Post-Index.
+	_, err = m.API.CreateIndex(context.Background(), c.Idx("k"), pilosa.IndexOptions{Keys: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
 
 	// needed for key translation
 	nameBytes, err := json.Marshal([]string{"a", "b", "c"})
@@ -812,24 +699,6 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 		t.Fatalf("marshalling json: %v", err)
 	}
 	names := string(nameBytes)
-
-	schema := `
-	{
-	   "index-name": "allowed-networks-index-keyed",
-	   "primary-key-type": "string",
-	   "index-action": "create",
-	   "fields": [
-		   {
-			   "field-name": "stringset",
-			   "field-type": "string",
-			   "field-options": {
-					"cache-type": "ranked",
-					   "cache-size": 100000
-			   }
-		   }
-	   ]
-	}
-	`
 
 	IPTests := []struct {
 		TestName   string
@@ -863,12 +732,6 @@ admin: "ac97c9e2-346b-42a2-b6da-18bcb61a32fe"`
 			method:   "GET",
 			url:      fmt.Sprintf("%s/schema", m.URL()),
 			body:     "",
-		},
-		{
-			testName: "Post-Schema",
-			method:   "POST",
-			url:      fmt.Sprintf("%s/internal/schema", m.URL()),
-			body:     schema,
 		},
 		{
 			testName: "Get-Shards",
