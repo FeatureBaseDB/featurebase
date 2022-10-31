@@ -15,6 +15,32 @@ jobs:
       - run: echo $(sh .github/workflows/version.sh)
       - run: echo "::set-output version=$(sh .github/workflows/version.sh)"
 
+  build-lattice:
+    runs-on: ubuntu-latest
+    needs: 
+      - version
+    
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - run: |
+          cd lattice
+          yarn install
+          yarn build
+          mv build ../
+          cd ../
+          rm -r lattice
+          mv build lattice
+          tar -czvf lattice.tar.gz lattice
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: lattice.tar.gz
+          path: ./lattice.tar.gz
+
   build-featurebase:
     runs-on: ubuntu-latest
     needs: 
@@ -36,7 +62,10 @@ jobs:
           go-version: "^1.19.1"
 
       - name: build featurebase
-        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/featurebase
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/featurebase
+          GOOS="darwin" GOARCH="arm64" go build -o roaring-migrate_darwin_arm64 ./cmd/roaring-migrate
+
 
       - uses: actions/upload-artifact@v3
         with:
