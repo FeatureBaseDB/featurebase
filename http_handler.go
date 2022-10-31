@@ -585,10 +585,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/index/{index}/shards", handler.chkAuthZ(handler.handleGetIndexAvailableShards, authz.Read)).Methods("GET").Name("GetIndexAvailableShards")
 	router.HandleFunc("/internal/nodes", handler.chkAuthN(handler.handleGetNodes)).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.chkAuthN(handler.handleGetShardsMax)).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
-	router.HandleFunc("/internal/ingest/{index}", handler.chkAuthZ(handler.handlePostIngestData, authz.Write)).Methods("POST").Name("PostIngestData")
-	router.HandleFunc("/internal/ingest/{index}/node", handler.chkAuthZ(handler.handlePostIngestNode, authz.Write)).Methods("POST").Name("PostIngestNode")
 
-	router.HandleFunc("/internal/schema", handler.chkAuthZ(handler.handleIngestSchema, authz.Admin)).Methods("POST").Name("PostIngestSchema")
 	router.HandleFunc("/internal/translate/index/{index}/keys/find", handler.chkAuthZ(handler.handleFindIndexKeys, authz.Admin)).Methods("POST").Name("FindIndexKeys")
 	router.HandleFunc("/internal/translate/index/{index}/keys/create", handler.chkAuthZ(handler.handleCreateIndexKeys, authz.Admin)).Methods("POST").Name("CreateIndexKeys")
 	router.HandleFunc("/internal/translate/index/{index}/{partition}", handler.chkAuthZ(handler.handlePostTranslateIndexDB, authz.Admin)).Methods("POST").Name("PostTranslateIndexDB")
@@ -2088,40 +2085,6 @@ func (h *Handler) handlePatchField(w http.ResponseWriter, r *http.Request) {
 	resp.write(w, err)
 }
 
-// handlePostIngestData handles JSON ingest data that may need key
-// translation, for the entire cluster.
-func (h *Handler) handlePostIngestData(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-
-	indexName, ok := mux.Vars(r)["index"]
-	if !ok {
-		http.Error(w, "index name is required", http.StatusBadRequest)
-		return
-	}
-
-	qcx := h.api.Txf().NewQcx()
-	err := h.api.IngestOperations(r.Context(), qcx, indexName, r.Body)
-	if err != nil {
-		qcx.Abort()
-		switch e := err.(type) {
-		case RedirectError:
-			http.Redirect(w, r, e.HostPort+r.URL.Path, http.StatusPermanentRedirect)
-			return
-		}
-	}
-	err = qcx.Finish()
-	if err != nil {
-		http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	resp := successResponse{h: h, Name: indexName}
-	resp.write(w, err)
-}
-
 type ingestSpec struct {
 	IndexName      string      `json:"index-name"`
 	IndexAction    string      `json:"index-action"`
@@ -2181,79 +2144,6 @@ func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
 	opt.TTL = fSpec.FieldOptions.TTL
 
 	return opt
-}
-
-func (h *Handler) handleIngestSchema(w http.ResponseWriter, r *http.Request) {
-	if !validHeaderAcceptJSON(r.Header) {
-		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
-		return
-	}
-
-	resp := successResponse{h: h}
-
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	schema := ingestSpec{}
-	// if a key in cleanupIndexes points to a 0-length slice, the
-	// entire index should be cleaned; otherwise, only the named
-	// fields within that index should be cleaned.
-	cleanupIndexes := map[string][]string{}
-	var schemaErr error
-	defer func() {
-		// we set schemaErr in any case where we need to do cleanup
-		if schemaErr != nil {
-			for index, fields := range cleanupIndexes {
-				if len(fields) == 0 {
-					err := h.api.DeleteIndex(r.Context(), index)
-					if err != nil {
-						h.logger.Printf("deleting index %q after schema err: %v", index, err)
-					}
-				} else {
-					for _, field := range fields {
-						err := h.api.DeleteField(r.Context(), index, field)
-						if err != nil {
-							h.logger.Printf("deleting field %q from index %q after schema err: %v", field, index, err)
-						}
-					}
-				}
-			}
-		}
-	}()
-	for dec.More() {
-		err := dec.Decode(&schema)
-		if err != nil {
-			resp.write(w, err)
-			return
-		}
-		index, fields, err := h.api.ApplyOneIngestSchema(r.Context(), &schema)
-		if err != nil {
-			switch e := err.(type) {
-			case RedirectError:
-				http.Redirect(w, r, e.HostPort+r.URL.Path, http.StatusPermanentRedirect)
-				return
-			default:
-				// if a previous schema created things, clean them up...
-				schemaErr = err
-				resp.write(w, err)
-				return
-			}
-		}
-		// we only have one slot to report these, sorry.
-		resp.Name = index.Name()
-		resp.CreatedAt = index.CreatedAt()
-		cleanupIndexes[index.Name()] = fields
-	}
-	// if we got here, we have a cleanupIndexes which we want to return,
-	// so we want to do that *instead* of the successResponse we'd be
-	// using otherwise (ironically, to indicate an error)
-	var mapBody []byte
-	var err error
-	if mapBody, err = json.Marshal(cleanupIndexes); err != nil {
-		resp.write(w, err)
-	}
-	if _, err = w.Write(mapBody); err != nil {
-		h.logger.Printf("error trying to write response: %v", err)
-	}
 }
 
 type postFieldRequest struct {
@@ -3598,52 +3488,6 @@ func (h *Handler) handlePostShardImportRoaring(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		h.logger.Errorf("writing shard-import-roaring response: %v", err)
 		return
-	}
-}
-
-// handlePostIngestNode is the internal endpoint taking already-translated
-// ingest operations, sorted by shard, for a single node.
-func (h *Handler) handlePostIngestNode(w http.ResponseWriter, r *http.Request) {
-	// Verify that request is only communicating over protobufs.
-	if error, code := validateProtobufHeader(r); error != "" {
-		http.Error(w, error, code)
-		return
-	}
-
-	ctx := r.Context()
-
-	// Read entire body.
-	span, _ := tracing.StartSpanFromContext(ctx, "io.ReadAll-Body")
-	body, err := readBody(r)
-	span.LogKV("bodySize", len(body))
-	span.Finish()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	req := &ingest.ShardedRequest{}
-	span, _ = tracing.StartSpanFromContext(ctx, "Unmarshal")
-	err = h.serializer.Unmarshal(body, req)
-	span.Finish()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	urlVars := mux.Vars(r)
-	indexName := urlVars["index"]
-
-	qcx := h.api.Txf().NewQcx()
-	err = h.api.IngestNodeOperations(r.Context(), qcx, indexName, req)
-	if err == nil {
-		err = qcx.Finish()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
-		}
-	} else {
-		http.Error(w, fmt.Sprintf("ingesting: %v", err), http.StatusInternalServerError)
-		qcx.Abort()
 	}
 }
 

@@ -522,72 +522,6 @@ func TestAPI_Ingest(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
-	t.Run("IngestAPI", func(t *testing.T) {
-		sampleJson := []byte(`
-	[
-	  {
-	    "action": "set",
-	    "records": {
-	      "2": {
-		"set": [2],
-		"tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [6] }
-	      },
-	      "5": { "set": [3] },
-	      "8": { "set": [3] },
-	      "1": {
-		"set": [2],
-		"tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [3, 4] }
-	      },
-	      "4": { "set": [3, 7] }
-	    }
-	  },
-	  {
-	    "action": "clear",
-	    "record_ids": [ 5, 6, 7 ],
-	    "fields": [ "tq", "set" ]
-	  },
-	  {
-	    "action": "write",
-	    "records": {
-	      "8": { "tq": { "time": "2006-01-02T15:04:05.999999999Z", "values": [3, 4] } },
-	      "9": { "set": [7, 3] }
-	    }
-	  },
-	  {
-	    "action": "delete",
-	    "record_ids": [ 9 ]
-	  }
-	]
-	`)
-		// just for set row 3:
-		// first operation should set it for 4, 5, and 8.
-		// clear operation should clear it for 5, 6, and 7, leaving it still set for 4 and 8.
-		// the write operation should clear set for record 8, even though record 8 doesn't
-		// contain that field in that op, because set is present in record 9, which also
-		// gets row 3 set. but then we delete 9.
-		// so after all that we expect Row(set=3) to be 4...
-		sampleBuf := bytes.NewBuffer(sampleJson)
-		qcx := coord.API.Txf().NewQcx()
-		defer func() {
-			if err := qcx.Finish(); err != nil {
-				t.Fatalf("finishing qcx: %v", err)
-			}
-		}()
-		err = coord.API.IngestOperations(ctx, qcx, index, sampleBuf)
-		if err != nil {
-			t.Fatalf("importing data: %v", err)
-		}
-		query := "Row(set=3)"
-		res, err := coord.API.Query(context.Background(), &pilosa.QueryRequest{Index: index, Query: query})
-		if err != nil {
-			t.Errorf("query: %v", err)
-		}
-		r := res.Results[0].(*pilosa.Row).Columns()
-		if len(r) != 1 || r[0] != 4 {
-			t.Fatalf("expected row with 4 set, got %d", r)
-		}
-	})
-
 	t.Run("ImportRoaringShard", func(t *testing.T) {
 		setBuf := &bytes.Buffer{}
 		setBits := roaring.NewBitmap(7, pilosa.ShardWidth+7)
@@ -696,55 +630,6 @@ func ingestBenchmarkHelper() []byte {
 	buf.WriteString(`}}]`)
 	data := buf.Bytes()
 	return data
-}
-
-func BenchmarkIngest(b *testing.B) {
-	b.StopTimer()
-	data := ingestBenchmarkHelper()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	c := test.MustRunCluster(b, 1)
-	defer c.Close()
-
-	coord := c.GetPrimary()
-	m0 := c.GetNode(0)
-	// m1 := c.GetNode(1)
-	// m2 := c.GetNode(2)
-
-	index := c.Idx()
-	setField := "set"
-	intField := "int"
-	tqField := "tq"
-	_, err := coord.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
-	if err != nil {
-		b.Fatalf("creating index: %v", err)
-	}
-	_, err = coord.API.CreateField(ctx, index, setField, pilosa.OptFieldTypeSet("none", 0))
-	if err != nil {
-		b.Fatalf("creating field: %v", err)
-	}
-	_, err = coord.API.CreateField(ctx, index, intField, pilosa.OptFieldTypeInt(0, 163840))
-	if err != nil {
-		b.Fatalf("creating field: %v", err)
-	}
-	_, err = coord.API.CreateField(ctx, index, tqField, pilosa.OptFieldTypeTime("YMDH", "0"))
-	if err != nil {
-		b.Fatalf("creating field: %v", err)
-	}
-	b.ReportAllocs()
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		qcx := m0.API.Txf().NewQcx()
-		defer qcx.Abort()
-		err = coord.API.IngestOperations(ctx, qcx, index, bytes.NewBuffer(data))
-		if err != nil {
-			b.Fatalf("ingest: %v", err)
-		}
-		err = qcx.Finish()
-		if err != nil {
-			b.Fatalf("finish: %v", err)
-		}
-	}
 }
 
 func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {

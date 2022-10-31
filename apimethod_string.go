@@ -42,14 +42,12 @@ func _() {
 	_ = x[apiIDCommit-31]
 	_ = x[apiIDReset-32]
 	_ = x[apiPartitionNodes-33]
-	_ = x[apiIngestOperations-34]
-	_ = x[apiIngestNodeOperations-35]
-	_ = x[apiMutexCheck-36]
+	_ = x[apiMutexCheck-34]
 }
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldTranslateDataapiFieldapiImportapiImportValueapiIndexapiQueryapiRecalculateCachesapiSchemaapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDResetapiPartitionNodesapiIngestOperationsapiIngestNodeOperationsapiMutexCheck"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldTranslateDataapiFieldapiImportapiImportValueapiIndexapiQueryapiRecalculateCachesapiSchemaapiShardNodesapiStateapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransactionapiActiveQueriesapiPastQueriesapiIDReserveapiIDCommitapiIDResetapiPartitionNodesapiMutexCheck"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 210, 218, 227, 241, 249, 257, 277, 286, 299, 307, 315, 329, 348, 368, 383, 400, 416, 430, 442, 453, 463, 480, 499, 522, 535}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 210, 218, 227, 241, 249, 257, 277, 286, 299, 307, 315, 329, 348, 368, 383, 400, 416, 430, 442, 453, 463, 480, 493}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {

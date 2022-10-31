@@ -791,34 +791,6 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 	return schemaInfo.Indexes, nil
 }
 
-func (c *Client) IngestSchema(reqBody map[string]interface{}) (body []byte, err error) {
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return data, errors.Wrap(err, "error building Schema body to Ingest")
-	}
-	return c.IngestRequest("/internal/schema", data)
-}
-
-func (c *Client) IngestData(index string, reqBody []map[string]interface{}) (body []byte, err error) {
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return data, errors.Wrap(err, "error building request body to Ingest")
-	}
-	return c.IngestRequest("/internal/ingest/"+index, data)
-}
-
-func (c *Client) IngestRequest(uri string, data []byte) (body []byte, err error) {
-	var header = make(map[string]string)
-	header["Content-Type"] = "application/json"
-	header["Accept"] = "application/json"
-	header["User-Agent"] = "pilosa/" + pilosa.Version
-	status, body, err := c.HTTPRequest("POST", uri, data, header)
-	if err != nil {
-		return nil, errors.Wrapf(err, "requesting %s status: %d", uri, status)
-	}
-	return body, err
-}
-
 func (c *Client) shardsMax() (map[string]uint64, error) {
 	_, data, err := c.HTTPRequest("GET", "/internal/shards/max", nil, nil)
 	if err != nil {

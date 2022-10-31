@@ -12,7 +12,6 @@ require (
 	github.com/aws/aws-sdk-go v1.42.39
 	github.com/beevik/ntp v0.3.0
 	github.com/benbjohnson/immutable v0.3.0
-	github.com/buger/jsonparser v1.1.1
 	github.com/cespare/xxhash v1.1.0
 	github.com/chzyer/readline v1.5.0
 	github.com/confluentinc/confluent-kafka-go v1.9.1

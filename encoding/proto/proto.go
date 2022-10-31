@@ -295,19 +295,6 @@ func (s Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		*mt = s.decodeRowMatrix(msg)
 		return nil
-
-	case *ingest.ShardedRequest:
-		msg := &pb.ShardedIngestRequest{}
-		err := proto.Unmarshal(buf, msg)
-		if err != nil {
-			return errors.Wrap(err, "unmarshalling ShardedRequest")
-		}
-		req, err := s.decodeShardedIngestRequest(msg)
-		if err != nil {
-			return err
-		}
-		*mt = *req
-		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -377,8 +364,6 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeTransactionMessage(mt)
 	case *pilosa.AtomicRecord:
 		return s.encodeAtomicRecord(mt)
-	case *ingest.ShardedRequest:
-		return s.encodeShardedIngestRequest(mt)
 	}
 	return nil
 }
@@ -899,48 +884,6 @@ func (s Serializer) encodeTransactionDeadline(deadline time.Time) int64 {
 
 func (s Serializer) encodeTransactionStats(stats pilosa.TransactionStats) *pb.TransactionStats {
 	return &pb.TransactionStats{}
-}
-
-func (s Serializer) encodeShardedIngestRequest(req *ingest.ShardedRequest) *pb.ShardedIngestRequest {
-	if req == nil || len(req.Ops) == 0 {
-		return &pb.ShardedIngestRequest{}
-	}
-	out := &pb.ShardedIngestRequest{Ops: make(map[uint64]*pb.ShardIngestOperations, len(req.Ops))}
-	for shard, ops := range req.Ops {
-		out.Ops[shard] = s.encodeShardIngestOperations(ops)
-	}
-	return out
-}
-
-func (s Serializer) encodeShardIngestOperations(ops []*ingest.Operation) *pb.ShardIngestOperations {
-	out := &pb.ShardIngestOperations{}
-	for _, op := range ops {
-		if op == nil {
-			continue
-		}
-		out.Ops = append(out.Ops, s.encodeShardIngestOperation(op))
-	}
-	return out
-}
-
-func (s Serializer) encodeShardIngestOperation(op *ingest.Operation) *pb.ShardIngestOperation {
-	out := &pb.ShardIngestOperation{
-		OpType:         op.OpType.String(),
-		ClearRecordIDs: op.ClearRecordIDs,
-		ClearFields:    op.ClearFields,
-		FieldOps:       make(map[string]*pb.FieldOperation, len(op.FieldOps)),
-	}
-	for k, v := range op.FieldOps {
-		if v == nil {
-			continue
-		}
-		out.FieldOps[k] = &pb.FieldOperation{
-			RecordIDs: v.RecordIDs,
-			Values:    v.Values,
-			Signed:    v.Signed,
-		}
-	}
-	return out
 }
 
 func (s Serializer) decodeSchema(sc *pb.Schema, m *pilosa.Schema) {
@@ -1844,58 +1787,4 @@ func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 		NewVersion: true,
 	}
 	return retval
-}
-
-func (s Serializer) decodeShardedIngestRequest(req *pb.ShardedIngestRequest) (*ingest.ShardedRequest, error) {
-	if req == nil || len(req.Ops) == 0 {
-		return &ingest.ShardedRequest{}, nil
-	}
-	out := &ingest.ShardedRequest{Ops: make(map[uint64][]*ingest.Operation, len(req.Ops))}
-	for shard, ops := range req.Ops {
-		var err error
-		out.Ops[shard], err = s.decodeShardIngestOperations(ops)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
-}
-
-func (s Serializer) decodeShardIngestOperations(ops *pb.ShardIngestOperations) ([]*ingest.Operation, error) {
-	out := []*ingest.Operation{}
-	if len(ops.Ops) == 0 {
-		return out, nil
-	}
-	for _, op := range ops.Ops {
-		if op == nil {
-			continue
-		}
-		decoded, err := s.decodeShardIngestOperation(op)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, decoded)
-	}
-	return out, nil
-}
-
-func (s Serializer) decodeShardIngestOperation(op *pb.ShardIngestOperation) (*ingest.Operation, error) {
-	opType, err := ingest.ParseOpType(op.OpType)
-	if err != nil {
-		return nil, err
-	}
-	out := &ingest.Operation{
-		OpType:         opType,
-		ClearRecordIDs: op.ClearRecordIDs,
-		ClearFields:    op.ClearFields,
-		FieldOps:       make(map[string]*ingest.FieldOperation, len(op.FieldOps)),
-	}
-	for k, v := range op.FieldOps {
-		out.FieldOps[k] = &ingest.FieldOperation{
-			RecordIDs: v.RecordIDs,
-			Values:    v.Values,
-			Signed:    v.Signed,
-		}
-	}
-	return out, nil
 }
