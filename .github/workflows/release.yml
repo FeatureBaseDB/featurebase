@@ -57,6 +57,10 @@ jobs:
           - "amd64"
           - "arm64"
 
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+
     steps:
       - uses: actions/checkout@v3
 
@@ -66,8 +70,8 @@ jobs:
 
       - name: build featurebase
         run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/featurebase
-          GOOS="darwin" GOARCH="arm64" go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/roaring-migrate
+          go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/featurebase
+          go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/roaring-migrate
 
       - uses: actions/upload-artifact@v3
         with:
