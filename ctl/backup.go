@@ -61,7 +61,8 @@ type BackupCommand struct { // nolint: maligned
 
 	TLS server.TLSConfig
 
-	AuthToken string
+	AuthToken        string
+	IgnoreSpaceCheck bool
 }
 
 // NewBackupCommand returns a new instance of BackupCommand.
@@ -142,13 +143,15 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	// Ensure output directory doesn't exist; then create output directory.
 	if _, err := os.Stat(cmd.OutputDir); !os.IsNotExist(err) {
 		return fmt.Errorf("output directory already exists")
-	} else if err := os.MkdirAll(cmd.OutputDir, 0750); err != nil {
+	} else if err := os.MkdirAll(cmd.OutputDir, 0o750); err != nil {
 		return err
 	}
 
-	// Ensure there is enough free space
-	if err := cmd.checkFreeSpace(ctx); err != nil {
-		return fmt.Errorf("not enough disk space available: %w", err)
+	if !cmd.IgnoreSpaceCheck {
+		// Ensure there is enough free space
+		if err := cmd.checkFreeSpace(ctx); err != nil {
+			return fmt.Errorf("not enough disk space available: %w", err)
+		}
 	}
 
 	// Backup schema.
@@ -193,7 +196,7 @@ func (cmd *BackupCommand) backupSchema(ctx context.Context, schema *pilosa.Schem
 		return fmt.Errorf("marshaling schema: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(cmd.OutputDir, "schema"), buf, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(cmd.OutputDir, "schema"), buf, 0o600); err != nil {
 		return fmt.Errorf("writing schema: %w", err)
 	}
 
@@ -334,14 +337,13 @@ func (cmd *BackupCommand) backupShardNode(ctx context.Context, indexName string,
 		pilosa.WithClientRetryPeriod(cmd.RetryPeriod),
 		pilosa.WithSerializer(proto.Serializer{}))
 	rc, err := client.ShardReader(ctx, indexName, shard)
-
 	if err != nil {
 		return fmt.Errorf("fetching shard reader: %w", err)
 	}
 	defer rc.Close()
 
 	filename := filepath.Join(cmd.OutputDir, "indexes", indexName, "shards", fmt.Sprintf("%04d", shard))
-	if err := os.MkdirAll(filepath.Dir(filename), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filename), 0o750); err != nil {
 		return err
 	}
 
@@ -399,7 +401,7 @@ func (cmd *BackupCommand) backupIndexPartitionTranslateData(ctx context.Context,
 	defer rc.Close()
 
 	filename := filepath.Join(cmd.OutputDir, "indexes", name, "translate", fmt.Sprintf("%04d", partitionID))
-	if err := os.MkdirAll(filepath.Dir(filename), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filename), 0o750); err != nil {
 		return err
 	}
 
@@ -428,7 +430,7 @@ func (cmd *BackupCommand) backupFieldTranslateData(ctx context.Context, indexNam
 	defer rc.Close()
 
 	filename := filepath.Join(cmd.OutputDir, "indexes", indexName, "fields", fieldName, "translate")
-	if err := os.MkdirAll(filepath.Dir(filename), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filename), 0o750); err != nil {
 		return err
 	}
 
