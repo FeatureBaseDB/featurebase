@@ -34,16 +34,33 @@ while ! $okay && [ $tries -le $max_tries ] ; do
 	terraform output -json > outputs.json
 	echo "Outputs:"
 	cat outputs.json
-	must_get_value outputs.json TMP_I .ingest_ips 0 '"value"' 0
-	must_get_value outputs.json TMP_D .data_node_ips 0 '"value"' 0
+	get_value outputs.json TMP_I .ingest_ips 0 '"value"' 0
+	get_value outputs.json TMP_D .data_node_ips 0 '"value"' 0
 	echo "TF status: $tf, ingest_ips $TMP_I, data_node_ips $TMP_D"
-	case $TMP_I.$TMP_D in
-	*null*)	echo >&2 "looks like we failed, null in IPs."
-		tries=$(expr $tries + 1)
+	okay_i=false
+	okay_d=false
+	case $TMP_I in
+	null)	echo >&2 "looks like we failed, null in ingest IPs."
 		;;
-	*)	okay=true
+	"")	echo >&2 "looks like we failed, empty string in ingest IPs."
+		;;
+	*)	okay_i=true
 		;;
 	esac
+	case $TMP_D in
+	null)	echo >&2 "looks like we failed, null in data IPs."
+		;;
+	"")	echo >&2 "looks like we failed, empty string in data IPs."
+		;;
+	*)	okay_d=true
+		;;
+	esac
+	if $okay_i && $okay_d; then
+		okay=true
+	else
+		echo >&2 "retrying"
+		tries=$(expr $tries + 1)
+	fi
 done
 echo "okay $okay, tries $tries"
 if ! $okay; then
