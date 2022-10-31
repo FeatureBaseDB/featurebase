@@ -16,7 +16,6 @@ jobs:
       - run: ls -alt
       - run: git pull --tags
       - run: git tag -l
-      - run: git describe
       - run: |
           current=$(git describe --tags | grep -Eo '[0-9]*?\.[0-9]*?\.[0-9]*')
           array=($(echo $current | tr '.' '\n'))
