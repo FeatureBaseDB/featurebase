@@ -73,7 +73,6 @@ jobs:
 
       - name: build featurebase
         run: |
-          make build FLAGS="-o ./build/featurebase-from-make-${{ matrix.goos }}-${{ matrix.goarch }}" ./cmd/featurebase
           go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/featurebase
           go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/roaring-migrate
 
@@ -81,11 +80,6 @@ jobs:
         with:
           name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: featurebase-from-make-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/featurebase-from-make-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - uses: actions/upload-artifact@v3
         with:
