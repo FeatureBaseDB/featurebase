@@ -695,29 +695,29 @@ func (s *Server) Open() error {
 		if !timer.Stop() {
 			<-timer.C
 		}
+		// wait for cluster to achieve Normal state
+		//
+		// This used to loop as long as the cluster was Starting, Down,
+		// or Unknown. It would come up in a Degraded state, except
+		// that during startup, as long as at least one node was Starting,
+		// we'd stay in Starting rather than Degraded. We've dropped the
+		// special case of Starting state, so now we just want to wait
+		// for Normal.
 		for {
 			state, err := s.noder.ClusterState(ctx)
 			if err != nil {
 				s.logger.Printf("failed to check cluster state: %v", err)
-				timer.Reset(time.Second)
-				select {
-				case <-s.closing:
-					return
-				case <-timer.C:
-					continue
-				}
 			}
-			switch state {
-			case disco.ClusterStateStarting, disco.ClusterStateUnknown, disco.ClusterStateDown:
-				timer.Reset(time.Second)
-				select {
-				case <-s.closing:
-					return
-				case <-timer.C:
-					continue
-				}
+			if state == disco.ClusterStateNormal {
+				break
 			}
-			break
+			timer.Reset(time.Second)
+			select {
+			case <-s.closing:
+				return
+			case <-timer.C:
+				continue
+			}
 		}
 
 		start := time.Now()
