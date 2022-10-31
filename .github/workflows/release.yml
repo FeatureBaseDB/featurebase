@@ -13,11 +13,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      - run: echo $(git describe --tags)
       - run: |
           current=$(git describe --tags | grep -Eo '[0-9]*?\.[0-9]*?\.[0-9]*')
           array=($(echo $current | tr '.' '\n'))
           array[2]=$((array[2]+1))
-          echo $(IFS="." ; echo "${array[*]}")
+          echo "version=$(IFS="." ; echo "${array[*]}")" >> $GITHUB_OUTPUT
 
   build-lattice:
     runs-on: ubuntu-latest
