@@ -84,7 +84,7 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: featurebase-from-make-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ./build/featurebase-from-make-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - uses: actions/upload-artifact@v3
