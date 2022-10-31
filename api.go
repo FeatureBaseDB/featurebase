@@ -119,16 +119,9 @@ func (api *API) SetAPIOptions(opts ...apiOption) error {
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
 var validAPIMethods = map[disco.ClusterState]map[apiMethod]struct{}{
-	disco.ClusterStateNormal: appendMap(methodsCommon, methodsNormal),
-	// Ideally, this would be just `appendMap(methodsCommon, methodsDegraded)`,
-	// but in an attempt to reduce the influence that state (determined by etcd)
-	// has on a node under load, this is set to effectively allow all requests
-	// in a DEGRADED state.
-	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsNormal),
-	// Ideally, this would be just `methodsCommon`, but in an attempt to reduce
-	// the influence that state (determined by etcd) has on a node under load,
-	// this is set to effectively allow all requests in a DOWN state.
-	disco.ClusterStateDown: appendMap(methodsCommon, methodsNormal),
+	disco.ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
+	disco.ClusterStateDegraded: appendMap(methodsCommon, methodsDegraded),
+	disco.ClusterStateDown:     methodsCommon,
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -3305,24 +3298,25 @@ var methodsCommon = map[apiMethod]struct{}{
 	apiState:          {},
 }
 
-// var methodsDegraded = map[apiMethod]struct{}{
-// 	apiExportCSV:         {},
-// 	apiFragmentBlockData: {},
-// 	apiFragmentBlocks:    {},
-// 	apiField:             {},
-// 	apiIndex:             {},
-// 	apiQuery:             {},
-// 	apiRecalculateCaches: {},
-// 	apiRemoveNode:        {},
-// 	apiShardNodes:        {},
-// 	apiSchema:            {},
-// 	apiViews:             {},
-// 	apiStartTransaction:  {},
-// 	apiFinishTransaction: {},
-// 	apiTransactions:      {},
-// 	apiGetTransaction:    {},
-// 	apiActiveQueries:     {},
-// }
+var methodsDegraded = map[apiMethod]struct{}{
+	apiExportCSV:         {},
+	apiFragmentBlockData: {},
+	apiFragmentBlocks:    {},
+	apiField:             {},
+	apiIndex:             {},
+	apiQuery:             {},
+	apiRecalculateCaches: {},
+	apiShardNodes:        {},
+	apiSchema:            {},
+	apiViews:             {},
+	apiStartTransaction:  {},
+	apiFinishTransaction: {},
+	apiTransactions:      {},
+	apiGetTransaction:    {},
+	apiActiveQueries:     {},
+	apiPastQueries:       {},
+	apiPartitionNodes:    {},
+}
 
 var methodsNormal = map[apiMethod]struct{}{
 	apiCreateField:          {},

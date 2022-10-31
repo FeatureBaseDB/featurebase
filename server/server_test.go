@@ -544,11 +544,11 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		Query: fmt.Sprintf("Row(%s=1)", fieldName),
 	}
 
-	// check for connection refused... this used to check 'shard
-	// unavailable', but we since made a change to allow queries to
-	// nodes which the cluster *thinks* are down, but often are
-	// actually not.
-	if _, err := cluster.GetPrimary().API.Query(context.Background(), qry); !strings.Contains(err.Error(), "connection refused") {
+	_, err := cluster.GetPrimary().API.Query(context.Background(), qry)
+	if err == nil {
+		t.Fatalf("expected error from cluster with downed node, didn't get an error")
+	}
+	if !strings.Contains(err.Error(), "not allowed in state") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
 }
@@ -604,7 +604,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	}
 
 	if err := others[0].Close(); err != nil {
-		t.Fatalf("closing third node: %v", err)
+		t.Fatalf("closing first node: %v", err)
 	}
 
 	err = cluster.AwaitPrimaryState(disco.ClusterStateDegraded, 30*time.Second)
@@ -612,13 +612,24 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("after closing first server: %v", err)
 	}
 
-	// We no longer support mutations or schema changes when the cluster is in
-	// state DEGRADED, so this test doesn't apply anymore.
-	//
-	// // confirm that cluster keeps accepting queries if replication > 1
-	// if _, err := coord.API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
-	// 	t.Fatalf("got unexpected error creating index: %v", err)
-	// }
+	qry := &pilosa.QueryRequest{
+		Index: "idx",
+		Query: fmt.Sprintf("Row(%s=1)", fieldName),
+	}
+
+	// With only one node down, we expect a query to still work.
+	resp, err := coord.API.Query(context.Background(), qry)
+	if err != nil {
+		t.Fatalf("unexpected error from degraded cluster: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("got no results")
+	}
+	row, ok := resp.Results[0].(*pilosa.Row)
+	if !ok {
+		t.Fatalf("expected a *pilosa.Row, but got %T", resp.Results[0])
+	}
+	require.Equal(t, row.Columns(), cols)
 
 	// confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
 	if err := others[1].Close(); err != nil {
@@ -630,34 +641,12 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("after closing second server: %v", err)
 	}
 
-	qry := &pilosa.QueryRequest{
-		Index: "idx",
-		Query: fmt.Sprintf("Row(%s=1)", fieldName),
+	_, err = coord.API.Query(context.Background(), qry)
+	if err == nil {
+		t.Fatalf("expected a cluster with two down nodes to reject query")
 	}
-
-	// Because we no longer block queries when the cluster is in state DOWN,
-	// there are cases where a DOWN cluster can still respond to a query. In
-	// that case, we want the test to pass. But if the unavailable node(s) cause
-	// the query to result in an error, we check that it's the error we expect.
-	resp, err := coord.API.Query(context.Background(), qry)
-	if err != nil {
-		// check for connection refused... this used to check 'shard
-		// unavailable', but we since made a change to allow queries to
-		// nodes which the cluster *thinks* are down, but often are
-		// actually not.
-		if !strings.Contains(err.Error(), "connection refused") {
-			t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
-		}
-	} else {
-		if len(resp.Results) == 0 {
-			t.Fatal("got no results")
-		}
-
-		row, ok := resp.Results[0].(*pilosa.Row)
-		if !ok {
-			t.Fatalf("expected a *pilosa.Row, but got %T", resp.Results[0])
-		}
-		require.Equal(t, row.Columns(), cols)
+	if !strings.Contains(err.Error(), "not allowed in state") {
+		t.Fatalf("expected not allowed in state error, got %q", err.Error())
 	}
 }
 
