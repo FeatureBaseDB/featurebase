@@ -7,10 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  version:
+  meta:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -19,15 +20,17 @@ jobs:
       # - run: .github/workflows/version.sh
       - id: version
         run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
+      - id: tag
+        run: echo "tag=v${{ steps.version.outputs.version}}-community" >> $GITHUB_OUTPUT
 
   build-lattice:
     runs-on: ubuntu-latest
-    needs: [version]
+    needs: [meta]
     env:
         CI: false
     
     steps:
-      - run: echo ${{needs.version.outputs.version}}
+      - run: echo ${{needs.meta.outputs.version}} ${{needs.meta.outputs.tag}}
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
@@ -50,7 +53,7 @@ jobs:
 
   build-featurebase:
     runs-on: ubuntu-latest
-    needs: [version]
+    needs: [meta]
 
     strategy:
       matrix:
@@ -89,7 +92,7 @@ jobs:
 
   build-ingest:
     runs-on: ubuntu-latest
-    needs: [version]
+    needs: [meta]
 
     strategy:
       matrix:
