@@ -21,11 +21,9 @@ jobs:
       - id: version
         run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
       - id: tag
-        run: echo "tag=v${{ steps.version.outputs.version}}-community" >> $GITHUB_OUTPUT
-      - id: commit
-        run: echo "commit="
+        run: echo "tag=v${{ steps.version.outputs.version }}-community" >> $GITHUB_OUTPUT
       - id: ldflags
-        run: echo "ldflags=-X github.com/featurebasedb/featurebase/v3.Version=${{steps.tag.output.tag}} -X github.com/featurebasedb/featurebase/v3.Commit=${{steps.commit.outputs.commit}}" >> $GITHUB_OUTPUT
+        run: echo "ldflags=-X github.com/featurebasedb/featurebase/v3.Version=${{ steps.tag.outputs.tag }} -X github.com/featurebasedb/featurebase/v3.Commit=${{ github.sha }}" >> $GITHUB_OUTPUT
 
   test-meta:
     runs-on: ubuntu-latest
