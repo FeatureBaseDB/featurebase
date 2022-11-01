@@ -10,8 +10,9 @@ jobs:
   meta:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      ldflags: ${{ steps.ldflags.outputs.ldflags }}
       tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v3
         with:
