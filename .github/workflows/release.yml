@@ -9,13 +9,16 @@ on:
 jobs:
   version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - run: echo $(git describe --tags)
       # - run: .github/workflows/version.sh
-      - run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
+      - id: version
+        run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
 
   build-lattice:
     runs-on: ubuntu-latest
@@ -24,6 +27,7 @@ jobs:
         CI: false
     
     steps:
+      - run: echo ${{needs.version.outputs.version}}
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
