@@ -23,6 +23,12 @@ jobs:
       - id: tag
         run: echo "tag=v${{ steps.version.outputs.version}}-community" >> $GITHUB_OUTPUT
 
+  test-meta:
+    runs-on: ubuntu-latest
+    needs: [meta]
+    steps:
+      - run: echo ${{needs.meta.outputs.version}} ${{needs.meta.outputs.tag}}
+
   build-lattice:
     runs-on: ubuntu-latest
     needs: [meta]
@@ -30,7 +36,6 @@ jobs:
         CI: false
     
     steps:
-      - run: echo ${{needs.meta.outputs.version}} ${{needs.meta.outputs.tag}}
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
