@@ -17,11 +17,14 @@ jobs:
         with:
           fetch-depth: 0
       - run: echo $(git describe --tags)
-      # - run: .github/workflows/version.sh
       - id: version
         run: echo "version=$(.github/workflows/version.sh)" >> $GITHUB_OUTPUT
       - id: tag
         run: echo "tag=v${{ steps.version.outputs.version}}-community" >> $GITHUB_OUTPUT
+      - id: commit
+        run: echo "commit="
+      - id: ldflags
+        run: echo "ldflags=-X github.com/featurebasedb/featurebase/v3.Version=${{steps.tag.output.tag}} -X github.com/featurebasedb/featurebase/v3.Commit=${{steps.commit.outputs.commit}}" >> $GITHUB_OUTPUT
 
   test-meta:
     runs-on: ubuntu-latest
@@ -29,6 +32,7 @@ jobs:
     steps:
       - run: echo "version ${{needs.meta.outputs.version}}"
       - run: echo "tag ${{needs.meta.outputs.tag}}"
+      - run: echo "ldflags ${{needs.meta.outputs.ldflags}}"
 
   build-lattice:
     runs-on: ubuntu-latest
