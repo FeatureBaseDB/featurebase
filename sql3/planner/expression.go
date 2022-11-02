@@ -465,9 +465,6 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 			return nil, nil
 		}
 
-		var nl float64
-		var nr float64
-
 		coercedLhs, err := coerceValue(n.lhs.Type(), coercedDataType, evalLhs, parser.Pos{Line: 0, Column: 0})
 		if err != nil {
 			return nil, err
@@ -481,36 +478,29 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		nld, nlok := coercedLhs.(pql.Decimal)
 		nrd, nrok := coercedRhs.(pql.Decimal)
 
-		//TODO(pok) eliminate the use of float here and return pql.Decimal values for arithmetic ops
-		if nlok {
-			nl = nld.Float64()
-		}
-		if nrok {
-			nr = nrd.Float64()
-		}
 		if nlok && nrok {
 			switch n.op {
 			case parser.NE:
-				return nl != nr, nil
+				return !nld.EqualTo(nrd), nil
 			case parser.EQ:
-				return nl == nr, nil
+				return nld.EqualTo(nrd), nil
 			case parser.LE:
-				return nl <= nr, nil
+				return nld.LessThanOrEqualTo(nrd), nil
 			case parser.GE:
-				return nl >= nr, nil
+				return nld.GreaterThanOrEqualTo(nrd), nil
 			case parser.GT:
-				return nl > nr, nil
+				return nld.GreaterThan(nrd), nil
 			case parser.LT:
-				return nl < nr, nil
+				return nld.LessThan(nrd), nil
 
 			case parser.PLUS:
-				return nl + nr, nil
+				return pql.AddDecimal(nld, nrd), nil
 			case parser.MINUS:
-				return nl - nr, nil
+				return pql.SubtractDecimal(nld, nrd), nil
 			case parser.STAR:
-				return nl * nr, nil
+				return pql.MultiplyDecimal(nld, nrd), nil
 			case parser.SLASH:
-				return nl / nr, nil
+				return pql.DivideDecimal(nld, nrd), nil
 
 			default:
 				return nil, sql3.NewErrInternalf("unhandled operator %d", n.op)

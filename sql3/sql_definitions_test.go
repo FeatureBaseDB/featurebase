@@ -413,6 +413,15 @@ var insertTest = tableTest{
 			compare: compareExactUnordered,
 		},
 		{
+			// Insert with exprs
+			sqls: sqls(
+				"insert into testinsert (_id, a, b, s, bl, d, event, ievent) values (4, 40*10, 400+1, 'foo' || 'bar', 1 > 2, 10.12 + 3.1, ['A', 'B', 'C'], [1, 2, 3])",
+			),
+			expHdrs: hdrs(),
+			expRows: rows(),
+			compare: compareExactUnordered,
+		},
+		{
 			// InsertBadTable
 			sqls: sqls(
 				"insert into ifoo (a, b) values (1, 2)",
