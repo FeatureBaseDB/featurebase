@@ -116,9 +116,10 @@ var setFunctionTests = tableTest{
 			),
 			expRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
-				row(int64(3), int64(30), int64(300), []string{"POST", "GET"}, nil),
+				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare: compareExactUnordered,
+			compare:        compareExactUnordered,
+			sortStringKeys: true,
 		},
 		{
 			// SetContains
@@ -135,9 +136,10 @@ var setFunctionTests = tableTest{
 			),
 			expRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
-				row(int64(3), int64(30), int64(300), []string{"POST", "GET"}, nil),
+				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare: compareExactUnordered,
+			compare:        compareExactUnordered,
+			sortStringKeys: true,
 		},
 		{
 			// SetContainsInt
@@ -175,9 +177,10 @@ var setFunctionTests = tableTest{
 			expRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
 				row(int64(2), int64(20), int64(200), []string{"GET"}, nil),
-				row(int64(3), int64(30), int64(300), []string{"POST", "GET"}, nil),
+				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare: compareExactUnordered,
+			compare:        compareExactUnordered,
+			sortStringKeys: true,
 		},
 		{
 			// SetContainsAndSetContains
@@ -195,9 +198,10 @@ var setFunctionTests = tableTest{
 				hdr("ievent", fldTypeIDSet),
 			),
 			expRows: rows(
-				row(int64(3), int64(30), int64(300), []string{"POST", "GET"}, nil),
+				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare: compareExactUnordered,
+			compare:        compareExactUnordered,
+			sortStringKeys: true,
 		},
 		{
 			// SetContainsWrongType

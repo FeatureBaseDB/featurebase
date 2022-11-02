@@ -1,8 +1,12 @@
 package sql3_test
 
-import "time"
+import (
+	"time"
 
-//INT bin op tests
+	"github.com/molecula/featurebase/v3/pql"
+)
+
+// INT bin op tests
 var binOpExprWithIntInt = tableTest{
 	table: tbl(
 		"binoptesti_i",
@@ -635,7 +639,7 @@ var binOpExprWithIntDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(32.34)),
+				row(pql.NewDecimal(3234, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -647,7 +651,7 @@ var binOpExprWithIntDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(7.66)),
+				row(pql.NewDecimal(766, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -659,7 +663,7 @@ var binOpExprWithIntDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(246.8)),
+				row(pql.NewDecimal(24680, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -671,8 +675,7 @@ var binOpExprWithIntDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				//TODO(pok) this float64 thing is for the birds
-				row(float64(1.6207455429497568)),
+				row(pql.NewDecimal(162, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -1139,7 +1142,7 @@ var binOpExprWithIntStringSet = tableTest{
 	},
 }
 
-//BOOL bin op tests
+// BOOL bin op tests
 var binOpExprWithBoolInt = tableTest{
 	table: tbl(
 		"binoptestb_i",
@@ -2047,7 +2050,7 @@ var binOpExprWithBoolStringSet = tableTest{
 	},
 }
 
-//ID bin op tests
+// ID bin op tests
 var binOpExprWithIDInt = tableTest{
 	table: tbl(
 		"binoptestid_i",
@@ -2678,7 +2681,7 @@ var binOpExprWithIDDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(32.34)),
+				row(pql.NewDecimal(3234, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -2690,7 +2693,7 @@ var binOpExprWithIDDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(7.66)),
+				row(pql.NewDecimal(766, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -2702,7 +2705,7 @@ var binOpExprWithIDDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(246.8)),
+				row(pql.NewDecimal(24680, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -2714,8 +2717,7 @@ var binOpExprWithIDDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				//TODO(pok) this float64 thing is for the birds
-				row(float64(1.6207455429497568)),
+				row(pql.NewDecimal(162, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3182,7 +3184,7 @@ var binOpExprWithIDStringSet = tableTest{
 	},
 }
 
-//DECIMAL bin op tests
+// DECIMAL bin op tests
 var binOpExprWithDecInt = tableTest{
 	table: tbl(
 		"binoptestdec_i",
@@ -3300,7 +3302,7 @@ var binOpExprWithDecInt = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(32.34)),
+				row(pql.NewDecimal(3234, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3312,7 +3314,7 @@ var binOpExprWithDecInt = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(-7.66)),
+				row(pql.NewDecimal(-766, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3324,7 +3326,7 @@ var binOpExprWithDecInt = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(246.8)),
+				row(pql.NewDecimal(24680, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3336,7 +3338,7 @@ var binOpExprWithDecInt = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(0.617)),
+				row(pql.NewDecimal(61, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3584,7 +3586,7 @@ var binOpExprWithDecID = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(32.34)),
+				row(pql.NewDecimal(3234, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3596,7 +3598,7 @@ var binOpExprWithDecID = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(-7.66)),
+				row(pql.NewDecimal(-766, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3608,7 +3610,7 @@ var binOpExprWithDecID = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(246.8)),
+				row(pql.NewDecimal(24680, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3620,7 +3622,7 @@ var binOpExprWithDecID = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(0.617)),
+				row(pql.NewDecimal(61, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3756,7 +3758,7 @@ var binOpExprWithDecDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(32.34)),
+				row(pql.NewDecimal(3234, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3768,7 +3770,7 @@ var binOpExprWithDecDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(7.66)),
+				row(pql.NewDecimal(766, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3780,7 +3782,7 @@ var binOpExprWithDecDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				row(float64(246.8)),
+				row(pql.NewDecimal(24680, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -3792,8 +3794,7 @@ var binOpExprWithDecDecimal = tableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			expRows: rows(
-				//TODO(pok) this float64 thing is for the birds
-				row(float64(1.6207455429497568)),
+				row(pql.NewDecimal(162, 2)),
 			),
 			compare: compareExactUnordered,
 		},
@@ -4260,7 +4261,7 @@ var binOpExprWithDecStringSet = tableTest{
 	},
 }
 
-//TIMESTAMP bin op tests
+// TIMESTAMP bin op tests
 var binOpExprWithTSInt = tableTest{
 	table: tbl(
 		"binoptestts_i",
@@ -5188,7 +5189,7 @@ var binOpExprWithTSStringSet = tableTest{
 	},
 }
 
-//IDSET bin op tests
+// IDSET bin op tests
 var binOpExprWithIDSetInt = tableTest{
 	table: tbl(
 		"binoptestids_i",
@@ -6097,7 +6098,7 @@ var binOpExprWithIDSetStringSet = tableTest{
 	},
 }
 
-//STRING bin op tests
+// STRING bin op tests
 var binOpExprWithStringInt = tableTest{
 	table: tbl(
 		"binoptests_i",
@@ -7012,7 +7013,7 @@ var binOpExprWithStringStringSet = tableTest{
 	},
 }
 
-//STRINGSET bin op tests
+// STRINGSET bin op tests
 var binOpExprWithStringSetInt = tableTest{
 	table: tbl(
 		"binoptestss_i",

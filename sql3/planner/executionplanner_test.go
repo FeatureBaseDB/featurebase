@@ -799,10 +799,14 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		opt := cmp.Comparer(func(x, y pql.Decimal) bool {
+			return x.EqualTo(y)
+		})
+
 		if diff := cmp.Diff([][]interface{}{
-			{float64(12.3), int64(1)},
+			{pql.NewDecimal(1230, 2), int64(1)},
 			{nil, int64(2)},
-		}, results); diff != "" {
+		}, results, opt); diff != "" {
 			t.Fatal(diff)
 		}
 

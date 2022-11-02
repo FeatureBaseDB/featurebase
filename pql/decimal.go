@@ -111,6 +111,52 @@ func AddDecimal(a, b Decimal) Decimal {
 	}
 }
 
+// SubtractDecimal subtracts b from a and returns a new Decimal.
+//
+// If the Scale of a and b don't match, the returned Decimal will have the
+// smallest Scale needed to precisely represent the sum.
+func SubtractDecimal(a, b Decimal) Decimal {
+	ac, bc := sameScalify(a, b)
+	apv, bpv := &ac.value, &bc.value
+	apv.Sub(apv, bpv)
+	return Decimal{
+		value: *apv,
+		Scale: ac.Scale,
+	}
+}
+
+// MultiplyDecimal multiplies a by b and returns a new Decimal.
+//
+// If the Scale of a and b don't match, the returned Decimal will have the
+// smallest Scale needed to precisely represent the sum.
+func MultiplyDecimal(a, b Decimal) Decimal {
+	ac, bc := sameScalify(a, b)
+	apv, bpv := &ac.value, &bc.value
+	scaleFactor := big.NewInt(Pow10(ac.Scale))
+	apv.Mul(apv, bpv)
+	apv.Div(apv, scaleFactor)
+	return Decimal{
+		value: *apv,
+		Scale: ac.Scale,
+	}
+}
+
+// DivideDecimal multiplies a by b and returns a new Decimal.
+//
+// If the Scale of a and b don't match, the returned Decimal will have the
+// smallest Scale needed to precisely represent the sum.
+func DivideDecimal(a, b Decimal) Decimal {
+	ac, bc := sameScalify(a, b)
+	apv, bpv := &ac.value, &bc.value
+	scaleFactor := big.NewInt(Pow10(ac.Scale))
+	apv.Mul(apv, scaleFactor)
+	apv.Div(apv, bpv)
+	return Decimal{
+		value: *apv,
+		Scale: ac.Scale,
+	}
+}
+
 // LessThan returns true if d < d2.
 func (d Decimal) LessThan(d2 Decimal) bool {
 	return d.lessThan(d2, false)
@@ -139,7 +185,6 @@ func (d *Decimal) withLargerScale(scale int64) *Decimal {
 		val = val.Mul(val, ten)
 		dc.Scale++
 	}
-
 	return dc
 }
 
