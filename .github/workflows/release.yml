@@ -170,6 +170,9 @@ jobs:
 
     steps:
       - uses: actions/download-artifact@v3
+      - name: What's Happening Here
+          run: pwd
+          run: ls -R
         with:
           name:
           path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/
