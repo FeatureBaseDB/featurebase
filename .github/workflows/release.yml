@@ -86,18 +86,18 @@ jobs:
 
       - name: build featurebase
         run: |
-          go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase
-          go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/roaring-migrate
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/roaring-migrate
 
       - uses: actions/upload-artifact@v3
         with:
           name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - uses: actions/upload-artifact@v3
         with:
           name: roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
 
   build-ingest:
     runs-on: ubuntu-latest
@@ -124,32 +124,32 @@ jobs:
           go-version: "^1.19.1"
 
       - name: build ingester
-        run: go build -o ./build/ingester-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/ingester
+        run: go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/ingester-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/ingester
 
       - name: build consumer-csv
-        run: go build -o ./build/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-csv
+        run: go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-csv
       
       - name: build consumer-kafka-static
-        run: go build -o ./build/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kafka-static
+        run: go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kafka-static
 
       - name: build consumer-sql
-        run: go build -o ./build/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-sql
+        run: go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-sql
 
       - name: build consumer-github
-        run: go build -o ./build/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-github
+        run: go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-github
 
       - name: build consumer-kinesis
-        run: go build -o ./build/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kinesis
+        run: go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kinesis
       
       - uses: actions/upload-artifact@v3
         with:
           name: ingester-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/ingester-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/ingester-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - uses: actions/upload-artifact@v3
         with:
           name: consumers-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/consumer*
+          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer*
 
   bundle:
     runs-on: ubuntu-latest
