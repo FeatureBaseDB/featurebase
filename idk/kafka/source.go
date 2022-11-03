@@ -240,7 +240,7 @@ func (r *Record) Commit(ctx context.Context) error {
 
 	if r.src.Verbose {
 		for _, o := range committedOffsets {
-			r.src.Log.Debugf("p: %v t: %v o: %v", o.Partition, *o.Topic, o.Offset)
+			r.src.Log.Debugf("t: %v p: %v o: %v", *o.Topic, o.Partition, o.Offset)
 		}
 	}
 
