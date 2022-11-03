@@ -172,6 +172,6 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: 
-          path: ./build
+          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}
       - name: Display structure of downloaded files
         run: ls -R
