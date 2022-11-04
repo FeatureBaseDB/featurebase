@@ -98,7 +98,7 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          path:  /home/runner/work/featurebase/featurebase/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
   # build-ingest:
   #   runs-on: ubuntu-latest
