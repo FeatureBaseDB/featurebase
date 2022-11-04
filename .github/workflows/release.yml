@@ -86,12 +86,12 @@ jobs:
 
       - name: build featurebase
         run: |
-          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase |
-          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-csv |
-          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kafka-static |
-          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-sql |
-          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-github |
-          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kinesis |
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-csv
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kafka-static
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-sql
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-github
+          go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kinesis
           tar -cvf featurebase-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ./build/${{ matrix.goos }}-${{ matrix.goarch }}/
       - uses: actions/upload-artifact@v3
         with:
