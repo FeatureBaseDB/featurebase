@@ -2083,67 +2083,6 @@ func (h *Handler) handlePatchField(w http.ResponseWriter, r *http.Request) {
 	resp.write(w, err)
 }
 
-type ingestSpec struct {
-	IndexName      string      `json:"index-name"`
-	IndexAction    string      `json:"index-action"`
-	FieldAction    string      `json:"field-action"`
-	PrimaryKeyType string      `json:"primary-key-type"`
-	Fields         []fieldSpec `json:"fields"`
-}
-
-type fieldSpec struct {
-	FieldName    string          `json:"field-name"`
-	FieldType    string          `json:"field-type"`
-	FieldOptions fieldOptionSpec `json:"field-options"`
-}
-
-type fieldOptionSpec struct {
-	EnforceMutualExclusion bool       `json:"enforce-mutual-exclusion"`
-	CacheType              *string    `json:"cache-type"`
-	CacheSize              *uint32    `json:"cache-size"`
-	Scale                  *int64     `json:"scale"`
-	Epoch                  *time.Time `json:"epoch"`
-	Unit                   *string    `json:"unit"`
-	TimeQuantum            *string    `json:"time-quantum"`
-	TTL                    *string    `json:"ttl"`
-}
-
-func fieldSpecToFieldOption(fSpec fieldSpec) fieldOptions {
-	opt := fieldOptions{}
-	// map fSpec type name to pilosa type name
-
-	// a string field could be a string set, mutex or time quantum
-	if fSpec.FieldOptions.TimeQuantum != nil {
-		opt.Type = "time"
-	} else if fSpec.FieldOptions.EnforceMutualExclusion {
-		opt.Type = "mutex"
-	} else {
-		opt.Type = "set"
-	}
-
-	// for other field types, there's a one-to-one mapping
-	if fSpec.FieldType != "string" && fSpec.FieldType != "id" {
-		opt.Type = fSpec.FieldType
-	}
-
-	if fSpec.FieldType == "string" {
-		var keys bool = true
-		opt.Keys = &keys
-	}
-	opt.CacheType = fSpec.FieldOptions.CacheType
-	opt.CacheSize = fSpec.FieldOptions.CacheSize
-	opt.Scale = fSpec.FieldOptions.Scale
-	opt.Epoch = fSpec.FieldOptions.Epoch
-	opt.TimeUnit = fSpec.FieldOptions.Unit
-	if fSpec.FieldOptions.TimeQuantum != nil {
-		timeQuantumVal := TimeQuantum(*fSpec.FieldOptions.TimeQuantum)
-		opt.TimeQuantum = &timeQuantumVal
-	}
-	opt.TTL = fSpec.FieldOptions.TTL
-
-	return opt
-}
-
 type postFieldRequest struct {
 	Options fieldOptions `json:"options"`
 }
