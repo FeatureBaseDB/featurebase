@@ -9,7 +9,7 @@ import (
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/test"
-	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck
+	. "github.com/featurebasedb/featurebase/v3/vprint" // nolint:staticcheck,golint,unused
 )
 
 func queryIRABit(m0api *pilosa.API, acctOwnerID uint64, iraField string, iraRowID uint64, index string) (bit bool) {
