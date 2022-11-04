@@ -464,10 +464,7 @@ func (h *GRPCHandler) GetIndex(ctx context.Context, req *pb.GetIndexRequest) (*p
 
 // GetIndexes returns a list of all Indexes
 func (h *GRPCHandler) GetIndexes(ctx context.Context, req *pb.GetIndexesRequest) (*pb.GetIndexesResponse, error) {
-	userInfo, ok := authn.GetUserInfo(ctx)
-	if !ok {
-		return nil, status.Error(codes.InvalidArgument, "malformed auth header")
-	}
+	userInfo, _ := authn.GetUserInfo(ctx) // nil is a valid userInfo here
 	schema, err := h.api.Schema(ctx, false)
 	if err != nil {
 		return nil, errToStatusError(err)
