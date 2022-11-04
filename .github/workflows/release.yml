@@ -87,13 +87,13 @@ jobs:
       - name: build featurebase
         run: |
           pwd
-          cp ./install/featurebase.conf ./install/NOTICE ./install/featurebase.debian.service ./install/featurebase.redhat.service ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase/
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/idk/consumer-csv-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-csv
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/idk/consumer-kafka-static-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kafka-static
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/idk/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-sql
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/idk/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-github
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/idk/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kinesis
+          cp ./install/featurebase.conf ./install/NOTICE ./install/featurebase.debian.service ./install/featurebase.redhat.service ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase/
           tar -cvf featurebase-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ./build/${{ matrix.goos }}-${{ matrix.goarch }}/
           ls -al
       - uses: actions/upload-artifact@v3
