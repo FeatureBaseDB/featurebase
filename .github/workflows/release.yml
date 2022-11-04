@@ -175,6 +175,6 @@ jobs:
           run: ls -R
         with:
           name:
-          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/
+          path: ./build/${{ matrix.goos }}-${{ matrix.goarch }}/*
       - name: Display structure of downloaded files
         run: ls -R
