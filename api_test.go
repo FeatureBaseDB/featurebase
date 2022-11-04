@@ -614,24 +614,6 @@ func TestAPI_Ingest(t *testing.T) {
 	})
 }
 
-// ingestBenchmarkHelper makes it easier to exclude this from benchmark computations
-// and profiles.
-func ingestBenchmarkHelper() []byte {
-	buf := &bytes.Buffer{}
-	buf.WriteString(`[{"action": "write", "records": {`)
-	comma := ""
-	now := time.Now().Add(-3840000 * time.Second)
-	for i := 0; i < 1000000; i++ {
-		then := now.Add(time.Duration(rand.Int63n(1234567)) * time.Second)
-		fmt.Fprintf(buf, `%s"%d": { "set": [%d, %d], "int": %d, "tq": { "time": "%s", "values": %d } }`, comma, i, i%2, (i%4)+2, rand.Int63n(163840),
-			then.Format(time.RFC3339), rand.Int63n(25))
-		comma = ", "
-	}
-	buf.WriteString(`}}]`)
-	data := buf.Bytes()
-	return data
-}
-
 func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()

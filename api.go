@@ -1752,23 +1752,6 @@ func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard ui
 	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, &options)
 }
 
-func clearExistenceColumns(tx Tx, index *Index, columnIDs []uint64, shard uint64) error {
-	ef := index.existenceField()
-	if ef == nil {
-		return nil
-	}
-	v := ef.view("standard")
-	if v == nil {
-		return nil
-	}
-	f := v.Fragment(shard)
-	if f == nil {
-		return nil
-	}
-	_, err := f.ClearRecords(tx, columnIDs)
-	return err
-}
-
 // ShardDistribution returns an object representing the distribution of shards
 // across nodes for each index, distinguishing between primary and replica.
 // The structure of this information is [indexName][nodeID][primaryOrReplica][]uint64.
