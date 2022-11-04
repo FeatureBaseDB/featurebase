@@ -94,7 +94,8 @@ jobs:
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/idk/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-github
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/idk/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kinesis
           cp ./install/featurebase.conf NOTICE ./install/featurebase.debian.service ./install/featurebase.redhat.service ./build/${{ matrix.goos }}-${{ matrix.goarch }}/featurebase/
-          tar -cvf featurebase-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ./build/${{ matrix.goos }}-${{ matrix.goarch }}/
+          cd ./build/${{ matrix.goos }}-${{ matrix.goarch }}/
+          tar -cvf /home/runner/work/featurebase/featurebase/featurebase-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz *
           ls -al
       - uses: actions/upload-artifact@v3
         with:
