@@ -92,7 +92,7 @@ jobs:
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-sql-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-sql
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-github-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-github
           go build -o ./build/${{ matrix.goos }}-${{ matrix.goarch }}/consumer-kinesis-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./idk/cmd/molecula-consumer-kinesis
-
+          tar -cvf featurebase-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz ./build/${{ matrix.goos }}-${{ matrix.goarch }}/
       - uses: actions/upload-artifact@v3
         with:
           name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
