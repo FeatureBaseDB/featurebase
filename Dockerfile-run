@@ -1,5 +1,6 @@
 ARG FEATUREBASE_URL=https://github.com/FeatureBaseDB/featurebase/releases/download/v1.1.0-community/featurebase-v1.1.0-community-linux-amd64.tar.gz
 
+# builder is responsible for downloads and conforming to naming conventions
 FROM alpine:latest as builder
 ARG FEATUREBASE_URL
 
@@ -12,6 +13,6 @@ FROM alpine:latest as featurebase
 COPY --from=builder /featurebase /featurebase
 WORKDIR /featurebase
 
-FROM alpine:latest as ingester
+FROM alpine:latest as ingest
 COPY --from=builder /idk /ingester
 WORKDIR /ingester
