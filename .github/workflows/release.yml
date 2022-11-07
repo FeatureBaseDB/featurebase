@@ -169,3 +169,21 @@ jobs:
           - "arm64"
 
     steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: ingester-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: consumers-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - run: ls -alt
+          
