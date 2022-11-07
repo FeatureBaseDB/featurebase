@@ -12,6 +12,7 @@ linters:
   enable:
     - govet
     - gofmt
+    - staticcheck
   enable-all: false
   disable-all: true
 
