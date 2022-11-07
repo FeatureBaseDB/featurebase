@@ -9,10 +9,19 @@ RUN tar -zxvf featurebase.tar.gz
 RUN mv featurebase-v*/ featurebase/
 RUN mv idk-v*/ idk/
 
+###
+# runner for featurebase binary
 FROM alpine:latest as featurebase
 COPY --from=builder /featurebase /featurebase
 WORKDIR /featurebase
 
+###
+# runner for IDK
 FROM alpine:latest as ingest
 COPY --from=builder /idk /ingester
 WORKDIR /ingester
+
+# Alpine tar command seems to leave meta files behind, this removes them
+RUN rm \._*
+
+RUN chmod ug+x *
