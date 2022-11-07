@@ -32,34 +32,7 @@ jobs:
       - run: echo "version ${{needs.meta.outputs.version}}"
       - run: echo "tag ${{needs.meta.outputs.tag}}"
       - run: echo "ldflags ${{needs.meta.outputs.ldflags}}"
-
-  build-lattice:
-    runs-on: ubuntu-latest
-    needs: [meta]
-    env:
-        CI: false
-    
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 14
-
-      - run: |
-          cd lattice
-          yarn install
-          yarn build
-          mv build ../
-          cd ../
-          rm -r lattice
-          mv build lattice
-          tar -czvf lattice.tar.gz lattice
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: lattice.tar.gz
-          path: ./lattice.tar.gz
-
+  
   build-featurebase:
     runs-on: ubuntu-latest
     needs: [meta]
@@ -157,7 +130,6 @@ jobs:
     needs: 
       - meta
       - build-featurebase
-      - build-lattice
       - build-ingest
 
     strategy:
