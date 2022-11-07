@@ -59,8 +59,8 @@ jobs:
 
       - name: build featurebase
         run: |
-          make install-build-deps
           make install-statik
+          make install-build-deps
           make generate-statik
           go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase
           go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/roaring-migrate
