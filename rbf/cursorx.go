@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-//probably should just implement the container interface
+// probably should just implement the container interface
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
 	shardVsContainerExponent := uint(4) //needs constant exported from roaring package

@@ -43,6 +43,7 @@ func LaunchKafkaEventConfirmer(producer *confluent.Producer, finished *int32, it
 	}()
 	return doneChan
 }
+
 func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 	var err error
 	configMap := &confluent.ConfigMap{}
@@ -84,7 +85,7 @@ func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 		}
 	}
 
-	//SSL
+	// SSL
 	if m.KafkaSslCaLocation != "" {
 		err = configMap.SetKey("ssl.ca.location", m.KafkaSslCaLocation)
 		if err != nil {
@@ -121,7 +122,7 @@ func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 		}
 	}
 
-	//SSL
+	// SSL
 	if m.KafkaSslCaLocation != "" {
 		err = configMap.SetKey("ssl.ca.location", m.KafkaSslCaLocation)
 		if err != nil {

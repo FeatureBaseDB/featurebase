@@ -635,9 +635,9 @@ func (t *tree) Set(k uint64, v *Container) {
 // (whatever, false) if it decides not to create or not to update the value of
 // the KV pair.
 //
-// 	tree.Set(k, v) call conceptually equals calling
+//	tree.Set(k, v) call conceptually equals calling
 //
-// 	tree.Put(k, func(uint64, bool){ return v, true })
+//	tree.Put(k, func(uint64, bool){ return v, true })
 //
 // modulo the differing return values.
 func (t *tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Container, write bool)) (oldV *Container, written bool) {

@@ -239,7 +239,6 @@ func TestParser_Parse(t *testing.T) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
 		}
 	})
-
 }
 
 func TestUnquote(t *testing.T) {
@@ -287,7 +286,6 @@ func TestUnquote(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func testErr(t *testing.T, exp string, actual error) (done bool) {

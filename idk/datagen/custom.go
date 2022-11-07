@@ -44,7 +44,6 @@ func NewCustom(cfg SourceGeneratorConfig) Sourcer {
 			IDKAndGenFields: ig,
 		}
 	}
-
 }
 
 // CustomConfig represents the JSON/yaml configuration for the "custom" datagen source.
@@ -373,7 +372,7 @@ func (cs *CustomSource) Record() (idk.Record, error) {
 		last = cs.record[i]
 	}
 	if cs.recordsToGenerate > 0 && cs.recordCounter >= cs.recordsToGenerate {
-		//break when number records produced
+		// break when number records produced
 		return nil, io.EOF
 	} else {
 		cs.recordCounter++

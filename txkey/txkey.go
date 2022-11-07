@@ -30,7 +30,7 @@ func FieldViewFromFullKey(fullKey []byte) FieldView {
 // The roaringContainerKey argument to Key() is a container key into a roaring Container.
 // The return value from Key() is constructed as follows:
 //
-//     ~index%field;view:shard<ckey#
+//	~index%field;view:shard<ckey#
 //
 // where shard and ckey are always exactly 8 bytes, uint64 big-endian encoded.
 //
@@ -43,20 +43,21 @@ func FieldViewFromFullKey(fullKey []byte) FieldView {
 // The ckey is the 8 bytes between the '<' and the '#'.
 // The Prefix of a key ends at, and includes, the '<'. It is at least 16 bytes long.
 // The index, field, and view are not allowed to contain these reserved bytes:
-//  {'~', '>', ';', ':', '<', '#', '$', '%', '^', '(', ')', '*', '!'}
+//
+//	{'~', '>', ';', ':', '<', '#', '$', '%', '^', '(', ')', '*', '!'}
 //
 // The bytes {'+', '/', '-', '_', '.', and '=' can be used in index, field, and view; to enable
 // base-64 encoding.
 //
 // The shortest possible key is 25 bytes. It would be laid out like this:
-//           ~i%f;v:12345678<12345678#
-//           1234567890123456789012345
+//
+//	~i%f;v:12345678<12345678#
+//	1234567890123456789012345
 //
 // keys starting with '~' are regular value keys.
 // keys starting with '>' are symlink keys.
 //
 // NB must be kept in sync with Prefix() and KeyExtractContainerKey().
-//
 func Key(index, field, view string, shard uint64, roaringContainerKey uint64) (r []byte) {
 
 	prefix := Prefix(index, field, view, shard)
@@ -68,9 +69,12 @@ func Key(index, field, view string, shard uint64, roaringContainerKey uint64) (r
 }
 
 // ShardFromKey key example: index/field;view:shard<ckey
-//                  n-9    n-1
+//
+//	n-9    n-1
+//
 // ... : 01234567 < 01234567   #
-//          shard       ckey
+//
+//	shard       ckey
 func ShardFromKey(bkey []byte) (shard uint64) {
 	MustValidateKey(bkey)
 	n := len(bkey)
@@ -122,9 +126,10 @@ func MustValidateKey(bkey []byte) {
 // KeyExtractContainerKey extracts the containerKey from bkey.
 // key example: index/field;view:shard<ckey
 // shortest: =i%f;v:12345678<12345678#
-//           1234567890123456789012345
-//  numbering len(bkey) - i:
-//           5432109876543210987654321
+//
+//	         1234567890123456789012345
+//	numbering len(bkey) - i:
+//	         5432109876543210987654321
 func KeyExtractContainerKey(bkey []byte) (containerKey uint64) {
 	n := len(bkey)
 	MustValidateKey(bkey)
@@ -170,7 +175,6 @@ func Prefix(index, field, view string, shard uint64) (r []byte) {
 // The full name of the index must be provided, no partial index names will work.
 //
 // The returned prefix is terminated by '%' and so DeleteIndex("i") will not delete the index "i2".
-//
 func IndexOnlyPrefix(indexName string) (r []byte) {
 	r = make([]byte, 0, 32)
 	r = append(r, '~')
@@ -191,9 +195,12 @@ func FieldPrefix(index, field string) (r []byte) {
 }
 
 // PrefixFromKey key example: index/field;view:shard<ckey
-//                  n-9    n-1
+//
+//	n-9    n-1
+//
 // ... : 01234567 < 01234567  #
-//          shard       ckey
+//
+//	shard       ckey
 func PrefixFromKey(bkey []byte) (prefix []byte) {
 	n := len(bkey)
 	return bkey[:(n - 9)]

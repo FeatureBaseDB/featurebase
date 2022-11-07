@@ -298,7 +298,8 @@ var tests = []struct {
 		},
 		exp: [][]interface{}{
 			{"a", true, int64(101), []byte{9, 196}, float64(9.4921)},
-			{nil, nil, nil, nil, nil}},
+			{nil, nil, nil, nil, nil},
+		},
 	},
 	{
 		schemaFile: "floatscale.json",
@@ -434,27 +435,28 @@ func TestKafkaSourceSchemaChangeCommitRegression(t *testing.T) {
 	}
 
 	go func() {
-
 		topic := "xyzzy"
-		src.recordChannel <- recordWithError{Record: &confluent.Message{
-			TopicPartition: confluent.TopicPartition{
-				Topic:     &topic,
-				Partition: 0,
-				Offset:    confluent.Offset(0),
+		src.recordChannel <- recordWithError{
+			Record: &confluent.Message{
+				TopicPartition: confluent.TopicPartition{
+					Topic:     &topic,
+					Partition: 0,
+					Offset:    confluent.Offset(0),
+				},
+				Timestamp: time.Now(),
+				Value:     data1,
 			},
-			Timestamp: time.Now(),
-			Value:     data1,
-		},
 		}
-		src.recordChannel <- recordWithError{Record: &confluent.Message{
-			TopicPartition: confluent.TopicPartition{
-				Topic:     &topic,
-				Partition: 0,
-				Offset:    confluent.Offset(1),
+		src.recordChannel <- recordWithError{
+			Record: &confluent.Message{
+				TopicPartition: confluent.TopicPartition{
+					Topic:     &topic,
+					Partition: 0,
+					Offset:    confluent.Offset(1),
+				},
+				Timestamp: time.Now(),
+				Value:     data2,
 			},
-			Timestamp: time.Now(),
-			Value:     data2,
-		},
 		}
 		close(src.recordChannel)
 	}()
@@ -508,14 +510,14 @@ func TestKafkaSourceTimeout(t *testing.T) {
 
 	go func() {
 		topic := "test"
-		src.recordChannel <- recordWithError{Record: &confluent.Message{
-			TopicPartition: confluent.TopicPartition{
-				Topic: &topic,
+		src.recordChannel <- recordWithError{
+			Record: &confluent.Message{
+				TopicPartition: confluent.TopicPartition{
+					Topic: &topic,
+				},
+				Value: buf,
 			},
-			Value: buf,
-		},
 		}
-
 	}()
 
 	// ensure we can get a message if one is available
@@ -621,7 +623,6 @@ func TestKafkaSourceIntegration(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func mustNewProducer(t *testing.T, kafkaHost string) *confluent.Producer {
@@ -767,7 +768,6 @@ func TestKafkaSourceNotAutoCommitting(t *testing.T) {
 	} else if off := offsets[0]; int64(off.Offset) != numRecords {
 		t.Fatalf("after commit, offset is not %d: %d", numRecords-1, off.Offset)
 	}
-
 }
 
 func TestRegistryURLParsing(t *testing.T) {
@@ -844,10 +844,8 @@ func TestRegistryURLParsing(t *testing.T) {
 			if codecURL != test.expectedCodecURL {
 				t.Errorf("codec URL exp:\n%s\ngot:\n%s", test.expectedCodecURL, codecURL)
 			}
-
 		})
 	}
-
 }
 
 func postSchema(t *testing.T, schemaFile, subj, regURL string, tlsConfig *tls.Config) (schemaID int) {
@@ -883,7 +881,8 @@ func tCreateTopic(t *testing.T, topic string, p *confluent.Producer) {
 		[]confluent.TopicSpecification{{
 			Topic:             topic,
 			NumPartitions:     64,
-			ReplicationFactor: 1}},
+			ReplicationFactor: 1,
+		}},
 		// Admin options
 		confluent.SetAdminOperationTimeout(maxDur))
 	if err != nil {
@@ -895,7 +894,6 @@ func tCreateTopic(t *testing.T, topic string, p *confluent.Producer) {
 		}
 	}
 	a.Close()
-
 }
 
 func tPutRecordsKafka(t *testing.T, p *confluent.Producer, topic string, schemaID int, schema *liavro.Codec, key string, records ...map[string]interface{}) {

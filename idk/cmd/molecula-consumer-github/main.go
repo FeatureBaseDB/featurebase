@@ -285,6 +285,7 @@ func (s *Source) issueSchema() []idk.Field {
 		idk.RecordTimeField{NameVal: "created_at", Layout: time.RFC3339},
 	}
 }
+
 func (s *Source) Close() error {
 	return nil
 }

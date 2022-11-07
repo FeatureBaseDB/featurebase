@@ -57,7 +57,7 @@ func (m *Main) Run() (err error) {
 		{"2", "1", 159, map[string]interface{}{"boolean": true}, map[string]interface{}{"boolean": false}, map[string]interface{}{"string": "cgr"}, map[string]interface{}{"array": []string{"a", "b"}}, nil, map[string]interface{}{"int": 7}, nil, nil, map[string]interface{}{"float": 5.4}, nil, map[string]interface{}{"org.test.survey1234": "yes"}, map[string]interface{}{"float": 8.0}, nil},
 	}
 
-	//kakfa.SetupSasl(configMap *confluent.ConfigMap, SASLConfig SaslConfig) (err error) {
+	// kakfa.SetupSasl(configMap *confluent.ConfigMap, SASLConfig SaslConfig) (err error) {
 
 	p, err := confluent.NewProducer(m.configMap)
 	if err != nil {
@@ -101,7 +101,7 @@ func (m *Main) Run() (err error) {
 			return errors.Wrap(err, "putting record")
 		}
 	}
-	<-doneChan //wait till all messages are acked
+	<-doneChan // wait till all messages are acked
 	p.Flush(10 * 1000)
 
 	return nil

@@ -1,6 +1,6 @@
 package sql3_test
 
-//LIKE tests
+// LIKE tests
 var likeTests = tableTest{
 	table: tbl(
 		"like_all_types",
@@ -83,7 +83,7 @@ var likeTests = tableTest{
 	},
 }
 
-//NOT LIKE tests
+// NOT LIKE tests
 var notLikeTests = tableTest{
 	table: tbl(
 		"not_like_all_types",

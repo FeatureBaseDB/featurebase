@@ -5,7 +5,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
-//groupby tests
+// groupby tests
 var groupByTests = tableTest{
 	table: tbl(
 		"groupby_test",

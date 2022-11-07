@@ -893,10 +893,10 @@ func validateTimestamp(unit Unit, ts time.Time) error {
 	return nil
 }
 
-//  validateDuration checks if the duration will overflow. Users can provide a custom epoch but
-//  Featurebase will ultimately convert this to some duration relative to the Unix epoch.
-//  So if the custom epoch + the provided value in the desired units is too far from
-//  Unix epoch such that it causes an interger overflow, this will return an error.
+// validateDuration checks if the duration will overflow. Users can provide a custom epoch but
+// Featurebase will ultimately convert this to some duration relative to the Unix epoch.
+// So if the custom epoch + the provided value in the desired units is too far from
+// Unix epoch such that it causes an interger overflow, this will return an error.
 func validateDuration(dur int64, offset int64, granularity Unit) error {
 	var minInt, maxInt int64
 	switch granularity {

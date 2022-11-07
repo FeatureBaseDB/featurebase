@@ -1156,7 +1156,7 @@ func TestBitmap_Xor_ArrayArray(t *testing.T) {
 
 }
 
-//empty array test
+// empty array test
 func TestBitmap_Xor_Empty(t *testing.T) {
 	bm1 := roaring.NewFileBitmap(0, 50000, 1000001, 1000002)
 	empty := roaring.NewFileBitmap()

@@ -85,8 +85,10 @@ func (j parseTables) secondary() *parseTable {
 // tableWhere represents a parseTable from a sql query along
 // with the portion of the where clause that relates to
 // that table. For example, if a sql query had:
-//     from tbl1, tbl2
-//     where tbl1.field1=1 and tbl2.field2=2
+//
+//	from tbl1, tbl2
+//	where tbl1.field1=1 and tbl2.field2=2
+//
 // then each table would have a separate tableWhere object
 // with the where made up of only the field with matching qualifier.
 type tableWhere struct {
@@ -847,10 +849,12 @@ func extractComparisonOp(expr *sqlparser.ComparisonExpr) pql.Token {
 // extractJoinTables returns a slice of parseTable containing two
 // items, the primary and secondary join tables. This function does
 // not extract join tables of the form:
-//    from tbl1, tbl2
-// The from clause must be of the form:
-//    from tbl1 INNER JOIN tbl2 ON ...
 //
+//	from tbl1, tbl2
+//
+// The from clause must be of the form:
+//
+//	from tbl1 INNER JOIN tbl2 ON ...
 func extractJoinTables(stmt *sqlparser.Select) (parseTables, error) {
 	if len(stmt.From) != 1 {
 		return nil, errors.New("selecting from multiple tables is not supported")

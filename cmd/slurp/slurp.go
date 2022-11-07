@@ -85,9 +85,8 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			index := parts[1]
 			fieldName := parts[2]
 			if fieldName == "_keys" {
-				//skip index keys are not not real fields so will have no need for field keys
+				// skip index keys are not not real fields so will have no need for field keys
 				return nil
-
 			}
 
 			byteData, err := io.ReadAll(tr)
@@ -121,6 +120,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 	r.state = parts[0]
 	return nil
 }
+
 func (r *stateMachine) Upload() error {
 	if len(r.viewData) > 0 {
 		request := &pilosa.ImportRoaringRequest{
@@ -242,7 +242,6 @@ func stopProfile(host, outfile string) {
 	defer fd.Close()
 	_, err = io.Copy(fd, resp.Body)
 	vprint.PanicOn(err)
-
 }
 
 var globURI *pnet.URI

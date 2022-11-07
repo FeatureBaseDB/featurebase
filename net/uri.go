@@ -30,12 +30,13 @@ var (
 // 3) Port: Port of the URI. Default: 10101.
 //
 // All parts of the URI are optional. The following are equivalent:
-// 	http://localhost:10101
-// 	http://localhost
-// 	http://:10101
-// 	localhost:10101
-// 	localhost
-// 	:10101
+//
+//	http://localhost:10101
+//	http://localhost
+//	http://:10101
+//	localhost:10101
+//	localhost
+//	:10101
 type URI struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`

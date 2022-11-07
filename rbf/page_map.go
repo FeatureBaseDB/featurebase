@@ -1,7 +1,7 @@
 /*
 start with https://github.com/benbjohnson/immutable and specialize Map<uint32,int64>
 
-Copyright 2019 Ben Johnson
+# Copyright 2019 Ben Johnson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in

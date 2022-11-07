@@ -84,7 +84,6 @@ func TestKafkaStaticSourceLocal(t *testing.T) {
 
 			for _, exp := range test.exp {
 				rec, err := src.Record()
-
 				if err != nil {
 					t.Fatalf("unexpected error getting record: %v", err)
 				}
@@ -171,7 +170,6 @@ func TestKafkaStaticSourceIntegration(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func tCreateTopic(t *testing.T, topic string, addr net.Addr) {

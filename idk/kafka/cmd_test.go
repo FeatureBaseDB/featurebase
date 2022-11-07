@@ -24,12 +24,14 @@ import (
 	liavro "github.com/linkedin/goavro/v2"
 )
 
-var pilosaHost string
-var pilosaTLSHost string
-var pilosaGrpcHost string
-var kafkaHost string
-var registryHost string
-var certPath string
+var (
+	pilosaHost     string
+	pilosaTLSHost  string
+	pilosaGrpcHost string
+	kafkaHost      string
+	registryHost   string
+	certPath       string
+)
 
 func init() {
 	var ok bool
@@ -181,7 +183,6 @@ func TestConfigOptions(t *testing.T) {
 	if val, err := cfg.Get("auto.offset.reset", nil); err != nil || val.(string) != "latest" {
 		t.Fatalf("unexpected val for auto.offset.reset val: %v, err: %v", val, err)
 	}
-
 }
 
 func TestCmdMainOne(t *testing.T) {
@@ -652,6 +653,7 @@ func (s sortableCRI) Less(i, j int) bool {
 	}
 	return true
 }
+
 func (s sortableCRI) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }

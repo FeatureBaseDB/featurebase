@@ -1,6 +1,6 @@
 package sql3_test
 
-//time quantum insert tests
+// time quantum insert tests
 var timeQuantumInsertTest = tableTest{
 	table: tbl(
 		"time_quantum_insert",
@@ -23,7 +23,7 @@ var timeQuantumInsertTest = tableTest{
 	},
 }
 
-//time quantum query tests
+// time quantum query tests
 var timeQuantumQueryTest = tableTest{
 	table: tbl(
 		"timeQuantumQueryTest",

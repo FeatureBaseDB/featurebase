@@ -8,7 +8,7 @@ import "sync"
 
 const containerWidth = 1 << 16
 
-////////////////// array
+// //////////////// array
 func arrayEmpty() []uint16 {
 	return make([]uint16, 0)
 }
@@ -77,7 +77,7 @@ func arrayEvenBitsSet() []uint16 {
 	return array
 }
 
-////////////////// bitmap
+// //////////////// bitmap
 func bitmapEmpty() []uint64 {
 	return make([]uint64, bitmapN)
 }
@@ -162,7 +162,7 @@ func bitmapEvenBitsSet() []uint64 {
 	return bitmap
 }
 
-////////////////// run
+// //////////////// run
 func runEmpty() []Interval16 {
 	return make([]Interval16, 0)
 }

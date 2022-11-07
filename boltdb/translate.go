@@ -60,13 +60,14 @@ var _ pilosa.TranslateStore = &TranslateStore{}
 
 // TranslateStore is an on-disk storage engine for translating string-to-uint64 values.
 // An empty string will be converted into the sentinel byte slice:
-// var emptyKey = []byte{
-// 	0x00, 0x00, 0x00,
-// 	0x4d, 0x54, 0x4d, 0x54, // MTMT
-// 	0x00,
-// 	0xc2, 0xa0, // NO-BREAK SPACE
-// 	0x00,
-// }
+//
+//	var emptyKey = []byte{
+//		0x00, 0x00, 0x00,
+//		0x4d, 0x54, 0x4d, 0x54, // MTMT
+//		0x00,
+//		0xc2, 0xa0, // NO-BREAK SPACE
+//		0x00,
+//	}
 type TranslateStore struct {
 	mu sync.RWMutex
 	db *bolt.DB

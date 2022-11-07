@@ -42,12 +42,12 @@ var (
 // destname are separated by "___", triple underscore) and converts it
 // to an idk Field like:
 //
-// FieldTypeField {
-//     NameVal: sourcename,
-//     DestNameVal: destname,
-//     Thing1: Arg,
-//     Thing2: Arg2,
-// }
+//	FieldTypeField {
+//	    NameVal: sourcename,
+//	    DestNameVal: destname,
+//	    Thing1: Arg,
+//	    Thing2: Arg2,
+//	}
 //
 // It does this using a variety of reflective magic. The unwritten
 // rules are that all idk Fields must be structs and have their first

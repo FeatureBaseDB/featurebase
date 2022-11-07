@@ -143,7 +143,6 @@ func TestGetIDKFields(t *testing.T) {
 			t.Fatalf("mismatched genFields at %d: got:\n%+v\nexp:\n%+v", i, gotGenField, expGenField)
 		}
 	}
-
 }
 
 func TestNewCustomUnmarshalling(t *testing.T) {
@@ -180,7 +179,6 @@ fields:
 	if cc.CustomConfig.Fields[0].TimeFormat != unixFormat {
 		t.Fatalf("wrong time format: %s", cc.CustomConfig.Fields[0].TimeFormat)
 	}
-
 }
 
 func TestIncreasingTimestampGenerator(t *testing.T) {
@@ -232,7 +230,6 @@ func TestIncreasingTimestampGenerator(t *testing.T) {
 			} else if recInt < testcase.min || recInt > testcase.max {
 				t.Fatalf("unexpected value for time: %v", recInt)
 			}
-
 		})
 	}
 }
