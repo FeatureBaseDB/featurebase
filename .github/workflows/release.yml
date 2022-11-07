@@ -60,6 +60,7 @@ jobs:
       - name: build featurebase
         run: |
           make install-build-deps
+          make install-statik
           make generate-statik
           go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase
           go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/roaring-migrate
@@ -161,11 +162,6 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: consumers-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: artifacts/
-
-      - uses: actions/download-artifact@v3
-        with:
-          name: lattice.tar.gz
           path: artifacts/
 
       - run: ls -alt artifacts/
