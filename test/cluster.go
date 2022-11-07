@@ -489,16 +489,6 @@ func (c *ShareableCluster) Start() error {
 
 // Close stops a Cluster
 func (c *ShareableCluster) Close() error {
-	if c.shared {
-		for i := range c.Nodes {
-			holder := c.GetHolder(i)
-			indexes := holder.Indexes()
-			var indexNames []string
-			for _, idx := range indexes {
-				indexNames = append(indexNames, idx.Name())
-			}
-		}
-	}
 	for i, cc := range c.Nodes {
 		if err := cc.Close(); err != nil {
 			return errors.Wrapf(err, "stopping server %d", i)
