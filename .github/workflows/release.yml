@@ -86,6 +86,7 @@ jobs:
 
       - name: build featurebase
         run: |
+          make generate-statik
           go build -o ./build/featurebase-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/featurebase
           go build -o ./build/roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }} -ldflags "${{needs.meta.outputs.ldflags}}" ./cmd/roaring-migrate
 
@@ -198,8 +199,14 @@ jobs:
 
       - run: |
           cd artifacts
-          tar -cvzf ../featurebase-${{needs.meta.outputs.version}}.tar.gz .
-          tar -tf ../featurebase-${{needs.meta.outputs.version}}.tar.gz
+          tar -cvzf ../featurebase-${{needs.meta.outputs.version}}-community.tar.gz .
+          tar -tf ../featurebase-${{needs.meta.outputs.version}}-community.tar.gz
+          cd ../
+      
+      - uses: actions/checkout@v3
+
+      # - run: |
+      #     tar -
 
       - uses: actions/upload-artifact@v3
         with:
