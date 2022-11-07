@@ -189,7 +189,7 @@ generate-protoc: require-protoc require-protoc-gen-gofast
 	$(GO) generate github.com/featurebasedb/featurebase/v3/pb
 
 # `go generate` statik assets (lattice UI)
-generate-statik: build-lattice require-statik
+generate-statik: build-lattice # require-statik
 	$(GO) generate github.com/featurebasedb/featurebase/v3/statik
 
 # `go generate` statik assets (lattice UI) in Docker
