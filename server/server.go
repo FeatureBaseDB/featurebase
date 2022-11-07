@@ -444,8 +444,10 @@ func (m *Command) SetupServer() error {
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
 		fapi := &pilosa.FeatureBaseSchemaAPI{API: api}
+		fsapi := &pilosa.FeatureBaseSystemAPI{API: api}
 		fimp := &batch.FeaturebaseImporter{API: api}
-		return planner.NewExecutionPlanner(e, fapi, api, fimp, m.logger, sql)
+
+		return planner.NewExecutionPlanner(e, fapi, fsapi, api, fimp, m.logger, sql)
 	}
 
 	serverOptions := []pilosa.ServerOption{

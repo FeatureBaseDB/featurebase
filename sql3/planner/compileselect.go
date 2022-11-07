@@ -189,6 +189,19 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser
 		return NewPlanOpNestedLoops(topOp, bottomOp, joinCondition), nil
 
 	case *parser.QualifiedTableName:
+
+		tableName := parser.IdentName(sourceExpr.Name)
+
+		// doing this check here because we don't have a 'system' flag that exists in the FB schema
+		st, ok := systemTables[strings.ToLower(tableName)]
+		if ok {
+			if sourceExpr.Alias != nil {
+				aliasName := parser.IdentName(sourceExpr.Alias)
+				return NewPlanOpRelAlias(aliasName, NewPlanOpSystemTable(p, st)), nil
+			}
+			return NewPlanOpSystemTable(p, st), nil
+
+		}
 		// get all the qualified refs that refer to this table
 		extractColumns := make([]string, 0)
 		for _, r := range scope.referenceList {
@@ -205,14 +218,11 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser
 				}
 			}
 		}
-
-		tableName := parser.IdentName(sourceExpr.Name)
-
 		if sourceExpr.Alias != nil {
 			aliasName := parser.IdentName(sourceExpr.Alias)
+
 			return NewPlanOpRelAlias(aliasName, NewPlanOpPQLTableScan(p, tableName, extractColumns)), nil
 		}
-
 		return NewPlanOpPQLTableScan(p, tableName, extractColumns), nil
 
 	case *parser.TableValuedFunction:
@@ -312,7 +322,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		return nil
 
 	case *parser.TableValuedFunction:
-		//check it actually is a table valued function - we only support one right now; subtable()
+		// check it actually is a table valued function - we only support one right now; subtable()
 		switch strings.ToUpper(source.Name.Name) {
 		case "SUBTABLE":
 			_, err := p.analyzeCallExpression(source.Call, scope)
