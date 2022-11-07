@@ -1,0 +1,17 @@
+ARG FEATUREBASE_URL=https://github.com/FeatureBaseDB/featurebase/releases/download/v1.1.0-community/featurebase-v1.1.0-community-linux-amd64.tar.gz
+
+FROM alpine:latest as builder
+ARG FEATUREBASE_URL
+
+RUN wget -O featurebase.tar.gz ${FEATUREBASE_URL}
+RUN tar -zxvf featurebase.tar.gz
+RUN mv featurebase-v*/ featurebase/
+RUN mv idk-v*/ idk/
+
+FROM alpine:latest as featurebase
+COPY --from=builder /featurebase /featurebase
+WORKDIR /featurebase
+
+FROM alpine:latest as ingester
+COPY --from=builder /idk /ingester
+WORKDIR /ingester
