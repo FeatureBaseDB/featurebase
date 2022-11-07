@@ -3,7 +3,6 @@ package csv
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -257,7 +256,7 @@ func tim(t *testing.T, tstr string) time.Time {
 }
 
 func writeTempFile(t *testing.T, data string) string {
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatalf("getting temp file: %v", err)
 	}
@@ -321,12 +320,12 @@ func TestStreamFileNames(t *testing.T) {
 }
 
 func testDirTree(tree string) (string, error) {
-	tmp, err := ioutil.TempDir("", "")
+	tmp, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", err
 	}
 
-	err = os.MkdirAll(filepath.Join(tmp, tree), 0755)
+	err = os.MkdirAll(filepath.Join(tmp, tree), 0o755)
 	if err != nil {
 		os.RemoveAll(tmp)
 		return "", err
@@ -490,7 +489,6 @@ func testTimestampRunner(t *testing.T, m *Main, testCase TimestampTestCase) {
 
 	check := testCase.expect.([]interface{})
 	testExtractRowsQuery(t, m.Index, testCase.fieldName, check)
-
 }
 
 // Test that out of range int values are ingested as nil when AllowIntOutOfRange is true.
@@ -532,7 +530,6 @@ id__ID,negneg__Int_-10_-5,negpos__Int_-10_10,pospos__Int_5_10,negzero__Int_-10_0
 			}
 		})
 	}
-
 }
 
 // Test that out of range timestamp values are ingested as nil when AllowTimestampOutOfRange is true.
@@ -556,7 +553,6 @@ id__ID,ts1__Timestamp_ns_2006-01-02 15:04:05.999,ts2__Timestamp_s_2006-01-02T15:
 	checker["ts4"] = []interface{}{nil, "0001-01-01T00:00:01Z", "0001-01-01T00:00:02Z", "9999-12-31T23:59:58Z", "9999-12-31T23:59:59Z", nil}
 	batchSizes := []int{3, 1, 4, 10}
 	for _, bsize := range batchSizes {
-
 		t.Run(fmt.Sprintf("batchsize=%d", bsize), func(t *testing.T) {
 			m := newMainOORFactory(t, file, false, false, true)
 			m.BatchSize = bsize
@@ -573,7 +569,6 @@ id__ID,ts1__Timestamp_ns_2006-01-02 15:04:05.999,ts2__Timestamp_s_2006-01-02T15:
 			}
 		})
 	}
-
 }
 
 // Tests various conditions that should halt ingest
@@ -618,7 +613,8 @@ func TestFailureConditions(t *testing.T) {
 
 		{name: "int string overflow", csv: `id__ID,pospos__Int
 0,"89273948723984729387492387492987"
-`, fail: true, intOutOfRange: false, timestampOutOfRange: false, decimalOutOfRange: false}}
+`, fail: true, intOutOfRange: false, timestampOutOfRange: false, decimalOutOfRange: false},
+	}
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {

@@ -5,21 +5,19 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"time"
-
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	gohttp "net/http"
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	pnet "github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/vprint"
-
-	"os"
-	"strconv"
-	"strings"
 )
 
 func UploadTar(srcFile string, client *pilosa.InternalClient) error {
@@ -40,8 +38,8 @@ func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 		tarReader = tar.NewReader(f)
 	}
 	viewData := make(map[string][]byte)
-	//given ordered by index/field/view
-	//trait_store/product_count__commercial_cd_or_share_certificate/views/bsig_product_count__commercial_cd_or_share_certificate/fragments/255
+	// given ordered by index/field/view
+	// trait_store/product_count__commercial_cd_or_share_certificate/views/bsig_product_count__commercial_cd_or_share_certificate/fragments/255
 	lastIndex := ""
 	lastField := ""
 	lastShard := uint64(0)
@@ -52,7 +50,7 @@ func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 			if header != nil {
 				vprint.PanicOn("header should not be nil on err io.EOF")
 			}
-			//submit any stuff we have left
+			// submit any stuff we have left
 			if len(viewData) > 0 {
 				request := &pilosa.ImportRoaringRequest{
 					Views: viewData,
@@ -69,7 +67,7 @@ func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 			vprint.VV("n = %v, progress, elapsed '%v'", n, time.Since(t0))
 		}
 		parts := strings.Split(header.Name, "/")
-		//vv("parts = '%#v'", parts)
+		// vv("parts = '%#v'", parts)
 		index := parts[1]
 		field := parts[2]
 		view := parts[4]
@@ -83,15 +81,15 @@ func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 				request := &pilosa.ImportRoaringRequest{
 					Views: viewData,
 				}
-				//vv("about to submit lastIndex='%v' lastShard='%v'", lastIndex, lastShard)
+				// vv("about to submit lastIndex='%v' lastShard='%v'", lastIndex, lastShard)
 				uri := GetImportRoaringURI(lastIndex, lastShard)
 				vprint.PanicOn(client.ImportRoaring(context.Background(), uri, lastIndex, lastField, lastShard, false, request))
 				viewData = make(map[string][]byte)
-				//vv("done with submit lastIndex='%v' lastShard='%v'; took='%v'", lastIndex, lastShard, time.Since(t0))
+				// vv("done with submit lastIndex='%v' lastShard='%v'; took='%v'", lastIndex, lastShard, time.Since(t0))
 
 			}
 		}
-		roaringData, err := ioutil.ReadAll(tarReader)
+		roaringData, err := io.ReadAll(tarReader)
 		if err != nil {
 			return err
 		}
@@ -102,8 +100,8 @@ func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 		lastIndex = index
 		lastField = field
 
-		//lastShard = shard
-		//vv("bottom of loop")
+		// lastShard = shard
+		// vv("bottom of loop")
 	}
 }
 
@@ -111,7 +109,6 @@ func UploadTar(srcFile string, client *pilosa.InternalClient) error {
 // the new "good" loader, and should always be preferred now
 // when not trying to repro that bug. pulled from 85fa67e8
 func main() {
-
 	host := "127.0.0.1:10101"
 	h := &gohttp.Client{}
 	c, err := pilosa.NewInternalClient(host, h, pilosa.WithSerializer(proto.Serializer{}))

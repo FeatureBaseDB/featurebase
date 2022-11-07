@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -262,7 +262,7 @@ func (s *Source) readFileOrURL(name string) ([]byte, error) {
 		s.Log.Printf("read %d bytes from %s\n", bytesRead, name)
 		content = buf.Bytes()
 	} else {
-		content, err = ioutil.ReadFile(name)
+		content, err = os.ReadFile(name)
 		if err != nil {
 			return nil, errors.Wrapf(err, "reading file %v", name)
 		}

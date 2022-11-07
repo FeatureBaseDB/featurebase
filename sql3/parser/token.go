@@ -22,7 +22,7 @@ func init() {
 // Token is the set of lexical tokens of the Go programming language.
 type Token int
 
-//TODO (pok) remove unnecessary tokens
+// TODO (pok) remove unnecessary tokens
 // The list of tokens.
 const (
 	// Special tokens

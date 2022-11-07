@@ -1,6 +1,6 @@
 package sql3_test
 
-//BETWEEN tests
+// BETWEEN tests
 var betweenTests = tableTest{
 	table: tbl(
 		"between_all_types",
@@ -101,7 +101,7 @@ var betweenTests = tableTest{
 	},
 }
 
-//NOT BETWEEN tests
+// NOT BETWEEN tests
 var notBetweenTests = tableTest{
 	table: tbl(
 		"not_between_all_types",

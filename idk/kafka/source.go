@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -1009,7 +1008,7 @@ func (s *Source) getCodec(id int32) (avro.Schema, error) {
 	}
 	defer schemaUrlResponse.Body.Close()
 	if schemaUrlResponse.StatusCode >= 300 {
-		bod, err := ioutil.ReadAll(schemaUrlResponse.Body)
+		bod, err := io.ReadAll(schemaUrlResponse.Body)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Failed to get schema, code: %d, no body", schemaUrlResponse.StatusCode)
 		}
@@ -1043,7 +1042,7 @@ func (s *Source) getCodec(id int32) (avro.Schema, error) {
 		s.Log.Infof("Problem getting subject/version info for schema: %v", err)
 	} else {
 		if subVerResponse.StatusCode >= 300 {
-			bod, err := ioutil.ReadAll(subVerResponse.Body)
+			bod, err := io.ReadAll(subVerResponse.Body)
 			s.Log.Infof("Problem getting subject/version info for schema, response: %s. Err reading body: %v", bod, err)
 		}
 		defer subVerResponse.Body.Close()
@@ -1053,7 +1052,7 @@ func (s *Source) getCodec(id int32) (avro.Schema, error) {
 			Version int    `json:"version"`
 		}
 
-		if bod, err := ioutil.ReadAll(subVerResponse.Body); err != nil {
+		if bod, err := io.ReadAll(subVerResponse.Body); err != nil {
 			s.Log.Infof("decoding subj/version %s body: %v", schemaSubVerUrl, err)
 		} else if err := json.Unmarshal(bod, &tempSchemaStruct); err != nil {
 			s.Log.Infof("decoding schema subject & version from registry: %v", err)

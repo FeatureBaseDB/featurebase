@@ -3,7 +3,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"sync/atomic"
 
@@ -43,11 +43,12 @@ func LaunchKafkaEventConfirmer(producer *confluent.Producer, finished *int32, it
 	}()
 	return doneChan
 }
+
 func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 	var err error
 	configMap := &confluent.ConfigMap{}
 	if m.KafkaConfiguration != "" {
-		file, er := ioutil.ReadFile(m.KafkaConfiguration)
+		file, er := os.ReadFile(m.KafkaConfiguration)
 		if er != nil {
 			return nil, er
 		}
@@ -84,7 +85,7 @@ func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 		}
 	}
 
-	//SSL
+	// SSL
 	if m.KafkaSslCaLocation != "" {
 		err = configMap.SetKey("ssl.ca.location", m.KafkaSslCaLocation)
 		if err != nil {
@@ -121,7 +122,7 @@ func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 		}
 	}
 
-	//SSL
+	// SSL
 	if m.KafkaSslCaLocation != "" {
 		err = configMap.SetKey("ssl.ca.location", m.KafkaSslCaLocation)
 		if err != nil {

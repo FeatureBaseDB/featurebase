@@ -665,12 +665,12 @@ func (e *MerckSource) StringWithCharset(length int, charset string) string {
 	return string(b)
 }
 
-//returns a string with random English alphabets of the specified length
+// returns a string with random English alphabets of the specified length
 func (e *MerckSource) String(length int) string {
 	return e.StringWithCharset(length, charset)
 }
 
-//returns a random int between a range with a 50% chance of returning a zero.
+// returns a random int between a range with a 50% chance of returning a zero.
 func (e *MerckSource) generate50(max int, min int) int {
 	num := e.rand.Intn(100)
 	numbertoReturn := e.rand.Intn(max-min) + min
@@ -682,7 +682,7 @@ func (e *MerckSource) generate50(max int, min int) int {
 	}
 }
 
-//returns a random int between a range with a 10% chance of returning a zero.
+// returns a random int between a range with a 10% chance of returning a zero.
 func (e *MerckSource) generate10(max int, min int) int {
 	num := e.rand.Intn(100)
 	numbertoReturn := e.rand.Intn(max-min) + min
@@ -694,7 +694,7 @@ func (e *MerckSource) generate10(max int, min int) int {
 	}
 }
 
-//returns a random float between a range with a 50% chance of returning a zero.
+// returns a random float between a range with a 50% chance of returning a zero.
 func (e *MerckSource) float50(max float64, min float64) float64 {
 	numbertoReturn := min + e.rand.Float64()*(max-min)
 	num := e.rand.Intn(100)
@@ -706,12 +706,12 @@ func (e *MerckSource) float50(max float64, min float64) float64 {
 	}
 }
 
-//returns a random float between a range
+// returns a random float between a range
 func (e *MerckSource) floatRand(max float64, min float64) float64 {
 	return min + e.rand.Float64()*(max-min)
 }
 
-//returns a random int between a range
+// returns a random int between a range
 func (e *MerckSource) generateRandomInt(max int, min int) int {
 	return e.rand.Intn(max-min) + min
 }

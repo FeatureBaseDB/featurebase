@@ -8,7 +8,9 @@ import (
 // data by providing one or more idk.Source. It also contains
 // a method for getting information about the supported sources.
 // Info() - return information about the generator along with
-//          a list of supported types
+//
+//	a list of supported types
+//
 // Sources() - provided a string key and configuration, returns
 // a list of primary key fields and a list of sources.
 type SourceGenerator interface {

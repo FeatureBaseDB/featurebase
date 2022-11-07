@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	gohttp "net/http"
 	"net/url"
 	"os"
@@ -54,7 +53,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 				return err
 			}
 		}
-		roaringData, err := ioutil.ReadAll(tr)
+		roaringData, err := io.ReadAll(tr)
 		if err != nil {
 			return err
 		}
@@ -85,12 +84,11 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			index := parts[1]
 			fieldName := parts[2]
 			if fieldName == "_keys" {
-				//skip index keys are not not real fields so will have no need for field keys
+				// skip index keys are not not real fields so will have no need for field keys
 				return nil
-
 			}
 
-			byteData, err := ioutil.ReadAll(tr)
+			byteData, err := io.ReadAll(tr)
 			vprint.PanicOn(err)
 			readerFunc := func() (io.Reader, error) {
 				return bytes.NewReader(byteData), nil
@@ -106,7 +104,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 			if err != nil {
 				return err
 			}
-			byteData, err := ioutil.ReadAll(tr)
+			byteData, err := io.ReadAll(tr)
 			vprint.PanicOn(err)
 			readerFunc := func() (io.Reader, error) {
 				return bytes.NewReader(byteData), nil
@@ -121,6 +119,7 @@ func (r *stateMachine) NewHeader(h *tar.Header, tr *tar.Reader) error {
 	r.state = parts[0]
 	return nil
 }
+
 func (r *stateMachine) Upload() error {
 	if len(r.viewData) > 0 {
 		request := &pilosa.ImportRoaringRequest{
@@ -242,7 +241,6 @@ func stopProfile(host, outfile string) {
 	defer fd.Close()
 	_, err = io.Copy(fd, resp.Body)
 	vprint.PanicOn(err)
-
 }
 
 var globURI *pnet.URI

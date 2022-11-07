@@ -533,6 +533,7 @@ func viewTimePart(v string) string {
 
 // getLowestGranularityQuantum returns lowest granularity quantum from a list of views
 // e.g.
+//
 //	[std_2001, std_200102, std_20010203, std_2001020304] - returns "Y" since year is the lowest granularity
 //	[std_2001020304, std_200102, std_20010203] - returns "M", the order of views should not affect lowest granularity
 func getLowestGranularityQuantum(views []string) TimeQuantum {

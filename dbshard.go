@@ -456,7 +456,6 @@ func (f *TxFactory) GetShardsForIndex(idx *Index, roaringViewPath string, requir
 //
 // when a new DBShard is made, we will update the list of shards then. Thus
 // the per.index2shard should always be up to date AFTER the first call here.
-//
 func (per *DBPerShard) TypedDBPerShardGetShardsForIndex(ty txtype, idx *Index, roaringViewPath string, requireData bool) (shardMap map[uint64]struct{}, err error) {
 
 	// use the cache, always

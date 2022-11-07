@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
+	"os"
 	"sort"
 	"strconv"
 	"sync"
@@ -200,7 +200,7 @@ func (s *Source) Open() error {
 		return errors.New("needs header specification file")
 	}
 
-	headerData, err := ioutil.ReadFile(s.Header)
+	headerData, err := os.ReadFile(s.Header)
 	if err != nil {
 		return errors.Wrap(err, "reading header file")
 	}

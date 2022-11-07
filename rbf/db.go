@@ -19,9 +19,7 @@ import (
 	"github.com/molecula/featurebase/v3/syswrap"
 )
 
-var (
-	ErrClosed = errors.New("rbf: database closed")
-)
+var ErrClosed = errors.New("rbf: database closed")
 
 // shared cursor pool across all DB instances.
 // Cursors are returned on Cursor.Close().
@@ -118,14 +116,14 @@ func (db *DB) Open() (err error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if err := os.MkdirAll(db.Path, 0755); err != nil {
+	if err := os.MkdirAll(db.Path, 0o755); err != nil {
 		return err
-	} else if db.file, err = os.OpenFile(db.DataPath(), os.O_WRONLY|os.O_CREATE, 0600); err != nil {
+	} else if db.file, err = os.OpenFile(db.DataPath(), os.O_WRONLY|os.O_CREATE, 0o600); err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
 
 	// Open read-only database mmap.
-	if f, err := os.OpenFile(db.DataPath(), os.O_RDONLY, 0600); err != nil {
+	if f, err := os.OpenFile(db.DataPath(), os.O_RDONLY, 0o600); err != nil {
 		return fmt.Errorf("open mmap file: %w", err)
 	} else if db.data, err = syswrap.Mmap(int(f.Fd()), 0, int(db.cfg.MaxSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		f.Close()
@@ -163,12 +161,12 @@ func (db *DB) Open() (err error) {
 
 func (db *DB) openWAL() (err error) {
 	// Open WAL file writer.
-	if db.walFile, err = os.OpenFile(db.WALPath(), os.O_WRONLY|os.O_CREATE, 0600); err != nil {
+	if db.walFile, err = os.OpenFile(db.WALPath(), os.O_WRONLY|os.O_CREATE, 0o600); err != nil {
 		return fmt.Errorf("open wal file: %w", err)
 	}
 
 	// Open read-only mmap.
-	if f, err := os.OpenFile(db.WALPath(), os.O_RDONLY, 0600); err != nil {
+	if f, err := os.OpenFile(db.WALPath(), os.O_RDONLY, 0o600); err != nil {
 		return fmt.Errorf("open wal mmap file: %w", err)
 	} else if db.wal, err = syswrap.Mmap(int(f.Fd()), 0, int(db.cfg.MaxWALSize), syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		f.Close()
@@ -332,7 +330,7 @@ func (db *DB) checkpoint() (err error) {
 				if IsBitmapHeader(page) {
 					pgno = readPageNo(page)
 					if i+1 < db.walPageN {
-						if page, err = db.readWALPageAt(i + 1); err != nil {
+						if _, err = db.readWALPageAt(i + 1); err != nil {
 							return err
 						}
 					} else {
@@ -501,7 +499,6 @@ func (db *DB) Close() (err error) {
 // We will internally create and rollback a read-only
 // transaction to answer this query.
 func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
-
 	// Read a list of all bitmaps in Tx.
 	tx, err := db.Begin(false)
 	if err != nil {
@@ -578,7 +575,6 @@ func (db *DB) init() error {
 
 // initMetaPage initializes the meta page.
 func (db *DB) initMetaPage() error {
-
 	page := allocPage()
 	writeMetaMagic(page)
 	writeMetaPageN(page, 3)
@@ -590,7 +586,6 @@ func (db *DB) initMetaPage() error {
 
 // initRootRecordPage initializes the initial root record page.
 func (db *DB) initRootRecordPage() error {
-
 	page := allocPage()
 	writePageNo(page, 1)
 	writeFlags(page, PageTypeRootRecord)
@@ -600,7 +595,6 @@ func (db *DB) initRootRecordPage() error {
 
 // initFreelistPage initializes the initial freelist btree page.
 func (db *DB) initFreelistPage() error {
-
 	page := allocPage()
 	writePageNo(page, 2)
 	writeFlags(page, PageTypeLeaf)
@@ -786,7 +780,6 @@ func (db *DB) removeTx(tx *Tx) error {
 
 // Check performs an integrity check.
 func (db *DB) Check() error {
-
 	tx, err := db.Begin(false)
 	if err != nil {
 		return err

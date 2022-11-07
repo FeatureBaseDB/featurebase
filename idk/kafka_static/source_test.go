@@ -6,9 +6,9 @@ package kafka_static
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -68,7 +68,7 @@ func TestKafkaStaticSourceLocal(t *testing.T) {
 			src := NewSource()
 			configureSourceTestFlags(src)
 			{
-				headerData, err := ioutil.ReadFile(test.header)
+				headerData, err := os.ReadFile(test.header)
 				if err != nil {
 					t.Fatalf("reading header file: %v", err)
 				}
@@ -84,7 +84,6 @@ func TestKafkaStaticSourceLocal(t *testing.T) {
 
 			for _, exp := range test.exp {
 				rec, err := src.Record()
-
 				if err != nil {
 					t.Fatalf("unexpected error getting record: %v", err)
 				}
@@ -171,7 +170,6 @@ func TestKafkaStaticSourceIntegration(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func tCreateTopic(t *testing.T, topic string, addr net.Addr) {

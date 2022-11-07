@@ -3,7 +3,6 @@ package kafka
 import (
 	"context"
 	"encoding/binary"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -60,7 +59,6 @@ func (p *PutCmd) Run() (err error) {
 	}
 	var auth *csrc.BasicAuth
 	if p.SchemaRegistryUsername != "" {
-
 		auth = &csrc.BasicAuth{
 			KafkaSchemaApiKey:    p.SchemaRegistryUsername,
 			KafkaSchemaApiSecret: p.SchemaRegistryPassword,
@@ -129,6 +127,7 @@ func (p *PutCmd) Run() (err error) {
 
 	return nil
 }
+
 func CreateKafkaTopic(ctx context.Context, topic string, p *confluent.Producer, numPartitions int, replicationFactor int) error {
 	a, err := confluent.NewAdminClientFromProducer(p)
 	if err != nil {
@@ -153,7 +152,8 @@ func CreateKafkaTopic(ctx context.Context, topic string, p *confluent.Producer, 
 		[]confluent.TopicSpecification{{
 			Topic:             topic,
 			NumPartitions:     numPartitions,
-			ReplicationFactor: replicationFactor}},
+			ReplicationFactor: replicationFactor,
+		}},
 		// Admin options
 		confluent.SetAdminOperationTimeout(maxDur))
 	if err != nil {
@@ -166,6 +166,7 @@ func CreateKafkaTopic(ctx context.Context, topic string, p *confluent.Producer, 
 	}
 	return nil
 }
+
 func (p *PutCmd) getSchema() (string, error) {
 	if p.Schema == "" && p.SchemaFile == "" {
 		return "", errors.New("need a string schema or schema file")
@@ -173,7 +174,7 @@ func (p *PutCmd) getSchema() (string, error) {
 	if p.Schema != "" {
 		return p.Schema, nil
 	}
-	bytes, err := ioutil.ReadFile(p.SchemaFile)
+	bytes, err := os.ReadFile(p.SchemaFile)
 	if err != nil {
 		return "", errors.Wrap(err, "reading schema file")
 	}

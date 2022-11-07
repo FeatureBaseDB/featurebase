@@ -122,7 +122,7 @@ func (e *HughesSource) Schema() []idk.Field {
 	return e.schema
 }
 
-//returns a random float between a range
+// returns a random float between a range
 func (e *HughesSource) floatRand(max float64, min float64) float64 {
 	return min + e.rand.Float64()*(max-min)
 }
@@ -138,7 +138,7 @@ func (e *HughesSource) StringWithCharset(length int, charset string) string {
 	return string(b)
 }
 
-//returns a string with random English alphabets of the specified length
+// returns a string with random English alphabets of the specified length
 func (e *HughesSource) SIDHughes(length int) string {
 	return e.StringWithCharset(length, charsetHughes)
 }

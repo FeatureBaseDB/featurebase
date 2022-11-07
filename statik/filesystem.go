@@ -1,9 +1,9 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
 //
-//go:generate statik -src=../lattice/build -dest=../
-//
 // Package statik contains static assets for the Lattice UI. `go generate` or
 // `make generate-statik` will produce statik.go, which is ignored by git.
+//
+//go:generate statik -src=../lattice/build -dest=../
 package statik
 
 import (

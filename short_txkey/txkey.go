@@ -32,7 +32,7 @@ func FieldViewFromFullKey(fullKey []byte) FieldView {
 // The roaringContainerKey argument to Key() is a container key into a roaring Container.
 // The return value from Key() is constructed as follows:
 //
-//     ~field;view<ckey#
+//	~field;view<ckey#
 //
 // where ckey is always exactly 8 bytes, uint64 big-endian encoded.
 //
@@ -43,20 +43,21 @@ func FieldViewFromFullKey(fullKey []byte) FieldView {
 // The ckey is the 8 bytes between the '<' and the '#'.
 // The Prefix of a key ends at, and includes, the '<'. It is at least 13 bytes long.
 // The index, field, and view are not allowed to contain these reserved bytes:
-//  {'~', '>', ';', ':', '<', '#', '$', '%', '^', '(', ')', '*', '!'}
+//
+//	{'~', '>', ';', ':', '<', '#', '$', '%', '^', '(', ')', '*', '!'}
 //
 // The bytes {'+', '/', '-', '_', '.', and '=' can be used in index, field, and view; to enable
 // base-64 encoding.
 //
 // The shortest possible key is 14 bytes. It would be laid out like this:
-//           ~f;v<12345678#
-//           12345678901234
+//
+//	~f;v<12345678#
+//	12345678901234
 //
 // keys starting with '~' are regular value keys.
 // keys starting with '>' are symlink keys.
 //
 // NB must be kept in sync with Prefix() and KeyExtractContainerKey().
-//
 func Key(index, field, view string, shard, roaringContainerKey uint64) (r []byte) {
 
 	prefix := Prefix(index, field, view, shard)
@@ -100,9 +101,10 @@ func MustValidateKey(bkey []byte) {
 // KeyExtractContainerKey extracts the containerKey from bkey.
 // key example: field;view<ckey
 // shortest: ~f;v<12345678#
-//           1234567890123456789012345
-//  numbering len(bkey) - i:
-//           5432109876543210987654321
+//
+//	         1234567890123456789012345
+//	numbering len(bkey) - i:
+//	         5432109876543210987654321
 func KeyExtractContainerKey(bkey []byte) (containerKey uint64) {
 	n := len(bkey)
 	MustValidateKey(bkey)
@@ -135,7 +137,6 @@ func Prefix(index, field, view string, shard uint64) (r []byte) {
 
 // IndexOnlyPrefix returns a "~" prefix suitable for DeleteIndex and a key-scan to
 // remove all storage. We assume only one index in this database, so delete everything.
-//
 func IndexOnlyPrefix(indexName string) (r []byte) {
 	return []byte("~")
 }
@@ -150,9 +151,12 @@ func FieldPrefix(index, field string) (r []byte) {
 }
 
 // PrefixFromKey key example: ~field;view<ckey#
-//                  n-9    n-1
+//
+//	n-9    n-1
+//
 // ... : 01234567 < 01234567  #
-//          view       ckey
+//
+//	view       ckey
 func PrefixFromKey(bkey []byte) (prefix []byte) {
 	n := len(bkey)
 	return bkey[:(n - 9)]

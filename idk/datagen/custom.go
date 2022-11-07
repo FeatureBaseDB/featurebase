@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -31,7 +30,7 @@ type Custom struct {
 // NewCustom returns a new instance of Custom.
 func NewCustom(cfg SourceGeneratorConfig) Sourcer {
 	conf := &CustomConfig{}
-	if bytes, err := ioutil.ReadFile(cfg.CustomConfig); err != nil {
+	if bytes, err := os.ReadFile(cfg.CustomConfig); err != nil {
 		return &Custom{err: errors.Wrap(err, "reading custom config file")}
 	} else if err = yaml.Unmarshal(bytes, conf); err != nil {
 		return &Custom{err: errors.Wrap(err, "unmarshaling custom config file")}
@@ -45,7 +44,6 @@ func NewCustom(cfg SourceGeneratorConfig) Sourcer {
 			IDKAndGenFields: ig,
 		}
 	}
-
 }
 
 // CustomConfig represents the JSON/yaml configuration for the "custom" datagen source.
@@ -374,7 +372,7 @@ func (cs *CustomSource) Record() (idk.Record, error) {
 		last = cs.record[i]
 	}
 	if cs.recordsToGenerate > 0 && cs.recordCounter >= cs.recordsToGenerate {
-		//break when number records produced
+		// break when number records produced
 		return nil, io.EOF
 	} else {
 		cs.recordCounter++

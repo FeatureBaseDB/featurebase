@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -101,7 +101,7 @@ func readIndexTranslateData(ctx context.Context, client *pilosa.InternalClient, 
 	if err != nil {
 		return err
 	}
-	buf, err := ioutil.ReadAll(r)
+	buf, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func readIndexTranslateData(ctx context.Context, client *pilosa.InternalClient, 
 }
 
 func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, error) {
-	dirEntries, err := ioutil.ReadDir(dirPath)
+	dirEntries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, 
 	// filter out non-file entries
 	filePaths := make([]string, 0, len(dirEntries))
 	for _, entry := range dirEntries {
-		if entry.Mode().IsDir() {
+		if entry.IsDir() {
 			continue
 		}
 		filePath := filepath.Join(dirPath, entry.Name())
@@ -186,7 +186,7 @@ func verifyNodeHasGivenKeys(ctx context.Context, node, index, dirPath string, ke
 
 	// create dir to store boltdbs for this node
 	nodeDirPath := filepath.Join(dirPath, node)
-	err = os.Mkdir(nodeDirPath, 0755)
+	err = os.Mkdir(nodeDirPath, 0o755)
 	if err != nil {
 		return err
 	}
@@ -385,7 +385,7 @@ func TestPauseReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	dirPath = filepath.Join(dirPath, keysDirName)
-	err = os.Mkdir(dirPath, 0755)
+	err = os.Mkdir(dirPath, 0o755)
 	if err != nil {
 		t.Fatal(err)
 	}

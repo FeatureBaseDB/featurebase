@@ -156,12 +156,12 @@ func (e *DellSource) StringWithCharset(length int, charset string) string {
 	return string(b)
 }
 
-//returns a string with random English alphabets of the specified length
+// returns a string with random English alphabets of the specified length
 func (e *DellSource) StringDell(length int) string {
 	return e.StringWithCharset(length, charsetDell)
 }
 
-//generates a random int between range max and min (inclusive)
+// generates a random int between range max and min (inclusive)
 func (e *DellSource) generateRandomInt(max int, min int) int {
 	return e.rand.Intn(max-min) + min
 }

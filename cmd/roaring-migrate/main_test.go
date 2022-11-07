@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -27,24 +26,27 @@ func TestFileExists(t *testing.T) {
 }
 
 func TestMainProgram(t *testing.T) {
-	os.Args = []string{"roaring-migrate",
+	os.Args = []string{
+		"roaring-migrate",
 		"--verbose",
 	}
 	if realMain() == 0 {
 		t.Fatal("should fail and it succeeded")
 	}
-	os.Args = []string{"roaring-migrate",
+	os.Args = []string{
+		"roaring-migrate",
 		"--verbose",
 	}
 	if realMain() == 0 {
 		t.Fatal("should fail and it succeeded")
 	}
-	dir, err := ioutil.TempDir("", "backup")
+	dir, err := os.MkdirTemp("", "backup")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir) // clean up
-	os.Args = []string{"roaring-migrate",
+	os.Args = []string{
+		"roaring-migrate",
 		"--verbose=true",
 		"--data-dir=testdata/data-dir/",
 		"--backup-dir=" + dir,
@@ -52,5 +54,4 @@ func TestMainProgram(t *testing.T) {
 	if realMain() == 1 {
 		t.Fatal("shouldn't fail")
 	}
-
 }
