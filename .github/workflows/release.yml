@@ -196,9 +196,11 @@ jobs:
 
       - run: ls -alt artifacts/
 
-      - run: tar -cvzf featurebase-${{needs.meta.outputs.version}}.tar.gz artifacts/*
+      - run: |
+          tar -cvzf featurebase-${{needs.meta.outputs.version}}.tar.gz -C artifacts *
+          tar -tf featurebase-${{needs.meta.outputs.version}}.tar.gz
 
       - uses: actions/upload-artifact@v3
         with:
-          name: featurebase-${{needs.meta.outputs.version}}--${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          name: featurebase-${{needs.meta.outputs.version}}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
           path: featurebase-${{needs.meta.outputs.version}}.tar.gz
