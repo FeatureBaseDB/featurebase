@@ -172,18 +172,33 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: featurebase-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: artifacts/
 
       - uses: actions/download-artifact@v3
         with:
           name: roaring-migrate-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: artifacts/
 
       - uses: actions/download-artifact@v3
         with:
           name: ingester-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: artifacts/
 
       - uses: actions/download-artifact@v3
         with:
           name: consumers-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: artifacts/
 
-      - run: ls -alt
-          
+      - uses: actions/download-artifact@v3
+        with:
+          name: lattice.tar.gz
+          path: artifacts/
+
+      - run: ls -alt artifacts/
+
+      - run: tar -cvzf featurebase-${{needs.meta.outputs.version}}.tar.gz artifacts/*
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: featurebase-${{needs.meta.outputs.version}}.tar.gz
+          path: featurebase-${{needs.meta.outputs.version}}.tar.gz
