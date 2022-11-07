@@ -197,8 +197,9 @@ jobs:
       - run: ls -alt artifacts/
 
       - run: |
-          tar -cvz -C artifacts -f featurebase-${{needs.meta.outputs.version}}.tar.gz artifacts/*
-          tar -tf featurebase-${{needs.meta.outputs.version}}.tar.gz
+          cd artifacts
+          tar -cvzf ../featurebase-${{needs.meta.outputs.version}}.tar.gz .
+          tar -tf ../featurebase-${{needs.meta.outputs.version}}.tar.gz
 
       - uses: actions/upload-artifact@v3
         with:
