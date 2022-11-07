@@ -44,12 +44,35 @@ func TestPlanner_Show(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	t.Run("SystemTables", func(t *testing.T) {
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, shard_width, replica_count from fb_cluster_info`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(results) != 1 {
+			t.Fatal(fmt.Errorf("unexpected result set length"))
+		}
+
+		if diff := cmp.Diff([]*planner_types.PlannerColumn{
+			{ColumnName: "name", Type: parser.NewDataTypeString()},
+			{ColumnName: "platform", Type: parser.NewDataTypeString()},
+			{ColumnName: "platform_version", Type: parser.NewDataTypeString()},
+			{ColumnName: "db_version", Type: parser.NewDataTypeString()},
+			{ColumnName: "state", Type: parser.NewDataTypeString()},
+			{ColumnName: "node_count", Type: parser.NewDataTypeInt()},
+			{ColumnName: "shard_width", Type: parser.NewDataTypeInt()},
+			{ColumnName: "replica_count", Type: parser.NewDataTypeInt()},
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
 	t.Run("ShowTables", func(t *testing.T) {
 		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW TABLES`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(results) != 2 {
+		if len(results) != 4 {
 			t.Fatal(fmt.Errorf("unexpected result set length"))
 		}
 

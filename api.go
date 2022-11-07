@@ -2894,6 +2894,27 @@ type SchemaAPI interface {
 	Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error)
 }
 
+type ClusterNode struct {
+	ID        string
+	State     string
+	URI       string
+	GRPCURI   string
+	IsPrimary bool
+}
+
+type SystemAPI interface {
+	ClusterName() string
+	Version() string
+	PlatformDescription() string
+	PlatformVersion() string
+	ClusterNodeCount() int
+	ClusterReplicaCount() int
+	ShardWidth() int
+	ClusterState() string
+
+	ClusterNodes() []ClusterNode
+}
+
 // CreateFieldObj is used to encapsulate the information required for creating a
 // field in the SchemaAPI.CreateIndexAndFields interface method.
 type CreateFieldObj struct {
@@ -2977,4 +2998,75 @@ func (fapi *FeatureBaseSchemaAPI) IndexInfo(ctx context.Context, indexName strin
 	idx.Fields = sortedFields
 
 	return idx, nil
+}
+
+// FeatureBaseSystemAPI is a wrapper around pilosa.API. It implements the
+// SystemAPI interface
+type FeatureBaseSystemAPI struct {
+	*API
+}
+
+func (fsapi *FeatureBaseSystemAPI) ClusterName() string {
+	return fsapi.API.ClusterName()
+}
+
+func (fsapi *FeatureBaseSystemAPI) Version() string {
+	return fsapi.API.Version()
+}
+
+func (fsapi *FeatureBaseSystemAPI) PlatformDescription() string {
+	si := fsapi.server.systemInfo
+	platform, err := si.Platform()
+	if err != nil {
+		return "unknown"
+	}
+	return platform
+}
+
+func (fsapi *FeatureBaseSystemAPI) PlatformVersion() string {
+	si := fsapi.server.systemInfo
+	platformVersion, err := si.OSVersion()
+	if err != nil {
+		return "unknown"
+	}
+	return platformVersion
+}
+
+func (fsapi *FeatureBaseSystemAPI) ClusterNodeCount() int {
+	return len(fsapi.cluster.noder.Nodes())
+}
+
+func (fsapi *FeatureBaseSystemAPI) ClusterReplicaCount() int {
+	return fsapi.cluster.ReplicaN
+}
+
+func (fsapi *FeatureBaseSystemAPI) ShardWidth() int {
+	return ShardWidth
+}
+
+func (fsapi *FeatureBaseSystemAPI) ClusterState() string {
+	state, err := fsapi.State()
+	if err != nil {
+		return "UNKNOWN"
+	}
+	return string(state)
+}
+
+func (fsapi *FeatureBaseSystemAPI) ClusterNodes() []ClusterNode {
+	result := make([]ClusterNode, 0)
+
+	nodes := fsapi.Hosts(context.Background())
+
+	for _, n := range nodes {
+		scn := ClusterNode{
+			ID:        n.ID,
+			State:     string(n.State),
+			URI:       n.URI.String(),
+			GRPCURI:   n.GRPCURI.String(),
+			IsPrimary: n.IsPrimary,
+		}
+		result = append(result, scn)
+	}
+
+	return result
 }
