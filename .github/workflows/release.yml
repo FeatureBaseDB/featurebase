@@ -200,5 +200,5 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: featurebase-${{needs.meta.outputs.version}}.tar.gz
+          name: featurebase-${{needs.meta.outputs.version}}--${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
           path: featurebase-${{needs.meta.outputs.version}}.tar.gz
