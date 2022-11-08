@@ -7,7 +7,7 @@ var grpc = require("@improbable-eng/grpc-web").grpc;
 
 var Pilosa = (function () {
   function Pilosa() {}
-  Pilosa.serviceName = "pilosa.Pilosa";
+  Pilosa.serviceName = "proto.Pilosa";
   return Pilosa;
 }());
 
