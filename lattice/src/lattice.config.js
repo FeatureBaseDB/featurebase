@@ -1,4 +1,4 @@
 export const pilosaConfig = {
-  hostname: 'localhost',
+  hostname: '127.0.0.1',
   httpPort: '10101'
 };
