@@ -6,8 +6,8 @@ TAG_INGEST_RUNNER=$(TAG_ROOT)/ingest-runner
 TAG_VERSION=latest
 
 docker-build-runners:
-	docker build --target=featurebase -t$(TAG_FB_RUNNER):$(TAG_VERSION) -f Dockerfile-run .
-	docker build --target=ingest -t$(TAG_INGEST_RUNNER):$(TAG_VERSION) -f Dockerfile-run .
+	docker build --target=featurebase -t$(TAG_FB_RUNNER):$(TAG_VERSION) -f Dockerfile ../
+	docker build --target=ingest -t$(TAG_INGEST_RUNNER):$(TAG_VERSION) -f Dockerfile ../
 
 docker-push-runners:
 	docker push $(TAG_FB_RUNNER):$(TAG_VERSION)
