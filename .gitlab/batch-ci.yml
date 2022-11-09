@@ -5,7 +5,11 @@ run go tests batch:
     USERNAME: fb-idk-access
     PROJECT: batch_${CI_CONCURRENT_ID}
     GIT_STRATEGY: clone
-  stage: test
+  # this test relies on stuff that happens after build-lattice, which
+  # makes it pause the entire CI run waiting for this. we accept the
+  # small risk of wasting a build against the near certainty of spending
+  # five minutes running only one job.
+  stage: nonblocking
   retry: 1
   script:
     - echo "Running test-all"
