@@ -344,21 +344,21 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "SetWithUnicode",
-			call: `Set(0, unicode="Æ�漢д ☮♬ ♞🜻💣")`,
+			call: `Set(0, unicode="Æ漢д ☮♬ ♞🜻💣")`,
 			exp: &Call{
 				Name: "Set",
 				Args: map[string]interface{}{
 					"_col":    int64(0),
-					"unicode": `Æ�漢д ☮♬ ♞🜻💣`,
+					"unicode": `Æ漢д ☮♬ ♞🜻💣`,
 				},
 			}},
 		{
 			name: "RowWithUnicode",
-			call: `Row(unicode="Æ�漢д ☮♬ ♞🜻💣")`,
+			call: `Row(unicode="Æ漢д ☮♬ ♞🜻💣")`,
 			exp: &Call{
 				Name: "Row",
 				Args: map[string]interface{}{
-					"unicode": `Æ�漢д ☮♬ ♞🜻💣`,
+					"unicode": `Æ漢д ☮♬ ♞🜻💣`,
 				},
 			}},
 		{
@@ -373,7 +373,7 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "TopNWithUnicode",
-			call: `TopN(stargazer, Row(unicode="Æ�漢д ☮♬ ♞🜻💣"), a="∑")`,
+			call: `TopN(stargazer, Row(unicode="Æ漢д ☮♬ ♞🜻💣"), a="∑")`,
 			exp: &Call{
 				Name: "TopN",
 				Args: map[string]interface{}{
@@ -381,7 +381,7 @@ func TestPQLDeepEquality(t *testing.T) {
 					"a":      "∑",
 				},
 				Children: []*Call{
-					{Name: "Row", Args: map[string]interface{}{"unicode": "Æ�漢д ☮♬ ♞🜻💣"}},
+					{Name: "Row", Args: map[string]interface{}{"unicode": "Æ漢д ☮♬ ♞🜻💣"}},
 				},
 			}},
 		{
