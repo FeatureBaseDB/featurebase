@@ -400,7 +400,7 @@ func testOverlappingWriteRequests(t *testing.T, write overlappingWriteReqs) erro
 			}
 			t.Fatalf("running reqs: %v", err)
 		}
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(250 * time.Millisecond):
 		if !write.shouldError {
 			// Only log this if we didn't expect an error.
 			t.Logf("write requests (%d):", len(write.reqs))
