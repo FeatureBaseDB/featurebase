@@ -44,4 +44,3 @@ contents:
 scripts:
   preinstall: ./install/preinstall.sh
   postinstall: ./install/postinstall.sh
-  preremove: ./install/preremove.sh
