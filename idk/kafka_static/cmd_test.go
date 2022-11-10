@@ -291,7 +291,7 @@ func TestLookupFieldWithExternalId(t *testing.T) {
 		// - identifying duplicates is not possible without a primary key in the message
 		{name: "missing-data", missing: true},
 		{name: "normal-write", text: "D", expText: "D"},
-		{name: "weirdstring-1", text: "Æ�漢д ☮♬ ♞🜻💣", expText: "Æ�漢д ☮♬ ♞🜻💣"},
+		{name: "weirdstring-1", text: "Æ漢д ☮♬ ♞🜻💣", expText: "Æ漢д ☮♬ ♞🜻💣"},
 		{name: "weirdstring-2", text: "", expText: ""},
 		{name: "weirdstring-3", text: "'", expText: "'"},
 		{name: "doublequotes-1", text: `\"`, expText: `"`}, // is this sensible?
