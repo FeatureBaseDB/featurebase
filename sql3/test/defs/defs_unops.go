@@ -1,9 +1,9 @@
-package sql3_test
+package defs
 
 import "time"
 
-var unaryOpExprWithInt = tableTest{
-	table: tbl(
+var unaryOpExprWithInt = TableTest{
+	Table: tbl(
 		"unoptesti",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -13,48 +13,48 @@ var unaryOpExprWithInt = tableTest{
 			srcRow(int64(1), int64(10)),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -i from unoptesti;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(-10)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !i from unoptesti;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(-11)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +i from unoptesti;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(10)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var unaryOpExprWithBool = tableTest{
-	table: tbl(
+var unaryOpExprWithBool = TableTest{
+	Table: tbl(
 		"unoptest_b",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -64,30 +64,30 @@ var unaryOpExprWithBool = tableTest{
 			srcRow(int64(1), bool(false)),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -i from unoptest_b;",
 			),
-			expErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !i from unoptest_b;",
 			),
-			expErr: "operator '!' incompatible with type 'BOOL'",
+			ExpErr: "operator '!' incompatible with type 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +i from unoptest_b;",
 			),
-			expErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'BOOL'",
 		},
 	},
 }
 
-var unaryOpExprWithID = tableTest{
-	table: tbl(
+var unaryOpExprWithID = TableTest{
+	Table: tbl(
 		"unoptestid",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -97,48 +97,48 @@ var unaryOpExprWithID = tableTest{
 			srcRow(int64(1), int64(10)),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -_id from unoptestid;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(-1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !_id from unoptestid;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(-2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +_id from unoptestid;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var unaryOpExprWithDecimal = tableTest{
-	table: tbl(
+var unaryOpExprWithDecimal = TableTest{
+	Table: tbl(
 		"unoptestd",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -148,42 +148,42 @@ var unaryOpExprWithDecimal = tableTest{
 			srcRow(int64(1), float64(12.34)),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -d from unoptestd;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(float64(-12.34)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !d from unoptestd;",
 			),
-			expErr: "operator '!' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '!' incompatible with type 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +d from unoptestd;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(float64(12.34)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var unaryOpExprWithTimestamp = tableTest{
-	table: tbl(
+var unaryOpExprWithTimestamp = TableTest{
+	Table: tbl(
 		"unoptestts",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -193,30 +193,30 @@ var unaryOpExprWithTimestamp = tableTest{
 			srcRow(int64(1), time.Time(knownTimestamp())),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -ts from unoptestts;",
 			),
-			expErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !ts from unoptestts;",
 			),
-			expErr: "operator '!' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '!' incompatible with type 'TIMESTAMP'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +ts from unoptestts;",
 			),
-			expErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
 		},
 	},
 }
 
-var unaryOpExprWithIDSet = tableTest{
-	table: tbl(
+var unaryOpExprWithIDSet = TableTest{
+	Table: tbl(
 		"unoptestids",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -226,30 +226,30 @@ var unaryOpExprWithIDSet = tableTest{
 			srcRow(int64(1), []int64{11, 12, 13}),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -ids from unoptestids;",
 			),
-			expErr: "operator '-' incompatible with type 'IDSET'",
+			ExpErr: "operator '-' incompatible with type 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !ids from unoptestids;",
 			),
-			expErr: "operator '!' incompatible with type 'IDSET'",
+			ExpErr: "operator '!' incompatible with type 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +ids from unoptestids;",
 			),
-			expErr: "operator '+' incompatible with type 'IDSET'",
+			ExpErr: "operator '+' incompatible with type 'IDSET'",
 		},
 	},
 }
 
-var unaryOpExprWithString = tableTest{
-	table: tbl(
+var unaryOpExprWithString = TableTest{
+	Table: tbl(
 		"unoptest_s",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -259,30 +259,30 @@ var unaryOpExprWithString = tableTest{
 			srcRow(int64(1), string("foo")),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -s from unoptest_s;",
 			),
-			expErr: "operator '-' incompatible with type 'STRING'",
+			ExpErr: "operator '-' incompatible with type 'STRING'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !s from unoptest_s;",
 			),
-			expErr: "operator '!' incompatible with type 'STRING'",
+			ExpErr: "operator '!' incompatible with type 'STRING'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +s from unoptest_s;",
 			),
-			expErr: "operator '+' incompatible with type 'STRING'",
+			ExpErr: "operator '+' incompatible with type 'STRING'",
 		},
 	},
 }
 
-var unaryOpExprWithStringSet = tableTest{
-	table: tbl(
+var unaryOpExprWithStringSet = TableTest{
+	Table: tbl(
 		"unoptestss",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -292,24 +292,24 @@ var unaryOpExprWithStringSet = tableTest{
 			srcRow(int64(1), []string{"11", "12", "13"}),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select -s from unoptestss;",
 			),
-			expErr: "operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '-' incompatible with type 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select !s from unoptestss;",
 			),
-			expErr: "operator '!' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '!' incompatible with type 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select +s from unoptestss;",
 			),
-			expErr: "operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '+' incompatible with type 'STRINGSET'",
 		},
 	},
 }

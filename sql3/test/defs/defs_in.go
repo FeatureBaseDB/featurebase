@@ -1,8 +1,8 @@
-package sql3_test
+package defs
 
 // IN tests
-var inTests = tableTest{
-	table: tbl(
+var inTests = TableTest{
+	Table: tbl(
 		"in_all_types",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -19,121 +19,121 @@ var inTests = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id in (1, 10) from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select i1 in (1, 1000) from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select b1 in (true, false) from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select d1 in (1.23, 4.56) from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select id1 in (3, 7) from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ids1 in ([101, 102], [456, 789]) from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select s1 in ('foo', 'bar') from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ss1 in (['a', 'b'], ['101', '102']) from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select t1 in ('2010-11-01T22:08:41+00:00', '2013-11-01T22:08:41+00:00', '2012-11-01T22:08:41+00:00') from in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
 // NOT IN tests
-var notInTests = tableTest{
-	table: tbl(
+var notInTests = TableTest{
+	Table: tbl(
 		"not_in_all_types",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -150,114 +150,114 @@ var notInTests = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id not in (1, 10) from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select i1 not in (1, 1000) from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select b1 not in (true, false) from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select d1 not in (1.23, 4.56) from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select id1 not in (3, 7) from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ids1 not in ([101, 102], [456, 789]) from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select s1 not in ('foo', 'bar') from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ss1 not in (['a', 'b'], ['101', '102']) from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select t1 not in ('2010-11-01T22:08:41+00:00', '2013-11-01T22:08:41+00:00', '2012-11-01T22:08:41+00:00') from not_in_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }

@@ -1,9 +1,9 @@
-package sql3_test
+package defs
 
 // set literal tests
-var setLiteralTests = tableTest{
+var setLiteralTests = TableTest{
 	name: "selectwithsetliterals",
-	table: tbl(
+	Table: tbl(
 		"selectwithsetliterals",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -18,40 +18,40 @@ var setLiteralTests = tableTest{
 			srcRow(int64(3), int64(30), int64(300), []string{"GET", "POST"}, []int64{101}),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
 			// SetContainsSelectList
 			name: "set-contains-select-list",
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, setcontains(event, 'POST') from selectwithsetliterals",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), true),
 				row(int64(2), false),
 				row(int64(3), true),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
 			// SetContainsSelectListInt
 			name: "set-contains-select-list-int",
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, setcontains(ievent, 101) from selectwithsetliterals",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), nil),
 				row(int64(2), nil),
 				row(int64(3), true),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
 			// SetContainsWithLiteral
@@ -61,7 +61,7 @@ var setLiteralTests = tableTest{
 			// SetContainsWithLiteralAll
 			// SetContainsWithLiteralAllInt
 			name: "set-contains-with-literal",
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, setcontains(['POST'], 'POST') from selectwithsetliterals",
 				"select _id, setcontains([101], 101) from selectwithsetliterals",
 				"select _id, setcontainsany(['POST'], ['POST']) from selectwithsetliterals",
@@ -69,24 +69,24 @@ var setLiteralTests = tableTest{
 				"select _id, setcontainsall(['POST'], ['POST']) from selectwithsetliterals",
 				"select _id, setcontainsall([101], [101]) from selectwithsetliterals",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), true),
 				row(int64(2), true),
 				row(int64(3), true),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
 // set function tests
-var setFunctionTests = tableTest{
+var setFunctionTests = TableTest{
 	name: "selectwithset",
-	table: tbl(
+	Table: tbl(
 		"selectwithset",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -101,139 +101,139 @@ var setFunctionTests = tableTest{
 			srcRow(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
 			name: "set-contains",
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, 'POST')",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("a", fldTypeInt),
 				hdr("b", fldTypeInt),
 				hdr("event", fldTypeStringSet),
 				hdr("ievent", fldTypeIDSet),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
 				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare:        compareExactUnordered,
-			sortStringKeys: true,
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
 		},
 		{
 			// SetContains
 
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, 'POST')",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("a", fldTypeInt),
 				hdr("b", fldTypeInt),
 				hdr("event", fldTypeStringSet),
 				hdr("ievent", fldTypeIDSet),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
 				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare:        compareExactUnordered,
-			sortStringKeys: true,
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
 		},
 		{
 			// SetContainsInt
 			name: "set-contains-int",
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(ievent, 101)",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("a", fldTypeInt),
 				hdr("b", fldTypeInt),
 				hdr("event", fldTypeStringSet),
 				hdr("ievent", fldTypeIDSet),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
 			// SetContainsOrSetContains
 			// SetContainsAny
 			name: "set-contains-or-set-contains",
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, 'POST') or setcontains(event, 'GET')",
 				"select * from selectwithset where setcontainsany(event, ['POST', 'GET'])",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("a", fldTypeInt),
 				hdr("b", fldTypeInt),
 				hdr("event", fldTypeStringSet),
 				hdr("ievent", fldTypeIDSet),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
 				row(int64(2), int64(20), int64(200), []string{"GET"}, nil),
 				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare:        compareExactUnordered,
-			sortStringKeys: true,
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
 		},
 		{
 			// SetContainsAndSetContains
 			// SetContainsAll
 			name: "set-contains-and-set-contains",
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, 'POST') and setcontains(event, 'GET')",
 				"select * from selectwithset where setcontainsall(event, ['POST', 'GET'])",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("a", fldTypeInt),
 				hdr("b", fldTypeInt),
 				hdr("event", fldTypeStringSet),
 				hdr("ievent", fldTypeIDSet),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 			),
-			compare:        compareExactUnordered,
-			sortStringKeys: true,
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
 		},
 		{
 			// SetContainsWrongType
 			name: "set-contains-wrong-type",
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, 1)",
 			),
-			expErr: "types 'STRINGSET' and 'INT' are not equatable",
+			ExpErr: "types 'STRINGSET' and 'INT' are not equatable",
 		},
 		{
 			// SetContainsWrongTypeInt
 			name: "set-contains-wrong-type-int",
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(ievent, 'foo')",
 			),
-			expErr: "types 'IDSET' and 'STRING' are not equatable",
+			ExpErr: "types 'IDSET' and 'STRING' are not equatable",
 		},
 		{
 			// SetContainsWrongTypeSet
 			name: "set-contains-wrong-type-set",
-			sqls: sqls(
+			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, ['foo'])",
 			),
-			expErr: "types 'STRINGSET' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'STRINGSET' and 'STRINGSET' are not equatable",
 		},
 	},
 }
 
 // set parameter tests
-var setParameterTests = tableTest{
+var setParameterTests = TableTest{
 
-	table: tbl(
+	Table: tbl(
 		"selectwithsetparams",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -248,59 +248,59 @@ var setParameterTests = tableTest{
 			srcRow(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontains(['POST', 'GET'])",
 			),
-			expErr: "count of formal parameters (2) does not match count of actual parameters (1)",
+			ExpErr: "count of formal parameters (2) does not match count of actual parameters (1)",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontains(1, 2)",
 			),
-			expErr: "set expression expected",
+			ExpErr: "set expression expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontains(['POST', 'GET'], 1)",
 			),
-			expErr: "types 'STRINGSET' and 'INT' are not equatable",
+			ExpErr: "types 'STRINGSET' and 'INT' are not equatable",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontains([1, 2], '1')",
 			),
-			expErr: "types 'IDSET' and 'STRING' are not equatable",
+			ExpErr: "types 'IDSET' and 'STRING' are not equatable",
 		},
 
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontainsall(['POST', 'GET'])",
 				"select setcontainsany(['POST', 'GET'])",
 			),
-			expErr: "count of formal parameters (2) does not match count of actual parameters (1)",
+			ExpErr: "count of formal parameters (2) does not match count of actual parameters (1)",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontainsall(1, 2)",
 				"select setcontainsany(1, 2)",
 			),
-			expErr: "set expression expected",
+			ExpErr: "set expression expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontainsall(['POST', 'GET'], [1, 2])",
 				"select setcontainsany(['POST', 'GET'], [1, 2])",
 			),
-			expErr: "types 'STRING' and 'ID' are not equatable",
+			ExpErr: "types 'STRING' and 'ID' are not equatable",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select setcontainsall([1, 2], ['1', '2'])",
 				"select setcontainsany([1, 2], ['1', '2'])",
 			),
-			expErr: "types 'ID' and 'STRING' are not equatable",
+			ExpErr: "types 'ID' and 'STRING' are not equatable",
 		},
 	},
 }
