@@ -1,8 +1,8 @@
-package sql3_test
+package defs
 
 // LIKE tests
-var likeTests = tableTest{
-	table: tbl(
+var likeTests = TableTest{
+	Table: tbl(
 		"like_all_types",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -19,73 +19,73 @@ var likeTests = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'ID'",
+			ExpErr: "operator 'LIKE' incompatible with type 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select i1 like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'INT'",
+			ExpErr: "operator 'LIKE' incompatible with type 'INT'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select b1 like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'BOOL'",
+			ExpErr: "operator 'LIKE' incompatible with type 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select d1 like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator 'LIKE' incompatible with type 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select id1 like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'ID'",
+			ExpErr: "operator 'LIKE' incompatible with type 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ids1 like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'IDSET'",
+			ExpErr: "operator 'LIKE' incompatible with type 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select s1 like '%f_' from like_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ss1 like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'STRINGSET'",
+			ExpErr: "operator 'LIKE' incompatible with type 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select t1 like '%f_' from like_all_types",
 			),
-			expErr: "operator 'LIKE' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator 'LIKE' incompatible with type 'TIMESTAMP'",
 		},
 	},
 }
 
 // NOT LIKE tests
-var notLikeTests = tableTest{
-	table: tbl(
+var notLikeTests = TableTest{
+	Table: tbl(
 		"not_like_all_types",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -102,66 +102,66 @@ var notLikeTests = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'ID'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select i1 not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'INT'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'INT'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select b1 not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'BOOL'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select d1 not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select id1 not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'ID'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ids1 not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'IDSET'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select s1 not like '%f_' from not_like_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ss1 not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'STRINGSET'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select t1 not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'TIMESTAMP'",
 		},
 	},
 }

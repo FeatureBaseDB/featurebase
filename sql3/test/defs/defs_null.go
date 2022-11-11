@@ -1,8 +1,8 @@
-package sql3_test
+package defs
 
 // NULL tests
-var nullTests = tableTest{
-	table: tbl(
+var nullTests = TableTest{
+	Table: tbl(
 		"null_all_types",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -20,133 +20,133 @@ var nullTests = tableTest{
 			srcRow(int64(1), int64(1), nil, nil, nil, nil, nil, nil, nil, nil),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select i is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select i1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select b1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select d1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select id1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ids1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select s1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ss1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select t1 is null from null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
 // NOT NULL tests
-var notNullTests = tableTest{
-	table: tbl(
+var notNullTests = TableTest{
+	Table: tbl(
 		"not_null_all_types",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -164,121 +164,121 @@ var notNullTests = tableTest{
 			srcRow(int64(1), int64(1), nil, nil, nil, nil, nil, nil, nil, nil),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select i1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select b1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select d1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select id1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ids1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select s1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select ss1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select t1 is not null from not_null_all_types",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
 // NULL filter condition tests
-var nullFilterTests = tableTest{
-	table: tbl(
+var nullFilterTests = TableTest{
+	Table: tbl(
 		"null_filter_all_types",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -297,150 +297,150 @@ var nullFilterTests = tableTest{
 			srcRow(int64(2), int64(1), int64(10), bool(true), float64(10), int64(20), []int64{101}, string("foo"), []string{"GET", "POST"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where _id is null",
 			),
-			expErr: "'_id' column cannot be used in a is/is not null filter expression",
+			ExpErr: "'_id' column cannot be used in a is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where _id is not null",
 			),
-			expErr: "'_id' column cannot be used in a is/is not null filter expression",
+			ExpErr: "'_id' column cannot be used in a is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where i1 is null",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where i1 is not null",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where b1 is null",
 			),
-			expErr: "unsupported type 'BOOL' for is/is not null filter expression",
+			ExpErr: "unsupported type 'BOOL' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where b1 is not null",
 			),
-			expErr: "unsupported type 'BOOL' for is/is not null filter expression",
+			ExpErr: "unsupported type 'BOOL' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where d1 is null",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where d1 is not null",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where id1 is null",
 			),
-			expErr: "unsupported type 'ID' for is/is not null filter expression",
+			ExpErr: "unsupported type 'ID' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where id1 is not null",
 			),
-			expErr: "unsupported type 'ID' for is/is not null filter expression",
+			ExpErr: "unsupported type 'ID' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where ids1 is null",
 			),
-			expErr: "unsupported type 'IDSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'IDSET' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where ids1 is not null",
 			),
-			expErr: "unsupported type 'IDSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'IDSET' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where s1 is null",
 			),
-			expErr: "unsupported type 'STRING' for is/is not null filter expression",
+			ExpErr: "unsupported type 'STRING' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where s1 is not null",
 			),
-			expErr: "unsupported type 'STRING' for is/is not null filter expression",
+			ExpErr: "unsupported type 'STRING' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where ss1 is null",
 			),
-			expErr: "unsupported type 'STRINGSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'STRINGSET' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where ss1 is not null",
 			),
-			expErr: "unsupported type 'STRINGSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'STRINGSET' for is/is not null filter expression",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where t1 is null",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id from null_filter_all_types where t1 is not null",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }

@@ -1,4 +1,4 @@
-package sql3_test
+package defs
 
 import (
 	"time"
@@ -10,114 +10,114 @@ func expectedCastTime() time.Time {
 	return time.Unix(1000, 0).UTC()
 }
 
-var castIntLiteral = tableTest{
-	table: tbl(
+var castIntLiteral = TableTest{
+	Table: tbl(
 		"",
 		nil,
 		nil,
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1 as int)",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1 as bool)",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(0 as bool)",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(bool(false)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1 as decimal(2))",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(pql.NewDecimal(100, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1 as id)",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1 as idset)",
 			),
-			expErr: "'INT' cannot be cast to 'IDSET'",
+			ExpErr: "'INT' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1 as string)",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(string("1")),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1 as stringset)",
 			),
-			expErr: "'INT' cannot be cast to 'STRINGSET'",
+			ExpErr: "'INT' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select cast(1000 as timestamp)",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("", fldTypeTimestamp),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(time.Time(expectedCastTime())),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var castInt = tableTest{
-	table: tbl(
+var castInt = TableTest{
+	Table: tbl(
 		"cast_int",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -134,102 +134,102 @@ var castInt = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as int) from cast_int",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(1000)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as bool) from cast_int",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as decimal(2)) from cast_int",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), pql.NewDecimal(100000, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as id) from cast_int",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(1000)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as idset) from cast_int",
 			),
-			expErr: "'INT' cannot be cast to 'IDSET'",
+			ExpErr: "'INT' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as string) from cast_int",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), string("1000")),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as stringset) from cast_int",
 			),
-			expErr: "'INT' cannot be cast to 'STRINGSET'",
+			ExpErr: "'INT' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(i1 as timestamp) from cast_int",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeTimestamp),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), time.Time(expectedCastTime())),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var castBool = tableTest{
-	table: tbl(
+var castBool = TableTest{
+	Table: tbl(
 		"cast_bool",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -246,81 +246,81 @@ var castBool = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as int) from cast_bool",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as bool) from cast_bool",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as decimal(2)) from cast_bool",
 			),
-			expErr: "'BOOL' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'BOOL' cannot be cast to 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as id) from cast_bool",
 			),
-			expErr: "'BOOL' cannot be cast to 'ID'",
+			ExpErr: "'BOOL' cannot be cast to 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as idset) from cast_bool",
 			),
-			expErr: "'BOOL' cannot be cast to 'IDSET'",
+			ExpErr: "'BOOL' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as string) from cast_bool",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), string("true")),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as stringset) from cast_bool",
 			),
-			expErr: "'BOOL' cannot be cast to 'STRINGSET'",
+			ExpErr: "'BOOL' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(b1 as timestamp) from cast_bool",
 			),
-			expErr: "'BOOL' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'BOOL' cannot be cast to 'TIMESTAMP'",
 		},
 	},
 }
 
-var castDecimal = tableTest{
-	table: tbl(
+var castDecimal = TableTest{
+	Table: tbl(
 		"cast_dec",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -337,74 +337,74 @@ var castDecimal = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as int) from cast_dec",
 			),
-			expErr: "'DECIMAL(2)' cannot be cast to 'INT'",
+			ExpErr: "'DECIMAL(2)' cannot be cast to 'INT'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as bool) from cast_dec",
 			),
-			expErr: "'DECIMAL(2)' cannot be cast to 'BOOL'",
+			ExpErr: "'DECIMAL(2)' cannot be cast to 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as decimal(2)) from cast_dec",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), pql.NewDecimal(1234, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as id) from cast_dec",
 			),
-			expErr: "'DECIMAL(2)' cannot be cast to 'ID'",
+			ExpErr: "'DECIMAL(2)' cannot be cast to 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as idset) from cast_dec",
 			),
-			expErr: "'DECIMAL(2)' cannot be cast to 'IDSET'",
+			ExpErr: "'DECIMAL(2)' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as string) from cast_dec",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), string("12.34")),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as stringset) from cast_dec",
 			),
-			expErr: "'DECIMAL(2)' cannot be cast to 'STRINGSET'",
+			ExpErr: "'DECIMAL(2)' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(d1 as timestamp) from cast_dec",
 			),
-			expErr: "'DECIMAL(2)' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'DECIMAL(2)' cannot be cast to 'TIMESTAMP'",
 		},
 	},
 }
 
-var castID = tableTest{
-	table: tbl(
+var castID = TableTest{
+	Table: tbl(
 		"cast_id",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -421,88 +421,88 @@ var castID = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as int) from cast_id",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(20)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as bool) from cast_id",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as decimal(2)) from cast_id",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), pql.NewDecimal(2000, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as id) from cast_id",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(20)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as idset) from cast_id",
 			),
-			expErr: "'ID' cannot be cast to 'IDSET'",
+			ExpErr: "'ID' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as string) from cast_id",
 			),
-			expErr: "'ID' cannot be cast to 'STRING'",
+			ExpErr: "'ID' cannot be cast to 'STRING'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as stringset) from cast_id",
 			),
-			expErr: "'ID' cannot be cast to 'STRINGSET'",
+			ExpErr: "'ID' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(id1 as timestamp) from cast_id",
 			),
-			expErr: "'ID' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'ID' cannot be cast to 'TIMESTAMP'",
 		},
 	},
 }
 
-var castIDSet = tableTest{
-	table: tbl(
+var castIDSet = TableTest{
+	Table: tbl(
 		"cast_ids",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -519,74 +519,74 @@ var castIDSet = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as int) from cast_ids",
 			),
-			expErr: "'IDSET' cannot be cast to 'INT'",
+			ExpErr: "'IDSET' cannot be cast to 'INT'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as bool) from cast_ids",
 			),
-			expErr: "'IDSET' cannot be cast to 'BOOL'",
+			ExpErr: "'IDSET' cannot be cast to 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as decimal(2)) from cast_ids",
 			),
-			expErr: "'IDSET' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'IDSET' cannot be cast to 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as id) from cast_ids",
 			),
-			expErr: "'IDSET' cannot be cast to 'ID'",
+			ExpErr: "'IDSET' cannot be cast to 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as idset) from cast_ids",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeIDSet),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), []int64{101, 102}),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as string) from cast_ids",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), string("[101 102]")),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as stringset) from cast_ids",
 			),
-			expErr: "'IDSET' cannot be cast to 'STRINGSET'",
+			ExpErr: "'IDSET' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ids1 as timestamp) from cast_ids",
 			),
-			expErr: "'IDSET' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'IDSET' cannot be cast to 'TIMESTAMP'",
 		},
 	},
 }
 
-var castString = tableTest{
-	table: tbl(
+var castString = TableTest{
+	Table: tbl(
 		"cast_string",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -603,132 +603,132 @@ var castString = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as int) from cast_string",
 			),
-			expErr: "'foo' cannot be cast to 'INT'",
+			ExpErr: "'foo' cannot be cast to 'INT'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast('11' as int) from cast_string",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(11)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as bool) from cast_string",
 			),
-			expErr: "'foo' cannot be cast to 'BOOL'",
+			ExpErr: "'foo' cannot be cast to 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast('true' as bool) from cast_string",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeBool),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), bool(true)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as decimal(2)) from cast_string",
 			),
-			expErr: "'foo' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'foo' cannot be cast to 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast('12.34' as decimal(2)) from cast_string",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), pql.NewDecimal(1234, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as id) from cast_string",
 			),
-			expErr: "'foo' cannot be cast to 'ID'",
+			ExpErr: "'foo' cannot be cast to 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast('11' as id) from cast_string",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeID),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(11)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as idset) from cast_string",
 			),
-			expErr: "'STRING' cannot be cast to 'IDSET'",
+			ExpErr: "'STRING' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as string) from cast_string",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), string("foo")),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as stringset) from cast_string",
 			),
-			expErr: "'STRING' cannot be cast to 'STRINGSET'",
+			ExpErr: "'STRING' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(s1 as timestamp) from cast_string",
 			),
-			expErr: "'foo' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'foo' cannot be cast to 'TIMESTAMP'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast('1970-01-01T00:16:40Z' as timestamp) from cast_string",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeTimestamp),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), time.Time(expectedCastTime())),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var castStringSet = tableTest{
-	table: tbl(
+var castStringSet = TableTest{
+	Table: tbl(
 		"cast_ss",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -745,75 +745,75 @@ var castStringSet = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as int) from cast_ss",
 			),
-			expErr: "'STRINGSET' cannot be cast to 'INT'",
+			ExpErr: "'STRINGSET' cannot be cast to 'INT'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as bool) from cast_ss",
 			),
-			expErr: "'STRINGSET' cannot be cast to 'BOOL'",
+			ExpErr: "'STRINGSET' cannot be cast to 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as decimal(2)) from cast_ss",
 			),
-			expErr: "'STRINGSET' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'STRINGSET' cannot be cast to 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as id) from cast_ss",
 			),
-			expErr: "'STRINGSET' cannot be cast to 'ID'",
+			ExpErr: "'STRINGSET' cannot be cast to 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as idset) from cast_ss",
 			),
-			expErr: "'STRINGSET' cannot be cast to 'IDSET'",
+			ExpErr: "'STRINGSET' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as string) from cast_ss",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), string(`["101","102"]`)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as stringset) from cast_ss",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeStringSet),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), []string{"101", "102"}),
 			),
-			compare:        compareExactUnordered,
-			sortStringKeys: true,
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(ss1 as timestamp) from cast_ss",
 			),
-			expErr: "'STRINGSET' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'STRINGSET' cannot be cast to 'TIMESTAMP'",
 		},
 	},
 }
 
-var castTimestamp = tableTest{
-	table: tbl(
+var castTimestamp = TableTest{
+	Table: tbl(
 		"cast_ts",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -830,75 +830,75 @@ var castTimestamp = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as int) from cast_ts",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), int64(1351807721)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as bool) from cast_ts",
 			),
-			expErr: "'TIMESTAMP' cannot be cast to 'BOOL'",
+			ExpErr: "'TIMESTAMP' cannot be cast to 'BOOL'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as decimal(2)) from cast_ts",
 			),
-			expErr: "'TIMESTAMP' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'TIMESTAMP' cannot be cast to 'DECIMAL(2)'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as id) from cast_ts",
 			),
-			expErr: "'TIMESTAMP' cannot be cast to 'ID'",
+			ExpErr: "'TIMESTAMP' cannot be cast to 'ID'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as idset) from cast_ts",
 			),
-			expErr: "'TIMESTAMP' cannot be cast to 'IDSET'",
+			ExpErr: "'TIMESTAMP' cannot be cast to 'IDSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as string) from cast_ts",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeString),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), string("2012-11-01T22:08:41Z")),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as stringset) from cast_ts",
 			),
-			expErr: "'TIMESTAMP' cannot be cast to 'STRINGSET'",
+			ExpErr: "'TIMESTAMP' cannot be cast to 'STRINGSET'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id, cast(t1 as timestamp) from cast_ts",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeTimestamp),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), knownTimestamp()),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }

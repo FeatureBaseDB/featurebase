@@ -1,8 +1,8 @@
-package sql3_test
+package defs
 
 // time quantum insert tests
-var timeQuantumInsertTest = tableTest{
-	table: tbl(
+var timeQuantumInsertTest = TableTest{
+	Table: tbl(
 		"time_quantum_insert",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -11,21 +11,21 @@ var timeQuantumInsertTest = tableTest{
 		),
 		srcRows(),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"insert into time_quantum_insert (_id, i1, ids1) values (1, 1, [1])",
 			),
-			expHdrs: hdrs(),
-			expRows: rows(),
-			compare: compareExactUnordered,
+			ExpHdrs: hdrs(),
+			ExpRows: rows(),
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
 // time quantum query tests
-var timeQuantumQueryTest = tableTest{
-	table: tbl(
+var timeQuantumQueryTest = TableTest{
+	Table: tbl(
 		"timeQuantumQueryTest",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -42,12 +42,12 @@ var timeQuantumQueryTest = tableTest{
 			srcRow(int64(1), int64(1000), bool(true), float64(12.34), int64(20), []int64{101, 102}, string("foo"), []string{"101", "102"}, knownTimestamp()),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"select _id not like '%f_' from not_like_all_types",
 			),
-			expErr: "operator 'NOTLIKE' incompatible with type 'ID'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'ID'",
 		},
 	},
 }

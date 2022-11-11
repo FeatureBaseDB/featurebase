@@ -1,9 +1,9 @@
-package sql3_test
+package defs
 
 // join tests
-var joinTestsUsers = tableTest{
+var joinTestsUsers = TableTest{
 	name: "jointestusers",
-	table: tbl(
+	Table: tbl(
 		"users",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -17,12 +17,12 @@ var joinTestsUsers = tableTest{
 			srcRow(int64(3), string("d"), int64(34)),
 		),
 	),
-	sqlTests: nil,
+	SQLTests: nil,
 }
 
-var joinTestsOrders = tableTest{
+var joinTestsOrders = TableTest{
 	name: "jointestorders",
-	table: tbl(
+	Table: tbl(
 		"orders",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -38,28 +38,28 @@ var joinTestsOrders = tableTest{
 			srcRow(int64(5), int64(2), float64(1.99)),
 		),
 	),
-	sqlTests: nil,
+	SQLTests: nil,
 }
 
-var joinTests = tableTest{
+var joinTests = TableTest{
 	name: "innerjointest",
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
 			name: "innerjoin-aggregate-groupby",
-			sqls: sqls(
+			SQLs: sqls(
 				"select u._id, sum(orders.price) from orders o inner join users u on o.userid = u._id group by u._id;",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
 				hdr("", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1), float64(22.98)),
 				row(int64(0), float64(3.99)),
 				row(int64(2), float64(16.98)),
 				row(int64(3), float64(5.99)),
 			),
-			compare: compareExactOrdered,
+			Compare: CompareExactOrdered,
 		},
 	},
 }

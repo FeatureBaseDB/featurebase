@@ -1,4 +1,4 @@
-package sql3_test
+package defs
 
 import (
 	"github.com/molecula/featurebase/v3/pql"
@@ -6,8 +6,8 @@ import (
 )
 
 // aggregate function tests
-var countTests = tableTest{
-	table: tbl(
+var countTests = TableTest{
+	Table: tbl(
 		"count_test",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -24,134 +24,134 @@ var countTests = tableTest{
 			srcRow(int64(6), int64(13), float64(13), nil),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(i1, d1) AS count_rows FROM count_test",
 			),
-			expErr: "count of formal parameters (1) does not match count of actual parameters (2)",
+			ExpErr: "count of formal parameters (1) does not match count of actual parameters (2)",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(1) AS count_rows FROM count_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) AS count_rows FROM count_test",
 				"SELECT COUNT(_id) AS count_rows FROM count_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(6)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(i1) as a, COUNT(i2) as b FROM count_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("a", fldTypeInt),
 				hdr("b", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(6), int64(2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) + 10 - 11 * 2 AS count_rows FROM count_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(-6)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) AS count_rows FROM count_test WHERE i1 = 10",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) AS count_rows FROM count_test WHERE i1 != 10",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(4)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) AS count_rows FROM count_test WHERE i1 < 12",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(3)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) AS count_rows FROM count_test WHERE i1 > 12",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) AS count_rows FROM count_test WHERE i1 = 10 AND i2 = 100",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(1)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(*) AS count_rows FROM count_test WHERE i1 = 10 OR i1 = 200 OR i1 = 12",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(4)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var countDistinctTests = tableTest{
-	table: tbl(
+var countDistinctTests = TableTest{
+	Table: tbl(
 		"count_d_test",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -167,49 +167,49 @@ var countDistinctTests = tableTest{
 			srcRow(int64(6), int64(13), nil),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(distinct i1) AS count_rows FROM count_d_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(4)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(distinct i1) AS count_rows FROM count_d_test where i1 > 11",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT COUNT(distinct i1) AS count_rows, sum(i1) as sum_rows FROM count_d_test where i1 > 11",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("count_rows", fldTypeInt),
 				hdr("sum_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(2), int64(37)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var sumTests = tableTest{
-	table: tbl(
+var sumTests = TableTest{
+	Table: tbl(
 		"sum_test",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -227,60 +227,60 @@ var sumTests = tableTest{
 			srcRow(int64(6), int64(13), float64(13), nil, string("foo")),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT sum(*) AS sum_rows FROM sum_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT sum(_id) AS sum_rows FROM sum_test",
 			),
-			expErr: "_id column cannot be used in aggregate function 'sum'",
+			ExpErr: "_id column cannot be used in aggregate function 'sum'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT sum(1) AS sum_rows FROM sum_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT sum(i1, d1) AS sum_rows FROM sum_test",
 			),
-			expErr: "count of formal parameters (1) does not match count of actual parameters (2)",
+			ExpErr: "count of formal parameters (1) does not match count of actual parameters (2)",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT sum(i1) AS sum_rows FROM sum_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("sum_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(68)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT sum(d1) AS sum_rows FROM sum_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("sum_rows", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(pql.NewDecimal(6800, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var avgTests = tableTest{
-	table: tbl(
+var avgTests = TableTest{
+	Table: tbl(
 		"avg_test",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -297,49 +297,49 @@ var avgTests = tableTest{
 			srcRow(int64(6), int64(13), float64(13), string("foo")),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT avg(*) AS avg_rows FROM avg_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT avg(_id) AS avg_rows FROM avg_test",
 			),
-			expErr: "_id column cannot be used in aggregate function 'avg'",
+			ExpErr: "_id column cannot be used in aggregate function 'avg'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT avg(i1, d1) AS avg_rows FROM avg_test",
 			),
-			expErr: "count of formal parameters (1) does not match count of actual parameters (2)",
+			ExpErr: "count of formal parameters (1) does not match count of actual parameters (2)",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT avg(s1) AS avg_rows FROM avg_test",
 			),
-			expErr: "integer or decimal expression expected",
+			ExpErr: "integer or decimal expression expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT avg(i1) AS avg_rows FROM avg_test",
 				"SELECT avg(d1) AS avg_rows FROM avg_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("avg_rows", parser.NewDataTypeDecimal(4)),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(pql.NewDecimal(113333, 4)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var percentileTests = tableTest{
-	table: tbl(
+var percentileTests = TableTest{
+	Table: tbl(
 		"percentile_test",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -356,66 +356,66 @@ var percentileTests = tableTest{
 			srcRow(int64(6), int64(13), float64(13), string("foo")),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT percentile(*) AS avg_rows FROM percentile_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT percentile(10, i1) AS avg_rows FROM percentile_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT percentile(_id, 50) AS avg_rows FROM percentile_test",
 			),
-			expErr: "_id column cannot be used in aggregate function 'percentile'",
+			ExpErr: "_id column cannot be used in aggregate function 'percentile'",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT percentile(i1, d1) AS avg_rows FROM percentile_test",
 			),
-			expErr: "literal expression expected",
+			ExpErr: "literal expression expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT percentile(s1, 50) AS avg_rows FROM percentile_test",
 			),
-			expErr: "integer, decimal or timestamp expression expected",
+			ExpErr: "integer, decimal or timestamp expression expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT percentile(i1, 50) AS p_rows FROM percentile_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("p_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(12)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT percentile(d1, 50) AS p_rows FROM percentile_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("p_rows", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(pql.NewDecimal(1000, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
 
-var minmaxTests = tableTest{
-	table: tbl(
+var minmaxTests = TableTest{
+	Table: tbl(
 		"minmax_test",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -432,89 +432,89 @@ var minmaxTests = tableTest{
 			srcRow(int64(6), int64(13), float64(13), string("foo")),
 		),
 	),
-	sqlTests: []sqlTest{
+	SQLTests: []SQLTest{
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT min(*) AS p_rows FROM minmax_test",
 				"SELECT max(*) AS p_rows FROM minmax_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT min(i1, d1) AS p_rows FROM minmax_test",
 				"SELECT max(i1, d1) AS p_rows FROM minmax_test",
 			),
-			expErr: "count of formal parameters (1) does not match count of actual parameters (2)",
+			ExpErr: "count of formal parameters (1) does not match count of actual parameters (2)",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT min(1) AS p_rows FROM minmax_test",
 				"SELECT max(1) AS p_rows FROM minmax_test",
 			),
-			expErr: "column reference expected",
+			ExpErr: "column reference expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT min(_id) AS p_rows FROM minmax_test",
 				"SELECT max(_id) AS p_rows FROM minmax_test",
 			),
-			expErr: "_id column cannot be used in aggregate function",
+			ExpErr: "_id column cannot be used in aggregate function",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT min(s1) AS p_rows FROM minmax_test",
 				"SELECT max(s1) AS p_rows FROM minmax_test",
 			),
-			expErr: "integer, decimal or timestamp expression expected",
+			ExpErr: "integer, decimal or timestamp expression expected",
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT min(i1) AS p_rows FROM minmax_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("p_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(10)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT max(i1) AS p_rows FROM minmax_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("p_rows", fldTypeInt),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(int64(13)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT min(d1) AS p_rows FROM minmax_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("p_rows", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(pql.NewDecimal(1000, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
 				"SELECT max(d1) AS p_rows FROM minmax_test",
 			),
-			expHdrs: hdrs(
+			ExpHdrs: hdrs(
 				hdr("p_rows", fldTypeDecimal2),
 			),
-			expRows: rows(
+			ExpRows: rows(
 				row(pql.NewDecimal(1300, 2)),
 			),
-			compare: compareExactUnordered,
+			Compare: CompareExactUnordered,
 		},
 	},
 }
