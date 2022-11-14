@@ -136,3 +136,9 @@ variable "use_spot_instances" {
   type    = bool
   default = false
 }
+
+variable "spot_fleet_iam_role_arn" {
+  description = "ARN for an IAM role for spot fleets. Needs permissions to tag and destroy EC2 instances."
+  type        = string
+  default     = "arn:aws:iam::977373308795:role/aws-ec2-spot-fleet-tagging-role"
+}
