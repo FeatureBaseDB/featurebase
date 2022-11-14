@@ -1,3 +1,11 @@
+# You will see a couple of instances of:
+# PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
+# This gets us a package list, comma-separated, which excludes the batch
+# and IDK tests, and a couple of subdirs with specialized stuff. We can
+# then use this with -coverpkg, or we can use ${PKG_LIST//,/ } to get a
+# space-separated list for use with `go test` to run the tests for those
+# directories only.
+
 include:
   - local: /.gitlab/batch-ci.yml
   - template: Security/SAST.gitlab-ci.yml
@@ -35,7 +43,7 @@ gosec-sast:
     - gosec convert gosec.json > gl-sast-report.json
 
 variables:
-  GOVERSION: "1.19.2"
+  GOVERSION: "1.19.3"
   GOFUTURE: "latest"
 
 stages:
@@ -199,6 +207,9 @@ run jest tests:
     paths:
       - lattice/coverage/lcov.info
 
+# We run go test -race on all the standard packages, skipping the ones that have their
+# own separate tests. we spin this off as nonblocking because it used to take a really
+# long time and even now it's pretty slow.
 run go tests race:
   stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
   image: golang:$GOVERSION
@@ -209,28 +220,28 @@ run go tests race:
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
   script:
     - echo "Running featurebase race tests..."
-    - go test -race -v -timeout=10m $(go list ./... | grep -Ev 'batch|idk|v3/dax/test/dax')
+    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
+    - go test -race -v -timeout=10m ${PKG_LIST//,/ }
   tags:
     - aws
 
-# we dump output in json mode because we're sending the test report data to sonarcloud. it's
-# harder to read but easier to use, and running it an extra time without json, when we expect
-# tests to succeed, makes CI slow
+# We run our base tests against $GOVERSION (a reasonably current version that we trust)
+# and use shardwidth22 for them. This gives us a canary for things breaking for
+# unusual shard widths.
 run go tests:
   stage: test
-  image: golang:$GOFUTURE
+  image: golang:$GOVERSION
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
   script:
     - echo "Running featurebase unit tests..."
-    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev 'batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - go test -timeout=10m -json -coverprofile=coverage.out -tags=shardwidth22 -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev 'batch|idk|v3/dax/test/dax') | tee test-report.out
+    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
+    - go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
   artifacts:
     paths:
       - coverage.out
-      - test-report.out
   tags:
     - aws
 
@@ -249,14 +260,15 @@ run go tests dax/test/dax:
     - make docker-image-datagen
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | paste -s -d, -)
     - mkdir -p coverage-from-docker
-    - go test -json -coverprofile=coverage-dax-integration.out -covermode=atomic -coverpkg=${PKG_LIST} -timeout=20m ./dax/test/dax | tee test-report-dax-integration.out
+    - go test -coverprofile=coverage-dax-integration.out -covermode=atomic -coverpkg=${PKG_LIST} -timeout=20m ./dax/test/dax
   artifacts:
     paths:
       - coverage*.out
       - coverage-from-docker/*.out
-      - test-report*.out
 
-# json mode because test report data goes to sonarcloud
+# We run our PLG tests against $GOFUTURE (whatever's most recent) and run them with regula
+# shardwidth, and the PLG flag, so they don't use multi-node clusters. Basically, these two
+# tests are as different as we can easily make them.
 run go tests plg:
   stage: test
   image: golang:$GOFUTURE
@@ -266,12 +278,11 @@ run go tests plg:
   retry: 1
   script:
     - echo "Running featurebase plg-specific unit tests..."
-    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | grep -Ev '(batch|idk|v3/dax/test/dax)' | paste -s -d, -)
-    - go test -tags=plg -timeout=10m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} $(go list ./... | grep -Ev '(batch|idk|v3/dax/test/dax)') | tee test-report-plg.out
+    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
+    - go test -tags=plg -timeout=10m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
   artifacts:
     paths:
       - coverage-plg.out
-      - test-report-plg.out
   tags:
     - aws
 
@@ -300,7 +311,6 @@ run go tests idk race:
   artifacts:
     paths:
       - ./idk/testdata/*_coverage.out
-      - ./idk/testdata/*_report.out
   tags:
     - shell
     - aws
@@ -332,7 +342,6 @@ run go tests idk shard transactional:
   artifacts:
     paths:
       - ./idk/testdata/*_coverage.out
-      - ./idk/testdata/*_report.out
       - ./idk/testdata/*_logs.txt
   tags:
     - shell
@@ -366,7 +375,6 @@ run go tests idk 533:
   artifacts:
     paths:
       - ./idk/testdata/*_coverage.out
-      - ./idk/testdata/*_report.out
   needs:
     - job: build amd container fb
 
@@ -396,20 +404,19 @@ run go tests idk sasl:
   artifacts:
     paths:
       - ./idk/testdata/*_coverage.out
-      - ./idk/testdata/*_report.out
   needs:
     - job: build amd container fb
 
 
 upload to sonarcloud:
   stage: nonblocking
-  image: sonarsource/sonar-scanner-cli:4.6
+  image: sonarsource/sonar-scanner-cli:4.7
   variables:
     SONAR_TOKEN: $SONAR_TOKEN
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
-    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/*coverage.out,batch/testdata/*coverage.out,coverage-from-docker/*.out -Dsonar.go.tests.reportPaths=test-report*.out,idk/testdata/*report.out,batch/testdata/*report.out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
+    - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/*coverage.out,batch/testdata/*coverage.out,coverage-from-docker/*.out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests
     - job: run go tests plg

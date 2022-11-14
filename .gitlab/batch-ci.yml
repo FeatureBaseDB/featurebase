@@ -20,7 +20,6 @@ run go tests batch:
   artifacts:
     paths:
       - ./batch/testdata/*_coverage.out
-      - ./batch/testdata/*_report.out
       - ./batch/testdata/*_logs.txt
   tags:
     - shell
