@@ -18,8 +18,8 @@ data "aws_ami" "amazon_linux_2" {
 }
 
 resource "aws_spot_fleet_request" "fb_data_nodes" {
-  target_capacity = var.fb_data_node_count                                           // TODO
-  iam_fleet_role  = "arn:aws:iam::977373308795:role/aws-ec2-spot-fleet-tagging-role" // TODO
+  target_capacity = var.use_spot_instances ? var.fb_data_node_count : 0
+  iam_fleet_role  = var.spot_fleet_iam_role_arn
 
   fleet_type           = "request"
   wait_for_fulfillment = true
@@ -31,14 +31,14 @@ resource "aws_spot_fleet_request" "fb_data_nodes" {
       version = aws_launch_template.fb_data_node.latest_version
     }
     overrides {
-      subnet_id = var.vpc_private_subnets[0] // TODO
+      subnet_id = var.vpc_private_subnets[0]
     }
   }
 }
 
 resource "aws_spot_fleet_request" "fb_ingest_nodes" {
-  target_capacity = var.fb_ingest_node_count
-  iam_fleet_role  = "arn:aws:iam::977373308795:role/aws-ec2-spot-fleet-tagging-role" // TODO
+  target_capacity = var.use_spot_instances ? var.fb_ingest_node_count : 0
+  iam_fleet_role  = var.spot_fleet_iam_role_arn
 
   fleet_type           = "request"
   wait_for_fulfillment = true
@@ -50,8 +50,69 @@ resource "aws_spot_fleet_request" "fb_ingest_nodes" {
       version = aws_launch_template.fb_ingest_node.latest_version
     }
     overrides {
-      subnet_id = var.vpc_public_subnets[0] // TODO
+      subnet_id = var.vpc_public_subnets[0]
     }
+  }
+}
+
+resource "aws_instance" "fb_cluster_nodes" {
+  count                  = var.use_spot_instances ? 0 : var.fb_data_node_count
+  ami                    = data.aws_ami.amazon_linux_2.id
+  instance_type          = var.fb_data_node_type
+  key_name               = aws_key_pair.gitlab-featurebase-ci.key_name
+  vpc_security_group_ids = [aws_security_group.featurebase.id]
+  monitoring             = true
+  subnet_id              = var.subnet != "" ? var.subnet : var.vpc_private_subnets[count.index % length(var.vpc_private_subnets)]
+  availability_zone      = var.zone != "" ? var.zone : var.azs[count.index % length(var.azs)]
+  iam_instance_profile   = aws_iam_instance_profile.fb_cluster_node_profile.name
+  user_data              = var.user_data != "" ? file("${var.user_data}") : file("${path.module}/cloud-init.sh")
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 20
+  }
+  dynamic "ebs_block_device" {
+    for_each = var.ebs_volumes
+    content {
+      device_name = "/dev/sdb"
+      volume_type = var.fb_data_disk_type
+      volume_size = var.fb_data_disk_size_gb
+      iops        = var.fb_data_disk_iops
+      encrypted   = true
+    }
+  }
+  tags = {
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-featurebase-cluster-${count.index}"
+    Role   = "cluster_node"
+  }
+}
+
+resource "aws_instance" "fb_ingest" {
+  count                       = var.use_spot_instances ? 0 : var.fb_ingest_node_count
+  ami                         = data.aws_ami.amazon_linux_2.id
+  key_name                    = aws_key_pair.gitlab-featurebase-ci.key_name
+  vpc_security_group_ids      = [aws_security_group.ingest.id]
+  instance_type               = var.fb_ingest_type
+  associate_public_ip_address = true
+  monitoring                  = true
+  subnet_id                   = var.subnet != "" ? var.subnet : var.vpc_public_subnets[count.index % length(var.vpc_public_subnets)]
+  availability_zone           = var.zone != "" ? var.zone : var.azs[count.index % length(var.azs)]
+  iam_instance_profile        = aws_iam_instance_profile.fb_cluster_node_profile.name
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 20
+  }
+  ebs_block_device {
+    device_name = "/dev/sdb"
+    volume_type = var.fb_ingest_disk_type
+    volume_size = var.fb_ingest_disk_size_gb
+    iops        = var.fb_ingest_disk_iops
+    encrypted   = true
+  }
+  tags = {
+    Prefix = "${var.cluster_prefix}"
+    Name   = "${var.cluster_prefix}-featurebase-ingest-${count.index}"
+    Role   = "ingest_node"
   }
 }
 
@@ -94,7 +155,7 @@ resource "aws_launch_template" "fb_data_node" {
   }
   network_interfaces {
     device_index    = 0
-    subnet_id       = var.subnet != "" ? var.subnet : var.vpc_private_subnets[0] // TODO don't always just use the first subnet.
+    subnet_id       = var.subnet != "" ? var.subnet : var.vpc_private_subnets[0]
     security_groups = [aws_security_group.featurebase.id]
   }
   instance_market_options {
@@ -152,7 +213,7 @@ resource "aws_launch_template" "fb_ingest_node" {
   network_interfaces {
     associate_public_ip_address = true
     device_index                = 0
-    subnet_id                   = var.subnet != "" ? var.subnet : var.vpc_public_subnets[0] // TODO don't always just use the first subnet.
+    subnet_id                   = var.subnet != "" ? var.subnet : var.vpc_public_subnets[0]
     security_groups             = [aws_security_group.featurebase.id]
   }
   instance_market_options {
