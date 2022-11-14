@@ -34,32 +34,40 @@ variable "fb_cluster_replica_count" {
 }
 
 variable "subnet" {
+  type    = string
   default = ""
 }
 
 variable "zone" {
+  type    = string
   default = ""
 }
 
 variable "fb_data_disk_type" {
+  type    = string
   default = "gp3"
 }
 variable "fb_data_disk_iops" {
+  type    = number
   default = 1000
 }
 
 variable "fb_data_disk_size_gb" {
+  type    = number
   default = 100
 }
 
 variable "fb_ingest_disk_type" {
+  type    = string
   default = "gp3"
 }
 variable "fb_ingest_disk_iops" {
+  type    = number
   default = 1000
 }
 
 variable "fb_ingest_disk_size_gb" {
+  type    = number
   default = 100
 }
 
@@ -79,6 +87,7 @@ variable "public_subnets" {
 }
 
 variable "vpc_cidr" {
+  type    = string
   default = "10.0.0.0/16"
 }
 
@@ -115,15 +124,15 @@ variable "vpc_private_subnets" {
 
 variable "user_data" {
   description = "Cloud init script"
-  type = string 
+  type        = string
 }
 
 variable "ebs_volumes" {
-  type = list(string)
+  type    = list(string)
   default = ["/dev/sdb"]
 }
 
 variable "use_spot_instances" {
-  type = bool
+  type    = bool
   default = false
 }
