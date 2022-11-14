@@ -1,9 +1,9 @@
 output "ingest_ips" {
-  value = data.aws_instances.ingest_nodes.private_ips
+  value = var.use_spot_instances ? data.aws_instances.ingest_nodes.private_ips : aws_instance.fb_ingest.*.private_ip
 }
 
 output "data_node_ips" {
-  value = data.aws_instances.data_nodes.private_ips
+  value = var.use_spot_instances ? data.aws_instances.data_nodes.private_ips : aws_instance.fb_cluster_nodes.*.private_ip
 }
 
 output "cluster_prefix" {
