@@ -135,13 +135,46 @@ build lattice:
   stage: test
   image: node:14
   variables:
+    AWS_PROFILE: "service-fb-ci"
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     CI: "false"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  before_script:
+    - curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    - unzip -qq awscliv2.zip
+    - ./aws/install
+    - aws --version
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region "us-east-2"
+    - aws configure set aws_profile $AWS_PROFILE
+    - aws sts get-caller-identity # ensure we have a valid AWS login
   script:
     - cd lattice
-    - yarn install
-    - yarn build
+    - cache=$(find . -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -d ' ' -f 1)
+    - echo "'$cache'"
+    - echo "looking for s3://molecula-artifact-storage/lattice/$cache/build.tar.gz"
+    # if is for if we had a cache object in S3
+    # else is for if we didn't have a cache object (and have to build).
+    - |
+      if aws s3api head-object --bucket molecula-artifact-storage --key "lattice/$cache/build.tar.gz"; then
+        # download object, extract, name the folder `build`
+        aws s3 cp "s3://molecula-artifact-storage/lattice/$cache/build.tar.gz" build.tar.gz
+        tar -xf build.tar.gz
+      else # cache file not found
+        yarn install --frozen-lockfile # CI needs to enforce that the lockfile doesn't need to be updated
+        yarn build
+        tar -czvf "$cache.tar.gz" build/
+        aws s3 mv "$cache.tar.gz" "s3://molecula-artifact-storage/lattice/$cache/build.tar.gz"
+        touch "$CI_COMMIT_SHA"
+        aws s3 mv "$CI_COMMIT_SHA" "s3://molecula-artifact-storage/lattice/$cache/$CI_COMMIT_SHA"
+      fi
+    - | # Ensure that we have build directory after the caching step
+      if [ ! -d build ]; then
+        echo "no build directory, erroring out" || exit 1
+      fi
     - mv build ../
     - cd ../
     - rm -r lattice
@@ -389,7 +422,6 @@ run go tests idk sasl:
       - ./idk/testdata/*_coverage.out
   needs:
     - job: build amd container fb
-
 
 upload to sonarcloud:
   stage: nonblocking
