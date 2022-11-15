@@ -69,7 +69,7 @@ type Main struct {
 	AutoGenerate             bool          `short:"a" help:"Automatically generate IDs."`
 	ExternalGenerate         bool          `short:"" help:"Use FeatureBase's ID generation (must be set alongside auto-generate)."`
 	IDAllocKeyPrefix         string        `short:"" help:"A prefix for ID allocator keys when using FeatureBase's ID generation (must be different for each concurrent ingester)."`
-	Concurrency              int           `short:"c" help:"Number of concurrent sources and indexing routines to launch. Concurrency is not supported for featurebasedb-consumer-sql. Concurrency for featurebasedb-consumer-csv only works when providing multiple files and does not support '--auto-generate'"`
+	Concurrency              int           `short:"c" help:"Number of concurrent sources and indexing routines to launch. Concurrency is not supported for molecula-consumer-sql. Concurrency for molecula-consumer-csv only works when providing multiple files and does not support '--auto-generate'"`
 	CacheLength              uint64        `short:""  help:"Number of batches of ID mappings to cache."`
 	PackBools                string        `short:"k" help:"If non-empty, boolean fields will be packed into two set fields—one with this name, and one with <name>-exists."`
 	Verbose                  bool          `short:"v" help:"Enable verbose logging."`
