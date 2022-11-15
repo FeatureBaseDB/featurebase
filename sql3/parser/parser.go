@@ -2,6 +2,7 @@
 package parser
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -1383,14 +1384,105 @@ func (p *Parser) parseBulkInsertStatement() (_ *BulkInsertStatement, err error) 
 
 	stmt.Bulk, _, _ = p.scan()
 
-	if p.peek() != INSERT {
-		return nil, p.errorExpected(p.pos, p.tok, "INSERT")
+	if pk := p.peek(); pk != INSERT && pk != REPLACE {
+		return nil, p.errorExpected(p.pos, p.tok, "INSERT or REPLACE")
 	}
-	stmt.Insert, _, _ = p.scan()
+	if p.peek() == INSERT {
+		stmt.Insert, _, _ = p.scan()
+	} else {
+		stmt.Replace, _, _ = p.scan()
+	}
 
-	// Parse table name & optional alias.
+	if p.peek() != INTO {
+		return nil, p.errorExpected(p.pos, p.tok, "INTO")
+	}
+	stmt.Into, _, _ = p.scan()
+
+	// Parse table name
 	if stmt.Table, err = p.parseIdent("table name"); err != nil {
 		return nil, err
+	}
+
+	if p.peek() == LP {
+		stmt.ColumnsLparen, _, _ = p.scan()
+		for {
+			col, err := p.parseIdent("column name")
+			if err != nil {
+				return &stmt, err
+			}
+			stmt.Columns = append(stmt.Columns, col)
+
+			if p.peek() == RP {
+				break
+			} else if p.peek() != COMMA {
+				return &stmt, p.errorExpected(p.pos, p.tok, "comma or right paren")
+			}
+			p.scan()
+		}
+		stmt.ColumnsRparen, _, _ = p.scan()
+	}
+
+	if p.peek() != MAP {
+		return &stmt, p.errorExpected(p.pos, p.tok, "MAP")
+	}
+	stmt.Map, _, _ = p.scan()
+	if p.peek() != LP {
+		return &stmt, p.errorExpected(p.pos, p.tok, "left paren")
+	}
+	stmt.MapLparen, _, _ = p.scan()
+
+	mapIdx := 0
+	for {
+		expr, err := p.ParseExpr()
+		if err != nil {
+			return &stmt, err
+		}
+
+		mapType, err := p.parseType()
+		if err != nil {
+			return &stmt, err
+		}
+
+		stmt.MapList = append(stmt.MapList, &BulkInsertMapDefinition{
+			Name: &Ident{
+				Name: fmt.Sprintf("%d", mapIdx),
+			},
+			MapExpr: expr,
+			Type:    mapType,
+		})
+		mapIdx++
+
+		if p.peek() == RP {
+			break
+		} else if p.peek() != COMMA {
+			return &stmt, p.errorExpected(p.pos, p.tok, "comma or right paren")
+		}
+		p.scan()
+	}
+	stmt.MapRparen, _, _ = p.scan()
+
+	if p.peek() == TRANSFORM {
+		stmt.Transform, _, _ = p.scan()
+		if p.peek() != LP {
+			return &stmt, p.errorExpected(p.pos, p.tok, "left paren")
+		}
+		stmt.TransformLparen, _, _ = p.scan()
+
+		for {
+			expr, err := p.ParseExpr()
+			if err != nil {
+				return &stmt, err
+			}
+			stmt.TransformList = append(stmt.TransformList, expr)
+
+			if p.peek() == RP {
+				break
+			} else if p.peek() != COMMA {
+				return &stmt, p.errorExpected(p.pos, p.tok, "comma or right paren")
+			}
+			p.scan()
+		}
+		stmt.TransformRparen, _, _ = p.scan()
 	}
 
 	if p.peek() != FROM {
@@ -1399,24 +1491,25 @@ func (p *Parser) parseBulkInsertStatement() (_ *BulkInsertStatement, err error) 
 	stmt.From, _, _ = p.scan()
 
 	if isLiteralToken(p.peek()) {
-		stmt.DataFile = p.mustParseLiteral()
+		stmt.DataSource = p.mustParseLiteral()
 	} else {
 		return nil, p.errorExpected(p.pos, p.tok, "literal")
 	}
 
-	if p.peek() == WITH {
-		stmt.With, _, _ = p.scan()
-		if !isBulkInsertOptionStartToken(p.peek(), p) {
-			return nil, p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT or MAP")
+	if p.peek() != WITH {
+		return nil, p.errorExpected(p.pos, p.tok, "WITH")
+	}
+	stmt.With, _, _ = p.scan()
+	if !isBulkInsertOptionStartToken(p.peek(), p) {
+		return nil, p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT, INPUT or HEADER_ROW")
+	}
+	for {
+		err := p.parseBulkInsertOption(&stmt)
+		if err != nil {
+			return nil, err
 		}
-		for {
-			err := p.parseBulkInsertOption(&stmt)
-			if err != nil {
-				return nil, err
-			}
-			if !isBulkInsertOptionStartToken(p.peek(), p) {
-				break
-			}
+		if !isBulkInsertOptionStartToken(p.peek(), p) {
+			break
 		}
 	}
 
@@ -1455,61 +1548,19 @@ func (p *Parser) parseBulkInsertOption(stmt *BulkInsertStatement) error {
 				return p.errorExpected(p.pos, p.tok, "literal")
 			}
 
-		case "MAP":
-			if p.peek() == IDENT {
-				ident, err := p.parseIdent("bulk insert option")
-				if err != nil {
-					return err
-				}
-				switch strings.ToUpper(ident.Name) {
-				case "_ID":
-					stmt.MapId = &BulkInsertIDMap{}
-					if p.peek() != TO {
-						return p.errorExpected(p.pos, p.tok, "TO")
-					}
-					_, _, _ = p.scan()
-
-					if p.peek() == AUTOINCREMENT {
-						stmt.MapId.Auto, _, _ = p.scan()
-						return nil
-					}
-
-					stmt.MapId.ColumnExprs, err = p.parseExprList()
-					if err != nil {
-						return err
-					}
-					return nil
-
-				case "OFFSET":
-					columnMapItem := &BulkInsertMappedColumn{}
-					if isLiteralToken(p.peek()) {
-						columnMapItem.SourceColumnOffset = p.mustParseLiteral()
-					} else {
-						return p.errorExpected(p.pos, p.tok, "literal")
-					}
-					if p.peek() != TO {
-						return p.errorExpected(p.pos, p.tok, "TO")
-					}
-					_, _, _ = p.scan()
-
-					if p.peek() != IDENT {
-						return p.errorExpected(p.pos, p.tok, "IDENTIFIER")
-					}
-					columnMapItem.TargetColumn, err = p.parseIdent("bulk insert map offset option")
-					if err != nil {
-						return err
-					}
-					if stmt.ColumnMap == nil {
-						stmt.ColumnMap = []*BulkInsertMappedColumn{}
-					}
-					stmt.ColumnMap = append(stmt.ColumnMap, columnMapItem)
-					return nil
-				}
+		case "INPUT":
+			if isLiteralToken(p.peek()) {
+				stmt.Input = p.mustParseLiteral()
+				return nil
+			} else {
+				return p.errorExpected(p.pos, p.tok, "literal")
 			}
-			return p.errorExpected(p.pos, p.tok, "_ID or OFFSET")
+		case "HEADER_ROW":
+			stmt.HeaderRow = ident
+			return nil
 		}
 	}
-	return p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT or MAP")
+	return p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT, INPUT or HEADER_ROW")
 }
 
 func (p *Parser) parseInsertStatement(withClause *WithClause) (_ *InsertStatement, err error) {
@@ -1523,7 +1574,7 @@ func (p *Parser) parseInsertStatement(withClause *WithClause) (_ *InsertStatemen
 	if p.peek() == INSERT {
 		stmt.Insert, _, _ = p.scan()
 
-		if p.peek() == OR {
+		/*if p.peek() == OR {
 			stmt.InsertOr, _, _ = p.scan()
 
 			switch p.peek() {
@@ -1540,7 +1591,7 @@ func (p *Parser) parseInsertStatement(withClause *WithClause) (_ *InsertStatemen
 			default:
 				return &stmt, p.errorExpected(p.pos, p.tok, "REPLACE")
 			}
-		}
+		} */
 	} else {
 		stmt.Replace, _, _ = p.scan()
 	}
@@ -2492,6 +2543,8 @@ func (p *Parser) mustParseLiteral() Expr {
 		return &FloatLit{ValuePos: pos, Value: lit}
 	case TRUE, FALSE:
 		return &BoolLit{ValuePos: pos, Value: tok == TRUE}
+	case BLOB:
+		return &StringLit{ValuePos: pos, Value: lit}
 	default:
 		assert(tok == NULL)
 		return &NullLit{ValuePos: pos}
@@ -2513,6 +2566,8 @@ func (p *Parser) parseOperand() (expr Expr, err error) {
 			return p.parseCall(ident)
 		}
 		return ident, nil
+	case VARIABLE:
+		return &VariableRef{Name: lit, NamePos: pos}, nil
 	case MIN, MAX:
 		ident := &Ident{Name: lit, NamePos: pos, Quoted: tok == QIDENT}
 		return p.parseCall(ident)
@@ -3359,7 +3414,7 @@ func isBulkInsertOptionStartToken(tok Token, p *Parser) bool {
 			return false
 		}
 		switch strings.ToUpper(ident.Name) {
-		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "MAP":
+		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "INPUT", "HEADER_ROW":
 			return true
 		}
 	}

@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -33,25 +34,54 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 		return nil, err
 	}
 
-	options := &bulkInsertOptions{
-		format: "CSV", //only format supported right now
-	}
+	// create an options
+	options := &bulkInsertOptions{}
 
-	sliteral, sok := stmt.DataFile.(*parser.StringLit)
+	// data source
+	sliteral, sok := stmt.DataSource.(*parser.StringLit)
 	if !sok {
-		return nil, sql3.NewErrInternalf("unexpected file name type '%T'", stmt.DataFile)
+		return nil, sql3.NewErrStringLiteral(stmt.DataSource.Pos().Line, stmt.DataSource.Pos().Column)
 	}
-	options.fileName = sliteral.Value
+	options.sourceData = sliteral.Value
 
-	//file should exist
-	if _, err := os.Stat(options.fileName); errors.Is(err, os.ErrNotExist) {
-		// TODO (pok) need proper error
-		return nil, sql3.NewErrInternalf("file '%s' does not exist", stmt.DataFile)
+	// format specifier
+	sliteral, sok = stmt.Format.(*parser.StringLit)
+	if !sok {
+		return nil, sql3.NewErrStringLiteral(stmt.Format.Pos().Line, stmt.Format.Pos().Column)
+	}
+	options.format = sliteral.Value
+
+	// input specifier
+	sliteral, sok = stmt.Input.(*parser.StringLit)
+	if !sok {
+		return nil, sql3.NewErrStringLiteral(stmt.Input.Pos().Line, stmt.Input.Pos().Column)
+	}
+	options.input = sliteral.Value
+
+	switch strings.ToUpper(options.input) {
+	case "FILE":
+		// file should exist
+		if _, err := os.Stat(options.sourceData); errors.Is(err, os.ErrNotExist) {
+			return nil, sql3.NewErrReadingDatasource(stmt.DataSource.Pos().Line, stmt.DataSource.Pos().Column, options.sourceData, fmt.Sprintf("file '%s' does not exist", options.sourceData))
+		}
+	case "URL", "STREAM":
+		// nothing to do here
+		break
+	default:
+		return nil, sql3.NewErrInvalidInputSpecifier(stmt.Input.Pos().Line, stmt.Input.Pos().Column, options.input)
 	}
 
+	// HEADER_ROW
+	bliteral, sok := stmt.HeaderRow.(*parser.BoolLit)
+	if !sok {
+		return nil, sql3.NewErrBoolLiteral(stmt.HeaderRow.Pos().Line, stmt.HeaderRow.Pos().Column)
+	}
+	options.hasHeaderRow = bliteral.Value
+
+	// batchsize
 	literal, ok := stmt.BatchSize.(*parser.IntegerLit)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected batch size type '%T'", stmt.BatchSize)
+		return nil, sql3.NewErrIntegerLiteral(stmt.BatchSize.Pos().Line, stmt.BatchSize.Pos().Column)
 	}
 	i, err := strconv.ParseInt(literal.Value, 10, 64)
 	if err != nil {
@@ -59,9 +89,10 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 	}
 	options.batchSize = int(i)
 
+	// rows limit
 	literal, ok = stmt.RowsLimit.(*parser.IntegerLit)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected rowslimit type '%T'", stmt.RowsLimit)
+		return nil, sql3.NewErrIntegerLiteral(stmt.RowsLimit.Pos().Line, stmt.RowsLimit.Pos().Column)
 	}
 	i, err = strconv.ParseInt(literal.Value, 10, 64)
 	if err != nil {
@@ -69,64 +100,50 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 	}
 	options.rowsLimit = int(i)
 
-	options.idColumnMap = make([]interface{}, 0)
-	if stmt.MapId.ColumnExprs != nil {
-		for _, m := range stmt.MapId.ColumnExprs.Exprs {
-			literal, ok = m.(*parser.IntegerLit)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unexpected id map expr type '%T'", m)
+	// build the target columns
+	options.targetColumns = make([]*qualifiedRefPlanExpression, 0)
+	for _, m := range stmt.Columns {
+		for idx, fld := range table.Fields {
+			if strings.EqualFold(fld.Name, m.Name) {
+				options.targetColumns = append(options.targetColumns, newQualifiedRefPlanExpression(tableName, m.Name, idx, fieldSQLDataType(fld)))
+				break
 			}
-			i, err = strconv.ParseInt(literal.Value, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			options.idColumnMap = append(options.idColumnMap, i)
 		}
 	}
 
-	if stmt.ColumnMap != nil {
-		options.columnMap = make([]*bulkInsertMappedColumn, 0)
-		for _, m := range stmt.ColumnMap {
-			literal, ok = m.SourceColumnOffset.(*parser.IntegerLit)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unexpected column map expr type '%T'", m)
-			}
-			i, err = strconv.ParseInt(literal.Value, 10, 64)
+	// build the map expressions
+	options.mapExpressions = make([]*bulkInsertMapColumn, 0)
+	for _, m := range stmt.MapList {
+		expr, err := p.compileExpr(m.MapExpr)
+		if err != nil {
+			return nil, err
+		}
+
+		mapType, err := dataTypeFromParserType(m.Type)
+		if err != nil {
+			return nil, err
+		}
+
+		options.mapExpressions = append(options.mapExpressions, &bulkInsertMapColumn{
+			name:    m.Name.String(),
+			expr:    expr,
+			colType: mapType,
+		})
+	}
+
+	// build the transforms
+	options.transformExpressions = make([]types.PlanExpression, 0)
+	if stmt.TransformList != nil {
+		for _, t := range stmt.TransformList {
+			expr, err := p.compileExpr(t)
 			if err != nil {
 				return nil, err
 			}
-
-			for _, fld := range table.Fields {
-				if strings.EqualFold(fld.Name, m.TargetColumn.Name) {
-					cm := &bulkInsertMappedColumn{
-						columnSource:   i,
-						columnName:     m.TargetColumn.Name,
-						columnDataType: fieldSQLDataType(fld),
-					}
-					options.columnMap = append(options.columnMap, cm)
-					break
-				}
-			}
-		}
-	} else {
-		options.columnMap = make([]*bulkInsertMappedColumn, 0)
-		//handle the case of a default mapping based on the table
-		i := 0
-		for _, fld := range table.Fields {
-			if strings.EqualFold(fld.Name, "_id") {
-				continue
-			}
-			cm := &bulkInsertMappedColumn{
-				columnSource:   i,
-				columnName:     fld.Name,
-				columnDataType: fieldSQLDataType(fld),
-			}
-			options.columnMap = append(options.columnMap, cm)
-			i += 1
+			options.transformExpressions = append(options.transformExpressions, expr)
 		}
 	}
 
-	return NewPlanOpBulkInsert(p, tableName, table.Options.Keys, options), nil
+	return NewPlanOpBulkInsert(p, tableName, options), nil
 }
 
 // analyzeBulkInsertStatement analyzes a BULK INSERT statement and returns an
@@ -142,14 +159,71 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		return err
 	}
 
-	// check filename
+	// check source
 
-	// file should be literal and a string
-	if !(stmt.DataFile.IsLiteral() && typeIsString(stmt.DataFile.DataType())) {
-		return sql3.NewErrStringLiteral(stmt.DataFile.Pos().Line, stmt.DataFile.Pos().Column)
+	// source should be literal and a string
+	if !(stmt.DataSource.IsLiteral() && typeIsString(stmt.DataSource.DataType())) {
+		return sql3.NewErrStringLiteral(stmt.DataSource.Pos().Line, stmt.DataSource.Pos().Column)
 	}
 
 	// check options
+
+	// check we have format specifier
+	if stmt.Format == nil {
+		return sql3.NewErrFormatSpecifierExpected(stmt.With.Line, stmt.With.Column)
+	}
+
+	// format should be literal and a string
+	if !(stmt.Format.IsLiteral() && typeIsString(stmt.Format.DataType())) {
+		return sql3.NewErrStringLiteral(stmt.Format.Pos().Line, stmt.Format.Pos().Column)
+	}
+
+	format, ok := stmt.Format.(*parser.StringLit)
+	if !ok {
+		return sql3.NewErrStringLiteral(stmt.Format.Pos().Line, stmt.Format.Pos().Column)
+	}
+
+	// check map and other correctness per format
+	switch strings.ToUpper(format.Value) {
+	case "CSV":
+		// for csv the map expressions need to be integer values
+		// that represent the offsets in the source file
+		for _, im := range stmt.MapList {
+			if !(im.MapExpr.IsLiteral() && typeIsInteger(im.MapExpr.DataType())) {
+				return sql3.NewErrIntegerLiteral(im.MapExpr.Pos().Line, im.MapExpr.Pos().Column)
+			}
+		}
+	case "NDJSON":
+		// for ndjson the map expressions need to be string values
+		// that represent json path expressions
+		for _, im := range stmt.MapList {
+			if !(im.MapExpr.IsLiteral() && typeIsString(im.MapExpr.DataType())) {
+				return sql3.NewErrStringLiteral(im.MapExpr.Pos().Line, im.MapExpr.Pos().Column)
+			}
+		}
+
+	default:
+		return sql3.NewErrInvalidFormatSpecifier(stmt.Format.Pos().Line, stmt.Format.Pos().Column, format.Value)
+	}
+
+	// check we have input specifier
+	if stmt.Input == nil {
+		return sql3.NewErrInputSpecifierExpected(stmt.With.Line, stmt.With.Column)
+	}
+
+	// input should be literal and a string
+	if !(stmt.Input.IsLiteral() && typeIsString(stmt.Input.DataType())) {
+		return sql3.NewErrStringLiteral(stmt.Input.Pos().Line, stmt.Input.Pos().Column)
+	}
+
+	// input specifier either FILE or URL
+	input, ok := stmt.Input.(*parser.StringLit)
+	if !ok {
+		return sql3.NewErrStringLiteral(stmt.Input.Pos().Line, stmt.Input.Pos().Column)
+	}
+	if !(strings.EqualFold(input.Value, "FILE") || strings.EqualFold(input.Value, "URL") || strings.EqualFold(input.Value, "STREAM")) {
+		return sql3.NewErrInvalidInputSpecifier(stmt.Input.Pos().Line, stmt.Input.Pos().Column, input.Value)
+	}
 
 	// batch size should default to 1000
 	if stmt.BatchSize == nil {
@@ -160,6 +234,18 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 	// batch size should be literal and an int
 	if !(stmt.BatchSize.IsLiteral() && typeIsInteger(stmt.BatchSize.DataType())) {
 		return sql3.NewErrIntegerLiteral(stmt.BatchSize.Pos().Line, stmt.BatchSize.Pos().Column)
+	}
+	// check batch size > 0
+	literal, ok := stmt.BatchSize.(*parser.IntegerLit)
+	if !ok {
+		return sql3.NewErrIntegerLiteral(stmt.BatchSize.Pos().Line, stmt.BatchSize.Pos().Column)
+	}
+	i, err := strconv.ParseInt(literal.Value, 10, 64)
+	if err != nil {
+		return err
+	}
+	if i == 0 {
+		return sql3.NewErrInvalidBatchSize(stmt.BatchSize.Pos().Line, stmt.BatchSize.Pos().Column, int(i))
 	}
 
 	// rowslimit should default to 0
@@ -173,54 +259,115 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		return sql3.NewErrIntegerLiteral(stmt.RowsLimit.Pos().Line, stmt.RowsLimit.Pos().Column)
 	}
 
-	// format should default to CSV
-	if stmt.Format == nil {
-		stmt.Format = &parser.StringLit{
-			Value: "CSV",
+	// header row is true if specified, false if not
+	if stmt.HeaderRow != nil {
+		stmt.HeaderRow = &parser.BoolLit{
+			Value: true,
+		}
+	} else {
+		stmt.HeaderRow = &parser.BoolLit{
+			Value: false,
 		}
 	}
 
-	// format should be literal and a string
-	if !(stmt.Format.IsLiteral() && typeIsString(stmt.Format.DataType())) {
-		return sql3.NewErrStringLiteral(stmt.Format.Pos().Line, stmt.Format.Pos().Column)
+	// analyze map expressions
+	for i, m := range stmt.MapList {
+		typeName := parser.IdentName(m.Type.Name)
+		if !parser.IsValidTypeName(typeName) {
+			return sql3.NewErrUnknownType(m.Type.Name.NamePos.Line, m.Type.Name.NamePos.Column, typeName)
+		}
+		ex, err := p.analyzeExpression(m.MapExpr, stmt)
+		if err != nil {
+			return err
+		}
+		stmt.MapList[i].MapExpr = ex
 	}
 
-	//CSV is the only format supported right now
-	format, ok := stmt.Format.(*parser.StringLit)
-	if !ok {
-		return sql3.NewErrInternalf("unexpected format type '%T'", stmt.Format)
-	}
-	if !strings.EqualFold(format.Value, "CSV") {
-		//TODO (pok) - proper error needed here
-		return sql3.NewErrInternalf("unexpected format '%s'", format.Value)
-	}
+	// check columns
+	if stmt.Columns == nil {
+		// we didn't get any columns so the column list is implictly
+		// the column list of the table referenced
 
-	// if we have an id map, check expressions are literals and ints
-	if stmt.MapId.ColumnExprs != nil {
-		for _, im := range stmt.MapId.ColumnExprs.Exprs {
-			if !(im.IsLiteral() && typeIsInteger(im.DataType())) {
-				return sql3.NewErrIntegerLiteral(im.Pos().Line, im.Pos().Column)
-			}
+		stmt.Columns = []*parser.Ident{}
+		for _, fld := range table.Fields {
+			stmt.Columns = append(stmt.Columns, &parser.Ident{
+				NamePos: parser.Pos{Line: 0, Column: 0},
+				Name:    fld.Name,
+			})
 		}
 	}
 
-	//if we have a column map, check offset expressions and target column names
-	if stmt.ColumnMap != nil {
-		for _, cm := range stmt.ColumnMap {
-			if !(cm.SourceColumnOffset.IsLiteral() && typeIsInteger(cm.SourceColumnOffset.DataType())) {
-				return sql3.NewErrIntegerLiteral(cm.SourceColumnOffset.Pos().Line, cm.SourceColumnOffset.Pos().Column)
+	// check map count is the same as target column count if there are no transforms
+	if stmt.TransformList == nil {
+		if len(stmt.Columns) != len(stmt.MapList) {
+			return sql3.NewErrInsertExprTargetCountMismatch(stmt.MapRparen.Line, stmt.MapRparen.Column)
+		}
+	}
+
+	// analyze transform expressions
+	if stmt.TransformList != nil {
+
+		// check transform count is the same as target column count if there are transforms
+		if len(stmt.Columns) != len(stmt.TransformList) {
+			return sql3.NewErrInsertExprTargetCountMismatch(stmt.TransformRparen.Line, stmt.TransformRparen.Column)
+		}
+
+		for i, t := range stmt.TransformList {
+			ex, err := p.analyzeExpression(t, stmt)
+			if err != nil {
+				return err
 			}
-			found := false
-			for _, fld := range table.Fields {
-				if strings.EqualFold(cm.TargetColumn.Name, fld.Name) {
-					found = true
-					break
+
+			stmt.TransformList[i] = ex
+		}
+	}
+
+	// check columns being inserted to are actual columns and that one of them is the _id column
+	// also do type checking
+	foundID := false
+	for idx, cm := range stmt.Columns {
+		found := false
+		for _, fld := range table.Fields {
+			if strings.EqualFold(cm.Name, fld.Name) {
+				found = true
+				colDataType := fieldSQLDataType(fld)
+
+				// if we have transforms check that type and target colum ref are assignment compatible
+				// else check that the map expressions type and target column ref are assignment compatible
+				if stmt.TransformList != nil {
+					t := stmt.TransformList[idx]
+					if !typesAreAssignmentCompatible(colDataType, t.DataType()) {
+						return sql3.NewErrTypeAssignmentIncompatible(t.Pos().Line, t.Pos().Column, t.DataType().TypeName(), colDataType.TypeName())
+					}
+				} else {
+					// this assumes that map and col list have already been checked for length
+					me := stmt.MapList[idx]
+					t, err := dataTypeFromParserType(me.Type)
+					if err != nil {
+						return err
+					}
+					if !typesAreAssignmentCompatible(colDataType, t) {
+						return sql3.NewErrTypeAssignmentIncompatible(me.MapExpr.Pos().Line, me.MapExpr.Pos().Column, t.TypeName(), colDataType.TypeName())
+					}
 				}
-			}
-			if !found {
-				return sql3.NewErrColumnNotFound(cm.TargetColumn.NamePos.Line, cm.TargetColumn.NamePos.Line, cm.TargetColumn.Name)
+				break
 			}
 		}
+		if !found {
+			return sql3.NewErrColumnNotFound(cm.NamePos.Line, cm.NamePos.Line, cm.Name)
+		}
+		if strings.EqualFold(cm.Name, "_id") {
+			foundID = true
+		}
 	}
+	if !foundID {
+		return sql3.NewErrInsertMustHaveIDColumn(stmt.ColumnsRparen.Line, stmt.ColumnsRparen.Column)
+	}
+
+	// check we have columns other than just _id
+	if len(stmt.Columns) < 2 {
+		return sql3.NewErrInsertMustAtLeastOneNonIDColumn(stmt.ColumnsLparen.Line, stmt.ColumnsLparen.Column)
+	}
+
 	return nil
 }

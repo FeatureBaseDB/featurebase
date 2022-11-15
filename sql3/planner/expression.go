@@ -1531,6 +1531,62 @@ func (n *qualifiedRefPlanExpression) WithChildren(children ...types.PlanExpressi
 	return n, nil
 }
 
+// variableRefPlanExpression is a variable ref
+type variableRefPlanExpression struct {
+	types.IdentifiableByName
+	name          string
+	variableIndex int
+	dataType      parser.ExprDataType
+}
+
+func newVariableRefPlanExpression(name string, variableIndex int, dataType parser.ExprDataType) *variableRefPlanExpression {
+	return &variableRefPlanExpression{
+		name:          name,
+		variableIndex: variableIndex,
+		dataType:      dataType,
+	}
+}
+
+func (n *variableRefPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+	if n.variableIndex < 0 || n.variableIndex >= len(currentRow) {
+		return nil, sql3.NewErrInternalf("unable to to find variable '%d'", n.variableIndex)
+	}
+
+	if currentRow[n.variableIndex] == nil {
+		return currentRow[n.variableIndex], nil
+	}
+
+	switch n.dataType.(type) {
+
+	default:
+		return currentRow[n.variableIndex], nil
+	}
+}
+
+func (n *variableRefPlanExpression) Name() string {
+	return n.name
+}
+
+func (n *variableRefPlanExpression) Type() parser.ExprDataType {
+	return n.dataType
+}
+
+func (n *variableRefPlanExpression) Plan() map[string]interface{} {
+	result := make(map[string]interface{})
+	result["_expr"] = fmt.Sprintf("%T", n)
+	result["name"] = n.name
+	result["dataType"] = n.dataType.TypeName()
+	return result
+}
+
+func (n *variableRefPlanExpression) Children() []types.PlanExpression {
+	return []types.PlanExpression{}
+}
+
+func (n *variableRefPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
+	return n, nil
+}
+
 // nullLiteralPlanExpression is a null literal
 type nullLiteralPlanExpression struct{}
 
@@ -1563,17 +1619,17 @@ func (n *nullLiteralPlanExpression) WithChildren(children ...types.PlanExpressio
 
 // intLiteralPlanExpression is an integer literal
 type intLiteralPlanExpression struct {
-	value string
+	value int64
 }
 
-func newIntLiteralPlanExpression(value string) *intLiteralPlanExpression {
+func newIntLiteralPlanExpression(value int64) *intLiteralPlanExpression {
 	return &intLiteralPlanExpression{
 		value: value,
 	}
 }
 
 func (n *intLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	return strconv.ParseInt(n.value, 10, 64)
+	return n.value, nil
 }
 
 func (n *intLiteralPlanExpression) Type() parser.ExprDataType {
@@ -2228,7 +2284,12 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 		return newNullLiteralPlanExpression(), nil
 
 	case *parser.IntegerLit:
-		return newIntLiteralPlanExpression(expr.Value), nil
+
+		val, err := strconv.ParseInt(expr.Value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return newIntLiteralPlanExpression(val), nil
 
 	case *parser.FloatLit:
 		return newFloatLiteralPlanExpression(expr.Value), nil
@@ -2238,6 +2299,10 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 
 	case *parser.ParenExpr:
 		return p.compileExpr(expr.X)
+
+	case *parser.VariableRef:
+		ref := newVariableRefPlanExpression(expr.Name, expr.VariableIndex, expr.DataType())
+		return ref, nil
 
 	case *parser.QualifiedRef:
 		ref := newQualifiedRefPlanExpression(parser.IdentName(expr.Table), parser.IdentName(expr.Column), expr.ColumnIndex, expr.DataType())
@@ -2360,35 +2425,29 @@ func (p *ExecutionPlanner) compileBinaryExpr(expr *parser.BinaryExpr) (_ types.P
 		opy, oky := y.(*intLiteralPlanExpression)
 		if okx && oky {
 			//both literals so we can fold
-			numx, err := strconv.Atoi(opx.value)
-			if err != nil {
-				return nil, err
-			}
-			numy, err := strconv.Atoi(opy.value)
-			if err != nil {
-				return nil, err
-			}
+			numx := opx.value
+			numy := opy.value
 
 			switch op {
 			case parser.PLUS:
 				value := numx + numy
-				return newIntLiteralPlanExpression(strconv.Itoa(value)), nil
+				return newIntLiteralPlanExpression(value), nil
 
 			case parser.MINUS:
 				value := numx - numy
-				return newIntLiteralPlanExpression(strconv.Itoa(value)), nil
+				return newIntLiteralPlanExpression(value), nil
 
 			case parser.STAR:
 				value := numx * numy
-				return newIntLiteralPlanExpression(strconv.Itoa(value)), nil
+				return newIntLiteralPlanExpression(value), nil
 
 			case parser.SLASH:
 				value := numx / numy
-				return newIntLiteralPlanExpression(strconv.Itoa(value)), nil
+				return newIntLiteralPlanExpression(value), nil
 
 			case parser.REM:
 				value := numx % numy
-				return newIntLiteralPlanExpression(strconv.Itoa(value)), nil
+				return newIntLiteralPlanExpression(value), nil
 
 			default:
 				//run home to momma

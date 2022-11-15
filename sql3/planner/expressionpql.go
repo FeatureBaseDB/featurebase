@@ -4,7 +4,6 @@ package planner
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	"github.com/molecula/featurebase/v3/pql"
@@ -257,7 +256,7 @@ func sqlToPQLOp(op parser.Token) (pql.Token, error) {
 func planExprToValue(expr types.PlanExpression) (interface{}, error) {
 	switch expr := expr.(type) {
 	case *intLiteralPlanExpression:
-		return strconv.ParseInt(expr.value, 10, 64)
+		return expr.value, nil
 	case *stringLiteralPlanExpression:
 		return expr.value, nil
 	case *dateLiteralPlanExpression:

@@ -52,9 +52,6 @@ func TestScanner_Scan(t *testing.T) {
 		t.Run("NoEndQuote", func(t *testing.T) {
 			AssertScan(t, `x'0123`, parser.ILLEGAL, `x'0123`)
 		})
-		t.Run("BadHex", func(t *testing.T) {
-			AssertScan(t, `x'hello`, parser.ILLEGAL, `x'h`)
-		})
 	})
 
 	t.Run("INTEGER", func(t *testing.T) {

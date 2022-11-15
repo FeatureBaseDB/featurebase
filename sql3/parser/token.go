@@ -32,15 +32,16 @@ const (
 	SPACE
 
 	literal_beg
-	IDENT   // IDENT
-	QIDENT  // "IDENT"
-	STRING  // 'string'
-	BLOB    // ???
-	FLOAT   // 123.45
-	INTEGER // 123
-	NULL    // NULL
-	TRUE    // true
-	FALSE   // false
+	IDENT    // IDENT
+	VARIABLE // VARIABLE
+	QIDENT   // "IDENT"
+	STRING   // 'string'
+	BLOB     // X'data'
+	FLOAT    // 123.45
+	INTEGER  // 123
+	NULL     // NULL
+	TRUE     // true
+	FALSE    // false
 	literal_end
 
 	operator_beg
@@ -164,6 +165,7 @@ const (
 	LEFT
 	LIKE
 	LRU
+	MAP
 	MATCH
 	MAX
 	MIN
@@ -225,6 +227,7 @@ const (
 	TOP
 	TOPN
 	TRANSACTION
+	TRANSFORM
 	TRIGGER
 	TRUTH
 	TTL
@@ -235,7 +238,6 @@ const (
 	USING
 	VACUUM
 	VALUES
-	VARIABLE
 	VECTOR
 	VIEW
 	VIRTUAL
@@ -255,14 +257,16 @@ var tokens = [...]string{
 	COMMENT: "COMMENT",
 	SPACE:   "SPACE",
 
-	IDENT:   "IDENT",
-	QIDENT:  "QIDENT",
-	STRING:  "STRING",
-	FLOAT:   "FLOAT",
-	INTEGER: "INTEGER",
-	NULL:    "NULL",
-	TRUE:    "TRUE",
-	FALSE:   "FALSE",
+	IDENT:    "IDENT",
+	VARIABLE: "VARIABLE",
+	QIDENT:   "QIDENT",
+	STRING:   "STRING",
+	BLOB:     "BLOB",
+	FLOAT:    "FLOAT",
+	INTEGER:  "INTEGER",
+	NULL:     "NULL",
+	TRUE:     "TRUE",
+	FALSE:    "FALSE",
 
 	SEMI:   ";",
 	LP:     "(",
@@ -381,6 +385,7 @@ var tokens = [...]string{
 	LAST:              "LAST",
 	LEFT:              "LEFT",
 	LIKE:              "LIKE",
+	MAP:               "MAP",
 	LRU:               "LRU",
 	MATCH:             "MATCH",
 	MAX:               "MAX",
@@ -442,6 +447,7 @@ var tokens = [...]string{
 	TO:                "TO",
 	TOP:               "TOP",
 	TOPN:              "TOPN",
+	TRANSFORM:         "TRANSFORM",
 	TRANSACTION:       "TRANSACTION",
 	TRIGGER:           "TRIGGER",
 	TRUTH:             "TRUTH",
@@ -453,7 +459,6 @@ var tokens = [...]string{
 	USING:             "USING",
 	VACUUM:            "VACUUM",
 	VALUES:            "VALUES",
-	VARIABLE:          "VARIABLE",
 	VECTOR:            "VECTOR",
 	VIEW:              "VIEW",
 	VIRTUAL:           "VIRTUAL",

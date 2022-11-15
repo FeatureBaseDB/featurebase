@@ -77,6 +77,8 @@ require (
 )
 
 require (
+	github.com/PaesslerAG/gval v1.0.0
+	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/google/uuid v1.3.0
 	github.com/jaffee/commandeer v0.5.0
 	github.com/linkedin/goavro/v2 v2.11.1
