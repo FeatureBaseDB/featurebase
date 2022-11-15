@@ -13,83 +13,85 @@ type Node interface {
 	fmt.Stringer
 }
 
-func (*AlterTableStatement) node()    {}
-func (*AnalyzeStatement) node()       {}
-func (*Assignment) node()             {}
-func (*ShowTablesStatement) node()    {}
-func (*ShowColumnsStatement) node()   {}
-func (*BeginStatement) node()         {}
-func (*BinaryExpr) node()             {}
-func (*BoolLit) node()                {}
-func (*BulkInsertStatement) node()    {}
-func (*CacheTypeConstraint) node()    {}
-func (*Call) node()                   {}
-func (*CaseBlock) node()              {}
-func (*CaseExpr) node()               {}
-func (*CastExpr) node()               {}
-func (*CheckConstraint) node()        {}
-func (*ColumnDefinition) node()       {}
-func (*CommitStatement) node()        {}
-func (*CreateIndexStatement) node()   {}
-func (*CreateTableStatement) node()   {}
-func (*CreateTriggerStatement) node() {}
-func (*CreateViewStatement) node()    {}
-func (*DateLit) node()                {}
-func (*DefaultConstraint) node()      {}
-func (*DeleteStatement) node()        {}
-func (*DropIndexStatement) node()     {}
-func (*DropTableStatement) node()     {}
-func (*DropTriggerStatement) node()   {}
-func (*DropViewStatement) node()      {}
-func (*Exists) node()                 {}
-func (*ExplainStatement) node()       {}
-func (*ExprList) node()               {}
-func (*FilterClause) node()           {}
-func (*FloatLit) node()               {}
-func (*ForeignKeyArg) node()          {}
-func (*ForeignKeyConstraint) node()   {}
-func (*FrameSpec) node()              {}
-func (*Ident) node()                  {}
-func (*IndexedColumn) node()          {}
-func (*InsertStatement) node()        {}
-func (*JoinClause) node()             {}
-func (*JoinOperator) node()           {}
-func (*KeyPartitionsOption) node()    {}
-func (*MinConstraint) node()          {}
-func (*MaxConstraint) node()          {}
-func (*NotNullConstraint) node()      {}
-func (*NullLit) node()                {}
-func (*IntegerLit) node()             {}
-func (*OnConstraint) node()           {}
-func (*OrderingTerm) node()           {}
-func (*OverClause) node()             {}
-func (*ParenExpr) node()              {}
-func (*SetLiteralExpr) node()         {}
-func (*ParenSource) node()            {}
-func (*PrimaryKeyConstraint) node()   {}
-func (*QualifiedRef) node()           {}
-func (*QualifiedTableName) node()     {}
-func (*Range) node()                  {}
-func (*ReleaseStatement) node()       {}
-func (*ResultColumn) node()           {}
-func (*RollbackStatement) node()      {}
-func (*SavepointStatement) node()     {}
-func (*SelectStatement) node()        {}
-func (*ShardWidthOption) node()       {}
-func (*StringLit) node()              {}
-func (*TableValuedFunction) node()    {}
-func (*TimeUnitConstraint) node()     {}
-func (*TimeQuantumConstraint) node()  {}
-func (*TupleLiteralExpr) node()       {}
-func (*Type) node()                   {}
-func (*UnaryExpr) node()              {}
-func (*UniqueConstraint) node()       {}
-func (*UpdateStatement) node()        {}
-func (*UpsertClause) node()           {}
-func (*UsingConstraint) node()        {}
-func (*Window) node()                 {}
-func (*WindowDefinition) node()       {}
-func (*WithClause) node()             {}
+func (*AlterTableStatement) node()     {}
+func (*AnalyzeStatement) node()        {}
+func (*Assignment) node()              {}
+func (*ShowTablesStatement) node()     {}
+func (*ShowColumnsStatement) node()    {}
+func (*BeginStatement) node()          {}
+func (*BinaryExpr) node()              {}
+func (*BoolLit) node()                 {}
+func (*BulkInsertMapDefinition) node() {}
+func (*BulkInsertStatement) node()     {}
+func (*CacheTypeConstraint) node()     {}
+func (*Call) node()                    {}
+func (*CaseBlock) node()               {}
+func (*CaseExpr) node()                {}
+func (*CastExpr) node()                {}
+func (*CheckConstraint) node()         {}
+func (*ColumnDefinition) node()        {}
+func (*CommitStatement) node()         {}
+func (*CreateIndexStatement) node()    {}
+func (*CreateTableStatement) node()    {}
+func (*CreateTriggerStatement) node()  {}
+func (*CreateViewStatement) node()     {}
+func (*DateLit) node()                 {}
+func (*DefaultConstraint) node()       {}
+func (*DeleteStatement) node()         {}
+func (*DropIndexStatement) node()      {}
+func (*DropTableStatement) node()      {}
+func (*DropTriggerStatement) node()    {}
+func (*DropViewStatement) node()       {}
+func (*Exists) node()                  {}
+func (*ExplainStatement) node()        {}
+func (*ExprList) node()                {}
+func (*FilterClause) node()            {}
+func (*FloatLit) node()                {}
+func (*ForeignKeyArg) node()           {}
+func (*ForeignKeyConstraint) node()    {}
+func (*FrameSpec) node()               {}
+func (*Ident) node()                   {}
+func (*VariableRef) node()             {}
+func (*IndexedColumn) node()           {}
+func (*InsertStatement) node()         {}
+func (*JoinClause) node()              {}
+func (*JoinOperator) node()            {}
+func (*KeyPartitionsOption) node()     {}
+func (*MinConstraint) node()           {}
+func (*MaxConstraint) node()           {}
+func (*NotNullConstraint) node()       {}
+func (*NullLit) node()                 {}
+func (*IntegerLit) node()              {}
+func (*OnConstraint) node()            {}
+func (*OrderingTerm) node()            {}
+func (*OverClause) node()              {}
+func (*ParenExpr) node()               {}
+func (*SetLiteralExpr) node()          {}
+func (*ParenSource) node()             {}
+func (*PrimaryKeyConstraint) node()    {}
+func (*QualifiedRef) node()            {}
+func (*QualifiedTableName) node()      {}
+func (*Range) node()                   {}
+func (*ReleaseStatement) node()        {}
+func (*ResultColumn) node()            {}
+func (*RollbackStatement) node()       {}
+func (*SavepointStatement) node()      {}
+func (*SelectStatement) node()         {}
+func (*ShardWidthOption) node()        {}
+func (*StringLit) node()               {}
+func (*TableValuedFunction) node()     {}
+func (*TimeUnitConstraint) node()      {}
+func (*TimeQuantumConstraint) node()   {}
+func (*TupleLiteralExpr) node()        {}
+func (*Type) node()                    {}
+func (*UnaryExpr) node()               {}
+func (*UniqueConstraint) node()        {}
+func (*UpdateStatement) node()         {}
+func (*UpsertClause) node()            {}
+func (*UsingConstraint) node()         {}
+func (*Window) node()                  {}
+func (*WindowDefinition) node()        {}
+func (*WithClause) node()              {}
 
 type Statement interface {
 	Node
@@ -216,6 +218,7 @@ func (*DateLit) expr()          {}
 func (*Exists) expr()           {}
 func (*ExprList) expr()         {}
 func (*Ident) expr()            {}
+func (*VariableRef) expr()      {}
 func (*NullLit) expr()          {}
 func (*IntegerLit) expr()       {}
 func (*FloatLit) expr()         {}
@@ -265,6 +268,9 @@ func CloneExpr(expr Expr) Expr {
 		return expr.Clone()
 	case *UnaryExpr:
 		return expr.Clone()
+	case *VariableRef:
+		return expr.Clone()
+
 	default:
 		panic(fmt.Sprintf("invalid expr type: %T", expr))
 	}
@@ -1439,6 +1445,41 @@ func IdentName(ident *Ident) string {
 		return ""
 	}
 	return ident.Name
+}
+
+type VariableRef struct {
+	NamePos       Pos    // variable position
+	Name          string // variable name
+	VariableIndex int
+	VarDataType   ExprDataType
+}
+
+func (expr *VariableRef) IsLiteral() bool { return false }
+
+func (expr *VariableRef) DataType() ExprDataType {
+	return expr.VarDataType
+}
+
+func (expr *VariableRef) Pos() Pos {
+	return expr.NamePos
+}
+
+// Clone returns a deep copy of i.
+func (i *VariableRef) Clone() *VariableRef {
+	if i == nil {
+		return nil
+	}
+	other := *i
+	return &other
+}
+
+// String returns the string representation of the expression.
+func (i *VariableRef) String() string {
+	return `"` + i.Name + `"`
+}
+
+func (i *VariableRef) VarName() string {
+	return i.Name[1:]
 }
 
 type Type struct {
@@ -2719,38 +2760,141 @@ func (s *DropTriggerStatement) String() string {
 	return buf.String()
 }
 
-type BulkInsertIDMap struct {
-	Auto        Pos // position of AUTO
-	ColumnExprs *ExprList
+type BulkInsertMapDefinition struct {
+	Name    *Ident // map name
+	Type    *Type  // data type
+	MapExpr Expr
 }
 
-type BulkInsertMappedColumn struct {
-	SourceColumnOffset Expr
-	TargetColumn       *Ident
+// Clone returns a deep copy of d.
+func (d *BulkInsertMapDefinition) Clone() *BulkInsertMapDefinition {
+	if d == nil {
+		return d
+	}
+	other := *d
+	other.Name = d.Name.Clone()
+	other.Type = d.Type.Clone()
+	//other.MapExpr = d.MapExpr.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (c *BulkInsertMapDefinition) String() string {
+	var buf bytes.Buffer
+	buf.WriteString(c.MapExpr.String())
+	buf.WriteString(" ")
+	buf.WriteString(c.Name.String())
+	buf.WriteString(" ")
+	buf.WriteString(c.Type.String())
+	return buf.String()
 }
 
 type BulkInsertStatement struct {
-	Bulk   Pos // position of BULK keyword
-	Insert Pos // position of INSERT keyword
+	Bulk    Pos // position of BULK keyword
+	Insert  Pos // position of INSERT keyword
+	Replace Pos // position of REPLACE keyword
+	Into    Pos // position of INTO keyword
 
 	Table *Ident // table name
 
-	From      Pos  // position of FROM keyword
-	DataFile  Expr // data file name
-	With      Pos  // position of WITH keyword
-	BatchSize Expr
-	RowsLimit Expr
-	Format    Expr
-	MapId     *BulkInsertIDMap
-	ColumnMap []*BulkInsertMappedColumn
+	ColumnsLparen Pos      // position of column list left paren
+	Columns       []*Ident // optional column list
+	ColumnsRparen Pos      // position of column list right paren
+
+	Map       Pos                        // position of MAP keyword
+	MapLparen Pos                        // position of column list left paren
+	MapList   []*BulkInsertMapDefinition // source to column map
+	MapRparen Pos                        // position of column list right paren
+
+	Transform       Pos    // position of MAP keyword
+	TransformLparen Pos    // position of column list left paren
+	TransformList   []Expr // source to column map
+	TransformRparen Pos    // position of column list right paren
+
+	From       Pos  // position of FROM keyword
+	DataSource Expr // data source
+	With       Pos  // position of WITH keyword
+	BatchSize  Expr
+	RowsLimit  Expr
+	Format     Expr
+	Input      Expr
+	HeaderRow  Expr // has header row (that needs to be skipped)
 }
 
 func (s *BulkInsertStatement) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("BULK INSERT ")
+	buf.WriteString("BULK ")
+	if s.Replace.IsValid() {
+		buf.WriteString("REPLACE")
+	} else {
+		buf.WriteString("INSERT")
+	}
+	buf.WriteString(" INTO ")
 	fmt.Fprintf(&buf, " %s", s.Table.String())
+
+	if s.Columns != nil {
+		buf.WriteString("(")
+
+		for i, col := range s.Columns {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(col.String())
+		}
+
+		buf.WriteString(")")
+	}
+	buf.WriteString(" MAP ")
+	buf.WriteString("(")
+	for i, m := range s.MapList {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(m.String())
+	}
+	buf.WriteString(")")
+	if s.TransformList != nil {
+		buf.WriteString(" TRANSFORM ")
+		buf.WriteString("(")
+
+		for i, t := range s.TransformList {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(t.String())
+		}
+
+		buf.WriteString(")")
+	}
+
 	buf.WriteString(" FROM ")
-	fmt.Fprintf(&buf, " %s", s.DataFile.String())
+	fmt.Fprintf(&buf, " %s", s.DataSource.String())
+	buf.WriteString(" WITH ")
+
+	if s.Format != nil {
+		buf.WriteString("FORMAT ")
+		buf.WriteString(s.Format.String())
+	}
+
+	if s.Input != nil {
+		buf.WriteString("INPUT ")
+		buf.WriteString(s.Input.String())
+	}
+
+	if s.HeaderRow != nil {
+		buf.WriteString("HEADER_ROW ")
+	}
+
+	if s.BatchSize != nil {
+		buf.WriteString("BATCHSIZE ")
+		buf.WriteString(s.BatchSize.String())
+	}
+
+	if s.RowsLimit != nil {
+		buf.WriteString("ROWSLIMIT ")
+		buf.WriteString(s.RowsLimit.String())
+	}
+
 	return buf.String()
 }
 
@@ -2809,11 +2953,12 @@ func (s *InsertStatement) String() string {
 	//	buf.WriteString(" ")
 	//}
 
-	//if s.Replace.IsValid() {
-	//	buf.WriteString("REPLACE")
-	//} else {
-	buf.WriteString("INSERT")
-	if s.InsertOrReplace.IsValid() {
+	if s.Replace.IsValid() {
+		buf.WriteString("REPLACE")
+	} else {
+		buf.WriteString("INSERT")
+	}
+	/*if s.InsertOrReplace.IsValid() {
 		buf.WriteString(" OR REPLACE")
 		//} else if s.InsertOrRollback.IsValid() {
 		//	buf.WriteString(" OR ROLLBACK")
@@ -2824,15 +2969,15 @@ func (s *InsertStatement) String() string {
 		//} else if s.InsertOrIgnore.IsValid() {
 		//	buf.WriteString(" OR IGNORE")
 		//}
-	}
+	}*/
 
-	fmt.Fprintf(&buf, " INTO %s", s.Table.String())
+	fmt.Fprintf(&buf, " INTO %s ", s.Table.String())
 	if s.Alias != nil {
-		fmt.Fprintf(&buf, " AS %s", s.Alias.String())
+		fmt.Fprintf(&buf, "AS %s ", s.Alias.String())
 	}
 
 	if len(s.Columns) != 0 {
-		buf.WriteString(" (")
+		buf.WriteString("(")
 		for i, col := range s.Columns {
 			if i != 0 {
 				buf.WriteString(", ")

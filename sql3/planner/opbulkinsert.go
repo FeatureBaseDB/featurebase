@@ -3,13 +3,16 @@
 package planner
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -18,50 +21,49 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
-// bulkInsertMappedColumn specifies a mapping from the source
-// data to a target column name
-type bulkInsertMappedColumn struct {
-	// source expression
-	// using an interface for so we have flexibility in data types as format changes
-	columnSource interface{}
-	// name of the target column
-	columnName string
-	// data type of the target column
-	columnDataType parser.ExprDataType
+type bulkInsertMapColumn struct {
+	name    string
+	expr    types.PlanExpression
+	colType parser.ExprDataType
 }
 
 // bulkInsertOptions contains options for bulk insert
 type bulkInsertOptions struct {
 	// name of the file we're going to read
-	fileName string
+	sourceData string
 	// number of rows in a batch
 	batchSize int
 	// stop after this many rows
 	rowsLimit int
 	// format specifier (CSV is the only one right now)
 	format string
-	// the column map in the source data to use as the _id value
-	// if empty or nill auto increment
-	// using an interface so we have flexibility in data types as format changes
-	idColumnMap []interface{}
-	// column mappings
-	columnMap []*bulkInsertMappedColumn
+	// whether the source has a header row
+	hasHeaderRow bool
+	// input specifier (FILE is the only one right now)
+	input string
+
+	// target columns
+	targetColumns []*qualifiedRefPlanExpression
+
+	// transformations
+	transformExpressions []types.PlanExpression
+
+	// map expressions
+	mapExpressions []*bulkInsertMapColumn
 }
 
 // PlanOpBulkInsert plan operator to handle INSERT.
 type PlanOpBulkInsert struct {
 	planner   *ExecutionPlanner
 	tableName string
-	isKeyed   bool
 	options   *bulkInsertOptions
 	warnings  []string
 }
 
-func NewPlanOpBulkInsert(p *ExecutionPlanner, tableName string, isKeyed bool, options *bulkInsertOptions) *PlanOpBulkInsert {
+func NewPlanOpBulkInsert(p *ExecutionPlanner, tableName string, options *bulkInsertOptions) *PlanOpBulkInsert {
 	return &PlanOpBulkInsert{
 		planner:   p,
 		tableName: tableName,
-		isKeyed:   isKeyed,
 		options:   options,
 		warnings:  make([]string, 0),
 	}
@@ -78,23 +80,36 @@ func (p *PlanOpBulkInsert) Plan() map[string]interface{} {
 	result["tableName"] = p.tableName
 
 	options := make(map[string]interface{})
-	options["batchsize"] = p.options.batchSize
-	options["rowslimit"] = p.options.rowsLimit
+	options["sourceData"] = p.options.sourceData
+	options["batchSize"] = p.options.batchSize
+	options["rowsLimit"] = p.options.rowsLimit
 	options["format"] = p.options.format
-	if len(p.options.idColumnMap) > 0 {
-		options["idColumnMap"] = p.options.idColumnMap
-	} else {
-		options["idColumnMap"] = "autoincrement"
-	}
-	colMap := make([]interface{}, 0)
-	for _, m := range p.options.columnMap {
-		cm := make(map[string]interface{})
-		cm["columnSource"] = m.columnSource
-		cm["columnName"] = m.columnName
-		colMap = append(colMap, cm)
-	}
-	options["columnMap"] = colMap
+	options["input"] = p.options.input
+	options["hasHeaderRow"] = p.options.hasHeaderRow
 
+	colMap := make([]interface{}, 0)
+	for _, m := range p.options.targetColumns {
+		colMap = append(colMap, m.Plan())
+	}
+	options["targetColumns"] = colMap
+
+	mapList := make([]interface{}, 0)
+	for _, m := range p.options.mapExpressions {
+		mapItem := make(map[string]interface{})
+		options["name"] = m.name
+		options["type"] = m.colType.TypeName()
+		options["expr"] = m.expr.Plan()
+		mapList = append(mapList, mapItem)
+	}
+	options["mapExpressions"] = mapList
+
+	if p.options.transformExpressions != nil && len(p.options.transformExpressions) > 0 {
+		transformList := make([]interface{}, 0)
+		for _, m := range p.options.transformExpressions {
+			transformList = append(transformList, m.Plan())
+		}
+		options["transformExpressions"] = transformList
+	}
 	result["options"] = options
 	return result
 }
@@ -120,545 +135,741 @@ func (p *PlanOpBulkInsert) Children() []types.PlanOperator {
 }
 
 func (p *PlanOpBulkInsert) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
-	return &bulkInsertCSVRowIter{
-		planner:   p.planner,
-		tableName: p.tableName,
-		isKeyed:   p.isKeyed,
-		options:   p.options,
-	}, nil
+	switch strings.ToUpper(p.options.format) {
+	case "CSV":
+		return &bulkInsertCSVRowIter{
+			planner:   p.planner,
+			tableName: p.tableName,
+			options:   p.options,
+			sourceIter: &bulkInsertSourceCSVRowIter{
+				planner: p.planner,
+				options: p.options,
+			},
+		}, nil
+
+	case "NDJSON":
+		return &bulkInsertNDJsonRowIter{
+			planner:   p.planner,
+			tableName: p.tableName,
+			options:   p.options,
+			sourceIter: &bulkInsertSourceNDJsonRowIter{
+				planner: p.planner,
+				options: p.options,
+			},
+		}, nil
+
+	default:
+		return nil, sql3.NewErrInternalf("unexpected format '%s'", p.options.format)
+	}
 }
 
 func (p *PlanOpBulkInsert) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
-	return NewPlanOpBulkInsert(p.planner, p.tableName, p.isKeyed, p.options), nil
+	return NewPlanOpBulkInsert(p.planner, p.tableName, p.options), nil
+}
+
+type bulkInsertSourceCSVRowIter struct {
+	planner   *ExecutionPlanner
+	options   *bulkInsertOptions
+	csvReader *csv.Reader
+
+	closeFunc func()
+
+	mapValues []int64
+
+	hasStarted *struct{}
+}
+
+var _ types.RowIterator = (*bulkInsertSourceCSVRowIter)(nil)
+
+func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error) {
+
+	if i.hasStarted == nil {
+
+		i.hasStarted = &struct{}{}
+
+		// pre-calculate map values since these represent column offsets and will be constant for csv
+		i.mapValues = []int64{}
+		for _, mc := range i.options.mapExpressions {
+			// this is csv so map value will be an int
+			rawMapValue, err := mc.expr.Evaluate(nil)
+			if err != nil {
+				return nil, err
+			}
+			mapValue, ok := rawMapValue.(int64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected type for mapValue '%T'", rawMapValue)
+			}
+			i.mapValues = append(i.mapValues, mapValue)
+		}
+
+		switch strings.ToUpper(i.options.input) {
+		case "FILE":
+			f, err := os.Open(i.options.sourceData)
+			if err != nil {
+				return nil, err
+			}
+			i.closeFunc = func() {
+				f.Close()
+			}
+
+			i.csvReader = csv.NewReader(f)
+
+		case "URL":
+			response, err := http.Get(i.options.sourceData)
+			if err != nil {
+				return nil, err
+			}
+			i.closeFunc = func() {
+				response.Body.Close()
+			}
+			if response.StatusCode != 200 {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("unexpected response %d", response.StatusCode))
+			}
+			i.csvReader = csv.NewReader(response.Body)
+
+		case "STREAM":
+			i.csvReader = csv.NewReader(strings.NewReader(i.options.sourceData))
+
+		default:
+			return nil, sql3.NewErrInternalf("unexpected input specification type '%s'", i.options.input)
+		}
+
+		i.csvReader.LazyQuotes = true
+		i.csvReader.TrimLeadingSpace = true
+		// skip header row if necessary
+		if i.options.hasHeaderRow {
+			_, err := i.csvReader.Read()
+			if err == io.EOF {
+				return nil, types.ErrNoMoreRows
+			} else if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	rec, err := i.csvReader.Read()
+	if err == io.EOF {
+		return nil, types.ErrNoMoreRows
+	} else if err != nil {
+		pe, ok := err.(*csv.ParseError)
+		if ok {
+			return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
+		}
+		return nil, err
+	}
+
+	// now we do the mapping to the output row
+	result := make([]interface{}, len(i.options.mapExpressions))
+	for idx := range i.options.mapExpressions {
+		mapExpressionResult := i.mapValues[idx]
+		if !(mapExpressionResult >= 0 && int(mapExpressionResult) < len(rec)) {
+			return nil, sql3.NewErrMappingFromDatasource(0, 0, i.options.sourceData, fmt.Sprintf("map index %d out of range", mapExpressionResult))
+		}
+		evalValue := rec[mapExpressionResult]
+
+		mapColumn := i.options.mapExpressions[idx]
+		switch mapColumn.colType.(type) {
+		case *parser.DataTypeID, *parser.DataTypeInt:
+			intVal, err := strconv.ParseInt(evalValue, 10, 64)
+			if err != nil {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+			}
+			result[idx] = intVal
+
+		case *parser.DataTypeIDSet:
+			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+
+		case *parser.DataTypeStringSet:
+			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+
+		case *parser.DataTypeTimestamp:
+			intVal, err := strconv.ParseInt(evalValue, 10, 64)
+			if err != nil {
+				if tm, err := time.ParseInLocation(time.RFC3339Nano, evalValue, time.UTC); err == nil {
+					result[idx] = tm
+				} else if tm, err := time.ParseInLocation(time.RFC3339, evalValue, time.UTC); err == nil {
+					result[idx] = tm
+				} else if tm, err := time.ParseInLocation("2006-01-02", evalValue, time.UTC); err == nil {
+					result[idx] = tm
+				} else {
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+				}
+			}
+			result[idx] = time.UnixMilli(intVal).UTC()
+
+		case *parser.DataTypeString:
+			result[idx] = evalValue
+
+		case *parser.DataTypeBool:
+			bval, err := strconv.ParseInt(evalValue, 10, 64)
+			if err != nil {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+			}
+			result[idx] = bval
+
+		case *parser.DataTypeDecimal:
+			dval, err := parser.StringToDecimal(evalValue)
+			if err != nil {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+			}
+			result[idx] = dval
+
+		default:
+			return nil, sql3.NewErrInternalf("unhandled type '%T'", mapColumn.colType)
+		}
+	}
+	return result, nil
+}
+
+func (i *bulkInsertSourceCSVRowIter) Close(ctx context.Context) {
+	if i.closeFunc != nil {
+		i.closeFunc()
+	}
 }
 
 type bulkInsertCSVRowIter struct {
 	planner   *ExecutionPlanner
 	tableName string
-	isKeyed   bool
 	options   *bulkInsertOptions
+	linesRead int
 
-	// latch is used to indicate if the CSV has been processed. It will
-	// be set to a non-nil value upon processing. After that, the file
-	// should not be processed again.
-	latch *struct{}
+	currentBatch [][]interface{}
 
-	currentBatch []interface{}
-	lastKeyValue uint64
+	sourceIter *bulkInsertSourceCSVRowIter
 }
 
 var _ types.RowIterator = (*bulkInsertCSVRowIter)(nil)
 
 func (i *bulkInsertCSVRowIter) Next(ctx context.Context) (types.Row, error) {
-	// If Next has already been called, return early. We only want to process
-	// the file once.
-	if i.latch != nil {
-		return nil, types.ErrNoMoreRows
-	}
-
-	// Set latch to indicate that Next() has been called.
-	i.latch = &struct{}{}
-
-	i.lastKeyValue = 0
-
-	f, err := os.Open(i.options.fileName)
-	if err != nil {
-		return nil, err
-	}
-
-	defer f.Close()
-
-	linesRead := 0
-	csvReader := csv.NewReader(f)
+	defer i.sourceIter.Close(ctx)
 	for {
-		rec, err := csvReader.Read()
-		if err == io.EOF {
+		row, err := i.sourceIter.Next(ctx)
+		if err != nil && err != types.ErrNoMoreRows {
+			return nil, err
+		}
+		if err == types.ErrNoMoreRows {
 			break
-		} else if err != nil {
-			return nil, err
 		}
+		i.linesRead++
 
-		// do something with read line
-		if err = i.processCSVLine(ctx, rec); err != nil {
-			return nil, err
+		if i.currentBatch == nil {
+			i.currentBatch = make([][]interface{}, 0)
 		}
-		linesRead += 1
-
-		// bail if we have a rows limit and we've hit it
-		if i.options.rowsLimit > 0 && linesRead >= i.options.rowsLimit {
+		i.currentBatch = append(i.currentBatch, row)
+		if len(i.currentBatch) >= i.options.batchSize {
+			err := processBatch(ctx, i.planner, i.tableName, i.currentBatch, i.options)
+			if err != nil {
+				return nil, err
+			}
+			i.currentBatch = nil
+		}
+		if i.options.rowsLimit > 0 && i.linesRead >= i.options.rowsLimit {
 			break
 		}
 	}
-
+	if len(i.currentBatch) > 0 {
+		err := processBatch(ctx, i.planner, i.tableName, i.currentBatch, i.options)
+		if err != nil {
+			return nil, err
+		}
+		i.currentBatch = nil
+	}
 	return nil, types.ErrNoMoreRows
 }
 
-func (i *bulkInsertCSVRowIter) processCSVLine(ctx context.Context, line []string) error {
-	if i.currentBatch == nil {
-		i.currentBatch = make([]interface{}, 0)
-	}
-	i.currentBatch = append(i.currentBatch, line)
-	if len(i.currentBatch) >= i.options.batchSize {
-		log.Printf("BULK INSERT: processing batch (%d)", len(i.currentBatch))
-		err := i.processBatch(ctx)
-		log.Printf("BULK INSERT: batch processed")
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+type bulkInsertSourceNDJsonRowIter struct {
+	planner *ExecutionPlanner
+	options *bulkInsertOptions
+	reader  *bufio.Scanner
+
+	closeFunc func()
+
+	mapExpressionResults []string
+	pathExpressions      []gval.Evaluable
+
+	hasStarted *struct{}
 }
 
-func (i *bulkInsertCSVRowIter) processBatch(ctx context.Context) error {
+var _ types.RowIterator = (*bulkInsertSourceNDJsonRowIter)(nil)
 
-	batchLen := len(i.currentBatch)
+func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, error) {
 
-	colIDs := make([]uint64, batchLen)
-	colKeys := make([]string, batchLen)
+	if i.hasStarted == nil {
 
-	insertData := make([]interface{}, len(i.options.columnMap))
+		i.hasStarted = &struct{}{}
 
-	addColID := func(index int, v interface{}) error {
-		switch id := v.(type) {
-		case int64:
-			colIDs[index] = uint64(id)
-		case uint64:
-			colIDs[index] = id
-		case string:
-			colKeys[index] = id
-		default:
-			return sql3.NewErrInternalf("unhandled _id data type '%T'", id)
-		}
-		return nil
-	}
+		builder := gval.Full(jsonpath.PlaceholderExtension())
 
-	// make objects for each column depending on data type
-	for cidx, mc := range i.options.columnMap {
-		switch targetType := mc.columnDataType.(type) {
-		case *parser.DataTypeID:
-			vals := make([]uint64, batchLen)
-			insertData[cidx] = vals
-
-		case *parser.DataTypeInt:
-			vals := make([]int64, batchLen)
-			insertData[cidx] = vals
-
-		case *parser.DataTypeString:
-			vals := make([]string, batchLen)
-			insertData[cidx] = vals
-
-		case *parser.DataTypeTimestamp:
-			vals := make([]time.Time, batchLen)
-			insertData[cidx] = vals
-
-		default:
-			return sql3.NewErrInternalf("unhandled target type '%T'", targetType)
-		}
-	}
-
-	// for each row in the batch add value to each mapped column
-	log.Printf("BULK INSERT: building batch...")
-	for rowIdx, row := range i.currentBatch {
-		csvRow, ok := row.([]string)
-		if !ok {
-			return sql3.NewErrInternalf("unexpected row type '%T'", row)
-		}
-
-		//handle each column
-		for colIdx, mc := range i.options.columnMap {
-
-			columnPosition, ok := mc.columnSource.(int64)
-			if !ok {
-				return sql3.NewErrInternalf("unexpected columnPosition type '%T'", mc.columnSource)
-			}
-			switch targetType := mc.columnDataType.(type) {
-			case *parser.DataTypeID:
-				valueStr := csvRow[columnPosition]
-				insertValue, err := strconv.ParseUint(valueStr, 10, 64)
-				if err != nil {
-					return err
-				}
-				columnData, ok := insertData[colIdx].([]uint64)
-				if !ok {
-					return sql3.NewErrInternalf("unexpected columnData type '%T'", insertData[colIdx])
-				}
-				columnData[rowIdx] = insertValue
-
-			case *parser.DataTypeInt:
-				valueStr := csvRow[columnPosition]
-				insertValue, err := strconv.ParseInt(valueStr, 10, 64)
-				if err != nil {
-					return err
-				}
-				columnData, ok := insertData[colIdx].([]int64)
-				if !ok {
-					return sql3.NewErrInternalf("unexpected columnData type '%T'", insertData[colIdx])
-				}
-				columnData[rowIdx] = insertValue
-
-			case *parser.DataTypeString:
-				insertValue := csvRow[columnPosition]
-				columnData, ok := insertData[colIdx].([]string)
-				if !ok {
-					return sql3.NewErrInternalf("unexpected columnData type '%T'", insertData[colIdx])
-				}
-				columnData[rowIdx] = insertValue
-
-			case *parser.DataTypeTimestamp:
-				valueStr := csvRow[columnPosition]
-
-				var insertValue time.Time
-				if tm, err := time.ParseInLocation(time.RFC3339Nano, valueStr, time.UTC); err == nil {
-					insertValue = tm
-				} else if tm, err := time.ParseInLocation(time.RFC3339, valueStr, time.UTC); err == nil {
-					insertValue = tm
-				} else if tm, err := time.ParseInLocation("2006-01-02 15:04:05", valueStr, time.UTC); err == nil {
-					insertValue = tm
-				} else if tm, err := time.ParseInLocation("2006-01-02", valueStr, time.UTC); err == nil {
-					insertValue = tm
-				} else {
-					return err
-				}
-				columnData, ok := insertData[colIdx].([]time.Time)
-				if !ok {
-					return sql3.NewErrInternalf("unexpected columnData type '%T'", insertData[colIdx])
-				}
-				columnData[rowIdx] = insertValue
-
-			default:
-				return sql3.NewErrInternalf("unhandled target type '%T'", targetType)
-			}
-
-		}
-
-		// add _id
-		if len(i.options.idColumnMap) > 0 {
-			return sql3.NewErrInternalf("not yet implemented")
-		} else {
-			// if the table is keyed, use the string representation of an integer key value
-			if i.isKeyed {
-				//auto increment
-				err := addColID(rowIdx, fmt.Sprintf("%d", i.lastKeyValue))
-				if err != nil {
-					return err
-				}
-			} else {
-				//auto increment
-				err := addColID(rowIdx, i.lastKeyValue)
-				if err != nil {
-					return err
-				}
-			}
-			i.lastKeyValue += 1
-		}
-	}
-	log.Printf("BULK INSERT: building batch complete")
-
-	// now loop again and actually do the insert
-
-	log.Printf("BULK INSERT: inserting columns...")
-	qcx := i.planner.computeAPI.Txf().NewQcx()
-
-	//nil out colids if the table is keyed
-	for colIdx, mc := range i.options.columnMap {
-		log.Printf("BULK INSERT: inserting column '%s'...", mc.columnName)
-		if i.isKeyed {
-			colIDs = nil
-		}
-		switch targetType := mc.columnDataType.(type) {
-		case *parser.DataTypeID:
-			vals, ok := insertData[colIdx].([]uint64)
-			if !ok {
-				return sql3.NewErrInternalf("unexpected insert data type '%T'", insertData[colIdx])
-			}
-
-			req := &pilosa.ImportRequest{
-				Index:      i.tableName,
-				Field:      mc.columnName,
-				Shard:      0, //TODO: handle non-0 shards
-				ColumnIDs:  colIDs,
-				ColumnKeys: colKeys,
-				RowIDs:     vals,
-			}
-
-			err := i.planner.computeAPI.Import(ctx, qcx, req)
+		// pre-calculate map values since these represent ndjson expressions and will be constant
+		i.mapExpressionResults = []string{}
+		i.pathExpressions = []gval.Evaluable{}
+		for _, mc := range i.options.mapExpressions {
+			rawMapValue, err := mc.expr.Evaluate(nil)
 			if err != nil {
-				return err
+				return nil, err
 			}
-
-		case *parser.DataTypeInt:
-			vals, ok := insertData[colIdx].([]int64)
+			mapValue, ok := rawMapValue.(string)
 			if !ok {
-				return sql3.NewErrInternalf("unexpected insert data type '%T'", insertData[colIdx])
+				return nil, sql3.NewErrInternalf("unexpected type for mapValue '%T'", rawMapValue)
 			}
+			i.mapExpressionResults = append(i.mapExpressionResults, mapValue)
 
-			req := &pilosa.ImportValueRequest{
-				Index:      i.tableName,
-				Field:      mc.columnName,
-				Shard:      0, //TODO: handle non-0 shards
-				ColumnIDs:  colIDs,
-				ColumnKeys: colKeys,
-				Values:     vals,
-			}
-
-			err := i.planner.computeAPI.ImportValue(ctx, qcx, req)
+			path, err := builder.NewEvaluable(mapValue)
 			if err != nil {
-				return err
+				return nil, err
 			}
+			i.pathExpressions = append(i.pathExpressions, path)
+		}
 
-		case *parser.DataTypeString:
-			vals, ok := insertData[colIdx].([]string)
-			if !ok {
-				return sql3.NewErrInternalf("unexpected insert data type '%T'", insertData[colIdx])
-			}
-
-			req := &pilosa.ImportRequest{
-				Index:      i.tableName,
-				Field:      mc.columnName,
-				Shard:      0, //TODO: handle non-0 shards
-				ColumnIDs:  colIDs,
-				ColumnKeys: colKeys,
-				RowKeys:    vals,
-			}
-			err := i.planner.computeAPI.Import(ctx, qcx, req)
+		switch strings.ToUpper(i.options.input) {
+		case "FILE":
+			f, err := os.Open(i.options.sourceData)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
-		case *parser.DataTypeTimestamp:
-			vals, ok := insertData[colIdx].([]time.Time)
-			if !ok {
-				return sql3.NewErrInternalf("unexpected insert data type '%T'", insertData[colIdx])
+			i.closeFunc = func() {
+				f.Close()
 			}
 
-			// TODO (pok) - getting and error for timestamp columns
-			// 'Error: local import after remote imports: number of columns (1) and number of values (0) do not match'
-			req := &pilosa.ImportValueRequest{
-				Index:           i.tableName,
-				Field:           mc.columnName,
-				Shard:           0, //TODO: handle non-0 shards
-				ColumnIDs:       colIDs,
-				ColumnKeys:      colKeys,
-				TimestampValues: vals,
-			}
+			i.reader = bufio.NewScanner(f)
 
-			err := i.planner.computeAPI.ImportValue(ctx, qcx, req)
+		case "URL":
+			response, err := http.Get(i.options.sourceData)
 			if err != nil {
-				return err
+				return nil, err
 			}
+			i.closeFunc = func() {
+				response.Body.Close()
+			}
+			if response.StatusCode != 200 {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("unexpected response %d", response.StatusCode))
+			}
+			i.reader = bufio.NewScanner(response.Body)
+
+		case "STREAM":
+			i.reader = bufio.NewScanner(strings.NewReader(i.options.sourceData))
 
 		default:
-			return sql3.NewErrInternalf("unhandled target type '%T'", targetType)
+			return nil, sql3.NewErrInternalf("unexpected input specification type '%s'", i.options.input)
 		}
-		log.Printf("BULK INSERT: inserting column '%s' complete.", mc.columnName)
 	}
-	log.Printf("BULK INSERT: inserting columns complete.")
 
-	/*
+	if i.reader.Scan() {
+		if err := i.reader.Err(); err != nil {
+			return nil, err
+		}
 
+		jsonValue := i.reader.Text()
 
-		//eval all the expressions and do the insert
-		for idx, iv := range i.insertValues {
+		// now we do the mapping to the output row
+		result := make([]interface{}, len(i.options.mapExpressions))
 
-			sourceType := iv.Type()
-			switch targetType := i.targetColumns[idx].dataType.(type) {
+		// parse the json
+		v := interface{}(nil)
+		err := json.Unmarshal([]byte(jsonValue), &v)
 
-			case *parser.DataTypeBool:
-				err = addColID(columnID)
-				if err != nil {
-					return nil, err
+		if err != nil {
+			return nil, err
+		}
+
+		// type check against the output type of the map operation
+
+		for idx, expr := range i.pathExpressions {
+
+			evalValue, err := expr(ctx, v)
+			if err != nil {
+				return nil, err
+			}
+
+			mapColumn := i.options.mapExpressions[idx]
+			switch mapColumn.colType.(type) {
+			case *parser.DataTypeID, *parser.DataTypeInt:
+
+				switch v := evalValue.(type) {
+				case float64:
+					// if v is a whole number then make it an int
+					if v == float64(int64(v)) {
+						result[idx] = int64(v)
+					} else {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					}
+
+				case []interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case string:
+					intVal, err := strconv.ParseInt(v, 10, 64)
+					if err != nil {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					}
+					result[idx] = intVal
+
+				case bool:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				default:
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
-
-				val := eval.(bool)
-				vals := make([]uint64, 1)
-				if val {
-					vals[0] = 1
-				} else {
-					vals[0] = 0
-				}
-
-				req := &pilosa.ImportRequest{
-					Index:      i.tableName,
-					Field:      targetColumn.columnName,
-					Shard:      0, //TODO: handle non-0 shards
-					ColumnIDs:  colIDs,
-					ColumnKeys: colKeys,
-					RowIDs:     vals,
-				}
-
-				err = i.planner.computeAPI.Import(ctx, qcx, req)
-				if err != nil {
-					return nil, err
-				}
-
-			case *parser.DataTypeDecimal:
-				err = addColID(columnID)
-				if err != nil {
-					return nil, err
-				}
-
-				vals := make([]float64, 1)
-				vals[0] = eval.(pql.Decimal).Float64()
-
-				req := &pilosa.ImportValueRequest{
-					Index:       i.tableName,
-					Field:       targetColumn.columnName,
-					Shard:       0, //TODO: handle non-0 shards
-					ColumnIDs:   colIDs,
-					ColumnKeys:  colKeys,
-					FloatValues: vals,
-				}
-
-				err = i.planner.computeAPI.ImportValue(ctx, qcx, req)
-				if err != nil {
-					return nil, err
-				}
-
 
 			case *parser.DataTypeIDSet:
-				rowIDs := make([]uint64, 0)
-				rowSet := eval.([]int64)
-				for k := range rowSet {
-					err = addColID(columnID)
-					if err != nil {
-						return nil, err
+				switch v := evalValue.(type) {
+				case float64:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case []interface{}:
+					setValue := make([]int64, 0)
+					for _, i := range v {
+						f, ok := i.(float64)
+						if !ok {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+						}
+						if f == float64(int64(f)) {
+							setValue = append(setValue, int64(f))
+						} else {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+						}
 					}
-					rowIDs = append(rowIDs, uint64(rowSet[k]))
-				}
+					result[idx] = setValue
 
-				req := &pilosa.ImportRequest{
-					Index:      i.tableName,
-					Field:      targetColumn.columnName,
-					Shard:      0, //TODO: handle non-0 shards
-					ColumnIDs:  colIDs,
-					ColumnKeys: colKeys,
-					RowIDs:     rowIDs,
-				}
-				err = i.planner.computeAPI.Import(ctx, qcx, req)
-				if err != nil {
-					return nil, err
-				}
+				case string:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
 
-			case *parser.DataTypeIDSetQuantum:
-				rowIDs := make([]uint64, 0)
-				timestamps := make([]int64, 0)
+				case bool:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
 
-				coercedVal, err := coerceValue(sourceType, targetType, eval, parser.Pos{Line: 0, Column: 0})
-				if err != nil {
-					return nil, err
-				}
+				case interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
 
-				record := coercedVal.([]interface{})
-				rowSet := record[1].([]int64)
-				for k := range rowSet {
-					err = addColID(columnID)
-					if err != nil {
-						return nil, err
-					}
-					rowIDs = append(rowIDs, uint64(rowSet[k]))
-				}
-
-				if record[0] == nil {
-					timestamps = nil
-				} else {
-					timestamp, ok := record[0].(time.Time)
-					if !ok {
-						return nil, sql3.NewErrInternalf("unexpected type '%T'", record[0])
-					}
-					for _ = range rowSet {
-						timestamps = append(timestamps, timestamp.Unix())
-					}
-				}
-
-				req := &pilosa.ImportRequest{
-					Index:      i.tableName,
-					Field:      targetColumn.columnName,
-					Shard:      0, //TODO: handle non-0 shards
-					ColumnIDs:  colIDs,
-					ColumnKeys: colKeys,
-					RowIDs:     rowIDs,
-					Timestamps: timestamps,
-				}
-				err = i.planner.computeAPI.Import(ctx, qcx, req)
-				if err != nil {
-					return nil, err
+				default:
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
 
 			case *parser.DataTypeStringSet:
-				rowKeys := make([]string, 0)
-				rowSet := eval.([]string)
-				for k := range rowSet {
-					err = addColID(columnID)
-					if err != nil {
-						return nil, err
+				switch v := evalValue.(type) {
+				case float64:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case []interface{}:
+					setValue := make([]string, 0)
+					for _, i := range v {
+						f, ok := i.(string)
+						if !ok {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+						}
+						setValue = append(setValue, f)
 					}
-					rowKeys = append(rowKeys, rowSet[k])
+					result[idx] = setValue
+
+				case string:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case bool:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				default:
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
 
-				req := &pilosa.ImportRequest{
-					Index:      i.tableName,
-					Field:      targetColumn.columnName,
-					Shard:      0, //TODO: handle non-0 shards
-					ColumnIDs:  colIDs,
-					ColumnKeys: colKeys,
-					RowKeys:    rowKeys,
-				}
-				err = i.planner.computeAPI.Import(ctx, qcx, req)
-				if err != nil {
-					return nil, err
-				}
-
-			case *parser.DataTypeStringSetQuantum:
-				rowKeys := make([]string, 0)
-				timestamps := make([]int64, 0)
-
-				coercedVal, err := coerceValue(sourceType, targetType, eval, parser.Pos{Line: 0, Column: 0})
-				if err != nil {
-					return nil, err
-				}
-
-				record := coercedVal.([]interface{})
-				rowSet := record[1].([]string)
-				for k := range rowSet {
-					err = addColID(columnID)
-					if err != nil {
-						return nil, err
+			case *parser.DataTypeTimestamp:
+				switch v := evalValue.(type) {
+				case float64:
+					// if v is a whole number then make it an int
+					if v == float64(int64(v)) {
+						result[idx] = time.UnixMilli(int64(v)).UTC()
+					} else {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
 					}
-					rowKeys = append(rowKeys, rowSet[k])
+
+				case []interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case string:
+					if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
+						result[idx] = tm
+					} else if tm, err := time.ParseInLocation(time.RFC3339, v, time.UTC); err == nil {
+						result[idx] = tm
+					} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
+						result[idx] = tm
+					} else {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					}
+
+				case bool:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				default:
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
 
-				if record[0] == nil {
-					timestamps = nil
-				} else {
-					timestamp, ok := record[0].(time.Time)
-					if !ok {
-						return nil, sql3.NewErrInternalf("unexpected type '%T'", record[0])
-					}
-					for _ = range rowSet {
-						timestamps = append(timestamps, timestamp.Unix())
-					}
+			case *parser.DataTypeString:
+				switch v := evalValue.(type) {
+				case float64:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case []interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case string:
+					result[idx] = v
+
+				case bool:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				default:
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
 
-				req := &pilosa.ImportRequest{
-					Index:      i.tableName,
-					Field:      targetColumn.columnName,
-					Shard:      0, //TODO: handle non-0 shards
-					ColumnIDs:  colIDs,
-					ColumnKeys: colKeys,
-					RowKeys:    rowKeys,
-					Timestamps: timestamps,
+			case *parser.DataTypeBool:
+				switch v := evalValue.(type) {
+				case float64:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case []interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case string:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case bool:
+					result[idx] = v
+
+				case interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				default:
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
-				err = i.planner.computeAPI.Import(ctx, qcx, req)
-				if err != nil {
-					return nil, err
+
+			case *parser.DataTypeDecimal:
+				switch v := evalValue.(type) {
+				case float64:
+					result[idx] = parser.FloatToDecimal(v)
+
+				case []interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case string:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case bool:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				case interface{}:
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+
+				default:
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
 
 			default:
-				return nil, sql3.NewErrInternalf("unhandled data type '%T'", targetType)
+				return nil, sql3.NewErrInternalf("unhandled type '%T'", mapColumn.colType)
 			}
-		}*/
+		}
+		return result, nil
+	}
+	return nil, types.ErrNoMoreRows
+}
 
-	// done with current batch
-	i.currentBatch = nil
+func (i *bulkInsertSourceNDJsonRowIter) Close(ctx context.Context) {
+	if i.closeFunc != nil {
+		i.closeFunc()
+	}
+}
+
+type bulkInsertNDJsonRowIter struct {
+	planner   *ExecutionPlanner
+	tableName string
+	options   *bulkInsertOptions
+	linesRead int
+
+	currentBatch [][]interface{}
+
+	sourceIter *bulkInsertSourceNDJsonRowIter
+}
+
+var _ types.RowIterator = (*bulkInsertNDJsonRowIter)(nil)
+
+func (i *bulkInsertNDJsonRowIter) Next(ctx context.Context) (types.Row, error) {
+	defer i.sourceIter.Close(ctx)
+	for {
+		row, err := i.sourceIter.Next(ctx)
+		if err != nil && err != types.ErrNoMoreRows {
+			return nil, err
+		}
+		if err == types.ErrNoMoreRows {
+			break
+		}
+		i.linesRead++
+
+		if i.currentBatch == nil {
+			i.currentBatch = make([][]interface{}, 0)
+		}
+		i.currentBatch = append(i.currentBatch, row)
+		if len(i.currentBatch) >= i.options.batchSize {
+			err := processBatch(ctx, i.planner, i.tableName, i.currentBatch, i.options)
+			if err != nil {
+				return nil, err
+			}
+			i.currentBatch = nil
+		}
+		if i.options.rowsLimit > 0 && i.linesRead >= i.options.rowsLimit {
+			break
+		}
+	}
+	if len(i.currentBatch) > 0 {
+		err := processBatch(ctx, i.planner, i.tableName, i.currentBatch, i.options)
+		if err != nil {
+			return nil, err
+		}
+		i.currentBatch = nil
+	}
+	return nil, types.ErrNoMoreRows
+}
+
+func processColumnValue(rawValue interface{}, targetType parser.ExprDataType) (types.PlanExpression, error) {
+	switch targetType.(type) {
+	case *parser.DataTypeID, *parser.DataTypeInt:
+		ival, ok := rawValue.(int64)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected value type '%T'", rawValue)
+		}
+
+		return newIntLiteralPlanExpression(ival), nil
+
+	case *parser.DataTypeIDSet:
+		val, ok := rawValue.([]int64)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to convert '%s", rawValue)
+		}
+		members := make([]types.PlanExpression, 0)
+		for _, m := range val {
+			members = append(members, newIntLiteralPlanExpression(m))
+		}
+		return newExprSetLiteralPlanExpression(members, parser.NewDataTypeIDSet()), nil
+
+	case *parser.DataTypeStringSet:
+		val, ok := rawValue.([]string)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to convert '%s", rawValue)
+		}
+		members := make([]types.PlanExpression, 0)
+		for _, m := range val {
+			members = append(members, newStringLiteralPlanExpression(m))
+		}
+		return newExprSetLiteralPlanExpression(members, parser.NewDataTypeStringSet()), nil
+
+	case *parser.DataTypeTimestamp:
+		tval, ok := rawValue.(time.Time)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to convert '%s", rawValue)
+		}
+		return newDateLiteralPlanExpression(tval), nil
+
+	case *parser.DataTypeString:
+		sval, ok := rawValue.(string)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to convert '%s", rawValue)
+		}
+		return newStringLiteralPlanExpression(sval), nil
+
+	case *parser.DataTypeBool:
+		bval, ok := rawValue.(bool)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to convert '%s", rawValue)
+		}
+		return newBoolLiteralPlanExpression(bval), nil
+
+	case *parser.DataTypeDecimal:
+		dval, ok := rawValue.(pql.Decimal)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to convert '%s", rawValue)
+		}
+		return newFloatLiteralPlanExpression(fmt.Sprintf("%f", dval.Float64())), nil
+
+	default:
+		return nil, sql3.NewErrInternalf("unhandled type '%T'", targetType)
+	}
+}
+
+func processBatch(ctx context.Context, planner *ExecutionPlanner, tableName string, currentBatch [][]interface{}, options *bulkInsertOptions) error {
+
+	insertValues := [][]types.PlanExpression{}
+
+	// we're going to take a different path if transforms are specified
+	// mostly for performmance reasons
+
+	if len(options.transformExpressions) > 0 {
+		// we have transformations so we are going to evaluate them and then build the insert tuple
+
+		for _, row := range currentBatch {
+			tupleValues := []types.PlanExpression{}
+
+			//handle each transform
+			for idx, mc := range options.transformExpressions {
+				rawValue, err := mc.Evaluate(row)
+				if err != nil {
+					return err
+				}
+
+				// handle nulls
+				if rawValue == nil {
+					tupleValues = append(tupleValues, newNullLiteralPlanExpression())
+					continue
+				}
+
+				tupleExpr, err := processColumnValue(rawValue, options.targetColumns[idx].dataType)
+				if err != nil {
+					return err
+				}
+				tupleValues = append(tupleValues, tupleExpr)
+			}
+			insertValues = append(insertValues, tupleValues)
+		}
+
+	} else {
+		// we are just going to take the values from the source row and copy pasta them across
+		// for each row in the batch add value to each mapped column
+
+		for _, row := range currentBatch {
+
+			tupleValues := []types.PlanExpression{}
+
+			// handle each column
+			for idx, rawValue := range row {
+				tupleExpr, err := processColumnValue(rawValue, options.targetColumns[idx].dataType)
+				if err != nil {
+					return err
+				}
+				tupleValues = append(tupleValues, tupleExpr)
+			}
+			insertValues = append(insertValues, tupleValues)
+		}
+
+	}
+
+	insert := &insertRowIter{
+		planner:       planner,
+		tableName:     tableName,
+		targetColumns: options.targetColumns,
+		insertValues:  insertValues,
+	}
+
+	_, err := insert.Next(ctx)
+	if err != nil && err != types.ErrNoMoreRows {
+		return err
+	}
 	return nil
 }

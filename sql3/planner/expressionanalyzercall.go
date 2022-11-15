@@ -229,7 +229,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 			return nil, sql3.NewErrSetExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 
-		//types from both set should be comparable
+		// types from both sets should be comparable
 		if !typesAreComparable(baseType1, baseType2) {
 			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, baseType1.TypeName(), baseType2.TypeName())
 		}

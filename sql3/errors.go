@@ -13,8 +13,9 @@ const (
 
 	ErrCacheKeyNotFound errors.Code = "ErrCacheKeyNotFound"
 
-	ErrDuplicateColumn errors.Code = "ErrDuplicateColumn"
-	ErrUnknownType     errors.Code = "ErrUnknownType"
+	ErrDuplicateColumn   errors.Code = "ErrDuplicateColumn"
+	ErrUnknownType       errors.Code = "ErrUnknownType"
+	ErrUnknownIdentifier errors.Code = "ErrUnknownIdentifier"
 
 	ErrTypeIncompatibleWithBitwiseOperator       errors.Code = "ErrTypeIncompatibleWithBitwiseOperator"
 	ErrTypeIncompatibleWithLogicalOperator       errors.Code = "ErrTypeIncompatibleWithLogicalOperator"
@@ -43,6 +44,7 @@ const (
 	ErrLiteralExpected                  errors.Code = "ErrLiteralExpected"
 	ErrIntegerLiteral                   errors.Code = "ErrIntegerLiteral"
 	ErrStringLiteral                    errors.Code = "ErrStringLiteral"
+	ErrBoolLiteral                      errors.Code = "ErrBoolLiteral"
 	ErrLiteralEmptySetNotAllowed        errors.Code = "ErrLiteralEmptySetNotAllowed"
 	ErrLiteralEmptyTupleNotAllowed      errors.Code = "ErrLiteralEmptyTupleNotAllowed"
 	ErrSetLiteralMustContainIntOrString errors.Code = "ErrSetLiteralMustContainIntOrString"
@@ -85,7 +87,18 @@ const (
 	ErrParameterTypeMistmatch               errors.Code = "ErrParameterTypeMistmatch"
 	ErrCallParameterValueInvalid            errors.Code = "ErrCallParameterValueInvalid"
 
-	//optimizer errors
+	// bulk insert errors
+
+	ErrReadingDatasource       errors.Code = "ErrReadingDatasource"
+	ErrMappingFromDatasource   errors.Code = "ErrMappingFromDatasource"
+	ErrFormatSpecifierExpected errors.Code = "ErrFormatSpecifierExpected"
+	ErrInvalidFormatSpecifier  errors.Code = "ErrInvalidFormatSpecifier"
+	ErrInputSpecifierExpected  errors.Code = "ErrInputSpecifierExpected"
+	ErrInvalidInputSpecifier   errors.Code = "ErrInvalidInputSpecifier"
+	ErrInvalidBatchSize        errors.Code = "ErrInvalidBatchSize"
+	ErrTypeConversionOnMap     errors.Code = "ErrTypeConversionOnMap"
+
+	// optimizer errors
 	ErrAggregateNotAllowedInGroupBy errors.Code = "ErrIdPercentileNotAllowedInGroupBy"
 )
 
@@ -100,6 +113,13 @@ func NewErrUnknownType(line int, col int, typ string) error {
 	return errors.New(
 		ErrUnknownType,
 		fmt.Sprintf("[%d:%d] unknown type '%s'", line, col, typ),
+	)
+}
+
+func NewErrUnknownIdentifier(line int, col int, ident string) error {
+	return errors.New(
+		ErrUnknownIdentifier,
+		fmt.Sprintf("[%d:%d] unknown identifier '%s'", line, col, ident),
 	)
 }
 
@@ -183,6 +203,13 @@ func NewErrStringLiteral(line, col int) error {
 	return errors.New(
 		ErrStringLiteral,
 		fmt.Sprintf("[%d:%d] string literal expected", line, col),
+	)
+}
+
+func NewErrBoolLiteral(line, col int) error {
+	return errors.New(
+		ErrBoolLiteral,
+		fmt.Sprintf("[%d:%d] bool literal expected", line, col),
 	)
 }
 
@@ -530,6 +557,64 @@ func NewErrCallParameterValueInvalid(line, col int, badParameterValue string, pa
 	return errors.New(
 		ErrCallParameterValueInvalid,
 		fmt.Sprintf("[%d:%d] invalid value '%s' for parameter '%s'", line, col, badParameterValue, parameterName),
+	)
+}
+
+// bulk insert
+
+func NewErrReadingDatasource(line, col int, dataSource string, errorText string) error {
+	return errors.New(
+		ErrReadingDatasource,
+		fmt.Sprintf("[%d:%d] unable to read datasource '%s': %s", line, col, dataSource, errorText),
+	)
+}
+
+func NewErrMappingFromDatasource(line, col int, dataSource string, errorText string) error {
+	return errors.New(
+		ErrMappingFromDatasource,
+		fmt.Sprintf("[%d:%d] unable to map from datasource '%s': %s", line, col, dataSource, errorText),
+	)
+}
+
+func NewErrFormatSpecifierExpected(line, col int) error {
+	return errors.New(
+		ErrFormatSpecifierExpected,
+		fmt.Sprintf("[%d:%d] format specifier expected", line, col),
+	)
+}
+
+func NewErrInvalidFormatSpecifier(line, col int, specifier string) error {
+	return errors.New(
+		ErrInvalidFormatSpecifier,
+		fmt.Sprintf("[%d:%d] invalid format specifier '%s'", line, col, specifier),
+	)
+}
+
+func NewErrInputSpecifierExpected(line, col int) error {
+	return errors.New(
+		ErrInputSpecifierExpected,
+		fmt.Sprintf("[%d:%d] input specifier expected", line, col),
+	)
+}
+
+func NewErrInvalidInputSpecifier(line, col int, specifier string) error {
+	return errors.New(
+		ErrInvalidFormatSpecifier,
+		fmt.Sprintf("[%d:%d] invalid input specifier '%s'", line, col, specifier),
+	)
+}
+
+func NewErrInvalidBatchSize(line, col int, batchSize int) error {
+	return errors.New(
+		ErrInvalidBatchSize,
+		fmt.Sprintf("[%d:%d] invalid batch size '%d'", line, col, batchSize),
+	)
+}
+
+func NewErrTypeConversionOnMap(line, col int, value interface{}, typeName string) error {
+	return errors.New(
+		ErrTypeConversionOnMap,
+		fmt.Sprintf("[%d:%d] value '%v' cannot be converted to type '%s'", line, col, value, typeName),
 	)
 }
 

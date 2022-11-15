@@ -86,6 +86,29 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
 		}
 
+	case *parser.VariableRef:
+		switch sc := scope.(type) {
+		case *parser.BulkInsertStatement:
+			// get the name of the variable without the @
+			varname := e.VarName()
+
+			for idx, mi := range sc.MapList {
+				if strings.EqualFold(varname, mi.Name.Name) {
+					e.VariableIndex = idx
+
+					dataType, err := dataTypeFromParserType(mi.Type)
+					if err != nil {
+						return nil, sql3.NewErrUnknownType(e.NamePos.Line, e.NamePos.Column, mi.Type.String())
+					}
+					e.VarDataType = dataType
+					return e, nil
+				}
+			}
+			return nil, sql3.NewErrUnknownIdentifier(e.NamePos.Line, e.NamePos.Column, varname)
+		default:
+			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
+		}
+
 	case *parser.NullLit:
 		return e, nil
 

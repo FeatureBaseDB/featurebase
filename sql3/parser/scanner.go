@@ -37,6 +37,8 @@ func (s *Scanner) Scan() (pos Pos, token Token, lit string) {
 			return s.scanBlob()
 		} else if isAlpha(ch) || ch == '_' {
 			return s.scanUnquotedIdent(s.pos, "")
+		} else if ch == '@' {
+			return s.scanVariable(s.pos)
 		} else if ch == '"' {
 			return s.scanQuotedIdent()
 		} else if ch == '\'' {
@@ -137,6 +139,22 @@ func (s *Scanner) scanUnquotedIdent(pos Pos, prefix string) (Pos, Token, string)
 	return pos, tok, lit
 }
 
+func (s *Scanner) scanVariable(pos Pos) (Pos, Token, string) {
+	assert(s.peek() == '@')
+	ch, _ := s.read()
+
+	s.buf.Reset()
+	s.buf.WriteRune(ch)
+	for ch, _ := s.read(); isUnquotedIdent(ch); ch, _ = s.read() {
+		s.buf.WriteRune(ch)
+	}
+	s.unread()
+
+	lit := s.buf.String()
+	tok := VARIABLE
+	return pos, tok, lit
+}
+
 func (s *Scanner) scanQuotedIdent() (Pos, Token, string) {
 	ch, pos := s.read()
 	assert(ch == '"')
@@ -199,8 +217,6 @@ func (s *Scanner) scanBlob() (Pos, Token, string) {
 			return pos, BLOB, s.buf.String()
 		} else if ch == -1 {
 			return pos, ILLEGAL, string(start) + `'` + s.buf.String()
-		} else if !isHex(ch) {
-			return pos, ILLEGAL, string(start) + `'` + s.buf.String() + string(ch)
 		}
 		s.buf.WriteRune(ch)
 	}

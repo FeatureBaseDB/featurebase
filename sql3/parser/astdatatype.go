@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -240,6 +241,14 @@ func NewDataTypeTimestamp() *DataTypeTimestamp {
 
 func (*DataTypeTimestamp) TypeName() string {
 	return FieldTypeTimestamp
+}
+
+func StringToDecimal(v string) (pql.Decimal, error) {
+	fvalue, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return pql.NewDecimal(0, 0), err
+	}
+	return FloatToDecimal(fvalue), nil
 }
 
 func FloatToDecimal(v float64) pql.Decimal {
