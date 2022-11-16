@@ -288,10 +288,7 @@ run go tests plg:
 
 # idk tests
 run go tests idk race:
-  extends:
-    - .setup_ssh
   variables:
-    USERNAME: fb-idk-access
     PROJECT: race_${CI_CONCURRENT_ID}
   stage: nonblocking
   retry: 1
@@ -300,9 +297,7 @@ run go tests idk race:
   script:
     - echo "Running test-all-race"
     - cd ./idk/
-    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
     - echo $PROJECT
-    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-race
   after_script:
     - cd ./idk/
@@ -318,11 +313,8 @@ run go tests idk race:
     - job: build amd container fb
 
 run go tests idk shard transactional:
-  extends:
-    - .setup_ssh
   variables:
     IDK_DEFAULT_SHARD_TRANSACTIONAL: 1
-    USERNAME: fb-idk-access
     PROJECT: shardttrans_${CI_CONCURRENT_ID}
   stage: nonblocking
   retry: 1
@@ -331,9 +323,7 @@ run go tests idk shard transactional:
   script:
     - echo "Running shard transactional tests"
     - cd ./idk/
-    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
     - echo $PROJECT
-    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
     - cd ./idk/
@@ -350,8 +340,6 @@ run go tests idk shard transactional:
     - job: build amd container fb
 
 run go tests idk 533:
-  extends:
-    - .setup_ssh
   variables:
     USERNAME: fb-idk-access
     PROJECT: test533_${CI_CONCURRENT_ID}
@@ -360,8 +348,7 @@ run go tests idk 533:
   script:
     - echo "Running confluent 5.3.3 test-all"
     - cd ./idk/
-    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
-    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
+    - echo $PROJECT
     - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
     - cd ./idk/
@@ -379,18 +366,14 @@ run go tests idk 533:
     - job: build amd container fb
 
 run go tests idk sasl:
-  extends:
-    - .setup_ssh
   variables:
-    USERNAME: fb-idk-access
     PROJECT: sasl_${CI_CONCURRENT_ID}
   stage: nonblocking
   retry: 1
   script:
     - echo "Running test-all-kafka-sasl"
     - cd ./idk/
-    - command -v certstrap >/dev/null || go install github.com/square/certstrap@latest
-    - echo $DOCKER_PASSWORD | docker login registry.gitlab.com --username "$USERNAME" --password-stdin
+    - echo $PROJECT
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-kafka-sasl
   after_script:
     - cd ./idk/
