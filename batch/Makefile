@@ -41,4 +41,4 @@ test-run-local:
 TPKG ?= ../...
 test-run: vendor
 	$(DOCKER_COMPOSE) build batch-test
-	$(DOCKER_COMPOSE) run -T batch-test bash -c "set -o pipefail; go test -v -mod=vendor -tags=odbc,dynamic $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -coverprofile=/testdata/$(PROJECT)_base_coverage.out"
+	$(DOCKER_COMPOSE) run -T batch-test bash -c "set -o pipefail; go test -v -mod=vendor -tags=odbc,dynamic ./... -covermode=atomic -coverpkg=$(TPKG) -coverprofile=/testdata/$(PROJECT)_base_coverage.out"
