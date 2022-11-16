@@ -53,7 +53,7 @@ func TestVersionStore(t *testing.T) {
 		})
 
 		t.Run("AddShards", func(t *testing.T) {
-			err := s.AddShards(ctx, invalidQtid, dax.NewShard(1, 0))
+			err := s.AddShards(ctx, invalidQtid, dax.NewVersionedShard(1, 0))
 			if assert.Error(t, err) {
 				assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
 			}
@@ -69,16 +69,16 @@ func TestVersionStore(t *testing.T) {
 				sh, ok, err := s.Shards(ctx, qtid)
 				assert.NoError(t, err)
 				assert.True(t, ok)
-				assert.Equal(t, sh, dax.Shards{})
+				assert.Equal(t, sh, dax.VersionedShards{})
 			}
 
 			// Add the first set of shards (with a duplicate (8)).
 			{
 				err := s.AddShards(ctx, qtid,
-					dax.NewShard(8, 0),
-					dax.NewShard(9, 0),
-					dax.NewShard(8, 0),
-					dax.NewShard(10, 0),
+					dax.NewVersionedShard(8, 0),
+					dax.NewVersionedShard(9, 0),
+					dax.NewVersionedShard(8, 0),
+					dax.NewVersionedShard(10, 0),
 				)
 				assert.NoError(t, err)
 			}
@@ -87,10 +87,10 @@ func TestVersionStore(t *testing.T) {
 				sh, ok, err := s.Shards(ctx, qtid)
 				assert.NoError(t, err)
 				assert.True(t, ok)
-				assert.Equal(t, dax.Shards{
-					dax.NewShard(8, 0),
-					dax.NewShard(9, 0),
-					dax.NewShard(10, 0),
+				assert.Equal(t, dax.VersionedShards{
+					dax.NewVersionedShard(8, 0),
+					dax.NewVersionedShard(9, 0),
+					dax.NewVersionedShard(10, 0),
 				}, sh)
 			}
 
@@ -98,10 +98,10 @@ func TestVersionStore(t *testing.T) {
 			// existing (10)).
 			{
 				err := s.AddShards(ctx, qtid,
-					dax.NewShard(10, 0),
-					dax.NewShard(11, 0),
-					dax.NewShard(12, 0),
-					dax.NewShard(11, 0),
+					dax.NewVersionedShard(10, 0),
+					dax.NewVersionedShard(11, 0),
+					dax.NewVersionedShard(12, 0),
+					dax.NewVersionedShard(11, 0),
 				)
 				assert.NoError(t, err)
 			}
@@ -110,12 +110,12 @@ func TestVersionStore(t *testing.T) {
 				sh, ok, err := s.Shards(ctx, qtid)
 				assert.NoError(t, err)
 				assert.True(t, ok)
-				assert.Equal(t, dax.Shards{
-					dax.NewShard(8, 0),
-					dax.NewShard(9, 0),
-					dax.NewShard(10, 0),
-					dax.NewShard(11, 0),
-					dax.NewShard(12, 0),
+				assert.Equal(t, dax.VersionedShards{
+					dax.NewVersionedShard(8, 0),
+					dax.NewVersionedShard(9, 0),
+					dax.NewVersionedShard(10, 0),
+					dax.NewVersionedShard(11, 0),
+					dax.NewVersionedShard(12, 0),
 				}, sh)
 			}
 		})
@@ -123,13 +123,13 @@ func TestVersionStore(t *testing.T) {
 		t.Run("RemoveTable", func(t *testing.T) {
 			shards, partitions, err := s.RemoveTable(ctx, qtid)
 			assert.NoError(t, err)
-			assert.Equal(t, dax.Partitions{}, partitions)
-			assert.Equal(t, dax.Shards{
-				dax.NewShard(8, 0),
-				dax.NewShard(9, 0),
-				dax.NewShard(10, 0),
-				dax.NewShard(11, 0),
-				dax.NewShard(12, 0),
+			assert.Equal(t, dax.VersionedPartitions{}, partitions)
+			assert.Equal(t, dax.VersionedShards{
+				dax.NewVersionedShard(8, 0),
+				dax.NewVersionedShard(9, 0),
+				dax.NewVersionedShard(10, 0),
+				dax.NewVersionedShard(11, 0),
+				dax.NewVersionedShard(12, 0),
 			}, shards)
 
 			// Make sure the table was removed.

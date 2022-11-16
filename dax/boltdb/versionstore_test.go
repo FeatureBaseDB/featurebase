@@ -69,9 +69,9 @@ func TestVersionStore(t *testing.T) {
 		defer vs.RemoveTable(ctx, qtid3)
 
 		// Create some shards to insert into the table.
-		shards := make(dax.Shards, 3)
+		shards := make(dax.VersionedShards, 3)
 		for i := range shards {
-			shards[i] = dax.Shard{
+			shards[i] = dax.VersionedShard{
 				Num:     dax.ShardNum(i),
 				Version: i * 2,
 			}
@@ -118,7 +118,7 @@ func TestVersionStore(t *testing.T) {
 			shards, partitions, err := vs.RemoveTable(ctx, qtid1)
 			assert.NoError(t, err)
 			assert.Equal(t, shards, shards)
-			assert.Equal(t, dax.Partitions{}, partitions)
+			assert.Equal(t, dax.VersionedPartitions{}, partitions)
 		}
 
 		// Fetch all shards and compare.
@@ -126,7 +126,7 @@ func TestVersionStore(t *testing.T) {
 			shrds, found, err := vs.Shards(ctx, qtid1)
 			assert.NoError(t, err)
 			assert.True(t, found)
-			assert.Equal(t, dax.Shards{}, shrds)
+			assert.Equal(t, dax.VersionedShards{}, shrds)
 		}
 	})
 
@@ -134,9 +134,9 @@ func TestVersionStore(t *testing.T) {
 		vs := boltdb.NewVersionStore(db, logger.NopLogger)
 
 		// Create some partitions to insert into the table.
-		partitions := make(dax.Partitions, 3)
+		partitions := make(dax.VersionedPartitions, 3)
 		for i := range partitions {
-			partitions[i] = dax.Partition{
+			partitions[i] = dax.VersionedPartition{
 				Num:     dax.PartitionNum(i),
 				Version: i * 2,
 			}
@@ -192,7 +192,7 @@ func TestVersionStore(t *testing.T) {
 		{
 			shards, partitions, err := vs.RemoveTable(ctx, qtid1)
 			assert.NoError(t, err)
-			assert.Equal(t, dax.Shards{}, shards)
+			assert.Equal(t, dax.VersionedShards{}, shards)
 			assert.Equal(t, partitions, partitions)
 		}
 
@@ -201,7 +201,7 @@ func TestVersionStore(t *testing.T) {
 			parts, found, err := vs.Partitions(ctx, qtid1)
 			assert.NoError(t, err)
 			assert.True(t, found)
-			assert.Equal(t, dax.Partitions{}, parts)
+			assert.Equal(t, dax.VersionedPartitions{}, parts)
 		}
 	})
 
@@ -219,9 +219,9 @@ func TestVersionStore(t *testing.T) {
 		defer vs.RemoveTable(ctx, qtid2)
 
 		// Create some fieldVersions to insert into the table.
-		fieldVersions := make(dax.FieldVersions, 3)
+		fieldVersions := make(dax.VersionedFields, 3)
 		for i := range fieldVersions {
-			fieldVersions[i] = dax.FieldVersion{
+			fieldVersions[i] = dax.VersionedField{
 				Name:    dax.FieldName(fmt.Sprintf("fld-%d", i)),
 				Version: i * 2,
 			}
@@ -267,8 +267,8 @@ func TestVersionStore(t *testing.T) {
 		{
 			shards, partitions, err := vs.RemoveTable(ctx, qtid1)
 			assert.NoError(t, err)
-			assert.Equal(t, dax.Shards{}, shards)
-			assert.Equal(t, dax.Partitions{}, partitions)
+			assert.Equal(t, dax.VersionedShards{}, shards)
+			assert.Equal(t, dax.VersionedPartitions{}, partitions)
 		}
 
 		// Fetch all fieldVersions and compare.
@@ -276,7 +276,7 @@ func TestVersionStore(t *testing.T) {
 			flds, found, err := vs.Fields(ctx, qtid1)
 			assert.NoError(t, err)
 			assert.True(t, found)
-			assert.Equal(t, dax.FieldVersions{}, flds)
+			assert.Equal(t, dax.VersionedFields{}, flds)
 		}
 	})
 
@@ -291,27 +291,27 @@ func TestVersionStore(t *testing.T) {
 		defer vs.RemoveTable(ctx, qtid1)
 
 		// Create some shards to insert into the table.
-		shards := make(dax.Shards, 3)
+		shards := make(dax.VersionedShards, 3)
 		for i := range shards {
-			shards[i] = dax.Shard{
+			shards[i] = dax.VersionedShard{
 				Num:     dax.ShardNum(i),
 				Version: i * 2,
 			}
 		}
 
 		// Create some partitions to insert into the table.
-		partitions := make(dax.Partitions, 3)
+		partitions := make(dax.VersionedPartitions, 3)
 		for i := range partitions {
-			partitions[i] = dax.Partition{
+			partitions[i] = dax.VersionedPartition{
 				Num:     dax.PartitionNum(i),
 				Version: i * 2,
 			}
 		}
 
 		// Create some fieldVersions to insert into the table.
-		fieldVersions := make(dax.FieldVersions, 3)
+		fieldVersions := make(dax.VersionedFields, 3)
 		for i := range fieldVersions {
-			fieldVersions[i] = dax.FieldVersion{
+			fieldVersions[i] = dax.VersionedField{
 				Name:    dax.FieldName(fmt.Sprintf("fld-%d", i)),
 				Version: i * 2,
 			}

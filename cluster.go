@@ -993,7 +993,7 @@ type TransactionMessage struct {
 	Action      string
 }
 
-func intInPartitions(i int, s dax.Partitions) bool {
+func intInPartitions(i int, s dax.VersionedPartitions) bool {
 	for _, a := range s {
 		if int(a.Num) == i {
 			return true
