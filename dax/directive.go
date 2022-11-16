@@ -57,9 +57,9 @@ func (d *Directive) Table(qtid QualifiedTableID) (*QualifiedTable, error) {
 // compute node is responsible. It assumes that the Directive does not contain
 // more than one ComputeRole for the same table; in that case, we would need to
 // return the union of Shards.
-func (d *Directive) ComputeShards(tbl TableKey) Shards {
+func (d *Directive) ComputeShards(tbl TableKey) VersionedShards {
 	if d == nil || d.ComputeRoles == nil {
-		return Shards{}
+		return VersionedShards{}
 	}
 
 	for _, cr := range d.ComputeRoles {
@@ -68,14 +68,14 @@ func (d *Directive) ComputeShards(tbl TableKey) Shards {
 		}
 	}
 
-	return Shards{}
+	return VersionedShards{}
 }
 
 // ComputeShardsMap returns a map of table to shards. It assumes that the
 // Directive does not contain more than one ComputeRole for the same table; in
 // that case, we would need to return the union of Shards.
-func (d *Directive) ComputeShardsMap() map[TableKey]Shards {
-	m := make(map[TableKey]Shards)
+func (d *Directive) ComputeShardsMap() map[TableKey]VersionedShards {
+	m := make(map[TableKey]VersionedShards)
 	if d == nil || d.ComputeRoles == nil {
 		return m
 	}
@@ -91,9 +91,9 @@ func (d *Directive) ComputeShardsMap() map[TableKey]Shards {
 // which this translate node is responsible. It assumes that the Directive does
 // not contain more than one TranslateRole for the same table; in that case, we
 // would need to return the union of Shards.
-func (d *Directive) TranslatePartitions(tbl TableKey) Partitions {
+func (d *Directive) TranslatePartitions(tbl TableKey) VersionedPartitions {
 	if d == nil || d.TranslateRoles == nil {
-		return Partitions{}
+		return VersionedPartitions{}
 	}
 
 	for _, tr := range d.TranslateRoles {
@@ -101,14 +101,14 @@ func (d *Directive) TranslatePartitions(tbl TableKey) Partitions {
 			return tr.Partitions
 		}
 	}
-	return Partitions{}
+	return VersionedPartitions{}
 }
 
 // TranslatePartitionsMap returns a map of table to partitions. It assumes that
 // the Directive does not contain more than one TranslateRole for the same
 // table; in that case, we would need to return the union of Partitions.
-func (d *Directive) TranslatePartitionsMap() map[TableKey]Partitions {
-	m := make(map[TableKey]Partitions)
+func (d *Directive) TranslatePartitionsMap() map[TableKey]VersionedPartitions {
+	m := make(map[TableKey]VersionedPartitions)
 	if d == nil || d.TranslateRoles == nil {
 		return m
 	}
@@ -129,8 +129,8 @@ func (d *Directive) TranslatePartitionsMap() map[TableKey]Partitions {
 // TranslateFieldsMap returns a map of table to fields. It assumes that
 // the Directive does not contain more than one TranslateRole for the same
 // table; in that case, we would need to return the union of FieldValues.
-func (d *Directive) TranslateFieldsMap() map[TableKey]FieldVersions {
-	m := make(map[TableKey]FieldVersions)
+func (d *Directive) TranslateFieldsMap() map[TableKey]VersionedFields {
+	m := make(map[TableKey]VersionedFields)
 	if d == nil || d.TranslateRoles == nil {
 		return m
 	}

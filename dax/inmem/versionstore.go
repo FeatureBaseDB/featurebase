@@ -18,7 +18,7 @@ type VersionStore struct {
 
 	// shards is a map of all shards, by table, by shard number, known to
 	// contain data.
-	shards map[dax.TableQualifierKey]map[dax.TableID]map[dax.ShardNum]dax.Shard
+	shards map[dax.TableQualifierKey]map[dax.TableID]map[dax.ShardNum]dax.VersionedShard
 
 	// tableKeys is a map of all partitions, by table, by partition number,
 	// known to contain key data.
@@ -31,7 +31,7 @@ type VersionStore struct {
 // NewVersionStore returns a new instance of VersionStore with default values.
 func NewVersionStore() *VersionStore {
 	return &VersionStore{
-		shards:    make(map[dax.TableQualifierKey]map[dax.TableID]map[dax.ShardNum]dax.Shard),
+		shards:    make(map[dax.TableQualifierKey]map[dax.TableID]map[dax.ShardNum]dax.VersionedShard),
 		tableKeys: make(map[dax.TableQualifierKey]map[dax.TableID]map[dax.PartitionNum]int),
 		fieldKeys: make(map[dax.TableQualifierKey]map[dax.TableID]map[dax.FieldName]int),
 	}
@@ -52,7 +52,7 @@ func (s *VersionStore) AddTable(ctx context.Context, qtid dax.QualifiedTableID) 
 
 	// Initialize the maps in case VersionStore wasn't created with NewVersionStore().
 	if s.shards == nil {
-		s.shards = make(map[dax.TableQualifierKey]map[dax.TableID]map[dax.ShardNum]dax.Shard)
+		s.shards = make(map[dax.TableQualifierKey]map[dax.TableID]map[dax.ShardNum]dax.VersionedShard)
 	}
 	if s.tableKeys == nil {
 		s.tableKeys = make(map[dax.TableQualifierKey]map[dax.TableID]map[dax.PartitionNum]int)
@@ -63,10 +63,10 @@ func (s *VersionStore) AddTable(ctx context.Context, qtid dax.QualifiedTableID) 
 
 	// shards.
 	if _, ok := s.shards[qtid.TableQualifier.Key()]; !ok {
-		s.shards[qtid.TableQualifier.Key()] = make(map[dax.TableID]map[dax.ShardNum]dax.Shard, 0)
+		s.shards[qtid.TableQualifier.Key()] = make(map[dax.TableID]map[dax.ShardNum]dax.VersionedShard, 0)
 	}
 	if _, ok := s.shards[qtid.TableQualifier.Key()][qtid.ID]; !ok {
-		s.shards[qtid.TableQualifier.Key()][qtid.ID] = make(map[dax.ShardNum]dax.Shard, 0)
+		s.shards[qtid.TableQualifier.Key()][qtid.ID] = make(map[dax.ShardNum]dax.VersionedShard, 0)
 	}
 
 	// tableKeys.
@@ -90,13 +90,13 @@ func (s *VersionStore) AddTable(ctx context.Context, qtid dax.QualifiedTableID) 
 
 // RemoveTable removes the given table. An error will be returned if the table
 // does not exist.
-func (s *VersionStore) RemoveTable(ctx context.Context, qtid dax.QualifiedTableID) (dax.Shards, dax.Partitions, error) {
+func (s *VersionStore) RemoveTable(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedShards, dax.VersionedPartitions, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var foundTable bool
-	var shards dax.Shards
-	var partitions dax.Partitions
+	var shards dax.VersionedShards
+	var partitions dax.VersionedPartitions
 	var err error
 
 	// Remove shards for table.
@@ -150,7 +150,7 @@ func (s *VersionStore) RemoveTable(ctx context.Context, qtid dax.QualifiedTableI
 
 // AddShards adds new shards to be managed by VersionStore. It returns the
 // number of shards added or an error.
-func (s *VersionStore) AddShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.Shard) error {
+func (s *VersionStore) AddShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.VersionedShard) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -173,7 +173,7 @@ func (s *VersionStore) AddShards(ctx context.Context, qtid dax.QualifiedTableID,
 
 // Shards returns the list of shards available for the give table. It returns
 // false if the table does not exist.
-func (s *VersionStore) Shards(ctx context.Context, qtid dax.QualifiedTableID) (dax.Shards, bool, error) {
+func (s *VersionStore) Shards(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedShards, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -181,13 +181,13 @@ func (s *VersionStore) Shards(ctx context.Context, qtid dax.QualifiedTableID) (d
 }
 
 // shardSlice is an unprotected version of Shards().
-func (s *VersionStore) shardSlice(qtid dax.QualifiedTableID) (dax.Shards, bool, error) {
+func (s *VersionStore) shardSlice(qtid dax.QualifiedTableID) (dax.VersionedShards, bool, error) {
 	if s.shards == nil {
 		return nil, false, nil
 	}
 
 	if shardNumMap, ok := s.shards[qtid.TableQualifier.Key()][qtid.ID]; ok {
-		rtn := make(dax.Shards, 0, len(shardNumMap))
+		rtn := make(dax.VersionedShards, 0, len(shardNumMap))
 		for _, shard := range shardNumMap {
 			rtn = append(rtn, shard)
 		}
@@ -233,7 +233,7 @@ func (s *VersionStore) ShardTables(ctx context.Context, qual dax.TableQualifier)
 
 // AddPartitions adds new partitions to be managed by VersionStore. It returns
 // the number of partitions added or an error.
-func (s *VersionStore) AddPartitions(ctx context.Context, qtid dax.QualifiedTableID, partitions ...dax.Partition) error {
+func (s *VersionStore) AddPartitions(ctx context.Context, qtid dax.QualifiedTableID, partitions ...dax.VersionedPartition) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -251,7 +251,7 @@ func (s *VersionStore) AddPartitions(ctx context.Context, qtid dax.QualifiedTabl
 
 // Partitions returns the list of partitions available for the give table. It
 // returns false if the table does not exist.
-func (s *VersionStore) Partitions(ctx context.Context, qtid dax.QualifiedTableID) (dax.Partitions, bool, error) {
+func (s *VersionStore) Partitions(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedPartitions, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -259,15 +259,15 @@ func (s *VersionStore) Partitions(ctx context.Context, qtid dax.QualifiedTableID
 }
 
 // partitionSlice is an unprotected version of Partitions().
-func (s *VersionStore) partitionSlice(qtid dax.QualifiedTableID) (dax.Partitions, bool, error) {
+func (s *VersionStore) partitionSlice(qtid dax.QualifiedTableID) (dax.VersionedPartitions, bool, error) {
 	if s.tableKeys == nil {
 		return nil, false, nil
 	}
 
 	if partitionNumMap, ok := s.tableKeys[qtid.TableQualifier.Key()][qtid.ID]; ok {
-		rtn := make(dax.Partitions, 0, len(partitionNumMap))
+		rtn := make(dax.VersionedPartitions, 0, len(partitionNumMap))
 		for partitionNum, version := range partitionNumMap {
-			rtn = append(rtn, dax.NewPartition(partitionNum, version))
+			rtn = append(rtn, dax.NewVersionedPartition(partitionNum, version))
 		}
 		sort.Sort(rtn)
 		return rtn, true, nil
@@ -309,7 +309,7 @@ func (s *VersionStore) PartitionTables(ctx context.Context, qual dax.TableQualif
 
 // AddFields adds new fields to be managed by VersionStore. It returns the
 // number of fields added or an error.
-func (s *VersionStore) AddFields(ctx context.Context, qtid dax.QualifiedTableID, fields ...dax.FieldVersion) error {
+func (s *VersionStore) AddFields(ctx context.Context, qtid dax.QualifiedTableID, fields ...dax.VersionedField) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -327,7 +327,7 @@ func (s *VersionStore) AddFields(ctx context.Context, qtid dax.QualifiedTableID,
 
 // Fields returns the list of fields available for the give table. It returns
 // false if the table does not exist.
-func (s *VersionStore) Fields(ctx context.Context, qtid dax.QualifiedTableID) (dax.FieldVersions, bool, error) {
+func (s *VersionStore) Fields(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedFields, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -335,15 +335,15 @@ func (s *VersionStore) Fields(ctx context.Context, qtid dax.QualifiedTableID) (d
 }
 
 // fieldSlice is an unprotected version of Fields().
-func (s *VersionStore) fieldSlice(qtid dax.QualifiedTableID) (dax.FieldVersions, bool, error) {
+func (s *VersionStore) fieldSlice(qtid dax.QualifiedTableID) (dax.VersionedFields, bool, error) {
 	if s.fieldKeys == nil {
 		return nil, false, nil
 	}
 
 	if fieldNameMap, ok := s.fieldKeys[qtid.TableQualifier.Key()][qtid.ID]; ok {
-		rtn := make(dax.FieldVersions, 0, len(fieldNameMap))
+		rtn := make(dax.VersionedFields, 0, len(fieldNameMap))
 		for fieldName, version := range fieldNameMap {
-			rtn = append(rtn, dax.NewFieldVersion(fieldName, version))
+			rtn = append(rtn, dax.NewVersionedField(fieldName, version))
 		}
 		sort.Sort(rtn)
 		return rtn, true, nil

@@ -520,7 +520,7 @@ func (c *Controller) nodesTranslateReadOrWrite(ctx context.Context, role *dax.Tr
 
 				// Initialize the partition version to 0.
 				qtid := j.table().QualifiedTableID()
-				if err := c.versionStore.AddPartitions(ctx, qtid, dax.NewPartition(j.partitionNum(), 0)); err != nil {
+				if err := c.versionStore.AddPartitions(ctx, qtid, dax.NewVersionedPartition(j.partitionNum(), 0)); err != nil {
 					return nil, false, NewErrInternal(err.Error())
 				}
 			}
@@ -543,7 +543,7 @@ func (c *Controller) nodesTranslateReadOrWrite(ctx context.Context, role *dax.Tr
 
 	for _, worker := range workers {
 		// covert worker.Jobs []string to map[string][]Partition
-		translateMap := make(map[dax.TableKey]dax.Partitions)
+		translateMap := make(map[dax.TableKey]dax.VersionedPartitions)
 		for _, job := range worker.Jobs {
 			j, err := decodePartition(job)
 			if err != nil {
@@ -561,7 +561,7 @@ func (c *Controller) nodesTranslateReadOrWrite(ctx context.Context, role *dax.Tr
 			}
 
 			translateMap[tkey] = append(translateMap[tkey],
-				dax.NewPartition(j.partitionNum(), partitionVersion),
+				dax.NewVersionedPartition(j.partitionNum(), partitionVersion),
 			)
 		}
 
@@ -707,7 +707,7 @@ func (c *Controller) nodesComputeReadOrWrite(ctx context.Context, role *dax.Comp
 
 				// Initialize the shard version to 0.
 				qtid := j.table().QualifiedTableID()
-				if err := c.versionStore.AddShards(ctx, qtid, dax.NewShard(j.shardNum(), 0)); err != nil {
+				if err := c.versionStore.AddShards(ctx, qtid, dax.NewVersionedShard(j.shardNum(), 0)); err != nil {
 					return nil, false, NewErrInternal(err.Error())
 				}
 			}
@@ -736,7 +736,7 @@ func (c *Controller) workersToAssignedNodes(ctx context.Context, workers []dax.W
 	nodes := []dax.AssignedNode{}
 	for _, worker := range workers {
 		// convert worker.Jobs []string to map[TableName][]Shard
-		computeMap := make(map[dax.TableKey]dax.Shards)
+		computeMap := make(map[dax.TableKey]dax.VersionedShards)
 		for _, job := range worker.Jobs {
 			j, err := decodeShard(job)
 			if err != nil {
@@ -754,7 +754,7 @@ func (c *Controller) workersToAssignedNodes(ctx context.Context, workers []dax.W
 			}
 
 			computeMap[tkey] = append(computeMap[tkey],
-				dax.NewShard(j.shardNum(), shardVersion),
+				dax.NewVersionedShard(j.shardNum(), shardVersion),
 			)
 		}
 
@@ -788,13 +788,13 @@ func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) 
 	}
 
 	// Add fields which have string keys to the local versionStore.
-	fieldVersions := make(dax.FieldVersions, 0)
+	fieldVersions := make(dax.VersionedFields, 0)
 	for _, field := range qtbl.Fields {
 		if !field.StringKeys() {
 			continue
 		}
 
-		fieldVersions = append(fieldVersions, dax.FieldVersion{
+		fieldVersions = append(fieldVersions, dax.VersionedField{
 			Name:    field.Name,
 			Version: 0,
 		})
@@ -812,9 +812,9 @@ func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) 
 		workerSet := NewAddressSet()
 
 		// Generate the list of partitions to be added.
-		partitions := make(dax.Partitions, qtbl.PartitionN)
+		partitions := make(dax.VersionedPartitions, qtbl.PartitionN)
 		for partitionNum := 0; partitionNum < qtbl.PartitionN; partitionNum++ {
-			partitions[partitionNum] = dax.NewPartition(dax.PartitionNum(partitionNum), 0)
+			partitions[partitionNum] = dax.NewVersionedPartition(dax.PartitionNum(partitionNum), 0)
 		}
 
 		// Add partitions to versionStore. Version is intentionally set to 0
@@ -855,7 +855,7 @@ func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) 
 		// and therefore need to be sent an updated Directive.
 		workerSet := NewAddressSet()
 
-		p := dax.NewPartition(0, 0)
+		p := dax.NewVersionedPartition(0, 0)
 
 		// Add partition 0 to versionStore. Version is intentionally set to 0
 		// here as this is the initial instance of the partition.
@@ -963,7 +963,7 @@ func (c *Controller) Tables(ctx context.Context, qual dax.TableQualifier, ids ..
 
 // AddShards registers the table/shard combinations with the controller and
 // sends the necessary directive.
-func (c *Controller) AddShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.Shard) error {
+func (c *Controller) AddShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.VersionedShard) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -989,7 +989,7 @@ func (c *Controller) AddShards(ctx context.Context, qtid dax.QualifiedTableID, s
 		}
 
 		// Initialize the shard version to 0.
-		if err := c.versionStore.AddShards(ctx, qtid, dax.NewShard(s.Num, 0)); err != nil {
+		if err := c.versionStore.AddShards(ctx, qtid, dax.NewVersionedShard(s.Num, 0)); err != nil {
 			return NewErrInternal(err.Error())
 		}
 	}
@@ -1007,7 +1007,7 @@ func (c *Controller) AddShards(ctx context.Context, qtid dax.QualifiedTableID, s
 
 // RemoveShards deregisters the table/shard combinations with the controller and
 // sends the necessary directives.
-func (c *Controller) RemoveShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.Shard) error {
+func (c *Controller) RemoveShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.VersionedShard) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -1138,12 +1138,12 @@ func (c *Controller) buildDirectives(ctx context.Context, addrs []addressMethod,
 		// computeMap maps a table to a list of shards for that table. We need
 		// to aggregate them here because the list of jobs from WorkerState()
 		// can contain a mixture of table/shards.
-		computeMap := make(map[dax.TableKey][]dax.Shard)
+		computeMap := make(map[dax.TableKey][]dax.VersionedShard)
 
 		// translateMap maps a table to a list of partitions for that table. We
 		// need to aggregate them here because the list of jobs from
 		// WorkerState() can contain a mixture of table/partitions.
-		translateMap := make(map[dax.TableKey]dax.Partitions)
+		translateMap := make(map[dax.TableKey]dax.VersionedPartitions)
 
 		// tableSet maintains the set of tables which have a job assignment
 		// change and therefore need to be included in the Directive schema.
@@ -1187,7 +1187,7 @@ func (c *Controller) buildDirectives(ctx context.Context, addrs []addressMethod,
 					}
 
 					computeMap[tkey] = append(computeMap[tkey],
-						dax.NewShard(j.shardNum(), shardVersion),
+						dax.NewVersionedShard(j.shardNum(), shardVersion),
 					)
 					tableSet.Add(tkey)
 				}
@@ -1222,7 +1222,7 @@ func (c *Controller) buildDirectives(ctx context.Context, addrs []addressMethod,
 					}
 
 					translateMap[tkey] = append(translateMap[tkey],
-						dax.NewPartition(j.partitionNum(), partitionVersion),
+						dax.NewVersionedPartition(j.partitionNum(), partitionVersion),
 					)
 					tableSet.Add(tkey)
 				}
@@ -1234,7 +1234,7 @@ func (c *Controller) buildDirectives(ctx context.Context, addrs []addressMethod,
 			// Because these were encoded as strings in the balancer and may be
 			// out of order numerically, sort them as integers.
 			//sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
-			sort.Sort(dax.Shards(v))
+			sort.Sort(dax.VersionedShards(v))
 
 			d.ComputeRoles = append(d.ComputeRoles, dax.ComputeRole{
 				TableKey: k,
@@ -1268,7 +1268,7 @@ func (c *Controller) buildDirectives(ctx context.Context, addrs []addressMethod,
 				return nil, errors.Wrapf(err, "getting table: %s", tkey)
 			}
 
-			fieldVersions := make(dax.FieldVersions, 0)
+			fieldVersions := make(dax.VersionedFields, 0)
 			for _, field := range table.Fields {
 				if !field.StringKeys() {
 					continue
@@ -1286,7 +1286,7 @@ func (c *Controller) buildDirectives(ctx context.Context, addrs []addressMethod,
 					return nil, NewErrInternal("field version not found in cache")
 				}
 
-				fieldVersions = append(fieldVersions, dax.FieldVersion{
+				fieldVersions = append(fieldVersions, dax.VersionedField{
 					Name:    field.Name,
 					Version: fieldVersion,
 				})
@@ -1414,7 +1414,7 @@ func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTa
 	// Get the node responsible for the shard.
 	bal := c.ComputeBalancer
 
-	job := shard(qtid.Key(), dax.NewShard(shardNum, -1))
+	job := shard(qtid.Key(), dax.NewVersionedShard(shardNum, -1))
 
 	workers, err := bal.WorkersForJobs(ctx, []dax.Job{dax.Job(job.String())})
 	if err != nil {
@@ -1435,7 +1435,7 @@ func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTa
 		return errors.Wrap(err, "copying version store")
 	}
 	if err := versionStoreCopy.AddShards(ctx, qtid,
-		dax.NewShard(shardNum, toShardVersion),
+		dax.NewVersionedShard(shardNum, toShardVersion),
 	); err != nil {
 		return NewErrInternal(err.Error())
 	}
@@ -1470,7 +1470,7 @@ func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTa
 
 	// A successful request means the shard version can be incremented.
 	if err := c.versionStore.AddShards(ctx, qtid,
-		dax.NewShard(shardNum, toShardVersion),
+		dax.NewVersionedShard(shardNum, toShardVersion),
 	); err != nil {
 		return NewErrInternal(err.Error())
 	}
@@ -1496,7 +1496,7 @@ func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTa
 	// Get the node responsible for the partition.
 	bal := c.TranslateBalancer
 
-	job := partition(qtid.Key(), dax.NewPartition(partitionNum, -1))
+	job := partition(qtid.Key(), dax.NewVersionedPartition(partitionNum, -1))
 
 	workers, err := bal.WorkersForJobs(ctx, []dax.Job{dax.Job(job.String())})
 	if err != nil {
@@ -1517,7 +1517,7 @@ func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTa
 		return errors.Wrap(err, "copying version store")
 	}
 	if err := versionStoreCopy.AddPartitions(ctx, qtid,
-		dax.NewPartition(partitionNum, toPartitionVersion),
+		dax.NewVersionedPartition(partitionNum, toPartitionVersion),
 	); err != nil {
 		return NewErrInternal(err.Error())
 	}
@@ -1552,7 +1552,7 @@ func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTa
 
 	// A successful request means the partition version can be incremented.
 	if err := c.versionStore.AddPartitions(ctx, qtid,
-		dax.NewPartition(partitionNum, toPartitionVersion),
+		dax.NewVersionedPartition(partitionNum, toPartitionVersion),
 	); err != nil {
 		return NewErrInternal(err.Error())
 	}
@@ -1580,7 +1580,7 @@ func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTa
 
 	// Field translation is currently handled by partition 0.
 	partitionNum := dax.PartitionNum(0)
-	job := partition(qtid.Key(), dax.NewPartition(partitionNum, -1))
+	job := partition(qtid.Key(), dax.NewVersionedPartition(partitionNum, -1))
 
 	workers, err := bal.WorkersForJobs(ctx, []dax.Job{dax.Job(job.String())})
 	if err != nil {
@@ -1601,7 +1601,7 @@ func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTa
 		return errors.Wrap(err, "copying version store")
 	}
 	if err := versionStoreCopy.AddFields(ctx, qtid,
-		dax.NewFieldVersion(field, toFieldVersion),
+		dax.NewVersionedField(field, toFieldVersion),
 	); err != nil {
 		return NewErrInternal(err.Error())
 	}
@@ -1636,7 +1636,7 @@ func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTa
 
 	// A successful request means the field version can be incremented.
 	if err := c.versionStore.AddFields(ctx, qtid,
-		dax.NewFieldVersion(field, toFieldVersion),
+		dax.NewVersionedField(field, toFieldVersion),
 	); err != nil {
 		return NewErrInternal(err.Error())
 	}
@@ -1649,7 +1649,7 @@ func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTa
 func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shards dax.ShardNums, isWrite bool) ([]ComputeNode, error) {
 	inRole := &dax.ComputeRole{
 		TableKey: qtid.Key(),
-		Shards:   dax.NewShards(shards...),
+		Shards:   dax.NewVersionedShards(shards...),
 	}
 
 	nodes, err := c.Nodes(ctx, inRole, isWrite)
@@ -1680,7 +1680,7 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitions dax.PartitionNums, isWrite bool) ([]TranslateNode, error) {
 	inRole := &dax.TranslateRole{
 		TableKey:   qtid.Key(),
-		Partitions: dax.NewPartitions(partitions...),
+		Partitions: dax.NewVersionedPartitions(partitions...),
 	}
 
 	nodes, err := c.Nodes(ctx, inRole, isWrite)
@@ -1760,7 +1760,7 @@ func (c *Controller) CreateField(ctx context.Context, qtid dax.QualifiedTableID,
 
 	// If the field has string keys, add it to the local versionStore.
 	if fld.StringKeys() {
-		fieldVersion := dax.FieldVersion{
+		fieldVersion := dax.VersionedField{
 			Name:    fld.Name,
 			Version: 0,
 		}
@@ -1775,7 +1775,7 @@ func (c *Controller) CreateField(ctx context.Context, qtid dax.QualifiedTableID,
 		return errors.Wrapf(err, "getting partition version: %s/0", qtid)
 	} else if found {
 		// Get the worker(s) responsible for partition 0.
-		job := partition(qtid.Key(), dax.Partition{
+		job := partition(qtid.Key(), dax.VersionedPartition{
 			Num:     0,
 			Version: v,
 		}).String()
@@ -1834,7 +1834,7 @@ func (c *Controller) DropField(ctx context.Context, qtid dax.QualifiedTableID, f
 		return errors.Wrapf(err, "getting partition version: %s/0", qtid)
 	} else if found {
 		// Get the worker(s) responsible for partition 0.
-		job := partition(qtid.Key(), dax.Partition{
+		job := partition(qtid.Key(), dax.VersionedPartition{
 			Num:     0,
 			Version: v,
 		}).String()
