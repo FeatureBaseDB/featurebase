@@ -101,19 +101,19 @@ type directiveJobTableKeys struct {
 	directiveJobType
 	idx       *Index
 	tkey      dax.TableKey
-	partition dax.Partition
+	partition dax.VersionedPartition
 }
 
 type directiveJobFieldKeys struct {
 	directiveJobType
 	tkey  dax.TableKey
-	field dax.FieldVersion
+	field dax.VersionedField
 }
 
 type directiveJobShards struct {
 	directiveJobType
 	tkey  dax.TableKey
-	shard dax.Shard
+	shard dax.VersionedShard
 }
 
 // directiveWorker is a worker in a worker pool which handles portions of a
@@ -347,7 +347,7 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 	}
 }
 
-func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey, partition dax.Partition) error {
+func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey, partition dax.VersionedPartition) error {
 	qtid := tkey.QualifiedTableID()
 
 	// Load the previous snapshot. Version 0 doesn't have a snapshot
@@ -422,7 +422,7 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 	}
 }
 
-func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.FieldVersion) error {
+func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.VersionedField) error {
 	qtid := tkey.QualifiedTableID()
 
 	// Load the previous snapshot. Version 0 doesn't have a snapshot
@@ -505,7 +505,7 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 	}
 }
 
-func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shard) error {
+func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.VersionedShard) error {
 	qtid := tkey.QualifiedTableID()
 
 	partition := disco.ShardToShardPartition(string(tkey), uint64(shard.Num), disco.DefaultPartitionN)
@@ -706,11 +706,11 @@ func thingsAdded[K comparable](from []K, to []K) []K {
 // partitionsComparer is used to compare the differences between two maps of
 // table:[]partition.
 type partitionsComparer struct {
-	from map[dax.TableKey]dax.Partitions
-	to   map[dax.TableKey]dax.Partitions
+	from map[dax.TableKey]dax.VersionedPartitions
+	to   map[dax.TableKey]dax.VersionedPartitions
 }
 
-func newPartitionsComparer(from map[dax.TableKey]dax.Partitions, to map[dax.TableKey]dax.Partitions) *partitionsComparer {
+func newPartitionsComparer(from map[dax.TableKey]dax.VersionedPartitions, to map[dax.TableKey]dax.VersionedPartitions) *partitionsComparer {
 	return &partitionsComparer{
 		from: from,
 		to:   to,
@@ -719,23 +719,23 @@ func newPartitionsComparer(from map[dax.TableKey]dax.Partitions, to map[dax.Tabl
 
 // added returns the partitions which are present in `to` but not in `from`. The
 // results remain in the format of a map of table:[]partition.
-func (p *partitionsComparer) added() map[dax.TableKey]dax.Partitions {
+func (p *partitionsComparer) added() map[dax.TableKey]dax.VersionedPartitions {
 	return partitionsAdded(p.from, p.to)
 }
 
 // removed returns the partitions which are present in `from` but not in `to`.
 // The results remain in the format of a map of table:[]partition.
-func (p *partitionsComparer) removed() map[dax.TableKey]dax.Partitions {
+func (p *partitionsComparer) removed() map[dax.TableKey]dax.VersionedPartitions {
 	return partitionsAdded(p.to, p.from)
 }
 
 // partitionsAdded returns the partitions which are present in `to` but not in `from`.
-func partitionsAdded(from map[dax.TableKey]dax.Partitions, to map[dax.TableKey]dax.Partitions) map[dax.TableKey]dax.Partitions {
+func partitionsAdded(from map[dax.TableKey]dax.VersionedPartitions, to map[dax.TableKey]dax.VersionedPartitions) map[dax.TableKey]dax.VersionedPartitions {
 	if from == nil {
 		return to
 	}
 
-	added := make(map[dax.TableKey]dax.Partitions)
+	added := make(map[dax.TableKey]dax.VersionedPartitions)
 	for tt, tps := range to {
 		fps, found := from[tt]
 		if !found {
@@ -743,7 +743,7 @@ func partitionsAdded(from map[dax.TableKey]dax.Partitions, to map[dax.TableKey]d
 			continue
 		}
 
-		addedPartitions := dax.Partitions{}
+		addedPartitions := dax.VersionedPartitions{}
 		for i := range tps {
 			var found bool
 			for j := range fps {
@@ -767,11 +767,11 @@ func partitionsAdded(from map[dax.TableKey]dax.Partitions, to map[dax.TableKey]d
 // fieldsComparer is used to compare the differences between two maps of
 // table:[]fieldVersion.
 type fieldsComparer struct {
-	from map[dax.TableKey]dax.FieldVersions
-	to   map[dax.TableKey]dax.FieldVersions
+	from map[dax.TableKey]dax.VersionedFields
+	to   map[dax.TableKey]dax.VersionedFields
 }
 
-func newFieldsComparer(from map[dax.TableKey]dax.FieldVersions, to map[dax.TableKey]dax.FieldVersions) *fieldsComparer {
+func newFieldsComparer(from map[dax.TableKey]dax.VersionedFields, to map[dax.TableKey]dax.VersionedFields) *fieldsComparer {
 	return &fieldsComparer{
 		from: from,
 		to:   to,
@@ -780,23 +780,23 @@ func newFieldsComparer(from map[dax.TableKey]dax.FieldVersions, to map[dax.Table
 
 // added returns the fields which are present in `to` but not in `from`. The
 // results remain in the format of a map of table:[]field.
-func (f *fieldsComparer) added() map[dax.TableKey]dax.FieldVersions {
+func (f *fieldsComparer) added() map[dax.TableKey]dax.VersionedFields {
 	return fieldsAdded(f.from, f.to)
 }
 
 // removed returns the fields which are present in `from` but not in `to`.
 // The results remain in the format of a map of table:[]field.
-func (f *fieldsComparer) removed() map[dax.TableKey]dax.FieldVersions {
+func (f *fieldsComparer) removed() map[dax.TableKey]dax.VersionedFields {
 	return fieldsAdded(f.to, f.from)
 }
 
 // fieldsAdded returns the fields which are present in `to` but not in `from`.
-func fieldsAdded(from map[dax.TableKey]dax.FieldVersions, to map[dax.TableKey]dax.FieldVersions) map[dax.TableKey]dax.FieldVersions {
+func fieldsAdded(from map[dax.TableKey]dax.VersionedFields, to map[dax.TableKey]dax.VersionedFields) map[dax.TableKey]dax.VersionedFields {
 	if from == nil {
 		return to
 	}
 
-	added := make(map[dax.TableKey]dax.FieldVersions)
+	added := make(map[dax.TableKey]dax.VersionedFields)
 	for tt, tps := range to {
 		fps, found := from[tt]
 		if !found {
@@ -804,7 +804,7 @@ func fieldsAdded(from map[dax.TableKey]dax.FieldVersions, to map[dax.TableKey]da
 			continue
 		}
 
-		addedFieldVersions := dax.FieldVersions{}
+		addedFieldVersions := dax.VersionedFields{}
 		for i := range tps {
 			var found bool
 			for j := range fps {
@@ -828,11 +828,11 @@ func fieldsAdded(from map[dax.TableKey]dax.FieldVersions, to map[dax.TableKey]da
 // shardsComparer is used to compare the differences between two maps of
 // table:[]shardV.
 type shardsComparer struct {
-	from map[dax.TableKey]dax.Shards
-	to   map[dax.TableKey]dax.Shards
+	from map[dax.TableKey]dax.VersionedShards
+	to   map[dax.TableKey]dax.VersionedShards
 }
 
-func newShardsComparer(from map[dax.TableKey]dax.Shards, to map[dax.TableKey]dax.Shards) *shardsComparer {
+func newShardsComparer(from map[dax.TableKey]dax.VersionedShards, to map[dax.TableKey]dax.VersionedShards) *shardsComparer {
 	return &shardsComparer{
 		from: from,
 		to:   to,
@@ -841,23 +841,23 @@ func newShardsComparer(from map[dax.TableKey]dax.Shards, to map[dax.TableKey]dax
 
 // added returns the shards which are present in `to` but not in `from`. The
 // results remain in the format of a map of table:[]shard.
-func (s *shardsComparer) added() map[dax.TableKey]dax.Shards {
+func (s *shardsComparer) added() map[dax.TableKey]dax.VersionedShards {
 	return shardsAdded(s.from, s.to)
 }
 
 // removed returns the shards which are present in `from` but not in `to`. The
 // results remain in the format of a map of table:[]shard.
-func (s *shardsComparer) removed() map[dax.TableKey]dax.Shards {
+func (s *shardsComparer) removed() map[dax.TableKey]dax.VersionedShards {
 	return shardsAdded(s.to, s.from)
 }
 
 // shardsAdded returns the shards which are present in `to` but not in `from`.
-func shardsAdded(from map[dax.TableKey]dax.Shards, to map[dax.TableKey]dax.Shards) map[dax.TableKey]dax.Shards {
+func shardsAdded(from map[dax.TableKey]dax.VersionedShards, to map[dax.TableKey]dax.VersionedShards) map[dax.TableKey]dax.VersionedShards {
 	if from == nil {
 		return to
 	}
 
-	added := make(map[dax.TableKey]dax.Shards)
+	added := make(map[dax.TableKey]dax.VersionedShards)
 	for tt, tss := range to {
 		fss, found := from[tt]
 		if !found {
@@ -865,7 +865,7 @@ func shardsAdded(from map[dax.TableKey]dax.Shards, to map[dax.TableKey]dax.Shard
 			continue
 		}
 
-		addedShards := dax.Shards{}
+		addedShards := dax.VersionedShards{}
 		for i := range tss {
 			var found bool
 			for j := range fss {
@@ -888,7 +888,7 @@ func shardsAdded(from map[dax.TableKey]dax.Shards, to map[dax.TableKey]dax.Shard
 
 // createTableAndFields creates the FeatureBase Tables and Fields provided in
 // the dax.Directive format.
-func (api *API) createTableAndFields(tbl *dax.QualifiedTable, partitions dax.Partitions) error {
+func (api *API) createTableAndFields(tbl *dax.QualifiedTable, partitions dax.VersionedPartitions) error {
 	cim := &CreateIndexMessage{
 		Index:     string(tbl.Key()),
 		CreatedAt: 0,

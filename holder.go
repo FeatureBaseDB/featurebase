@@ -1016,7 +1016,7 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 // createIndexWithPartitions is similar to createIndex, but it takes a list of
 // partitions for which this node is responsible. This ensures that the node
 // doesn't instantiate more partition TranslateStores than is necessary.
-func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePartitions dax.Partitions) (*Index, error) {
+func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePartitions dax.VersionedPartitions) (*Index, error) {
 	if cim.Index == "" {
 		return nil, errors.New("index name required")
 	}
@@ -1048,9 +1048,9 @@ func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePar
 	}
 
 	// Initialize a list of partitions at version 0.
-	newPartitions := make(dax.Partitions, len(translatePartitions))
+	newPartitions := make(dax.VersionedPartitions, len(translatePartitions))
 	for i := range translatePartitions {
-		newPartitions[i] = dax.NewPartition(translatePartitions[i].Num, 0)
+		newPartitions[i] = dax.NewVersionedPartition(translatePartitions[i].Num, 0)
 	}
 
 	if err := h.versionStore.AddPartitions(context.Background(), qtid, newPartitions...); err != nil {

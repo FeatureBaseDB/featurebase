@@ -721,7 +721,7 @@ func (api *API) getOrCreateShardVersion(ctx context.Context, indexName string, s
 	} else if !found {
 		version = 0
 		api.server.logger.Printf("could not find version for shard: %s, %d, so creating 0", tableName, shardNum)
-		if err := api.holder.versionStore.AddShards(ctx, qtid, dax.NewShard(shardNum, version)); err != nil {
+		if err := api.holder.versionStore.AddShards(ctx, qtid, dax.NewVersionedShard(shardNum, version)); err != nil {
 			return -1, errors.Wrap(err, "adding shard 0")
 		}
 	}
@@ -3102,7 +3102,7 @@ func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDat
 
 	// Increment the version of the shard managed by this node.
 	if err := api.holder.versionStore.AddShards(ctx, qtid,
-		dax.NewShard(req.ShardNum, req.ToVersion),
+		dax.NewVersionedShard(req.ShardNum, req.ToVersion),
 	); err != nil {
 		return errors.Wrap(err, "incrementing shard version locally")
 	}
@@ -3150,7 +3150,7 @@ func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKey
 
 	// Increment the version of the partition managed by this node.
 	if err := api.holder.versionStore.AddPartitions(ctx, qtid,
-		dax.NewPartition(req.PartitionNum, req.ToVersion),
+		dax.NewVersionedPartition(req.PartitionNum, req.ToVersion),
 	); err != nil {
 		return errors.Wrap(err, "incrementing partition version locally")
 	}
@@ -3191,7 +3191,7 @@ func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKey
 
 	// Increment the version of the field managed by this node.
 	if err := api.holder.versionStore.AddFields(ctx, qtid,
-		dax.NewFieldVersion(req.Field, req.ToVersion),
+		dax.NewVersionedField(req.Field, req.ToVersion),
 	); err != nil {
 		return errors.Wrap(err, "incrementing field version locally")
 	}
@@ -3323,7 +3323,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiMutexCheck:           {},
 }
 
-func shardInShards(i dax.ShardNum, s dax.Shards) bool {
+func shardInShards(i dax.ShardNum, s dax.VersionedShards) bool {
 	for _, o := range s {
 		if i == o.Num {
 			return true

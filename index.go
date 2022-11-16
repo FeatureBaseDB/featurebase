@@ -49,7 +49,7 @@ type Index struct {
 	holder *Holder
 
 	// Per-partition translation stores
-	translatePartitions dax.Partitions
+	translatePartitions dax.VersionedPartitions
 	translateStores     map[int]TranslateStore
 
 	translationSyncer TranslationSyncer
@@ -966,7 +966,7 @@ func (i *Index) DeleteField(name string) error {
 // case, we need to update this cached value. Really, this is kind of hacky and
 // we need to revisit the ApplyDirective logic so that it's more intuitive with
 // respect to index.translatePartitions.
-func (i *Index) SetTranslatePartitions(tp dax.Partitions) {
+func (i *Index) SetTranslatePartitions(tp dax.VersionedPartitions) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 

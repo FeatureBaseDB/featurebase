@@ -99,7 +99,7 @@ func (s *VersionStore) AddTable(ctx context.Context, qtid dax.QualifiedTableID) 
 	return tx.Commit()
 }
 
-func (s *VersionStore) RemoveTable(ctx context.Context, qtid dax.QualifiedTableID) (dax.Shards, dax.Partitions, error) {
+func (s *VersionStore) RemoveTable(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedShards, dax.VersionedPartitions, error) {
 	tx, err := s.db.BeginTx(ctx, true)
 	if err != nil {
 		return nil, nil, err
@@ -189,7 +189,7 @@ func deleteByPrefix(tx *Tx, bucket Bucket, prefix []byte) error {
 	return nil
 }
 
-func (s *VersionStore) AddShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.Shard) error {
+func (s *VersionStore) AddShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.VersionedShard) error {
 	tx, err := s.db.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "getting transaction")
@@ -205,7 +205,7 @@ func (s *VersionStore) AddShards(ctx context.Context, qtid dax.QualifiedTableID,
 	return tx.Commit()
 }
 
-func createShard(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, shard dax.Shard) error {
+func createShard(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, shard dax.VersionedShard) error {
 	// TODO: validate data more formally
 	if shard.Version < 0 {
 		return errors.New(errors.ErrUncoded, fmt.Sprintf("invalid shard version: %d", shard.Version))
@@ -227,7 +227,7 @@ func createShard(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, shard d
 	return bkt.Put(shardKey(qtid, shard.Num), vsn)
 }
 
-func (s *VersionStore) Shards(ctx context.Context, qtid dax.QualifiedTableID) (dax.Shards, bool, error) {
+func (s *VersionStore) Shards(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedShards, bool, error) {
 	tx, err := s.db.BeginTx(ctx, false)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "getting tx")
@@ -242,11 +242,11 @@ func (s *VersionStore) Shards(ctx context.Context, qtid dax.QualifiedTableID) (d
 	return shards, true, nil
 }
 
-func (s *VersionStore) getShards(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID) (dax.Shards, error) {
+func (s *VersionStore) getShards(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID) (dax.VersionedShards, error) {
 	c := tx.Bucket(bucketShards).Cursor()
 
 	// Deserialize rows into Shard objects.
-	shards := make(dax.Shards, 0)
+	shards := make(dax.VersionedShards, 0)
 
 	prefix := []byte(fmt.Sprintf(prefixFmtShards, qtid.OrganizationID, qtid.DatabaseID, qtid.ID))
 	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
@@ -255,7 +255,7 @@ func (s *VersionStore) getShards(ctx context.Context, tx *Tx, qtid dax.Qualified
 			continue
 		}
 
-		var shard dax.Shard
+		var shard dax.VersionedShard
 
 		shardNum, err := keyShardNum(k)
 		if err != nil {
@@ -368,7 +368,7 @@ func (s *VersionStore) bucketTables(ctx context.Context, bucket Bucket) ([]dax.Q
 
 // AddPartitions adds new partitions to be managed by VersionStore. It returns
 // the number of partitions added or an error.
-func (s *VersionStore) AddPartitions(ctx context.Context, qtid dax.QualifiedTableID, partitions ...dax.Partition) error {
+func (s *VersionStore) AddPartitions(ctx context.Context, qtid dax.QualifiedTableID, partitions ...dax.VersionedPartition) error {
 	tx, err := s.db.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "getting transaction")
@@ -384,7 +384,7 @@ func (s *VersionStore) AddPartitions(ctx context.Context, qtid dax.QualifiedTabl
 	return tx.Commit()
 }
 
-func createPartition(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, partition dax.Partition) error {
+func createPartition(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, partition dax.VersionedPartition) error {
 	// TODO: validate data more formally
 	if partition.Version < 0 {
 		return errors.New(errors.ErrUncoded, fmt.Sprintf("invalid partition version: %d", partition.Version))
@@ -406,7 +406,7 @@ func createPartition(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, par
 	return bkt.Put(partitionKey(qtid, partition.Num), vsn)
 }
 
-func (s *VersionStore) Partitions(ctx context.Context, qtid dax.QualifiedTableID) (dax.Partitions, bool, error) {
+func (s *VersionStore) Partitions(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedPartitions, bool, error) {
 	tx, err := s.db.BeginTx(ctx, false)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "getting tx")
@@ -421,11 +421,11 @@ func (s *VersionStore) Partitions(ctx context.Context, qtid dax.QualifiedTableID
 	return partitions, true, nil
 }
 
-func (s *VersionStore) getPartitions(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID) (dax.Partitions, error) {
+func (s *VersionStore) getPartitions(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID) (dax.VersionedPartitions, error) {
 	c := tx.Bucket(bucketTableKeys).Cursor()
 
 	// Deserialize rows into Partition objects.
-	partitions := make(dax.Partitions, 0)
+	partitions := make(dax.VersionedPartitions, 0)
 
 	prefix := []byte(fmt.Sprintf(prefixFmtTableKeys, qtid.OrganizationID, qtid.DatabaseID, qtid.ID))
 	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
@@ -434,7 +434,7 @@ func (s *VersionStore) getPartitions(ctx context.Context, tx *Tx, qtid dax.Quali
 			continue
 		}
 
-		var partition dax.Partition
+		var partition dax.VersionedPartition
 
 		partitionNum, err := keyPartitionNum(k)
 		if err != nil {
@@ -489,7 +489,7 @@ func (s *VersionStore) PartitionTables(ctx context.Context, qual dax.TableQualif
 
 // AddFields adds new fields to be managed by VersionStore. It returns the
 // number of fields added or an error.
-func (s *VersionStore) AddFields(ctx context.Context, qtid dax.QualifiedTableID, fields ...dax.FieldVersion) error {
+func (s *VersionStore) AddFields(ctx context.Context, qtid dax.QualifiedTableID, fields ...dax.VersionedField) error {
 	tx, err := s.db.BeginTx(ctx, true)
 	if err != nil {
 		return err
@@ -505,7 +505,7 @@ func (s *VersionStore) AddFields(ctx context.Context, qtid dax.QualifiedTableID,
 	return tx.Commit()
 }
 
-func createFieldVersion(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, field dax.FieldVersion) error {
+func createFieldVersion(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, field dax.VersionedField) error {
 	// TODO: validate data more formally
 	if field.Version < 0 {
 		return errors.New(errors.ErrUncoded, fmt.Sprintf("invalid field version: %d", field.Version))
@@ -527,7 +527,7 @@ func createFieldVersion(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID, 
 	return bkt.Put(fieldKey(qtid, field.Name), vsn)
 }
 
-func (s *VersionStore) Fields(ctx context.Context, qtid dax.QualifiedTableID) (dax.FieldVersions, bool, error) {
+func (s *VersionStore) Fields(ctx context.Context, qtid dax.QualifiedTableID) (dax.VersionedFields, bool, error) {
 	tx, err := s.db.BeginTx(ctx, false)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "getting tx")
@@ -542,11 +542,11 @@ func (s *VersionStore) Fields(ctx context.Context, qtid dax.QualifiedTableID) (d
 	return fields, true, nil
 }
 
-func (s *VersionStore) getFields(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID) (dax.FieldVersions, error) {
+func (s *VersionStore) getFields(ctx context.Context, tx *Tx, qtid dax.QualifiedTableID) (dax.VersionedFields, error) {
 	c := tx.Bucket(bucketFieldKeys).Cursor()
 
 	// Deserialize rows into FieldVersion objects.
-	fieldVersions := make(dax.FieldVersions, 0)
+	fieldVersions := make(dax.VersionedFields, 0)
 
 	prefix := []byte(fmt.Sprintf(prefixFmtFieldKeys, qtid.OrganizationID, qtid.DatabaseID, qtid.ID))
 	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
@@ -555,7 +555,7 @@ func (s *VersionStore) getFields(ctx context.Context, tx *Tx, qtid dax.Qualified
 			continue
 		}
 
-		var fieldVersion dax.FieldVersion
+		var fieldVersion dax.VersionedField
 
 		fieldName, err := keyFieldName(k)
 		if err != nil {

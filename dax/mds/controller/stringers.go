@@ -13,7 +13,7 @@ import (
 // used as a job in the Balancer.
 type pUnit struct {
 	t dax.TableKey
-	p dax.Partition
+	p dax.VersionedPartition
 }
 
 func (p pUnit) String() string {
@@ -28,7 +28,7 @@ func (p pUnit) partitionNum() dax.PartitionNum {
 	return p.p.Num
 }
 
-func partition(t dax.TableKey, p dax.Partition) pUnit {
+func partition(t dax.TableKey, p dax.VersionedPartition) pUnit {
 	return pUnit{t, p}
 }
 
@@ -49,7 +49,7 @@ func decodePartition(j dax.Job) (pUnit, error) {
 
 	return pUnit{
 		t: dax.TableKey(parts[0]),
-		p: dax.Partition{
+		p: dax.VersionedPartition{
 			Num:     dax.PartitionNum(intVar),
 			Version: -1,
 		},
@@ -60,7 +60,7 @@ func decodePartition(j dax.Job) (pUnit, error) {
 // a job in the Balancer.
 type sUnit struct {
 	t dax.TableKey
-	s dax.Shard
+	s dax.VersionedShard
 }
 
 func (s sUnit) String() string {
@@ -75,7 +75,7 @@ func (s sUnit) shardNum() dax.ShardNum {
 	return s.s.Num
 }
 
-func shard(t dax.TableKey, s dax.Shard) sUnit {
+func shard(t dax.TableKey, s dax.VersionedShard) sUnit {
 	return sUnit{t, s}
 }
 
@@ -96,7 +96,7 @@ func decodeShard(j dax.Job) (sUnit, error) {
 
 	return sUnit{
 		t: dax.TableKey(parts[0]),
-		s: dax.Shard{
+		s: dax.VersionedShard{
 			Num:     dax.ShardNum(uint64Var),
 			Version: -1,
 		},
