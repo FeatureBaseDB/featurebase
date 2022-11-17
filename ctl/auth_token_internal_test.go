@@ -61,8 +61,8 @@ func TestDeviceAuthRequest(t *testing.T) {
 			if err := json.NewEncoder(&b).Encode(goodResponse); err != nil {
 				t.Fatalf("unexpected error encoding goodResponse: %v", err)
 			}
-			w.Write(b.Bytes())
 			w.WriteHeader(http.StatusOK)
+			w.Write(b.Bytes())
 		}),
 	)
 	cli := &http.Client{}
