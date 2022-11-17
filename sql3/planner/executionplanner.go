@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/batch"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"

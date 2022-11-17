@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
 	"golang.org/x/sync/errgroup"
 )
 

@@ -1,5 +1,4 @@
-// Copyright 2022 Molecula Corp. (DBA FeatureBase).
-// SPDX-License-Identifier: Apache-2.0
+// Copyright 2021 Molecula Corp. All rights reserved.
 package main
 
 import (
@@ -8,16 +7,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	gohttp "net/http"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
 	"github.com/featurebasedb/featurebase/v3/vprint"
-
-	"os"
-	"strconv"
-	"strings"
 )
 
 func UploadTar(srcFile string, client *pilosa.InternalClient) error {

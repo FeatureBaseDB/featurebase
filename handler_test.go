@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 )
 
 func TestSortToShards(t *testing.T) {

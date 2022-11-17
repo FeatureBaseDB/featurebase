@@ -10,9 +10,9 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/molecula/featurebase/v3/rbf"
-	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/rbf"
+	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
 // rbfDBQueryContexts represents an actual backend DB, and a map of the

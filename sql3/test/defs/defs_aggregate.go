@@ -5,9 +5,9 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
-//aggregate function tests
-var countTests = tableTest{
-	table: tbl(
+// aggregate function tests
+var countTests = TableTest{
+	Table: tbl(
 		"count_test",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
@@ -51,7 +51,20 @@ var countTests = tableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			sqls: sqls(
+			SQLs: sqls(
+				"SELECT COUNT(i1) as a, COUNT(i2) as b FROM count_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("a", fldTypeInt),
+				hdr("b", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(6), int64(2)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
 				"SELECT COUNT(*) + 10 - 11 * 2 AS count_rows FROM count_test",
 			),
 			ExpHdrs: hdrs(

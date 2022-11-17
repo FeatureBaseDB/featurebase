@@ -1,5 +1,4 @@
-// Copyright 2022 Molecula Corp. (DBA FeatureBase).
-// SPDX-License-Identifier: Apache-2.0
+// Copyright 2021 Molecula Corp. All rights reserved.
 package sql
 
 import (
@@ -7,6 +6,7 @@ import (
 	"fmt"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/authn"
 	pproto "github.com/featurebasedb/featurebase/v3/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"

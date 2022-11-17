@@ -1,5 +1,4 @@
-// Copyright 2022 Molecula Corp. (DBA FeatureBase).
-// SPDX-License-Identifier: Apache-2.0
+// Copyright 2021 Molecula Corp. All rights reserved.
 package pilosa
 
 import (
@@ -7,7 +6,7 @@ import (
 	"math/bits"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/ingest"
+	"github.com/featurebasedb/featurebase/v3/shardwidth"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 )

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
 // QueryContext represents the lifespan of a query or similar thing which

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/sql3/parser"
-	planner_types "github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 type fldType parser.ExprDataType

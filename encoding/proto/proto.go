@@ -10,7 +10,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/ingest"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
 	"github.com/featurebasedb/featurebase/v3/pb"
 	"github.com/featurebasedb/featurebase/v3/pql"

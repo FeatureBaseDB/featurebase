@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 )
 
 type oopsieWrapper struct {

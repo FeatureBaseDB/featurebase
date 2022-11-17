@@ -1,6 +1,5 @@
-// Copyright 2022 Molecula Corp. (DBA FeatureBase).
-// SPDX-License-Identifier: Apache-2.0
-package client
+// Package batch provides tooling to prepare batches of records for ingest.
+package batch
 
 import (
 	"bytes"
@@ -11,8 +10,9 @@ import (
 	"time"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/client/egpool"
+	"github.com/featurebasedb/featurebase/v3/batch/egpool"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
@@ -716,7 +716,7 @@ func (b *Batch) Add(rec Row) error {
 	return nil
 }
 
-// ErrBatchNowFull — similar to io.EOF — is a marker error to notify the user of
+// ErrBatchNowFull — similar to io.EOF — is a marker error to notify the user of
 // a batch that it is time to call Import.
 var ErrBatchNowFull = errors.New("batch is now full - you cannot add any more records (though the one you just added was accepted)")
 

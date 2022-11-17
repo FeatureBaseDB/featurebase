@@ -31,7 +31,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/authz"
 	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/ingest"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/monitor"
 	"github.com/featurebasedb/featurebase/v3/pql"

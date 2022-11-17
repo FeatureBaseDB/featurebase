@@ -21,7 +21,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/ingest"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
 	"github.com/featurebasedb/featurebase/v3/tracing"

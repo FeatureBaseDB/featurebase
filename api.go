@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/ingest"
 	"github.com/featurebasedb/featurebase/v3/rbf"
 
 	//"github.com/featurebasedb/featurebase/v3/pg"

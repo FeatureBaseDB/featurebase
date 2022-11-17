@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/ingest"
 	"github.com/featurebasedb/featurebase/v3/pb"
 )
 

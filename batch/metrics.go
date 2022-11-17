@@ -1,6 +1,6 @@
 // Copyright 2022 Molecula Corp. (DBA FeatureBase).
 // SPDX-License-Identifier: Apache-2.0
-package client
+package batch
 
 const (
 	// MetricBatchImportDurationSeconds records the full time of the

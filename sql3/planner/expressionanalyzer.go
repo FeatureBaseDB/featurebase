@@ -3,6 +3,8 @@
 package planner
 
 import (
+	"strings"
+
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )

@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
-	featurebase "github.com/molecula/featurebase/v3"
-	featurebaseproto "github.com/molecula/featurebase/v3/encoding/proto"
-	"github.com/molecula/featurebase/v3/pb"
-	"github.com/molecula/featurebase/v3/roaring"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	featurebaseproto "github.com/featurebasedb/featurebase/v3/encoding/proto"
+	"github.com/featurebasedb/featurebase/v3/pb"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

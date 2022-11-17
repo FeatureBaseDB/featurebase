@@ -3,8 +3,8 @@ package batch
 import (
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/errors"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 var (

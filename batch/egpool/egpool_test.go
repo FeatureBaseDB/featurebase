@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/featurebasedb/featurebase/v3/client/egpool"
+	"github.com/featurebasedb/featurebase/v3/batch/egpool"
 )
 
 func TestEGPool(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/ingest"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
