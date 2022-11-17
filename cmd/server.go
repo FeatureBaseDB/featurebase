@@ -58,8 +58,11 @@ on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Start & run the server.
 			if err := Server.Start(); err != nil {
-				return errors.Wrap(err, "running server")
+				return considerUsageError(cmd, errors.Wrap(err, "running server"))
 			}
+			// anything past here is definitely not a usage error
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
 			if Server.Config.DataDog.Enable {
 				opts := make([]profiler.ProfileType, 0)
 				if Server.Config.DataDog.CPUProfile {

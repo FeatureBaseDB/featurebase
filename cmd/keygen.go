@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"context"
 	"io"
 
 	"github.com/molecula/featurebase/v3/ctl"
@@ -17,9 +16,7 @@ func newKeygenCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobr
 		Long: `
 Generate secret key to configure FeatureBase for Authentication.
 `,
-		RunE: func(c *cobra.Command, args []string) error {
-			return cmd.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

@@ -23,7 +23,7 @@ func newConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command 
 
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf.Config = Server.Config
-			return conf.Run(context.Background())
+			return considerUsageError(cmd, conf.Run(context.Background()))
 		},
 	}
 

@@ -13,6 +13,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+type ctlUsageError struct{}
+
+func (c ctlUsageError) Error() string {
+	return "usage error"
+}
+
+var UsageError ctlUsageError
+
 // startProfilingServer starts a server which handles /debug/pprof and
 // /debug/fgprof for use in utilities we might want to profile but
 // wouldn't otherwise be running an http server. Caller should call

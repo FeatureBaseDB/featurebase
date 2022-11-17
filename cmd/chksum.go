@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"context"
 	"io"
 
 	"github.com/molecula/featurebase/v3/ctl"
@@ -18,9 +17,7 @@ func newChkSumCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobr
 			Generates a digital signature of all the data associated with a provided FeatureBase server
 			WARNING: could be slow if high cardinality fields exist
 `,
-		RunE: func(c *cobra.Command, args []string) error {
-			return cmd.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

@@ -69,7 +69,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 
 	// Validate arguments.
 	if cmd.Path == "" {
-		return fmt.Errorf("-s flag required")
+		return fmt.Errorf("%w: -s flag required", UsageError)
 	}
 	useStdin := cmd.Path == "-"
 

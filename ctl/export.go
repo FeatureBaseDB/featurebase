@@ -3,10 +3,11 @@ package ctl
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
 )
@@ -42,9 +43,9 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 
 	// Validate arguments.
 	if cmd.Index == "" {
-		return pilosa.ErrIndexRequired
+		return fmt.Errorf("%w: %v", UsageError, pilosa.ErrIndexRequired)
 	} else if cmd.Field == "" {
-		return pilosa.ErrFieldRequired
+		return fmt.Errorf("%w: %v", UsageError, pilosa.ErrFieldRequired)
 	}
 
 	// Use output file, if specified.

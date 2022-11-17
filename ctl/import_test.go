@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,25 +26,47 @@ import (
 	"github.com/molecula/featurebase/v3/testhook"
 )
 
+// errContains reports whether the first error is or
+// contains the second, either via errors.Is, or by
+// containing its Error() string. a nil error contains
+// a nil error, but does not contain any non-nil error,
+// and a non-nil error does not contain a nil error.
+func errContains(err error, expected error) bool {
+	if err == nil {
+		if expected == nil {
+			return true
+		}
+		return false
+	}
+	if expected == nil {
+		return false
+	}
+	if errors.Is(err, expected) {
+		return true
+	}
+	e1, e2 := err.Error(), expected.Error()
+	return strings.Contains(e1, e2)
+}
 func TestImportCommand_Validation(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
 	err := cm.Run(context.Background())
-	if err != pilosa.ErrIndexRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrIndexRequired, err)
+	if !errContains(err, pilosa.ErrIndexRequired) {
+		t.Fatalf("wrong error: expected %q, got: '%v'", pilosa.ErrIndexRequired, err)
 	}
 
 	cm.Index = "i"
 	err = cm.Run(context.Background())
-	if err != pilosa.ErrFieldRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFieldRequired, err)
+	if !errContains(err, pilosa.ErrFieldRequired) {
+		t.Fatalf("wrong error: expected %q, got: '%v'", pilosa.ErrFieldRequired, err)
 	}
 
 	cm.Field = "f"
 	err = cm.Run(context.Background())
-	if err.Error() != "path required" {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", "path required", err)
+	pathRequired := errors.New("path required")
+	if !errContains(err, pathRequired) {
+		t.Fatalf("wrong error: expected %q, got: '%v'", pathRequired, err)
 	}
 }
 

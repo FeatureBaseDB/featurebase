@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"context"
 	"io"
 
 	"github.com/molecula/featurebase/v3/ctl"
@@ -17,9 +16,7 @@ func newRestoreTarCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Comm
 		Long: `
 The Restore command will take a tar-formatted backup archive and restore it to a new, clean cluster.
 `,
-		RunE: func(c *cobra.Command, args []string) error {
-			return cmd.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(cmd),
 	}
 	flags := restoreCmd.Flags()
 	flags.StringVarP(&cmd.Path, "source", "s", "", "backup file; specify '-' to restore from stdin tar stream")

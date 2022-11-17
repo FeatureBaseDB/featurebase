@@ -76,13 +76,13 @@ func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
 
 	// Validate arguments.
 	if cmd.OutputPath == "" {
-		return fmt.Errorf("-o flag required")
+		return fmt.Errorf("%w: -o flag required", UsageError)
 	}
 	useStdout := cmd.OutputPath == "-"
 
 	if cmd.HeaderTimeoutStr != "" {
 		if dur, err := time.ParseDuration(cmd.HeaderTimeoutStr); err != nil {
-			return fmt.Errorf("could not parse '%s' as a duration: %v", cmd.HeaderTimeoutStr, err)
+			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", UsageError, cmd.HeaderTimeoutStr, err)
 		} else {
 			cmd.HeaderTimeout = dur
 		}

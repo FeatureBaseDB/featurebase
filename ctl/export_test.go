@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/test"
 )
 
@@ -19,14 +19,14 @@ func TestExportCommand_Validation(t *testing.T) {
 	cm := NewExportCommand(stdin, stdout, stderr)
 
 	err := cm.Run(context.Background())
-	if err != pilosa.ErrIndexRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrIndexRequired, err)
+	if !errContains(err, pilosa.ErrIndexRequired) {
+		t.Fatalf("wrong error, expected %q, got: '%s'", pilosa.ErrIndexRequired, err)
 	}
 
 	cm.Index = "i"
 	err = cm.Run(context.Background())
-	if err != pilosa.ErrFieldRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFieldRequired, err)
+	if !errContains(err, pilosa.ErrFieldRequired) {
+		t.Fatalf("wrong error, expected %q, got: '%s'", pilosa.ErrFieldRequired, err)
 	}
 }
 

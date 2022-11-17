@@ -19,7 +19,7 @@ func newDAXCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := server.Start(); err != nil {
-				return errors.Wrap(err, "running server")
+				return considerUsageError(cmd, errors.Wrap(err, "running server"))
 			}
 			return errors.Wrap(server.Wait(), "waiting on Server")
 		},

@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -44,9 +43,7 @@ Executes a consistency check on an RBF data directory.
 			c.Path = args[0]
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(c),
 	}
 	return cmd
 }
@@ -78,9 +75,7 @@ Dumps the raw hex data for one or more RBF pages.
 
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(c),
 	}
 	return cmd
 }
@@ -102,9 +97,7 @@ Prints a line for every page in the database with its type/status.
 			c.Path = args[0]
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(c),
 	}
 
 	flags := cmd.Flags()
@@ -139,9 +132,7 @@ Prints the header & cell data for one or more pages.
 
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(c),
 	}
 	return cmd
 }
