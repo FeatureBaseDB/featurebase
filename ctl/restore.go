@@ -78,9 +78,9 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 
 	// Validate arguments.
 	if cmd.Path == "" {
-		return fmt.Errorf("-s flag required")
+		return fmt.Errorf("%w: -s flag required", UsageError)
 	} else if cmd.Concurrency <= 0 {
-		return fmt.Errorf("concurrency must be at least one")
+		return fmt.Errorf("%w: concurrency must be at least one", UsageError)
 	}
 
 	// Parse TLS configuration for node-specific clients.

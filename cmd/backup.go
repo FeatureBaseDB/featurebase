@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"context"
 	"io"
 
 	"github.com/featurebasedb/featurebase/v3/ctl"
@@ -18,9 +17,7 @@ func newBackupCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobr
 		Long: `
 Backs up a FeatureBase server to a local, tar-formatted snapshot file.
 `,
-		RunE: func(c *cobra.Command, args []string) error {
-			return cmd.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

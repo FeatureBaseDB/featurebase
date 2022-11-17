@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"context"
 	"io"
 
 	"github.com/featurebasedb/featurebase/v3/ctl"
@@ -18,9 +17,7 @@ func newCLICommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Use:   "cli",
 		Short: "Query FB with SQL3 from the command line",
 		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.Run(context.Background())
-		},
+		RunE:  usageErrorWrapper(cli),
 	}
 
 	flags := cliCmd.Flags()

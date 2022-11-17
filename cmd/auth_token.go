@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"context"
 	"io"
 
 	"github.com/featurebasedb/featurebase/v3/ctl"
@@ -18,9 +17,7 @@ func newAuthTokenCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *c
 		Long: `
 Retrieves an auth-token for use in authenticating with FeatureBase from the configured identity provider.
 `,
-		RunE: func(c *cobra.Command, args []string) error {
-			return cmd.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

@@ -6,18 +6,19 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/authn"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/encoding/proto"
-	"github.com/featurebasedb/featurebase/v3/server"
-	"github.com/pkg/errors"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/server"
 	"github.com/ricochet2200/go-disk-usage/du"
 	"golang.org/x/sync/errgroup"
 )
@@ -81,19 +82,19 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	logger := cmd.Logger()
 	close, err := startProfilingServer(cmd.Pprof, logger)
 	if err != nil {
-		return errors.Wrap(err, "starting profiling server")
+		return fmt.Errorf("starting profiling server: %w", err)
 	}
 	defer close()
 
 	// Validate arguments.
 	if cmd.OutputDir == "" {
-		return fmt.Errorf("-o flag required")
+		return fmt.Errorf("%w: -o flag required", UsageError)
 	} else if cmd.Concurrency <= 0 {
-		return fmt.Errorf("concurrency must be at least one")
+		return fmt.Errorf("%w: concurrency must be at least one", UsageError)
 	}
 	if cmd.HeaderTimeoutStr != "" {
 		if dur, err := time.ParseDuration(cmd.HeaderTimeoutStr); err != nil {
-			return fmt.Errorf("could not parse '%s' as a duration: %v", cmd.HeaderTimeoutStr, err)
+			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", UsageError, cmd.HeaderTimeoutStr, err)
 		} else {
 			cmd.HeaderTimeout = dur
 		}
@@ -137,7 +138,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	schema := &pilosa.Schema{Indexes: indexes}
 
 	// Ensure output directory doesn't exist; then create output directory.
-	if _, err := os.Stat(cmd.OutputDir); !os.IsNotExist(err) {
+	if _, err := os.Stat(cmd.OutputDir); !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("output directory already exists")
 	} else if err := os.MkdirAll(cmd.OutputDir, 0o750); err != nil {
 		return err
