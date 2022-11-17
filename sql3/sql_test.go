@@ -7,10 +7,8 @@ import (
 	"sort"
 	"testing"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
+	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

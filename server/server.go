@@ -15,7 +15,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,7 +25,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/dax"
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -34,8 +32,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/authz"
 	"github.com/featurebasedb/featurebase/v3/batch"
 	"github.com/featurebasedb/featurebase/v3/boltdb"
-	"github.com/featurebasedb/featurebase/v3/dax/computer"
-	"github.com/featurebasedb/featurebase/v3/dax/computer/alpha"
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	petcd "github.com/featurebasedb/featurebase/v3/etcd"
 	"github.com/featurebasedb/featurebase/v3/gcnotify"
@@ -79,12 +75,7 @@ type Command struct {
 	logger         loggerLogger
 	queryLogger    loggerLogger
 
-	mds         pilosa.MDS
-	writeLogger pilosa.WriteLogger
-	snapshotter pilosa.Snapshotter
-
 	Handler      pilosa.HandlerI
-	httpHandler  http.Handler
 	grpcServer   *grpcServer
 	grpcLn       net.Listener
 	API          *pilosa.API
@@ -95,10 +86,6 @@ type Command struct {
 
 	serverOptions []pilosa.ServerOption
 	auth          *authn.Auth
-
-	// isComputeNode is set to true if this node is running as a DAX compute
-	// node.
-	isComputeNode bool
 }
 
 type CommandOption func(c *Command) error
@@ -124,48 +111,11 @@ func OptCommandConfig(config *Config) CommandOption {
 			c.Config.Etcd = config.Etcd
 			c.Config.Auth = config.Auth
 			c.Config.TLS = config.TLS
-			c.Config.MDSAddress = config.MDSAddress
-			c.Config.WriteLogger = config.WriteLogger
 			return nil
 		}
 		c.Config = config
 		return nil
 	}
-}
-
-// OptCommandSetConfig was added because OptCommandConfig only sets a small
-// sub-set of the config options (it doesn't seem to be used for anything but
-// tests). We need a functional option which sets the full Config.
-func OptCommandSetConfig(config *Config) CommandOption {
-	return func(c *Command) error {
-		defer c.Config.MustValidate()
-		c.Config = config
-		return nil
-	}
-}
-
-// OptCommandInjections injects the interface implementations.
-func OptCommandInjections(inj Injections) CommandOption {
-	return func(c *Command) error {
-		if inj.MDS != nil {
-			c.mds = inj.MDS
-		}
-		if inj.WriteLogger != nil {
-			c.writeLogger = inj.WriteLogger
-		}
-		if inj.Snapshotter != nil {
-			c.snapshotter = inj.Snapshotter
-		}
-		c.isComputeNode = inj.IsComputeNode
-		return nil
-	}
-}
-
-type Injections struct {
-	MDS           pilosa.MDS
-	WriteLogger   pilosa.WriteLogger
-	Snapshotter   pilosa.Snapshotter
-	IsComputeNode bool
 }
 
 // NewCommand returns a new instance of Main.
@@ -265,70 +215,12 @@ func (m *Command) setupResourceLimits() error {
 	return setupResourceLimitsErr
 }
 
-// StartNoServe starts the pilosa server, but doesn't serve on the http handler.
-func (m *Command) StartNoServe() (err error) {
-	// Seed random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
-
-	// setupServer
-	err = m.setupServer()
-	if err != nil {
-		return errors.Wrap(err, "setting up server")
-	}
-	err = m.setupResourceLimits()
-	if err != nil {
-		return errors.Wrap(err, "setting resource limits")
-	}
-
-	// Initialize server.
-	if err = m.Server.Open(); err != nil {
-		return errors.Wrap(err, "opening server")
-	}
-
-	return nil
-}
-
-// Register registers the node with the MDS service using whatever MDS
-// implementation was injected during setup.
-func (m *Command) Register() (err error) {
-	if m.mds == nil {
-		return errors.New("no MDS implementation with which to register")
-	}
-
-	node := &dax.Node{
-		Address: dax.Address(m.Config.Advertise),
-		RoleTypes: []dax.RoleType{
-			dax.RoleTypeCompute,
-			dax.RoleTypeTranslate,
-		},
-	}
-	return m.mds.RegisterNode(context.Background(), node)
-}
-
-// CheckIn is called periodically to check in with the MDS service using
-// whatever MDS implementation was injected during setup.
-func (m *Command) CheckIn() (err error) {
-	if m.mds == nil {
-		return errors.New("no MDS implementation with which to check-in")
-	}
-
-	node := &dax.Node{
-		Address: dax.Address(m.Config.Advertise),
-		RoleTypes: []dax.RoleType{
-			dax.RoleTypeCompute,
-			dax.RoleTypeTranslate,
-		},
-	}
-	return m.mds.CheckInNode(context.Background(), node)
-}
-
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-
-	// setupServer
-	err = m.setupServer()
+	// SetupServer
+	err = m.SetupServer()
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
@@ -366,8 +258,8 @@ func (m *Command) UpAndDown() (err error) {
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	// setupServer
-	err = m.setupServer()
+	// SetupServer
+	err = m.SetupServer()
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
@@ -408,8 +300,8 @@ func (m *Command) Wait() error {
 	}
 }
 
-// setupServer uses the cluster configuration to set up this server.
-func (m *Command) setupServer() error {
+// SetupServer uses the cluster configuration to set up this server.
+func (m *Command) SetupServer() error {
 	runtime.SetBlockProfileRate(m.Config.Profile.BlockRate)
 	runtime.SetMutexProfileFraction(m.Config.Profile.MutexFraction)
 
@@ -476,13 +368,9 @@ func (m *Command) setupServer() error {
 		return errors.Wrap(err, "new stats client")
 	}
 
-	if m.Config.Listener == nil {
-		m.ln, err = getListener(*uri, m.tlsConfig)
-		if err != nil {
-			return errors.Wrap(err, "getting listener")
-		}
-	} else {
-		m.ln = m.Config.Listener
+	m.ln, err = getListener(*uri, m.tlsConfig)
+	if err != nil {
+		return errors.Wrap(err, "getting listener")
 	}
 
 	// If port is 0, get auto-allocated port from listener
@@ -551,21 +439,6 @@ func (m *Command) setupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
-	// WriteLogger setup.
-	var wlw computer.WriteLogWriter = computer.NewNopWriteLogWriter()
-	var wlr computer.WriteLogReader = computer.NewNopWriteLogReader()
-	if m.writeLogger != nil {
-		alphaWriteLog := alpha.NewAlphaWriteLog(m.writeLogger)
-		wlr = alphaWriteLog
-		wlw = alphaWriteLog
-	}
-
-	// Snapshotter setup.
-	var snap computer.SnapshotReadWriter = computer.NewNopSnapshotReadWriter()
-	if m.snapshotter != nil {
-		snap = alpha.NewAlphaSnapshot(m.snapshotter)
-	}
-
 	m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
 	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
 
@@ -604,9 +477,6 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
 		pilosa.OptServerDisCo(e, e, e, e),
 		pilosa.OptServerExecutionPlannerFn(executionPlannerFn),
-		pilosa.OptServerWriteLogReader(wlr),
-		pilosa.OptServerWriteLogWriter(wlw),
-		pilosa.OptServerSnapshotReadWriter(snap),
 	}
 
 	if m.Config.LookupDBDSN != "" {
@@ -622,6 +492,7 @@ func (m *Command) setupServer() error {
 	}
 
 	m.Server, err = pilosa.NewServer(serverOptions...)
+
 	if err != nil {
 		return errors.Wrap(err, "new server")
 	}
@@ -629,11 +500,6 @@ func (m *Command) setupServer() error {
 	m.API, err = pilosa.NewAPI(
 		pilosa.OptAPIServer(m.Server),
 		pilosa.OptAPIImportWorkerPoolSize(m.Config.ImportWorkerPoolSize),
-		pilosa.OptAPIWriteLogReader(wlr),
-		pilosa.OptAPIWriteLogWriter(wlw),
-		pilosa.OptAPISnapshotter(snap),
-		pilosa.OptAPIDirectiveWorkerPoolSize(m.Config.DirectiveWorkerPoolSize),
-		pilosa.OptAPIIsComputeNode(m.isComputeNode),
 	)
 	if err != nil {
 		return errors.Wrap(err, "new api")
@@ -693,7 +559,7 @@ func (m *Command) setupServer() error {
 		return errors.Wrap(err, "getting grpcServer")
 	}
 
-	hndlr, err := pilosa.NewHandler(
+	m.Handler, err = pilosa.NewHandler(
 		pilosa.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		pilosa.OptHandlerAPI(m.API),
 		pilosa.OptHandlerLogger(m.logger),
@@ -708,21 +574,7 @@ func (m *Command) setupServer() error {
 		pilosa.OptHandlerRoaringSerializer(proto.RoaringSerializer),
 		pilosa.OptHandlerSQLEnabled(m.Config.SQL.EndpointEnabled),
 	)
-	if err != nil {
-		return errors.Wrap(err, "new handler")
-	}
-
-	m.httpHandler = hndlr
-	m.Handler = hndlr
-
-	return nil
-}
-
-// HTTPHandler was added for the case where we want to get the full
-// http.Handler, and not just those methods which satisfy the pilosa.HandlerI
-// interface.
-func (m *Command) HTTPHandler() http.Handler {
-	return m.httpHandler
+	return errors.Wrap(err, "new handler")
 }
 
 // setupLogger sets up the logger based on the configuration.

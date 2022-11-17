@@ -1,5 +1,4 @@
-// Copyright 2022 Molecula Corp. (DBA FeatureBase).
-// SPDX-License-Identifier: Apache-2.0
+// Copyright 2021 Molecula Corp. All rights reserved.
 package clustertest
 
 import (
@@ -130,9 +129,7 @@ func readIndexTranslateData(ctx context.Context, client *pilosa.InternalClient, 
 }
 
 func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, error) {
-	//TODO lint - uses the fs.FileInfo.Mode to filter out directories later
-	// this does not exist in the os.DirEntry elements returned by os.ReadDir
-	dirEntries, err := ioutil.ReadDir(dirPath)
+	dirEntries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return nil, err
 	}
