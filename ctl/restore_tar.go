@@ -73,16 +73,17 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 	}
 	useStdin := cmd.Path == "-"
 
-	var f *os.File
+	var f io.Reader
 	// read from Stdin if path specified as -
 	if useStdin {
-		f = os.Stdin
+		f = cmd.Stdin
 	} else {
-		f, err = os.Open(cmd.Path)
+		file, err := os.Open(cmd.Path)
 		if err != nil {
 			return (err)
 		}
-		defer f.Close()
+		defer file.Close()
+		f = file
 	}
 
 	// Parse TLS configuration for node-specific clients.

@@ -127,7 +127,7 @@ func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
 	// Create output file in temporary location, or send to stdout if a dash is specified.
 	var w io.Writer
 	if useStdout {
-		w = os.Stdout
+		w = cmd.Stdout
 	} else {
 		f, err := os.Create(cmd.OutputPath + ".tmp")
 		if err != nil {
