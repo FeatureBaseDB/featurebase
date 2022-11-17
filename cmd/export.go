@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"context"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -28,9 +27,7 @@ The format of the CSV file is:
 
 The file does not contain any headers.
 `,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return Exporter.Run(context.Background())
-		},
+		RunE: usageErrorWrapper(Exporter),
 	}
 	flags := exportCmd.Flags()
 

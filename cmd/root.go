@@ -3,15 +3,48 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/ctl"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
+
+// runner represents a thing, like any of the NewFooCommand we produce
+// in ctl/*.go, which has a Run(context) error method, which is used
+// to implement a command. We use this so we can just specify the
+// object, rather than its run method, in calling usageErrorWrapper.
+type runner interface {
+	Run(context.Context) error
+}
+
+// usageErrorWrapper takes a thing with a Run(context) error, and produces
+// a func(*cobra.Command, []string) error from it which will run that
+// command, and then set Cobra's SilenceUsage flag unless the returned
+// error errors.Is() a ctl.UsageError.
+func usageErrorWrapper(inner runner) func(*cobra.Command, []string) error {
+	return func(c *cobra.Command, args []string) error {
+		return considerUsageError(c, inner.Run(context.Background()))
+	}
+}
+
+// considerUsageError sets a command to silence usage errors if
+// the given error is not a ctl.UsageError, then returns the
+// unmodified error. It's here to let us write one-liner Run
+// wrappers.
+func considerUsageError(cmd *cobra.Command, err error) error {
+	cmd.SilenceErrors = true
+	if !errors.Is(err, ctl.UsageError) {
+		cmd.SilenceUsage = true
+	}
+	return err
+}
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	rc := &cobra.Command{
@@ -49,6 +82,7 @@ at https://docs.featurebase.com/.
 
 			return nil
 		},
+		SilenceErrors: true,
 	}
 	rc.PersistentFlags().Bool("dry-run", false, "stop before executing")
 	_ = rc.PersistentFlags().MarkHidden("dry-run")
