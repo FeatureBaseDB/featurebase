@@ -3,7 +3,9 @@ package ctl
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -20,6 +22,17 @@ func TestRestoreTarCommand_Run(t *testing.T) {
 	cm := NewRestoreTarCommand(stdin, stdout, stderr)
 	hostport := cmd.API.Node().URI.HostPort()
 	cm.Host = hostport
+	cm.Path = ""
+	err := cm.Run(context.Background())
+	if !errors.Is(err, UsageError) {
+		t.Fatalf("expected usage error with empty path, got %v", err)
+	}
+	cm.Path = "nonexistent-file"
+	err = cm.Run(context.Background())
+	if _, ok := err.(*os.PathError); !ok {
+		t.Fatalf("expected path error with nonexistent path, got %v", err)
+	}
+	// use stdin
 	cm.Path = "-"
 
 	resp, err := http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))

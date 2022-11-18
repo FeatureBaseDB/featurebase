@@ -80,7 +80,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 	} else {
 		file, err := os.Open(cmd.Path)
 		if err != nil {
-			return (err)
+			return err
 		}
 		defer file.Close()
 		f = file
