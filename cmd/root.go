@@ -100,7 +100,6 @@ at https://docs.molecula.cloud/.
 	rc.AddCommand(newRBFCommand(stdin, stdout, stderr))
 	rc.AddCommand(newServeCmd(stdin, stdout, stderr))
 	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
-	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
 	rc.AddCommand(newKeygenCommand(stdin, stdout, stderr))
 	rc.AddCommand(newCLICommand(stdin, stdout, stderr))
 	rc.AddCommand(newDAXCommand(stdin, stdout, stderr))
