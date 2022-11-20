@@ -3,6 +3,7 @@ package dax
 import (
 	"crypto/rand"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -177,8 +178,9 @@ func (t *Table) CreateID() (TableID, error) {
 	//
 	// In order to avoid creating an ID with a double underscore, we remove all
 	// underscores from the original table name (because that's what we use in
-	// TableKey as a delimiter).
-	stub := strings.ReplaceAll(string(t.Name), "_", "")
+	// TableKey as a delimiter). In addition to that, we remove any other
+	// characters which are not valid as a pilosa indes name.
+	stub := regexp.MustCompile(`[^a-z0-9-]+`).ReplaceAllString(strings.ToLower(string(t.Name)), "")
 	if len(stub) > 10 {
 		stub = stub[:10]
 	}
