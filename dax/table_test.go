@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,6 +209,55 @@ func TestTable(t *testing.T) {
 	})
 
 	t.Run("Table", func(t *testing.T) {
+		// CleanStub makes sure that the portion of the dax.TableName that we
+		// use in the pilosa.Index.Name is actually valid.
+		t.Run("CleanStub", func(t *testing.T) {
+			tests := []struct {
+				name    dax.TableName
+				expStub string
+			}{
+				{
+					name:    "",
+					expStub: "",
+				},
+				{
+					name:    "foo",
+					expStub: "foo",
+				},
+				{
+					name:    "AbCdEfG1234",
+					expStub: "abcdefg123",
+				},
+				{
+					name:    "foo_bar_",
+					expStub: "foobar",
+				},
+				{
+					name:    "!!!!!!!",
+					expStub: "",
+				},
+				{
+					name:    "long1234567890",
+					expStub: "long123456",
+				},
+				{
+					name:    "&&&&&&&&&&&&&&valid_stuff",
+					expStub: "validstuff",
+				},
+			}
+
+			for i, test := range tests {
+				t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
+					n := dax.NewTable(test.name)
+					assert.Empty(t, n.ID)
+					n.CreateID()
+
+					parts := strings.Split(string(n.ID), "_")
+					assert.Equal(t, test.expStub, parts[0])
+				})
+			}
+		})
+
 		t.Run("RandomID", func(t *testing.T) {
 			n := dax.NewTable(tableName)
 			assert.Empty(t, n.ID)
