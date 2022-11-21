@@ -20,6 +20,9 @@ func MustQueryRows(tb testing.TB, svr *pilosa.Server, q string) ([][]interface{}
 		return nil, nil, err
 	}
 
+	// get the plan so that code runs during testing
+	_ = stmt.Plan()
+
 	ocolumns := stmt.Schema()
 
 	rowIter, err := stmt.Iterator(ctx, nil)

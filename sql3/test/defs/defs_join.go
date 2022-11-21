@@ -1,5 +1,7 @@
 package defs
 
+import "github.com/molecula/featurebase/v3/pql"
+
 // join tests
 var joinTestsUsers = TableTest{
 	name: "jointestusers",
@@ -54,10 +56,49 @@ var joinTests = TableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			ExpRows: rows(
-				row(int64(1), float64(22.98)),
-				row(int64(0), float64(3.99)),
-				row(int64(2), float64(16.98)),
-				row(int64(3), float64(5.99)),
+				row(int64(1), pql.NewDecimal(2298, 2)),
+				row(int64(0), pql.NewDecimal(399, 2)),
+				row(int64(2), pql.NewDecimal(1698, 2)),
+				row(int64(3), pql.NewDecimal(599, 2)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "innerjoin-aggregate-groupby-sum-filter",
+			SQLs: sqls(
+				"select sum(price) from orders o inner join users u on o.userid = u._id where u.age > 20;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(2696, 2)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "innerjoin-aggregate-groupby-count-distinct-filter",
+			SQLs: sqls(
+				"SELECT COUNT(DISTINCT u.name) FROM orders o JOIN users u ON o.userid = u._id WHERE o.price > 10;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "innerjoin-aggregate-groupby-count-filter",
+			SQLs: sqls(
+				"SELECT COUNT(u.name) FROM orders o JOIN users u ON o.userid = u._id WHERE o.price > 10;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2)),
 			),
 			Compare: CompareExactOrdered,
 		},

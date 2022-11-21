@@ -61,6 +61,7 @@ func (p *PlanOpFilter) Plan() map[string]interface{} {
 		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
 	result["_schema"] = ps
+	result["predicate"] = p.Predicate.Plan()
 	result["child"] = p.ChildOp.Plan()
 	return result
 }
@@ -75,6 +76,23 @@ func (p *PlanOpFilter) AddWarning(warning string) {
 
 func (p *PlanOpFilter) Warnings() []string {
 	return p.warnings
+}
+
+func (p *PlanOpFilter) Expressions() []types.PlanExpression {
+	if p.Predicate != nil {
+		return []types.PlanExpression{
+			p.Predicate,
+		}
+	}
+	return []types.PlanExpression{}
+}
+
+func (p *PlanOpFilter) WithUpdatedExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
+	if len(exprs) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
+	}
+	p.Predicate = exprs[0]
+	return p, nil
 }
 
 type filterIterator struct {
@@ -92,6 +110,18 @@ func newFilterIterator(ctx context.Context, predicate types.PlanExpression, chil
 }
 
 func (i *filterIterator) Next(ctx context.Context) (types.Row, error) {
-	//TODO (pok) - actually implement the filter
-	return i.child.Next(ctx)
+	for {
+		row, err := i.child.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		matches, err := conditionIsTrue(ctx, row, i.predicate)
+		if err != nil {
+			return nil, err
+		}
+		if !matches {
+			continue
+		}
+		return row, nil
+	}
 }

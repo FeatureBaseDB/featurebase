@@ -67,7 +67,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		}
 
 		//make sure the ref is sum-able
-		if !(typeIsInteger(ref.DataType()) || typeIsFloat(ref.DataType())) {
+		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType())) {
 			return nil, sql3.NewErrIntOrDecimalExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
 		}
 
@@ -95,7 +95,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		}
 
 		//make sure the ref is avg-able
-		if !(typeIsInteger(ref.DataType()) || typeIsFloat(ref.DataType())) {
+		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType())) {
 			return nil, sql3.NewErrIntOrDecimalExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
 		}
 
@@ -123,7 +123,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		}
 
 		//make sure the ref is percentilable-able
-		if !(typeIsInteger(ref.DataType()) || typeIsFloat(ref.DataType()) || typeIsTimestamp(ref.DataType())) {
+		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType()) || typeIsTimestamp(ref.DataType())) {
 			return nil, sql3.NewErrIntOrDecimalOrTimestampExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
 		}
 
@@ -164,7 +164,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		}
 
 		// make sure the ref is min/max-able
-		if !(typeIsInteger(ref.DataType()) || typeIsFloat(ref.DataType()) || typeIsTimestamp(ref.DataType())) {
+		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType()) || typeIsTimestamp(ref.DataType())) {
 			return nil, sql3.NewErrIntOrDecimalOrTimestampExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
 		}
 

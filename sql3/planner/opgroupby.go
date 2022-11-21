@@ -49,7 +49,7 @@ func (p *PlanOpGroupBy) Schema() types.Schema {
 	offset := len(p.GroupByExprs)
 	for idx, agg := range p.Aggregates {
 		s := &types.PlannerColumn{
-			ColumnName:   "",
+			ColumnName:   agg.String(),
 			RelationName: "",
 			Type:         agg.Type(),
 		}
@@ -86,7 +86,7 @@ func (p *PlanOpGroupBy) WithChildren(children ...types.PlanOperator) (types.Plan
 
 func (p *PlanOpGroupBy) Expressions() []types.PlanExpression {
 	result := []types.PlanExpression{}
-	result = append(result, p.GroupByExprs...)
+	result = append(result, p.Aggregates...)
 	return result
 }
 
@@ -94,8 +94,7 @@ func (p *PlanOpGroupBy) WithUpdatedExpressions(exprs ...types.PlanExpression) (t
 	if len(exprs) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
 	}
-	p.GroupByExprs = exprs
-	return p, nil
+	return NewPlanOpGroupBy(exprs, p.GroupByExprs, p.ChildOp), nil
 }
 
 func (p *PlanOpGroupBy) Plan() map[string]interface{} {

@@ -257,6 +257,11 @@ func FloatToDecimal(v float64) pql.Decimal {
 	return pql.NewDecimal(unscaledValue, int64(scale))
 }
 
+func FloatToDecimalWithScale(v float64, s int64) pql.Decimal {
+	unscaledValue := int64(v * math.Pow(10, float64(s)))
+	return pql.NewDecimal(unscaledValue, int64(s))
+}
+
 func NumDecimalPlaces(v string) int {
 	i := strings.IndexByte(v, '.')
 	if i > -1 {

@@ -79,12 +79,10 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	default:
 		return nil, sql3.NewErrInternalf("cannot plan statement: %T", stmt)
 	}
-
 	// Optimize the plan.
 	if err == nil {
 		rootOperator, err = p.optimizePlan(ctx, rootOperator)
 	}
-
 	return rootOperator, err
 }
 

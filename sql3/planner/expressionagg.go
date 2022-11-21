@@ -120,6 +120,10 @@ func (n *countPlanExpression) Type() parser.ExprDataType {
 	return n.returnDataType
 }
 
+func (n *countPlanExpression) String() string {
+	return fmt.Sprintf("count(%s)", n.arg.String())
+}
+
 func (n *countPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -179,6 +183,10 @@ func (n *countDistinctPlanExpression) Type() parser.ExprDataType {
 	return n.returnDataType
 }
 
+func (n *countDistinctPlanExpression) String() string {
+	return fmt.Sprintf("count(distinct %s)", n.arg.String())
+}
+
 func (n *countDistinctPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -197,13 +205,12 @@ func (n *countDistinctPlanExpression) WithChildren(children ...types.PlanExpress
 
 // aggregator for the SUM function
 type aggregateSum struct {
-	sum  float64
+	sum  interface{}
 	expr types.PlanExpression
 }
 
 func NewAggSumBuffer(child types.PlanExpression) *aggregateSum {
 	return &aggregateSum{
-		sum:  float64(0),
 		expr: child,
 	}
 }
@@ -230,7 +237,17 @@ func (m *aggregateSum) Update(ctx context.Context, row types.Row) error {
 		if !ok {
 			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
 		}
-		m.sum += val.Float64()
+		var dsum pql.Decimal
+		if m.sum != nil {
+			dsum, ok = m.sum.(pql.Decimal)
+			if !ok {
+				return sql3.NewErrInternalf("unexpected type conversion '%T'", m.sum)
+			}
+		} else {
+			dsum = pql.NewDecimal(0, dataType.Scale)
+		}
+		dsum = pql.AddDecimal(dsum, val)
+		m.sum = dsum
 	default:
 		return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
 	}
@@ -238,7 +255,17 @@ func (m *aggregateSum) Update(ctx context.Context, row types.Row) error {
 }
 
 func (m *aggregateSum) Eval(ctx context.Context) (interface{}, error) {
-	return m.sum, nil
+	switch m.expr.Type().(type) {
+	case *parser.DataTypeDecimal:
+		dsum, ok := m.sum.(pql.Decimal)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected type conversion '%T'", m.sum)
+		}
+		return dsum, nil
+	default:
+		return nil, sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", m.expr.Type())
+	}
+
 }
 
 // sumPlanExpression handles SUM()
@@ -284,6 +311,10 @@ func (n *sumPlanExpression) Type() parser.ExprDataType {
 	return n.returnDataType
 }
 
+func (n *sumPlanExpression) String() string {
+	return fmt.Sprintf("sum(%s)", n.arg.String())
+}
+
 func (n *sumPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -293,11 +324,16 @@ func (n *sumPlanExpression) Plan() map[string]interface{} {
 }
 
 func (n *sumPlanExpression) Children() []types.PlanExpression {
-	return nil
+	return []types.PlanExpression{
+		n.arg,
+	}
 }
 
 func (n *sumPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newSumPlanExpression(children[0], n.returnDataType), nil
 }
 
 // aggregator for AVG
@@ -385,6 +421,10 @@ func (n *avgPlanExpression) AggAdditionalExpr() []types.PlanExpression {
 
 func (n *avgPlanExpression) Type() parser.ExprDataType {
 	return n.returnDataType
+}
+
+func (n *avgPlanExpression) String() string {
+	return fmt.Sprintf("avg(%s)", n.arg.String())
 }
 
 func (n *avgPlanExpression) Plan() map[string]interface{} {
@@ -480,6 +520,10 @@ func (n *minPlanExpression) Type() parser.ExprDataType {
 	return n.returnDataType
 }
 
+func (n *minPlanExpression) String() string {
+	return fmt.Sprintf("min(%s)", n.arg.String())
+}
+
 func (n *minPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -573,6 +617,10 @@ func (n *maxPlanExpression) Type() parser.ExprDataType {
 	return n.returnDataType
 }
 
+func (n *maxPlanExpression) String() string {
+	return fmt.Sprintf("max(%s)", n.arg.String())
+}
+
 func (n *maxPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -634,6 +682,10 @@ func (n *percentilePlanExpression) AggAdditionalExpr() []types.PlanExpression {
 
 func (n *percentilePlanExpression) Type() parser.ExprDataType {
 	return n.returnDataType
+}
+
+func (n *percentilePlanExpression) String() string {
+	return fmt.Sprintf("percentile(%s)", n.arg.String())
 }
 
 func (n *percentilePlanExpression) Plan() map[string]interface{} {

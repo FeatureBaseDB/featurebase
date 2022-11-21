@@ -38,6 +38,7 @@ func (p *PlanOpNestedLoops) Plan() map[string]interface{} {
 	result["_schema"] = ps
 	result["top"] = p.top.Plan()
 	result["bottom"] = p.bottom.Plan()
+	result["condition"] = p.cond.Plan()
 	return result
 }
 
@@ -124,8 +125,6 @@ type nestedLoopsIter struct {
 	rowSize    int
 
 	originalRow types.Row
-
-	bottomRows RowCache
 }
 
 func newNestedLoopsIter(ctx context.Context, jt joinType, top types.RowIterator, bottom types.RowIterable, scopeRow types.Row, joinCondition types.PlanExpression, rowWidth int, originalRow types.Row) *nestedLoopsIter {
@@ -136,7 +135,6 @@ func newNestedLoopsIter(ctx context.Context, jt joinType, top types.RowIterator,
 		cond:           joinCondition,
 		rowSize:        rowWidth,
 		originalRow:    originalRow,
-		bottomRows:     newInMemoryRowCache(),
 		ctx:            ctx,
 	}
 }
@@ -153,11 +151,14 @@ func (i *nestedLoopsIter) loadTop(ctx context.Context) error {
 	i.topRow = i.originalRow.Append(r)
 	i.foundMatch = false
 
+	//DEBUG log.Printf("top row %v", i.topRow)
+
 	return nil
 }
 
 func (i *nestedLoopsIter) loadBottom(ctx context.Context) (row types.Row, err error) {
 	if i.bottom == nil {
+		// DEBUG log.Printf("bottom row initializing iterator...")
 		var iter types.RowIterator
 		iter, err = i.bottomProvider.Iterator(ctx, i.topRow)
 		if err != nil {
@@ -169,16 +170,15 @@ func (i *nestedLoopsIter) loadBottom(ctx context.Context) (row types.Row, err er
 	rightRow, err := i.bottom.Next(ctx)
 	if err != nil {
 		if err == types.ErrNoMoreRows {
+			// DEBUG log.Printf("bottom end of rows")
 			i.bottom = nil
 			i.topRow = nil
 			return nil, types.ErrNoMoreRows
 		}
 		return nil, err
 	}
-	err = i.bottomRows.Add(rightRow)
-	if err != nil {
-		return nil, err
-	}
+
+	//DEBUG log.Printf("bottom row %v", rightRow)
 	return rightRow, nil
 }
 
@@ -247,7 +247,8 @@ func (i *nestedLoopsIter) Next(ctx context.Context) (types.Row, error) {
 
 		i.foundMatch = true
 
-		//DEBUG log.Printf("Join result %v", row)
+		// DEBUG log.Printf("join result %v", row)
+
 		return row, nil
 	}
 }
