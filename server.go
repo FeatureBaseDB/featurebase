@@ -97,6 +97,8 @@ type Server struct { // nolint: maligned
 	writeLogReader     computer.WriteLogReader
 	writeLogWriter     computer.WriteLogWriter
 	snapshotReadWriter computer.SnapshotReadWriter
+
+	dataframeEnabled bool
 }
 
 type ExecutionPlannerFn func(executor Executor, api *API, sql string) sql3.CompilePlanner
@@ -398,8 +400,8 @@ func OptServerMaxQueryMemory(v int64) ServerOption {
 func OptServerDisCo(disCo disco.DisCo,
 	noder disco.Noder,
 	sharder disco.Sharder,
-	schemator disco.Schemator) ServerOption {
-
+	schemator disco.Schemator,
+) ServerOption {
 	return func(s *Server) error {
 		s.disCo = disCo
 		s.noder = noder
@@ -462,6 +464,14 @@ func OptServerSnapshotReadWriter(snap computer.SnapshotReadWriter) ServerOption 
 func OptServerIsComputeNode(is bool) ServerOption {
 	return func(s *Server) error {
 		s.cluster.isComputeNode = is
+		return nil
+	}
+}
+
+// OptServerIsDataframeEnabled specifies if experimental dataframe support available
+func OptServerIsDataframeEnabled(is bool) ServerOption {
+	return func(s *Server) error {
+		s.dataframeEnabled = is
 		return nil
 	}
 }
@@ -536,6 +546,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		executorOpts = append(executorOpts, optExecutorWorkerPoolSize(s.executorPoolSize))
 	}
 	s.executor = newExecutor(executorOpts...)
+	s.executor.dataframeEnabled = s.dataframeEnabled
 
 	path, err := expandDirName(s.dataDir)
 	if err != nil {
@@ -1028,6 +1039,10 @@ func (s *Server) receiveMessage(m Message) error {
 		err := s.handleTransactionMessage(obj)
 		if err != nil {
 			return errors.Wrapf(err, "handling transaction message: %v", obj)
+		}
+	case *DeleteDataframeMessage:
+		if err := s.holder.DeleteDataframe(obj.Index); err != nil {
+			return err
 		}
 	}
 

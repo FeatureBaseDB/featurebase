@@ -625,7 +625,8 @@ func (r ResultUint64) ToRows(callback func(*pb.RowResponse) error) error {
 		Headers: []*pb.ColumnInfo{{Name: "count", Datatype: "uint64"}},
 		Columns: []*pb.ColumnResponse{
 			{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
-		}})
+		},
+	})
 }
 
 // ResultBool is a wrapper around a bool result type
@@ -644,7 +645,8 @@ func (r ResultBool) ToRows(callback func(*pb.RowResponse) error) error {
 		Headers: []*pb.ColumnInfo{{Name: "result", Datatype: "bool"}},
 		Columns: []*pb.ColumnResponse{
 			{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bool(r)}},
-		}})
+		},
+	})
 }
 
 // Normally we wouldn't need this wrapper, but since pilosa returns
@@ -749,7 +751,6 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 					fields = append(fields, field)
 					break
 				}
-
 			}
 		} else {
 			fields = append(fields, field)

@@ -210,7 +210,6 @@ func (r *Record) Commit(ctx context.Context) error {
 		return errors.New("cannot commit a record that has already been committed")
 	}
 	section, remaining := r.src.spool[:idx-base], r.src.spool[idx-base:]
-
 	sort.Slice(section, func(i, j int) bool {
 		if *section[i].Topic != *section[j].Topic {
 			return *section[i].Topic < *section[j].Topic
@@ -222,14 +221,16 @@ func (r *Record) Commit(ctx context.Context) error {
 	p := int32(-1)
 	s := ""
 	r.src.highmarks = r.src.highmarks[:0]
+
 	// sort by increasing partition, decreasing offset
 
 	for _, x := range section {
 		if s != *x.Topic || p != x.Partition {
 			r.src.highmarks = append(r.src.highmarks, x)
 		}
-		s = *x.Topic
 		p = x.Partition
+		s = *x.Topic
+
 	}
 
 	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)

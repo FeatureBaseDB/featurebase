@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/lib/pq"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/pql"
@@ -72,6 +73,9 @@ type executor struct {
 
 	// Maximum per-request memory usage (Extract() only)
 	maxMemory int64
+
+	// Temporary flag to be removed when stablized
+	dataframeEnabled bool
 }
 
 // executorOption is a functional option type for pilosa.executor
@@ -232,7 +236,6 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		qcx = idx.holder.txf.NewWritableQcx()
 	} else {
 		qcx = idx.holder.txf.NewQcx()
-
 	}
 	defer qcx.Abort()
 
@@ -334,6 +337,12 @@ func safeCopy(resp QueryResponse) (out QueryResponse) {
 		case DistinctTimestamp:
 			out.Results = append(out.Results, x)
 		case *SortedRow:
+			out.Results = append(out.Results, x)
+		case *dataframe.DataFrame:
+			// dumpTable(x)
+			out.Results = append(out.Results, x)
+		case *basicTable:
+			// dumpTable(x)
 			out.Results = append(out.Results, x)
 		default:
 			panic(fmt.Sprintf("handle %T here", v))
@@ -696,7 +705,6 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 			shards = []uint64{0}
 		}
 	}
-
 	// Preprocess the query.
 	c, err := e.preprocessQuery(ctx, qcx, index, c, shards, opt)
 	if err != nil {
@@ -805,6 +813,12 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	case "Sort":
 		res, err := e.executeSort(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeSort")
+	case "Apply":
+		res, err := e.executeApply(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrap(err, "executeApply")
+	case "Arrow":
+		res, err := e.executeArrow(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrap(err, "executeArrow")
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
@@ -845,7 +859,6 @@ func (e *executor) validateTimeCallArgs(c *pql.Call, indexName string) error {
 	tq := field.TimeQuantum()
 	if (from || to) && tq == "" {
 		return fmt.Errorf("field %s is not a time-field, 'from' and 'to' are not valid options for this field type", f)
-
 	}
 
 	return nil
@@ -3084,7 +3097,6 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	// TODO as an optimization, we could apply some "having"
 	// conditions here long as they aren't on the Count(Distinct)
 	// aggregate
-
 	// Calculate Count(Distinct) aggregate if requested.
 	aggregate, _, err := c.CallArg("aggregate")
 	if err == nil && aggregate != nil && aggregate.Name == "Count" && len(aggregate.Children) > 0 && aggregate.Children[0].Name == "Distinct" && !opt.Remote {
@@ -4472,7 +4484,6 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 	default:
 		return ExtractedIDMatrix{}, errors.New("Extract, unexpected result type found")
 	}
-
 }
 
 func mergeBits(bits *Row, mask uint64, out map[uint64]uint64) {
@@ -6341,7 +6352,9 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	span, ctx := tracing.StartSpanFromContext(ctx, "executor.mapperLocal")
 	defer span.Finish()
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	defer func() {
+		cancel()
+	}()
 	done := ctx.Done()
 	// the close process needs to know whether any mappers are currently active.
 	// note that we bump this BEFORE checking e.shutdown. if we check shutdown
@@ -6797,6 +6810,7 @@ func fieldValidateValue(f *Field, val interface{}) error {
 	case FieldTypeTimestamp:
 		switch v := val.(type) {
 		case time.Time:
+		case int64: // TODO(twg) 2022/09/14 revisit this hack
 		default:
 			return errors.Errorf("invalid value %v for timestamp field %q", v, f.Name())
 		}
@@ -7740,7 +7754,6 @@ func TimestampToVal(unit string, ts time.Time) int64 {
 		return ts.UnixNano()
 	}
 	return 0
-
 }
 
 // detectRangeCall returns true if the call or one of its children contains a Range call
@@ -8866,10 +8879,10 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 }
 
 func DeleteRowsWithFlow(ctx context.Context, src *Row, idx *Index, shard uint64, normalFlow bool) (change bool, err error) {
-	if len(src.Segments) == 0 { //nothing to remove
+	if len(src.Segments) == 0 { // nothing to remove
 		return false, nil
 	}
-	columns := src.Segments[0].data //should only be one segment
+	columns := src.Segments[0].data // should only be one segment
 	if columns.Count() == 0 {
 		return false, nil
 	}
@@ -8932,7 +8945,7 @@ func (e *executor) executeSort(ctx context.Context, qcx *Qcx, index string, c *p
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		//var result *SortedRow
+		// var result *SortedRow
 		switch other := prev.(type) {
 		case *SortedRow:
 			if err := other.Merge(v.(*SortedRow), sort_desc); err != nil {
@@ -9110,10 +9123,9 @@ func (e *executor) executeSortShard(ctx context.Context, qcx *Qcx, index string,
 						i++
 					}
 				}
-
 			}
 		}
-		//this is to make sure compare function worked.
+		// this is to make sure compare function worked.
 		ok := true
 		sort.SliceStable(rowKVs, func(i, j int) bool {
 			if c, k := rowKVs[i].Compare(rowKVs[j], sort_desc); k {
@@ -9252,5 +9264,4 @@ func MergeExtractedIDMatrixSorted(a, b ExtractedIDMatrixSorted, sort_desc bool) 
 		},
 		RowKVs: rowKVs,
 	}, nil
-
 }

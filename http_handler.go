@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
 	"expvar"
@@ -27,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/felixge/fgprof"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -230,8 +232,10 @@ func OptHandlerSQLEnabled(v bool) handlerOption {
 	}
 }
 
-var makeImportOk sync.Once
-var importOk []byte
+var (
+	makeImportOk sync.Once
+	importOk     []byte
+)
 
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...handlerOption) (*Handler, error) {
@@ -330,7 +334,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetTransaction"] = queryValidationSpecRequired()
 	h.validators["PostTransaction"] = queryValidationSpecRequired()
 	h.validators["PostFinishTransaction"] = queryValidationSpecRequired()
-
+	h.validators["DeleteDataframe"] = queryValidationSpecRequired()
 }
 
 type contextKeyQuery int
@@ -512,7 +516,10 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/index/{index}", handler.chkAuthZ(handler.handleGetIndex, authz.Read)).Methods("GET").Name("GetIndex")
 	router.HandleFunc("/index/{index}", handler.chkAuthZ(handler.handlePostIndex, authz.Admin)).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/{index}", handler.chkAuthZ(handler.handleDeleteIndex, authz.Admin)).Methods("DELETE").Name("DeleteIndex")
-	//router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handleGetFields, authz.Read)).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/dataframe/{shard}", handler.chkAuthZ(handler.handlePostDataframe, authz.Write)).Methods("POST").Name("PostDataframe")
+	router.HandleFunc("/index/{index}/dataframe/{shard}", handler.chkAuthZ(handler.handleGetDataframe, authz.Read)).Methods("GET").Name("GetDataframe")
+	router.HandleFunc("/index/{index}/dataframe", handler.chkAuthZ(handler.handleGetDataframeSchema, authz.Read)).Methods("GET").Name("GetDataframeSchema")
+	router.HandleFunc("/index/{index}/dataframe", handler.chkAuthZ(handler.handleDeleteDataframe, authz.Write)).Methods("DELETE").Name("DeleteDataframe")
 	router.HandleFunc("/index/{index}/field", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/", handler.chkAuthZ(handler.handlePostField, authz.Write)).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}/view", handler.chkAuthZ(handler.handleGetView, authz.Admin)).Methods("GET")
@@ -593,6 +600,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/idalloc/data", handler.chkAuthN(handler.handleIDAllocData)).Methods("GET").Name("IDAllocData")
 
 	router.HandleFunc("/internal/restore/{index}/{shardID}", handler.chkAuthZ(handler.handlePostRestore, authz.Admin)).Methods("POST").Name("Restore")
+	router.HandleFunc("/internal/dataframe/restore/{index}/{shardID}", handler.chkAuthZ(handler.handlePostDataframeRestore, authz.Admin)).Methods("POST").Name("Restore")
 
 	router.HandleFunc("/internal/debug/rbf", handler.chkAuthZ(handler.handleGetInternalDebugRBFJSON, authz.Admin)).Methods("GET").Name("GetInternalDebugRBFJSON")
 
@@ -700,7 +708,7 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		//if the request is unauthenticated and we have the appropriate header get the userid from the header
+		// if the request is unauthenticated and we have the appropriate header get the userid from the header
 		requestUserID := r.Header.Get(HeaderRequestUserID)
 		ctx = WithUserID(ctx, requestUserID)
 
@@ -739,7 +747,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		//if the request is unauthenticated and we have the appropriate header get the userid from the header
+		// if the request is unauthenticated and we have the appropriate header get the userid from the header
 		requestUserID := r.Header.Get(HeaderRequestUserID)
 		ctx = WithUserID(ctx, requestUserID)
 
@@ -879,7 +887,6 @@ func GetIP(r *http.Request) string {
 	forwardedList := strings.Split(forwarded, ",")
 	if forwardedList[0] != "" {
 		return forwardedList[0]
-
 	}
 
 	return r.RemoteAddr
@@ -1264,7 +1271,6 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
-
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
@@ -1382,7 +1388,6 @@ func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, err er
 	if e != nil {
 		h.logger.Errorf("write query response error: %v (while trying to write another error: %v)", e, err)
 	}
-
 }
 
 // handlePostSQL handles /sql requests.
@@ -1400,7 +1405,6 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b, err := io.ReadAll(r.Body)
-
 	if err != nil {
 		h.writeBadRequest(w, r, err)
 		return
@@ -1553,7 +1557,6 @@ type SQLSchema struct {
 }
 
 func (h *Handler) handleCPUProfileStart(w http.ResponseWriter, r *http.Request) {
-
 	if h.pprofCPUProfileBuffer == nil {
 		h.pprofCPUProfileBuffer = bytes.NewBuffer(nil)
 	} else {
@@ -1570,7 +1573,6 @@ func (h *Handler) handleCPUProfileStart(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleCPUProfileStop(w http.ResponseWriter, r *http.Request) {
-
 	if h.pprofCPUProfileBuffer == nil {
 		http.Error(w, "no cpu profile in progress", http.StatusBadRequest)
 		return
@@ -1585,7 +1587,7 @@ func (h *Handler) handleCPUProfileStop(w http.ResponseWriter, r *http.Request) {
 	// Date: Tue, 03 Nov 2020 18:31:36 GMT
 	// Content-Length: 939
 
-	//Send the headers
+	// Send the headers
 	by := h.pprofCPUProfileBuffer.Bytes()
 	w.Header().Set("Content-Disposition", "attachment; filename=\"profile\"")
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -1739,7 +1741,6 @@ type _postIndexRequest postIndexRequest
 
 // Custom Unmarshal JSON to validate request body when creating a new index.
 func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
-
 	// m is an overflow map used to capture additional, unexpected keys.
 	m := make(map[string]interface{})
 	if err := json.Unmarshal(b, &m); err != nil {
@@ -1926,7 +1927,6 @@ func (h *Handler) handleGetPastQueries(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(queries); err != nil {
 		h.logger.Errorf("encoding GetActiveQueries response: %s", err)
 	}
-
 }
 
 func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
@@ -2351,7 +2351,6 @@ func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *
 	if err != nil {
 		h.logger.Errorf("encoding transaction response: %v", err)
 	}
-
 }
 
 func (h *Handler) handleGetTransaction(w http.ResponseWriter, r *http.Request) {
@@ -3010,7 +3009,6 @@ func GetHTTPClient(t *tls.Config, opts ...ClientOption) *http.Client {
 
 // handlePostImportAtomicRecord handles /import-atomic-record requests
 func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Request) {
-
 	// Verify that request is only communicating over protobufs.
 	if error, code := validateProtobufHeader(r); error != "" {
 		http.Error(w, error, code)
@@ -3774,6 +3772,7 @@ func (h *Handler) handleRestoreIDAlloc(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK")) //nolint:errcheck
 }
+
 func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 	indexName, ok := mux.Vars(r)["index"]
 	if !ok {
@@ -3791,10 +3790,66 @@ func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := context.Background()
-	//validate shard for this node
+	// validate shard for this node
 	err = h.api.RestoreShard(ctx, indexName, shard, r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to restore shard %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Add("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK")) //nolint:errcheck
+}
+
+// handleDeleteDataframe handles DELETE /index/dataframe request.
+func (h *Handler) handleDeleteDataframe(w http.ResponseWriter, r *http.Request) {
+	if !h.api.server.dataframeEnabled {
+		http.Error(w, "Dataframe is disabled", http.StatusBadRequest)
+		return
+	}
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName := mux.Vars(r)["index"]
+
+	resp := successResponse{h: h}
+	err := h.api.DeleteDataframe(r.Context(), indexName)
+	resp.write(w, err)
+}
+
+func (h *Handler) handlePostDataframeRestore(w http.ResponseWriter, r *http.Request) {
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+	shardID, ok := mux.Vars(r)["shardID"]
+	if !ok {
+		http.Error(w, "shardID is required", http.StatusBadRequest)
+		return
+	}
+	shard, err := strconv.ParseUint(shardID, 10, 64)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse shard %v %v err:%v", indexName, shardID, err), http.StatusBadRequest)
+		return
+	}
+	idx, err := h.api.Index(r.Context(), indexName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
+		return
+	}
+	filename := idx.GetDataFramePath(shard) + ".parquet"
+	dest, err := os.Create(filename)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to create restore dataframe shard %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
+		return
+	}
+	_, err = io.Copy(dest, r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to copy restore dataframe shard %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
 		return
 	}
 
@@ -4030,4 +4085,118 @@ func (h *Handler) handlePostSnapshotFieldKeys(w http.ResponseWriter, r *http.Req
 // GET /health
 func (h *Handler) handleGetHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func init() {
+	gob.Register(arrow.PrimitiveTypes.Int64)
+	gob.Register(arrow.PrimitiveTypes.Float64)
+}
+
+// EXPERIMENTAL API MAY CHANGE
+
+func (h *Handler) handleGetDataframeSchema(w http.ResponseWriter, r *http.Request) {
+	if !h.api.server.dataframeEnabled {
+		http.Error(w, "Dataframe is disabled", http.StatusBadRequest)
+		return
+	}
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+	parts, err := h.api.GetDataframeSchema(r.Context(), indexName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("%v", err), http.StatusBadRequest)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(parts); err != nil {
+		h.logger.Errorf("dataframe schema err: %s", err)
+	}
+}
+
+func (h *Handler) handleGetDataframe(w http.ResponseWriter, r *http.Request) {
+	if !h.api.server.dataframeEnabled {
+		http.Error(w, "Dataframe is disabled", http.StatusBadRequest)
+		return
+	}
+	indexName, ok := mux.Vars(r)["index"]
+
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+	shardString, ok := mux.Vars(r)["shard"]
+	if !ok {
+		http.Error(w, "shard is required", http.StatusBadRequest)
+		return
+	}
+	shard, err := strconv.ParseUint(shardString, 10, 64)
+	if err != nil {
+		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
+		return
+	}
+	idx, err := h.api.Index(r.Context(), indexName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
+		return
+	}
+	filename := idx.GetDataFramePath(shard) + ".parquet"
+	http.ServeFile(w, r, filename)
+}
+
+func (h *Handler) handlePostDataframe(w http.ResponseWriter, r *http.Request) {
+	if !h.api.server.dataframeEnabled {
+		http.Error(w, "Dataframe is disabled", http.StatusBadRequest)
+		return
+	}
+	// TODO(twg) 2022/09/29 validate the request
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+	shardString, ok := mux.Vars(r)["shard"]
+	if !ok {
+		http.Error(w, "shard is required", http.StatusBadRequest)
+		return
+	}
+	shard, err := strconv.ParseUint(shardString, 10, 64)
+	if err != nil {
+		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
+		return
+	}
+	body, err := readBody(r)
+	if err != nil {
+		http.Error(w, "reading body", http.StatusBadRequest)
+		return
+	}
+	blob := bytes.NewReader(body)
+	dec := gob.NewDecoder(blob)
+	var changesetRequest ChangesetRequest
+	err = dec.Decode(&changesetRequest)
+	if err != nil {
+		http.Error(w, "decoding request", http.StatusBadRequest)
+		return
+	}
+	err = h.api.ApplyDataframeChangeset(r.Context(), indexName, &changesetRequest, shard)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("err:%v", err), http.StatusBadRequest)
+		return
+	}
+	msg := ""
+
+	resp := struct {
+		Index string
+		Err   string
+	}{
+		Index: indexName,
+		Err:   msg,
+	}
+	w.Header().Add("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(resp)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 }

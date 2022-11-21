@@ -78,7 +78,7 @@ func TestSetGRPCMetadata(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected ok, got: %v", ok)
 			}
-			err := a.SetGRPCMetadata(ctx, md, "accesstoken!", "refreshtoken!")
+			ctx, err := a.SetGRPCMetadata(ctx, md, "accesstoken!", "refreshtoken!")
 			if err != nil {
 				t.Fatalf("expected no errors, got: %v", err)
 			}
@@ -378,7 +378,6 @@ func TestAuthenticate_CleanCache(t *testing.T) {
 			t.Errorf("goldy should not have been deleted")
 		}
 	})
-
 }
 
 func TestGetGroups(t *testing.T) {
@@ -464,7 +463,6 @@ func TestGetGroups(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestDecodeHex(t *testing.T) {
@@ -616,7 +614,6 @@ func TestHandlers(t *testing.T) {
 			t.Fatalf("expected BadRequest, got %v", resp.StatusCode)
 		}
 	})
-
 }
 
 // This type is used for mocking ServerTransportStreams in tests
@@ -668,7 +665,6 @@ func assertEqual(exp, got interface{}, t *testing.T) {
 }
 
 func TestCheckAllowedNetworks(t *testing.T) {
-
 	tests := []struct {
 		requestIP     string
 		configuredIPs []string
@@ -722,7 +718,6 @@ func TestCheckAllowedNetworks(t *testing.T) {
 }
 
 func TestConvertIP(t *testing.T) {
-
 	tests := []struct {
 		configuredIPs []string
 		convertedIPs  []net.IPNet

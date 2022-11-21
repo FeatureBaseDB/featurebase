@@ -5,6 +5,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/apache/arrow/go/v10/arrow"
+	"github.com/apache/arrow/go/v10/arrow/array"
+	"github.com/apache/arrow/go/v10/arrow/memory"
+	"github.com/gomem/gomem/pkg/dataframe"
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/pb"
 )
@@ -80,4 +84,77 @@ func TestDecodeQueryResult(t *testing.T) {
 			t.Errorf("failed to decode DistinctTimestamp. expected %v got %v", piloTime, decoded)
 		}
 	})
+}
+
+func TestDataFrameQueryResult(t *testing.T) {
+	pool := memory.NewCheckedAllocator(memory.NewGoAllocator())
+
+	t.Run("Dataframe", func(t *testing.T) {
+		df, err := CreateDataframe(pool)
+		if err != nil {
+			t.Fatalf("need a good starting point %v", err)
+		}
+		s := Serializer{}
+		pdf := s.encodeDataFrame(df)
+		q := &pb.QueryResult{Type: queryResultTypeDataFrame, DataFrame: pdf}
+		decoded := s.decodeQueryResult(q).(*dataframe.DataFrame)
+
+		if !df.Equals(decoded) {
+			t.Errorf("failed to decode Dataframe. expected\n %#v\n got\n %#v", df, decoded)
+		}
+	})
+}
+
+func TestArrowResult(t *testing.T) {
+	pool := memory.NewCheckedAllocator(memory.NewGoAllocator())
+
+	t.Run("Arrow", func(t *testing.T) {
+		table := CreateArrowTable(pool)
+		defer table.Release()
+		s := Serializer{}
+		art := s.encodeArrowTable(table)
+		q := &pb.QueryResult{Type: queryResultTypeArrowTable, ArrowTable: art}
+		decoded := s.decodeQueryResult(q).(arrow.Table)
+
+		if table.NumRows() != decoded.NumRows() {
+			t.Errorf("failed to decode Dataframe. expected\n %#v\n got\n %#v", table.NumRows(), decoded.NumRows())
+		}
+	})
+}
+
+func CreateDataframe(pool memory.Allocator) (*dataframe.DataFrame, error) {
+	table := CreateArrowTable(pool)
+	return dataframe.NewDataFrameFromTable(pool, table)
+}
+
+func CreateArrowTable(pool memory.Allocator) arrow.Table {
+	schema := arrow.NewSchema(
+		[]arrow.Field{
+			{Name: "INT", Type: arrow.PrimitiveTypes.Int64},
+			{Name: "FLOAT", Type: arrow.PrimitiveTypes.Float64},
+		},
+		nil,
+	)
+
+	b := array.NewRecordBuilder(pool, schema)
+	defer b.Release()
+	// create 2 chunks
+	b.Field(0).(*array.Int64Builder).AppendValues([]int64{1, 2, 3, 4, 5, 6}, nil)
+	b.Field(0).(*array.Int64Builder).AppendValues([]int64{7, 8, 9, 10}, []bool{true, true, false, true})
+	b.Field(1).(*array.Float64Builder).AppendValues([]float64{1, 2, 3, 4, 5, 6}, nil)
+	b.Field(1).(*array.Float64Builder).AppendValues([]float64{7, 8, 9, 10}, []bool{true, true, false, true})
+
+	rec1 := b.NewRecord()
+
+	b.Field(0).(*array.Int64Builder).AppendValues([]int64{11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, nil)
+	b.Field(1).(*array.Float64Builder).AppendValues([]float64{11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, nil)
+
+	rec2 := b.NewRecord()
+
+	b.Field(0).(*array.Int64Builder).AppendValues([]int64{31, 32, 33, 34, 35, 36, 37, 38, 39, 40}, nil)
+	b.Field(1).(*array.Float64Builder).AppendValues([]float64{31, 32, 33, 34, 35, 36, 37, 38, 39, 40}, nil)
+
+	rec3 := b.NewRecord()
+	records := []arrow.Record{rec1, rec2, rec3}
+	return array.NewTableFromRecords(schema, records)
 }

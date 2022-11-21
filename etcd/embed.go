@@ -341,6 +341,7 @@ func (e *Etcd) parseOptions() (*embed.Config, error) {
 	cfg.Name = e.options.Name
 	cfg.Dir = e.options.Dir
 	cfg.InitialClusterToken = e.options.ClusterName
+	cfg.EnableGRPCGateway = false // TODO(twg) 2022/11/03 fixes tests but unsure ramifications
 	var err error
 	cfg.LCUrls, err = types.NewURLs([]string{e.options.LClientURL})
 	if err != nil {

@@ -607,6 +607,7 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerWriteLogReader(wlr),
 		pilosa.OptServerWriteLogWriter(wlw),
 		pilosa.OptServerSnapshotReadWriter(snap),
+		pilosa.OptServerIsDataframeEnabled(m.Config.Dataframe.Enable),
 	}
 
 	if m.Config.LookupDBDSN != "" {

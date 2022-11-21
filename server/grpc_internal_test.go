@@ -88,7 +88,7 @@ func TestGetTokensFromMetadata(t *testing.T) {
 					),
 					NewServerTransportStream(),
 				)
-				err := a.SetGRPCMetadata(ctx, test.md, test.access, test.refresh)
+				_, err := a.SetGRPCMetadata(ctx, test.md, test.access, test.refresh)
 				if err != nil {
 					t.Errorf("unexpected error setting GRPC metadata: %v", err)
 				}

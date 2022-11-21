@@ -50,4 +50,5 @@ const (
 	MetricExclusiveTransactionBlocked     = "transaction_exclusive_blocked"
 	MetricPqlQueries                      = "pql_queries_total"
 	MetricSqlQueries                      = "sql_queries_total"
+	MetricDeleteDataframe                 = "delete_dataframe"
 )

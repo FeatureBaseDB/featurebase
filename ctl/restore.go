@@ -109,7 +109,6 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 			primary = node
 			break
 		}
-
 	}
 	if primary == nil {
 		return errors.New("no primary")
@@ -122,6 +121,8 @@ func (cmd *RestoreCommand) Run(ctx context.Context) (err error) {
 	}
 	if err := cmd.restoreShards(ctx); err != nil {
 		return fmt.Errorf("cannot restore shards: %w", err)
+	} else if err := cmd.restoreDataframes(ctx); err != nil {
+		return fmt.Errorf("cannot restore dataframes: %w", err)
 	} else if err := cmd.restoreIndexTranslation(ctx); err != nil {
 		return fmt.Errorf("cannot restore index translation: %w", err)
 	} else if err := cmd.restoreFieldTranslation(ctx, nodes); err != nil {
@@ -183,7 +184,7 @@ func (cmd *RestoreCommand) restoreSchema(ctx context.Context, primary *disco.Nod
 			return false
 		}
 		logger := cmd.Logger()
-		//NOTE SHOULD ONLY BE ONE
+		// NOTE SHOULD ONLY BE ONE
 		for _, index := range schema.Indexes {
 			if exists(index.Name) {
 				return fmt.Errorf("index Exists %v", index.Name)
@@ -252,6 +253,38 @@ func (cmd *RestoreCommand) restoreIDAlloc(ctx context.Context, primary *disco.No
 	err = cmd.client.IDAllocDataWriter(ctx, f, primary)
 
 	return err
+}
+
+func (cmd *RestoreCommand) restoreDataframes(ctx context.Context) error {
+	filenames, err := filepath.Glob(filepath.Join(cmd.Path, "indexes", "*", "dataframe", "*"))
+	if err != nil {
+		return err
+	}
+
+	ch := make(chan string, len(filenames))
+	for _, filename := range filenames {
+		ch <- filename
+	}
+	close(ch)
+
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < cmd.Concurrency; i++ {
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case filename, ok := <-ch:
+					if !ok {
+						return nil
+					} else if err := cmd.restoredDataframeShard(ctx, filename); err != nil {
+						return err
+					}
+				}
+			}
+		})
+	}
+	return g.Wait()
 }
 
 func (cmd *RestoreCommand) restoreShards(ctx context.Context) error {
@@ -473,3 +506,61 @@ func (cmd *RestoreCommand) restoreFieldTranslationFile(ctx context.Context, node
 func (cmd *RestoreCommand) TLSHost() string { return cmd.Host }
 
 func (cmd *RestoreCommand) TLSConfiguration() server.TLSConfig { return cmd.TLS }
+
+func (cmd *RestoreCommand) restoredDataframeShard(ctx context.Context, filename string) error {
+	logger := cmd.Logger()
+
+	rel, err := filepath.Rel(cmd.Path, filename)
+	if err != nil {
+		return err
+	}
+
+	// Parse filename.
+	record := strings.Split(rel, string(os.PathSeparator))
+	indexName := record[1]
+	shard, err := strconv.ParseUint(record[3], 10, 64)
+	if err != nil {
+		return nil // not a shard file
+	}
+
+	nodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
+	if err != nil {
+		return fmt.Errorf("cannot determine fragment nodes: %w", err)
+	} else if len(nodes) == 0 {
+		return fmt.Errorf("no nodes available")
+	}
+
+	for _, node := range nodes {
+		logger.Printf("dataframe shard %v %v", shard, indexName)
+
+		f, err := os.Open(filename)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		url := node.URI.Path(fmt.Sprintf("/internal/dataframe/restore/%v/%v", indexName, shard))
+		req, err := retryablehttp.NewRequest("POST", url, f)
+		if err != nil {
+			return err
+		}
+		req = req.WithContext(ctx)
+		req.Header.Set("Content-Type", "application/octet-stream")
+
+		token, ok := authn.GetAccessToken(ctx)
+		if ok && token != "" {
+			req.Header.Set("Authorization", token)
+		}
+
+		client := cmd.newClient()
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		} else if err := resp.Body.Close(); err != nil {
+			return err
+		} else if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+	}
+	return nil
+}

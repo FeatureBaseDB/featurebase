@@ -76,7 +76,7 @@ type Config struct {
 	BindGRPC string `toml:"bind-grpc"`
 
 	// Listener is an already-bound listener to use for http.
-	//Listener *net.TCPListener
+	// Listener *net.TCPListener
 	Listener net.Listener
 
 	// GRPCListener is an already-bound listener to use for gRPC.
@@ -249,6 +249,10 @@ type Config struct {
 	} `toml:"datadog"`
 
 	Auth Auth
+
+	Dataframe struct {
+		Enable bool `toml:"enable"`
+	} `toml:"dataframe"`
 }
 
 type Auth struct {

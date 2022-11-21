@@ -1000,3 +1000,8 @@ func intInPartitions(i int, s dax.VersionedPartitions) bool {
 	}
 	return false
 }
+
+// DeleteDataframeMessage is an internal message indicating dataframe deletion.
+type DeleteDataframeMessage struct {
+	Index string
+}

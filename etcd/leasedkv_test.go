@@ -17,8 +17,10 @@ import (
 	"go.etcd.io/etcd/pkg/types"
 )
 
-const initVal = "test"
-const newVal = "newValue"
+const (
+	initVal = "test"
+	newVal  = "newValue"
+)
 
 func TestClusterKv(t *testing.T) {
 	if !AllowCluster() {
@@ -62,6 +64,7 @@ func TestLeasedKv(t *testing.T) {
 	cfg.LCUrls = types.MustNewURLs([]string{clientURL})
 	cfg.ACUrls = types.MustNewURLs([]string{clientURL})
 	cfg.InitialCluster = cfg.Name + "=" + peerURL
+	cfg.EnableGRPCGateway = false
 
 	dir, err := testhook.TempDir(t, "leasedkv-*")
 	if err != nil {

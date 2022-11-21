@@ -65,7 +65,7 @@ func (r *Row) Clone() (clone *Row) {
 		if seg.data != nil {
 			segClone.data = seg.data.Clone() // *roaring.Bitmap
 		}
-		//segClone.InvalidateCount() // not needed?
+		// segClone.InvalidateCount() // not needed?
 		clone.Segments = append(clone.Segments, segClone)
 	}
 	return clone
@@ -143,10 +143,11 @@ func (r *Row) ToRows(callback func(*pb.RowResponse) error) error {
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
 					{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: x}},
-				}}); err != nil {
+				},
+			}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
-			ci = nil //only send on the first
+			ci = nil // only send on the first
 		}
 	} else {
 		// Column IDs
@@ -158,10 +159,11 @@ func (r *Row) ToRows(callback func(*pb.RowResponse) error) error {
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
 					{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: x}},
-				}}); err != nil {
+				},
+			}); err != nil {
 				return errors.Wrap(err, "calling callback")
 			}
-			ci = nil //only send on the first
+			ci = nil // only send on the first
 		}
 	}
 	return nil
@@ -185,7 +187,6 @@ func (r *Row) IsEmpty() bool {
 		if r.Segments[i].n > 0 {
 			return false
 		}
-
 	}
 	return true
 }
@@ -479,6 +480,19 @@ func (r *Row) Columns() []uint64 {
 	return a
 }
 
+func (r *Row) ShardColumns() []int64 {
+	// We occasionally hit cases where we want to call Columns on something
+	// that might not exist, but a nil slice would be fine.
+	if r == nil {
+		return nil
+	}
+	a := make([]int64, 0, r.Count())
+	for i := range r.Segments {
+		a = append(a, r.Segments[i].ShardColumns()...)
+	}
+	return a
+}
+
 // Includes returns true if the row contains the given column.
 func (r *Row) Includes(col uint64) bool {
 	shard := col / ShardWidth
@@ -642,6 +656,17 @@ func (s *RowSegment) Columns() []uint64 {
 	itr := s.data.Iterator()
 	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
 		a = append(a, v)
+	}
+	return a
+}
+
+// Columns returns a list of all columns set in the segment, normalized from 0-shardwidth-1
+func (s *RowSegment) ShardColumns() []int64 {
+	a := make([]int64, 0, s.Count())
+	itr := s.data.Iterator()
+	mask := uint64(ShardWidth - 1)
+	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
+		a = append(a, int64(mask&v))
 	}
 	return a
 }
