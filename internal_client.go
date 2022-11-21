@@ -1715,6 +1715,27 @@ func (c *InternalClient) GetTransaction(ctx context.Context, id string) (*Transa
 	return tr.Transaction, err
 }
 
+func (c *InternalClient) GetDataframeShard(ctx context.Context, index string, shard uint64) (*http.Response, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.GetDataframeShard")
+	defer span.Finish()
+
+	// Execute request against the host.
+	path := fmt.Sprintf("/index/%v/dataframe/%04d", index, shard)
+	// Build request.
+	url := uriPathToURL(c.defaultURI, path)
+	req, err := http.NewRequest("GET", url.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+	req.Header.Set("Accept", "application/octet-stream")
+	AddAuthToken(ctx, &req.Header)
+
+	// Execute request.
+	return c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
+}
+
 type executeOpts struct {
 	// giveRawResponse instructs executeRequest not to process the
 	// respStatusCode and try to extract errors or whatever.
@@ -1730,6 +1751,7 @@ func giveRawResponse(b bool) executeRequestOption {
 		eo.giveRawResponse = b
 	}
 }
+
 func forwardAuthHeader(b bool) executeRequestOption {
 	return func(eo *executeOpts) {
 		eo.forwardAuthHeader = b
@@ -2084,6 +2106,7 @@ func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, 
 
 	return resp.Body, nil
 }
+
 func (c *InternalClient) ImportIndexKeys(ctx context.Context, uri *pnet.URI, index string, partitionID int, remote bool, readerFunc func() (io.Reader, error)) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportIndexKeys")
 	defer span.Finish()

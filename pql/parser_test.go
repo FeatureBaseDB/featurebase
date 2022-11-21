@@ -3,6 +3,7 @@
 package pql_test
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -224,6 +225,14 @@ func TestParser_Parse(t *testing.T) {
 		} else if !strings.Contains(err.Error(), "not a valid timestamp") {
 			t.Fatalf("expected error for invalid timestamp, got: %s", err.Error())
 		}
+		// str := `Row('2024-04-24T23:24:24Z' < x < '2024-04-24T24:24:24Z')`
+		str := `Row('2024-04-24T23:24:24Z' < x < '2024-04-24T24:24:24Z')`
+		_, err = pql.ParseString(str)
+		if err == nil {
+			t.Fatal("no error parsing invalid date")
+		} else if !strings.Contains(err.Error(), "not a valid timestamp") {
+			t.Fatalf("expected error for invalid timestamp, got: %s on string '%v'", err.Error(), str)
+		}
 	})
 
 	t.Run("VariousSpaces", func(t *testing.T) {
@@ -237,6 +246,65 @@ func TestParser_Parse(t *testing.T) {
 			},
 		) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+	t.Run("Apply", func(t *testing.T) {
+		twos := "2022-02-22T22:22:22Z"
+		date, _ := time.Parse(time.RFC3339, twos)
+		defaultFilter := `Row(x>'2022-02-22T22:22:22Z')`
+		// ivy := `(+/++A+B*B`
+		// ivy := `(+/ sqrt(A*A + B*B)/rho x 1-2 ? || )`
+		// ivy := `text*here`
+		defRes := []*pql.Call{
+			{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"x": &pql.Condition{Op: pql.GT, Value: date},
+				},
+			},
+		}
+		programs := []struct {
+			prog        string
+			description string
+			filter      string
+			children    []*pql.Call
+		}{
+			{"(+/ sqrt(x*x + y*y))/rho x )", "average distance from x to y", defaultFilter, defRes},
+			{"rho sample", "size of input values", defaultFilter, defRes},
+			{"(1 drop sample)", " first element removed", defaultFilter, defRes},
+			{"(-1 drop sample)", " last element removed", defaultFilter, defRes},
+			{"(1 drop sample) - (-1 drop sample)", "subtract those", defaultFilter, defRes},
+			{"_ > 0", "which ones of the last difference are greater than zero", defaultFilter, defRes},
+			{"+/ _", "sum list from previous calc", defaultFilter, defRes},
+			{"(1 drop sample) > (-1 drop sample)", "compare array", defaultFilter, defRes},
+			{"1 2 3 +.* 2 3 4", "inner product with + then * and equals 20", defaultFilter, defRes},
+			{"(1 drop sample) +.> (-1 drop sample)", "inner product with + then >  ", defaultFilter, defRes},
+			{"op inc x = (1 drop sample) +.> (-1 drop sample)", "function of previous  ", defaultFilter, defRes},
+			{"op sum3 x = (-2 drop x) +.> (-1 drop 1 drop x) + 2 drop x", "function of previous  ", defaultFilter, defRes},
+			{"op grid3 x = 3 ((rho x)-2) rho (-2 drop x), (-1 drop 1 drop x), 2 drop x", "make 3x2 grid from array", defaultFilter, defRes},
+			{"x[ up x ]", "sort the array", defaultFilter, defRes},
+			{"x[ up x ]", "no filter", "", nil},
+		}
+		for i := range programs {
+			ivy := programs[i].prog
+			filter := programs[i].filter
+			children := programs[i].children
+			qstring := fmt.Sprintf(`Apply(%s,"%s")`, filter, ivy)
+			if filter == "" {
+				qstring = fmt.Sprintf(`Apply("%s")`, ivy)
+			}
+			q, err := pql.ParseString(qstring)
+			if err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(q.Calls[0],
+				&pql.Call{
+					Name:     "Apply",
+					Children: children,
+					Args:     map[string]interface{}{"_ivy": ivy},
+				},
+			) {
+				t.Fatalf("unexpected call: %#v", q.Calls[0])
+			}
 		}
 	})
 }

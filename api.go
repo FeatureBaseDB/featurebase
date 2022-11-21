@@ -310,6 +310,31 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 	return index, nil
 }
 
+func (api *API) DeleteDataframe(ctx context.Context, indexName string) error {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.DeleteDataframe")
+	defer span.Finish()
+
+	if err := api.validate(apiDeleteDataframe); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+	// Delete index from the holder.
+	err := api.holder.DeleteDataframe(indexName)
+	if err != nil {
+		return errors.Wrap(err, "deleting index")
+	}
+	// Send the delete index message to all nodes.
+	err = api.server.SendSync(
+		&DeleteDataframeMessage{
+			Index: indexName,
+		})
+	if err != nil {
+		api.server.logger.Errorf("problem sending DeleteIndex message: %s", err)
+		return errors.Wrap(err, "sending DeleteIndex message")
+	}
+	api.holder.Stats.Count(MetricDeleteDataframe, 1, 1.0)
+	return nil
+}
+
 // DeleteIndex removes the named index. If the index is not found it does
 // nothing and returns no error.
 func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
@@ -542,7 +567,6 @@ func importWorker(importWork chan importJob) {
 						}
 
 						err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
-
 						if err != nil {
 							return errors.Wrap(err, "importing standard roaring")
 						}
@@ -1359,7 +1383,6 @@ func OptImportOptionsSuppressLog(b bool) ImportOption {
 var ErrAborted = fmt.Errorf("error: update was aborted")
 
 func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRecord, opts ...ImportOption) error {
-
 	simPowerLoss := false
 	lossAfter := -1
 	var opt ImportOptions
@@ -2533,6 +2556,7 @@ func (api *API) WriteIDAllocDataTo(w io.Writer) error {
 	_, err := api.holder.ida.WriteTo(w)
 	return err
 }
+
 func (api *API) RestoreIDAlloc(r io.Reader) error {
 	return api.holder.ida.Replace(r)
 }
@@ -2584,7 +2608,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	}
 
 	idx := api.holder.Index(indexName)
-	//need to get a dbShard
+	// need to get a dbShard
 	dbs, err := api.holder.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
 	if err != nil {
 		return err
@@ -2592,7 +2616,7 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	db := dbs.W
 	finalPath := db.Path() + "/data"
 	tempPath := finalPath + ".tmp"
-	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -2631,8 +2655,8 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 		return err
 	}
 	defer tx.Rollback()
-	//arguments idx,shard do not matter for rbf they
-	//are ignored
+	// arguments idx,shard do not matter for rbf they
+	// are ignored
 	flvs, err := tx.GetSortedFieldViewList(idx, shard)
 	if err != nil {
 		return nil
@@ -2811,8 +2835,8 @@ func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fiel
 	useIndexKeys := index.Keys()
 	// If we're not doing details, we won't translate field keys even if we could.
 	useFieldKeys := field.Keys() && details
-	var indexKeys = map[uint64]string{}
-	var fieldKeys = map[uint64]string{}
+	indexKeys := map[uint64]string{}
+	fieldKeys := map[uint64]string{}
 	var indexIDs []uint64
 	var fieldIDs []uint64
 	// We'll use the string "untranslated" as our default value and overwrite
@@ -3235,20 +3259,20 @@ const (
 	apiTranslateData
 	apiFieldTranslateData
 	apiField
-	//apiHosts // not implemented
+	// apiHosts // not implemented
 	apiImport
 	apiImportValue
 	apiIndex
-	//apiLocalID // not implemented
-	//apiLongQueryTime // not implemented
-	//apiMaxShards // not implemented
+	// apiLocalID // not implemented
+	// apiLongQueryTime // not implemented
+	// apiMaxShards // not implemented
 	apiQuery
 	apiRecalculateCaches
 	apiSchema
 	apiShardNodes
 	apiState
-	//apiStatsWithTags // not implemented
-	//apiVersion // not implemented
+	// apiStatsWithTags // not implemented
+	// apiVersion // not implemented
 	apiViews
 	apiApplySchema
 	apiStartTransaction
@@ -3262,6 +3286,8 @@ const (
 	apiIDReset
 	apiPartitionNodes
 	apiMutexCheck
+	apiApplyChangeset
+	apiDeleteDataframe
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -3322,6 +3348,8 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiIDReset:              {},
 	apiPartitionNodes:       {},
 	apiMutexCheck:           {},
+	apiApplyChangeset:       {},
+	apiDeleteDataframe:      {},
 }
 
 func shardInShards(i dax.ShardNum, s dax.VersionedShards) bool {
@@ -3413,6 +3441,7 @@ func NewNopComputeAPI() *NopComputeAPI {
 func (c *NopComputeAPI) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
 	return nil
 }
+
 func (c *NopComputeAPI) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error {
 	return nil
 }

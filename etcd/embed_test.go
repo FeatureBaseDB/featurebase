@@ -14,6 +14,7 @@ import (
 func TestRestartEtcd(t *testing.T) {
 	cfg := embed.NewConfig()
 	cfg.Dir = "default.etcd"
+	cfg.EnableGRPCGateway = false
 	curl, _ := url.Parse(unixSocket(t))
 	// append-in-place to replace any existing URLs with our new URL
 	cfg.LPUrls = append(cfg.LPUrls[:0], *curl)
@@ -51,7 +52,7 @@ func TestRestartEtcd(t *testing.T) {
 }
 
 func TestParseOptions(t *testing.T) {
-	var e = &Etcd{options: Options{ClusterURL: "http://foo"}, logger: logger.NewLogfLogger(t)}
+	e := &Etcd{options: Options{ClusterURL: "http://foo"}, logger: logger.NewLogfLogger(t)}
 	curl, _ := url.Parse(unixSocket(t))
 	e.options.LClientURL = curl.String()
 

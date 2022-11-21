@@ -107,6 +107,13 @@ func (q *Query) startConditional() {
 	}
 }
 
+func (q *Query) condAddTimestamp(val string) {
+	// TODO(twg) 2022/09/14 reviist this ugly hack
+	tsv := parseTimestamp2(val)
+	secsinstring := fmt.Sprintf("%d", tsv.Unix())
+	q.condAdd(secsinstring)
+}
+
 func (q *Query) condAdd(val string) {
 	q.conditional = append(q.conditional, val)
 }
@@ -281,21 +288,27 @@ func (q *Query) endList() {
 func (q *Query) addGT() {
 	q.lastCallStackElem().lastCond = GT
 }
+
 func (q *Query) addLT() {
 	q.lastCallStackElem().lastCond = LT
 }
+
 func (q *Query) addGTE() {
 	q.lastCallStackElem().lastCond = GTE
 }
+
 func (q *Query) addLTE() {
 	q.lastCallStackElem().lastCond = LTE
 }
+
 func (q *Query) addEQ() {
 	q.lastCallStackElem().lastCond = EQ
 }
+
 func (q *Query) addNEQ() {
 	q.lastCallStackElem().lastCond = NEQ
 }
+
 func (q *Query) addBTWN() {
 	q.lastCallStackElem().lastCond = BETWEEN
 }
@@ -497,7 +510,8 @@ var callInfoByFunc = map[string]callInfo{
 			"rows":   nil,
 		},
 	},
-	"Shift": {allowUnknown: false,
+	"Shift": {
+		allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"n": int64(0),
 		},
@@ -613,6 +627,19 @@ var callInfoByFunc = map[string]callInfo{
 			"limit":     int64(0),
 			"offset":    int64(0),
 			"sort-desc": false,
+		},
+	},
+	"Apply": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_ivy":       stringOrVariable,
+			"_ivyReduce": stringOrVariable,
+		},
+	},
+	"Arrow": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"header": interfaceOrVariable,
 		},
 	},
 }
@@ -1074,7 +1101,6 @@ func (c *Call) ExpandVars(vars map[string]interface{}) ([]*Call, error) {
 				default:
 					return nil, fmt.Errorf("variable: requires single value for argument, got: %+v", newArg)
 				}
-
 			}
 		}
 
@@ -1376,6 +1402,15 @@ func parseNum(val string) interface{} {
 		panic(fmt.Sprintf("%s: %s", intOutOfRangeError, err))
 	}
 	return ival
+}
+
+func parseTimestamp2(val string) time.Time {
+	val = strings.Replace(val, "\"", "", -1)
+	tsval, err := time.Parse("2006-01-02T15:04:05Z", val)
+	if err != nil {
+		panic(fmt.Sprintf("%s: %s", invalidTimestampError, err))
+	}
+	return tsval
 }
 
 func parseTimestamp(val string) time.Time {
