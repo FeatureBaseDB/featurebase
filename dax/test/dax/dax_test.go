@@ -105,6 +105,8 @@ func TestDAXIntegration(t *testing.T) {
 			"binoptestdec_d/test-12",
 			"table-82/test-3",
 			"table-82/test-8",
+			"table-83/test-3",
+			"table-83/test-8",
 			"cast_int/test-2",
 			"cast_int/test-7",
 			"cast_id/test-2",

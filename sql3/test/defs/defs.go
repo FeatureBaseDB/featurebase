@@ -13,6 +13,8 @@ var TableTests []TableTest = []TableTest{
 	unkeyed,
 	keyed,
 
+	selectTests,
+
 	setLiteralTests,
 	setFunctionTests,
 	setParameterTests,

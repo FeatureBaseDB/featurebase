@@ -333,7 +333,7 @@ func isHex(ch rune) bool {
 }
 
 func isUnquotedIdent(ch rune) bool {
-	return isAlpha(ch) || isDigit(ch) || ch == '_'
+	return isAlpha(ch) || isDigit(ch) || ch == '_' || ch == '-'
 }
 
 // IsInteger returns true if s only contains digits.
