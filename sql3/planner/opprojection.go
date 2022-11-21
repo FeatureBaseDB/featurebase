@@ -60,12 +60,12 @@ func (p *PlanOpProjection) WithChildren(children ...types.PlanOperator) (types.P
 
 func (p *PlanOpProjection) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
-	result["_op"] = fmt.Sprintf("%T", p)
+	result["__op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
 		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
 	}
-	result["_schema"] = sc
+	result["__schema"] = sc
 
 	result["child"] = p.ChildOp.Plan()
 
@@ -73,7 +73,7 @@ func (p *PlanOpProjection) Plan() map[string]interface{} {
 	for _, e := range p.Projections {
 		ps = append(ps, e.Plan())
 	}
-	result["projections"] = ps
+	result["_projections"] = ps
 
 	return result
 }
@@ -100,7 +100,6 @@ func ExpressionToColumn(e types.PlanExpression) *types.PlannerColumn {
 	if n, ok := e.(types.IdentifiableByName); ok {
 		name = n.Name()
 	} else {
-		//TODO(pok) - implement this
 		name = "" //e.String()
 	}
 

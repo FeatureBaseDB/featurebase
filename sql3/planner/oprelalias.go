@@ -28,7 +28,7 @@ func NewPlanOpRelAlias(alias string, child types.PlanOperator) *PlanOpRelAlias {
 func (p *PlanOpRelAlias) Schema() types.Schema {
 	schema := p.ChildOp.Schema()
 	for _, s := range schema {
-		s.RelationName = p.alias
+		s.AliasName = p.alias
 	}
 	return schema
 }

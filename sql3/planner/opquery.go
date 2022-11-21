@@ -28,6 +28,7 @@ func NewPlanOpQuery(child types.PlanOperator, sql string) *PlanOpQuery {
 	return &PlanOpQuery{
 		ChildOp:  child,
 		warnings: make([]string, 0),
+		sql:      sql,
 	}
 }
 

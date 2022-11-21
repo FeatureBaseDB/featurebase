@@ -481,8 +481,8 @@ func typeIsTimestamp(testType parser.ExprDataType) bool {
 	}
 }
 
-// returns true if the type is a float
-func typeIsFloat(testType parser.ExprDataType) bool {
+// returns true if the type is a decimal
+func typeIsDecimal(testType parser.ExprDataType) bool {
 	switch testType.(type) {
 	case *parser.DataTypeDecimal:
 		return true

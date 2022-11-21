@@ -85,12 +85,17 @@ func (p *PlanOpPQLTableScan) Schema() types.Schema {
 		return result
 	}
 
-	for _, col := range table.Fields {
-		result = append(result, &types.PlannerColumn{
-			ColumnName:   col.Name,
-			RelationName: p.tableName,
-			Type:         fieldSQLDataType(col),
-		})
+	for _, col := range p.columns {
+		for _, fld := range table.Fields {
+			if strings.EqualFold(fld.Name, col) {
+				result = append(result, &types.PlannerColumn{
+					ColumnName:   fld.Name,
+					RelationName: p.tableName,
+					Type:         fieldSQLDataType(fld),
+				})
+				break
+			}
+		}
 	}
 	return result
 }
@@ -149,15 +154,20 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 			}
 			return nil, err
 		}
-		i.rowWidth = len(table.Fields)
+		i.rowWidth = len(i.columns)
 
 		i.columnMap = make(map[string]*targetColumn)
-		for idx, fld := range table.Fields {
-			i.columnMap[fld.Name] = &targetColumn{
-				columnIdx:    idx,
-				srcColumnIdx: -1,
-				columnName:   fld.Name,
-				dataType:     fieldSQLDataType(fld),
+		for idx, col := range i.columns {
+			for _, fld := range table.Fields {
+				if strings.EqualFold(col, fld.Name) {
+					i.columnMap[fld.Name] = &targetColumn{
+						columnIdx:    idx,
+						srcColumnIdx: -1,
+						columnName:   fld.Name,
+						dataType:     fieldSQLDataType(fld),
+					}
+					break
+				}
 			}
 		}
 

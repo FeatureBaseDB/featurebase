@@ -156,12 +156,18 @@ func InspectExpressionsWithPlanOp(op types.PlanOperator, f exprWithNodeInspector
 // If there was a transformation, the bool will be true, and an error if there was an error
 type PlanOpTransformFunc func(op types.PlanOperator) (types.PlanOperator, bool, error)
 
-// TransformPlanOp applies a transformation function to the given plan op graph
+// TransformPlanOp applies a depth first transformation function to the given plan op
+// It returns a tuple that is the result of the transformation; the new PlanOperator, a bool that
+// is true if the resultant PlanOperator has not been transformed or an error.
+// If the TransformPlanOp has children it will iterate the children and call the transformation
+// function on each of them in turn. If those operators are transformed, it will create a new operator
+// with those children. The last step is to call the transformation on the passed PlanOperator
 func TransformPlanOp(op types.PlanOperator, f PlanOpTransformFunc) (types.PlanOperator, bool, error) {
+	thisOperator := op
 
-	children := op.Children()
+	children := thisOperator.Children()
 	if len(children) == 0 {
-		return f(op)
+		return f(thisOperator)
 	}
 
 	var newChildren []types.PlanOperator
@@ -185,17 +191,17 @@ func TransformPlanOp(op types.PlanOperator, f PlanOpTransformFunc) (types.PlanOp
 	sameChildren := true
 	if len(newChildren) > 0 {
 		sameChildren = false
-		op, err = op.WithChildren(newChildren...)
+		thisOperator, err = thisOperator.WithChildren(newChildren...)
 		if err != nil {
 			return nil, true, err
 		}
 	}
 
-	op, sameOperator, err := f(op)
+	resultOperator, sameOperator, err := f(thisOperator)
 	if err != nil {
 		return nil, true, err
 	}
-	return op, sameChildren && sameOperator, nil
+	return resultOperator, sameChildren && sameOperator, nil
 }
 
 // ParentContext is a struct that enables transformation functions to include a parent operator
@@ -209,6 +215,7 @@ type ParentContextFunc func(c ParentContext) (types.PlanOperator, bool, error)
 
 type ParentSelectorFunc func(c ParentContext) bool
 
+// TransformPlanOpWithParent applies a transformation function to a plan operator in the context that plan operators parent
 func TransformPlanOpWithParent(op types.PlanOperator, s ParentSelectorFunc, f ParentContextFunc) (types.PlanOperator, bool, error) {
 	return planOpWithParentHelper(ParentContext{op, nil, -1}, s, f)
 }
@@ -252,11 +259,11 @@ func planOpWithParentHelper(c ParentContext, s ParentSelectorFunc, f ParentConte
 		}
 	}
 
-	operator, sameOperator, err := f(ParentContext{operator, c.Parent, c.ChildCount})
+	resultOperator, sameOperator, err := f(ParentContext{operator, c.Parent, c.ChildCount})
 	if err != nil {
 		return nil, true, err
 	}
-	return operator, sameChildren && sameOperator, nil
+	return resultOperator, sameChildren && sameOperator, nil
 }
 
 // ExprWithPlanOpFunc is a function that given an expression and the node
@@ -362,11 +369,13 @@ func TransformSinglePlanOpExpressions(op types.PlanOperator, f ExprFunc) (types.
 	return op, true, nil
 }
 
-// TransformExpr applies a transformation function to an expression
+// TransformExpr applies a  depth first transformation function to an expression
 func TransformExpr(expr types.PlanExpression, f ExprFunc) (types.PlanExpression, bool, error) {
+	thisExpr := expr
+
 	children := expr.Children()
 	if len(children) == 0 {
-		return f(expr)
+		return f(thisExpr)
 	}
 
 	var (
@@ -392,22 +401,24 @@ func TransformExpr(expr types.PlanExpression, f ExprFunc) (types.PlanExpression,
 	sameChildren := true
 	if len(newChildren) > 0 {
 		sameChildren = false
-		expr, err = expr.WithChildren(newChildren...)
+		thisExpr, err = thisExpr.WithChildren(newChildren...)
 		if err != nil {
 			return nil, true, err
 		}
 	}
 
-	expr, sameExpr, err := f(expr)
+	resultExpr, sameExpr, err := f(thisExpr)
 	if err != nil {
 		return nil, true, err
 	}
-	return expr, sameChildren && sameExpr, nil
+	return resultExpr, sameChildren && sameExpr, nil
 }
 
-// TransformExprWithPlanOp applies a transformation function to an expression in the context of a plan operator
+// TransformExprWithPlanOp applies a depth first transformation function to an expression in the context of a plan operator
 func TransformExprWithPlanOp(n types.PlanOperator, e types.PlanExpression, f ExprWithPlanOpFunc) (types.PlanExpression, bool, error) {
-	children := e.Children()
+	thisExpr := e
+
+	children := thisExpr.Children()
 	if len(children) == 0 {
 		return f(n, e)
 	}
@@ -435,15 +446,15 @@ func TransformExprWithPlanOp(n types.PlanOperator, e types.PlanExpression, f Exp
 	sameChilren := true
 	if len(newChildren) > 0 {
 		sameChilren = false
-		e, err = e.WithChildren(newChildren...)
+		thisExpr, err = thisExpr.WithChildren(newChildren...)
 		if err != nil {
 			return nil, true, err
 		}
 	}
 
-	e, sameExpr, err := f(n, e)
+	resultExpr, sameExpr, err := f(n, thisExpr)
 	if err != nil {
 		return nil, true, err
 	}
-	return e, sameChilren && sameExpr, nil
+	return resultExpr, sameChilren && sameExpr, nil
 }
