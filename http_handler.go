@@ -1398,6 +1398,17 @@ func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, err er
 
 // handlePostSQL handles /sql requests.
 func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
+	includePlan := false
+
+	includePlanValue := r.URL.Query().Get("plan")
+	if len(includePlanValue) > 0 {
+		var err error
+		includePlan, err = strconv.ParseBool(includePlanValue)
+		if err != nil {
+			h.writeBadRequest(w, r, err)
+			return
+		}
+	}
 
 	b, err := io.ReadAll(r.Body)
 
@@ -1466,6 +1477,17 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	writePlan := func(plan map[string]interface{}) {
+		if plan != nil && includePlan {
+			planBytes, err := json.Marshal(plan)
+			if err != nil {
+				planBytes = []byte(`"PROBLEM ENCODING QUERY PLAN"`)
+			}
+			w.Write([]byte(`,"queryPlan":`))
+			w.Write(planBytes)
+		}
+	}
+
 	// Get a query iterator.
 	iter, err := rootOperator.Iterator(r.Context(), nil)
 	if err != nil {
@@ -1529,6 +1551,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	writeError(rowErr)
 	writeWarnings(rootOperator.Warnings())
+	writePlan(rootOperator.Plan())
 }
 
 type SQLField struct {

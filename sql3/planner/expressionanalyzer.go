@@ -337,7 +337,7 @@ func (p *ExecutionPlanner) analyzeUnaryExpression(expr *parser.UnaryExpr, scope 
 		}
 		if typeIsInteger(x.DataType()) {
 			expr.ResultDataType = parser.NewDataTypeInt()
-		} else if typeIsFloat(x.DataType()) {
+		} else if typeIsDecimal(x.DataType()) {
 			fd, ok := x.DataType().(*parser.DataTypeDecimal)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected data type")

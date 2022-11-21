@@ -166,6 +166,10 @@ func (n *unaryOpPlanExpression) Type() parser.ExprDataType {
 	return n.resultDataType
 }
 
+func (n *unaryOpPlanExpression) String() string {
+	return fmt.Sprintf("%s%s", n.op.String(), n.rhs.String())
+}
+
 func (n *unaryOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -233,7 +237,11 @@ func (n *unaryOpPlanExpression) plusWithTypeCheck(rhs interface{}) (interface{},
 	case *parser.DataTypeDecimal:
 		nr, nrok := rhs.(pql.Decimal)
 		if nrok {
-			return +(nr.Float64()), nil
+			val := nr.Value()
+			if !val.IsInt64() {
+				return nil, sql3.NewErrInternalf("decimal value overflow: %v", rhs)
+			}
+			return pql.NewDecimal(+val.Int64(), nr.Scale), nil
 		}
 		return nil, sql3.NewErrInternalf("unexpected incompatible types '%T", rhs)
 
@@ -266,7 +274,12 @@ func (n *unaryOpPlanExpression) minusWithTypeCheck(rhs interface{}) (interface{}
 	case *parser.DataTypeDecimal:
 		nr, nrok := rhs.(pql.Decimal)
 		if nrok {
-			return -(nr.Float64()), nil
+			val := nr.Value()
+			if !val.IsInt64() {
+				return nil, sql3.NewErrInternalf("decimal value overflow: %v", rhs)
+			}
+			return pql.NewDecimal(-val.Int64(), nr.Scale), nil
+
 		}
 		return nil, sql3.NewErrInternalf("unexpected incompatible types '%T", rhs)
 
@@ -644,6 +657,10 @@ func (n *binOpPlanExpression) Type() parser.ExprDataType {
 	return n.resultDataType
 }
 
+func (n *binOpPlanExpression) String() string {
+	return fmt.Sprintf("%s%s%s", n.lhs.String(), n.op.String(), n.rhs.String())
+}
+
 func (n *binOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -709,6 +726,10 @@ func (n *rangePlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 
 func (n *rangePlanExpression) Type() parser.ExprDataType {
 	return n.resultDataType
+}
+
+func (n *rangePlanExpression) String() string {
+	return fmt.Sprintf("between %s and %s", n.lhs.String(), n.rhs.String())
 }
 
 func (n *rangePlanExpression) Plan() map[string]interface{} {
@@ -900,6 +921,24 @@ func (n *casePlanExpression) Type() parser.ExprDataType {
 	return n.resultDataType
 }
 
+func (n *casePlanExpression) String() string {
+	var result string
+	if n.baseExpr != nil {
+		result = fmt.Sprintf("case %s", n.baseExpr)
+	} else {
+		result = "case"
+	}
+	for _, blk := range n.blocks {
+		result += fmt.Sprintf(" %s", blk.String())
+	}
+	if n.elseExpr != nil {
+		result += fmt.Sprintf(" else %s end", n.elseExpr)
+	} else {
+		result += " end"
+	}
+	return result
+}
+
 func (n *casePlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -919,11 +958,45 @@ func (n *casePlanExpression) Plan() map[string]interface{} {
 }
 
 func (n *casePlanExpression) Children() []types.PlanExpression {
-	return []types.PlanExpression{}
+	result := make([]types.PlanExpression, 0)
+	if n.baseExpr != nil {
+		result = append(result, n.baseExpr)
+	}
+	result = append(result, n.blocks...)
+	if n.elseExpr != nil {
+		result = append(result, n.elseExpr)
+	}
+	return result
 }
 
 func (n *casePlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	currentLen := 0
+	if n.baseExpr != nil {
+		currentLen += 1
+	}
+	currentLen += len(n.blocks)
+	if n.elseExpr != nil {
+		currentLen += 1
+	}
+	if len(children) != currentLen {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+
+	offset := 0
+	var newBaseExpr types.PlanExpression
+	if n.baseExpr != nil {
+		newBaseExpr = children[offset]
+		offset += 1
+	}
+	newBlocks := make([]types.PlanExpression, len(n.blocks))
+	copy(newBlocks[0:], children[offset:offset+len(n.blocks)])
+	offset += len(n.blocks)
+
+	var newElseExpr types.PlanExpression
+	if n.elseExpr != nil {
+		newElseExpr = children[offset]
+	}
+	return newCasePlanExpression(newBaseExpr, newBlocks, newElseExpr, n.resultDataType), nil
 }
 
 // caseBlockPlanExpression is for case blocks
@@ -947,6 +1020,10 @@ func (n *caseBlockPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeBool()
 }
 
+func (n *caseBlockPlanExpression) String() string {
+	return fmt.Sprintf("when %s then %s end", n.condition.String(), n.body.String())
+}
+
 func (n *caseBlockPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -964,7 +1041,10 @@ func (n *caseBlockPlanExpression) Children() []types.PlanExpression {
 }
 
 func (n *caseBlockPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 2 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newCaseBlockPlanExpression(children[0], children[1]), nil
 }
 
 // subqueryPlanExpression is a select statement (when used in an expression)
@@ -1007,6 +1087,10 @@ func (n *subqueryPlanExpression) Evaluate(currentRow []interface{}) (interface{}
 
 func (n *subqueryPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeBool()
+}
+
+func (n *subqueryPlanExpression) String() string {
+	return n.op.String()
 }
 
 func (n *subqueryPlanExpression) Plan() map[string]interface{} {
@@ -1110,6 +1194,13 @@ func (n *betweenOpPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeBool()
 }
 
+func (n *betweenOpPlanExpression) String() string {
+	if n.op == parser.BETWEEN {
+		return fmt.Sprintf("between %s and %s", n.lhs.String(), n.rhs.String())
+	}
+	return fmt.Sprintf("not between %s and %s", n.lhs.String(), n.rhs.String())
+}
+
 func (n *betweenOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -1127,7 +1218,7 @@ func (n *betweenOpPlanExpression) Children() []types.PlanExpression {
 }
 
 func (n *betweenOpPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	if len(children) != 1 {
+	if len(children) != 2 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
 	return newBetweenOpPlanExpression(children[0], n.op, children[1]), nil
@@ -1317,6 +1408,17 @@ func (n *inOpPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeBool()
 }
 
+func (n *inOpPlanExpression) String() string {
+	s := n.lhs.String()
+	if n.op == parser.NOTIN {
+		s += " not "
+	}
+	s += " in ("
+	s += n.rhs.String()
+	s += ")"
+	return s
+}
+
 func (n *inOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -1335,7 +1437,7 @@ func (n *inOpPlanExpression) Children() []types.PlanExpression {
 }
 
 func (n *inOpPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	if len(children) != 1 {
+	if len(children) != 2 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
 	return newInOpPlanExpression(children[0], n.op, children[1]), nil
@@ -1373,6 +1475,17 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 
 func (n *callPlanExpression) Type() parser.ExprDataType {
 	return n.dataType
+}
+
+func (n *callPlanExpression) String() string {
+	args := ""
+	for idx, arg := range n.args {
+		if idx > 0 {
+			args += ", "
+		}
+		args += arg.String()
+	}
+	return fmt.Sprintf("%s(%s)", n.name, args)
 }
 
 func (n *callPlanExpression) Plan() map[string]interface{} {
@@ -1425,6 +1538,10 @@ func (n *aliasPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 // returns the type of the expression
 func (n *aliasPlanExpression) Type() parser.ExprDataType {
 	return n.expr.Type()
+}
+
+func (n *aliasPlanExpression) String() string {
+	return fmt.Sprintf("%s as %s", n.expr.String(), n.aliasName)
 }
 
 func (n *aliasPlanExpression) Plan() map[string]interface{} {
@@ -1513,6 +1630,13 @@ func (n *qualifiedRefPlanExpression) Type() parser.ExprDataType {
 	return n.dataType
 }
 
+func (n *qualifiedRefPlanExpression) String() string {
+	if len(n.tableName) > 0 {
+		return fmt.Sprintf("%s.%s", n.tableName, n.columnName)
+	}
+	return n.columnName
+}
+
 func (n *qualifiedRefPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -1571,6 +1695,10 @@ func (n *variableRefPlanExpression) Type() parser.ExprDataType {
 	return n.dataType
 }
 
+func (n *variableRefPlanExpression) String() string {
+	return fmt.Sprintf("@%s", n.name)
+}
+
 func (n *variableRefPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -1600,6 +1728,10 @@ func (n *nullLiteralPlanExpression) Evaluate(currentRow []interface{}) (interfac
 
 func (n *nullLiteralPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeVoid()
+}
+
+func (n *nullLiteralPlanExpression) String() string {
+	return "null"
 }
 
 func (n *nullLiteralPlanExpression) Plan() map[string]interface{} {
@@ -1634,6 +1766,10 @@ func (n *intLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface
 
 func (n *intLiteralPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeInt()
+}
+
+func (n *intLiteralPlanExpression) String() string {
+	return fmt.Sprintf("%d", n.value)
 }
 
 func (n *intLiteralPlanExpression) Plan() map[string]interface{} {
@@ -1678,6 +1814,10 @@ func (n *floatLiteralPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeDecimal(int64(scale))
 }
 
+func (n *floatLiteralPlanExpression) String() string {
+	return n.value
+}
+
 func (n *floatLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -1711,6 +1851,10 @@ func (n *boolLiteralPlanExpression) Evaluate(currentRow []interface{}) (interfac
 
 func (n *boolLiteralPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeBool()
+}
+
+func (n *boolLiteralPlanExpression) String() string {
+	return fmt.Sprintf("%v", n.value)
 }
 
 func (n *boolLiteralPlanExpression) Plan() map[string]interface{} {
@@ -1748,6 +1892,10 @@ func (n *dateLiteralPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeTimestamp()
 }
 
+func (n *dateLiteralPlanExpression) String() string {
+	return n.value.Format(time.RFC3339Nano)
+}
+
 func (n *dateLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -1781,6 +1929,10 @@ func (n *stringLiteralPlanExpression) Evaluate(currentRow []interface{}) (interf
 
 func (n *stringLiteralPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeString()
+}
+
+func (n *stringLiteralPlanExpression) String() string {
+	return fmt.Sprintf("'%s'", n.value)
 }
 
 func (n *stringLiteralPlanExpression) Plan() map[string]interface{} {
@@ -2006,6 +2158,10 @@ func (n *castPlanExpression) Type() parser.ExprDataType {
 	return n.targetType
 }
 
+func (n *castPlanExpression) String() string {
+	return fmt.Sprintf("cast(%s as %s)", n.lhs.String(), n.targetType.TypeName())
+}
+
 func (n *castPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -2046,6 +2202,17 @@ func (n *exprListPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeVoid()
 }
 
+func (n *exprListPlanExpression) String() string {
+	var s string
+	for idx, expr := range n.exprs {
+		if idx > 0 {
+			s += ", "
+		}
+		s += expr.String()
+	}
+	return fmt.Sprintf("(%s)", s)
+}
+
 func (n *exprListPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
@@ -2062,7 +2229,10 @@ func (n *exprListPlanExpression) Children() []types.PlanExpression {
 }
 
 func (n *exprListPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != len(n.exprs) {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newExprListExpression(children), nil
 }
 
 // exprSetLiteralPlanExpression is a set literal
@@ -2120,6 +2290,17 @@ func (n *exprSetLiteralPlanExpression) Evaluate(currentRow []interface{}) (inter
 
 func (n *exprSetLiteralPlanExpression) Type() parser.ExprDataType {
 	return n.dataType
+}
+
+func (n *exprSetLiteralPlanExpression) String() string {
+	var members string
+	for idx, m := range n.members {
+		if idx > 0 {
+			members += ", "
+		}
+		members += m.String()
+	}
+	return fmt.Sprintf("[%s]", members)
 }
 
 func (n *exprSetLiteralPlanExpression) Plan() map[string]interface{} {
@@ -2190,6 +2371,17 @@ func (n *exprTupleLiteralPlanExpression) Evaluate(currentRow []interface{}) (int
 
 func (n *exprTupleLiteralPlanExpression) Type() parser.ExprDataType {
 	return n.dataType
+}
+
+func (n *exprTupleLiteralPlanExpression) String() string {
+	members := ""
+	for idx, m := range n.members {
+		if idx > 0 {
+			members += ", "
+		}
+		members += m.String()
+	}
+	return fmt.Sprintf("{%s}", members)
 }
 
 func (n *exprTupleLiteralPlanExpression) Plan() map[string]interface{} {

@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
@@ -24,6 +25,8 @@ const (
 
 // PlanExpression is an expression node for an execution plan
 type PlanExpression interface {
+	fmt.Stringer
+
 	// evaluates expression based on current row
 	Evaluate(currentRow []interface{}) (interface{}, error)
 
@@ -50,6 +53,8 @@ type AggregationBuffer interface {
 
 // Interface to an expression that is a an aggregate
 type Aggregable interface {
+	fmt.Stringer
+
 	NewBuffer() (AggregationBuffer, error)
 	AggType() AggregateFunctionType
 	AggExpression() PlanExpression

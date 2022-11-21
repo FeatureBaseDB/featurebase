@@ -8,10 +8,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/featurebasedb/featurebase/v3/errors"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 //TODO(pok) push order by down as far as possible
@@ -41,15 +40,12 @@ var optimizerFunctions = []OptimizerFunc{
 	// take the join out and use the appropriate PQL operator instead
 	tryToRewriteSubtableJoins,
 
+	// update the columnIdx for all the qualified references in various operators
+	fixFieldRefs,
+
 	// update the columnIdx for all the references in the projections
 	// based on the child operator for a projection
-	fixGroupByProjections,
-
-	// update the columnIdx for all the references in joins
-	fixJoinFieldRefs,
-
-	// update the columnIdx for all the references in group bys
-	fixGroupByFieldRefs,
+	fixProjectionReferences,
 
 	// if the query has one TableScanOperator then push the top
 	// expression down into that operator
@@ -64,12 +60,12 @@ type OptimizerScope struct {
 // optimizePlan takes a plan from the compiler and executes a series of transforms on it to optimize it
 func (p *ExecutionPlanner) optimizePlan(ctx context.Context, plan types.PlanOperator) (types.PlanOperator, error) {
 
-	//log.Println("================================================================================")
-	//log.Println("plan pre-optimzation")
-	//jplan := plan.Plan()
-	//a, _ := json.MarshalIndent(jplan, "", "    ")
-	//log.Println(string(a))
-	//log.Println("--------------------------------------------------------------------------------")
+	// log.Println("================================================================================")
+	// log.Println("plan pre-optimzation")
+	// jplan := plan.Plan()
+	// a, _ := json.MarshalIndent(jplan, "", "    ")
+	// log.Println(string(a))
+	// log.Println("--------------------------------------------------------------------------------")
 
 	var err error
 	var result = plan
@@ -79,6 +75,14 @@ func (p *ExecutionPlanner) optimizePlan(ctx context.Context, plan types.PlanOper
 			return nil, err
 		}
 	}
+
+	// log.Println("================================================================================")
+	// log.Println("plan ppst-optimzation")
+	// jplan = plan.Plan()
+	// a, _ = json.MarshalIndent(jplan, "", "    ")
+	// log.Println(string(a))
+	// log.Println("--------------------------------------------------------------------------------")
+
 	return result, nil
 }
 
@@ -297,6 +301,7 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 	}
 	filters.markFiltersHandled(tableFilters...)
 
+	// fix the field refs
 	tableFilters, _, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), tableFilters...)
 	if err != nil {
 		return nil, true, err
@@ -320,6 +325,7 @@ func pushdownFiltersToAboveRelation(ctx context.Context, a *ExecutionPlanner, ta
 	if tableFilters := filters.availableFiltersForTable(table.Name()); len(tableFilters) > 0 {
 		filters.markFiltersHandled(tableFilters...)
 
+		// fix the field refs
 		handled, _, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), tableFilters...)
 		if err != nil {
 			return nil, true, err
@@ -355,24 +361,16 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 				if err != nil {
 					return nil, true, err
 				}
-				n, sameFix, err := fixFieldRefIndexesForOperator(ctx, a, n, scope)
-				if err != nil {
-					return nil, true, err
-				}
-				return n, samePred && sameFix, nil
+				return n, samePred, nil
 
 			case *PlanOpRelAlias, *PlanOpPQLTableScan:
 				n, samePred, err := pushdownFiltersToFilterableRelations(ctx, a, node, scope, filters, tableAliases)
 				if err != nil {
 					return nil, true, err
 				}
-				n, sameFix, err := fixFieldRefIndexesForOperator(ctx, a, n, scope)
-				if err != nil {
-					return nil, true, err
-				}
-				return n, samePred && sameFix, nil
+				return n, samePred, nil
 			default:
-				return fixFieldRefIndexesForOperator(ctx, a, node, scope)
+				return node, true, nil
 			}
 		})
 	}
@@ -388,26 +386,18 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 				if same {
 					return n, true, nil
 				}
-				n, _, err = fixFieldRefIndexesForOperator(ctx, a, n, scope)
-				if err != nil {
-					return nil, true, err
-				}
 				return n, false, nil
 			case *PlanOpRelAlias, *PlanOpPQLTableScan:
-				table, same, err := pushdownFiltersToAboveRelation(ctx, a, node, scope, filters)
+				_, same, err := pushdownFiltersToAboveRelation(ctx, a, node, scope, filters)
 				if err != nil {
 					return nil, true, err
 				}
 				if same {
 					return node, true, nil
 				}
-				node, _, err = fixFieldRefIndexesForOperator(ctx, a, table, scope)
-				if err != nil {
-					return nil, true, err
-				}
 				return node, false, nil
 			default:
-				return fixFieldRefIndexesForOperator(ctx, a, node, scope)
+				return node, true, nil
 			}
 		})
 	}
@@ -730,23 +720,30 @@ func areAggregablesEqual(lhs types.Aggregable, rhs types.Aggregable) bool {
 	return false
 }
 
-func fixGroupByProjections(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
+// fixes references for a projection op depending on child
+func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
 	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
 		switch n := node.(type) {
 		case *PlanOpProjection:
 			switch childOp := n.ChildOp.(type) {
+
 			case *PlanOpGroupBy:
 				//PlanOpGroupBy's iterator returns group by exprs, then aggregates in the order they appear
-
+				childSchema := childOp.Schema()
 				for idx, pj := range n.Projections {
 					expr, _, err := TransformExpr(pj, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
-						switch e.(type) {
+						switch thisAggregate := e.(type) {
 						case types.Aggregable:
 							// if we have a Aggregable, the AggExpression() will be a qualified ref
 							// given we are in the context of a PlanOpProjection with a PlanOpGroupBy
 							// we can use the ordinal position of the projection as the column index
-							ae := newQualifiedRefPlanExpression("", "", idx, e.Type())
-							return ae, false, nil
+							for idx, sc := range childSchema {
+								if strings.EqualFold(thisAggregate.String(), sc.ColumnName) {
+									ae := newQualifiedRefPlanExpression("", "", idx, e.Type())
+									return ae, false, nil
+								}
+							}
+							return nil, true, sql3.NewErrColumnNotFound(0, 0, thisAggregate.String())
 						default:
 							return e, true, nil
 						}
@@ -893,40 +890,75 @@ func fixGroupByProjections(ctx context.Context, a *ExecutionPlanner, n types.Pla
 					n.Projections[idx] = expr
 				}
 				return n, false, nil
+
+			// everything else that can be a child of projection
+			case *PlanOpRelAlias, *PlanOpFilter, *PlanOpPQLTableScan, *PlanOpNestedLoops:
+				exprs, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, childOp.Schema(), n.Projections...)
+				if err != nil {
+					return n, true, err
+				}
+				n.Projections = exprs
+				return n, same, err
+
+			default:
+				return n, true, nil
 			}
-			return n, true, nil
+
 		default:
 			return n, true, nil
 		}
 	})
 }
 
-func fixJoinFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
+func fixFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
 	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-		switch n := node.(type) {
+		switch thisNode := node.(type) {
+		case *PlanOpFilter:
+			schema := thisNode.Schema()
+			expressions := thisNode.Expressions()
+			fixed, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, expressions...)
+			if err != nil {
+				return nil, true, err
+			}
+			newNode, err := thisNode.WithUpdatedExpressions(fixed...)
+			if err != nil {
+				return nil, true, err
+			}
+			return newNode, same, nil
+
 		case *PlanOpNestedLoops:
-			_, _, err := fixFieldRefIndexesForOperator(ctx, a, n, scope)
+			schema := thisNode.Schema()
+			expressions := thisNode.Expressions()
+			fixed, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, expressions...)
 			if err != nil {
 				return nil, true, err
 			}
-			return n, true, nil
-		default:
-			return n, true, nil
-		}
-	})
-}
+			newNode, err := thisNode.WithUpdatedExpressions(fixed...)
+			if err != nil {
+				return nil, true, err
+			}
+			return newNode, same, nil
 
-func fixGroupByFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
-	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-		switch n := node.(type) {
 		case *PlanOpGroupBy:
-			_, _, err := fixFieldRefIndexesForOperator(ctx, a, n, scope)
+			schema := thisNode.ChildOp.Schema()
+			aggregateExpressions := thisNode.Aggregates
+			fixedAggregateExpressions, aggregateSame, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, aggregateExpressions...)
 			if err != nil {
 				return nil, true, err
 			}
-			return n, true, nil
+
+			groupByExpressions := thisNode.GroupByExprs
+			fixedGroupByExpressions, groupBySame, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, groupByExpressions...)
+			if err != nil {
+				return nil, true, err
+			}
+
+			newNode := NewPlanOpGroupBy(fixedAggregateExpressions, fixedGroupByExpressions, thisNode.ChildOp)
+			newNode.warnings = append(newNode.warnings, thisNode.warnings...)
+			return newNode, aggregateSame && groupBySame, nil
+
 		default:
-			return n, true, nil
+			return node, true, nil
 		}
 	})
 }
@@ -1015,24 +1047,35 @@ func getNestedLoopOperators(ctx context.Context, a *ExecutionPlanner, n types.Pl
 
 func fixFieldRefIndexes(ctx context.Context, scope *OptimizerScope, a *ExecutionPlanner, schema types.Schema, exp types.PlanExpression) (types.PlanExpression, bool, error) {
 	return TransformExpr(exp, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
-		switch e := e.(type) {
+		switch typedExpr := e.(type) {
 		case *qualifiedRefPlanExpression:
 			for i, col := range schema {
 				newIndex := i
-				if e.Name() == col.ColumnName && e.tableName == col.RelationName {
-					if newIndex != e.columnIndex {
-						// update the column index
-						return newQualifiedRefPlanExpression(e.tableName, e.columnName, newIndex, e.dataType), false, nil
+				if strings.EqualFold(typedExpr.Name(), col.ColumnName) {
+					if len(typedExpr.tableName) > 0 { // do we have a qualifier?
+						if typedExpr.tableName == col.RelationName || typedExpr.tableName == col.AliasName {
+							if newIndex != typedExpr.columnIndex {
+								// update the column index
+								return newQualifiedRefPlanExpression(typedExpr.tableName, typedExpr.columnName, newIndex, typedExpr.dataType), false, nil
+							}
+							return e, true, nil
+						}
+					} else { // no qualifier
+						if newIndex != typedExpr.columnIndex {
+							// update the column index
+							return newQualifiedRefPlanExpression(typedExpr.tableName, typedExpr.columnName, newIndex, typedExpr.dataType), false, nil
+						}
+						return e, true, nil
 					}
-					return e, true, nil
 				}
 			}
-			return nil, true, sql3.NewErrColumnNotFound(0, 0, e.Name())
+			return nil, true, sql3.NewErrColumnNotFound(0, 0, typedExpr.Name())
 		}
 		return e, true, nil
 	})
 }
 
+// for a list of expressions and an operator schema, fix the references for any qualifiedRef expressions
 func fixFieldRefIndexesOnExpressions(ctx context.Context, scope *OptimizerScope, a *ExecutionPlanner, schema types.Schema, expressions ...types.PlanExpression) ([]types.PlanExpression, bool, error) {
 	var result []types.PlanExpression
 	var res types.PlanExpression
@@ -1056,57 +1099,4 @@ func fixFieldRefIndexesOnExpressions(ctx context.Context, scope *OptimizerScope,
 		return result, false, nil
 	}
 	return expressions, true, nil
-}
-
-func fixFieldRefIndexesForOperator(ctx context.Context, a *ExecutionPlanner, node types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
-	if _, ok := node.(types.ContainsExpressions); !ok {
-		return node, true, nil
-	}
-
-	var schemas []types.Schema
-	for _, child := range node.Children() {
-		schemas = append(schemas, child.Schema())
-	}
-
-	if len(schemas) < 1 {
-		return node, true, nil
-	}
-
-	n, sameC, err := TransformPlanOpExprsWithPlanOp(node, func(_ types.PlanOperator, e types.PlanExpression) (types.PlanExpression, bool, error) {
-		for _, schema := range schemas {
-			fixed, same, err := fixFieldRefIndexes(ctx, scope, a, schema, e)
-			if err == nil {
-				return fixed, same, nil
-			}
-
-			if errors.Is(err, sql3.ErrColumnNotFound) {
-				continue
-			}
-			return nil, true, err
-		}
-
-		return e, true, nil
-	})
-
-	if err != nil {
-		return nil, true, err
-	}
-
-	sameJ := true
-	var cond types.PlanExpression
-	switch j := n.(type) {
-	case *PlanOpNestedLoops:
-		cond, sameJ, err = fixFieldRefIndexes(ctx, scope, a, j.Schema(), j.cond)
-		if err != nil {
-			return nil, true, err
-		}
-		if !sameJ {
-			n, err = j.WithUpdatedExpressions(cond)
-			if err != nil {
-				return nil, true, err
-			}
-		}
-	}
-
-	return n, sameC && sameJ, nil
 }

@@ -19,6 +19,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestPlanner_Misc(t *testing.T) {
+
+	d, err := parser.StringToDecimal("12.345678")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.True(t, d.EqualTo(pql.NewDecimal(12345678, 6)))
+
+	d = parser.FloatToDecimalWithScale(12.345678, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.True(t, d.EqualTo(pql.NewDecimal(12345678, 6)))
+}
+
 func TestPlanner_Show(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()

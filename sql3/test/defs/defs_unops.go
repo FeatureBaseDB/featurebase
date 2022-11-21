@@ -1,6 +1,10 @@
 package defs
 
-import "time"
+import (
+	"time"
+
+	"github.com/molecula/featurebase/v3/pql"
+)
 
 var unaryOpExprWithInt = TableTest{
 	Table: tbl(
@@ -157,7 +161,7 @@ var unaryOpExprWithDecimal = TableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			ExpRows: rows(
-				row(float64(-12.34)),
+				row(pql.NewDecimal(-1234, 2)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -175,7 +179,7 @@ var unaryOpExprWithDecimal = TableTest{
 				hdr("", fldTypeDecimal2),
 			),
 			ExpRows: rows(
-				row(float64(12.34)),
+				row(pql.NewDecimal(1234, 2)),
 			),
 			Compare: CompareExactUnordered,
 		},
