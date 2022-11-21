@@ -148,7 +148,6 @@ func (a *Auth) refreshToken(access, refresh string) (string, string, error) {
 			"client_secret": {a.oAuthConfig.ClientSecret},
 		},
 	)
-
 	if err != nil {
 		return "", "", errors.Wrap(err, "refreshing token")
 	}
@@ -367,7 +366,7 @@ func (a *Auth) SetCookie(w http.ResponseWriter, access, refresh string, expiry t
 	return nil
 }
 
-func (a *Auth) SetGRPCMetadata(ctx context.Context, md metadata.MD, access, refresh string) error {
+func (a *Auth) SetGRPCMetadata(ctx context.Context, md metadata.MD, access, refresh string) (context.Context, error) {
 	mCookies := map[string]string{}
 	if c, ok := md["cookie"]; ok {
 		for _, cookie := range c {
@@ -385,7 +384,7 @@ func (a *Auth) SetGRPCMetadata(ctx context.Context, md metadata.MD, access, refr
 	}
 
 	md["cookie"] = cookies
-	return grpc.SetHeader(ctx, md)
+	return metadata.NewIncomingContext(ctx, md), grpc.SetHeader(ctx, md)
 }
 
 func decodeHex(hexstr string) ([]byte, error) {

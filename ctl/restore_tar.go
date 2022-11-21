@@ -123,7 +123,6 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			primary = node
 			break
 		}
-
 	}
 	if primary == nil {
 		return errors.New("no primary")
@@ -190,6 +189,37 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			if err := g.Wait(); err != nil {
 				return err
 			}
+		case "dataframe":
+			shard, err := strconv.ParseUint(record[3], 10, 64)
+			if err != nil {
+				return err
+			}
+			fragmentNodes, err := cmd.client.FragmentNodes(ctx, indexName, shard)
+			if err != nil {
+				return fmt.Errorf("cannot determine fragmentNodes: %w", err)
+			} else if len(fragmentNodes) == 0 {
+				return fmt.Errorf("no fragmentNodes available")
+			}
+
+			shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
+			if err != nil {
+				return err
+			}
+			g, _ := errgroup.WithContext(ctx)
+			for _, node := range fragmentNodes {
+				node := node
+				g.Go(func() error {
+					client := &gohttp.Client{}
+					rd := bytes.NewReader(shardBytes)
+					logger.Printf("dataframe shard %v %v", shard, indexName)
+					url := node.URI.Path(fmt.Sprintf("/internal/dataframe/restore/%v/%v", indexName, shard))
+					_, err = client.Post(url, "application/octet-stream", rd)
+					return err
+				})
+			}
+			if err := g.Wait(); err != nil {
+				return err
+			}
 		case "translate":
 			partitionID, err := strconv.Atoi(record[3])
 			logger.Printf("column keys %v (%v)", indexName, partitionID)
@@ -221,13 +251,13 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			}
 
 		case "attributes":
-			//skip
+			// skip
 		case "fields":
 			fieldName := record[3]
 			switch action := record[4]; action {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
-				//needs to go to all nodes
+				// needs to go to all nodes
 				shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
 				if err != nil {
 					return err
@@ -248,7 +278,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 					return err
 				}
 			case "attributes":
-			//skip
+			// skip
 			default:
 				return fmt.Errorf("unknown restore action: %v", action)
 			}

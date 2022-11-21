@@ -3,17 +3,27 @@
 package proto
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/apache/arrow/go/v10/arrow"
+	"github.com/apache/arrow/go/v10/arrow/memory"
+	"github.com/apache/arrow/go/v10/parquet"
+	"github.com/apache/arrow/go/v10/parquet/file"
+	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	"github.com/gogo/protobuf/proto"
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	pnet "github.com/featurebasedb/featurebase/v3/net"
-	"github.com/featurebasedb/featurebase/v3/pb"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/gomem/gomem/pkg/dataframe"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/disco"
+	pnet "github.com/molecula/featurebase/v3/net"
+	"github.com/molecula/featurebase/v3/pb"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -22,8 +32,10 @@ type Serializer struct {
 	RoaringRows bool
 }
 
-var DefaultSerializer = Serializer{}
-var RoaringSerializer = Serializer{RoaringRows: true}
+var (
+	DefaultSerializer = Serializer{}
+	RoaringSerializer = Serializer{RoaringRows: true}
+)
 
 // Marshal turns pilosa messages into protobuf serialized bytes.
 func (s Serializer) Marshal(m pilosa.Message) ([]byte, error) {
@@ -363,6 +375,8 @@ func (s Serializer) encodeToProto(m pilosa.Message) proto.Message {
 		return s.encodeTransactionMessage(mt)
 	case *pilosa.AtomicRecord:
 		return s.encodeAtomicRecord(mt)
+	case *pilosa.DeleteDataframeMessage:
+		return s.encodeDeleteDataframeMessage(mt)
 	}
 	return nil
 }
@@ -376,6 +390,7 @@ func (s Serializer) encodeBlockDataRequest(m *pilosa.BlockDataRequest) *pb.Block
 		Block: m.Block,
 	}
 }
+
 func (s Serializer) encodeBlockDataResponse(m *pilosa.BlockDataResponse) *pb.BlockDataResponse {
 	return &pb.BlockDataResponse{
 		RowIDs:    m.RowIDs,
@@ -537,6 +552,12 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryRespon
 			resp.Results[i].DistinctTimestamp = s.encodeDistinctTimestamp(result)
 		case nil:
 			resp.Results[i].Type = queryResultTypeNil
+		case *dataframe.DataFrame:
+			resp.Results[i].Type = queryResultTypeDataFrame
+			resp.Results[i].DataFrame = s.encodeDataFrame(result)
+		case arrow.Table:
+			resp.Results[i].Type = queryResultTypeArrowTable
+			resp.Results[i].ArrowTable = s.encodeArrowTable(result)
 		default:
 			panic(fmt.Errorf("unknown type: %T", m.Results[i]))
 		}
@@ -883,6 +904,12 @@ func (s Serializer) encodeTransactionDeadline(deadline time.Time) int64 {
 
 func (s Serializer) encodeTransactionStats(stats pilosa.TransactionStats) *pb.TransactionStats {
 	return &pb.TransactionStats{}
+}
+
+func (s Serializer) encodeDeleteDataframeMessage(m *pilosa.DeleteDataframeMessage) *pb.DeleteDataframeMessage {
+	return &pb.DeleteDataframeMessage{
+		Index: m.Index,
+	}
 }
 
 func (s Serializer) decodeSchema(sc *pb.Schema, m *pilosa.Schema) {
@@ -1310,6 +1337,8 @@ const (
 	queryResultTypeExtractedIDMatrix
 	queryResultTypeExtractedTable
 	queryResultTypeDistinctTimestamp
+	queryResultTypeDataFrame
+	queryResultTypeArrowTable
 )
 
 func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
@@ -1348,6 +1377,10 @@ func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
 		return s.decodeRowMatrix(pb.RowMatrix)
 	case queryResultTypeDistinctTimestamp:
 		return s.decodeDistinctTimestamp(pb.DistinctTimestamp)
+	case queryResultTypeDataFrame:
+		return s.decodeDataFrame(pb.DataFrame)
+	case queryResultTypeArrowTable:
+		return s.decodeArrowTable(pb.ArrowTable)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1563,6 +1596,63 @@ func (s Serializer) decodeDecimalStruct(pb *pb.Decimal) *pql.Decimal {
 	d := &pql.Decimal{}
 	s.decodeDecimal(pb, d)
 	return d
+}
+
+func (s Serializer) decodeDataFrame(pdf *pb.DataFrame) *dataframe.DataFrame {
+	pool := memory.NewGoAllocator() // TODO(twg) this should probably be asingletoon somwhere
+
+	df, _ := dataframe.NewFrameFromArrowBytes(pdf.Data, pool)
+	return df
+}
+
+func (s Serializer) decodeDeleteDataframeMessage(pb *pb.DeleteDataframeMessage, m *pilosa.DeleteDataframeMessage) {
+	m.Index = pb.Index
+}
+
+func (s Serializer) encodeDataFrame(df *dataframe.DataFrame) *pb.DataFrame {
+	if df == nil {
+		return &pb.DataFrame{} // Generated proto code doesn't like a nil Row.
+	}
+	buff, err := df.ToBytes()
+	if err != nil {
+		panic(err)
+	}
+	// ugh hate having to swallow error here
+	return &pb.DataFrame{
+		Data: buff,
+	}
+}
+
+func (s Serializer) encodeArrowTable(table arrow.Table) *pb.ArrowTable {
+	props := parquet.NewWriterProperties(parquet.WithDictionaryDefault(false))
+	arrProps := pqarrow.DefaultWriterProps()
+	var b bytes.Buffer
+	w := bufio.NewWriter(&b)
+	chunkSize := int64(65536) // TODO(twg) 2022/11/09 default 64k?
+	pqarrow.WriteTable(table, w, chunkSize, props, arrProps)
+	w.Flush()
+	return &pb.ArrowTable{
+		Data: b.Bytes(),
+	}
+}
+
+func (s Serializer) decodeArrowTable(table *pb.ArrowTable) arrow.Table {
+	mem := memory.NewGoAllocator()   // TODO(twg) this should probably be asingletoon somwhere
+	r := bytes.NewReader(table.Data) // TODO(twg) 2022/11/09 I hate snarfing errors
+	pf, err := file.NewParquetReader(r)
+	if err != nil {
+		vprint.VV("e1 %v", err)
+	}
+	reader, err := pqarrow.NewFileReader(pf, pqarrow.ArrowReadProperties{}, mem)
+	if err != nil {
+		vprint.VV("e2 %v", err)
+	}
+	tbl, err := reader.ReadTable(context.Background())
+	if err != nil {
+		vprint.VV("e3 %v", err)
+	}
+	vprint.VV("decodeArrowTable %d", tbl.NumRows())
+	return tbl
 }
 
 func (s Serializer) encodeSignedRow(r pilosa.SignedRow) *pb.SignedRow {

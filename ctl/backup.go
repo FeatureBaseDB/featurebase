@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -316,6 +317,14 @@ func (cmd *BackupCommand) backupShard(ctx context.Context, indexName string, sha
 
 	for _, node := range nodes {
 		if e := cmd.backupShardNode(ctx, indexName, shard, node); e == nil {
+			break
+		} else if err == nil {
+			err = e // save first error, try next node
+		}
+	}
+
+	for _, node := range nodes {
+		if e := cmd.backupShardDataframe(ctx, indexName, shard, node); e == nil {
 			return nil // backup ok, exit
 		} else if err == nil {
 			err = e // save first error, try next node
@@ -520,5 +529,42 @@ func (cmd *BackupCommand) syncDir(path string) error {
 		return fmt.Errorf("syncing directory: %w", err)
 	}
 
+	return f.Close()
+}
+
+func (cmd *BackupCommand) backupShardDataframe(ctx context.Context, indexName string, shard uint64, node *disco.Node) error {
+	logger := cmd.Logger()
+	logger.Printf("backing up dataframe shard: index=%q shard=%d", indexName, shard)
+
+	client := pilosa.NewInternalClientFromURI(&node.URI,
+		pilosa.GetHTTPClient(cmd.tlsConfig, pilosa.ClientResponseHeaderTimeoutOption(cmd.HeaderTimeout)),
+	)
+
+	resp, err := client.GetDataframeShard(ctx, indexName, shard)
+	// no error if doesn't exist
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 404 {
+		// no error if not present server maynot have it turned on
+		return nil
+	}
+	filename := filepath.Join(cmd.OutputDir, "indexes", indexName, "dataframe", fmt.Sprintf("%04d", shard))
+	if err := os.MkdirAll(filepath.Dir(filename), 0o750); err != nil {
+		return err
+	}
+
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return err
+	} else if err := cmd.syncFile(f); err != nil {
+		return err
+	}
 	return f.Close()
 }

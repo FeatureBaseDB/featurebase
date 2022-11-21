@@ -68,7 +68,6 @@ type Index struct {
 // NewIndex returns an existing (but possibly empty) instance of
 // Index at path. It will not erase any prior content.
 func NewIndex(holder *Holder, path, name string) (*Index, error) {
-
 	// Emulate what the spf13/cobra does, letting env vars override
 	// the defaults, because we may be under a simple "go test" run where
 	// not all that command line machinery has been spun up.
@@ -108,6 +107,11 @@ func (i *Index) CreatedAt() int64 {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return i.createdAt
+}
+
+// DataframePath returns the path of the dataframes specific to an index
+func (i *Index) DataframesPath() string {
+	return filepath.Join(i.path, DataframesDir)
 }
 
 // Name returns name of the index.
@@ -194,9 +198,16 @@ func (i *Index) open(idx *disco.Index) (err error) {
 	defer i.mu.Unlock()
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.FieldsPath())
-	if err := os.MkdirAll(i.FieldsPath(), 0750); err != nil {
+	if err := os.MkdirAll(i.FieldsPath(), 0o750); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
+
+	// Ensure the dataframes path exists
+	i.holder.Logger.Debugf("ensure dataframes path exists: %s", i.DataframesPath())
+	if err := os.MkdirAll(i.DataframesPath(), 0o750); err != nil {
+		return errors.Wrap(err, "creating dataframes directory")
+	}
+
 	i.closing = make(chan struct{})
 	// fmt.Printf("new channel %p for index %p\n", i.closing, i)
 
@@ -496,7 +507,7 @@ func (i *Index) AvailableShards(localOnly bool) *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for _, f := range i.fields {
-		//b.Union(f.AvailableShards(localOnly))
+		// b.Union(f.AvailableShards(localOnly))
 		b.UnionInPlace(f.AvailableShards(localOnly))
 	}
 
@@ -840,7 +851,6 @@ func (i *Index) UpdateFieldLocal(cfm *CreateFieldMessage, update FieldUpdate) er
 	}
 
 	return nil
-
 }
 
 // createFieldIfNotExists creates the field if it does not already exist in the
@@ -972,6 +982,14 @@ func (i *Index) SetTranslatePartitions(tp dax.VersionedPartitions) {
 	defer i.mu.Unlock()
 
 	i.translatePartitions = tp
+}
+
+// TODO (twg) refine parquet strategy a bit
+func (i *Index) GetDataFramePath(shard uint64) string {
+	path := i.DataframesPath()
+	os.MkdirAll(i.path, 0o750)
+	shardpad := fmt.Sprintf("%04d", shard)
+	return filepath.Join(path, shardpad)
 }
 
 type indexSlice []*Index

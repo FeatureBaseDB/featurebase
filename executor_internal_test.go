@@ -235,7 +235,6 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 			t.Run(fmt.Sprintf("test (#%d):", i), func(t *testing.T) {
 				for j, check := range test.checks {
 					t.Run(fmt.Sprintf("check (#%d):", j), func(t *testing.T) {
-
 						query, err := pql.ParseString(fmt.Sprintf("GroupBy(Rows(a), having=Condition(%s))", check.cond))
 						if err != nil {
 							t.Fatalf("parsing query: %v", err)
@@ -488,7 +487,6 @@ func TestGetSorter(t *testing.T) {
 			if !reflect.DeepEqual(gcs, tst.expGCS) {
 				t.Errorf("exp:\n%+v\ngot:\n%v\n", tst.expGCS, gcs)
 			}
-
 		})
 	}
 }
@@ -516,7 +514,6 @@ func TestGetScaledInt(t *testing.T) {
 	if !reflect.DeepEqual(res, v) {
 		t.Errorf("expected %v, got %v", v, res)
 	}
-
 }
 
 func TestDistinctTimestampUnion(t *testing.T) {

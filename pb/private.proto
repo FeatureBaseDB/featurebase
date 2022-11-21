@@ -270,3 +270,7 @@ message ShardIngestOperations {
 message ShardedIngestRequest {
     map <uint64, ShardIngestOperations> Ops = 1;
 }
+
+message DeleteDataframeMessage {
+	string Index = 1;
+}

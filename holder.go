@@ -41,6 +41,9 @@ const (
 
 	// FieldsDir is the default fields directory used by each index.
 	FieldsDir = "fields"
+
+	// DataframesDir is the directory where we store the dataframe files (currently Apache Arrow)
+	DataframesDir = "dataframes"
 )
 
 func init() {
@@ -427,7 +430,7 @@ func (h *Holder) Open() error {
 	h.closing = make(chan struct{})
 
 	h.Logger.Printf("open holder path: %s", h.path)
-	if err := os.MkdirAll(h.IndexesPath(), 0750); err != nil {
+	if err := os.MkdirAll(h.IndexesPath(), 0o750); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 
@@ -531,7 +534,6 @@ func (h *Holder) Open() error {
 	h.Logger.Printf("open holder: complete")
 
 	return nil
-
 }
 
 func (h *Holder) sendOrSpool(msg Message) error {
@@ -1306,11 +1308,11 @@ func (h *Holder) logStartup() error {
 	time := time.Now().Format(RFC3339NanoFixedWidth)
 	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
 
-	if err := os.MkdirAll(h.path, 0750); err != nil {
+	if err := os.MkdirAll(h.path, 0o750); err != nil {
 		return errors.Wrap(err, "creating data directory")
 	}
 
-	f, err := os.OpenFile(h.path+"/startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	f, err := os.OpenFile(h.path+"/startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return errors.Wrap(err, "opening startup log")
 	}
@@ -1381,7 +1383,6 @@ func (s *holderSyncer) resetTranslationSync() error {
 		return errors.Wrap(err, "initializing translation replication")
 	}
 	return nil
-
 }
 
 ////////////////////////////////////////////////////////////
@@ -1783,4 +1784,35 @@ func decodeCreateFieldMessage(ser Serializer, b []byte) (*CreateFieldMessage, er
 		return nil, errors.Wrap(err, "unmarshaling")
 	}
 	return &cfm, nil
+}
+
+func (h *Holder) DeleteDataframe(name string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Confirm index exists.
+	idx := h.Index(name)
+	if idx == nil {
+		return newNotFoundError(ErrIndexNotFound, name)
+	}
+
+	path := idx.DataframesPath()
+	// Delete dataframe directory.
+	if err := os.RemoveAll(path); err != nil {
+		// There is a rare edge case here: If a cache flush was happening, RemoveAll
+		// can fail because a file gets created, say in a fragment directory, after
+		// RemoveAll has deleted everything it found in the directory, but before
+		// the actual directory is unlinked. In theory, though, this can't happen
+		// twice; by the time we get here, everything was closed, so at most one
+		// more file should get created.
+		err = os.RemoveAll(path)
+		if err != nil {
+			return errors.Wrap(err, "removing directory")
+		}
+	}
+	if err := os.Mkdir(path, 0o750); err != nil {
+		return errors.Wrap(err, "creating dataframe")
+	}
+
+	return nil
 }

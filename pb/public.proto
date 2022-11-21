@@ -164,6 +164,8 @@ message QueryResult {
 	RowMatrix RowMatrix = 15;
 	GroupCounts GroupCounts = 16;
     DistinctTimestamp DistinctTimestamp = 17;
+	DataFrame DataFrame = 18;
+	ArrowTable ArrowTable = 19;
 }
 
 message ImportRequest {
@@ -260,3 +262,11 @@ message GroupCounts{
 	string Aggregate = 1;
 	repeated GroupCount Groups = 2;
 }
+
+message DataFrame{
+	bytes Data =1;
+}
+message ArrowTable{
+	bytes Data =1;
+}
+

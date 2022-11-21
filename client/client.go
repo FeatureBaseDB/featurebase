@@ -7,6 +7,7 @@ package client
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,6 +39,7 @@ import (
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -228,7 +230,6 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	c.maxBackoff = 2 * time.Minute
 	go c.runChangeDetection()
 	return c
-
 }
 
 // NewClient creates a client with the given address, URI, or cluster and options.
@@ -1800,4 +1801,58 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 // in order to satisfy the SchemaManager interface.
 func (c *Client) SetAuthToken(token string) {
 	c.AuthToken = token
+}
+
+// ApplyDataframeChangeset will create or append the existing dataframe
+// if creating, the provided schema will be used
+// if appending, the provided schema will be used to validate against
+// Only one shard can be written to at a time so slight care must be taken
+// Server side locking will prevent writting conflict
+func (c *Client) ApplyDataframeChangeset(indexName string, cr *pilosa.ChangesetRequest, shard uint64) (map[string]interface{}, error) {
+	path := fmt.Sprintf("/index/%s/dataframe/%d", indexName, shard)
+
+	headers := c.augmentHeaders(map[string]string{
+		"Content-Type": "application/octet-stream",
+		"Accept":       "application/json",
+	})
+
+	var buffer bytes.Buffer
+	enc := gob.NewEncoder(&buffer)
+	err := enc.Encode(cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "encoding changesetrequest")
+	}
+	uris, err := c.getURIsForShard(indexName, shard)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting URIs for import")
+	}
+
+	eg := errgroup.Group{}
+	data := buffer.Bytes()
+	for _, uri := range uris {
+		uri := uri
+		eg.Go(func() error {
+			vprint.VV("SENDING: %v", uri)
+			status, body, err := c.doRequest(uri, "POST", path, headers, data)
+			if err != nil {
+				return errors.Wrap(err, "executing request")
+			}
+			if status != http.StatusOK {
+				return errors.Errorf("find dataframe request failed (status: %d): %q", status, string(body))
+			}
+			return nil
+		})
+	}
+	err = eg.Wait()
+
+	//	status, body, err := c.HTTPRequest(http.MethodPost, path, buffer.Bytes(), headers)
+	/*
+		var result map[string]interface{}
+		err = json.Unmarshal(body, &result)
+		if err != nil {
+			return nil, errors.Wrap(err, "unmarshalling response")
+		}
+	*/
+
+	return nil, err
 }
