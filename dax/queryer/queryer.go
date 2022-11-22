@@ -76,13 +76,13 @@ func New(cfg Config) *Queryer {
 	return q
 }
 
-func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.SQLResponse, error) {
+func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.WireQueryResponse, error) {
 	start := time.Now()
 
 	if len(sql) > 0 && sql[0] == '[' {
 		return q.parseAndQueryPQL(ctx, qual, sql)
 	}
-	ret := &featurebase.SQLResponse{}
+	ret := &featurebase.WireQueryResponse{}
 
 	applyExecutionTime := func() {
 		ret.ExecutionTime = time.Since(start).Microseconds()
@@ -133,13 +133,20 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 
 	// Read schema.
 	columns := planOp.Schema()
-	schema := featurebase.SQLSchema{
-		Fields: make([]*featurebase.SQLField, len(columns)),
+	schema := featurebase.WireQuerySchema{
+		Fields: make([]*featurebase.WireQueryField, len(columns)),
 	}
 	for i, col := range columns {
-		schema.Fields[i] = &featurebase.SQLField{
-			Name: col.ColumnName,
-			Type: col.Type.TypeName(),
+		btype, err := dax.BaseTypeFromString(col.Type.TypeName())
+		if err != nil {
+			applyError(errors.Wrap(err, "getting fieldtype from string"))
+			return ret, nil
+		}
+		schema.Fields[i] = &featurebase.WireQueryField{
+			Name:     dax.FieldName(col.ColumnName),
+			Type:     col.Type.TypeDescription(),
+			BaseType: btype,
+			TypeInfo: col.Type.TypeInfo(),
 		}
 	}
 
@@ -161,7 +168,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	return ret, nil
 }
 
-func (q *Queryer) parseAndQueryPQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.SQLResponse, error) {
+func (q *Queryer) parseAndQueryPQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.WireQueryResponse, error) {
 	var i int
 	for i = 1; sql[i] != ']'; i++ {
 		if i == len(sql)-1 {
@@ -175,7 +182,7 @@ func (q *Queryer) parseAndQueryPQL(ctx context.Context, qual dax.TableQualifier,
 	return q.QueryPQL(ctx, qual, dax.TableName(table), query)
 }
 
-func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table dax.TableName, pql string) (*featurebase.SQLResponse, error) {
+func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
 	// Parse the pql into a pql.Query containing []pql.Call.
 	qry, err := featurebase_pql.NewParser(strings.NewReader(pql)).Parse()
 	if err != nil {
@@ -201,7 +208,7 @@ func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table d
 	return PQLResultToQueryResult(results.Results[0])
 }
 
-func PQLResultToQueryResult(pqlResult interface{}) (*featurebase.SQLResponse, error) {
+func PQLResultToQueryResult(pqlResult interface{}) (*featurebase.WireQueryResponse, error) {
 	toTabler, err := server.ToTablerWrapper(pqlResult)
 	if err != nil {
 		return nil, errors.Wrap(err, "wrapping as type ToTabler")
@@ -214,13 +221,17 @@ func PQLResultToQueryResult(pqlResult interface{}) (*featurebase.SQLResponse, er
 	return tableResponseToQueryResult(table)
 }
 
-func tableResponseToQueryResult(t *fbproto.TableResponse) (*featurebase.SQLResponse, error) {
-	qr := &featurebase.SQLResponse{
-		Schema: featurebase.SQLSchema{Fields: make([]*featurebase.SQLField, len(t.Headers))},
+func tableResponseToQueryResult(t *fbproto.TableResponse) (*featurebase.WireQueryResponse, error) {
+	qr := &featurebase.WireQueryResponse{
+		Schema: featurebase.WireQuerySchema{Fields: make([]*featurebase.WireQueryField, len(t.Headers))},
 		Data:   make([][]interface{}, len(t.Rows)),
 	}
 	for i, ci := range t.Headers {
-		qr.Schema.Fields[i] = &featurebase.SQLField{Name: ci.Name, Type: datatypeToType(ci.Datatype)}
+		qr.Schema.Fields[i] = &featurebase.WireQueryField{
+			Name:     dax.FieldName(ci.Name),
+			Type:     string(datatypeToBaseType(ci.Datatype)), // TODO(tlt): this doesn't contain typeInfo
+			BaseType: datatypeToBaseType(ci.Datatype),
+		}
 	}
 
 	for i, row := range t.Rows {
@@ -230,27 +241,27 @@ func tableResponseToQueryResult(t *fbproto.TableResponse) (*featurebase.SQLRespo
 	return qr, nil
 }
 
-func datatypeToType(ciDatatype string) string {
+func datatypeToBaseType(ciDatatype string) dax.BaseType {
 	switch ciDatatype {
 	case "string":
-		return parser.FieldTypeString
+		return dax.BaseTypeString
 	case "uint64":
-		return parser.FieldTypeID
+		return dax.BaseTypeID
 	case "float64":
 		// ??
 		panic("float64 doesn't have sql3 field type?")
 	case "int64":
-		return parser.FieldTypeInt
+		return dax.BaseTypeInt
 	case "bool":
-		return parser.FieldTypeBool
+		return dax.BaseTypeBool
 	case "decimal":
-		return parser.FieldTypeDecimal
+		return dax.BaseTypeDecimal
 	case "timestamp":
-		return parser.FieldTypeTimestamp
+		return dax.BaseTypeTimestamp
 	case "[]string":
-		return parser.FieldTypeStringSet
+		return dax.BaseTypeStringSet
 	case "[]uint64":
-		return parser.FieldTypeIDSet
+		return dax.BaseTypeIDSet
 	// TODO []byte??
 	default:
 		panic(fmt.Sprintf("unknown ColumnInfo Datatype: %s", ciDatatype))

@@ -183,7 +183,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		}
 
 		if !typesAreComparable(baseType, call.Args[1].DataType()) {
-			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[0].DataType().TypeName(), call.Args[1].DataType().TypeName())
+			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[0].DataType().TypeDescription(), call.Args[1].DataType().TypeDescription())
 		}
 		call.ResultDataType = parser.NewDataTypeBool()
 
@@ -207,7 +207,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 
 		//types from both set should be comparable
 		if !typesAreComparable(baseType1, baseType2) {
-			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, baseType1.TypeName(), baseType2.TypeName())
+			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, baseType1.TypeDescription(), baseType2.TypeDescription())
 		}
 
 		call.ResultDataType = parser.NewDataTypeBool()
@@ -231,7 +231,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 
 		// types from both sets should be comparable
 		if !typesAreComparable(baseType1, baseType2) {
-			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, baseType1.TypeName(), baseType2.TypeName())
+			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, baseType1.TypeDescription(), baseType2.TypeDescription())
 		}
 
 		call.ResultDataType = parser.NewDataTypeBool()

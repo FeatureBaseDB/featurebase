@@ -59,16 +59,16 @@ const TableKeyDelimiter = "__"
 // which make up the TableKey) be at the beginning of the TableKey.
 const PrefixTable = "tbl"
 
-// Field types.
+// Base types.
 const (
-	FieldTypeBool      = "bool"      //
-	FieldTypeDecimal   = "decimal"   //
-	FieldTypeID        = "id"        // non-keyed mutex
-	FieldTypeIDSet     = "idset"     // non-keyed set
-	FieldTypeInt       = "int"       //
-	FieldTypeString    = "string"    // keyed mutex
-	FieldTypeStringSet = "stringset" // keyed set
-	FieldTypeTimestamp = "timestamp" //
+	BaseTypeBool      = "bool"      //
+	BaseTypeDecimal   = "decimal"   //
+	BaseTypeID        = "id"        // non-keyed mutex
+	BaseTypeIDSet     = "idset"     // non-keyed set
+	BaseTypeInt       = "int"       //
+	BaseTypeString    = "string"    // keyed mutex
+	BaseTypeStringSet = "stringset" // keyed set
+	BaseTypeTimestamp = "timestamp" //
 
 	DefaultPartitionN = 256
 
@@ -179,7 +179,7 @@ func (t *Table) CreateID() (TableID, error) {
 	// In order to avoid creating an ID with a double underscore, we remove all
 	// underscores from the original table name (because that's what we use in
 	// TableKey as a delimiter). In addition to that, we remove any other
-	// characters which are not valid as a pilosa indes name.
+	// characters which are not valid as a pilosa index name.
 	stub := regexp.MustCompile(`[^a-z0-9-]+`).ReplaceAllString(strings.ToLower(string(t.Name)), "")
 	if len(stub) > 10 {
 		stub = stub[:10]
@@ -208,7 +208,7 @@ func NewTable(name TableName) *Table {
 func (t *Table) StringKeys() bool {
 	for _, fld := range t.Fields {
 		if fld.IsPrimaryKey() {
-			if fld.Type == FieldTypeString {
+			if fld.Type == BaseTypeString {
 				return true
 			}
 			break
@@ -225,7 +225,7 @@ func (t *Table) HasValidPrimaryKey() bool {
 			continue
 		}
 
-		if fld.Type == FieldTypeID || fld.Type == FieldTypeString {
+		if fld.Type == BaseTypeID || fld.Type == BaseTypeString {
 			return true
 		}
 	}
@@ -491,13 +491,32 @@ func (o QualifiedTables) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
 // FieldName is a typed string used for field names.
 type FieldName string
 
-// FieldType is a typed string used for field types.
-type FieldType string
+// BaseType is a typed string used for field types.
+type BaseType string
+
+// BaseTypeFromString converts a string to one of the defined BaseTypes. If the
+// string does not match a BaseType, then an error is returned.
+func BaseTypeFromString(s string) (BaseType, error) {
+	lowered := strings.ToLower(s)
+	switch lowered {
+	case BaseTypeBool,
+		BaseTypeDecimal,
+		BaseTypeID,
+		BaseTypeIDSet,
+		BaseTypeInt,
+		BaseTypeString,
+		BaseTypeStringSet,
+		BaseTypeTimestamp:
+		return BaseType(lowered), nil
+	default:
+		return "", errors.Errorf("invalid field type: %s", s)
+	}
+}
 
 // Field represents a field and its configuration.
 type Field struct {
 	Name    FieldName    `json:"name"`
-	Type    FieldType    `json:"type"`
+	Type    BaseType     `json:"type"`
 	Options FieldOptions `json:"options"`
 }
 
@@ -509,7 +528,7 @@ func (f *Field) String() string {
 // StringKeys returns true if the field uses string keys.
 func (f *Field) StringKeys() bool {
 	switch f.Type {
-	case FieldTypeString, FieldTypeStringSet:
+	case BaseTypeString, BaseTypeStringSet:
 		return true
 	}
 	return false
@@ -539,13 +558,13 @@ func (f *Field) constraints() string {
 
 	// Apply constraints.
 	switch f.Type {
-	case FieldTypeInt:
+	case BaseTypeInt:
 		sql += fmt.Sprintf(" MIN %d MAX %d", f.Options.Min.ToInt64(0), f.Options.Max.ToInt64(0))
-	case FieldTypeID, FieldTypeString:
+	case BaseTypeID, BaseTypeString:
 		if f.Options.CacheType != "" {
 			sql += fmt.Sprintf(" CACHETYPE %s SIZE %d", f.Options.CacheType, f.Options.CacheSize)
 		}
-	case FieldTypeIDSet, FieldTypeStringSet:
+	case BaseTypeIDSet, BaseTypeStringSet:
 		if f.Options.CacheType != "" {
 			sql += fmt.Sprintf(" CACHETYPE %s SIZE %d", f.Options.CacheType, f.Options.CacheSize)
 		}
@@ -555,7 +574,7 @@ func (f *Field) constraints() string {
 				sql += fmt.Sprintf(" TTL '%s'", f.Options.TTL)
 			}
 		}
-	case FieldTypeTimestamp:
+	case BaseTypeTimestamp:
 		if f.Options.TimeUnit != "" {
 			sql += fmt.Sprintf(" TIMEUNIT '%s'", f.Options.TimeUnit)
 			if !f.Options.Epoch.IsZero() {

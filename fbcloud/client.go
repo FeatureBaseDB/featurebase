@@ -47,7 +47,7 @@ type tokenizedSQL struct {
 }
 
 // Query issues a SQL query formatted for the FeatureBase cloud query endpoint.
-func (cq *Queryer) Query(org, db, sql string) (*featurebase.SQLResponse, error) {
+func (cq *Queryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
 	if time.Since(cq.lastRefresh) > TokenRefreshTimeout {
 		if err := cq.tokenRefresh(); err != nil {
 			return nil, errors.Wrap(err, "refreshing token")
@@ -143,5 +143,5 @@ func (cq *Queryer) HTTPRequest(method, path, body string, v interface{}) ([]byte
 }
 
 type cloudResponse struct {
-	Results featurebase.SQLResponse `json:"results"`
+	Results featurebase.WireQueryResponse `json:"results"`
 }

@@ -48,13 +48,13 @@ var betweenTests = TableTest{
 			SQLs: sqls(
 				"select b1 between true and false from between_all_types",
 			),
-			ExpErr: "type 'BOOL' cannot be used a range subscript",
+			ExpErr: "type 'BOOL' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
 				"select d1 between 1.23 and 4.56 from between_all_types",
 			),
-			ExpErr: "type 'DECIMAL(2)' cannot be used a range subscript",
+			ExpErr: "type 'DECIMAL(2)' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
@@ -72,19 +72,19 @@ var betweenTests = TableTest{
 			SQLs: sqls(
 				"select ids1 between [100, 102] and [456, 789] from between_all_types",
 			),
-			ExpErr: "type 'IDSET' cannot be used a range subscript",
+			ExpErr: "type 'IDSET' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
 				"select s1 between 'foo' and 'bar' from between_all_types",
 			),
-			ExpErr: "type 'STRING' cannot be used a range subscript",
+			ExpErr: "type 'STRING' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
 				"select ss1 between ['a', 'b'] and ['c', 'd'] from between_all_types",
 			),
-			ExpErr: "type 'STRINGSET' cannot be used a range subscript",
+			ExpErr: "type 'STRINGSET' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
@@ -149,13 +149,13 @@ var notBetweenTests = TableTest{
 			SQLs: sqls(
 				"select b1 not between true and false from not_between_all_types",
 			),
-			ExpErr: "type 'BOOL' cannot be used a range subscript",
+			ExpErr: "type 'BOOL' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
 				"select d1 not between 1.23 and 4.56 from not_between_all_types",
 			),
-			ExpErr: "type 'DECIMAL(2)' cannot be used a range subscript",
+			ExpErr: "type 'DECIMAL(2)' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
@@ -173,19 +173,19 @@ var notBetweenTests = TableTest{
 			SQLs: sqls(
 				"select ids1 not between [100, 102] and [456, 789] from not_between_all_types",
 			),
-			ExpErr: "type 'IDSET' cannot be used a range subscript",
+			ExpErr: "type 'IDSET' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
 				"select s1 not between 'foo' and 'bar' from not_between_all_types",
 			),
-			ExpErr: "type 'STRING' cannot be used a range subscript",
+			ExpErr: "type 'STRING' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
 				"select ss1 not between ['a', 'b'] and ['c', 'd'] from not_between_all_types",
 			),
-			ExpErr: "type 'STRINGSET' cannot be used a range subscript",
+			ExpErr: "type 'STRINGSET' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(

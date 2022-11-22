@@ -2060,7 +2060,7 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 			i, err := strconv.Atoi(nl)
 			if err != nil {
 				//TODO(pok) need to push location into here
-				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeName())
+				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 			return int64(i), nil
 
@@ -2068,7 +2068,7 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 			i, err := strconv.ParseBool(nl)
 			if err != nil {
 				//TODO(pok) need to push location into here
-				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeName())
+				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 			return i, nil
 
@@ -2076,13 +2076,13 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 			fvalue, err := strconv.ParseFloat(nl, 64)
 			if err != nil {
 				//TODO(pok) need to push location into here
-				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeName())
+				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 			scale := parser.NumDecimalPlaces(nl)
 			unscaledValue := int64(fvalue * math.Pow(10, float64(scale)))
 			castValue := pql.NewDecimal(unscaledValue, int64(scale))
 			if tt.Scale < castValue.Scale {
-				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeName())
+				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 
 			return castValue, nil
@@ -2098,7 +2098,7 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 			} else if tm, err := time.ParseInLocation("2006-01-02", nl, time.UTC); err == nil {
 				return tm, nil
 			} else {
-				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeName())
+				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 		}
 

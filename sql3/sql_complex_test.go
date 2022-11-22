@@ -16,6 +16,12 @@ import (
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/google/go-cmp/cmp"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/sql3/parser"
+	sql_test "github.com/molecula/featurebase/v3/sql3/test"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -71,15 +77,15 @@ func TestPlanner_Show(t *testing.T) {
 			t.Fatal(fmt.Errorf("unexpected result set length"))
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "name", Type: parser.NewDataTypeString()},
-			{ColumnName: "platform", Type: parser.NewDataTypeString()},
-			{ColumnName: "platform_version", Type: parser.NewDataTypeString()},
-			{ColumnName: "db_version", Type: parser.NewDataTypeString()},
-			{ColumnName: "state", Type: parser.NewDataTypeString()},
-			{ColumnName: "node_count", Type: parser.NewDataTypeInt()},
-			{ColumnName: "shard_width", Type: parser.NewDataTypeInt()},
-			{ColumnName: "replica_count", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("name"),
+			wireQueryFieldString("platform"),
+			wireQueryFieldString("platform_version"),
+			wireQueryFieldString("db_version"),
+			wireQueryFieldString("state"),
+			wireQueryFieldInt("node_count"),
+			wireQueryFieldInt("shard_width"),
+			wireQueryFieldInt("replica_count"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -94,12 +100,12 @@ func TestPlanner_Show(t *testing.T) {
 			t.Fatal(fmt.Errorf("unexpected result set length"))
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "name", Type: parser.NewDataTypeString()},
-			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{ColumnName: "track_existence", Type: parser.NewDataTypeBool()},
-			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
-			{ColumnName: "shard_width", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("name"),
+			wireQueryFieldTimestamp("created_at"),
+			wireQueryFieldBool("track_existence"),
+			wireQueryFieldBool("keys"),
+			wireQueryFieldInt("shard_width"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -114,21 +120,21 @@ func TestPlanner_Show(t *testing.T) {
 			t.Fatal(fmt.Errorf("unexpected result set length: %d", len(results)))
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "name", Type: parser.NewDataTypeString()},
-			{ColumnName: "type", Type: parser.NewDataTypeString()},
-			{ColumnName: "internal_type", Type: parser.NewDataTypeString()},
-			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
-			{ColumnName: "cache_type", Type: parser.NewDataTypeString()},
-			{ColumnName: "cache_size", Type: parser.NewDataTypeInt()},
-			{ColumnName: "scale", Type: parser.NewDataTypeInt()},
-			{ColumnName: "min", Type: parser.NewDataTypeInt()},
-			{ColumnName: "max", Type: parser.NewDataTypeInt()},
-			{ColumnName: "timeunit", Type: parser.NewDataTypeString()},
-			{ColumnName: "epoch", Type: parser.NewDataTypeInt()},
-			{ColumnName: "timequantum", Type: parser.NewDataTypeString()},
-			{ColumnName: "ttl", Type: parser.NewDataTypeString()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("name"),
+			wireQueryFieldString("type"),
+			wireQueryFieldString("internal_type"),
+			wireQueryFieldTimestamp("created_at"),
+			wireQueryFieldBool("keys"),
+			wireQueryFieldString("cache_type"),
+			wireQueryFieldInt("cache_size"),
+			wireQueryFieldInt("scale"),
+			wireQueryFieldInt("min"),
+			wireQueryFieldInt("max"),
+			wireQueryFieldString("timeunit"),
+			wireQueryFieldInt("epoch"),
+			wireQueryFieldString("timequantum"),
+			wireQueryFieldString("ttl"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -143,21 +149,21 @@ func TestPlanner_Show(t *testing.T) {
 			t.Fatal(fmt.Errorf("unexpected result set length"))
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "name", Type: parser.NewDataTypeString()},
-			{ColumnName: "type", Type: parser.NewDataTypeString()},
-			{ColumnName: "internal_type", Type: parser.NewDataTypeString()},
-			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
-			{ColumnName: "cache_type", Type: parser.NewDataTypeString()},
-			{ColumnName: "cache_size", Type: parser.NewDataTypeInt()},
-			{ColumnName: "scale", Type: parser.NewDataTypeInt()},
-			{ColumnName: "min", Type: parser.NewDataTypeInt()},
-			{ColumnName: "max", Type: parser.NewDataTypeInt()},
-			{ColumnName: "timeunit", Type: parser.NewDataTypeString()},
-			{ColumnName: "epoch", Type: parser.NewDataTypeInt()},
-			{ColumnName: "timequantum", Type: parser.NewDataTypeString()},
-			{ColumnName: "ttl", Type: parser.NewDataTypeString()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("name"),
+			wireQueryFieldString("type"),
+			wireQueryFieldString("internal_type"),
+			wireQueryFieldTimestamp("created_at"),
+			wireQueryFieldBool("keys"),
+			wireQueryFieldString("cache_type"),
+			wireQueryFieldInt("cache_size"),
+			wireQueryFieldInt("scale"),
+			wireQueryFieldInt("min"),
+			wireQueryFieldInt("max"),
+			wireQueryFieldString("timeunit"),
+			wireQueryFieldInt("epoch"),
+			wireQueryFieldString("timequantum"),
+			wireQueryFieldString("ttl"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -383,7 +389,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 		results, columns, err := sql_test.MustQueryRows(t, server, sql)
 		assert.NoError(t, err)
 		assert.Equal(t, [][]interface{}{}, results)
-		assert.Equal(t, []*planner_types.PlannerColumn{}, columns)
+		assert.Equal(t, []*pilosa.WireQueryField{}, columns)
 
 		// Ensure that the fields got created as expected.
 		t.Run("EnsureFields", func(t *testing.T) {
@@ -460,7 +466,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{}, columns); diff != "" {
+		if diff := cmp.Diff([]*pilosa.WireQueryField{}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
@@ -513,7 +519,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{}, columns); diff != "" {
+		if diff := cmp.Diff([]*pilosa.WireQueryField{}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
@@ -523,21 +529,21 @@ func TestPlanner_CreateTable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "name", Type: parser.NewDataTypeString()},
-			{ColumnName: "type", Type: parser.NewDataTypeString()},
-			{ColumnName: "internal_type", Type: parser.NewDataTypeString()},
-			{ColumnName: "created_at", Type: parser.NewDataTypeTimestamp()},
-			{ColumnName: "keys", Type: parser.NewDataTypeBool()},
-			{ColumnName: "cache_type", Type: parser.NewDataTypeString()},
-			{ColumnName: "cache_size", Type: parser.NewDataTypeInt()},
-			{ColumnName: "scale", Type: parser.NewDataTypeInt()},
-			{ColumnName: "min", Type: parser.NewDataTypeInt()},
-			{ColumnName: "max", Type: parser.NewDataTypeInt()},
-			{ColumnName: "timeunit", Type: parser.NewDataTypeString()},
-			{ColumnName: "epoch", Type: parser.NewDataTypeInt()},
-			{ColumnName: "timequantum", Type: parser.NewDataTypeString()},
-			{ColumnName: "ttl", Type: parser.NewDataTypeString()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("name"),
+			wireQueryFieldString("type"),
+			wireQueryFieldString("internal_type"),
+			wireQueryFieldTimestamp("created_at"),
+			wireQueryFieldBool("keys"),
+			wireQueryFieldString("cache_type"),
+			wireQueryFieldInt("cache_size"),
+			wireQueryFieldInt("scale"),
+			wireQueryFieldInt("min"),
+			wireQueryFieldInt("max"),
+			wireQueryFieldString("timeunit"),
+			wireQueryFieldInt("epoch"),
+			wireQueryFieldString("timequantum"),
+			wireQueryFieldString("ttl"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -595,7 +601,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{}, columns); diff != "" {
+		if diff := cmp.Diff([]*pilosa.WireQueryField{}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
@@ -609,7 +615,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{}, columns); diff != "" {
+		if diff := cmp.Diff([]*pilosa.WireQueryField{}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
@@ -624,7 +630,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{}, columns); diff != "" {
+		if diff := cmp.Diff([]*pilosa.WireQueryField{}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
@@ -705,9 +711,9 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeBool()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldBool(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -726,9 +732,9 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeBool()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldBool(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -784,9 +790,9 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeBool()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldBool(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -805,9 +811,9 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -826,9 +832,9 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -851,9 +857,9 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeDecimal(2)},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldDecimal("", 2),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -872,9 +878,9 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeString()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -930,10 +936,10 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
-			{ColumnName: "", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("b"),
+			wireQueryFieldInt(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -952,10 +958,10 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
-			{ColumnName: "", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("b"),
+			wireQueryFieldInt(""),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1013,10 +1019,10 @@ func TestPlanner_Select(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1035,10 +1041,10 @@ func TestPlanner_Select(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1057,10 +1063,10 @@ func TestPlanner_Select(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "foo", Type: parser.NewDataTypeInt()},
-			{ColumnName: "bar", Type: parser.NewDataTypeInt()},
-			{ColumnName: "baz", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("foo"),
+			wireQueryFieldInt("bar"),
+			wireQueryFieldID("baz"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1079,10 +1085,10 @@ func TestPlanner_Select(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldID("_id"),
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1101,10 +1107,10 @@ func TestPlanner_Select(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldID("_id"),
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1123,10 +1129,10 @@ func TestPlanner_Select(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldID("_id"),
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1145,9 +1151,9 @@ func TestPlanner_Select(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1201,10 +1207,10 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1471,8 +1477,8 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt(""),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1628,10 +1634,10 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1650,10 +1656,10 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1725,8 +1731,8 @@ func TestPlanner_In(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "count", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("count"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1745,8 +1751,8 @@ func TestPlanner_In(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "count", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("count"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1764,8 +1770,8 @@ func TestPlanner_In(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "count", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("count"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1783,8 +1789,8 @@ func TestPlanner_In(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{Name: "count", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("count"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1855,8 +1861,8 @@ func TestPlanner_Distinct(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldID("_id"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1877,8 +1883,8 @@ func TestPlanner_Distinct(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "parentid", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("parentid"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1898,9 +1904,9 @@ func TestPlanner_Distinct(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
-			{ColumnName: "parentid", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldID("_id"),
+			wireQueryFieldInt("parentid"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1950,10 +1956,10 @@ func TestPlanner_SelectTop(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldID("_id"),
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -1973,12 +1979,60 @@ func TestPlanner_SelectTop(t *testing.T) {
 			t.Fatal(diff)
 		}
 
-		if diff := cmp.Diff([]*planner_types.PlannerColumn{
-			{ColumnName: "_id", Type: parser.NewDataTypeID()},
-			{ColumnName: "a", Type: parser.NewDataTypeInt()},
-			{ColumnName: "b", Type: parser.NewDataTypeInt()},
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldID("_id"),
+			wireQueryFieldInt("a"),
+			wireQueryFieldInt("b"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
 	})
+}
+
+// helpers
+
+func wireQueryFieldID(name string) *pilosa.WireQueryField {
+	return &pilosa.WireQueryField{
+		Name:     dax.FieldName(name),
+		Type:     dax.BaseTypeID,
+		BaseType: dax.BaseTypeID,
+	}
+}
+func wireQueryFieldBool(name string) *pilosa.WireQueryField {
+	return &pilosa.WireQueryField{
+		Name:     dax.FieldName(name),
+		Type:     dax.BaseTypeBool,
+		BaseType: dax.BaseTypeBool,
+	}
+}
+func wireQueryFieldString(name string) *pilosa.WireQueryField {
+	return &pilosa.WireQueryField{
+		Name:     dax.FieldName(name),
+		Type:     dax.BaseTypeString,
+		BaseType: dax.BaseTypeString,
+	}
+}
+func wireQueryFieldInt(name string) *pilosa.WireQueryField {
+	return &pilosa.WireQueryField{
+		Name:     dax.FieldName(name),
+		Type:     dax.BaseTypeInt,
+		BaseType: dax.BaseTypeInt,
+	}
+}
+func wireQueryFieldTimestamp(name string) *pilosa.WireQueryField {
+	return &pilosa.WireQueryField{
+		Name:     dax.FieldName(name),
+		Type:     dax.BaseTypeTimestamp,
+		BaseType: dax.BaseTypeTimestamp,
+	}
+}
+func wireQueryFieldDecimal(name string, scale int64) *pilosa.WireQueryField {
+	return &pilosa.WireQueryField{
+		Name:     dax.FieldName(name),
+		Type:     fmt.Sprintf("%s(%d)", dax.BaseTypeDecimal, scale),
+		BaseType: dax.BaseTypeDecimal,
+		TypeInfo: map[string]interface{}{
+			"scale": scale,
+		},
+	}
 }

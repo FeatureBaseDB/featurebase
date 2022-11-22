@@ -938,37 +938,37 @@ func createField(idx *Index, fld *dax.Field) error {
 	opts := []FieldOption{}
 
 	switch fld.Type {
-	case dax.FieldTypeBool:
+	case dax.BaseTypeBool:
 		opts = append(opts,
 			OptFieldTypeBool(),
 		)
-	case dax.FieldTypeDecimal:
+	case dax.BaseTypeDecimal:
 		opts = append(opts,
 			OptFieldTypeDecimal(fld.Options.Scale),
 		)
-	case dax.FieldTypeID:
+	case dax.BaseTypeID:
 		opts = append(opts,
 			OptFieldTypeMutex(cacheType, cacheSize),
 		)
-	case dax.FieldTypeIDSet:
+	case dax.BaseTypeIDSet:
 		opts = append(opts,
 			OptFieldTypeSet(cacheType, cacheSize),
 		)
-	case dax.FieldTypeInt:
+	case dax.BaseTypeInt:
 		opts = append(opts,
 			OptFieldTypeInt(fld.Options.Min.ToInt64(0), fld.Options.Max.ToInt64(0)),
 		)
-	case dax.FieldTypeString:
+	case dax.BaseTypeString:
 		opts = append(opts,
 			OptFieldTypeMutex(cacheType, cacheSize),
 			OptFieldKeys(),
 		)
-	case dax.FieldTypeStringSet:
+	case dax.BaseTypeStringSet:
 		opts = append(opts,
 			OptFieldTypeSet(cacheType, cacheSize),
 			OptFieldKeys(),
 		)
-	case dax.FieldTypeTimestamp:
+	case dax.BaseTypeTimestamp:
 		opts = append(opts,
 			OptFieldTypeTimestamp(fld.Options.Epoch, fld.Options.TimeUnit),
 		)

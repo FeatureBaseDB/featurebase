@@ -8,23 +8,46 @@ import (
 	"testing"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	featurebase "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 )
 
-type fldType parser.ExprDataType
-
 // fldType constants are providing a map of a defined test type to the
-// parser.ExprDataType
+// featurebase.WireQueryField.
 var (
-	fldTypeID        fldType = parser.NewDataTypeID()
-	fldTypeBool      fldType = parser.NewDataTypeBool()
-	fldTypeIDSet     fldType = parser.NewDataTypeIDSet()
-	fldTypeInt       fldType = parser.NewDataTypeInt()
-	fldTypeDecimal2  fldType = parser.NewDataTypeDecimal(2)
-	fldTypeString    fldType = parser.NewDataTypeString()
-	fldTypeStringSet fldType = parser.NewDataTypeStringSet()
-	fldTypeTimestamp fldType = parser.NewDataTypeTimestamp()
+	fldTypeID featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeID,
+		BaseType: dax.BaseTypeID,
+	}
+	fldTypeBool featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeBool,
+		BaseType: dax.BaseTypeBool,
+	}
+	fldTypeIDSet featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeIDSet,
+		BaseType: dax.BaseTypeIDSet,
+	}
+	fldTypeInt featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeInt,
+		BaseType: dax.BaseTypeInt,
+	}
+	fldTypeDecimal2 featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeDecimal + "(2)",
+		BaseType: dax.BaseTypeDecimal,
+		TypeInfo: map[string]interface{}{"scale": int64(2)},
+	}
+	fldTypeString featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeString,
+		BaseType: dax.BaseTypeString,
+	}
+	fldTypeStringSet featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeStringSet,
+		BaseType: dax.BaseTypeStringSet,
+	}
+	fldTypeTimestamp featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeTimestamp,
+		BaseType: dax.BaseTypeTimestamp,
+	}
 )
 
 type compareMethod string
@@ -84,7 +107,7 @@ func (tt TableTest) InsertInto(t *testing.T) string {
 type SQLTest struct {
 	name           string
 	SQLs           []string
-	ExpHdrs        []*planner_types.PlannerColumn
+	ExpHdrs        []*featurebase.WireQueryField
 	ExpRows        [][]interface{}
 	ExpErr         string
 	Compare        compareMethod
@@ -107,7 +130,7 @@ type PQLTest struct {
 	name    string
 	PQLs    []string
 	Table   string
-	ExpHdrs []*planner_types.PlannerColumn
+	ExpHdrs []*featurebase.WireQueryField
 	ExpRows [][]interface{}
 	ExpErr  string
 }
@@ -126,7 +149,7 @@ func (s PQLTest) Name(i int) string {
 // The following "source" types are helpers for creating a test table.
 type sourceColumn struct {
 	name    string
-	typ     fldType
+	typ     featurebase.WireQueryField
 	options string
 }
 
@@ -142,7 +165,7 @@ func srcHdrs(hdrs ...sourceColumn) []sourceColumn {
 	return hdrs
 }
 
-func srcHdr(name string, typ fldType, opts ...string) sourceColumn {
+func srcHdr(name string, typ featurebase.WireQueryField, opts ...string) sourceColumn {
 	return sourceColumn{
 		name:    name,
 		typ:     typ,
@@ -227,7 +250,7 @@ func (s source) createTable() string {
 
 	cols := []string{}
 	for _, col := range s.columns {
-		f := col.name + " " + col.typ.TypeName()
+		f := col.name + " " + col.typ.Type
 		if col.options != "" {
 			f += " " + col.options
 		}
@@ -248,15 +271,18 @@ func (s source) insertInto(t *testing.T) string {
 }
 
 // hdrs is just a helper function to make the test definition look cleaner.
-func hdrs(hdrs ...*planner_types.PlannerColumn) []*planner_types.PlannerColumn {
+func hdrs(hdrs ...*featurebase.WireQueryField) []*featurebase.WireQueryField {
 	return hdrs
 }
 
-// hdr is just a helper function to make the test definition look cleaner.
-func hdr(name string, typ fldType) *planner_types.PlannerColumn {
-	return &planner_types.PlannerColumn{
-		ColumnName: name,
-		Type:       typ,
+// hdr is just a helper function to make the test definition look cleaner. It
+// applies the `name` value to the provided WireQueryType.
+func hdr(name string, typ featurebase.WireQueryField) *featurebase.WireQueryField {
+	return &featurebase.WireQueryField{
+		Name:     dax.FieldName(name),
+		Type:     typ.Type,
+		BaseType: typ.BaseType,
+		TypeInfo: typ.TypeInfo,
 	}
 }
 

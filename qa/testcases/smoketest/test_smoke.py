@@ -44,7 +44,8 @@ def test_sql3_is_responding():
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "application/json"
     resp_body = response.json()
-    assert resp_body['schema']['fields'][0]['type'] == "INT"
+    assert resp_body['schema']['fields'][0]['type'] == "int"
+    assert resp_body['schema']['fields'][0]['base-type'] == "int"
     assert resp_body['data'][0][0] == 1
 
 def test_get_index_api():
