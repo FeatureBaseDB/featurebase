@@ -17,14 +17,22 @@ type WriteLogWriter interface {
 	// CreateTableKeys sends a map of string key to uint64 ID for the table and
 	// partition provided.
 	CreateTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int, _ map[string]uint64) error
+
+	// DeleteTableKeys deletes all table keys for the table and partition
+	// provided.
 	DeleteTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int) error
 
 	// CreateFieldKeys sends a map of string key to uint64 ID for the table and
 	// field provided.
 	CreateFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName, version int, _ map[string]uint64) error
+
+	// DeleteTableKeys deletes all field keys for the table and field provided.
 	DeleteFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName, version int) error
 
+	// WriteShard sends shard data for the table and shard provided.
 	WriteShard(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int, msg LogMessage) error
+
+	// DeleteShard deletes all data for the table and shard provided.
 	DeleteShard(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int) error
 }
 
@@ -180,29 +188,111 @@ type FieldKeyMap struct {
 }
 
 const (
-	logMessageTypeImportRoaring = iota
+	logMessageTypeImportRoaring byte = iota
 	logMessageTypeImport
 	logMessageTypeImportValue
 	logMessageTypeImportRoaringShard
 )
 
+// encoderKey* are part of the log message header. They indicate what encoding
+// type a specific log message is serialized with.
+const (
+	encoderKeyJSON byte = iota
+)
+
+const (
+	EncodeTypeJSON string = "json"
+
+	// encodeVersion refers to the version of the structs used to represent the
+	// log messages. If we change structs, we'll need to modify this version
+	// number and maintain the previous version of the structs somewhere for
+	// deserialization.
+	encodeVersion byte = 1
+)
+
+// logMessageEncoder is implemented by any encoder used to serialize LogMessages
+// to []byte.
+type logMessageEncoder interface {
+	Key() byte
+	Marshal(LogMessage) ([]byte, error)
+	Unmarshal([]byte, LogMessage) error
+}
+
+// LogMessage is implemented by a variety of types which can be serialized as
+// messages to the WriteLogger.
 type LogMessage interface{}
 
-// MarshalLogMessage serializes the log message and adds log message type info.
-func MarshalLogMessage(msg LogMessage) ([]byte, error) {
-	typ, err := getLogMessageType(msg)
+// MarshalLogMessage serializes the log message and prepends additional encoding
+// information to each message. Currently, we prepend three bytes to each log
+// message:
+// byte[0]: encodeVersion - this is currently a constant within the code. If we
+// modify structs such that they encode differently, we'll have to change the
+// constant and keep previous versions of structs for deserialization.
+// byte[1]: encodeType (e.g. "json", etc.)
+// byte[2]: logMessageType
+//
+// If we get into a situation where we want more flexibility in these message
+// header bytes—for example, if we want to use more than three bytes—we could do
+// something with the first bit of the encodeVersion: if it's 1, that could
+// indicate that there are additional header bytes, and the following seven bits
+// could indicate how many.
+func MarshalLogMessage(msg LogMessage, encode string) ([]byte, error) {
+	encoder, err := getEncoderByType(encode)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting encoder by type")
+	}
+
+	logMessageType, err := getLogMessageType(msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting log message type")
 	}
 
-	buf, err := json.Marshal(msg)
+	var buf []byte
+
+	buf, err = encoder.Marshal(msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling log message")
 	}
-	return append([]byte{typ}, buf...), nil
+
+	return append([]byte{encodeVersion, encoder.Key(), logMessageType}, buf...), nil
 }
 
-func LogMessageByType(typ byte) (LogMessage, error) {
+// UnmarshalLogMessage deserializes the log message based on the log message
+// type info.
+func UnmarshalLogMessage(b []byte) (LogMessage, error) {
+	if len(b) < 3 {
+		return nil, errors.New(errors.ErrUncoded, "log record does not contain a full header")
+	}
+
+	encVersion := b[0]
+	encKey := b[1]
+	logMessageType := b[2]
+
+	// Ensure that the log message is able to be handled by this code. If we
+	// increment the constant encodeVersion, we'll need to modify this to handle
+	// the log based on previous encodeVersions.
+	if encVersion != encodeVersion {
+		return nil, errors.Errorf("encode version is unsupported: %d", encVersion)
+	}
+
+	msg, err := logMessageByType(logMessageType)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting log message by type")
+	}
+
+	encoder, err := getEncoderByKey(encKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting encoder by key")
+	}
+
+	if err := encoder.Unmarshal(b[3:], &msg); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling log message")
+	}
+
+	return msg, nil
+}
+
+func logMessageByType(typ byte) (LogMessage, error) {
 	switch typ {
 	case logMessageTypeImportRoaring:
 		return &ImportRoaringMessage{}, nil
@@ -229,6 +319,24 @@ func getLogMessageType(m LogMessage) (byte, error) {
 		return logMessageTypeImportRoaringShard, nil
 	default:
 		return 0, errors.Errorf("don't have type for message %#v", m)
+	}
+}
+
+func getEncoderByType(encode string) (logMessageEncoder, error) {
+	switch encode {
+	case EncodeTypeJSON:
+		return &encoderJSON{}, nil
+	default:
+		return nil, errors.Errorf("invalid encode type: %s", encode)
+	}
+}
+
+func getEncoderByKey(id byte) (logMessageEncoder, error) {
+	switch id {
+	case encoderKeyJSON:
+		return &encoderJSON{}, nil
+	default:
+		return nil, errors.Errorf("invalid encode type: %d", id)
 	}
 }
 
@@ -304,4 +412,23 @@ type RoaringUpdate struct {
 	Clear        []byte `json:"clear"`
 	Set          []byte `json:"set"`
 	ClearRecords bool   `json:"clear-records"`
+}
+
+// Ensure type implements interface.
+var _ logMessageEncoder = (*encoderJSON)(nil)
+
+// encoderJSON is an implementation of the logMessageEncoder interface which
+// encodes LogMessages as JSON.
+type encoderJSON struct{}
+
+func (e *encoderJSON) Key() byte {
+	return encoderKeyJSON
+}
+
+func (e *encoderJSON) Marshal(msg LogMessage) ([]byte, error) {
+	return json.Marshal(msg)
+}
+
+func (e *encoderJSON) Unmarshal(b []byte, msg LogMessage) error {
+	return json.Unmarshal(b, msg)
 }

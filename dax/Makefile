@@ -15,11 +15,10 @@ testv:
 
 test-integration:
 	mkdir -p ../coverage-from-docker
-	$(GO) test ./test/dax -count 1 -run TestDAXIntegration
+	$(GO) test ./test/dax -count 1 -run TestDAXIntegration/$(RUN)
 
 testv-integration:
-	$(GO) test -v ./test/dax -count 1 -run TestDAXIntegration
-
+	$(GO) test -v ./test/dax -count 1 -run TestDAXIntegration/$(RUN)
 
 
 ############################### AWS STUFF ###############################
