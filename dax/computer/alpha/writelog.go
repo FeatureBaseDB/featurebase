@@ -25,8 +25,15 @@ import (
 var _ computer.WriteLogReader = &alphaWriteLog{}
 var _ computer.WriteLogWriter = &alphaWriteLog{}
 
-// alphaWriteLog uses a WLer implementation (which could be, for example, an
-// http client or a locally running sub-service) to store its log messages.
+// alphaWriteLog is an implementation of the WriteLogReader and WriteLogWriter
+// interfaces. It uses a WriteLogger implementation (which could be, for
+// example, an http client or a locally running sub-service) to store its log
+// messages. I can't remember why we put this implementation in its own package
+// (a meaningless name called "alpha"); it probably has something to do with
+// wanting to adhere to a typical interface/implementation package structure,
+// but was confused by the current state of things where the "storage" package
+// (or perhaps "computer") is the top level package (i.e. "pilosa"). Until we
+// can correct the packaging, we will likely have weird cases like this.
 type alphaWriteLog struct {
 	wl featurebase.WriteLogger
 }
@@ -90,7 +97,7 @@ func (w *alphaWriteLog) DeleteFieldKeys(ctx context.Context, qtid dax.QualifiedT
 }
 
 func (w *alphaWriteLog) WriteShard(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int, msg computer.LogMessage) error {
-	b, err := computer.MarshalLogMessage(msg)
+	b, err := computer.MarshalLogMessage(msg, computer.EncodeTypeJSON)
 	if err != nil {
 		return errors.Wrap(err, "marshalling log message")
 	}
@@ -299,22 +306,7 @@ func (r *shardReader) Read() (computer.LogMessage, error) {
 	}
 
 	if r.scanner.Scan() {
-		b := r.scanner.Bytes()
-
-		if len(b) == 0 {
-			return nil, errors.New(errors.ErrUncoded, "empty log record")
-		}
-		logMessageType := b[0]
-
-		msg, err := computer.LogMessageByType(logMessageType)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting log message by type")
-		}
-
-		if err := json.Unmarshal(b[1:], &msg); err != nil {
-			return nil, errors.Wrap(err, "unmarshaling log message")
-		}
-		return msg, nil
+		return computer.UnmarshalLogMessage(r.scanner.Bytes())
 	}
 	if err := r.scanner.Err(); err != nil {
 		return nil, err
