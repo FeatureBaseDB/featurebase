@@ -5,26 +5,21 @@ package ctl
 import (
 	"bytes"
 	"context"
-	"io"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 func TestGenerateConfigCommand_Run(t *testing.T) {
-	rder := []byte{}
-	stdin := bytes.NewReader(rder)
-	r, w, _ := os.Pipe()
-	cm := NewGenerateConfigCommand(stdin, w, os.Stderr)
+	cmLog := logger.NewStandardLogger(os.Stderr)
+	cm := NewGenerateConfigCommand(cmLog)
+	buf := &bytes.Buffer{}
+	cm.stdout = buf
 	err := cm.Run(context.Background())
 	if err != nil {
 		t.Fatalf("Config Run doesn't work: %s", err)
-	}
-	w.Close()
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(buf.String(), ":10101") {
 		t.Fatalf("Unexpected config: %s", buf.String())

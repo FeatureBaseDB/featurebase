@@ -5,8 +5,11 @@ package ctl
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 func TestRBFPagesCommand_Run(t *testing.T) {
@@ -20,12 +23,14 @@ ID       TYPE       EXTRA
 3        leaf       flags=x2,celln=1
 `[1:]
 
-		var stdout, stderr bytes.Buffer
-		cmd := NewRBFPagesCommand(bytes.NewReader(nil), &stdout, &stderr)
-		cmd.Path = filepath.Join("testdata", "rbf-pages", "ok")
+		cmLog := logger.NewStandardLogger(os.Stderr)
+		cmd := NewRBFPagesCommand(cmLog)
+		buf := &bytes.Buffer{}
+		cmd.stdout = buf
+		cmd.Path = filepath.Join("testdata", "ok")
 		if err := cmd.Run(context.Background()); err != nil {
 			t.Fatal(err)
-		} else if got := stdout.String(); got != want {
+		} else if got := buf.String(); got != want {
 			t.Fatalf("got:\n%s\n\nwant:\n%s", got, want)
 		}
 	})
@@ -41,12 +46,14 @@ ID       TYPE       EXTRA
 4        unknown [<nil>]
 `[1:]
 
-		var stdout, stderr bytes.Buffer
-		cmd := NewRBFPagesCommand(bytes.NewReader(nil), &stdout, &stderr)
-		cmd.Path = filepath.Join("testdata", "rbf-pages", "err-invalid-page-type")
+		cmLog := logger.NewStandardLogger(os.Stderr)
+		cmd := NewRBFPagesCommand(cmLog)
+		buf := &bytes.Buffer{}
+		cmd.stdout = buf
+		cmd.Path = filepath.Join("testdata", "err-invalid-page-type")
 		if err := cmd.Run(context.Background()); err != nil {
 			t.Fatal(err)
-		} else if got := stdout.String(); got != want {
+		} else if got := buf.String(); got != want {
 			t.Fatalf("got:\n%s\n\nwant:\n%s", got, want)
 		}
 	})

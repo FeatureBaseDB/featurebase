@@ -3,14 +3,13 @@
 package cmd
 
 import (
-	"io"
-
-	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-func newBackupCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := ctl.NewBackupCommand(stdin, stdout, stderr)
+func newBackupCommand(logdest logger.Logger) *cobra.Command {
+	cmd := ctl.NewBackupCommand(logdest)
 	ccmd := &cobra.Command{
 		Use:   "backup",
 		Short: "Back up FeatureBase server",

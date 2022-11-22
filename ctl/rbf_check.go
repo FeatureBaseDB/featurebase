@@ -6,9 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/rbf"
 )
 
 // RBFCheckCommand represents a command for running a consistency check on RBF.
@@ -17,13 +18,15 @@ type RBFCheckCommand struct {
 	Path string
 
 	// Standard input/output
-	*pilosa.CmdIO
+	stdout  io.Writer
+	logDest logger.Logger
 }
 
 // NewRBFCheckCommand returns a new instance of RBFCheckCommand.
-func NewRBFCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *RBFCheckCommand {
+func NewRBFCheckCommand(logdest logger.Logger) *RBFCheckCommand {
 	return &RBFCheckCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		stdout:  os.Stdout,
+		logDest: logdest,
 	}
 }
 
@@ -41,16 +44,16 @@ func (cmd *RBFCheckCommand) Run(ctx context.Context) error {
 		switch err := err.(type) {
 		case rbf.ErrorList:
 			for i := range err {
-				fmt.Fprintln(cmd.Stdout, err[i])
+				fmt.Fprintln(cmd.stdout, err[i])
 			}
 		default:
-			fmt.Fprintln(cmd.Stdout, err)
+			fmt.Fprintln(cmd.stdout, err)
 		}
 		return fmt.Errorf("check failed")
 	}
 
 	// If successful, print a success message.
-	fmt.Fprintln(cmd.Stdout, "ok")
+	fmt.Fprintln(cmd.stdout, "ok")
 
 	return nil
 }

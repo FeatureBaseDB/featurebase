@@ -12,10 +12,11 @@ import (
 	"strconv"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/authn"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/server"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
 )
 
@@ -58,17 +59,22 @@ type ImportCommand struct { // nolint: maligned
 	client *pilosa.InternalClient
 
 	// Standard input/output
-	*pilosa.CmdIO
+	logDest logger.Logger
 
 	TLS server.TLSConfig
 
 	AuthToken string
 }
 
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *ImportCommand) Logger() logger.Logger {
+	return cmd.logDest
+}
+
 // NewImportCommand returns a new instance of ImportCommand.
-func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand {
+func NewImportCommand(logdest logger.Logger) *ImportCommand {
 	return &ImportCommand{
-		CmdIO:      pilosa.NewCmdIO(stdin, stdout, stderr),
+		logDest:    logdest,
 		BufferSize: 10000000,
 	}
 }
@@ -185,7 +191,7 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, useColumnKeys, useRowK
 		// Read rows as bits.
 		r = csv.NewReader(f)
 	} else {
-		r = csv.NewReader(cmd.Stdin)
+		r = csv.NewReader(os.Stdin)
 	}
 
 	r.FieldsPerRecord = -1
@@ -307,7 +313,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys, parse
 		// Read rows as bits.
 		r = csv.NewReader(f)
 	} else {
-		r = csv.NewReader(cmd.Stdin)
+		r = csv.NewReader(os.Stdin)
 	}
 
 	r.FieldsPerRecord = -1

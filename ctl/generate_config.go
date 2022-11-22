@@ -6,22 +6,25 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
 
 // GenerateConfigCommand represents a command for printing a default config.
 type GenerateConfigCommand struct {
-	*pilosa.CmdIO
+	stdout  io.Writer
+	logDest logger.Logger
 }
 
 // NewGenerateConfigCommand returns a new instance of GenerateConfigCommand.
-func NewGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *GenerateConfigCommand {
+func NewGenerateConfigCommand(logdest logger.Logger) *GenerateConfigCommand {
 	return &GenerateConfigCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		stdout:  os.Stdout,
+		logDest: logdest,
 	}
 }
 
@@ -32,6 +35,6 @@ func (cmd *GenerateConfigCommand) Run(_ context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "unmarshalling default config")
 	}
-	fmt.Fprintf(cmd.Stdout, "%s\n", ret)
+	fmt.Fprintf(cmd.stdout, "%s\n", ret)
 	return nil
 }

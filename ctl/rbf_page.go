@@ -6,9 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/rbf"
 )
 
 // RBFPageCommand represents a command for printing data for a single RBF page.
@@ -20,13 +21,15 @@ type RBFPageCommand struct {
 	Pgnos []uint32
 
 	// Standard input/output
-	*pilosa.CmdIO
+	stdout  io.Writer
+	logDest logger.Logger
 }
 
 // NewRBFPageCommand returns a new instance of RBFPageCommand.
-func NewRBFPageCommand(stdin io.Reader, stdout, stderr io.Writer) *RBFPageCommand {
+func NewRBFPageCommand(logdest logger.Logger) *RBFPageCommand {
 	return &RBFPageCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		stdout:  os.Stdout,
+		logDest: logdest,
 	}
 }
 
@@ -69,60 +72,60 @@ func (cmd *RBFPageCommand) Run(ctx context.Context) error {
 		default:
 			return fmt.Errorf("unexpected page type %T", page)
 		}
-		fmt.Fprintln(cmd.Stdout, "")
+		fmt.Fprintln(cmd.stdout, "")
 	}
 
 	return nil
 }
 
 func (cmd *RBFPageCommand) printMetaPage(page *rbf.MetaPage) {
-	fmt.Fprintf(cmd.Stdout, "Pgno: %d\n", page.Pgno)
-	fmt.Fprintf(cmd.Stdout, "Type: meta\n")
-	fmt.Fprintf(cmd.Stdout, "PageN: %d\n", page.PageN)
-	fmt.Fprintf(cmd.Stdout, "WALID: %d\n", page.WALID)
-	fmt.Fprintf(cmd.Stdout, "Root Record Pgno: %d\n", page.RootRecordPageNo)
-	fmt.Fprintf(cmd.Stdout, "Freelist Pgno: %d\n", page.FreelistPageNo)
+	fmt.Fprintf(cmd.stdout, "Pgno: %d\n", page.Pgno)
+	fmt.Fprintf(cmd.stdout, "Type: meta\n")
+	fmt.Fprintf(cmd.stdout, "PageN: %d\n", page.PageN)
+	fmt.Fprintf(cmd.stdout, "WALID: %d\n", page.WALID)
+	fmt.Fprintf(cmd.stdout, "Root Record Pgno: %d\n", page.RootRecordPageNo)
+	fmt.Fprintf(cmd.stdout, "Freelist Pgno: %d\n", page.FreelistPageNo)
 }
 
 func (cmd *RBFPageCommand) printRootRecordPage(page *rbf.RootRecordPage) {
-	fmt.Fprintf(cmd.Stdout, "Pgno: %d\n", page.Pgno)
-	fmt.Fprintf(cmd.Stdout, "Type: root record\n")
-	fmt.Fprintf(cmd.Stdout, "Next: %d\n", page.Next)
-	fmt.Fprintf(cmd.Stdout, "Records: n=%d\n", len(page.Records))
+	fmt.Fprintf(cmd.stdout, "Pgno: %d\n", page.Pgno)
+	fmt.Fprintf(cmd.stdout, "Type: root record\n")
+	fmt.Fprintf(cmd.stdout, "Next: %d\n", page.Next)
+	fmt.Fprintf(cmd.stdout, "Records: n=%d\n", len(page.Records))
 	for i, rec := range page.Records {
-		fmt.Fprintf(cmd.Stdout, "[%d]: name=%q pgno=%d\n", i, rec.Name, rec.Pgno)
+		fmt.Fprintf(cmd.stdout, "[%d]: name=%q pgno=%d\n", i, rec.Name, rec.Pgno)
 	}
 }
 
 func (cmd *RBFPageCommand) printLeafPage(page *rbf.LeafPage) {
-	fmt.Fprintf(cmd.Stdout, "Pgno: %d\n", page.Pgno)
-	fmt.Fprintf(cmd.Stdout, "Type: leaf\n")
-	fmt.Fprintf(cmd.Stdout, "Cells: n=%d\n", len(page.Cells))
+	fmt.Fprintf(cmd.stdout, "Pgno: %d\n", page.Pgno)
+	fmt.Fprintf(cmd.stdout, "Type: leaf\n")
+	fmt.Fprintf(cmd.stdout, "Cells: n=%d\n", len(page.Cells))
 	for i, cell := range page.Cells {
 		if cell.Type == rbf.ContainerTypeBitmapPtr {
-			fmt.Fprintf(cmd.Stdout, "[%d]: key=%d type=%s pgno=%d\n", i, cell.Key, cell.Type, cell.Pgno)
+			fmt.Fprintf(cmd.stdout, "[%d]: key=%d type=%s pgno=%d\n", i, cell.Key, cell.Type, cell.Pgno)
 		} else {
-			fmt.Fprintf(cmd.Stdout, "[%d]: key=%d type=%s values=%v\n", i, cell.Key, cell.Type, cell.Values)
+			fmt.Fprintf(cmd.stdout, "[%d]: key=%d type=%s values=%v\n", i, cell.Key, cell.Type, cell.Values)
 		}
 	}
 }
 
 func (cmd *RBFPageCommand) printBranchPage(page *rbf.BranchPage) {
-	fmt.Fprintf(cmd.Stdout, "Pgno: %d\n", page.Pgno)
-	fmt.Fprintf(cmd.Stdout, "Type: branch\n")
-	fmt.Fprintf(cmd.Stdout, "Cells: n=%d\n", len(page.Cells))
+	fmt.Fprintf(cmd.stdout, "Pgno: %d\n", page.Pgno)
+	fmt.Fprintf(cmd.stdout, "Type: branch\n")
+	fmt.Fprintf(cmd.stdout, "Cells: n=%d\n", len(page.Cells))
 	for i, cell := range page.Cells {
-		fmt.Fprintf(cmd.Stdout, "[%d]: key=%d flags=%d pgno=%d\n", i, cell.Key, cell.Flags, cell.Pgno)
+		fmt.Fprintf(cmd.stdout, "[%d]: key=%d flags=%d pgno=%d\n", i, cell.Key, cell.Flags, cell.Pgno)
 	}
 }
 
 func (cmd *RBFPageCommand) printBitmapPage(page *rbf.BitmapPage) {
-	fmt.Fprintf(cmd.Stdout, "Pgno: %d\n", page.Pgno)
-	fmt.Fprintf(cmd.Stdout, "Type: bitmap\n")
-	fmt.Fprintf(cmd.Stdout, "Values: %v\n", page.Values)
+	fmt.Fprintf(cmd.stdout, "Pgno: %d\n", page.Pgno)
+	fmt.Fprintf(cmd.stdout, "Type: bitmap\n")
+	fmt.Fprintf(cmd.stdout, "Values: %v\n", page.Values)
 }
 
 func (cmd *RBFPageCommand) printFreePage(page *rbf.FreePage) {
-	fmt.Fprintf(cmd.Stdout, "Pgno: %d\n", page.Pgno)
-	fmt.Fprintf(cmd.Stdout, "Type: free\n")
+	fmt.Fprintf(cmd.stdout, "Pgno: %d\n", page.Pgno)
+	fmt.Fprintf(cmd.stdout, "Type: free\n")
 }

@@ -7,10 +7,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/rbf"
 )
 
 // RBFDumpCommand represents a command for dumping raw data for an RBF page.
@@ -22,13 +23,15 @@ type RBFDumpCommand struct {
 	Pgnos []uint32
 
 	// Standard input/output
-	*pilosa.CmdIO
+	stdout  io.Writer
+	logDest logger.Logger
 }
 
 // NewRBFDumpCommand returns a new instance of RBFDumpCommand.
-func NewRBFDumpCommand(stdin io.Reader, stdout, stderr io.Writer) *RBFDumpCommand {
+func NewRBFDumpCommand(logdest logger.Logger) *RBFDumpCommand {
 	return &RBFDumpCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		stdout:  os.Stdout,
+		logDest: logdest,
 	}
 }
 
@@ -55,9 +58,9 @@ func (cmd *RBFDumpCommand) Run(ctx context.Context) error {
 			return err
 		}
 
-		fmt.Fprintf(cmd.Stdout, "## PAGE %d\n", pgno)
-		fmt.Fprintln(cmd.Stdout, compressedHexDump(buf))
-		fmt.Fprintln(cmd.Stdout, "")
+		fmt.Fprintf(cmd.stdout, "## PAGE %d\n", pgno)
+		fmt.Fprintln(cmd.stdout, compressedHexDump(buf))
+		fmt.Fprintln(cmd.stdout, "")
 	}
 
 	return nil

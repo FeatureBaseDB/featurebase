@@ -15,7 +15,7 @@ import (
 
 func main() {
 	defer monitor.CaptureMessage("Session:Ended")
-	rootCmd := cmd.NewRootCommand(os.Stdin, os.Stdout, os.Stderr)
+	rootCmd := cmd.NewRootCommand(os.Stderr)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

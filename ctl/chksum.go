@@ -7,10 +7,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/cespare/xxhash"
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/server"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
 )
 
 // ChkSumCommand represents a command for backing up a Pilosa node.
@@ -24,15 +26,22 @@ type ChkSumCommand struct { // nolint: maligned
 	client *pilosa.InternalClient
 
 	// Standard input/output
-	*pilosa.CmdIO
+	stdout  io.Writer
+	logDest logger.Logger
 
 	TLS server.TLSConfig
 }
 
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *ChkSumCommand) Logger() logger.Logger {
+	return cmd.logDest
+}
+
 // NewChkSumCommand returns a new instance of BackupCommand.
-func NewChkSumCommand(stdin io.Reader, stdout, stderr io.Writer) *ChkSumCommand {
+func NewChkSumCommand(logdest logger.Logger) *ChkSumCommand {
 	return &ChkSumCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		stdout:  os.Stdout,
+		logDest: logdest,
 	}
 }
 
@@ -127,7 +136,7 @@ func (cmd *ChkSumCommand) Run(ctx context.Context) (err error) {
 			}
 
 		}
-		fmt.Fprintf(cmd.Stdout, "hash:%x\n", h.Sum(nil))
+		fmt.Fprintf(cmd.stdout, "hash:%x\n", h.Sum(nil))
 	}
 
 	return nil

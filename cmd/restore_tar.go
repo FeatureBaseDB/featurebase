@@ -2,14 +2,13 @@
 package cmd
 
 import (
-	"io"
-
-	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-func newRestoreTarCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	cmd := ctl.NewRestoreTarCommand(stdin, stdout, stderr)
+func newRestoreTarCommand(logdest logger.Logger) *cobra.Command {
+	cmd := ctl.NewRestoreTarCommand(logdest)
 	restoreCmd := &cobra.Command{
 		Use:   "restoretar",
 		Short: "Restore from a backup in tar format",

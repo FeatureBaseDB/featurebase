@@ -19,6 +19,7 @@ import (
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
@@ -51,17 +52,22 @@ type BackupTarCommand struct { // nolint: maligned
 	client *pilosa.InternalClient
 
 	// Standard input/output
-	*pilosa.CmdIO
+	logDest logger.Logger
 
 	TLS server.TLSConfig
 
 	AuthToken string
 }
 
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *BackupTarCommand) Logger() logger.Logger {
+	return cmd.logDest
+}
+
 // NewBackupTarCommand returns a new instance of BackupCommand.
-func NewBackupTarCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupTarCommand {
+func NewBackupTarCommand(logdest logger.Logger) *BackupTarCommand {
 	return &BackupTarCommand{
-		CmdIO:         pilosa.NewCmdIO(stdin, stdout, stderr),
+		logDest:       logdest,
 		RetryPeriod:   time.Minute,
 		HeaderTimeout: time.Second * 3,
 		Pprof:         "localhost:0",
@@ -130,7 +136,7 @@ func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
 	// Create output file in temporary location, or send to stdout if a dash is specified.
 	var w io.Writer
 	if useStdout {
-		w = cmd.Stdout
+		w = os.Stdout
 	} else {
 		f, err := os.Create(cmd.OutputPath + ".tmp")
 		if err != nil {

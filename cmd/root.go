@@ -11,6 +11,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -46,7 +47,8 @@ func considerUsageError(cmd *cobra.Command, err error) error {
 	return err
 }
 
-func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func NewRootCommand(stderr io.Writer) *cobra.Command {
+	logdest := logger.NewStandardLogger(stderr)
 	rc := &cobra.Command{
 		Use: "featurebase",
 		// TODO: These short/long descriptions could use some updating.
@@ -88,22 +90,22 @@ at https://docs.featurebase.com/.
 	_ = rc.PersistentFlags().MarkHidden("dry-run")
 	rc.PersistentFlags().StringP("config", "c", "", "Configuration file to read from.")
 
-	rc.AddCommand(newChkSumCommand(stdin, stdout, stderr))
-	rc.AddCommand(newBackupCommand(stdin, stdout, stderr))
-	rc.AddCommand(newRestoreCommand(stdin, stdout, stderr))
-	rc.AddCommand(newBackupTarCommand(stdin, stdout, stderr))
-	rc.AddCommand(newRestoreTarCommand(stdin, stdout, stderr))
-	rc.AddCommand(newConfigCommand(stdin, stdout, stderr))
-	rc.AddCommand(newExportCommand(stdin, stdout, stderr))
-	rc.AddCommand(newGenerateConfigCommand(stdin, stdout, stderr))
-	rc.AddCommand(newImportCommand(stdin, stdout, stderr))
-	rc.AddCommand(newAuthTokenCommand(stdin, stdout, stderr))
-	rc.AddCommand(newRBFCommand(stdin, stdout, stderr))
-	rc.AddCommand(newServeCmd(stdin, stdout, stderr))
-	rc.AddCommand(newHolderCmd(stdin, stdout, stderr))
-	rc.AddCommand(newKeygenCommand(stdin, stdout, stderr))
-	rc.AddCommand(newCLICommand(stdin, stdout, stderr))
-	rc.AddCommand(newDAXCommand(stdin, stdout, stderr))
+	rc.AddCommand(newChkSumCommand(logdest))
+	rc.AddCommand(newBackupCommand(logdest))
+	rc.AddCommand(newRestoreCommand(logdest))
+	rc.AddCommand(newBackupTarCommand(logdest))
+	rc.AddCommand(newRestoreTarCommand(logdest))
+	rc.AddCommand(newConfigCommand(stderr))
+	rc.AddCommand(newExportCommand(logdest))
+	rc.AddCommand(newGenerateConfigCommand(logdest))
+	rc.AddCommand(newImportCommand(logdest))
+	rc.AddCommand(newAuthTokenCommand(logdest))
+	rc.AddCommand(newRBFCommand(logdest))
+	rc.AddCommand(newServeCmd(stderr))
+	rc.AddCommand(newHolderCmd(stderr))
+	rc.AddCommand(newKeygenCommand(logdest))
+	rc.AddCommand(newCLICommand(logdest))
+	rc.AddCommand(newDAXCommand(stderr))
 
 	rc.SetOutput(stderr)
 	return rc
