@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/pql"
@@ -144,11 +145,20 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 					}
 				}
 
+			case dax.BaseTypeTimestamp:
+				if src, ok := s.Data[i][j].(string); ok && src != "" {
+					val, err := time.ParseInLocation(time.RFC3339Nano, src, time.UTC)
+					if err != nil {
+						return errors.Wrap(err, "parsing timestamp")
+					}
+					s.Data[i][j] = val
+				}
+
 			case dax.BaseTypeBool, dax.BaseTypeString:
 				// no need to convert
 
 			default:
-				log.Printf("WARNING: unimplemented: %T", hdr.BaseType)
+				log.Printf("WARNING: unimplemented: %s", hdr.BaseType)
 			}
 		}
 	}
