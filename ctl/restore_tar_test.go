@@ -1,15 +1,16 @@
 package ctl
 
 import (
-	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestRestoreTarCommand_Run(t *testing.T) {
@@ -17,9 +18,8 @@ func TestRestoreTarCommand_Run(t *testing.T) {
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewRestoreTarCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewRestoreTarCommand(cmLog)
 	hostport := cmd.API.Node().URI.HostPort()
 	cm.Host = hostport
 	cm.Path = ""

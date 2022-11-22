@@ -6,26 +6,29 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/gorilla/securecookie"
-	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 // Keygen represents a command for generating a cryptographic key.
 type KeygenCommand struct {
-	CmdIO     *pilosa.CmdIO
+	stdout    io.Writer
+	logDest   logger.Logger
 	KeyLength int
 }
 
 // NewKeygen returns a new instance of Keygen.
-func NewKeygenCommand(stdin io.Reader, stdout, stderr io.Writer) *KeygenCommand {
+func NewKeygenCommand(logdest logger.Logger) *KeygenCommand {
 	return &KeygenCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		stdout:  os.Stdout,
+		logDest: logdest,
 	}
 }
 
 // Run keygen to obtain key to use for authentication .
 func (kg *KeygenCommand) Run(_ context.Context) error {
-	fmt.Printf("secret-key = \"%+x\"\n", securecookie.GenerateRandomKey(kg.KeyLength))
+	fmt.Fprintf(kg.stdout, "secret-key = \"%+x\"\n", securecookie.GenerateRandomKey(kg.KeyLength))
 	return nil
 }

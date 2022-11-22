@@ -3,17 +3,16 @@
 package cmd
 
 import (
-	"io"
-
 	"github.com/spf13/cobra"
 
-	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 var generateConf *ctl.GenerateConfigCommand
 
-func newGenerateConfigCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	generateConf = ctl.NewGenerateConfigCommand(stdin, stdout, stderr)
+func newGenerateConfigCommand(logdest logger.Logger) *cobra.Command {
+	generateConf = ctl.NewGenerateConfigCommand(logdest)
 	confCmd := &cobra.Command{
 		Use:   "generate-config",
 		Short: "Print the default configuration.",

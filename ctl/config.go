@@ -6,22 +6,26 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/molecula/featurebase/v3/server"
 	toml "github.com/pelletier/go-toml"
 )
 
 // ConfigCommand represents a command for printing a default config.
 type ConfigCommand struct {
-	*pilosa.CmdIO
+	// this exists so we can override it in tests
+	stdout io.Writer
+	// this actually gets overridden more generally by different tests
+	stderr io.Writer
 	Config *server.Config
 }
 
 // NewConfigCommand returns a new instance of ConfigCommand.
-func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand {
+func NewConfigCommand(stderr io.Writer) *ConfigCommand {
 	return &ConfigCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		stdout: os.Stdout,
+		stderr: stderr,
 	}
 }
 
@@ -31,6 +35,6 @@ func (cmd *ConfigCommand) Run(_ context.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(cmd.Stdout, string(buf))
+	fmt.Fprintln(cmd.stdout, string(buf))
 	return nil
 }

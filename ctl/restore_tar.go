@@ -15,10 +15,11 @@ import (
 	"strings"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/authn"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/server"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -42,17 +43,22 @@ type RestoreTarCommand struct {
 	client *pilosa.InternalClient
 
 	// Standard input/output
-	*pilosa.CmdIO
+	logDest logger.Logger
 
 	TLS server.TLSConfig
 
 	AuthToken string
 }
 
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *RestoreTarCommand) Logger() logger.Logger {
+	return cmd.logDest
+}
+
 // NewRestoreTarCommand returns a new instance of RestoreTarCommand.
-func NewRestoreTarCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreTarCommand {
+func NewRestoreTarCommand(logdest logger.Logger) *RestoreTarCommand {
 	return &RestoreTarCommand{
-		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
+		logDest:     logdest,
 		RetryPeriod: time.Second * 30,
 		Pprof:       "localhost:0",
 	}
@@ -76,7 +82,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 	var f io.Reader
 	// read from Stdin if path specified as -
 	if useStdin {
-		f = cmd.Stdin
+		f = os.Stdin
 	} else {
 		file, err := os.Open(cmd.Path)
 		if err != nil {

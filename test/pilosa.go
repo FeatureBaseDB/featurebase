@@ -48,7 +48,11 @@ func newCommand(tb DirCleaner, opts ...server.CommandOption) *Command {
 	}, opts...)
 
 	m := &Command{commandOptions: opts}
-	m.Command = server.NewCommand(bytes.NewReader(nil), io.Discard, io.Discard, opts...)
+	output := io.Discard
+	if testing.Verbose() {
+		output = os.Stderr
+	}
+	m.Command = server.NewCommand(output, opts...)
 	// pick etcd ports using a socket rather than a real port
 	err := GetPortsGenConfigs(tb, []*Command{m})
 	if err != nil {
@@ -67,11 +71,6 @@ func newCommand(tb DirCleaner, opts ...server.CommandOption) *Command {
 
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2
-
-	if testing.Verbose() {
-		m.Command.Stdout = os.Stdout
-		m.Command.Stderr = os.Stderr
-	}
 
 	return m
 }
@@ -110,7 +109,11 @@ func (m *Command) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Command.Config
-	m.Command = server.NewCommand(bytes.NewReader(nil), io.Discard, io.Discard, m.commandOptions...)
+	output := io.Discard
+	if testing.Verbose() {
+		output = os.Stderr
+	}
+	m.Command = server.NewCommand(output, m.commandOptions...)
 	m.Command.Config = config
 
 	// Run new program.

@@ -2,17 +2,16 @@
 package cmd
 
 import (
-	"io"
-
-	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
 var cli *ctl.CLICommand
 
 // newCLICommand runs the FeatureBase CLI subcommand for ingesting bulk data.
-func newCLICommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	cli = ctl.NewCLICommand(stdin, stdout, stderr)
+func newCLICommand(logdest logger.Logger) *cobra.Command {
+	cli = ctl.NewCLICommand(logdest)
 	cliCmd := &cobra.Command{
 		Use:   "cli",
 		Short: "Query FB with SQL3 from the command line",

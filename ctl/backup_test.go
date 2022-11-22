@@ -4,12 +4,15 @@ package ctl
 import (
 	"context"
 	"errors"
-	"os"
+	"io"
 	"testing"
+
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 func TestBackupCommand_Run(t *testing.T) {
-	cm := NewBackupCommand(os.Stdin, os.Stdout, os.Stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewBackupCommand(cmLog)
 	cm.OutputDir = ""
 	err := cm.Run(context.Background())
 	if !errors.Is(err, UsageError) {
