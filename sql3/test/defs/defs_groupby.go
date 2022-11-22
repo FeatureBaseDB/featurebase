@@ -1,8 +1,9 @@
 package defs
 
 import (
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	featurebase "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/pql"
 )
 
 // groupby tests
@@ -109,7 +110,11 @@ var groupByTests = TableTest{
 				"select avg(i1) as avg_rows, i1 from groupby_test group by i1",
 			),
 			ExpHdrs: hdrs(
-				hdr("avg_rows", parser.NewDataTypeDecimal(4)),
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
 				hdr("i1", fldTypeInt),
 			),
 			ExpRows: rows(
@@ -125,7 +130,11 @@ var groupByTests = TableTest{
 				"select avg(d1) as avg_rows, i1 from groupby_test group by i1",
 			),
 			ExpHdrs: hdrs(
-				hdr("avg_rows", parser.NewDataTypeDecimal(4)),
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
 				hdr("i1", fldTypeInt),
 			),
 			ExpRows: rows(

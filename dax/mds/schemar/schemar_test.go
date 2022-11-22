@@ -33,11 +33,11 @@ func TestSchemar(t *testing.T) {
 		tbl.Fields = []*dax.Field{
 			{
 				Name: dax.PrimaryKeyFieldName,
-				Type: dax.FieldTypeString,
+				Type: dax.BaseTypeString,
 			},
 			{
 				Name: "intField",
-				Type: dax.FieldTypeInt,
+				Type: dax.BaseTypeInt,
 			},
 		}
 		qtbl := dax.NewQualifiedTable(qual, tbl)

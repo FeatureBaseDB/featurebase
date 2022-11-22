@@ -14,11 +14,11 @@ import (
 func TestQualifiedTable(t *testing.T, qual dax.TableQualifier, name dax.TableName, partitionN int, keyed bool) *dax.QualifiedTable {
 	t.Helper()
 
-	var pkFieldType dax.FieldType
+	var pkFieldType dax.BaseType
 	if keyed {
-		pkFieldType = dax.FieldTypeString
+		pkFieldType = dax.BaseTypeString
 	} else {
-		pkFieldType = dax.FieldTypeID
+		pkFieldType = dax.BaseTypeID
 	}
 
 	tbl := dax.NewTable(name)
@@ -42,11 +42,11 @@ func TestQualifiedTable(t *testing.T, qual dax.TableQualifier, name dax.TableNam
 func TestQualifiedTableWithID(t *testing.T, qual dax.TableQualifier, id string, name dax.TableName, partitionN int, keyed bool) *dax.QualifiedTable {
 	t.Helper()
 
-	var pkFieldType dax.FieldType
+	var pkFieldType dax.BaseType
 	if keyed {
-		pkFieldType = dax.FieldTypeString
+		pkFieldType = dax.BaseTypeString
 	} else {
-		pkFieldType = dax.FieldTypeID
+		pkFieldType = dax.BaseTypeID
 	}
 
 	tbl := &dax.Table{

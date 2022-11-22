@@ -7,9 +7,10 @@ import (
 	"sort"
 	"testing"
 
-	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
-	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
-	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/molecula/featurebase/v3/dax"
+	sql_test "github.com/molecula/featurebase/v3/sql3/test"
+	"github.com/molecula/featurebase/v3/sql3/test/defs"
+	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,9 +57,9 @@ func TestSQL_Execute(t *testing.T) {
 							assert.ElementsMatch(t, sqltest.ExpHdrs, headers)
 
 							// make a map of column name to header index
-							m := make(map[string]int)
+							m := make(map[dax.FieldName]int)
 							for i := range headers {
-								m[headers[i].ColumnName] = i
+								m[headers[i].Name] = i
 							}
 
 							// Put the expRows in the same column order as the headers returned
@@ -67,7 +68,7 @@ func TestSQL_Execute(t *testing.T) {
 							for i := range sqltest.ExpRows {
 								exp[i] = make([]interface{}, len(headers))
 								for j := range sqltest.ExpHdrs {
-									targetIdx := m[sqltest.ExpHdrs[j].ColumnName]
+									targetIdx := m[sqltest.ExpHdrs[j].Name]
 									assert.GreaterOrEqual(t, len(sqltest.ExpRows[i]), len(headers),
 										"expected row set has fewer columns than returned headers")
 									exp[i][targetIdx] = sqltest.ExpRows[i][j]

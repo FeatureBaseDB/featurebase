@@ -31,11 +31,11 @@ func TestTable(t *testing.T) {
 				Fields: []*dax.Field{
 					{
 						Name: dax.PrimaryKeyFieldName,
-						Type: dax.FieldTypeString,
+						Type: dax.BaseTypeString,
 					},
 					{
 						Name: "stringField2",
-						Type: dax.FieldTypeString,
+						Type: dax.BaseTypeString,
 					},
 				},
 			}
@@ -48,7 +48,7 @@ func TestTable(t *testing.T) {
 				Fields: []*dax.Field{
 					{
 						Name: dax.PrimaryKeyFieldName,
-						Type: dax.FieldTypeID,
+						Type: dax.BaseTypeID,
 					},
 				},
 			}
