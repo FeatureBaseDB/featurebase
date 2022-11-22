@@ -951,7 +951,7 @@ type successResponse struct {
 	Error     *HTTPError `json:"error,omitempty"`
 }
 
-// Error defines a standard application error.
+// HTTPError defines a standard application error.
 type HTTPError struct {
 	// Human-readable message.
 	Message string `json:"message"`
@@ -1491,13 +1491,21 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	// Read schema & write to response.
 	columns := rootOperator.Schema()
-	schema := SQLSchema{
-		Fields: make([]*SQLField, len(columns)),
+	schema := WireQuerySchema{
+		Fields: make([]*WireQueryField, len(columns)),
 	}
 	for i, col := range columns {
-		schema.Fields[i] = &SQLField{
-			Name: col.ColumnName,
-			Type: col.Type.TypeName(),
+		btype, err := dax.BaseTypeFromString(col.Type.TypeName())
+		if err != nil {
+			writeError(err)
+			writeWarnings(rootOperator.Warnings())
+			return
+		}
+		schema.Fields[i] = &WireQueryField{
+			Name:     dax.FieldName(col.ColumnName),
+			Type:     strings.ToLower(col.Type.TypeDescription()), // TODO(tlt): remove this once sql3 uses BaseTypes.
+			BaseType: btype,
+			TypeInfo: col.Type.TypeInfo(),
 		}
 	}
 	w.Write([]byte(`"schema":`))
@@ -1545,15 +1553,6 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	writeError(rowErr)
 	writeWarnings(rootOperator.Warnings())
 	writePlan(rootOperator.Plan())
-}
-
-type SQLField struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
-type SQLSchema struct {
-	Fields []*SQLField `json:"fields"`
 }
 
 func (h *Handler) handleCPUProfileStart(w http.ResponseWriter, r *http.Request) {

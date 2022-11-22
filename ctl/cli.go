@@ -319,7 +319,7 @@ func appendCommand(orig string, part string) string {
 }
 
 type FBQueryer interface {
-	Query(org, db, sql string) (*featurebase.SQLResponse, error)
+	Query(org, db, sql string) (*featurebase.WireQueryResponse, error)
 }
 
 func (cmd *CLICommand) executeCommands(ctx context.Context) error {
@@ -341,7 +341,7 @@ func (cmd *CLICommand) executeCommands(ctx context.Context) error {
 			fmt.Printf("making query: %v\n", err)
 			continue
 		}
-		err = WriteOut(sqlResponse, os.Stdout)
+		err = writeOut(sqlResponse, os.Stdout)
 		if err != nil {
 			return errors.Wrap(err, "writing out response")
 		}
@@ -401,7 +401,7 @@ func (cmd *CLICommand) handleIfNonSQLCommand(ctx context.Context, sql string) (b
 	return handled, nil
 }
 
-func WriteWarnings(r *featurebase.SQLResponse, w io.Writer) error {
+func writeWarnings(r *featurebase.WireQueryResponse, w io.Writer) error {
 	if len(r.Warnings) > 0 {
 		if _, err := w.Write([]byte("\n")); err != nil {
 			return errors.Wrapf(err, "writing warning: %s", r.Error)
@@ -415,7 +415,7 @@ func WriteWarnings(r *featurebase.SQLResponse, w io.Writer) error {
 	return nil
 }
 
-func WriteOut(r *featurebase.SQLResponse, w io.Writer) error {
+func writeOut(r *featurebase.WireQueryResponse, w io.Writer) error {
 	if r == nil {
 		return errors.New("attempt to write out nil response")
 	}
@@ -423,7 +423,7 @@ func WriteOut(r *featurebase.SQLResponse, w io.Writer) error {
 		if _, err := w.Write([]byte("Error: " + r.Error + "\n")); err != nil {
 			return errors.Wrapf(err, "writing error: %s", r.Error)
 		}
-		return WriteWarnings(r, w)
+		return writeWarnings(r, w)
 	}
 
 	t := table.NewWriter()
@@ -445,7 +445,7 @@ func WriteOut(r *featurebase.SQLResponse, w io.Writer) error {
 	}
 	t.Render()
 
-	err := WriteWarnings(r, w)
+	err := writeWarnings(r, w)
 	if err != nil {
 		return err
 	}
@@ -465,7 +465,7 @@ func WriteOut(r *featurebase.SQLResponse, w io.Writer) error {
 	return nil
 }
 
-func schemaToRow(schema featurebase.SQLSchema) []interface{} {
+func schemaToRow(schema featurebase.WireQuerySchema) []interface{} {
 	ret := make([]interface{}, len(schema.Fields))
 	for i, field := range schema.Fields {
 		ret[i] = field.Name
@@ -483,7 +483,7 @@ type standardQueryer struct {
 	Port string
 }
 
-func (qryr *standardQueryer) Query(org, db, sql string) (*featurebase.SQLResponse, error) {
+func (qryr *standardQueryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
 	buf := bytes.Buffer{}
 	url := fmt.Sprintf("%s/sql", hostPort(qryr.Host, qryr.Port))
 
@@ -498,8 +498,10 @@ func (qryr *standardQueryer) Query(org, db, sql string) (*featurebase.SQLRespons
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
-	sqlResponse := &featurebase.SQLResponse{}
-	if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
+	sqlResponse := &featurebase.WireQueryResponse{}
+	// TODO(tlt): switch this back once all responses are typed
+	// if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
+	if err := sqlResponse.UnmarshalJSONTyped(fullbod, true); err != nil {
 		return nil, errors.Wrapf(err, "unmarshaling query response, body:\n'%s'\n", fullbod)
 	}
 
@@ -517,7 +519,7 @@ type daxQueryer struct {
 	Port string
 }
 
-func (qryr *daxQueryer) Query(org, db, sql string) (*featurebase.SQLResponse, error) {
+func (qryr *daxQueryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
 	buf := bytes.Buffer{}
 	url := fmt.Sprintf("%s/queryer/sql", hostPort(qryr.Host, qryr.Port))
 
@@ -539,8 +541,10 @@ func (qryr *daxQueryer) Query(org, db, sql string) (*featurebase.SQLResponse, er
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
-	sqlResponse := &featurebase.SQLResponse{}
-	if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
+	sqlResponse := &featurebase.WireQueryResponse{}
+	// TODO(tlt): switch this back once all responses are typed
+	// if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
+	if err := sqlResponse.UnmarshalJSONTyped(fullbod, true); err != nil {
 		return nil, errors.Wrapf(err, "unmarshaling query response, body:\n'%s'\n", fullbod)
 	}
 

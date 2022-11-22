@@ -93,7 +93,7 @@ func daxFieldToFeaturebaseFieldInfo(field *dax.Field) (*pilosa.FieldInfo, error)
 	max := field.Options.Max
 
 	switch field.Type {
-	case dax.FieldTypeTimestamp:
+	case dax.BaseTypeTimestamp:
 		timestampOptions, err := daxFieldOptionsToFeaturebaseTimestamp(field.Options)
 		if err != nil {
 			return nil, errors.Wrap(err, "getting timestamp options")
@@ -132,12 +132,12 @@ func daxFieldToFeaturebaseFieldInfo(field *dax.Field) (*pilosa.FieldInfo, error)
 // dax.Field.
 func featurebaseFieldType(f *dax.Field) string {
 	switch f.Type {
-	case dax.FieldTypeID, dax.FieldTypeString:
+	case dax.BaseTypeID, dax.BaseTypeString:
 		if f.Name == dax.PrimaryKeyFieldName {
 			return string(f.Type)
 		}
 		return "mutex"
-	case dax.FieldTypeIDSet, dax.FieldTypeStringSet:
+	case dax.BaseTypeIDSet, dax.BaseTypeStringSet:
 		if f.Options.TimeQuantum != "" {
 			return "time"
 		}
@@ -189,7 +189,7 @@ func featurebaseFieldOptionsToDaxField(name string, fo *pilosa.FieldOptions) (*d
 	// values are applied in sql3/planner/createtable.go, so we don't
 	// initialize with defaults here. In other words, we set these value to
 	// exactly as we receive them from the caller.
-	var fieldType dax.FieldType
+	var fieldType dax.BaseType
 	var min pql.Decimal
 	var max pql.Decimal
 	var scale int64
@@ -203,41 +203,41 @@ func featurebaseFieldOptionsToDaxField(name string, fo *pilosa.FieldOptions) (*d
 	switch fo.Type {
 	case pilosa.FieldTypeMutex:
 		if fo.Keys {
-			fieldType = dax.FieldTypeString
+			fieldType = dax.BaseTypeString
 		} else {
-			fieldType = dax.FieldTypeID
+			fieldType = dax.BaseTypeID
 		}
 		cacheType = fo.CacheType
 		cacheSize = fo.CacheSize
 	case pilosa.FieldTypeSet:
 		if fo.Keys {
-			fieldType = dax.FieldTypeStringSet
+			fieldType = dax.BaseTypeStringSet
 		} else {
-			fieldType = dax.FieldTypeIDSet
+			fieldType = dax.BaseTypeIDSet
 		}
 		cacheType = fo.CacheType
 		cacheSize = fo.CacheSize
 	case pilosa.FieldTypeInt:
 		min = fo.Min
 		max = fo.Max
-		fieldType = dax.FieldTypeInt
+		fieldType = dax.BaseTypeInt
 		foreignIndex = fo.ForeignIndex
 	case pilosa.FieldTypeDecimal:
 		min = fo.Min
 		max = fo.Max
 		scale = fo.Scale
-		fieldType = dax.FieldTypeDecimal
+		fieldType = dax.BaseTypeDecimal
 	case pilosa.FieldTypeTimestamp:
 		epoch = featurebaseFieldOptionsToEpoch(fo)
 		timeUnit = fo.TimeUnit
-		fieldType = dax.FieldTypeTimestamp
+		fieldType = dax.BaseTypeTimestamp
 	case pilosa.FieldTypeBool:
-		fieldType = dax.FieldTypeBool
+		fieldType = dax.BaseTypeBool
 	case pilosa.FieldTypeTime:
 		if fo.Keys {
-			fieldType = dax.FieldTypeStringSet
+			fieldType = dax.BaseTypeStringSet
 		} else {
-			fieldType = dax.FieldTypeIDSet
+			fieldType = dax.BaseTypeIDSet
 		}
 		timeQuantum = dax.TimeQuantum(fo.TimeQuantum)
 	default:
@@ -316,11 +316,11 @@ func (s *qualifiedSchemaAPI) CreateIndexAndFields(ctx context.Context, indexName
 	daxFields := make([]*dax.Field, 0, len(fields)+1)
 
 	// Add the primary key field.
-	var fieldType dax.FieldType
+	var fieldType dax.BaseType
 	if options.Keys {
-		fieldType = dax.FieldTypeString
+		fieldType = dax.BaseTypeString
 	} else {
-		fieldType = dax.FieldTypeID
+		fieldType = dax.BaseTypeID
 	}
 	daxFields = append(daxFields, &dax.Field{
 		Name: dax.PrimaryKeyFieldName,

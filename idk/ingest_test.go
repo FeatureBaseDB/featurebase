@@ -1757,7 +1757,7 @@ func TestBatchTargetMDS(t *testing.T) {
 
 	t.Run("FieldTypes", func(t *testing.T) {
 		tests := []struct {
-			fieldType    dax.FieldType
+			fieldType    dax.BaseType
 			fieldOptions dax.FieldOptions
 			fieldFn      fieldFn
 			in           [][]interface{}
@@ -1771,7 +1771,7 @@ func TestBatchTargetMDS(t *testing.T) {
 			// 	},
 			// },
 			{
-				fieldType: dax.FieldTypeDecimal,
+				fieldType: dax.BaseTypeDecimal,
 				fieldOptions: dax.FieldOptions{
 					Scale: 4,
 				},
@@ -1782,7 +1782,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				},
 			},
 			{
-				fieldType: dax.FieldTypeID,
+				fieldType: dax.BaseTypeID,
 				fieldFn:   idFn,
 				in: [][]interface{}{
 					{1, uint64(11)},
@@ -1790,7 +1790,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				},
 			},
 			{
-				fieldType: dax.FieldTypeIDSet,
+				fieldType: dax.BaseTypeIDSet,
 				fieldFn:   idSetFn,
 				in: [][]interface{}{
 					{1, []uint64{11, 12, 13}},
@@ -1798,7 +1798,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				},
 			},
 			{
-				fieldType: dax.FieldTypeInt,
+				fieldType: dax.BaseTypeInt,
 				fieldFn:   intFn,
 				in: [][]interface{}{
 					{1, int(11)},
@@ -1807,7 +1807,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				fieldOptions: dax.FieldOptions{Min: pql.NewDecimal(-100, 0), Max: pql.NewDecimal(100, 0)},
 			},
 			{
-				fieldType: dax.FieldTypeString,
+				fieldType: dax.BaseTypeString,
 				fieldFn:   stringFn,
 				in: [][]interface{}{
 					{1, "cycling"},
@@ -1815,7 +1815,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				},
 			},
 			{
-				fieldType: dax.FieldTypeStringSet,
+				fieldType: dax.BaseTypeStringSet,
 				fieldFn:   stringSetFn,
 				in: [][]interface{}{
 					{1, []string{"cycling", "swimming"}},
@@ -1823,7 +1823,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				},
 			},
 			{
-				fieldType: dax.FieldTypeTimestamp,
+				fieldType: dax.BaseTypeTimestamp,
 				fieldFn:   timestampFn,
 				in: [][]interface{}{
 					{1, time.Now()},
@@ -1846,7 +1846,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				tbl.Fields = []*dax.Field{
 					{
 						Name: dax.PrimaryKeyFieldName,
-						Type: dax.FieldTypeID,
+						Type: dax.BaseTypeID,
 					},
 					{
 						Name:    dax.FieldName(fieldName),

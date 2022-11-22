@@ -3,14 +3,16 @@ package test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	planner_types "github.com/molecula/featurebase/v3/sql3/planner/types"
+	featurebase "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	plannertypes "github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 // MustQueryRows returns the row results as a slice of []interface{}, along with the columns.
-func MustQueryRows(tb testing.TB, svr *pilosa.Server, q string) ([][]interface{}, []*planner_types.PlannerColumn, error) {
+func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interface{}, []*featurebase.WireQueryField, error) {
 	tb.Helper()
 
 	ctx := context.Background()
@@ -32,26 +34,28 @@ func MustQueryRows(tb testing.TB, svr *pilosa.Server, q string) ([][]interface{}
 	results := make([][]interface{}, 0)
 
 	next, err := rowIter.Next(ctx)
-	if err != nil && err != planner_types.ErrNoMoreRows {
+	if err != nil && err != plannertypes.ErrNoMoreRows {
 		return nil, nil, err
 	}
-	for err != planner_types.ErrNoMoreRows {
+	for err != plannertypes.ErrNoMoreRows {
 		result := make([]interface{}, len(ocolumns))
 		for i := range result {
 			result[i] = next[i]
 		}
 		results = append(results, result)
 		next, err = rowIter.Next(ctx)
-		if err != nil && err != planner_types.ErrNoMoreRows {
+		if err != nil && err != plannertypes.ErrNoMoreRows {
 			return nil, nil, err
 		}
 	}
 	//temporarily transform to Columns()
-	cols := make([]*planner_types.PlannerColumn, 0)
+	cols := make([]*featurebase.WireQueryField, 0)
 	for _, oc := range ocolumns {
-		cols = append(cols, &planner_types.PlannerColumn{
-			ColumnName: oc.ColumnName,
-			Type:       oc.Type,
+		cols = append(cols, &featurebase.WireQueryField{
+			Name:     dax.FieldName(oc.ColumnName),
+			Type:     strings.ToLower(oc.Type.TypeDescription()),
+			BaseType: dax.BaseType(strings.ToLower(oc.Type.TypeName())),
+			TypeInfo: oc.Type.TypeInfo(),
 		})
 	}
 	return results, cols, nil

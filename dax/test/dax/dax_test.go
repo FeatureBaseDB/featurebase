@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,8 +25,6 @@ import (
 	"github.com/molecula/featurebase/v3/dax/test/featurebase"
 	"github.com/molecula/featurebase/v3/dax/test/inspector"
 	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/sql3/parser"
-	planner_types "github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/molecula/featurebase/v3/sql3/test/defs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -95,14 +92,7 @@ func TestDAXIntegration(t *testing.T) {
 		// skips is a list of tests which are currently not passing in dax. We
 		// need to get these passing before alpha.
 		skips := []string{
-			"testinsert/test-5",
-			"unoptestd/test-0",
-			"unoptestd/test-2",
-			"binoptesti_d/test-12",
-			"binoptestid_d/test-12",
-			"binoptestdec_i/test-12",
-			"binoptestdec_id/test-12",
-			"binoptestdec_d/test-12",
+			"testinsert/test-5", // error messages differ
 			"table-82/test-3",
 			"table-82/test-8",
 			"table-83/test-3",
@@ -179,9 +169,9 @@ func TestDAXIntegration(t *testing.T) {
 								assert.ElementsMatch(t, sqltest.ExpHdrs, headers)
 
 								// make a map of column name to header index
-								m := make(map[string]int)
+								m := make(map[dax.FieldName]int)
 								for i := range headers {
-									m[headers[i].ColumnName] = i
+									m[dax.FieldName(headers[i].Name)] = i
 								}
 
 								// Put the expRows in the same column order as the headers returned
@@ -190,7 +180,7 @@ func TestDAXIntegration(t *testing.T) {
 								for i := range sqltest.ExpRows {
 									exp[i] = make([]interface{}, len(headers))
 									for j := range sqltest.ExpHdrs {
-										targetIdx := m[sqltest.ExpHdrs[j].ColumnName]
+										targetIdx := m[sqltest.ExpHdrs[j].Name]
 										assert.GreaterOrEqual(t, len(sqltest.ExpRows[i]), len(headers),
 											"expected row set has fewer columns than returned headers")
 										exp[i][targetIdx] = sqltest.ExpRows[i][j]
@@ -242,9 +232,9 @@ func TestDAXIntegration(t *testing.T) {
 								assert.ElementsMatch(t, pqltest.ExpHdrs, headers)
 
 								// make a map of column name to header index
-								m := make(map[string]int)
+								m := make(map[dax.FieldName]int)
 								for i := range headers {
-									m[headers[i].ColumnName] = i
+									m[dax.FieldName(headers[i].Name)] = i
 								}
 
 								// Put the expRows in the same column order as the headers returned
@@ -253,7 +243,7 @@ func TestDAXIntegration(t *testing.T) {
 								for i := range pqltest.ExpRows {
 									exp[i] = make([]interface{}, len(headers))
 									for j := range pqltest.ExpHdrs {
-										targetIdx := m[pqltest.ExpHdrs[j].ColumnName]
+										targetIdx := m[pqltest.ExpHdrs[j].Name]
 										assert.GreaterOrEqual(t, len(pqltest.ExpRows[i]), len(headers),
 											"expected row set has fewer columns than returned headers")
 										exp[i][targetIdx] = pqltest.ExpRows[i][j]
@@ -604,7 +594,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl where setcontains(a_string_set, 'A90B')`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[1]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[1]],"error":"","warnings":null}`,
 			)
 		})
 
@@ -833,7 +823,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl where setcontains(a_string_set, 'A90B')`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[1]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[1]],"error":"","warnings":null}`,
 			)
 		})
 
@@ -874,7 +864,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl where setcontains(a_string_set, 'A90B')`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[1]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[1]],"error":"","warnings":null}`,
 			)
 		})
 
@@ -1023,7 +1013,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl where setcontains(a_string_set, 'B25A')`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[1]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[1]],"error":"","warnings":null}`,
 			)
 		})
 
@@ -1086,7 +1076,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl where setcontains(a_string_set, 'B25A')`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[2]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[2]],"error":"","warnings":null}`,
 			)
 		})
 
@@ -1128,7 +1118,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl where setcontains(a_string_set, 'B25A')`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[2]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[2]],"error":"","warnings":null}`,
 			)
 		})
 
@@ -1461,7 +1451,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[100]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[100]],"error":"","warnings":null}`,
 			)
 		})
 
@@ -1481,7 +1471,7 @@ func TestDAXIntegration(t *testing.T) {
 				addressFn(qcName),
 				qual,
 				`select count(*) as cnt from tbl`,
-				`{"schema":{"fields":[{"name":"cnt","type":"INT"}]},"data":[[0]],"error":"","warnings":null}`,
+				`{"schema":{"fields":[{"name":"cnt","type":"int","base-type":"int"}]},"data":[[0]],"error":"","warnings":null}`,
 			)
 		})
 	})
@@ -1587,10 +1577,10 @@ func sqlCheck(t *testing.T, c docker.Container, address dax.Address, qual dax.Ta
 
 	out := sqlRun(t, c, address, qual, sql)
 
-	got := &fb.SQLResponse{}
+	got := &fb.WireQueryResponse{}
 	assert.NoError(t, json.Unmarshal([]byte(out), got))
 
-	want := &fb.SQLResponse{}
+	want := &fb.WireQueryResponse{}
 	assert.NoError(t, json.Unmarshal([]byte(exp), want))
 
 	assert.Equal(t, want.Schema, got.Schema)
@@ -1666,7 +1656,6 @@ func pqlRun(tb testing.TB, c docker.Container, address dax.Address, qual dax.Tab
 	cmd := req.Cmd()
 	log.Printf("cmd: %s", cmd)
 
-	//resp, err := insp.ExecResp(ctx, c, req.Cmd())
 	resp, err := insp.ExecResp(ctx, c, cmd)
 	assert.NoError(tb, err)
 
@@ -1803,7 +1792,7 @@ func sortStringKeys(in [][]interface{}) {
 }
 
 // mustQueryRows returns the row results as a slice of []interface{}, along with the columns.
-func mustQueryRows(tb testing.TB, c docker.Container, address dax.Address, qual dax.TableQualifier, query string, table string) ([][]interface{}, []*planner_types.PlannerColumn, error) {
+func mustQueryRows(tb testing.TB, c docker.Container, address dax.Address, qual dax.TableQualifier, query string, table string) ([][]interface{}, []*fb.WireQueryField, error) {
 	tb.Helper()
 	var sql string
 	var out string
@@ -1814,105 +1803,16 @@ func mustQueryRows(tb testing.TB, c docker.Container, address dax.Address, qual 
 		out = pqlRun(tb, c, address, qual, table, query)
 	}
 
-	sqlResp := &fb.SQLResponse{}
+	sqlResp := &fb.WireQueryResponse{}
 
-	err := json.Unmarshal([]byte(out), sqlResp)
-	if err != nil {
+	if err := json.Unmarshal([]byte(out), sqlResp); err != nil {
 		tb.Fatalf("error unmarshaling response: %v, raw resp: '%s'", err, out)
 	}
 
-	headers := make([]*planner_types.PlannerColumn, len(sqlResp.Schema.Fields))
-	for i, fld := range sqlResp.Schema.Fields {
-		var htype parser.ExprDataType
-
-		if strings.HasPrefix(fld.Type, parser.FieldTypeDecimal) {
-			sscale := fld.Type[8 : len(fld.Type)-1]
-			scale, err := strconv.Atoi(sscale)
-			assert.NoError(tb, err)
-			htype = &parser.DataTypeDecimal{
-				Scale: int64(scale),
-			}
-
-		} else {
-			switch fld.Type {
-			case parser.FieldTypeBool:
-				htype = &parser.DataTypeBool{}
-			case parser.FieldTypeID:
-				htype = &parser.DataTypeID{}
-			case parser.FieldTypeIDSet:
-				htype = &parser.DataTypeIDSet{}
-			case parser.FieldTypeIDSetQuantum:
-				htype = &parser.DataTypeIDSetQuantum{}
-			case parser.FieldTypeInt:
-				htype = &parser.DataTypeInt{}
-			case parser.FieldTypeString:
-				htype = &parser.DataTypeString{}
-			case parser.FieldTypeStringSet:
-				htype = &parser.DataTypeStringSet{}
-			case parser.FieldTypeStringSetQuantum:
-				htype = &parser.DataTypeStringSetQuantum{}
-			case parser.FieldTypeTimestamp:
-				htype = &parser.DataTypeTimestamp{}
-			default:
-				tb.Errorf("unsupported header type: %s", fld.Type)
-			}
-		}
-
-		headers[i] = &planner_types.PlannerColumn{
-			ColumnName: fld.Name,
-			Type:       htype,
-		}
-	}
-
-	data := sqlResp.Data
-
-	// try to convert the types based on the headers
-	for i := range data {
-		for j, hdr := range headers {
-			switch ht := hdr.Type.(type) {
-			case *parser.DataTypeID, *parser.DataTypeInt:
-				if _, ok := data[i][j].(float64); ok {
-					data[i][j] = int64(data[i][j].(float64))
-				}
-
-			case *parser.DataTypeIDSet:
-				if src, ok := data[i][j].([]interface{}); ok {
-					val := make([]int64, len(src))
-					for k := range src {
-						val[k] = int64(src[k].(float64))
-					}
-					data[i][j] = val
-				}
-
-			case *parser.DataTypeDecimal:
-				if _, ok := data[i][j].(float64); ok {
-					format := fmt.Sprintf("%%.%df", ht.Scale)
-					dec, err := pql.ParseDecimal(fmt.Sprintf(format, data[i][j]))
-					assert.NoError(tb, err)
-					data[i][j] = dec
-				}
-
-			case *parser.DataTypeStringSet:
-				if src, ok := data[i][j].([]interface{}); ok {
-					val := make([]string, len(src))
-					for k := range src {
-						val[k] = src[k].(string)
-					}
-					data[i][j] = val
-				}
-
-			case *parser.DataTypeBool, *parser.DataTypeString:
-				// no need to convert
-
-			default:
-				log.Printf("WARNING: unimplemented: %T", ht)
-			}
-		}
-	}
-
+	var errOut error
 	if sqlResp.Error != "" {
-		err = errors.New(sqlResp.Error)
+		errOut = errors.New(sqlResp.Error)
 	}
 
-	return data, headers, err
+	return sqlResp.Data, sqlResp.Schema.Fields, errOut
 }

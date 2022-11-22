@@ -307,7 +307,7 @@ func NewErrTypeIncompatibleWithBetweenOperator(line, col int, operator, type1 st
 func NewErrTypeCannotBeUsedAsRangeSubscript(line, col int, type1 string) error {
 	return errors.New(
 		ErrTypeCannotBeUsedAsRangeSubscript,
-		fmt.Sprintf("[%d:%d] type '%s' cannot be used a range subscript", line, col, type1),
+		fmt.Sprintf("[%d:%d] type '%s' cannot be used as a range subscript", line, col, type1),
 	)
 }
 

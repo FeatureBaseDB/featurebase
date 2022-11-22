@@ -1,8 +1,9 @@
 package defs
 
 import (
+	featurebase "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/sql3/parser"
 )
 
 // aggregate function tests
@@ -328,7 +329,11 @@ var avgTests = TableTest{
 				"SELECT avg(d1) AS avg_rows FROM avg_test",
 			),
 			ExpHdrs: hdrs(
-				hdr("avg_rows", parser.NewDataTypeDecimal(4)),
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
 			),
 			ExpRows: rows(
 				row(pql.NewDecimal(113333, 4)),

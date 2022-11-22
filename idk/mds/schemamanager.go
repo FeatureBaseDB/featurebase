@@ -49,28 +49,28 @@ func (s *schemaManager) Schema() (*featurebase_client.Schema, error) {
 			opts := make([]featurebase_client.FieldOption, 0)
 
 			switch fld.Type {
-			case dax.FieldTypeBool:
+			case dax.BaseTypeBool:
 				opts = append(opts, featurebase_client.OptFieldTypeBool())
-			case dax.FieldTypeDecimal:
+			case dax.BaseTypeDecimal:
 				opts = append(opts, featurebase_client.OptFieldTypeDecimal(
 					fld.Options.Scale,
 				))
-			case dax.FieldTypeID:
+			case dax.BaseTypeID:
 				opts = append(opts, featurebase_client.OptFieldTypeMutex(
 					featurebase_client.CacheType(fld.Options.CacheType),
 					int(fld.Options.CacheSize),
 				))
-			case dax.FieldTypeIDSet:
+			case dax.BaseTypeIDSet:
 				opts = append(opts, featurebase_client.OptFieldTypeSet(
 					featurebase_client.CacheType(fld.Options.CacheType),
 					int(fld.Options.CacheSize),
 				))
-			case dax.FieldTypeInt:
+			case dax.BaseTypeInt:
 				opts = append(opts, featurebase_client.OptFieldTypeInt(
 					fld.Options.Min.ToInt64(0),
 					fld.Options.Max.ToInt64(0),
 				))
-			case dax.FieldTypeString:
+			case dax.BaseTypeString:
 				opts = append(opts,
 					featurebase_client.OptFieldTypeMutex(
 						featurebase_client.CacheType(fld.Options.CacheType),
@@ -78,7 +78,7 @@ func (s *schemaManager) Schema() (*featurebase_client.Schema, error) {
 					),
 					featurebase_client.OptFieldKeys(true),
 				)
-			case dax.FieldTypeStringSet:
+			case dax.BaseTypeStringSet:
 				opts = append(opts,
 					featurebase_client.OptFieldTypeSet(
 						featurebase_client.CacheType(fld.Options.CacheType),
@@ -86,7 +86,7 @@ func (s *schemaManager) Schema() (*featurebase_client.Schema, error) {
 					),
 					featurebase_client.OptFieldKeys(true),
 				)
-			case dax.FieldTypeTimestamp:
+			case dax.BaseTypeTimestamp:
 				opts = append(opts, featurebase_client.OptFieldTypeTimestamp(
 					featurebase_client.DefaultEpoch,
 					fld.Options.TimeUnit,

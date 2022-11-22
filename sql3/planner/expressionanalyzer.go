@@ -36,7 +36,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 			return nil, err
 		}
 		if !typesCanBeCast(analyzedExpr.DataType(), targetType) {
-			return nil, sql3.NewErrInvalidCast(analyzedExpr.Pos().Line, analyzedExpr.Pos().Column, analyzedExpr.DataType().TypeName(), targetType.TypeName())
+			return nil, sql3.NewErrInvalidCast(analyzedExpr.Pos().Line, analyzedExpr.Pos().Column, analyzedExpr.DataType().TypeDescription(), targetType.TypeDescription())
 		}
 		e.X = analyzedExpr
 		e.ResultDataType = targetType
@@ -256,7 +256,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 			//we are "case expr when" form, so need to make sure that 'expr' and all block conditions are equatable
 			for _, blk := range e.Blocks {
 				if !typesAreComparable(e.Operand.DataType(), blk.Condition.DataType()) {
-					return nil, sql3.NewErrTypesAreNotEquatable(blk.Condition.Pos().Line, blk.Condition.Pos().Column, e.Operand.DataType().TypeName(), blk.Condition.DataType().TypeName())
+					return nil, sql3.NewErrTypesAreNotEquatable(blk.Condition.Pos().Line, blk.Condition.Pos().Column, e.Operand.DataType().TypeDescription(), blk.Condition.DataType().TypeDescription())
 				}
 			}
 		} else {
@@ -325,7 +325,7 @@ func (p *ExecutionPlanner) analyzeUnaryExpression(expr *parser.UnaryExpr, scope 
 	//bitwise operators
 	case parser.BITNOT:
 		if !typeIsCompatibleWithBitwiseOperator(x.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithBitwiseOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithBitwiseOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		expr.ResultDataType = x.DataType()
 		return expr, nil
@@ -333,7 +333,7 @@ func (p *ExecutionPlanner) analyzeUnaryExpression(expr *parser.UnaryExpr, scope 
 	//arithmetic operators
 	case parser.PLUS, parser.MINUS:
 		if !typeIsCompatibleWithArithmeticOperator(x.DataType(), op) {
-			return nil, sql3.NewErrTypeIncompatibleWithArithmeticOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithArithmeticOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if typeIsInteger(x.DataType()) {
 			expr.ResultDataType = parser.NewDataTypeInt()
@@ -373,10 +373,10 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 	//logical operators
 	case parser.AND, parser.OR:
 		if !typeIsCompatibleWithLogicalOperator(x.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithLogicalOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithLogicalOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if !typeIsCompatibleWithLogicalOperator(y.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithLogicalOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithLogicalOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
 		//logical operator so type of expr is bool
 		expr.ResultDataType = parser.NewDataTypeBool()
@@ -385,13 +385,13 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 	//equality operators
 	case parser.EQ, parser.NE:
 		if !typeIsCompatibleWithEqualityOperator(x.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithEqualityOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithEqualityOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if !typeIsCompatibleWithEqualityOperator(y.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithEqualityOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithEqualityOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
 		if !typesAreComparable(x.DataType(), y.DataType()) {
-			return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeName(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeDescription(), y.DataType().TypeDescription())
 		}
 		//equality operator so type of expr is bool
 		expr.ResultDataType = parser.NewDataTypeBool()
@@ -400,7 +400,7 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 	//comparison operators
 	case parser.LT, parser.LE, parser.GT, parser.GE:
 		if !typeIsCompatibleWithComparisonOperator(x.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithComparisonOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithComparisonOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if typeIsTimestamp(x.DataType()) && y.IsLiteral() && typeIsString(y.DataType()) {
 			// we have a string literal on the rhs being compared to a date so
@@ -416,10 +416,10 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 			}
 		}
 		if !typeIsCompatibleWithComparisonOperator(y.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithComparisonOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithComparisonOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
 		if !typesAreComparable(x.DataType(), y.DataType()) {
-			return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeName(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeDescription(), y.DataType().TypeDescription())
 		}
 		//comparison operator so type of expr is bool
 		expr.ResultDataType = parser.NewDataTypeBool()
@@ -428,10 +428,10 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 	//arithmetic operators
 	case parser.PLUS, parser.MINUS, parser.STAR, parser.SLASH, parser.REM:
 		if !typeIsCompatibleWithArithmeticOperator(x.DataType(), op) {
-			return nil, sql3.NewErrTypeIncompatibleWithArithmeticOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithArithmeticOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if !typeIsCompatibleWithArithmeticOperator(y.DataType(), op) {
-			return nil, sql3.NewErrTypeIncompatibleWithArithmeticOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithArithmeticOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
 
 		coercedType, err := typesCoercedForArithmeticOperator(x.DataType(), y.DataType(), x.Pos())
@@ -487,10 +487,10 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 	//bitwise operators
 	case parser.BITAND, parser.BITOR, parser.LSHIFT, parser.RSHIFT:
 		if !typeIsCompatibleWithBitwiseOperator(x.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithBitwiseOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithBitwiseOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if !typeIsCompatibleWithBitwiseOperator(y.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithBitwiseOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithBitwiseOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
 		coercedType, err := typesCoercedForBitwiseOperator(x.DataType(), y.DataType(), x.Pos())
 		if err != nil {
@@ -573,7 +573,7 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 					return nil, sql3.NewErrInternalf("select used as part of IN expression should only return one column")
 				}
 				if !typesAreComparable(x.DataType(), sel.Columns[0].Expr.DataType()) {
-					return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeName(), ex.DataType().TypeName())
+					return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeDescription(), ex.DataType().TypeDescription())
 				}
 
 				//need to turn this into an inner join
@@ -634,7 +634,7 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 
 			//make sure LHS and RHS types are comparable
 			if !typesAreComparable(x.DataType(), ex.DataType()) {
-				return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeName(), ex.DataType().TypeName())
+				return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeDescription(), ex.DataType().TypeDescription())
 			}
 		}
 
@@ -643,7 +643,7 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 
 	case parser.BETWEEN, parser.NOTBETWEEN:
 		if !typeIsRange(y.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithBetweenOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithBetweenOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 
 		ok, err := typesAreRangeComparable(x.DataType(), y.DataType())
@@ -651,27 +651,27 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 			return nil, err
 		}
 		if !ok {
-			return nil, sql3.NewErrTypeIncompatibleWithBetweenOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithBetweenOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		expr.ResultDataType = parser.NewDataTypeBool()
 		return expr, nil
 
 	case parser.CONCAT:
 		if !typeIsCompatibleWithConcatOperator(x.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithConcatOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithConcatOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if !typeIsCompatibleWithConcatOperator(y.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithConcatOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithConcatOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
 		expr.ResultDataType = parser.NewDataTypeString()
 		return expr, nil
 
 	case parser.LIKE, parser.NOTLIKE:
 		if !typeIsCompatibleWithLikeOperator(x.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithLikeOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithLikeOperator(x.Pos().Line, x.Pos().Column, op.String(), x.DataType().TypeDescription())
 		}
 		if !typeIsCompatibleWithLikeOperator(y.DataType()) {
-			return nil, sql3.NewErrTypeIncompatibleWithLikeOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeName())
+			return nil, sql3.NewErrTypeIncompatibleWithLikeOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
 		//comparison operator so type of expr is bool
 		expr.ResultDataType = parser.NewDataTypeBool()
@@ -713,10 +713,10 @@ func (p *ExecutionPlanner) analyzeRangeExpression(expr *parser.Range, scope pars
 	}
 
 	if !typeCanBeUsedInRange(expr.X.DataType()) {
-		return nil, sql3.NewErrTypeCannotBeUsedAsRangeSubscript(expr.X.Pos().Line, expr.X.Pos().Column, expr.X.DataType().TypeName())
+		return nil, sql3.NewErrTypeCannotBeUsedAsRangeSubscript(expr.X.Pos().Line, expr.X.Pos().Column, expr.X.DataType().TypeDescription())
 	}
 	if !typeCanBeUsedInRange(expr.Y.DataType()) {
-		return nil, sql3.NewErrTypeCannotBeUsedAsRangeSubscript(expr.Y.Pos().Line, expr.Y.Pos().Column, expr.Y.DataType().TypeName())
+		return nil, sql3.NewErrTypeCannotBeUsedAsRangeSubscript(expr.Y.Pos().Line, expr.Y.Pos().Column, expr.Y.DataType().TypeDescription())
 	}
 	if !typesOfRangeBoundsAreTheSame(expr.X.DataType(), expr.Y.DataType()) {
 		return nil, sql3.NewErrIncompatibleTypesForRangeSubscripts(expr.Pos().Line, expr.Pos().Column, expr.X.DataType().TypeName(), expr.Y.DataType().TypeName())
