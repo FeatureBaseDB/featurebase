@@ -33,10 +33,7 @@ import (
 // and a non-nil error does not contain a nil error.
 func errContains(err error, expected error) bool {
 	if err == nil {
-		if expected == nil {
-			return true
-		}
-		return false
+		return expected == nil
 	}
 	if expected == nil {
 		return false
@@ -48,9 +45,8 @@ func errContains(err error, expected error) bool {
 	return strings.Contains(e1, e2)
 }
 func TestImportCommand_Validation(t *testing.T) {
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewImportCommand(cmLog)
 	err := cm.Run(context.Background())
 	if !errContains(err, pilosa.ErrIndexRequired) {
 		t.Fatalf("wrong error: expected %q, got: '%v'", pilosa.ErrIndexRequired, err)
@@ -72,9 +68,8 @@ func TestImportCommand_Validation(t *testing.T) {
 
 func TestImportCommand_Basic(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
-		buf := bytes.Buffer{}
-		stdin, stdout, stderr := GetIO(buf)
-		cm := NewImportCommand(stdin, stdout, stderr)
+		cmLog := logger.NewStandardLogger(io.Discard)
+		cm := NewImportCommand(cmLog)
 		file, err := testhook.TempFile(t, "import.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
@@ -104,9 +99,8 @@ func TestImportCommand_Basic(t *testing.T) {
 	})
 
 	t.Run("clear", func(t *testing.T) {
-		buf := bytes.Buffer{}
-		stdin, stdout, stderr := GetIO(buf)
-		cm := NewImportCommand(stdin, stdout, stderr)
+		cmLog := logger.NewStandardLogger(io.Discard)
+		cm := NewImportCommand(cmLog)
 		file, err := testhook.TempFile(t, "import.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
@@ -137,9 +131,8 @@ func TestImportCommand_Basic(t *testing.T) {
 // Ensure that the ImportValue path runs.
 func TestImportCommand_RunValue(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
-		buf := bytes.Buffer{}
-		stdin, stdout, stderr := GetIO(buf)
-		cm := NewImportCommand(stdin, stdout, stderr)
+		cmLog := logger.NewStandardLogger(io.Discard)
+		cm := NewImportCommand(cmLog)
 		file, err := testhook.TempFile(t, "import-value.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
@@ -176,9 +169,8 @@ func TestImportCommand_RunValue(t *testing.T) {
 	})
 
 	t.Run("clear", func(t *testing.T) {
-		buf := bytes.Buffer{}
-		stdin, stdout, stderr := GetIO(buf)
-		cm := NewImportCommand(stdin, stdout, stderr)
+		cmLog := logger.NewStandardLogger(io.Discard)
+		cm := NewImportCommand(cmLog)
 		file, err := testhook.TempFile(t, "import-value.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)
@@ -221,9 +213,8 @@ func TestImportCommand_RunValue(t *testing.T) {
 
 // Ensure that import with keys runs.
 func TestImportCommand_RunKeys(t *testing.T) {
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewImportCommand(cmLog)
 	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
@@ -261,9 +252,8 @@ func TestImportCommand_RunKeys(t *testing.T) {
 
 // Ensure that import with keys runs with key replication.
 func TestImportCommand_KeyReplication(t *testing.T) {
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewImportCommand(cmLog)
 	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
@@ -339,9 +329,8 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 
 // Ensure that integer import with keys runs.
 func TestImportCommand_RunValueKeys(t *testing.T) {
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewImportCommand(cmLog)
 	file, err := testhook.TempFile(t, "import-key.csv")
 	if err != nil {
 		t.Fatal(err)
@@ -382,9 +371,8 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewImportCommand(cmLog)
 	cm.Host = cmd.API.Node().URI.HostPort()
 	cm.Index = "i"
 	cm.Field = "f"
@@ -470,9 +458,8 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewImportCommand(cmLog)
 	file, err := testhook.TempFile(t, "import-value.csv")
 	if err != nil {
 		t.Fatal(err)
@@ -537,9 +524,8 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 
 // Ensure that import into bool field runs.
 func TestImportCommand_RunBool(t *testing.T) {
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewImportCommand(cmLog)
 	ctx := context.Background()
 
 	cluster := test.MustRunCluster(t, 1)
@@ -717,9 +703,8 @@ func TestImport_AuthOn(t *testing.T) {
 	}
 
 	t.Run("set", func(t *testing.T) {
-		buf := bytes.Buffer{}
-		stdin, stdout, stderr := GetIO(buf)
-		cm := NewImportCommand(stdin, stdout, stderr)
+		cmLog := logger.NewStandardLogger(io.Discard)
+		cm := NewImportCommand(cmLog)
 		file, err := testhook.TempFile(t, "import.csv")
 		if err != nil {
 			t.Fatalf("creating tempfile: %v", err)

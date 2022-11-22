@@ -2,7 +2,6 @@
 package clustertest
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -251,12 +250,8 @@ func TestClusterStuff(t *testing.T) {
 		// replicas=3 and the backup command will retry on replicas.
 		// featurebase backup cmd can't be used for a test expected to fail
 		// because code coverage report won't be generated.
-		buf := bytes.Buffer{}
-		rder := []byte{}
-		stdin := bytes.NewReader(rder)
-		stdout := bufio.NewWriter(&buf)
-		stderr := bufio.NewWriter(&buf)
-		backup := ctl.NewBackupCommand(stdin, stdout, stderr)
+		backuplog := logger.NewStandardLogger(os.Stderr)
+		backup := ctl.NewBackupCommand(backuplog)
 		backup.Host = "--host=pilosa1:10101"
 		backup.OutputDir = tmpdir + "/backuptest2"
 		backup.RetryPeriod = time.Millisecond * 200

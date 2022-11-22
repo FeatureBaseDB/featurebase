@@ -1,12 +1,14 @@
 package ctl
 
 import (
-	"bytes"
 	"context"
+	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/test"
 )
 
@@ -15,12 +17,12 @@ func TestBackupTarCommand_Run(t *testing.T) {
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewBackupTarCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewBackupTarCommand(cmLog)
 	hostport := cmd.API.Node().URI.HostPort()
 	cm.Host = hostport
-	cm.OutputPath = "-"
+	dir := t.TempDir()
+	cm.OutputPath = filepath.Join(dir, "backuptest.tar")
 
 	resp, err := http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))
 	if err != nil {

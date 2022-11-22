@@ -2,14 +2,13 @@
 package cmd
 
 import (
-	"io"
-
 	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-func newBackupTarCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := ctl.NewBackupTarCommand(stdin, stdout, stderr)
+func newBackupTarCommand(logdest logger.Logger) *cobra.Command {
+	cmd := ctl.NewBackupTarCommand(logdest)
 	ccmd := &cobra.Command{
 		Use:   "backuptar",
 		Short: "Back up FeatureBase server in tar format",

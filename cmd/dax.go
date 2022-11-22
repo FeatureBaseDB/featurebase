@@ -11,8 +11,8 @@ import (
 )
 
 // newDAXCommand runs the FeatureBase CLI subcommand for ingesting bulk data.
-func newDAXCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	server := server.NewCommand(stdin, stdout, stderr)
+func newDAXCommand(stderr io.Writer) *cobra.Command {
+	server := server.NewCommand(stderr)
 	daxCmd := &cobra.Command{
 		Use:   "dax",
 		Short: "Run a collection of DAX services",

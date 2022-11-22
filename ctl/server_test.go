@@ -2,7 +2,7 @@
 package ctl
 
 import (
-	"bytes"
+	"os"
 	"testing"
 
 	"github.com/molecula/featurebase/v3/server"
@@ -11,9 +11,7 @@ import (
 
 func TestBuildServerFlags(t *testing.T) {
 	cm := &cobra.Command{}
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	Server := server.NewCommand(stdin, stdout, stderr)
+	Server := server.NewCommand(os.Stderr)
 	BuildServerFlags(cm, Server)
 	if cm.Flags().Lookup("data-dir").Name == "" {
 		t.Fatal("data-dir flag is required")

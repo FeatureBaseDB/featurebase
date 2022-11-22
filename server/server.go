@@ -66,9 +66,6 @@ type Command struct {
 	// Configuration.
 	Config *Config
 
-	// Standard input/output
-	*pilosa.CmdIO
-
 	// Started will be closed once Command.Start is finished.
 	Started chan struct{}
 	// done will be closed when Command.Close() is called
@@ -99,6 +96,11 @@ type Command struct {
 	// isComputeNode is set to true if this node is running as a DAX compute
 	// node.
 	isComputeNode bool
+}
+
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *Command) Logger() logger.Logger {
+	return cmd.logger
 }
 
 type CommandOption func(c *Command) error
@@ -169,11 +171,11 @@ type Injections struct {
 }
 
 // NewCommand returns a new instance of Main.
-func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption) *Command {
+func NewCommand(stderr io.Writer, opts ...CommandOption) *Command {
 	c := &Command{
 		Config: NewConfig(),
 
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		logOutput: stderr,
 
 		Started: make(chan struct{}),
 		done:    make(chan struct{}),
@@ -730,9 +732,7 @@ func (m *Command) HTTPHandler() http.Handler {
 func (m *Command) setupLogger() error {
 	var f *logger.FileWriter
 	var err error
-	if m.Config.LogPath == "" {
-		m.logOutput = m.Stderr
-	} else {
+	if m.Config.LogPath != "" {
 		f, err = logger.NewFileWriter(m.Config.LogPath)
 		if err != nil {
 			return errors.Wrap(err, "opening file")

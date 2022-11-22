@@ -18,6 +18,7 @@ import (
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/ricochet2200/go-disk-usage/du"
 	"golang.org/x/sync/errgroup"
@@ -58,7 +59,7 @@ type BackupCommand struct { // nolint: maligned
 	client *pilosa.InternalClient
 
 	// Standard input/output
-	*pilosa.CmdIO
+	logDest logger.Logger
 
 	TLS server.TLSConfig
 
@@ -66,10 +67,15 @@ type BackupCommand struct { // nolint: maligned
 	IgnoreSpaceCheck bool
 }
 
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *BackupCommand) Logger() logger.Logger {
+	return cmd.logDest
+}
+
 // NewBackupCommand returns a new instance of BackupCommand.
-func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
+func NewBackupCommand(logdest logger.Logger) *BackupCommand {
 	return &BackupCommand{
-		CmdIO:         pilosa.NewCmdIO(stdin, stdout, stderr),
+		logDest:       logdest,
 		Concurrency:   1,
 		RetryPeriod:   time.Minute,
 		HeaderTimeout: time.Second * 3,

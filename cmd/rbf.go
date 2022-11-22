@@ -4,14 +4,14 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
 
 	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-func newRBFCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newRBFCommand(logdest logger.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rbf",
 		Short: "Inspect RBF data files.",
@@ -19,15 +19,15 @@ func newRBFCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 Provides a set of commands for inspecting RBF data files.
 `,
 	}
-	cmd.AddCommand(newRBFCheckCommand(stdin, stdout, stderr))
-	cmd.AddCommand(newRBFDumpCommand(stdin, stdout, stderr))
-	cmd.AddCommand(newRBFPagesCommand(stdin, stdout, stderr))
-	cmd.AddCommand(newRBFPageCommand(stdin, stdout, stderr))
+	cmd.AddCommand(newRBFCheckCommand(logdest))
+	cmd.AddCommand(newRBFDumpCommand(logdest))
+	cmd.AddCommand(newRBFPagesCommand(logdest))
+	cmd.AddCommand(newRBFPageCommand(logdest))
 	return cmd
 }
 
-func newRBFCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	c := ctl.NewRBFCheckCommand(stdin, stdout, stderr)
+func newRBFCheckCommand(logdest logger.Logger) *cobra.Command {
+	c := ctl.NewRBFCheckCommand(logdest)
 	cmd := &cobra.Command{
 		Use:   "check [flags] PATH",
 		Short: "Run consistency check on RBF data.",
@@ -48,8 +48,8 @@ Executes a consistency check on an RBF data directory.
 	return cmd
 }
 
-func newRBFDumpCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	c := ctl.NewRBFDumpCommand(stdin, stdout, stderr)
+func newRBFDumpCommand(logdest logger.Logger) *cobra.Command {
+	c := ctl.NewRBFDumpCommand(logdest)
 	cmd := &cobra.Command{
 		Use:   "dump [flags] PATH PGNO [PGNO...]",
 		Short: "Prints RBF raw page data",
@@ -80,8 +80,8 @@ Dumps the raw hex data for one or more RBF pages.
 	return cmd
 }
 
-func newRBFPagesCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	c := ctl.NewRBFPagesCommand(stdin, stdout, stderr)
+func newRBFPagesCommand(logdest logger.Logger) *cobra.Command {
+	c := ctl.NewRBFPagesCommand(logdest)
 	cmd := &cobra.Command{
 		Use:   "pages [flags] PATH",
 		Short: "Prints metadata for the list of all pages",
@@ -105,8 +105,8 @@ Prints a line for every page in the database with its type/status.
 	return cmd
 }
 
-func newRBFPageCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	c := ctl.NewRBFPageCommand(stdin, stdout, stderr)
+func newRBFPageCommand(logdest logger.Logger) *cobra.Command {
+	c := ctl.NewRBFPageCommand(logdest)
 	cmd := &cobra.Command{
 		Use:   "page [flags] PATH PGNO [PGNO...]",
 		Short: "Prints data for a page(s)",

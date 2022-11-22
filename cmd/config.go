@@ -13,9 +13,9 @@ import (
 
 var conf *ctl.ConfigCommand
 
-func newConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	conf = ctl.NewConfigCommand(stdin, stdout, stderr)
-	Server := server.NewCommand(stdin, stdout, stderr)
+func newConfigCommand(stderr io.Writer) *cobra.Command {
+	conf = ctl.NewConfigCommand(stderr)
+	Server := server.NewCommand(stderr)
 	confCmd := &cobra.Command{
 		Use:   "config",
 		Short: "Print the current configuration.",

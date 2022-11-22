@@ -2,17 +2,16 @@
 package cmd
 
 import (
-	"io"
-
 	"github.com/spf13/cobra"
 
 	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 var Exporter *ctl.ExportCommand
 
-func newExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Exporter = ctl.NewExportCommand(stdin, stdout, stderr)
+func newExportCommand(logdest logger.Logger) *cobra.Command {
+	Exporter = ctl.NewExportCommand(logdest)
 	exportCmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export data from FeatureBase.",

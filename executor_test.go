@@ -26,6 +26,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/ctl"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/proto"
 	"github.com/molecula/featurebase/v3/server"
@@ -7398,8 +7399,8 @@ func backupTest(t *testing.T, c *test.Cluster, index string) {
 
 func chkSumCluster(t *testing.T, c *test.Cluster) string {
 	buf := &bytes.Buffer{}
-
-	chkSum := ctl.NewChkSumCommand(nil, buf, buf)
+	chkSumLog := logger.NewStandardLogger(buf)
+	chkSum := ctl.NewChkSumCommand(chkSumLog)
 	chkSum.Host = c.Nodes[len(c.Nodes)-1].URL()
 	if err := chkSum.Run(context.Background()); err != nil {
 		t.Fatalf("running checksum: %v", err)
@@ -7416,7 +7417,8 @@ func backupCluster(t *testing.T, c *test.Cluster, index string) (backupDir strin
 	td = td + "/backupTest"
 
 	buf := &bytes.Buffer{}
-	backupCommand := ctl.NewBackupCommand(nil, buf, buf)
+	backupLog := logger.NewStandardLogger(buf)
+	backupCommand := ctl.NewBackupCommand(backupLog)
 	backupCommand.Host = c.Nodes[len(c.Nodes)-1].URL() // don't pick node 0 so we don't always get primary (better code coverage)
 	backupCommand.Index = index
 	backupCommand.OutputDir = td
@@ -7430,8 +7432,8 @@ func backupCluster(t *testing.T, c *test.Cluster, index string) (backupDir strin
 
 func restoreCluster(t *testing.T, backupDir string, c *test.Cluster) {
 	buf := &bytes.Buffer{}
-
-	restore := ctl.NewRestoreCommand(nil, buf, buf)
+	restoreLog := logger.NewStandardLogger(buf)
+	restore := ctl.NewRestoreCommand(restoreLog)
 	restore.Host = c.Nodes[len(c.Nodes)-1].URL()
 	restore.Path = backupDir
 	if err := restore.Run(context.Background()); err != nil {

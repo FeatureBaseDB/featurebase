@@ -2,14 +2,13 @@
 package cmd
 
 import (
-	"io"
-
 	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-func newKeygenCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := ctl.NewKeygenCommand(stdin, stdout, stderr)
+func newKeygenCommand(logdest logger.Logger) *cobra.Command {
+	cmd := ctl.NewKeygenCommand(logdest)
 	ccmd := &cobra.Command{
 		Use:   "keygen",
 		Short: "Generate secret key for authentication.",

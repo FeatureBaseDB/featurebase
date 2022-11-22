@@ -2,21 +2,22 @@
 package ctl
 
 import (
-	"bytes"
 	"context"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/test"
 )
 
 func TestExportCommand_Validation(t *testing.T) {
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
+	cmLog := logger.NewStandardLogger(os.Stderr)
 
-	cm := NewExportCommand(stdin, stdout, stderr)
+	cm := NewExportCommand(cmLog)
 
 	err := cm.Run(context.Background())
 	if !errContains(err, pilosa.ErrIndexRequired) {
@@ -35,9 +36,8 @@ func TestExportCommand_Run(t *testing.T) {
 	defer cluster.Close()
 	cmd := cluster.GetNode(0)
 
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewExportCommand(stdin, stdout, stderr)
+	cmLog := logger.NewStandardLogger(io.Discard)
+	cm := NewExportCommand(cmLog)
 	hostport := cmd.API.Node().URI.HostPort()
 	cm.Host = hostport
 

@@ -2,14 +2,13 @@
 package cmd
 
 import (
-	"io"
-
 	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-func newAuthTokenCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
-	cmd := ctl.NewAuthTokenCommand(stdin, stdout, stderr)
+func newAuthTokenCommand(logdest logger.Logger) *cobra.Command {
+	cmd := ctl.NewAuthTokenCommand(logdest)
 	ccmd := &cobra.Command{
 		Use:   "auth-token",
 		Short: "Get an auth-token",

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
 	"golang.org/x/oauth2"
 )
@@ -31,13 +32,18 @@ type AuthTokenCommand struct { // nolint: maligned
 	client *pilosa.InternalClient
 
 	// Standard input/output.
-	*pilosa.CmdIO
+	logDest logger.Logger
+}
+
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *AuthTokenCommand) Logger() logger.Logger {
+	return cmd.logDest
 }
 
 // NewAuthTokenCommand returns a new instance of AuthTokenCommand.
-func NewAuthTokenCommand(stdin io.Reader, stdout, stderr io.Writer) *AuthTokenCommand {
+func NewAuthTokenCommand(logdest logger.Logger) *AuthTokenCommand {
 	return &AuthTokenCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+		logDest: logdest,
 	}
 }
 

@@ -53,7 +53,7 @@ type Command struct {
 	done chan struct{}
 
 	// Standard input/output
-	*featurebase.CmdIO
+	stderr io.Writer
 
 	ln           net.Listener
 	listenURI    *fbnet.URI
@@ -94,11 +94,11 @@ func OptCommandConfig(config *Config) CommandOption {
 }
 
 // NewCommand returns a new instance of Command.
-func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption) *Command {
+func NewCommand(stderr io.Writer, opts ...CommandOption) *Command {
 	c := &Command{
 		Config: NewConfig(),
 
-		CmdIO: featurebase.NewCmdIO(stdin, stdout, stderr),
+		stderr: stderr,
 
 		registerFns: make([]registerFn, 0),
 
@@ -415,7 +415,7 @@ func (m *Command) setupServer() error {
 			m.logger.Warnf("No snapshotter configured.")
 		}
 
-		fbcmd := featurebaseserver.NewCommand(m.CmdIO.Stdin, m.CmdIO.Stdout, m.CmdIO.Stderr,
+		fbcmd := featurebaseserver.NewCommand(m.stderr,
 			featurebaseserver.OptCommandSetConfig(&m.Config.Computer.Config),
 			featurebaseserver.OptCommandServerOptions(
 				featurebase.OptServerIsComputeNode(true),
@@ -465,7 +465,7 @@ func (m *Command) setupLogger() error {
 	var f *logger.FileWriter
 	var err error
 	if m.Config.LogPath == "" {
-		m.logOutput = m.Stderr
+		m.logOutput = os.Stderr
 	} else {
 		f, err = logger.NewFileWriter(m.Config.LogPath)
 		if err != nil {

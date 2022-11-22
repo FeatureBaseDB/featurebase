@@ -18,6 +18,7 @@ import (
 	"github.com/molecula/featurebase/v3/dax"
 	queryerhttp "github.com/molecula/featurebase/v3/dax/queryer/http"
 	"github.com/molecula/featurebase/v3/fbcloud"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
@@ -55,7 +56,7 @@ type CLICommand struct {
 	queryer FBQueryer
 }
 
-func NewCLICommand(stdin io.Reader, stdout, stderr io.Writer) *CLICommand {
+func NewCLICommand(logdest logger.Logger) *CLICommand {
 	historyPath := ""
 	home, err := os.UserHomeDir()
 	if err != nil {

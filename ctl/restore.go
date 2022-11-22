@@ -49,17 +49,22 @@ type RestoreCommand struct {
 	client *pilosa.InternalClient
 
 	// Standard input/output
-	*pilosa.CmdIO
+	logDest logger.Logger
 
 	TLS server.TLSConfig
 
 	AuthToken string
 }
 
+// Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
+func (cmd *RestoreCommand) Logger() logger.Logger {
+	return cmd.logDest
+}
+
 // NewRestoreCommand returns a new instance of RestoreCommand.
-func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
+func NewRestoreCommand(logdest logger.Logger) *RestoreCommand {
 	return &RestoreCommand{
-		CmdIO:       pilosa.NewCmdIO(stdin, stdout, stderr),
+		logDest:     logdest,
 		RetryPeriod: time.Second * 30,
 		Concurrency: 1,
 		Pprof:       "localhost:0",

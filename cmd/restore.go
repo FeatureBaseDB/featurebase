@@ -2,14 +2,13 @@
 package cmd
 
 import (
-	"io"
-
 	"github.com/molecula/featurebase/v3/ctl"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-func newRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	cmd := ctl.NewRestoreCommand(stdin, stdout, stderr)
+func newRestoreCommand(logdest logger.Logger) *cobra.Command {
+	cmd := ctl.NewRestoreCommand(logdest)
 	restoreCmd := &cobra.Command{
 		Use:   "restore",
 		Short: "Restore from a backup",

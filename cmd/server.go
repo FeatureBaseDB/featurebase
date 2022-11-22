@@ -20,8 +20,8 @@ var holder *server.Command
 
 // newHolderCmd creates a FeatureBase server for just long enough to open the
 // holder, then shuts it down again.
-func newHolderCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	holder = server.NewCommand(stdin, stdout, stderr)
+func newHolderCmd(stderr io.Writer) *cobra.Command {
+	holder = server.NewCommand(stderr)
 	serveCmd := &cobra.Command{
 		Use:   "holder",
 		Short: "Load FeatureBase.",
@@ -45,8 +45,8 @@ This is only useful for diagnostic use.
 }
 
 // newServeCmd creates a FeatureBase server and runs it with command line flags.
-func newServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Server = server.NewCommand(stdin, stdout, stderr)
+func newServeCmd(stderr io.Writer) *cobra.Command {
+	Server = server.NewCommand(stderr)
 	serveCmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run FeatureBase.",

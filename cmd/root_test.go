@@ -2,14 +2,13 @@
 package cmd_test
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
-
-	"time"
 
 	"github.com/molecula/featurebase/v3/cmd"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -25,43 +24,15 @@ func failErr(t *testing.T, err error, context ...string) {
 	}
 }
 
-// tExec executes the given `cmd`, which will be writing its output to `w`, and
-// can be read from `out`. It will fail the test if the command does not return
-// within 1 second. Useful for testing help messages and such.
-func tExec(t *testing.T, cmd *cobra.Command, out io.Reader, w io.WriteCloser) (output []byte, err error) {
-	done := make(chan struct{})
-	var readErr error
-	go func() {
-		output, readErr = io.ReadAll(out)
-		close(done)
-	}()
-	err = cmd.Execute()
-	if err != nil {
-		return output, err
-	}
-	if err := w.Close(); err != nil {
-		return output, fmt.Errorf("closing cmd's stdout: %v", err)
-	}
-
-	// NOTE: if cmd.Execute doesn't return, then this select (and
-	// therefore the one-second timeout, won't be reached)
-	select {
-	case <-done:
-	case <-time.After(time.Second * 1):
-		t.Fatal("Test failed due to command execution timeout")
-	}
-	return output, readErr
-}
-
 // ExecNewRootCommand executes the pilosa root command with the given arguments
 // and returns its output. It will fail if the command does not complete within
 // 1 second.
 func ExecNewRootCommand(t *testing.T, args ...string) (string, error) {
-	out, w := io.Pipe()
-	rc := cmd.NewRootCommand(os.Stdin, w, w)
+	buf := &bytes.Buffer{}
+	rc := cmd.NewRootCommand(buf)
 	rc.SetArgs(args)
-	output, err := tExec(t, rc, out, w)
-	return string(output), err
+	err := rc.Execute()
+	return buf.String(), err
 }
 
 // validator is a simple helper to avoid repeated `if err != nil` checks in
@@ -141,7 +112,7 @@ func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 	os.Setenv("PILOSA_POSTGRES_BIND", "")
 
 	// make command and set args
-	rc := cmd.NewRootCommand(strings.NewReader(""), io.Discard, io.Discard)
+	rc := cmd.NewRootCommand(io.Discard)
 	rc.SetArgs(ct.args)
 
 	err = cfgFile.Close()
