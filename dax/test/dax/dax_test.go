@@ -92,23 +92,10 @@ func TestDAXIntegration(t *testing.T) {
 		// skips is a list of tests which are currently not passing in dax. We
 		// need to get these passing before alpha.
 		skips := []string{
-			"testinsert/test-5", // error messages differ
-			"table-82/test-3",
-			"table-82/test-8",
-			"table-83/test-3",
-			"table-83/test-8",
-			"cast_int/test-2",
-			"cast_int/test-7",
-			"cast_id/test-2",
-			"cast_string/test-12",
-			"cast_ts/test-7",
-			"sum_test/test-5",
-			"percentile_test/test-6",
-			"minmax_test/test-7",
-			"minmax_test/test-8",
-			"groupby_test/test-5",
-			"groupby_test/test-6",
-			"innerjointest/innerjoin-aggregate-groupby",
+			"testinsert/test-5",                         // error messages differ
+			"percentile_test/test-6",                    // related to TODO in orchestrator.executePercentile
+			"groupby_test/test-6",                       // something to do with GroupCount.DecimalAgg=nil in orchestrator.executeGroupBy
+			"innerjointest/innerjoin-aggregate-groupby", // join test which won't work until we support multiple tables
 		}
 
 		doSkip := func(name string) bool {

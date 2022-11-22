@@ -144,7 +144,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 		}
 		schema.Fields[i] = &featurebase.WireQueryField{
 			Name:     dax.FieldName(col.ColumnName),
-			Type:     col.Type.TypeDescription(),
+			Type:     strings.ToLower(col.Type.TypeDescription()), // TODO(tlt): remove this once sql3 uses BaseTypes.
 			BaseType: btype,
 			TypeInfo: col.Type.TypeInfo(),
 		}
