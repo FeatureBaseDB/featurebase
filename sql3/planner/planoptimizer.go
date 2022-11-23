@@ -78,7 +78,7 @@ func (p *ExecutionPlanner) optimizePlan(ctx context.Context, plan types.PlanOper
 
 	// log.Println("================================================================================")
 	// log.Println("plan ppst-optimzation")
-	// jplan = plan.Plan()
+	// jplan = result.Plan()
 	// a, _ = json.MarshalIndent(jplan, "", "    ")
 	// log.Println(string(a))
 	// log.Println("--------------------------------------------------------------------------------")
@@ -408,7 +408,7 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 			filtersByTable := getFiltersByRelation(n)
 			filters := newFilterSet(n.Predicate, filtersByTable, tableAliases)
 
-			// first push down filters to any op that implements FilteredRelation
+			// first push down filters to any op that supports a filter
 			node, sameA, err := pushdownFiltersForFilterableRelations(n, filters)
 			if err != nil {
 				return nil, true, err
@@ -723,14 +723,14 @@ func areAggregablesEqual(lhs types.Aggregable, rhs types.Aggregable) bool {
 // fixes references for a projection op depending on child
 func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
 	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-		switch n := node.(type) {
+		switch thisNode := node.(type) {
 		case *PlanOpProjection:
-			switch childOp := n.ChildOp.(type) {
+			switch childOp := thisNode.ChildOp.(type) {
 
-			case *PlanOpGroupBy:
-				//PlanOpGroupBy's iterator returns group by exprs, then aggregates in the order they appear
+			case *PlanOpGroupBy, *PlanOpPQLGroupBy, *PlanOpPQLMultiAggregate, *PlanOpPQLMultiGroupBy:
 				childSchema := childOp.Schema()
-				for idx, pj := range n.Projections {
+
+				for idx, pj := range thisNode.Projections {
 					expr, _, err := TransformExpr(pj, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
 						switch thisAggregate := e.(type) {
 						case types.Aggregable:
@@ -744,168 +744,57 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 								}
 							}
 							return nil, true, sql3.NewErrColumnNotFound(0, 0, thisAggregate.String())
-						default:
-							return e, true, nil
-						}
-					})
-					if err != nil {
-						return n, true, err
-					}
-					n.Projections[idx] = expr
-				}
-				return n, false, nil
 
-			case *PlanOpPQLGroupBy:
-				// PlanOpGroupBy's iterator returns group by exprs, then the single aggregate in the order they appear
-
-				// make a map of the names of the group by columns
-				groupByColumnsNameMap := make(map[string]int)
-				for gidx, gbe := range childOp.groupByExprs {
-					gbeRef, ok := gbe.(*qualifiedRefPlanExpression)
-					if !ok {
-						return nil, false, sql3.NewErrInternalf("unexpected group by expression type '%T'", gbe)
-					}
-					gbeRef.columnIndex = gidx
-					groupByColumnsNameMap[gbeRef.columnName] = gidx
-				}
-				//set the index for the aggregate to be the length of the group by list
-				aggregateIndex := len(childOp.groupByExprs)
-
-				//loop projections:
-				//1. looking for the Aggregable and replace it with a qualifiedRefPlanExpression pointing to
-				//	 the offset in the child iterator
-				//2. looking for the qualified refs replace it with a qualifiedRefPlanExpression pointing to
-				//	 the offset in the child iterator
-				for idx, pj := range n.Projections {
-					expr, _, err := TransformExpr(pj, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
-						switch thisExpr := e.(type) {
-						case types.Aggregable:
-							ae := newQualifiedRefPlanExpression(fmt.Sprintf("$PlanOpPQLGroupBy:%d", aggregateIndex), "", aggregateIndex, e.Type())
-							return ae, false, nil
 						case *qualifiedRefPlanExpression:
-							colIdx, ok := groupByColumnsNameMap[thisExpr.columnName]
-							if ok {
-								ae := newQualifiedRefPlanExpression(fmt.Sprintf("$PlanOpPQLGroupBy.%s:%d", thisExpr.columnName, colIdx), thisExpr.columnName, colIdx, e.Type())
-								return ae, false, nil
-							}
-							return e, true, nil
-						default:
-							return e, true, nil
-						}
-					})
-					if err != nil {
-						return n, true, err
-					}
-					n.Projections[idx] = expr
-				}
-				return n, false, nil
-
-			case *PlanOpPQLMultiAggregate:
-				//PlanOpGroupBy's iterator returns aggregates in the order they appear
-
-				// make a list of the aggregables
-				aggregableList := make([]types.Aggregable, 0)
-				for _, op := range childOp.operators {
-					aggregableList = append(aggregableList, op.aggregate)
-				}
-
-				//loop projections:
-				//1. looking for the Aggregable and replace it with a qualifiedRefPlanExpression pointing to
-				//	 the offset in the child iterator
-				for idx, pj := range n.Projections {
-					expr, _, err := TransformExpr(pj, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
-						switch thisExpr := e.(type) {
-						case types.Aggregable:
-							for idx, a := range aggregableList {
-								if areAggregablesEqual(thisExpr, a) {
-									ae := newQualifiedRefPlanExpression(fmt.Sprintf("$PlanOpPQLMultiAggregate:%d", idx), "", idx, e.Type())
-									return ae, false, nil
+							for idx, sc := range childSchema {
+								if matchesSchema(thisAggregate, sc) {
+									if idx != thisAggregate.columnIndex {
+										// update the column index
+										return newQualifiedRefPlanExpression(thisAggregate.tableName, thisAggregate.columnName, idx, thisAggregate.dataType), false, nil
+									}
+									return thisAggregate, true, nil
 								}
 							}
-							return e, true, nil
+							return nil, true, sql3.NewErrColumnNotFound(0, 0, thisAggregate.String())
+
 						default:
 							return e, true, nil
 						}
-					})
-					if err != nil {
-						return n, true, err
-					}
-					n.Projections[idx] = expr
-				}
-				return n, false, nil
-
-			case *PlanOpPQLMultiGroupBy:
-				//PlanOpPQLMultiGroupBy's iterator returns group by exprs, then the aggregates in the order they appear
-
-				// make a map of the names of the group by columns and update the indexes
-				groupByColumnsNameMap := make(map[string]int)
-				for gidx, gbe := range childOp.groupByExprs {
-					gbeRef, ok := gbe.(*qualifiedRefPlanExpression)
-					if !ok {
-						return nil, false, sql3.NewErrInternalf("unexpected group by expression type '%T'", gbe)
-					}
-					gbeRef.columnIndex = gidx
-					groupByColumnsNameMap[gbeRef.columnName] = gidx
-				}
-				//set the index for the start of the aggregates to be the length of the group by list
-				aggregateStartIndex := len(childOp.groupByExprs)
-
-				// make a list of the aggregables
-				aggregableList := make([]types.Aggregable, 0)
-				for _, op := range childOp.operators {
-					aggregableList = append(aggregableList, op.aggregate)
-				}
-
-				//loop projections:
-				//1. looking for the Aggregable and replace it with a qualifiedRefPlanExpression pointing to
-				//	 the offset in the child iterator
-				//2. looking for the qualified refs replace it with a qualifiedRefPlanExpression pointing to
-				//	 the offset in the child iterator
-				for idx, pj := range n.Projections {
-					expr, _, err := TransformExpr(pj, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
-						switch thisExpr := e.(type) {
+					}, func(parentExpr, childExpr types.PlanExpression) bool {
+						// if the parent is an aggregable, and the child is a qualified ref
+						// we will skip, because the qualified ref should have already been handled in
+						// fixFieldRefs
+						switch parentExpr.(type) {
 						case types.Aggregable:
-							for idx, a := range aggregableList {
-								if areAggregablesEqual(thisExpr, a) {
-									ae := newQualifiedRefPlanExpression(fmt.Sprintf("$PlanOpPQLMultiGroupBy:%d", idx+aggregateStartIndex), "", idx+aggregateStartIndex, e.Type())
-									return ae, false, nil
-								}
+							switch childExpr.(type) {
+							case *qualifiedRefPlanExpression:
+								return false
 							}
-							return e, true, nil
-						case *qualifiedRefPlanExpression:
-							colIdx, ok := groupByColumnsNameMap[thisExpr.columnName]
-							if ok {
-								ae := newQualifiedRefPlanExpression(fmt.Sprintf("$PlanOpPQLMultiGroupBy.%s:%d", thisExpr.columnName, colIdx), thisExpr.columnName, colIdx, e.Type())
-								return ae, false, nil
-							}
-							return e, true, nil
-
-						default:
-							return e, true, nil
 						}
+						return true
 					})
 					if err != nil {
-						return n, true, err
+						return thisNode, true, err
 					}
-					n.Projections[idx] = expr
+					thisNode.Projections[idx] = expr
 				}
-				return n, false, nil
+				return thisNode, false, nil
 
 			// everything else that can be a child of projection
 			case *PlanOpRelAlias, *PlanOpFilter, *PlanOpPQLTableScan, *PlanOpNestedLoops:
-				exprs, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, childOp.Schema(), n.Projections...)
+				exprs, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, childOp.Schema(), thisNode.Projections...)
 				if err != nil {
-					return n, true, err
+					return thisNode, true, err
 				}
-				n.Projections = exprs
-				return n, same, err
+				thisNode.Projections = exprs
+				return thisNode, same, err
 
 			default:
-				return n, true, nil
+				return thisNode, true, nil
 			}
 
 		default:
-			return n, true, nil
+			return thisNode, true, nil
 		}
 	})
 }
@@ -914,6 +803,7 @@ func fixFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator
 	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
 		switch thisNode := node.(type) {
 		case *PlanOpFilter:
+			// fix references for the expressions referenced in the filter predicate expression
 			schema := thisNode.Schema()
 			expressions := thisNode.Expressions()
 			fixed, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, expressions...)
@@ -927,6 +817,7 @@ func fixFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator
 			return newNode, same, nil
 
 		case *PlanOpNestedLoops:
+			// fix references for the expressions referenced in the join condition expression
 			schema := thisNode.Schema()
 			expressions := thisNode.Expressions()
 			fixed, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, expressions...)
@@ -940,6 +831,7 @@ func fixFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator
 			return newNode, same, nil
 
 		case *PlanOpGroupBy:
+			// fix references for the expressions referenced in the aggregate functions or the group by clause
 			schema := thisNode.ChildOp.Schema()
 			aggregateExpressions := thisNode.Aggregates
 			fixedAggregateExpressions, aggregateSame, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, aggregateExpressions...)
@@ -956,6 +848,27 @@ func fixFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator
 			newNode := NewPlanOpGroupBy(fixedAggregateExpressions, fixedGroupByExpressions, thisNode.ChildOp)
 			newNode.warnings = append(newNode.warnings, thisNode.warnings...)
 			return newNode, aggregateSame && groupBySame, nil
+
+		case *PlanOpPQLMultiGroupBy:
+
+			schema := thisNode.operators[0].Schema()
+			for idx, op := range thisNode.operators {
+				if idx > 0 {
+					opSchema := op.Schema()
+					last := opSchema[len(opSchema)-1]
+					schema = append(schema, last)
+				}
+			}
+			expressions := thisNode.Expressions()
+			fixed, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, expressions...)
+			if err != nil {
+				return nil, true, err
+			}
+			newNode, err := thisNode.WithUpdatedExpressions(fixed...)
+			if err != nil {
+				return nil, true, err
+			}
+			return newNode, same, nil
 
 		default:
 			return node, true, nil
@@ -1045,36 +958,6 @@ func getNestedLoopOperators(ctx context.Context, a *ExecutionPlanner, n types.Pl
 	return joins
 }
 
-func fixFieldRefIndexes(ctx context.Context, scope *OptimizerScope, a *ExecutionPlanner, schema types.Schema, exp types.PlanExpression) (types.PlanExpression, bool, error) {
-	return TransformExpr(exp, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
-		switch typedExpr := e.(type) {
-		case *qualifiedRefPlanExpression:
-			for i, col := range schema {
-				newIndex := i
-				if strings.EqualFold(typedExpr.Name(), col.ColumnName) {
-					if len(typedExpr.tableName) > 0 { // do we have a qualifier?
-						if typedExpr.tableName == col.RelationName || typedExpr.tableName == col.AliasName {
-							if newIndex != typedExpr.columnIndex {
-								// update the column index
-								return newQualifiedRefPlanExpression(typedExpr.tableName, typedExpr.columnName, newIndex, typedExpr.dataType), false, nil
-							}
-							return e, true, nil
-						}
-					} else { // no qualifier
-						if newIndex != typedExpr.columnIndex {
-							// update the column index
-							return newQualifiedRefPlanExpression(typedExpr.tableName, typedExpr.columnName, newIndex, typedExpr.dataType), false, nil
-						}
-						return e, true, nil
-					}
-				}
-			}
-			return nil, true, sql3.NewErrColumnNotFound(0, 0, typedExpr.Name())
-		}
-		return e, true, nil
-	})
-}
-
 // for a list of expressions and an operator schema, fix the references for any qualifiedRef expressions
 func fixFieldRefIndexesOnExpressions(ctx context.Context, scope *OptimizerScope, a *ExecutionPlanner, schema types.Schema, expressions ...types.PlanExpression) ([]types.PlanExpression, bool, error) {
 	var result []types.PlanExpression
@@ -1099,4 +982,38 @@ func fixFieldRefIndexesOnExpressions(ctx context.Context, scope *OptimizerScope,
 		return result, false, nil
 	}
 	return expressions, true, nil
+}
+
+func matchesSchema(qualifiedRef *qualifiedRefPlanExpression, col *types.PlannerColumn) bool {
+	if strings.EqualFold(qualifiedRef.Name(), col.ColumnName) {
+		if len(qualifiedRef.tableName) == 0 { // do we have a qualifier?
+			return true
+		}
+		if qualifiedRef.tableName == col.RelationName || qualifiedRef.tableName == col.AliasName {
+			return true
+		}
+	}
+	return false
+}
+
+func fixFieldRefIndexes(ctx context.Context, scope *OptimizerScope, a *ExecutionPlanner, schema types.Schema, exp types.PlanExpression) (types.PlanExpression, bool, error) {
+	return TransformExpr(exp, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
+		switch typedExpr := e.(type) {
+		case *qualifiedRefPlanExpression:
+			for i, col := range schema {
+				newIndex := i
+				if matchesSchema(typedExpr, col) {
+					if newIndex != typedExpr.columnIndex {
+						// update the column index
+						return newQualifiedRefPlanExpression(typedExpr.tableName, typedExpr.columnName, newIndex, typedExpr.dataType), false, nil
+					}
+					return e, true, nil
+				}
+			}
+			return nil, true, sql3.NewErrColumnNotFound(0, 0, typedExpr.Name())
+		}
+		return e, true, nil
+	}, func(parentExpr, childExpr types.PlanExpression) bool {
+		return true
+	})
 }

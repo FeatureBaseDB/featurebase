@@ -57,7 +57,7 @@ func (p *PlanOpPQLMultiAggregate) Schema() types.Schema {
 	result := make(types.Schema, len(p.operators))
 	for idx, aggOp := range p.operators {
 		s := &types.PlannerColumn{
-			ColumnName:   "",
+			ColumnName:   aggOp.aggregate.String(),
 			RelationName: "",
 			Type:         aggOp.aggregate.AggExpression().Type(),
 		}
