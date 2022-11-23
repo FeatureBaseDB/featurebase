@@ -20,6 +20,8 @@ RUN yarn build
 
 FROM golang:${GO_VERSION} as pilosa-builder
 ARG MAKE_FLAGS
+ARG SOURCE_DATE_EPOCH
+
 WORKDIR /pilosa
 
 RUN go install github.com/rakyll/statik@v0.1.7
@@ -28,6 +30,7 @@ COPY . ./
 COPY --from=lattice-builder /lattice/build /lattice
 RUN /go/bin/statik -src=/lattice -dest=/pilosa
 
+ENV SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH
 RUN make build FLAGS="-o build/featurebase" ${MAKE_FLAGS}
 
 #####################

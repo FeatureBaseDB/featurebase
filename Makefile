@@ -6,7 +6,13 @@ GO=go
 GOOS=$(shell $(GO) env GOOS)
 GOARCH=$(shell $(GO) env GOARCH)
 VERSION_ID=$(if $(TRIAL_DEADLINE),trial-$(TRIAL_DEADLINE)-,)$(VERSION)-$(GOOS)-$(GOARCH)
-BUILD_TIME := $(shell date -u +%FT%T%z)
+DATE_FMT="+%FT%T%z"
+ifdef SOURCE_DATE_EPOCH
+	BUILD_TIME ?= $(shell date -u -d "@$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u -r "$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u "$(DATE_FMT)")
+else
+	BUILD_TIME ?= $(shell date -u "$(DATE_FMT)")
+endif
+SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
 LDFLAGS="-X github.com/featurebasedb/featurebase/v3.Version=$(VERSION) -X github.com/featurebasedb/featurebase/v3.BuildTime=$(BUILD_TIME) -X github.com/featurebasedb/featurebase/v3.Variant=$(VARIANT) -X github.com/featurebasedb/featurebase/v3.Commit=$(COMMIT) -X github.com/featurebasedb/featurebase/v3.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.19
@@ -177,6 +183,7 @@ docker-build: vendor
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="TRIAL_DEADLINE=$(TRIAL_DEADLINE) GOOS=$(GOOS) GOARCH=$(GOARCH)" \
+	    --build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
 	    --target pilosa-builder \
 	    --tag featurebase:build .
 	docker create --name featurebase-build featurebase:build
