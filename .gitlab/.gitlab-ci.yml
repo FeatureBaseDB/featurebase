@@ -195,6 +195,7 @@ build featurebase:
     - tar -xvf lattice.tar.gz
     - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
     - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
     - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
@@ -218,7 +219,8 @@ build amd container fb:
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:
     - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-amd64-${CI_COMMIT_REF_SLUG}
-    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 -t $tag -f .gitlab/Dockerfile .
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=amd64 --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
   needs:
@@ -477,7 +479,8 @@ build arm container fb:
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:
     - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-arm64-${CI_COMMIT_REF_SLUG}
-    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 -t $tag -f .gitlab/Dockerfile .
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+    - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH -t $tag -f .gitlab/Dockerfile .
     - docker push $tag
     - echo Created docker featurebase image with tag "$tag"
 
