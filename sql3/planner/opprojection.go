@@ -95,6 +95,17 @@ func (p *PlanOpProjection) Warnings() []string {
 	return w
 }
 
+func (p *PlanOpProjection) Expressions() []types.PlanExpression {
+	return p.Projections
+}
+
+func (p *PlanOpProjection) WithUpdatedExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
+	if len(exprs) != len(p.Projections) {
+		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
+	}
+	return NewPlanOpProjection(exprs, p.ChildOp), nil
+}
+
 func ExpressionToColumn(e types.PlanExpression) *types.PlannerColumn {
 	var name string
 	if n, ok := e.(types.IdentifiableByName); ok {

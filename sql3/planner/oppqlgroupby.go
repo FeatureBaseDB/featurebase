@@ -84,7 +84,7 @@ func (p *PlanOpPQLGroupBy) Schema() types.Schema {
 		result[idx] = s
 	}
 	s := &types.PlannerColumn{
-		ColumnName:   "",
+		ColumnName:   p.aggregate.String(),
 		RelationName: "",
 		Type:         p.aggregate.AggExpression().Type(),
 	}

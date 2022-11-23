@@ -77,7 +77,10 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		for _, expr := range projections {
 			InspectExpression(expr, func(expr types.PlanExpression) bool {
 				switch ex := expr.(type) {
-				case *sumPlanExpression:
+				case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
+					*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
+					*percentilePlanExpression:
+					//return false for these, because thats as far down we want to inspect
 					return false
 				case *qualifiedRefPlanExpression:
 					nonAggregateReferences = append(nonAggregateReferences, ex)

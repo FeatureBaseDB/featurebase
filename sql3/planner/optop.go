@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
@@ -39,7 +40,10 @@ func (p *PlanOpTop) Children() []types.PlanOperator {
 }
 
 func (p *PlanOpTop) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
-	return nil, nil
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return NewPlanOpTop(p.expr, children[0]), nil
 }
 
 func (p *PlanOpTop) Plan() map[string]interface{} {

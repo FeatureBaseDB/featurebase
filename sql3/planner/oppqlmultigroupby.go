@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
@@ -80,7 +81,7 @@ func (p *PlanOpPQLMultiGroupBy) Schema() types.Schema {
 	offset := len(p.groupByExprs)
 	for idx, aggOp := range p.operators {
 		s := &types.PlannerColumn{
-			ColumnName:   "",
+			ColumnName:   aggOp.aggregate.String(),
 			RelationName: "",
 			Type:         aggOp.aggregate.AggExpression().Type(),
 		}
@@ -114,6 +115,17 @@ func (p *PlanOpPQLMultiGroupBy) Iterator(ctx context.Context, row types.Row) (ty
 
 func (p *PlanOpPQLMultiGroupBy) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
 	return nil, nil
+}
+
+func (p *PlanOpPQLMultiGroupBy) Expressions() []types.PlanExpression {
+	return p.groupByExprs
+}
+
+func (p *PlanOpPQLMultiGroupBy) WithUpdatedExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
+	if len(exprs) != len(p.groupByExprs) {
+		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
+	}
+	return NewPlanOpPQLMultiGroupBy(p.planner, p.operators, exprs), nil
 }
 
 // pqlMultiGroupByRowIter is an iterator for the PlanOpPQLMultiGroupBy operator

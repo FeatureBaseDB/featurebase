@@ -276,64 +276,13 @@ type ExprWithPlanOpFunc func(op types.PlanOperator, expr types.PlanExpression) (
 // whether the expression was modified, and an error or nil.
 type ExprFunc func(expr types.PlanExpression) (types.PlanExpression, bool, error)
 
-// TransformPlanOpExprsWithPlanOp applies a transformation function to all expressions on the given plan operator from the bottom up in the context of the plan operator
-func TransformPlanOpExprsWithPlanOp(op types.PlanOperator, f ExprWithPlanOpFunc) (types.PlanOperator, bool, error) {
-	return TransformPlanOp(op, func(n types.PlanOperator) (types.PlanOperator, bool, error) {
-		return TransformSinglePlanOpExprsInPlanOpContext(n, f)
-	})
-}
-
-// TransformPlanOpExprs applies a transformation function to all expressions on the given plan operator from the bottom up
-func TransformPlanOpExprs(op types.PlanOperator, f ExprFunc) (types.PlanOperator, bool, error) {
-	return TransformPlanOpExprsWithPlanOp(op, func(operator types.PlanOperator, expr types.PlanExpression) (types.PlanExpression, bool, error) {
-		return f(expr)
-	})
-}
-
-// TransformSinglePlanOpExprsInPlanOpContext applies a transformation function to all expressions on a given plan operator in the context of that plan operator
-func TransformSinglePlanOpExprsInPlanOpContext(op types.PlanOperator, f ExprWithPlanOpFunc) (types.PlanOperator, bool, error) {
-	ne, ok := op.(types.ContainsExpressions)
-	if !ok {
-		return op, true, nil
-	}
-
-	exprs := ne.Expressions()
-	if len(exprs) == 0 {
-		return op, true, nil
-	}
-
-	var (
-		newExprs []types.PlanExpression
-		err      error
-	)
-
-	for i := range exprs {
-		e := exprs[i]
-		e, same, err := TransformExprWithPlanOp(op, e, f)
-		if err != nil {
-			return nil, true, err
-		}
-		if !same {
-			if newExprs == nil {
-				newExprs = make([]types.PlanExpression, len(exprs))
-				copy(newExprs, exprs)
-			}
-			newExprs[i] = e
-		}
-	}
-
-	if len(newExprs) > 0 {
-		op, err = ne.WithUpdatedExpressions(newExprs...)
-		if err != nil {
-			return nil, true, err
-		}
-		return op, false, nil
-	}
-	return op, true, nil
-}
+// ExprExprSelectorFunc is a function that can be used as a filter selector during
+// expression transformation - it is called before calling a transformation function on
+// a child expression; if it returns false, the child is skipped
+type ExprSelectorFunc func(parentExpr, childExpr types.PlanExpression) bool
 
 // TransformSinglePlanOpExpressions applies a transformation function to all expressions on the given plan operator
-func TransformSinglePlanOpExpressions(op types.PlanOperator, f ExprFunc) (types.PlanOperator, bool, error) {
+func TransformSinglePlanOpExpressions(op types.PlanOperator, f ExprFunc, selector ExprSelectorFunc) (types.PlanOperator, bool, error) {
 	e, ok := op.(types.ContainsExpressions)
 	if !ok {
 		return op, true, nil
@@ -347,7 +296,7 @@ func TransformSinglePlanOpExpressions(op types.PlanOperator, f ExprFunc) (types.
 	var newExprs []types.PlanExpression
 	for i := range exprs {
 		expr := exprs[i]
-		expr, same, err := TransformExpr(expr, f)
+		expr, same, err := TransformExpr(expr, f, selector)
 		if err != nil {
 			return nil, true, err
 		}
@@ -370,12 +319,12 @@ func TransformSinglePlanOpExpressions(op types.PlanOperator, f ExprFunc) (types.
 }
 
 // TransformExpr applies a  depth first transformation function to an expression
-func TransformExpr(expr types.PlanExpression, f ExprFunc) (types.PlanExpression, bool, error) {
+func TransformExpr(expr types.PlanExpression, transformFunction ExprFunc, selector ExprSelectorFunc) (types.PlanExpression, bool, error) {
 	thisExpr := expr
 
 	children := expr.Children()
 	if len(children) == 0 {
-		return f(thisExpr)
+		return transformFunction(thisExpr)
 	}
 
 	var (
@@ -384,17 +333,19 @@ func TransformExpr(expr types.PlanExpression, f ExprFunc) (types.PlanExpression,
 	)
 
 	for i := 0; i < len(children); i++ {
-		c := children[i]
-		c, same, err := TransformExpr(c, f)
-		if err != nil {
-			return nil, true, err
-		}
-		if !same {
-			if newChildren == nil {
-				newChildren = make([]types.PlanExpression, len(children))
-				copy(newChildren, children)
+		child := children[i]
+		if selector(expr, child) {
+			c, same, err := TransformExpr(child, transformFunction, selector)
+			if err != nil {
+				return nil, true, err
 			}
-			newChildren[i] = c
+			if !same {
+				if newChildren == nil {
+					newChildren = make([]types.PlanExpression, len(children))
+					copy(newChildren, children)
+				}
+				newChildren[i] = c
+			}
 		}
 	}
 
@@ -407,54 +358,9 @@ func TransformExpr(expr types.PlanExpression, f ExprFunc) (types.PlanExpression,
 		}
 	}
 
-	resultExpr, sameExpr, err := f(thisExpr)
+	resultExpr, sameExpr, err := transformFunction(thisExpr)
 	if err != nil {
 		return nil, true, err
 	}
 	return resultExpr, sameChildren && sameExpr, nil
-}
-
-// TransformExprWithPlanOp applies a depth first transformation function to an expression in the context of a plan operator
-func TransformExprWithPlanOp(n types.PlanOperator, e types.PlanExpression, f ExprWithPlanOpFunc) (types.PlanExpression, bool, error) {
-	thisExpr := e
-
-	children := thisExpr.Children()
-	if len(children) == 0 {
-		return f(n, e)
-	}
-
-	var (
-		newChildren []types.PlanExpression
-		err         error
-	)
-
-	for i := 0; i < len(children); i++ {
-		c := children[i]
-		c, same, err := TransformExprWithPlanOp(n, c, f)
-		if err != nil {
-			return nil, true, err
-		}
-		if !same {
-			if newChildren == nil {
-				newChildren = make([]types.PlanExpression, len(children))
-				copy(newChildren, children)
-			}
-			newChildren[i] = c
-		}
-	}
-
-	sameChilren := true
-	if len(newChildren) > 0 {
-		sameChilren = false
-		thisExpr, err = thisExpr.WithChildren(newChildren...)
-		if err != nil {
-			return nil, true, err
-		}
-	}
-
-	resultExpr, sameExpr, err := f(n, thisExpr)
-	if err != nil {
-		return nil, true, err
-	}
-	return resultExpr, sameChilren && sameExpr, nil
 }

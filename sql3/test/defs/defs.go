@@ -15,6 +15,8 @@ var TableTests []TableTest = []TableTest{
 
 	selectTests,
 
+	topTests,
+
 	setLiteralTests,
 	setFunctionTests,
 	setParameterTests,

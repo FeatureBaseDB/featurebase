@@ -133,11 +133,16 @@ func (n *countPlanExpression) Plan() map[string]interface{} {
 }
 
 func (n *countPlanExpression) Children() []types.PlanExpression {
-	return []types.PlanExpression{}
+	return []types.PlanExpression{
+		n.arg,
+	}
 }
 
 func (n *countPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newCountPlanExpression(children[0], n.returnDataType), nil
 }
 
 // countDistinctPlanExpression handles COUNT(DISTINCT)
@@ -196,11 +201,16 @@ func (n *countDistinctPlanExpression) Plan() map[string]interface{} {
 }
 
 func (n *countDistinctPlanExpression) Children() []types.PlanExpression {
-	return nil
+	return []types.PlanExpression{
+		n.arg,
+	}
 }
 
 func (n *countDistinctPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newCountDistinctPlanExpression(children[0], n.returnDataType), nil
 }
 
 // aggregator for the SUM function
@@ -436,11 +446,16 @@ func (n *avgPlanExpression) Plan() map[string]interface{} {
 }
 
 func (n *avgPlanExpression) Children() []types.PlanExpression {
-	return nil
+	return []types.PlanExpression{
+		n.arg,
+	}
 }
 
 func (n *avgPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newAvgPlanExpression(children[0], n.returnDataType), nil
 }
 
 // aggregator for MIN
@@ -533,11 +548,16 @@ func (n *minPlanExpression) Plan() map[string]interface{} {
 }
 
 func (n *minPlanExpression) Children() []types.PlanExpression {
-	return nil
+	return []types.PlanExpression{
+		n.arg,
+	}
 }
 
 func (n *minPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newMinPlanExpression(children[0], n.returnDataType), nil
 }
 
 // aggregator for MAX
@@ -630,11 +650,16 @@ func (n *maxPlanExpression) Plan() map[string]interface{} {
 }
 
 func (n *maxPlanExpression) Children() []types.PlanExpression {
-	return nil
+	return []types.PlanExpression{
+		n.arg,
+	}
 }
 
 func (n *maxPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newMaxPlanExpression(children[0], n.returnDataType), nil
 }
 
 // percentilePlanExpression handles PERCENTILE()
@@ -693,15 +718,22 @@ func (n *percentilePlanExpression) Plan() map[string]interface{} {
 	result["_expr"] = fmt.Sprintf("%T", n)
 	result["dataType"] = n.Type().TypeName()
 	result["arg"] = n.arg.Plan()
+	result["ntharg"] = n.nthArg.Plan()
 	return result
 }
 
 func (n *percentilePlanExpression) Children() []types.PlanExpression {
-	return nil
+	return []types.PlanExpression{
+		n.arg,
+		n.nthArg,
+	}
 }
 
 func (n *percentilePlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	return n, nil
+	if len(children) != 2 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	return newPercentilePlanExpression(children[0], children[1], n.returnDataType), nil
 }
 
 // aggregator for last
