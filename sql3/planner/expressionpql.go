@@ -153,6 +153,15 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		case *parser.DataTypeID:
+			if strings.EqualFold(lhs.columnName, "_id") {
+				return &pql.Call{
+					Name: "ConstRow",
+					Args: map[string]interface{}{
+						"columns": []interface{}{pqlValue},
+					},
+					Type: pql.PrecallGlobal,
+				}, nil
+			}
 			return &pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
@@ -161,6 +170,15 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		case *parser.DataTypeString:
+			if strings.EqualFold(lhs.columnName, "_id") {
+				return &pql.Call{
+					Name: "ConstRow",
+					Args: map[string]interface{}{
+						"columns": []interface{}{pqlValue},
+					},
+					Type: pql.PrecallGlobal,
+				}, nil
+			}
 			return &pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
