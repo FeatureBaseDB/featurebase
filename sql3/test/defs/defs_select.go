@@ -48,5 +48,67 @@ var selectTests = TableTest{
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,
 		},
+		{
+			SQLs: sqls(
+				"select * from un-keyed where _id = 1",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("an_int", fldTypeInt),
+				hdr("an_id_set", fldTypeIDSet),
+				hdr("an_id", fldTypeID),
+				hdr("a_string", fldTypeString),
+				hdr("a_string_set", fldTypeStringSet),
+				hdr("a_decimal", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}, pql.NewDecimal(12345, 2)),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+	},
+}
+
+var selectKeyedTests = TableTest{
+	name: "selectKeyedTests",
+	Table: tbl(
+		"selectkeyed",
+		srcHdrs(
+			srcHdr("_id", fldTypeString),
+			srcHdr("an_int", fldTypeInt, "min 0", "max 100"),
+			srcHdr("an_id_set", fldTypeIDSet),
+			srcHdr("an_id", fldTypeID),
+			srcHdr("a_string", fldTypeString),
+			srcHdr("a_string_set", fldTypeStringSet),
+			srcHdr("a_decimal", fldTypeDecimal2),
+		),
+		srcRows(
+			srcRow(string("user1"), int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}, float64(123.45)),
+			srcRow(string("user2"), int64(22), []int64{21, 22, 23}, int64(201), "str2", []string{"a2", "b2", "c2"}, float64(234.56)),
+			srcRow(string("user3"), int64(33), []int64{31, 32, 33}, int64(301), "str3", []string{"a3", "b3", "c3"}, float64(345.67)),
+			srcRow(string("user4"), int64(44), []int64{41, 42, 43}, int64(401), "str4", []string{"a4", "b4", "c4"}, float64(456.78)),
+		),
+	),
+	SQLTests: []SQLTest{
+		{
+			SQLs: sqls(
+				"select * from selectkeyed where _id = 'user1'",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeString),
+				hdr("an_int", fldTypeInt),
+				hdr("an_id_set", fldTypeIDSet),
+				hdr("an_id", fldTypeID),
+				hdr("a_string", fldTypeString),
+				hdr("a_string_set", fldTypeStringSet),
+				hdr("a_decimal", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(string("user1"), int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}, pql.NewDecimal(12345, 2)),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
 	},
 }
