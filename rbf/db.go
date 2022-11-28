@@ -44,13 +44,13 @@ type txWaiter struct {
 type DB struct {
 	cfg rbfcfg.Config
 
-	data        []byte               // database mmap
-	file        *os.File             // database file descriptor
-	rootRecords *immutable.SortedMap // cached root records
-	pageMap     *PageMap             // pgno-to-WALID mapping
-	txs         map[*Tx]struct{}     // active transactions
-	opened      bool                 // true if open
-	logger      logger.Logger        // for diagnostics from async things
+	data        []byte                               // database mmap
+	file        *os.File                             // database file descriptor
+	rootRecords *immutable.SortedMap[string, uint32] // cached root records
+	pageMap     *PageMap                             // pgno-to-WALID mapping
+	txs         map[*Tx]struct{}                     // active transactions
+	opened      bool                                 // true if open
+	logger      logger.Logger                        // for diagnostics from async things
 
 	wal       []byte   // wal mmap
 	walFile   *os.File // wal file descriptor
@@ -514,9 +514,9 @@ func (db *DB) HasData(requireOneHotBit bool) (hasAnyRecords bool, err error) {
 	// If we can move to a cell then we have at least one record.
 
 	for itr := records.Iterator(); !itr.Done(); {
-		name, _ := itr.Next()
+		name, _, _ := itr.Next()
 		// Fetch cursor for bitmap.
-		cur, err := tx.Cursor(name.(string))
+		cur, err := tx.Cursor(name)
 		if err != nil {
 			return false, err
 		}

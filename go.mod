@@ -14,7 +14,7 @@ require (
 	github.com/alexbrainman/odbc v0.0.0-20211220213544-9c9a2e61c5e2
 	github.com/aws/aws-sdk-go v1.42.39
 	github.com/beevik/ntp v0.3.0
-	github.com/benbjohnson/immutable v0.3.0
+	github.com/benbjohnson/immutable v0.4.0
 	github.com/cespare/xxhash v1.1.0
 	github.com/chzyer/readline v1.5.1
 	github.com/confluentinc/confluent-kafka-go v1.9.1
