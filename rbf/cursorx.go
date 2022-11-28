@@ -16,10 +16,10 @@ import (
 // probably should just implement the container interface
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
-	shardVsContainerExponent := uint(4) //needs constant exported from roaring package
+	shardVsContainerExponent := uint(4) // needs constant exported from roaring package
 	rows := make([]uint64, 0)
 	if err := c.First(); err != nil {
-		if err == io.EOF { //root leaf with no elements
+		if err == io.EOF { // root leaf with no elements
 			return rows, nil
 		}
 		return nil, errors.Wrap(err, "rows")
@@ -53,15 +53,15 @@ func (tx *Tx) FieldViews() []string {
 	records, _ := tx.RootRecords()
 	a := make([]string, 0, records.Len())
 	for itr := records.Iterator(); !itr.Done(); {
-		name, _ := itr.Next()
-		a = append(a, name.(string))
+		name, _, _ := itr.Next()
+		a = append(a, name)
 	}
 	return a
 }
 
 func (c *Cursor) DumpKeys() {
 	if err := c.First(); err != nil {
-		//ignoring errors for this debug function
+		// ignoring errors for this debug function
 		return
 	}
 	for {
@@ -78,6 +78,7 @@ func (c *Cursor) DumpKeys() {
 		fmt.Println("key", cell.Key)
 	}
 }
+
 func (c *Cursor) DumpStack() {
 	fmt.Println("STACK")
 	for i := c.stack.top; i >= 0; i-- {
@@ -85,6 +86,7 @@ func (c *Cursor) DumpStack() {
 	}
 	fmt.Println()
 }
+
 func (c *Cursor) Dump(name string) {
 	writer, _ := os.Create(name)
 	defer writer.Close()
