@@ -150,6 +150,7 @@ func writeMetaChecksum(page []byte, chksum uint32) {
 // Root record page helpers
 
 func WalkRootRecordPages(page []byte) uint32 { return binary.BigEndian.Uint32(page[8:]) }
+
 func writeRootRecordOverflowPgno(page []byte, pgno uint32) {
 	binary.BigEndian.PutUint32(page[8:], pgno)
 }
@@ -170,13 +171,13 @@ func readRootRecords(page []byte) (records []*RootRecord, err error) {
 // We can return io.ErrShortBuffer in err. If we still have records
 // to write that don't fit on page, remain will point to the next
 // record that hasn't yet been written.
-func writeRootRecords(page []byte, itr *immutable.SortedMapIterator) (err error) {
+func writeRootRecords(page []byte, itr *immutable.SortedMapIterator[string, uint32]) (err error) {
 	data := page[rootRecordPageHeaderSize:]
 
 	for !itr.Done() {
-		name, pgno := itr.Next()
+		name, pgno, _ := itr.Next()
 
-		data, err = WriteRootRecord(data, &RootRecord{Name: name.(string), Pgno: pgno.(uint32)})
+		data, err = WriteRootRecord(data, &RootRecord{Name: name, Pgno: pgno})
 		if err != nil {
 			itr.Seek(name)
 			return err
@@ -686,7 +687,7 @@ func Pagedump(b []byte, indent string, writer io.Writer) {
 			cell := readLeafCell(b, i)
 			switch cell.Type {
 			case ContainerTypeArray:
-				//fmt.Fprintf(os.Stderr, "[%d]: key=%d type=array n=%d elems=%v\n", i, cell.Key, cell.N, toArray16(cell.Data))
+				// fmt.Fprintf(os.Stderr, "[%d]: key=%d type=array n=%d elems=%v\n", i, cell.Key, cell.N, toArray16(cell.Data))
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=array BitN=%d \n", indent, i, cell.Key, cell.BitN)
 			case ContainerTypeRLE:
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=rle BitN=%d\n", indent, i, cell.Key, cell.BitN)
