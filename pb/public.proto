@@ -32,7 +32,14 @@ message ExtractedIDColumn {
 	uint64 ID = 1;
 	repeated IDList Vals = 2;
 }
-
+message ExtractedIDMatrixSorted{
+	ExtractedIDMatrix ExtractedIDMatrix =1;
+	repeated RowKV RowKVs=2;
+}
+message RowKV{
+	uint64 RowID =1;
+	ExtractedTableValue Value =2;
+}
 message ExtractedIDMatrix {
 	repeated string Fields = 1;
 	repeated ExtractedIDColumn Columns = 2;
@@ -167,6 +174,7 @@ message QueryResult {
     DistinctTimestamp DistinctTimestamp = 17;
 	DataFrame DataFrame = 18;
 	ArrowTable ArrowTable = 19;
+	ExtractedIDMatrixSorted ExtractedIDMatrixSorted = 20;
 }
 
 message ImportRequest {
