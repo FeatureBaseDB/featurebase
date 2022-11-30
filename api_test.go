@@ -1265,8 +1265,8 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		t.Run("translateIndexDbOnNilIndex",
 			func(t *testing.T) {
 				err := api.TranslateIndexDB(context.Background(), "nonExistentIndex", 0, r)
-				expected := fmt.Errorf("index %q not found", "nonExistentIndex")
-				if !reflect.DeepEqual(err, expected) {
+				expected := fmt.Sprintf("index %q not found", "nonExistentIndex")
+				if err == nil || err.Error() != expected {
 					t.Fatalf("expected '%#v', got '%#v'", expected, err)
 				}
 			})
@@ -1274,8 +1274,8 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		t.Run("translateIndexDbOnNilTranslateStore",
 			func(t *testing.T) {
 				err := api.TranslateIndexDB(context.Background(), c.Idx(), 0, r)
-				expected := fmt.Errorf("index %q has no translate store", c.Idx())
-				if !reflect.DeepEqual(err, expected) {
+				expected := fmt.Sprintf("index %q has no translate store", c.Idx())
+				if err == nil || err.Error() != expected {
 					t.Fatalf("expected '%#v', got '%#v'", expected, err)
 				}
 			})
@@ -1283,8 +1283,8 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		t.Run("translateFieldDbOnNilIndex",
 			func(t *testing.T) {
 				err := api.TranslateFieldDB(context.Background(), "nonExistentIndex", "field", r)
-				expected := fmt.Errorf("index %q not found", "nonExistentIndex")
-				if !reflect.DeepEqual(err, expected) {
+				expected := fmt.Sprintf("index %q not found", "nonExistentIndex")
+				if err == nil || err.Error() != expected {
 					t.Fatalf("expected '%#v', got '%#v'", expected, err)
 				}
 			})
@@ -1292,8 +1292,8 @@ func TestVariousApiTranslateCalls(t *testing.T) {
 		t.Run("translateFieldDbOnNilField",
 			func(t *testing.T) {
 				err := api.TranslateFieldDB(context.Background(), c.Idx(), "nonExistentField", r)
-				expected := fmt.Errorf("field %q/%q not found", c.Idx(), "nonExistentField")
-				if !reflect.DeepEqual(err, expected) {
+				expected := fmt.Sprintf("field %q/%q not found", c.Idx(), "nonExistentField")
+				if err == nil || err.Error() != expected {
 					t.Fatalf("expected '%#v', got '%#v'", expected, err)
 				}
 			})

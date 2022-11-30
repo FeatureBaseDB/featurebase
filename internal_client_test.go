@@ -161,11 +161,11 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	// Compare TopN results across all nodes in the cluster.
-	if !reflect.DeepEqual(result, result1) {
+	if result.SameAs(result1) != nil {
 		t.Fatalf("TopN result should be the same on node0 and node1: %s", spew.Sdump(result1))
 	}
 
-	if !reflect.DeepEqual(result, result2) {
+	if result.SameAs(result2) != nil {
 		t.Fatalf("TopN result should be the same on node0 and node2: %s", spew.Sdump(result2))
 	}
 }

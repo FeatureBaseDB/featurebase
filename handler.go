@@ -3,7 +3,9 @@ package pilosa
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/bits"
+	"reflect"
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/shardwidth"
@@ -75,6 +77,28 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 		Results: resp.Results,
 		Profile: resp.Profile,
 	})
+}
+
+// SameAs compares one QueryResponse to another and returns nil if the Results
+// and Err are both identical, or a descriptive error if they differ.
+// This function replaces using reflect.DeepEqual directly on the
+// QueryResponse, since QueryResponse contains an error field and reflect.DeepEqual
+// should not be used on errors.
+func (qr *QueryResponse) SameAs(other *QueryResponse) error {
+	switch {
+	case !reflect.DeepEqual(qr.Results, other.Results):
+		return fmt.Errorf("responses contained different results")
+	case qr.Err == nil && other.Err == nil:
+		return nil
+	case qr.Err == nil && other.Err != nil:
+		return fmt.Errorf("unexpected error: %w", other.Err)
+	case qr.Err != nil && other.Err == nil:
+		return fmt.Errorf("missing error: expected %v, got no error", qr.Err)
+	case qr.Err.Error() != other.Err.Error():
+		return fmt.Errorf("wrong error: expected %v, got %w", qr.Err, other.Err)
+	default:
+		return nil
+	}
 }
 
 // HandlerI is the interface for the data handler, a wrapper around

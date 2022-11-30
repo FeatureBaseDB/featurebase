@@ -9335,7 +9335,7 @@ func TestExternalLookup(t *testing.T) {
 				t.Parallel()
 
 				result := c.Query(t, c.Idx(), tc.query)
-				if !reflect.DeepEqual(result, tc.expect) {
+				if tc.expect.SameAs(&result) != nil {
 					t.Errorf("expected %v but got %v", tc.expect, result)
 				}
 			})
