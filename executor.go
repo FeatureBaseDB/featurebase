@@ -345,6 +345,8 @@ func safeCopy(resp QueryResponse) (out QueryResponse) {
 		case *basicTable:
 			// dumpTable(x)
 			out.Results = append(out.Results, x)
+		case ExtractedIDMatrixSorted:
+			out.Results = append(out.Results, x)
 		default:
 			panic(fmt.Sprintf("handle %T here", v))
 		}
@@ -4363,27 +4365,12 @@ type TimeArgs struct {
 	To   time.Time
 }
 
-func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ExtractedIDMatrix, error) {
-	// Extract the column filter call.
-	if len(c.Children) < 1 {
-		return ExtractedIDMatrix{}, errors.New("missing column filter in Extract")
-	}
-	filter := c.Children[0]
-	var sort_desc bool
-	if filter.Name == "Sort" {
-		sd, _, err := filter.BoolArg("sort-desc")
-		if err != nil {
-			return ExtractedIDMatrix{}, errors.Wrap(err, "sort field error")
-		}
-		sort_desc = sd
-	}
-
-	// Extract fields from rows calls.
+func extractFieldsFromRowsCalls(c *pql.Call) ([]string, []TimeArgs, error) {
 	fields := make([]string, len(c.Children)-1)
 	timeArgs := make([]TimeArgs, len(c.Children)-1)
 	for i, rows := range c.Children[1:] {
 		if rows.Name != "Rows" {
-			return ExtractedIDMatrix{}, errors.Errorf("child call of Extract is %q but expected Rows", rows.Name)
+			return fields, timeArgs, errors.Errorf("child call of Extract is %q but expected Rows", rows.Name)
 		}
 		var fieldName string
 		var ok bool
@@ -4396,33 +4383,30 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 			case "from":
 				fromTime, err := parseTime(v)
 				if err != nil {
-					return ExtractedIDMatrix{}, errors.Wrap(err, "parsing from time")
+					return fields, timeArgs, errors.Wrap(err, "parsing from time")
 				}
 				timeArg.From = fromTime
 			case "to":
 				toTime, err := parseTime(v)
 				if err != nil {
-					return ExtractedIDMatrix{}, errors.Wrap(err, "parsing from time")
+					return fields, timeArgs, errors.Wrap(err, "parsing from time")
 				}
 				timeArg.To = toTime
 			default:
-				return ExtractedIDMatrix{}, errors.Errorf("unsupported Rows argument for Extract: %q", k)
+				return fields, timeArgs, errors.Errorf("unsupported Rows argument for Extract: %q", k)
 			}
 		}
 		if !ok {
-			return ExtractedIDMatrix{}, errors.New("missing field specification in Rows")
+			return fields, timeArgs, errors.New("missing field specification in Rows")
 		}
 		fields[i] = fieldName
 		timeArgs[i] = timeArg
 	}
+	return fields, timeArgs, nil
+}
 
-	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
-		return e.executeExtractShard(ctx, qcx, index, fields, filter, shard, mopt, timeArgs)
-	}
-
-	// Merge returned results at coordinating node.
-	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+func makeReduceFunc(sort_desc bool) func(ctx context.Context, prev, v interface{}) interface{} {
+	return func(ctx context.Context, prev, v interface{}) interface{} {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -4453,13 +4437,9 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 			return ExtractedIDMatrix{}
 		}
 	}
+}
 
-	// Get full result set.
-	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
-	if err != nil {
-		return ExtractedIDMatrix{}, err
-	}
-
+func handleExtractResults(other interface{}, filter *pql.Call, opt *ExecOptions) (interface{}, error) {
 	switch results := other.(type) {
 	case ExtractedIDMatrix:
 		sort.Slice(results.Columns, func(i, j int) bool {
@@ -4481,10 +4461,50 @@ func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c
 		if hasLimit && limit < uint64(len(results.RowKVs)) {
 			results.ExtractedIDMatrix.Columns = results.ExtractedIDMatrix.Columns[:limit]
 		}
+		// need to reture sorted to originating node in order to be able to sort properly
+		if opt.Remote {
+			return results, nil
+		}
 		return *results.ExtractedIDMatrix, nil
 	default:
 		return ExtractedIDMatrix{}, errors.New("Extract, unexpected result type found")
 	}
+}
+
+func (e *executor) executeExtract(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
+	// Extract the column filter call.
+	if len(c.Children) < 1 {
+		return ExtractedIDMatrix{}, errors.New("missing column filter in Extract")
+	}
+	filter := c.Children[0]
+	var sort_desc bool
+	if filter.Name == "Sort" {
+		sd, _, err := filter.BoolArg("sort-desc")
+		if err != nil {
+			return ExtractedIDMatrix{}, errors.Wrap(err, "sort field error")
+		}
+		sort_desc = sd
+	}
+
+	// Extract fields from rows calls.
+	fields, timeArgs, err := extractFieldsFromRowsCalls(c)
+	if err != nil {
+		return ExtractedIDMatrix{}, errors.Wrap(err, "sort field error")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
+		return e.executeExtractShard(ctx, qcx, index, fields, filter, shard, mopt, timeArgs)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := makeReduceFunc(sort_desc)
+	// Get full result set.
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return ExtractedIDMatrix{}, err
+	}
+	return handleExtractResults(other, filter, opt)
 }
 
 func mergeBits(bits *Row, mask uint64, out map[uint64]uint64) {

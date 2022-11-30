@@ -558,6 +558,9 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryRespon
 		case arrow.Table:
 			resp.Results[i].Type = queryResultTypeArrowTable
 			resp.Results[i].ArrowTable = s.encodeArrowTable(result)
+		case pilosa.ExtractedIDMatrixSorted:
+			resp.Results[i].Type = queryResultTypeExtractedIDMatrixSorted
+			resp.Results[i].ExtractedIDMatrixSorted = s.endcodeExtractedIDMatrixSorted(result)
 		default:
 			panic(fmt.Errorf("unknown type: %T", m.Results[i]))
 		}
@@ -1339,6 +1342,7 @@ const (
 	queryResultTypeDistinctTimestamp
 	queryResultTypeDataFrame
 	queryResultTypeArrowTable
+	queryResultTypeExtractedIDMatrixSorted
 )
 
 func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
@@ -1381,6 +1385,8 @@ func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
 		return s.decodeDataFrame(pb.DataFrame)
 	case queryResultTypeArrowTable:
 		return s.decodeArrowTable(pb.ArrowTable)
+	case queryResultTypeExtractedIDMatrixSorted:
+		return s.decodeExtractedIDMatrixSorted(pb.ExtractedIDMatrixSorted)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1463,24 +1469,8 @@ func (s Serializer) decodeExtractedTable(t *pb.ExtractedTable) pilosa.ExtractedT
 		}
 
 		rows := make([]interface{}, len(c.Values))
-		for j, v := range rows {
-			var val interface{}
-			switch v := v.(type) {
-			case *pb.ExtractedTableValue_IDs:
-				val = v.IDs.IDs
-			case *pb.ExtractedTableValue_Keys:
-				val = v.Keys.Keys
-			case *pb.ExtractedTableValue_BSIValue:
-				val = v.BSIValue
-			case *pb.ExtractedTableValue_MutexID:
-				val = v.MutexID
-			case *pb.ExtractedTableValue_MutexKey:
-				val = v.MutexKey
-			case *pb.ExtractedTableValue_Bool:
-				val = v.Bool
-			}
-
-			rows[j] = val
+		for j, v := range c.Values {
+			rows[j] = castExtractedTableValue(v)
 		}
 
 		columns[i] = pilosa.ExtractedTableColumn{
@@ -1878,4 +1868,118 @@ func (s Serializer) encodeDecimal(p *pql.Decimal) *pb.Decimal {
 		NewVersion: true,
 	}
 	return retval
+}
+
+func (s Serializer) endcodeExtractedIDMatrixSorted(m pilosa.ExtractedIDMatrixSorted) *pb.ExtractedIDMatrixSorted {
+	cols := make([]*pb.ExtractedIDColumn, len(m.ExtractedIDMatrix.Columns))
+	for i, v := range m.ExtractedIDMatrix.Columns {
+		vals := make([]*pb.IDList, len(v.Rows))
+		for j, f := range v.Rows {
+			vals[j] = &pb.IDList{IDs: f}
+		}
+		cols[i] = &pb.ExtractedIDColumn{
+			ID:   v.ColumnID,
+			Vals: vals,
+		}
+	}
+	rowKeyV := s.encodeRowKVs(m.RowKVs)
+	return &pb.ExtractedIDMatrixSorted{
+		ExtractedIDMatrix: &pb.ExtractedIDMatrix{
+			Fields:  m.ExtractedIDMatrix.Fields,
+			Columns: cols,
+		},
+		RowKVs: rowKeyV,
+	}
+}
+
+func (s Serializer) encodeRowKVs(kvs []pilosa.RowKV) []*pb.RowKV {
+	result := make([]*pb.RowKV, len(kvs))
+	for i, v := range kvs {
+		kv := &pb.RowKV{}
+		kv.RowID = v.RowID
+		switch val := v.Value.(type) {
+		case []uint64:
+			kv.Value = &pb.ExtractedTableValue{
+				Value: &pb.ExtractedTableValue_IDs{
+					IDs: &pb.IDList{
+						IDs: val,
+					},
+				},
+			}
+		case []string:
+			kv.Value = &pb.ExtractedTableValue{
+				Value: &pb.ExtractedTableValue_Keys{
+					Keys: &pb.KeyList{
+						Keys: val,
+					},
+				},
+			}
+		case int64:
+			kv.Value = &pb.ExtractedTableValue{
+				Value: &pb.ExtractedTableValue_BSIValue{
+					BSIValue: val,
+				},
+			}
+		case uint64:
+			kv.Value = &pb.ExtractedTableValue{
+				Value: &pb.ExtractedTableValue_MutexID{
+					MutexID: val,
+				},
+			}
+		case string:
+			kv.Value = &pb.ExtractedTableValue{
+				Value: &pb.ExtractedTableValue_MutexKey{
+					MutexKey: val,
+				},
+			}
+		case bool:
+			kv.Value = &pb.ExtractedTableValue{
+				Value: &pb.ExtractedTableValue_Bool{
+					Bool: val,
+				},
+			}
+		}
+		result[i] = kv
+
+	}
+	return result
+}
+
+func (s Serializer) decodeExtractedIDMatrixSorted(m *pb.ExtractedIDMatrixSorted) pilosa.ExtractedIDMatrixSorted {
+	mat := s.decodeExtractedIDMatrix(m.ExtractedIDMatrix)
+	kvs := s.decodeRowKVs(m.RowKVs)
+	return pilosa.ExtractedIDMatrixSorted{
+		ExtractedIDMatrix: &mat,
+		RowKVs:            kvs,
+	}
+}
+
+func castExtractedTableValue(v *pb.ExtractedTableValue) interface{} {
+	switch val := v.Value.(type) {
+	case *pb.ExtractedTableValue_IDs:
+		return val.IDs.IDs
+	case *pb.ExtractedTableValue_Keys:
+		return val.Keys.Keys
+	case *pb.ExtractedTableValue_BSIValue:
+		return val.BSIValue
+	case *pb.ExtractedTableValue_MutexID:
+		return val.MutexID
+	case *pb.ExtractedTableValue_MutexKey:
+		return val.MutexKey
+	case *pb.ExtractedTableValue_Bool:
+		return val.Bool
+	}
+	// Shouldn't happen, but i don't think we should panic
+	return v
+}
+
+func (s Serializer) decodeRowKVs(m []*pb.RowKV) []pilosa.RowKV {
+	rows := make([]pilosa.RowKV, len(m))
+	for i, v := range m {
+		kv := pilosa.RowKV{}
+		kv.RowID = v.RowID
+		kv.Value = castExtractedTableValue(v.Value)
+		rows[i] = kv
+	}
+	return rows
 }

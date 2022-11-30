@@ -159,3 +159,225 @@ func CreateArrowTable(pool memory.Allocator) arrow.Table {
 	records := []arrow.Record{rec1, rec2, rec3}
 	return array.NewTableFromRecords(schema, records)
 }
+
+func areEqualKV(a, b []pilosa.RowKV) bool {
+	return reflect.DeepEqual(a, b)
+}
+
+func TestExtractedIDMatrixSorted(t *testing.T) {
+	areEqualEIM := func(a, b *pilosa.ExtractedIDMatrix) bool {
+		if !reflect.DeepEqual(a.Fields, b.Fields) {
+			return false
+		}
+		if len(a.Columns) != len(b.Columns) {
+			return false
+		}
+		for i := range a.Columns {
+			if a.Columns[i].ColumnID != b.Columns[i].ColumnID {
+				return false
+			}
+			for x := range a.Columns[i].Rows {
+				if len(a.Columns[i].Rows[x]) != len(b.Columns[i].Rows[x]) {
+					return false
+				}
+				for y := range a.Columns[i].Rows[x] {
+					if a.Columns[i].Rows[x][y] != b.Columns[i].Rows[x][y] {
+						return false
+					}
+				}
+			}
+		}
+		return true
+	}
+	compare := func(a, b pilosa.ExtractedIDMatrixSorted) bool {
+		return areEqualKV(a.RowKVs, b.RowKVs) && areEqualEIM(a.ExtractedIDMatrix, b.ExtractedIDMatrix)
+	}
+	t.Run("ExtractedIDMatrixSorted", func(t *testing.T) {
+		// not correct ExtractedIDMatrix contents, but will test the typing appropriately
+		em := &pilosa.ExtractedIDMatrix{
+			Fields: []string{"A", "B", "C"},
+			Columns: []pilosa.ExtractedIDColumn{
+				{ColumnID: 1, Rows: [][]uint64{{1}}},
+				{ColumnID: 2, Rows: [][]uint64{{2}}},
+				{ColumnID: 3, Rows: [][]uint64{{3}}},
+			},
+		}
+		rows := []pilosa.RowKV{
+			{RowID: 1, Value: int64(10)},
+			{RowID: 2, Value: int64(20)},
+			{RowID: 3, Value: int64(30)},
+		}
+		table := pilosa.ExtractedIDMatrixSorted{
+			ExtractedIDMatrix: em,
+			RowKVs:            rows,
+		}
+		s := Serializer{}
+		before := s.endcodeExtractedIDMatrixSorted(table)
+		q := &pb.QueryResult{Type: queryResultTypeExtractedIDMatrixSorted, ExtractedIDMatrixSorted: before}
+		decoded := s.decodeQueryResult(q).(pilosa.ExtractedIDMatrixSorted)
+
+		if !compare(table, decoded) {
+			t.Errorf("failed to decode ExtractedIDMatrixSorted. expected\n %#v\n got\n %#v", table, decoded)
+		}
+	})
+}
+
+func TestSerializer_RowKVs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []pilosa.RowKV
+	}{
+		{
+			name: "IDs",
+			args: []pilosa.RowKV{
+				{RowID: 1, Value: []uint64{10}},
+			},
+		},
+		{
+			name: "Keys",
+			args: []pilosa.RowKV{
+				{RowID: 1, Value: []string{"aaaa"}},
+			},
+		},
+		{
+			name: "BSIValue",
+			args: []pilosa.RowKV{
+				{RowID: 1, Value: int64(52)},
+			},
+		},
+		{
+			name: "MutexID",
+			args: []pilosa.RowKV{
+				{RowID: 1, Value: uint64(42)},
+			},
+		},
+		{
+			name: "MutexKey",
+			args: []pilosa.RowKV{
+				{RowID: 1, Value: "aaaa"},
+			},
+		},
+		{
+			name: "Bool",
+			args: []pilosa.RowKV{
+				{RowID: 1, Value: true},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := Serializer{}
+			encoded := s.encodeRowKVs(tt.args)
+			after := s.decodeRowKVs(encoded)
+			if !areEqualKV(tt.args, after) {
+				t.Fatalf("expected: %v got: %v", tt.args, after)
+			}
+		})
+	}
+}
+
+func TestSerializer_ExtractedTable(t *testing.T) {
+	compare := func(a, b pilosa.ExtractedTable) bool {
+		return reflect.DeepEqual(a, b)
+		// return true
+	}
+	tests := []struct {
+		name string
+		args pilosa.ExtractedTable
+	}{
+		{
+			name: "uint64",
+			args: pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{Name: "a", Type: "uint64"},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 0},
+						Rows:   []interface{}{uint64(1)},
+					},
+				},
+			},
+		},
+		{
+			name: "int64",
+			args: pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{Name: "a", Type: "int64"},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 0},
+						Rows:   []interface{}{int64(1)},
+					},
+				},
+			},
+		},
+		{
+			name: "string",
+			args: pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{Name: "a", Type: "string"},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 0},
+						Rows:   []interface{}{"a"},
+					},
+				},
+			},
+		},
+		{
+			name: "[]string",
+			args: pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{Name: "a", Type: "[]string"},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 0},
+						Rows:   []interface{}{[]string{"a"}},
+					},
+				},
+			},
+		},
+		{
+			name: "bool",
+			args: pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{Name: "a", Type: "bool"},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 0},
+						Rows:   []interface{}{true},
+					},
+				},
+			},
+		},
+		{
+			name: "[]uint64",
+			args: pilosa.ExtractedTable{
+				Fields: []pilosa.ExtractedTableField{
+					{Name: "a", Type: "[]uint64"},
+				},
+				Columns: []pilosa.ExtractedTableColumn{
+					{
+						Column: pilosa.KeyOrID{ID: 0},
+						Rows:   []interface{}{[]uint64{2}},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := Serializer{}
+			encoded := s.encodeExtractedTable(tt.args)
+			after := s.decodeExtractedTable(encoded)
+			if !compare(tt.args, after) {
+				t.Fatalf("expected: %v got: %v", tt.args, after)
+			}
+		})
+	}
+}
