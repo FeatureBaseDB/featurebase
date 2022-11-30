@@ -29,6 +29,64 @@ var groupByTests = TableTest{
 	SQLTests: []SQLTest{
 		{
 			SQLs: sqls(
+				"SELECT COUNT(*), i1 FROM groupby_test group by i1 order by count(*) asc",
+				"SELECT COUNT(_id), i1 FROM groupby_test group by i1 order by count(*) asc",
+			),
+			ExpErr: "column reference, alias reference or column position expected",
+		},
+		{
+			SQLs: sqls(
+				"SELECT COUNT(*), i1 FROM groupby_test group by i1 order by 2 asc",
+				"SELECT COUNT(_id), i1 FROM groupby_test group by i1 order by 2 asc",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("i1", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2), int64(10)),
+				row(int64(1), int64(11)),
+				row(int64(2), int64(12)),
+				row(int64(1), int64(13)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT COUNT(*), i1 as c FROM groupby_test group by i1 order by c asc",
+				"SELECT COUNT(_id), i1 as c FROM groupby_test group by i1 order by c asc",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("c", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2), int64(10)),
+				row(int64(1), int64(11)),
+				row(int64(2), int64(12)),
+				row(int64(1), int64(13)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT COUNT(*), i1 as c FROM groupby_test group by i1 order by i1 asc",
+				"SELECT COUNT(_id), i1 as c FROM groupby_test group by i1 order by i1 asc",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("c", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2), int64(10)),
+				row(int64(1), int64(11)),
+				row(int64(2), int64(12)),
+				row(int64(1), int64(13)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			SQLs: sqls(
 				"SELECT COUNT(*), i1 FROM groupby_test group by i1",
 				"SELECT COUNT(_id), i1 FROM groupby_test group by i1",
 			),
