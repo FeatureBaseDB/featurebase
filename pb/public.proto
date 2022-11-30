@@ -102,6 +102,7 @@ message GroupCount{
 	repeated FieldRow Group = 1;
 	uint64 Count = 2;
 	int64 Agg = 3;
+	Decimal DecimalAgg = 4;
 }
 
 message ValCount {

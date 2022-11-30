@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -31,7 +32,8 @@ const (
 
 // OrderByExpression is the expression on which an order by can be computed
 type OrderByExpression struct {
-	Expr         types.PlanExpression
+	Index        int
+	ExprType     parser.ExprDataType
 	Order        orderByOrder
 	NullOrdering nullOrdering
 }
@@ -94,7 +96,8 @@ func (n *PlanOpOrderBy) Plan() map[string]interface{} {
 	ps := make([]interface{}, 0)
 	for _, e := range n.orderByFields {
 		ps = append(ps, &map[string]interface{}{
-			"expr":         e.Expr.Plan(),
+			"index":        e.Index,
+			"exprType":     e.ExprType.TypeName(),
 			"order":        e.Order,
 			"nullOrdering": e.NullOrdering,
 		})
@@ -204,17 +207,8 @@ func (s *OrderBySorter) Less(i, j int) bool {
 	a := s.Rows[i]
 	b := s.Rows[j]
 	for _, sf := range s.SortFields {
-		av, err := sf.Expr.Evaluate(a)
-		if err != nil {
-			s.LastError = sql3.NewErrInternalf("unable to sort '%s'", err.Error())
-			return false
-		}
-
-		bv, err := sf.Expr.Evaluate(b)
-		if err != nil {
-			s.LastError = sql3.NewErrInternalf("unable to sort '%s'", err.Error())
-			return false
-		}
+		av := a[sf.Index]
+		bv := b[sf.Index]
 
 		if sf.Order == orderByDesc {
 			av, bv = bv, av
@@ -228,7 +222,7 @@ func (s *OrderBySorter) Less(i, j int) bool {
 			return sf.NullOrdering != nullOrderingFirst
 		}
 
-		switch sf.Expr.Type().(type) {
+		switch sf.ExprType.(type) {
 		case *parser.DataTypeInt, *parser.DataTypeID:
 			avInt, aok := av.(int64)
 			bvInt, bok := bv.(int64)
@@ -253,6 +247,30 @@ func (s *OrderBySorter) Less(i, j int) bool {
 			}
 			return true
 
+		case *parser.DataTypeString:
+			avString, aok := av.(string)
+			bvString, bok := bv.(string)
+			if !(aok && bok) {
+				s.LastError = sql3.NewErrInternalf("unexpected type conversion result")
+				return false
+			}
+			if avString > bvString {
+				return false
+			}
+			return true
+
+		case *parser.DataTypeDecimal:
+			avDecimal, aok := av.(pql.Decimal)
+			bvDecimal, bok := bv.(pql.Decimal)
+			if !(aok && bok) {
+				s.LastError = sql3.NewErrInternalf("unexpected type conversion result")
+				return false
+			}
+			if avDecimal.GreaterThan(bvDecimal) {
+				return false
+			}
+			return true
+
 		case *parser.DataTypeTimestamp:
 			avTime, aok := av.(time.Time)
 			bvTime, bok := bv.(time.Time)
@@ -266,7 +284,7 @@ func (s *OrderBySorter) Less(i, j int) bool {
 			return true
 
 		default:
-			s.LastError = sql3.NewErrInternalf("unhandled data type '%T'", sf.Expr.Type())
+			s.LastError = sql3.NewErrInternalf("unhandled data type '%T'", sf.ExprType)
 			return false
 		}
 	}

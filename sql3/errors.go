@@ -78,7 +78,8 @@ const (
 	ErrConflictingColumnConstraint errors.Code = "ErrConflictingColumnConstraint"
 
 	// expected errors
-	ErrExpectedColumnReference errors.Code = "ErrExpectedColumnReference"
+	ErrExpectedColumnReference         errors.Code = "ErrExpectedColumnReference"
+	ErrExpectedSortExpressionReference errors.Code = "ErrExpectedSortExpressionReference"
 
 	// call errors
 	ErrCallUnknownFunction                  errors.Code = "ErrCallUnknownFunction"
@@ -520,6 +521,13 @@ func NewErrExpectedColumnReference(line, col int) error {
 	return errors.New(
 		ErrExpectedColumnReference,
 		fmt.Sprintf("[%d:%d] column reference expected", line, col),
+	)
+}
+
+func NewErrExpectedSortExpressionReference(line, col int) error {
+	return errors.New(
+		ErrExpectedSortExpressionReference,
+		fmt.Sprintf("[%d:%d] column reference, alias reference or column position expected", line, col),
 	)
 }
 

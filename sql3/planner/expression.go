@@ -875,6 +875,14 @@ func (n *casePlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 						return b, nil
 					}
 					return nil, sql3.NewErrInternalf("unexpected type conversion error '%t'", bok)
+
+				case *parser.DataTypeBool:
+					b, bok := evalBlockBody.(bool)
+					if bok {
+						return b, nil
+					}
+					return nil, sql3.NewErrInternalf("unexpected type conversion error '%t'", bok)
+
 				case *parser.DataTypeString:
 					s, sok := evalBlockBody.(string)
 					if sok {
@@ -2723,6 +2731,29 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 
 	default:
 		return newCallPlanExpression(parser.IdentName(expr.Name), args, expr.ResultDataType), nil
+	}
+}
+
+func (p *ExecutionPlanner) compileOrderingTermExpr(expr parser.Expr) (index int, err error) {
+	if expr == nil {
+		return 0, nil
+	}
+
+	switch thisExpr := expr.(type) {
+	case *parser.QualifiedRef:
+		return thisExpr.ColumnIndex, nil
+
+	case *parser.IntegerLit:
+		val, err := strconv.ParseInt(thisExpr.Value, 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		// subtract one because ordering terms are 1 based, not 0 based
+		return int(val - 1), nil
+
+	default:
+		return 0, sql3.NewErrInternalf("unexpected ordering expression type: %T", expr)
+
 	}
 }
 

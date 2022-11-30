@@ -94,7 +94,6 @@ func TestDAXIntegration(t *testing.T) {
 		skips := []string{
 			"testinsert/test-5",                         // error messages differ
 			"percentile_test/test-6",                    // related to TODO in orchestrator.executePercentile
-			"groupby_test/test-6",                       // something to do with GroupCount.DecimalAgg=nil in orchestrator.executeGroupBy
 			"innerjointest/innerjoin-aggregate-groupby", // join test which won't work until we support multiple tables
 		}
 
