@@ -117,12 +117,16 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 	if len(stmt.OrderingTerms) > 0 {
 		orderByFields := make([]*OrderByExpression, 0)
 		for _, ot := range stmt.OrderingTerms {
-			otExpr, err := p.compileExpr(ot.X)
+			index, err := p.compileOrderingTermExpr(ot.X)
 			if err != nil {
 				return nil, err
 			}
+			// get the data type from the projection
+			projDataType := projections[index].Type()
+
 			f := &OrderByExpression{
-				Expr: otExpr,
+				Index:    index,
+				ExprType: projDataType,
 			}
 			f.Order = orderByAsc
 			if ot.Desc.IsValid() {
@@ -424,13 +428,11 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 	}
 
 	for _, term := range stmt.OrderingTerms {
-		expr, err = p.analyzeExpression(term.X, stmt)
+		expr, err := p.analyzeOrderingTermExpression(term.X, stmt)
 		if err != nil {
 			return err
 		}
-		if expr != nil {
-			term.X = expr
-		}
+		term.X = expr
 	}
 
 	return nil

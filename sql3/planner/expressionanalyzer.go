@@ -3,6 +3,7 @@
 package planner
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -739,5 +740,82 @@ func (p *ExecutionPlanner) analyzeCaseBlockExpression(expr *parser.CaseBlock, ca
 	}
 	expr.Condition = y
 
+	return expr, nil
+}
+
+func (p *ExecutionPlanner) analyzeOrderingTermExpression(expr parser.Expr, scope parser.Statement) (parser.Expr, error) {
+	if expr == nil {
+		return nil, nil
+	}
+
+	// ordering terms need to be either a column name, an alias name or an integer literal representing
+	// position of column in the select list
+
+	switch thisExpr := expr.(type) {
+	case *parser.Ident:
+		switch sc := scope.(type) {
+		case *parser.SelectStatement:
+
+			// go find the first ident in the projection list that matches
+			columnIndex := 0
+			found := false
+			for idx, proj := range sc.Columns {
+				// if the expression is a qualified ref, check the name
+				colExpr, ok := proj.Expr.(*parser.QualifiedRef)
+				if ok && strings.EqualFold(thisExpr.Name, colExpr.Column.Name) {
+					columnIndex = idx
+					found = true
+					break
+				}
+				// try the alias is there is one
+				if proj.Alias != nil && strings.EqualFold(thisExpr.Name, proj.Alias.Name) {
+					columnIndex = idx
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				return nil, sql3.NewErrColumnNotFound(thisExpr.NamePos.Line, thisExpr.NamePos.Column, thisExpr.Name)
+			}
+
+			// turn *parser.Ident into *parser.QualifiedRef
+			ident := &parser.QualifiedRef{
+				Table: &parser.Ident{
+					Name:    "",
+					NamePos: parser.Pos{Line: 0, Column: 0},
+				},
+				Column: &parser.Ident{
+					Name:    thisExpr.Name,
+					NamePos: thisExpr.NamePos,
+				},
+				ColumnIndex: columnIndex,
+				// since this is a ordring term, we don't care about the type
+				RefDataType: parser.NewDataTypeVoid(),
+			}
+			return ident, nil
+
+		default:
+			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
+		}
+
+	case *parser.IntegerLit:
+		switch sc := scope.(type) {
+		case *parser.SelectStatement:
+			// check to see if the offset is in the range
+			value, err := strconv.ParseInt(thisExpr.Value, 10, 64)
+			if err != nil {
+				return nil, sql3.NewErrInternalf("unexpected integer literal value")
+			}
+			if value < 1 || value > int64(len(sc.Columns)) {
+				return nil, sql3.NewErrExpectedSortExpressionReference(0, 0)
+			}
+		default:
+			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
+		}
+
+	default:
+		return nil, sql3.NewErrExpectedSortExpressionReference(expr.Pos().Line, expr.Pos().Column)
+	}
 	return expr, nil
 }

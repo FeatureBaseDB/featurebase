@@ -1514,7 +1514,8 @@ func (s Serializer) decodeGroupCounts(a *pb.GroupCounts, b []*pb.GroupCount) *pi
 			Count: gc.Count,
 			// note: not renaming the `pb. structure members now
 			// to avoid breaking protobuf interactions.
-			Agg: gc.Agg,
+			Agg:        gc.Agg,
+			DecimalAgg: s.decodeDecimalStruct(gc.DecimalAgg),
 		}
 	}
 	return pilosa.NewGroupCounts(a.Aggregate, other...)
@@ -1703,9 +1704,10 @@ func (s Serializer) encodeGroupCounts(counts *pilosa.GroupCounts) *pb.GroupCount
 	}
 	for i, gc := range groups {
 		result.Groups[i] = &pb.GroupCount{
-			Group: s.encodeFieldRows(gc.Group),
-			Count: gc.Count,
-			Agg:   gc.Agg,
+			Group:      s.encodeFieldRows(gc.Group),
+			Count:      gc.Count,
+			Agg:        gc.Agg,
+			DecimalAgg: s.encodeDecimal(gc.DecimalAgg),
 		}
 	}
 	return result

@@ -16,6 +16,9 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+	if err := client.FromEnv(cli); err != nil {
+		panic(err)
+	}
 	cli.RegistryLogin(context.Background(), types.AuthConfig{})
 
 	DefaultClient = cli
