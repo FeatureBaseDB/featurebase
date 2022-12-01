@@ -299,26 +299,6 @@ run go tests dax/test/dax:
       - coverage*.out
       - coverage-from-docker/*.out
 
-# We run our PLG tests against $GOFUTURE (whatever's most recent) and run them with regula
-# shardwidth, and the PLG flag, so they don't use multi-node clusters. Basically, these two
-# tests are as different as we can easily make them.
-run go tests plg:
-  stage: test
-  image: golang:$GOFUTURE
-  extends: .go-cache
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  retry: 1
-  script:
-    - echo "Running featurebase plg-specific unit tests..."
-    - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - go test -tags=plg -timeout=10m -coverprofile=coverage-plg.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
-  artifacts:
-    paths:
-      - coverage-plg.out
-  tags:
-    - aws
-
 # idk tests
 run go tests idk race:
   variables:
@@ -434,7 +414,6 @@ upload to sonarcloud:
     - sonar-scanner -Dsonar.projectKey=molecula_featurebase -Dsonar.organization=molecula -Dsonar.sources=. -Dsonar.host.url=https://sonarcloud.io -Dsonar.go.coverage.reportPaths=coverage*.out,results/coverage*out,idk/testdata/*coverage.out,batch/testdata/*coverage.out,coverage-from-docker/*.out -Dsonar.javascript.lcov.reportPaths=lattice/coverage/lcov.info
   needs:
     - job: run go tests
-    - job: run go tests plg
     - job: run jest tests
     - job: external lookup tests
     - job: run go tests idk race
@@ -628,32 +607,6 @@ idk s3 dump tag:
     - job: idk build_amd64
     - job: idk build_arm64
 ### end idk builds ###
-
-# authclustertests doesn't run in docker, and requires several things to be set up on the runner to work:
-# 1. Install Go, make sure it's on the path
-# 2. Make sure "make" is installed
-# 3. make sure docker/docker-compose is installed
-# 4. make sure the git config is done `git config --global --add url."ssh://git@github.com/".insteadOf "https://github.com/"`
-# 5. Add deploy key github.com/molecula/featurebase/settings/keys and add public key in .ssh folder of gitlab-runner user
-#
-# there used to be two versions of this, one with auth and one without, but
-# there's no marginal value to running without, we don't think.
-authclustertests:
-  variables:
-    PROJECT: clustertests_${CI_CONCURRENT_ID}
-  stage: integration
-  tags:
-    - shell
-  retry: 1
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - rm -rf  internal/clustertests/results && mkdir -p internal/clustertests/results && chown gitlab-runner:gitlab-runner  internal/clustertests/results
-    - make authclustertests
-    - mv internal/clustertests/results/ results/
-  artifacts:
-    paths:
-      - results/coverage*.out
 
 external lookup tests:
   stage: integration

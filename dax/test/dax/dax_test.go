@@ -95,6 +95,7 @@ func TestDAXIntegration(t *testing.T) {
 			"testinsert/test-5",                         // error messages differ
 			"percentile_test/test-6",                    // related to TODO in orchestrator.executePercentile
 			"innerjointest/innerjoin-aggregate-groupby", // join test which won't work until we support multiple tables
+			"alterTable/alterTableBadTable",             // looks like table does not exist is a different error in DAX
 		}
 
 		doSkip := func(name string) bool {

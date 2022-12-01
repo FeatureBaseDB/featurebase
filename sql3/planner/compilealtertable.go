@@ -3,11 +3,14 @@
 package planner
 
 import (
+	"context"
 	"strings"
 
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/pkg/errors"
 )
 
 type alterOperation int64
@@ -22,12 +25,43 @@ const (
 // PlanOperator.
 func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Name)
+
+	// does the table exist
+	table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	if err != nil {
+		if errors.Is(err, pilosa.ErrIndexNotFound) {
+			return nil, sql3.NewErrTableNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, tableName)
+		}
+		return nil, err
+	}
+
 	if stmt.Drop.IsValid() {
 		columnName := parser.IdentName(stmt.DropColumnName)
+
+		// does this column exist
+		found := false
+		for _, f := range table.Fields {
+			if strings.EqualFold(f.Name, columnName) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, sql3.NewErrColumnNotFound(stmt.DropColumnName.NamePos.Line, stmt.DropColumnName.NamePos.Column, columnName)
+		}
+
 		return NewPlanOpQuery(NewPlanOpAlterTable(p, tableName, alterOpDrop, columnName, "", nil), p.sql), nil
 	} else if stmt.Add.IsValid() {
 		col := stmt.ColumnDef
 		columnName := parser.IdentName(col.Name)
+
+		// does this column exist
+		for _, f := range table.Fields {
+			if strings.EqualFold(f.Name, columnName) {
+				return nil, sql3.NewErrDuplicateColumn(col.Name.NamePos.Line, col.Name.NamePos.Column, columnName)
+			}
+		}
+
 		column, err := p.compileColumn(col)
 		if err != nil {
 			return nil, err
@@ -46,6 +80,7 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 // analyzeAlterTableStatement analyze an ALTER TABLE statement and returns an
 // error if anything is invalid.
 func (p *ExecutionPlanner) analyzeAlterTableStatement(stmt *parser.AlterTableStatement) error {
+
 	if stmt.Drop.IsValid() {
 		//no checks for now
 	} else if stmt.Add.IsValid() {
