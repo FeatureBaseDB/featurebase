@@ -8,7 +8,14 @@ ODBC_ENABLED=
 BINOUT ?= bin
 VERSION := $(shell git describe --tags 2> /dev/null || git rev-parse --verify --short=7 HEAD)
 VERSION_ID = $(VERSION)-$(GOOS)-$(GOARCH)
-BUILD_TIME := $(shell date -u +%FT%T%z)
+DATE_FMT="+%FT%T%z"
+# set SOURCE_DATE_EPOCH like this to use the last git commit timestamp
+# export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) instead of the current time from running `date`.
+ifdef SOURCE_DATE_EPOCH
+	BUILD_TIME ?= $(shell date -u -d "@$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u -r "$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u "$(DATE_FMT)")
+else
+	BUILD_TIME ?= $(shell date -u "$(DATE_FMT)")
+endif
 AWS_ACCOUNTID ?= undefined
 BRANCH_NAME ?= ""
 
@@ -271,6 +278,7 @@ docker-build: vendor
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --build-arg MAKE_FLAGS="GOOS=$(GOOS) GOARCH=$(GOARCH) BUILD_CGO=$(BUILD_CGO)" \
 	    --build-arg GO_BUILD_FLAGS=$(GO_BUILD_FLAGS) \
+            --build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
 	    --target builder \
 	    --tag idk:$(BUILD_NAME) ../.
 	mkdir -p build/idk-$(GOOS)-$(GOARCH)

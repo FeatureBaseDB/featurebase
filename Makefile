@@ -7,6 +7,8 @@ GOOS=$(shell $(GO) env GOOS)
 GOARCH=$(shell $(GO) env GOARCH)
 VERSION_ID=$(if $(TRIAL_DEADLINE),trial-$(TRIAL_DEADLINE)-,)$(VERSION)-$(GOOS)-$(GOARCH)
 DATE_FMT="+%FT%T%z"
+# set SOURCE_DATE_EPOCH like this to use the last git commit timestamp
+# export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) instead of the current time from running `date`
 ifdef SOURCE_DATE_EPOCH
 	BUILD_TIME ?= $(shell date -u -d "@$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u -r "$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u "$(DATE_FMT)")
 else

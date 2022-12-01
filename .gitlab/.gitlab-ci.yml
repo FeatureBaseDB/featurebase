@@ -497,6 +497,7 @@ idk build_amd64:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - cd ./idk/
     - date
     - make docker-build GOOS="linux" GOARCH="amd64" BUILD_CGO=1
@@ -519,6 +520,7 @@ idk build_arm64:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - cd ./idk/
     - date
     - make docker-build GOOS="linux" GOARCH="arm64" BUILD_CGO=1 BUILD_NAME="linux-arm64"
@@ -543,6 +545,7 @@ idk package_docker_all:
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
   script:
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - make docker-idk GOOS="linux" GOARCH="amd64"
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - make docker-idk-tag-push GOOS="linux" GOARCH="amd64"
