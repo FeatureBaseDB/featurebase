@@ -37,6 +37,10 @@ var topTests = TableTest{
 			SortStringKeys: true,
 		},
 		{
+			// TODO(pok) this is a bit weird type consistency wise - grouping by a set in FB is grouping by the members of a set
+			// 		suggest making the below query a semantic error 'can't group by set column' and
+			//		force syntax like '...group by members(skills)' to make it explicit what it is doing
+			//		if we want to group by a set column, it should group by distinct member combinations instead
 			SQLs: sqls(
 				"select top(10) count(*), skills from skills group by skills;",
 			),
@@ -45,8 +49,21 @@ var topTests = TableTest{
 				hdr("skills", fldTypeStringSet),
 			),
 			ExpRows: rows(
-				row(int64(1), []string{"Marketing Manager"}),
-				row(int64(1), []string{"Software Engineer I"}),
+				row(int64(1), string("Marketing Manager")),
+				row(int64(1), string("Software Engineer I")),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select top(1) count(*) from skills;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2)),
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,

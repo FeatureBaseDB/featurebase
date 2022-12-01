@@ -27,13 +27,11 @@ var optimizerFunctions = []OptimizerFunc{
 	pushdownFilters,
 
 	// if we have a group by that has one TableScanOperator,
-	// no Top or TopN or Distincts, try to use a PQL(multi)
-	// groupby operator instead
+	// try to use a PQL(multi)groupby operator instead
 	tryToReplaceGroupByWithPQLGroupBy,
 
 	// if we have a group by with no group by exprs that has
-	// one TableScanOperator, no Top or TopN or Distincts, try
-	// to use a PQL aggregate operators instead
+	// one TableScanOperator,  try to use a PQL aggregate operators instead
 	tryToReplaceGroupByWithPQLAggregate,
 
 	// if we have a subtable call on a timequantum type
@@ -496,19 +494,11 @@ func splitOnAnd(expr types.PlanExpression) []types.PlanExpression {
 
 func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
 	//bail if there are any joins
-	scans, err := hasOnlyTableScans(ctx, a, n, scope)
+	joins, err := hasJoins(ctx, a, n, scope)
 	if err != nil {
 		return nil, false, err
 	}
-	if !scans {
-		return n, true, nil
-	}
-	//bail if there is a top
-	top, err := hasTop(ctx, a, n, scope)
-	if err != nil {
-		return nil, false, err
-	}
-	if top {
+	if joins {
 		return n, true, nil
 	}
 
@@ -553,19 +543,11 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 
 func tryToReplaceGroupByWithPQLGroupBy(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
 	//bail if there are any joins
-	scans, err := hasOnlyTableScans(ctx, a, n, scope)
+	joins, err := hasJoins(ctx, a, n, scope)
 	if err != nil {
 		return nil, false, err
 	}
-	if !scans {
-		return n, true, nil
-	}
-	//bail if there is a top
-	top, err := hasTop(ctx, a, n, scope)
-	if err != nil {
-		return nil, false, err
-	}
-	if top {
+	if joins {
 		return n, true, nil
 	}
 
@@ -679,19 +661,37 @@ func tryToRewriteSubtableJoins(ctx context.Context, a *ExecutionPlanner, n types
 }
 
 func pushdownPQLTop(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
-	//bail if there are any joins
-	hasOnlyScans, err := hasOnlyTableScans(ctx, a, n, scope)
+	// bail if there are any joins
+	joins, err := hasJoins(ctx, a, n, scope)
 	if err != nil {
 		return nil, false, err
 	}
-	if !hasOnlyScans {
+	if joins {
 		return n, true, nil
 	}
 
-	//go find the table scan operators
-	tables := getTableScanOperators(ctx, a, n, scope)
+	// get a list of tables that have projections as parents
+	var tables []*PlanOpPQLTableScan
+	_, _, err = TransformPlanOpWithParent(n, func(c ParentContext) bool { return true }, func(c ParentContext) (types.PlanOperator, bool, error) {
+		parent := c.Parent
+		node := c.Operator
 
-	//only do this if we have one TableScanOperator
+		switch thisNode := node.(type) {
+		case *PlanOpPQLTableScan:
+			switch parent.(type) {
+			case *PlanOpProjection:
+				tables = append(tables, thisNode)
+			}
+
+		}
+		return node, true, nil
+
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	// only do this if we have one TableScanOperator
 	if len(tables) == 1 {
 		return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
 			switch n := node.(type) {
@@ -707,17 +707,6 @@ func pushdownPQLTop(ctx context.Context, a *ExecutionPlanner, n types.PlanOperat
 		})
 	}
 	return n, true, nil
-}
-
-func areAggregablesEqual(lhs types.Aggregable, rhs types.Aggregable) bool {
-	if reflect.TypeOf(lhs) == reflect.TypeOf(rhs) {
-		lhsRef, lhsok := lhs.AggExpression().(*qualifiedRefPlanExpression)
-		rhsRef, rhsok := rhs.AggExpression().(*qualifiedRefPlanExpression)
-		if lhsok && rhsok {
-			return strings.EqualFold(lhsRef.columnName, rhsRef.columnName)
-		}
-	}
-	return false
 }
 
 // fixes references for a projection op depending on child
@@ -898,16 +887,14 @@ func hasTopN(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, sco
 	return false, nil
 }
 
-// inspects a plan op tree and returns false (or error) if there are read operators other
-// than table scans
-func hasOnlyTableScans(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (bool, error) {
-	//assume true
-	result := true
+// inspects a plan op tree and returns false (or error) if there are read join operators
+func hasJoins(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (bool, error) {
+	// assume false
+	result := false
 	InspectPlan(n, func(node types.PlanOperator) bool {
-		// if we find a nested loops, nope to only table scans
 		switch node.(type) {
 		case *PlanOpNestedLoops:
-			result = false
+			result = true
 			return false
 		}
 		return true
