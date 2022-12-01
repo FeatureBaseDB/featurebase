@@ -9,6 +9,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
+// TODO(pok) make all these lower case
 const (
 	FieldTypeBool             = "BOOL"
 	FieldTypeDecimal          = "DECIMAL"
