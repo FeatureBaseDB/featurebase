@@ -46,3 +46,38 @@ var createTable = TableTest{
 		},
 	},
 }
+
+var alterTable = TableTest{
+	name: "alterTable",
+	Table: tbl(
+		"alter_table_test",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("a_int", fldTypeInt),
+		),
+		srcRows(),
+	),
+	SQLTests: []SQLTest{
+		{
+			name: "alterTableBadTable",
+			SQLs: sqls(
+				"alter table alter_table_test_foo add column a_int int",
+			),
+			ExpErr: "table 'alter_table_test_foo' not found",
+		},
+		{
+			name: "alterTableAddExistingCol",
+			SQLs: sqls(
+				"alter table alter_table_test add column a_int int",
+			),
+			ExpErr: "duplicate column 'a_int'",
+		},
+		{
+			name: "alterTableDropNonExistentCol",
+			SQLs: sqls(
+				"alter table alter_table_test drop column b_int",
+			),
+			ExpErr: "column 'b_int' not found",
+		},
+	},
+}

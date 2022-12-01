@@ -151,6 +151,7 @@ var TableTests []TableTest = []TableTest{
 
 	//create table tests
 	createTable,
+	alterTable,
 
 	//joins
 	joinTestsUsers,
