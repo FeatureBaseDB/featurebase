@@ -124,6 +124,12 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 			// get the data type from the projection
 			projDataType := projections[index].Type()
 
+			// don't let a sort happen on something unsortable right now
+			switch projDataType.(type) {
+			case *parser.DataTypeStringSet, *parser.DataTypeIDSet:
+				return nil, sql3.NewErrExpectedSortableExpression(0, 0, projDataType.TypeDescription())
+			}
+
 			f := &OrderByExpression{
 				Index:    index,
 				ExprType: projDataType,
