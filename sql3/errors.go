@@ -80,6 +80,7 @@ const (
 	// expected errors
 	ErrExpectedColumnReference         errors.Code = "ErrExpectedColumnReference"
 	ErrExpectedSortExpressionReference errors.Code = "ErrExpectedSortExpressionReference"
+	ErrExpectedSortableExpression      errors.Code = "ErrExpectedSortableExpression"
 
 	// call errors
 	ErrCallUnknownFunction                  errors.Code = "ErrCallUnknownFunction"
@@ -528,6 +529,13 @@ func NewErrExpectedSortExpressionReference(line, col int) error {
 	return errors.New(
 		ErrExpectedSortExpressionReference,
 		fmt.Sprintf("[%d:%d] column reference, alias reference or column position expected", line, col),
+	)
+}
+
+func NewErrExpectedSortableExpression(line, col int, typeName string) error {
+	return errors.New(
+		ErrExpectedSortExpressionReference,
+		fmt.Sprintf("[%d:%d] unable to sort a column of type '%s'", line, col, typeName),
 	)
 }
 
