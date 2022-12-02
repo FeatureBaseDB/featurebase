@@ -23,26 +23,28 @@ type PlannerScope struct {
 
 // ExecutionPlanner compiles SQL text into a query plan
 type ExecutionPlanner struct {
-	executor   pilosa.Executor
-	schemaAPI  pilosa.SchemaAPI
-	systemAPI  pilosa.SystemAPI
-	computeAPI pilosa.ComputeAPI
-	importer   batch.Importer
-	logger     logger.Logger
-	sql        string
-	scopeStack *scopeStack
+	executor       pilosa.Executor
+	schemaAPI      pilosa.SchemaAPI
+	systemAPI      pilosa.SystemAPI
+	computeAPI     pilosa.ComputeAPI
+	systemLayerAPI pilosa.SystemLayerAPI
+	importer       batch.Importer
+	logger         logger.Logger
+	sql            string
+	scopeStack     *scopeStack
 }
 
-func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, computeAPI pilosa.ComputeAPI, importer batch.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
+func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, computeAPI pilosa.ComputeAPI, systemLayerAPI pilosa.SystemLayerAPI, importer batch.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
 	return &ExecutionPlanner{
-		executor:   executor,
-		schemaAPI:  newSystemTableDefintionsWrapper(schemaAPI),
-		systemAPI:  systemAPI,
-		computeAPI: computeAPI,
-		importer:   importer,
-		logger:     logger,
-		sql:        sql,
-		scopeStack: newScopeStack(),
+		executor:       executor,
+		schemaAPI:      newSystemTableDefintionsWrapper(schemaAPI),
+		systemAPI:      systemAPI,
+		computeAPI:     computeAPI,
+		systemLayerAPI: systemLayerAPI,
+		importer:       importer,
+		logger:         logger,
+		sql:            sql,
+		scopeStack:     newScopeStack(),
 	}
 }
 

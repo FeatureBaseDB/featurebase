@@ -91,6 +91,8 @@ func indexInfoFromSystemTable(st *systemTable) (*pilosa.IndexInfo, error) {
 		case *parser.DataTypeString:
 			opts.Type = pilosa.FieldTypeMutex
 			opts.Keys = true
+		case *parser.DataTypeTimestamp:
+			opts.Type = pilosa.FieldTypeTimestamp
 		default:
 			return nil, sql3.NewErrInternalf("unexpected system table field type '%T'", f.Type)
 		}

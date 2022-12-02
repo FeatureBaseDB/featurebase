@@ -62,7 +62,7 @@ func TestPlanner_Show(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("SystemTables", func(t *testing.T) {
+	t.Run("SystemTablesInfo", func(t *testing.T) {
 		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, shard_width, replica_count from fb_cluster_info`)
 		if err != nil {
 			t.Fatal(err)
@@ -85,12 +85,57 @@ func TestPlanner_Show(t *testing.T) {
 		}
 	})
 
+	t.Run("SystemTablesNode", func(t *testing.T) {
+		_, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_cluster_nodes`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("id"),
+			wireQueryFieldString("state"),
+			wireQueryFieldString("uri"),
+			wireQueryFieldString("grpc_uri"),
+			wireQueryFieldBool("is_primary"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("SystemTablesExecRequests", func(t *testing.T) {
+		_, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_exec_requests`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("request_id"),
+			wireQueryFieldString("user"),
+			wireQueryFieldTimestamp("start_time"),
+			wireQueryFieldTimestamp("end_time"),
+			wireQueryFieldString("status"),
+			wireQueryFieldString("wait_type"),
+			wireQueryFieldInt("wait_time"),
+			wireQueryFieldString("wait_resource"),
+			wireQueryFieldInt("cpu_time"),
+			wireQueryFieldInt("elapsed_time"),
+			wireQueryFieldInt("reads"),
+			wireQueryFieldInt("writes"),
+			wireQueryFieldInt("logical_reads"),
+			wireQueryFieldInt("row_count"),
+			wireQueryFieldString("sql"),
+			wireQueryFieldString("plan"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
 	t.Run("ShowTables", func(t *testing.T) {
 		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW TABLES`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(results) != 4 {
+		if len(results) != 5 {
 			t.Fatal(fmt.Errorf("unexpected result set length"))
 		}
 

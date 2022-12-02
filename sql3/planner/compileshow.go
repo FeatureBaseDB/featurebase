@@ -45,7 +45,7 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 		dataType:    parser.NewDataTypeInt(),
 	}}
 
-	return NewPlanOpQuery(NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(indexInfo)), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(indexInfo)), p.sql), nil
 }
 
 func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {
@@ -130,5 +130,5 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsS
 		dataType:    parser.NewDataTypeString(),
 	}}
 
-	return NewPlanOpQuery(NewPlanOpProjection(columns, NewPlanOpFeatureBaseColumns(index)), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseColumns(index)), p.sql), nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
+	fbcontext "github.com/molecula/featurebase/v3/context"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/pql"
@@ -1632,7 +1633,7 @@ func TestAddAuthToken(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		ogIP := "10.0.0.1"
-		pilosa.AddAuthToken(pilosa.WithOriginalIP(context.Background(), ogIP), &req.Header)
+		pilosa.AddAuthToken(fbcontext.WithOriginalIP(context.Background(), ogIP), &req.Header)
 		if got := req.Header.Get(pilosa.OriginalIPHeader); got != ogIP {
 			t.Fatalf("got '%v', expected '%v'", got, ogIP)
 		}

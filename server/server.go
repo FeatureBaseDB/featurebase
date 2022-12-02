@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/systemlayer"
 	"golang.org/x/sync/errgroup"
 
 	pilosa "github.com/molecula/featurebase/v3"
@@ -576,7 +577,7 @@ func (m *Command) setupServer() error {
 		fsapi := &pilosa.FeatureBaseSystemAPI{API: api}
 		fimp := &batch.FeaturebaseImporter{API: api}
 
-		return planner.NewExecutionPlanner(e, fapi, fsapi, api, fimp, m.logger, sql)
+		return planner.NewExecutionPlanner(e, fapi, fsapi, api, m.Server.SystemLayer, fimp, m.logger, sql)
 	}
 
 	serverOptions := []pilosa.ServerOption{
@@ -628,6 +629,8 @@ func (m *Command) setupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "new server")
 	}
+
+	m.Server.SystemLayer = systemlayer.NewSystemLayer()
 
 	m.API, err = pilosa.NewAPI(
 		pilosa.OptAPIServer(m.Server),
