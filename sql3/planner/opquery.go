@@ -2,14 +2,20 @@ package planner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/molecula/featurebase/v3"
+	fbcontext "github.com/molecula/featurebase/v3/context"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 // PlanOpQuery is a query - this is the root node of an execution plan
 type PlanOpQuery struct {
+	planner *ExecutionPlanner
+
 	ChildOp types.PlanOperator
 
 	// the list of aggregate terms
@@ -24,8 +30,9 @@ type PlanOpQuery struct {
 
 var _ types.PlanOperator = (*PlanOpQuery)(nil)
 
-func NewPlanOpQuery(child types.PlanOperator, sql string) *PlanOpQuery {
+func NewPlanOpQuery(p *ExecutionPlanner, child types.PlanOperator, sql string) *PlanOpQuery {
 	return &PlanOpQuery{
+		planner:  p,
 		ChildOp:  child,
 		warnings: make([]string, 0),
 		sql:      sql,
@@ -41,7 +48,12 @@ func (p *PlanOpQuery) Child() types.PlanOperator {
 }
 
 func (p *PlanOpQuery) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
-	return p.Child().Iterator(ctx, row)
+	iter, err := p.ChildOp.Iterator(ctx, row)
+	if err != nil {
+		return nil, err
+	}
+
+	return newQueryIterator(p.planner.systemLayerAPI.ExecutionRequests(), p, iter), nil
 }
 
 func (p *PlanOpQuery) Children() []types.PlanOperator {
@@ -54,7 +66,7 @@ func (p *PlanOpQuery) WithChildren(children ...types.PlanOperator) (types.PlanOp
 	if len(children) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	op := NewPlanOpQuery(children[0], p.sql)
+	op := NewPlanOpQuery(p.planner, children[0], p.sql)
 	op.warnings = append(op.warnings, p.warnings...)
 	return op, nil
 
@@ -90,4 +102,50 @@ func (p *PlanOpQuery) Warnings() []string {
 
 func (p *PlanOpQuery) String() string {
 	return ""
+}
+
+type queryIterator struct {
+	requests pilosa.ExecutionRequestsAPI
+	query    *PlanOpQuery
+
+	child types.RowIterator
+
+	hasStarted *struct{}
+}
+
+func newQueryIterator(requests pilosa.ExecutionRequestsAPI, query *PlanOpQuery, child types.RowIterator) *queryIterator {
+	return &queryIterator{
+		requests: requests,
+		query:    query,
+		child:    child,
+	}
+}
+
+func (i *queryIterator) Next(ctx context.Context) (types.Row, error) {
+	if i.hasStarted == nil {
+		i.hasStarted = &struct{}{}
+
+		requestId, ok := fbcontext.RequestID(ctx)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to get request id from context")
+		}
+
+		userId := ""
+		userId, _ = fbcontext.UserID(ctx)
+
+		i.requests.AddRequest(requestId, userId, time.Now(), i.query.sql)
+	}
+
+	row, err := i.child.Next(ctx)
+	if err != nil {
+		// either error or no more rows, either way update the request
+		requestId, ok := fbcontext.RequestID(ctx)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to get request id from context")
+		}
+
+		plan, _ := json.MarshalIndent(i.query.Plan(), "", "    ")
+		i.requests.UpdateRequest(requestId, time.Now(), "complete", "", 0, "", 0, 0, 0, 0, 0, string(plan))
+	}
+	return row, err
 }

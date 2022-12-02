@@ -23,5 +23,5 @@ func (p *ExecutionPlanner) compileDropTableStatement(stmt *parser.DropTableState
 		}
 		return nil, err
 	}
-	return NewPlanOpQuery(NewPlanOpDropTable(p, index), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpDropTable(p, index), p.sql), nil
 }

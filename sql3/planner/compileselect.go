@@ -15,7 +15,7 @@ import (
 
 // compileSelectStatment compiles a parser.SelectStatment AST into a PlanOperator
 func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, isSubquery bool) (types.PlanOperator, error) {
-	query := NewPlanOpQuery(NewPlanOpNullTable(), p.sql)
+	query := NewPlanOpQuery(p, NewPlanOpNullTable(), p.sql)
 	p.scopeStack.push(query)
 
 	// handle projections

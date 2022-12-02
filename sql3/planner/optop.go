@@ -30,6 +30,7 @@ func (p *PlanOpTop) Schema() types.Schema {
 }
 
 func (p *PlanOpTop) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
+	// TODO (pok) actually implement top
 	return p.ChildOp.Iterator(ctx, row)
 }
 
