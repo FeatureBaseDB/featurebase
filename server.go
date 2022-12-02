@@ -58,6 +58,8 @@ type Server struct { // nolint: maligned
 	executorPoolSize int
 	serializer       Serializer
 
+	SystemLayer SystemLayerAPI
+
 	// Distributed Consensus
 	disCo   disco.DisCo
 	noder   disco.Noder

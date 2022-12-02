@@ -62,7 +62,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 
 		columns = append(columns, column)
 	}
-	return NewPlanOpQuery(NewPlanOpCreateTable(p, tableName, failIfExists, isKeyed, keyPartitions, columns), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpCreateTable(p, tableName, failIfExists, isKeyed, keyPartitions, columns), p.sql), nil
 }
 
 // compiles a column def

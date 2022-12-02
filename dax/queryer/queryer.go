@@ -9,6 +9,7 @@ import (
 	"time"
 
 	featurebase "github.com/molecula/featurebase/v3"
+	fbcontext "github.com/molecula/featurebase/v3/context"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/errors"
@@ -21,6 +22,8 @@ import (
 	"github.com/molecula/featurebase/v3/sql3/planner"
 	plannertypes "github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/molecula/featurebase/v3/stats"
+	"github.com/molecula/featurebase/v3/systemlayer"
+	uuid "github.com/satori/go.uuid"
 )
 
 // Queryer represents the query layer in a Molecula implementation. The idea is
@@ -93,6 +96,15 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 		applyExecutionTime()
 	}
 
+	// Create a requestID and add it to the context.
+	requestID, err := uuid.NewV4()
+	if err != nil {
+		applyError(errors.Wrap(err, "creating requestID"))
+		return ret, nil
+	}
+	// put the requestId in the context
+	ctx = fbcontext.WithRequestID(ctx, requestID.String())
+
 	st, err := parser.NewParser(strings.NewReader(sql)).ParseStatement()
 	if err != nil {
 		applyError(errors.Wrap(err, "parsing sql"))
@@ -116,7 +128,9 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	// no-op implementation).
 	sysapi := &featurebase.FeatureBaseSystemAPI{API: nil}
 
-	pl := planner.NewExecutionPlanner(orch, sapi, sysapi, capi, imp, q.orchestrator.logger, sql)
+	systemLayer := systemlayer.NewSystemLayer()
+
+	pl := planner.NewExecutionPlanner(orch, sapi, sysapi, capi, systemLayer, imp, q.orchestrator.logger, sql)
 
 	planOp, err := pl.CompilePlan(ctx, st)
 	if err != nil {

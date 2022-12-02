@@ -50,7 +50,7 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 			return nil, sql3.NewErrColumnNotFound(stmt.DropColumnName.NamePos.Line, stmt.DropColumnName.NamePos.Column, columnName)
 		}
 
-		return NewPlanOpQuery(NewPlanOpAlterTable(p, tableName, alterOpDrop, columnName, "", nil), p.sql), nil
+		return NewPlanOpQuery(p, NewPlanOpAlterTable(p, tableName, alterOpDrop, columnName, "", nil), p.sql), nil
 	} else if stmt.Add.IsValid() {
 		col := stmt.ColumnDef
 		columnName := parser.IdentName(col.Name)
@@ -66,12 +66,12 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 		if err != nil {
 			return nil, err
 		}
-		return NewPlanOpQuery(NewPlanOpAlterTable(p, tableName, alterOpAdd, "", columnName, column), p.sql), nil
+		return NewPlanOpQuery(p, NewPlanOpAlterTable(p, tableName, alterOpAdd, "", columnName, column), p.sql), nil
 
 	} else if stmt.Rename.IsValid() {
 		oldColumnName := parser.IdentName(stmt.OldColumnName)
 		newColumnName := parser.IdentName(stmt.NewColumnName)
-		return NewPlanOpQuery(NewPlanOpAlterTable(p, tableName, alterOpRename, oldColumnName, newColumnName, nil), p.sql), nil
+		return NewPlanOpQuery(p, NewPlanOpAlterTable(p, tableName, alterOpRename, oldColumnName, newColumnName, nil), p.sql), nil
 	} else {
 		return nil, sql3.NewErrInternal("unhandled alter operation")
 	}

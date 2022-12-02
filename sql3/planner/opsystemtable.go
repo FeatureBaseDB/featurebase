@@ -34,6 +34,7 @@ import (
 const (
 	fbClusterInfo  = "fb_cluster_info"
 	fbClusterNodes = "fb_cluster_nodes"
+	fbExecRequests = "fb_exec_requests"
 )
 
 type systemTable struct {
@@ -45,6 +46,11 @@ var systemTables = map[string]*systemTable{
 	fbClusterInfo: {
 		name: fbClusterInfo,
 		schema: types.Schema{
+			&types.PlannerColumn{
+				RelationName: fbClusterInfo,
+				ColumnName:   "name",
+				Type:         parser.NewDataTypeString(),
+			},
 			&types.PlannerColumn{
 				RelationName: fbClusterInfo,
 				ColumnName:   "name",
@@ -91,29 +97,115 @@ var systemTables = map[string]*systemTable{
 		name: fbClusterNodes,
 		schema: types.Schema{
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbClusterNodes,
 				ColumnName:   "id",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbClusterNodes,
 				ColumnName:   "state",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbClusterNodes,
 				ColumnName:   "uri",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbClusterNodes,
 				ColumnName:   "grpc_uri",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbClusterNodes,
 				ColumnName:   "is_primary",
 				Type:         parser.NewDataTypeBool(),
+			},
+		},
+	},
+
+	fbExecRequests: {
+		name: fbExecRequests,
+		schema: types.Schema{
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "request_id",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "user",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "start_time",
+				Type:         parser.NewDataTypeTimestamp(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "end_time",
+				Type:         parser.NewDataTypeTimestamp(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "status",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "wait_type",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "wait_time",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "wait_resource",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "cpu_time",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "elapsed_time",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "reads",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "writes",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "logical_reads",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "row_count",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "sql",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbExecRequests,
+				ColumnName:   "plan",
+				Type:         parser.NewDataTypeString(),
 			},
 		},
 	},
@@ -175,6 +267,10 @@ func (p *PlanOpSystemTable) Iterator(ctx context.Context, row types.Row) (types.
 		return &fbClusterNodesRowIter{
 			planner: p.planner,
 		}, nil
+	case fbExecRequests:
+		return &fbExecRequestsRowIter{
+			planner: p.planner,
+		}, nil
 	default:
 		return nil, sql3.NewErrInternalf("unable to find system table '%s'", p.table.name)
 	}
@@ -197,6 +293,7 @@ var _ types.RowIterator = (*fbClusterInfoRowIter)(nil)
 func (i *fbClusterInfoRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.rowIndex < 1 {
 		row := []interface{}{
+			i.planner.systemAPI.ClusterName(),
 			i.planner.systemAPI.ClusterName(),
 			i.planner.systemAPI.PlatformDescription(),
 			i.planner.systemAPI.PlatformVersion(),
@@ -232,6 +329,49 @@ func (i *fbClusterNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 			n.URI,
 			n.GRPCURI,
 			n.IsPrimary,
+		}
+		// Move to next result element.
+		i.result = i.result[1:]
+		return row, nil
+	}
+	return nil, types.ErrNoMoreRows
+}
+
+type fbExecRequestsRowIter struct {
+	planner *ExecutionPlanner
+	result  []pilosa.ExecutionRequest
+}
+
+var _ types.RowIterator = (*fbExecRequestsRowIter)(nil)
+
+func (i *fbExecRequestsRowIter) Next(ctx context.Context) (types.Row, error) {
+	if i.result == nil {
+		var err error
+		i.result, err = i.planner.systemLayerAPI.ExecutionRequests().ListRequests()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(i.result) > 0 {
+		n := i.result[0]
+		row := []interface{}{
+			n.RequestID,
+			n.UserID,
+			n.StartTime,
+			n.EndTime,
+			n.Status,
+			n.WaitType,
+			n.WaitTime.Microseconds(),
+			n.WaitResource,
+			n.CPUTime.Microseconds(),
+			n.ElapsedTime.Microseconds(),
+			n.Reads,
+			n.Writes,
+			n.LogicalReads,
+			n.RowCount,
+			n.SQL,
+			n.Plan,
 		}
 		// Move to next result element.
 		i.result = i.result[1:]

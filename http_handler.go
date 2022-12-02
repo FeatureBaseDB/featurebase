@@ -35,6 +35,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
+	fbcontext "github.com/molecula/featurebase/v3/context"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
@@ -48,6 +49,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
+	uuid "github.com/satori/go.uuid"
 	"github.com/zeebo/blake3"
 )
 
@@ -699,7 +701,7 @@ func (h *Handler) chkAllowedNetworks(r *http.Request) (bool, context.Context) {
 	// if client IP is in allowed networks
 	// add it to the context for key X-Molecula-Original-IP
 	if h.auth.CheckAllowedNetworks(reqIP) {
-		ctx := WithOriginalIP(r.Context(), reqIP)
+		ctx := fbcontext.WithOriginalIP(r.Context(), reqIP)
 		return true, ctx
 	}
 	return false, r.Context()
@@ -711,7 +713,7 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 
 		// if the request is unauthenticated and we have the appropriate header get the userid from the header
 		requestUserID := r.Header.Get(HeaderRequestUserID)
-		ctx = WithUserID(ctx, requestUserID)
+		ctx = fbcontext.WithUserID(ctx, requestUserID)
 
 		if h.auth == nil {
 			handler.ServeHTTP(w, r.WithContext(ctx))
@@ -733,7 +735,7 @@ func (h *Handler) chkAuthN(handler http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// prefer the user id from an authenticated request over one in a header
-		ctx = WithUserID(ctx, uinfo.UserID)
+		ctx = fbcontext.WithUserID(ctx, uinfo.UserID)
 
 		// just in case it got refreshed
 		ctx = authn.WithAccessToken(ctx, "Bearer"+access)
@@ -750,7 +752,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 
 		// if the request is unauthenticated and we have the appropriate header get the userid from the header
 		requestUserID := r.Header.Get(HeaderRequestUserID)
-		ctx = WithUserID(ctx, requestUserID)
+		ctx = fbcontext.WithUserID(ctx, requestUserID)
 
 		// handle the case when auth is not turned on
 		if h.auth == nil {
@@ -779,7 +781,7 @@ func (h *Handler) chkAuthZ(handler http.HandlerFunc, perm authz.Permission) http
 		}
 
 		// prefer the user id from an authenticated request over one in a header
-		ctx = WithUserID(ctx, uinfo.UserID)
+		ctx = fbcontext.WithUserID(ctx, uinfo.UserID)
 
 		ctx = authn.WithAccessToken(ctx, "Bearer "+access)
 		ctx = authn.WithRefreshToken(ctx, refresh)
@@ -877,7 +879,7 @@ func GetIP(r *http.Request) string {
 	}
 
 	// check if original IP is in the context
-	if ogIP, ok := OriginalIPFromContext(r.Context()); ok && ogIP != "" {
+	if ogIP, ok := fbcontext.OriginalIP(r.Context()); ok && ogIP != "" {
 		return ogIP
 	}
 
@@ -1411,9 +1413,15 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	start := time.Now()
+	requestID, err := uuid.NewV4()
+	if err != nil {
+		h.writeBadRequest(w, r, err)
+	}
+	// put the requestId in the context
+	ctx := fbcontext.WithRequestID(r.Context(), requestID.String())
 
-	rootOperator, err := h.api.CompilePlan(r.Context(), string(b))
+	sql := string(b)
+	rootOperator, err := h.api.CompilePlan(ctx, sql)
 	if err != nil {
 		h.writeBadRequest(w, r, err)
 		return
@@ -1429,10 +1437,15 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	// Write the closing bracket on any exit from this method.
 	defer func() {
-		duration := time.Since(start)
-		value, err := json.Marshal(duration.Microseconds())
+		var value []byte
+		request, err := h.api.server.SystemLayer.ExecutionRequests().GetRequest(requestID.String())
 		if err != nil {
 			value = big.NewInt(-1).Bytes()
+		} else {
+			value, err = json.Marshal(request.ElapsedTime.Microseconds())
+			if err != nil {
+				value = big.NewInt(-1).Bytes()
+			}
 		}
 		w.Write([]byte(`,"exec_time":`))
 		w.Write(value)
@@ -1483,7 +1496,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get a query iterator.
-	iter, err := rootOperator.Iterator(r.Context(), nil)
+	iter, err := rootOperator.Iterator(ctx, nil)
 	if err != nil {
 		writeError(err)
 		writeWarnings(rootOperator.Warnings())
@@ -1529,7 +1542,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	var nextErr error
 
 	rowCounter := 1
-	for currentRow, nextErr = iter.Next(r.Context()); nextErr == nil; currentRow, nextErr = iter.Next(r.Context()) {
+	for currentRow, nextErr = iter.Next(ctx); nextErr == nil; currentRow, nextErr = iter.Next(ctx) {
 		jsonRow, err := json.Marshal(currentRow)
 		if err != nil {
 			h.logger.Errorf("json encoding error: %s", err)

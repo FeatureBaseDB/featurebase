@@ -7,15 +7,21 @@ import (
 	"testing"
 
 	featurebase "github.com/molecula/featurebase/v3"
+	fbcontext "github.com/molecula/featurebase/v3/context"
 	"github.com/molecula/featurebase/v3/dax"
 	plannertypes "github.com/molecula/featurebase/v3/sql3/planner/types"
+	uuid "github.com/satori/go.uuid"
 )
 
 // MustQueryRows returns the row results as a slice of []interface{}, along with the columns.
 func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interface{}, []*featurebase.WireQueryField, error) {
 	tb.Helper()
+	requestId, err := uuid.NewV4()
+	if err != nil {
+		return nil, nil, err
+	}
 
-	ctx := context.Background()
+	ctx := fbcontext.WithRequestID(context.Background(), requestId.String())
 
 	stmt, err := svr.CompileExecutionPlan(ctx, q)
 	if err != nil {

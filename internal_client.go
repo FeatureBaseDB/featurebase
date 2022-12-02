@@ -18,11 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/authn"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	pnet "github.com/featurebasedb/featurebase/v3/net"
-	"github.com/featurebasedb/featurebase/v3/tracing"
+	fbcontext "github.com/molecula/featurebase/v3/context"
+
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
@@ -261,7 +258,7 @@ func AddAuthToken(ctx context.Context, header *http.Header) {
 	}
 
 	// set ogIP to request for remote calls
-	if ogIP, ok := OriginalIPFromContext(ctx); ok && ogIP != "" {
+	if ogIP, ok := fbcontext.OriginalIP(ctx); ok && ogIP != "" {
 		header.Set(OriginalIPHeader, ogIP)
 	}
 
