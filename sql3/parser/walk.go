@@ -142,7 +142,7 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 			return node, err
 		}
 
-	case *DropTriggerStatement:
+	case *DropFunctionStatement:
 		if err := walkIdent(v, &n.Name); err != nil {
 			return node, err
 		}
@@ -161,19 +161,13 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 			return node, err
 		}
 
-	case *CreateTriggerStatement:
+	case *CreateFunctionStatement:
 		if err := walkIdent(v, &n.Name); err != nil {
 			return node, err
 		}
-		if err := walkIdentList(v, n.UpdateOfColumns); err != nil {
-			return node, err
-		}
-		if err := walkIdent(v, &n.Table); err != nil {
-			return node, err
-		}
-		if err := walkExpr(v, &n.WhenExpr); err != nil {
-			return node, err
-		}
+		// if err := walkIdentList(v, n.UpdateOfColumns); err != nil {
+		// 	return node, err
+		// }
 		for i := range n.Body {
 			if body, err := walk(v, n.Body[i]); err != nil {
 				return node, err

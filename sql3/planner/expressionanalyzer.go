@@ -89,7 +89,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
 		}
 
-	case *parser.VariableRef:
+	case *parser.Variable:
 		switch sc := scope.(type) {
 		case *parser.BulkInsertStatement:
 			// get the name of the variable without the @

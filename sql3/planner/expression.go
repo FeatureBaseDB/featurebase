@@ -1808,13 +1808,7 @@ func newFloatLiteralPlanExpression(value string) *floatLiteralPlanExpression {
 }
 
 func (n *floatLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	scale := parser.NumDecimalPlaces(n.value)
-	fvalue, err := strconv.ParseFloat(n.value, 64)
-	if err != nil {
-		return nil, err
-	}
-	unscaledValue := int64(fvalue * math.Pow(10, float64(scale)))
-	return pql.NewDecimal(unscaledValue, int64(scale)), nil
+	return pql.ParseDecimal(n.value)
 }
 
 func (n *floatLiteralPlanExpression) Type() parser.ExprDataType {
@@ -2081,14 +2075,11 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 			return i, nil
 
 		case *parser.DataTypeDecimal:
-			fvalue, err := strconv.ParseFloat(nl, 64)
+			castValue, err := pql.ParseDecimal(nl)
 			if err != nil {
 				//TODO(pok) need to push location into here
 				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
-			scale := parser.NumDecimalPlaces(nl)
-			unscaledValue := int64(fvalue * math.Pow(10, float64(scale)))
-			castValue := pql.NewDecimal(unscaledValue, int64(scale))
 			if tt.Scale < castValue.Scale {
 				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
@@ -2500,7 +2491,7 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 	case *parser.ParenExpr:
 		return p.compileExpr(expr.X)
 
-	case *parser.VariableRef:
+	case *parser.Variable:
 		ref := newVariableRefPlanExpression(expr.Name, expr.VariableIndex, expr.DataType())
 		return ref, nil
 

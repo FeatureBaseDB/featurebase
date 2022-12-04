@@ -13,7 +13,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/sql3/parser"
 	sql_test "github.com/molecula/featurebase/v3/sql3/test"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/stretchr/testify/assert"
@@ -21,14 +20,14 @@ import (
 
 func TestPlanner_Misc(t *testing.T) {
 
-	d, err := parser.StringToDecimal("12.345678")
+	d, err := pql.ParseDecimal("12.345678")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	assert.True(t, d.EqualTo(pql.NewDecimal(12345678, 6)))
 
-	d = parser.FloatToDecimalWithScale(12.345678, 6)
+	d, err = pql.FromFloat64WithScale(12.345678, 6)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +124,30 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldInt("row_count"),
 			wireQueryFieldString("sql"),
 			wireQueryFieldString("plan"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("SystemTablesExecRequestsAgg", func(t *testing.T) {
+		_, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select 
+		count(request_id) as request_count,
+		min(elapsed_time) as min_duration,
+		max(elapsed_time) as max_duration,
+		avg(elapsed_time) as avg_duration
+	from 
+		fb_exec_requests 
+	where 
+		status = 'complete';`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("request_count"),
+			wireQueryFieldInt("min_duration"),
+			wireQueryFieldInt("max_duration"),
+			wireQueryFieldDecimal("avg_duration", 4),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}

@@ -310,7 +310,7 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 			result[idx] = bval
 
 		case *parser.DataTypeDecimal:
-			dval, err := parser.StringToDecimal(evalValue)
+			dval, err := pql.ParseDecimal(evalValue)
 			if err != nil {
 				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
 			}
@@ -658,7 +658,7 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeDecimal:
 				switch v := evalValue.(type) {
 				case float64:
-					result[idx] = parser.FloatToDecimal(v)
+					result[idx] = pql.FromFloat64(v)
 
 				case []interface{}:
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())

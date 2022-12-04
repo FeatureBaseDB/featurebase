@@ -351,13 +351,13 @@ func TestParser_ParseCacheTypeConstraints(t *testing.T) {
 func TestParser_ParseAlterStatement(t *testing.T) {
 
 	t.Run("AlterTable", func(t *testing.T) {
-		/*AssertParseStatement(t, `ALTER TABLE tbl RENAME TO new_tbl`, &sql.AlterTableStatement{
+		/*AssertParseStatement(t, `ALTER TABLE tbl RENAME TO new_tbl`, &parser.AlterTableStatement{
 			Alter:    pos(0),
 			Table:    pos(6),
-			Name:     &sql.Ident{NamePos: pos(12), Name: "tbl"},
+			Name:     &parser.Ident{NamePos: pos(12), Name: "tbl"},
 			Rename:   pos(16),
 			RenameTo: pos(23),
-			NewName:  &sql.Ident{NamePos: pos(26), Name: "new_tbl"},
+			NewName:  &parser.Ident{NamePos: pos(26), Name: "new_tbl"},
 		})*/
 		AssertParseStatement(t, `ALTER TABLE tbl RENAME COLUMN col TO new_col`, &parser.AlterTableStatement{
 			Alter:         pos(0),
@@ -378,19 +378,19 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 			To:            pos(27),
 			NewColumnName: &parser.Ident{NamePos: pos(30), Name: "new_col"},
 		})
-		/*AssertParseStatement(t, `ALTER TABLE tbl ADD COLUMN col TEXT PRIMARY KEY`, &sql.AlterTableStatement{
+		/*AssertParseStatement(t, `ALTER TABLE tbl ADD COLUMN col TEXT PRIMARY KEY`, &parser.AlterTableStatement{
 			Alter:     pos(0),
 			Table:     pos(6),
-			Name:      &sql.Ident{NamePos: pos(12), Name: "tbl"},
+			Name:      &parser.Ident{NamePos: pos(12), Name: "tbl"},
 			Add:       pos(16),
 			AddColumn: pos(20),
-			ColumnDef: &sql.ColumnDefinition{
-				Name: &sql.Ident{Name: "col", NamePos: pos(27)},
-				Type: &sql.Type{
-					Name: &sql.Ident{Name: "TEXT", NamePos: pos(31)},
+			ColumnDef: &parser.ColumnDefinition{
+				Name: &parser.Ident{Name: "col", NamePos: pos(27)},
+				Type: &parser.Type{
+					Name: &parser.Ident{Name: "TEXT", NamePos: pos(31)},
 				},
 				Constraints: []sql.Constraint{
-					&sql.PrimaryKeyConstraint{
+					&parser.PrimaryKeyConstraint{
 						Primary: pos(36),
 						Key:     pos(44),
 					},
@@ -440,6 +440,183 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 	})
 }
 
+func TestParser_ParseFunctionStatement(t *testing.T) {
+	t.Run("CreateFunction", func(t *testing.T) {
+		AssertParseStatement(t, `CREATE FUNCTION IF NOT EXISTS func (@param1 int, @param2 string) returns @scalar int as begin end`, &parser.CreateFunctionStatement{
+			Create:      pos(0),
+			Function:    pos(7),
+			If:          pos(16),
+			IfNot:       pos(19),
+			IfNotExists: pos(23),
+			Name:        &parser.Ident{NamePos: pos(30), Name: "func"},
+			Lparen:      pos(35),
+			Parameters: []*parser.ParameterDefinition{
+				{
+					Name: &parser.Variable{Name: "@param1", NamePos: pos(36)},
+					Type: &parser.Type{Name: &parser.Ident{NamePos: pos(44), Name: "int"}},
+				},
+				{
+					Name: &parser.Variable{Name: "@param2", NamePos: pos(49)},
+					Type: &parser.Type{Name: &parser.Ident{NamePos: pos(57), Name: "string"}},
+				},
+			},
+			Rparen:  pos(63),
+			Returns: pos(65),
+			ReturnDef: &parser.ParameterDefinition{
+				Name: &parser.Variable{Name: "@scalar", NamePos: pos(73)},
+				Type: &parser.Type{Name: &parser.Ident{NamePos: pos(81), Name: "int"}},
+			},
+			As:    pos(85),
+			Begin: pos(88),
+			End:   pos(94),
+		})
+		// AssertParseStatement(t, `CREATE TRIGGER IF NOT EXISTS trig BEFORE INSERT ON tbl BEGIN DELETE FROM new; END`, &parser.CreateFunctionStatement{
+		// 	Create:      pos(0),
+		// 	Function:    pos(7),
+		// 	If:          pos(15),
+		// 	IfNot:       pos(18),
+		// 	IfNotExists: pos(22),
+		// 	Name:        &parser.Ident{NamePos: pos(29), Name: "trig"},
+		// 	Before:      pos(34),
+		// 	Insert:      pos(41),
+		// 	On:          pos(48),
+		// 	Table:       &parser.Ident{NamePos: pos(51), Name: "tbl"},
+		// 	Begin:       pos(55),
+		// 	Body: []parser.Statement{
+		// 		&parser.DeleteStatement{
+		// 			Delete: pos(61),
+		// 			From:   pos(68),
+		// 			Table: &parser.QualifiedTableName{
+		// 				Name: &parser.Ident{NamePos: pos(73), Name: "new"},
+		// 			},
+		// 		},
+		// 	},
+		// 	End: pos(78),
+		// })
+		// AssertParseStatement(t, `CREATE TRIGGER trig INSTEAD OF UPDATE ON tbl BEGIN SELECT *; END`, &parser.CreateFunctionStatement{
+		// 	Create:    pos(0),
+		// 	Function:  pos(7),
+		// 	Name:      &parser.Ident{NamePos: pos(15), Name: "trig"},
+		// 	Instead:   pos(20),
+		// 	InsteadOf: pos(28),
+		// 	Update:    pos(31),
+		// 	On:        pos(38),
+		// 	Table:     &parser.Ident{NamePos: pos(41), Name: "tbl"},
+		// 	Begin:     pos(45),
+		// 	Body: []parser.Statement{
+		// 		&parser.SelectStatement{
+		// 			Select:  pos(51),
+		// 			Columns: []*parser.ResultColumn{{Star: pos(58)}},
+		// 		},
+		// 	},
+		// 	End: pos(61),
+		// })
+		// AssertParseStatement(t, `CREATE TRIGGER trig INSTEAD OF UPDATE OF x, y ON tbl FOR EACH ROW WHEN true BEGIN SELECT *; END`, &parser.CreateFunctionStatement{
+		// 	Create:    pos(0),
+		// 	Function:  pos(7),
+		// 	Name:      &parser.Ident{NamePos: pos(15), Name: "trig"},
+		// 	Instead:   pos(20),
+		// 	InsteadOf: pos(28),
+		// 	Update:    pos(31),
+		// 	UpdateOf:  pos(38),
+		// 	UpdateOfColumns: []*parser.Ident{
+		// 		{NamePos: pos(41), Name: "x"},
+		// 		{NamePos: pos(44), Name: "y"},
+		// 	},
+		// 	On:         pos(46),
+		// 	Table:      &parser.Ident{NamePos: pos(49), Name: "tbl"},
+		// 	For:        pos(53),
+		// 	ForEach:    pos(57),
+		// 	ForEachRow: pos(62),
+		// 	When:       pos(66),
+		// 	WhenExpr:   &parser.BoolLit{ValuePos: pos(71), Value: true},
+		// 	Begin:      pos(76),
+		// 	Body: []parser.Statement{
+		// 		&parser.SelectStatement{
+		// 			Select:  pos(82),
+		// 			Columns: []*parser.ResultColumn{{Star: pos(89)}},
+		// 		},
+		// 	},
+		// 	End: pos(92),
+		// })
+		// AssertParseStatement(t, `CREATE TRIGGER trig AFTER UPDATE ON tbl BEGIN WITH cte (x) AS (SELECT y) SELECT *; END`, &parser.CreateFunctionStatement{
+		// 	Create:   pos(0),
+		// 	Function: pos(7),
+		// 	Name:     &parser.Ident{NamePos: pos(15), Name: "trig"},
+		// 	After:    pos(20),
+		// 	Update:   pos(26),
+		// 	On:       pos(33),
+		// 	Table:    &parser.Ident{NamePos: pos(36), Name: "tbl"},
+		// 	Begin:    pos(40),
+		// 	Body: []parser.Statement{
+		// 		&parser.SelectStatement{
+		// 			WithClause: &parser.WithClause{
+		// 				With: pos(46),
+		// 				CTEs: []*parser.CTE{
+		// 					{
+		// 						TableName:     &parser.Ident{NamePos: pos(51), Name: "cte"},
+		// 						ColumnsLparen: pos(55),
+		// 						Columns: []*parser.Ident{
+		// 							{NamePos: pos(56), Name: "x"},
+		// 						},
+		// 						ColumnsRparen: pos(57),
+		// 						As:            pos(59),
+		// 						SelectLparen:  pos(62),
+		// 						Select: &parser.SelectStatement{
+		// 							Select: pos(63),
+		// 							Columns: []*parser.ResultColumn{
+		// 								{Expr: &parser.Ident{NamePos: pos(70), Name: "y"}},
+		// 							},
+		// 						},
+		// 						SelectRparen: pos(71),
+		// 					},
+		// 				},
+		// 			},
+		// 			Select:  pos(73),
+		// 			Columns: []*parser.ResultColumn{{Star: pos(80)}},
+		// 		},
+		// 	},
+		// 	End: pos(83),
+		// })
+
+		AssertParseStatementError(t, `CREATE FUNCTION`, `1:15: expected function name, found 'EOF'`)
+		AssertParseStatementError(t, `CREATE FUNCTION IF`, `1:18: expected NOT, found 'EOF'`)
+		AssertParseStatementError(t, `CREATE FUNCTION IF NOT`, `1:22: expected EXISTS, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE FUNCTION trig INSTEAD`, `1:27: expected OF, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE FUNCTION trig AFTER`, `1:25: expected DELETE, INSERT, or UPDATE, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE FUNCTION trig UPDATE OF`, `1:29: expected column name, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig UPDATE OF x,`, `1:32: expected column name, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT`, `1:32: expected ON, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON `, `1:36: expected table name, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl FOR`, `1:43: expected EACH, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl FOR EACH`, `1:48: expected ROW, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl WHEN`, `1:44: expected expression, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl`, `1:39: expected BEGIN, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN`, `1:45: expected statement, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN SELECT`, `1:52: expected expression, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN SELECT *`, `1:54: expected semicolon, found 'EOF'`)
+		// AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN SELECT *;`, `1:55: expected statement, found 'EOF'`)
+	})
+
+	t.Run("DropFunction", func(t *testing.T) {
+		AssertParseStatement(t, `DROP FUNCTION func`, &parser.DropFunctionStatement{
+			Drop:    pos(0),
+			Trigger: pos(5),
+			Name:    &parser.Ident{NamePos: pos(14), Name: "func"},
+		})
+		AssertParseStatement(t, `DROP FUNCTION IF EXISTS func`, &parser.DropFunctionStatement{
+			Drop:     pos(0),
+			Trigger:  pos(5),
+			If:       pos(14),
+			IfExists: pos(17),
+			Name:     &parser.Ident{NamePos: pos(24), Name: "func"},
+		})
+		AssertParseStatementError(t, `DROP FUNCTION`, `1:13: expected function name, found 'EOF'`)
+		AssertParseStatementError(t, `DROP FUNCTION IF`, `1:16: expected EXISTS, found 'EOF'`)
+		AssertParseStatementError(t, `DROP FUNCTION IF EXISTS`, `1:23: expected function name, found 'EOF'`)
+	})
+}
+
 func TestParser_ParseStatement(t *testing.T) {
 	t.Run("ErrNoStatement", func(t *testing.T) {
 		AssertParseStatementError(t, `123`, `1:1: expected statement, found 123`)
@@ -473,19 +650,19 @@ func TestParser_ParseStatement(t *testing.T) {
 
 	t.Run("Explain", func(t *testing.T) {
 		/*t.Run("", func(t *testing.T) {
-			AssertParseStatement(t, `EXPLAIN BEGIN`, &sql.ExplainStatement{
+			AssertParseStatement(t, `EXPLAIN BEGIN`, &parser.ExplainStatement{
 				Explain: pos(0),
-				Stmt: &sql.BeginStatement{
+				Stmt: &parser.BeginStatement{
 					Begin: pos(8),
 				},
 			})
 		})*/
 		/*t.Run("QueryPlan", func(t *testing.T) {
-			AssertParseStatement(t, `EXPLAIN QUERY PLAN BEGIN`, &sql.ExplainStatement{
+			AssertParseStatement(t, `EXPLAIN QUERY PLAN BEGIN`, &parser.ExplainStatement{
 				Explain:   pos(0),
 				Query:     pos(8),
 				QueryPlan: pos(14),
-				Stmt: &sql.BeginStatement{
+				Stmt: &parser.BeginStatement{
 					Begin: pos(19),
 				},
 			})
@@ -500,31 +677,31 @@ func TestParser_ParseStatement(t *testing.T) {
 
 	/*t.Run("Begin", func(t *testing.T) {
 		t.Run("", func(t *testing.T) {
-			AssertParseStatement(t, `BEGIN`, &sql.BeginStatement{
+			AssertParseStatement(t, `BEGIN`, &parser.BeginStatement{
 				Begin: pos(0),
 			})
 		})
 		t.Run("Transaction", func(t *testing.T) {
-			AssertParseStatement(t, `BEGIN TRANSACTION`, &sql.BeginStatement{
+			AssertParseStatement(t, `BEGIN TRANSACTION`, &parser.BeginStatement{
 				Begin:       pos(0),
 				Transaction: pos(6),
 			})
 		})
 		t.Run("DeferredTransaction", func(t *testing.T) {
-			AssertParseStatement(t, `BEGIN DEFERRED TRANSACTION`, &sql.BeginStatement{
+			AssertParseStatement(t, `BEGIN DEFERRED TRANSACTION`, &parser.BeginStatement{
 				Begin:       pos(0),
 				Deferred:    pos(6),
 				Transaction: pos(15),
 			})
 		})
 		t.Run("Immediate", func(t *testing.T) {
-			AssertParseStatement(t, `BEGIN IMMEDIATE;`, &sql.BeginStatement{
+			AssertParseStatement(t, `BEGIN IMMEDIATE;`, &parser.BeginStatement{
 				Begin:     pos(0),
 				Immediate: pos(6),
 			})
 		})
 		t.Run("Exclusive", func(t *testing.T) {
-			AssertParseStatement(t, `BEGIN EXCLUSIVE`, &sql.BeginStatement{
+			AssertParseStatement(t, `BEGIN EXCLUSIVE`, &parser.BeginStatement{
 				Begin:     pos(0),
 				Exclusive: pos(6),
 			})
@@ -536,12 +713,12 @@ func TestParser_ParseStatement(t *testing.T) {
 
 	/*t.Run("Commit", func(t *testing.T) {
 		t.Run("", func(t *testing.T) {
-			AssertParseStatement(t, `COMMIT`, &sql.CommitStatement{
+			AssertParseStatement(t, `COMMIT`, &parser.CommitStatement{
 				Commit: pos(0),
 			})
 		})
 		t.Run("Transaction", func(t *testing.T) {
-			AssertParseStatement(t, `COMMIT TRANSACTION`, &sql.CommitStatement{
+			AssertParseStatement(t, `COMMIT TRANSACTION`, &parser.CommitStatement{
 				Commit:      pos(0),
 				Transaction: pos(7),
 			})
@@ -550,12 +727,12 @@ func TestParser_ParseStatement(t *testing.T) {
 
 	/*t.Run("End", func(t *testing.T) {
 		t.Run("", func(t *testing.T) {
-			AssertParseStatement(t, `END`, &sql.CommitStatement{
+			AssertParseStatement(t, `END`, &parser.CommitStatement{
 				End: pos(0),
 			})
 		})
 		t.Run("Transaction", func(t *testing.T) {
-			AssertParseStatement(t, `END TRANSACTION`, &sql.CommitStatement{
+			AssertParseStatement(t, `END TRANSACTION`, &parser.CommitStatement{
 				End:         pos(0),
 				Transaction: pos(4),
 			})
@@ -564,33 +741,33 @@ func TestParser_ParseStatement(t *testing.T) {
 
 	/*t.Run("Rollback", func(t *testing.T) {
 		t.Run("", func(t *testing.T) {
-			AssertParseStatement(t, `ROLLBACK`, &sql.RollbackStatement{
+			AssertParseStatement(t, `ROLLBACK`, &parser.RollbackStatement{
 				Rollback: pos(0),
 			})
 		})
 		t.Run("Transaction", func(t *testing.T) {
-			AssertParseStatement(t, `ROLLBACK TRANSACTION`, &sql.RollbackStatement{
+			AssertParseStatement(t, `ROLLBACK TRANSACTION`, &parser.RollbackStatement{
 				Rollback:    pos(0),
 				Transaction: pos(9),
 			})
 		})
 		t.Run("To", func(t *testing.T) {
-			AssertParseStatement(t, `ROLLBACK TO svpt`, &sql.RollbackStatement{
+			AssertParseStatement(t, `ROLLBACK TO svpt`, &parser.RollbackStatement{
 				Rollback: pos(0),
 				To:       pos(9),
-				SavepointName: &sql.Ident{
+				SavepointName: &parser.Ident{
 					Name:    "svpt",
 					NamePos: pos(12),
 				},
 			})
 		})
 		t.Run("TransactionToSavepoint", func(t *testing.T) {
-			AssertParseStatement(t, `ROLLBACK TRANSACTION TO SAVEPOINT "svpt"`, &sql.RollbackStatement{
+			AssertParseStatement(t, `ROLLBACK TRANSACTION TO SAVEPOINT "svpt"`, &parser.RollbackStatement{
 				Rollback:    pos(0),
 				Transaction: pos(9),
 				To:          pos(21),
 				Savepoint:   pos(24),
-				SavepointName: &sql.Ident{
+				SavepointName: &parser.Ident{
 					Name:    "svpt",
 					NamePos: pos(34),
 					Quoted:  true,
@@ -604,18 +781,18 @@ func TestParser_ParseStatement(t *testing.T) {
 
 	/*t.Run("Savepoint", func(t *testing.T) {
 		t.Run("Ident", func(t *testing.T) {
-			AssertParseStatement(t, `SAVEPOINT svpt`, &sql.SavepointStatement{
+			AssertParseStatement(t, `SAVEPOINT svpt`, &parser.SavepointStatement{
 				Savepoint: pos(0),
-				Name: &sql.Ident{
+				Name: &parser.Ident{
 					Name:    "svpt",
 					NamePos: pos(10),
 				},
 			})
 		})
 		t.Run("String", func(t *testing.T) {
-			AssertParseStatement(t, `SAVEPOINT "svpt"`, &sql.SavepointStatement{
+			AssertParseStatement(t, `SAVEPOINT "svpt"`, &parser.SavepointStatement{
 				Savepoint: pos(0),
-				Name: &sql.Ident{
+				Name: &parser.Ident{
 					Name:    "svpt",
 					NamePos: pos(10),
 					Quoted:  true,
@@ -629,18 +806,18 @@ func TestParser_ParseStatement(t *testing.T) {
 
 	/*t.Run("Release", func(t *testing.T) {
 		t.Run("Ident", func(t *testing.T) {
-			AssertParseStatement(t, `RELEASE svpt`, &sql.ReleaseStatement{
+			AssertParseStatement(t, `RELEASE svpt`, &parser.ReleaseStatement{
 				Release: pos(0),
-				Name: &sql.Ident{
+				Name: &parser.Ident{
 					Name:    "svpt",
 					NamePos: pos(8),
 				},
 			})
 		})
 		t.Run("String", func(t *testing.T) {
-			AssertParseStatement(t, `RELEASE "svpt"`, &sql.ReleaseStatement{
+			AssertParseStatement(t, `RELEASE "svpt"`, &parser.ReleaseStatement{
 				Release: pos(0),
-				Name: &sql.Ident{
+				Name: &parser.Ident{
 					Name:    "svpt",
 					NamePos: pos(8),
 					Quoted:  true,
@@ -648,10 +825,10 @@ func TestParser_ParseStatement(t *testing.T) {
 			})
 		})
 		t.Run("SavepointIdent", func(t *testing.T) {
-			AssertParseStatement(t, `RELEASE SAVEPOINT svpt`, &sql.ReleaseStatement{
+			AssertParseStatement(t, `RELEASE SAVEPOINT svpt`, &parser.ReleaseStatement{
 				Release:   pos(0),
 				Savepoint: pos(8),
-				Name: &sql.Ident{
+				Name: &parser.Ident{
 					Name:    "svpt",
 					NamePos: pos(18),
 				},
@@ -732,35 +909,35 @@ func TestParser_ParseStatement(t *testing.T) {
 		AssertParseStatementError(t, `CREATE TABLE tbl (col1 DECIMAL(1`, `1:32: expected right paren, found 'EOF'`)
 		/*AssertParseStatementError(t, `CREATE TABLE tbl (col1 TEXT CONSTRAINT`, `1:38: expected constraint name, found 'EOF'`)*/
 
-		/*AssertParseStatement(t, `CREATE TABLE tbl AS SELECT foo`, &sql.CreateTableStatement{
+		/*AssertParseStatement(t, `CREATE TABLE tbl AS SELECT foo`, &parser.CreateTableStatement{
 			Create: pos(0),
 			Table:  pos(7),
-			Name: &sql.Ident{
+			Name: &parser.Ident{
 				Name:    "tbl",
 				NamePos: pos(13),
 			},
 			As: pos(17),
-			Select: &sql.SelectStatement{
+			Select: &parser.SelectStatement{
 				Select: pos(20),
 				Columns: []*sql.ResultColumn{
-					{Expr: &sql.Ident{NamePos: pos(27), Name: "foo"}},
+					{Expr: &parser.Ident{NamePos: pos(27), Name: "foo"}},
 				},
 			},
 		})*/
-		/*AssertParseStatement(t, `CREATE TABLE tbl AS WITH cte (x) AS (SELECT y) SELECT foo`, &sql.CreateTableStatement{
+		/*AssertParseStatement(t, `CREATE TABLE tbl AS WITH cte (x) AS (SELECT y) SELECT foo`, &parser.CreateTableStatement{
 			Create: pos(0),
 			Table:  pos(7),
-			Name: &sql.Ident{
+			Name: &parser.Ident{
 				Name:    "tbl",
 				NamePos: pos(13),
 			},
 			As: pos(17),
-			Select: &sql.SelectStatement{
-				WithClause: &sql.WithClause{
+			Select: &parser.SelectStatement{
+				WithClause: &parser.WithClause{
 					With: pos(20),
 					CTEs: []*sql.CTE{
 						{
-							TableName:     &sql.Ident{NamePos: pos(25), Name: "cte"},
+							TableName:     &parser.Ident{NamePos: pos(25), Name: "cte"},
 							ColumnsLparen: pos(29),
 							Columns: []*sql.Ident{
 								{NamePos: pos(30), Name: "x"},
@@ -768,10 +945,10 @@ func TestParser_ParseStatement(t *testing.T) {
 							ColumnsRparen: pos(31),
 							As:            pos(33),
 							SelectLparen:  pos(36),
-							Select: &sql.SelectStatement{
+							Select: &parser.SelectStatement{
 								Select: pos(37),
 								Columns: []*sql.ResultColumn{
-									{Expr: &sql.Ident{NamePos: pos(44), Name: "y"}},
+									{Expr: &parser.Ident{NamePos: pos(44), Name: "y"}},
 								},
 							},
 							SelectRparen: pos(45),
@@ -780,7 +957,7 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 				Select: pos(47),
 				Columns: []*sql.ResultColumn{
-					{Expr: &sql.Ident{NamePos: pos(54), Name: "foo"}},
+					{Expr: &parser.Ident{NamePos: pos(54), Name: "foo"}},
 				},
 			},
 		})*/
@@ -790,19 +967,19 @@ func TestParser_ParseStatement(t *testing.T) {
 		t.Run("ColumnConstraint", func(t *testing.T) {
 			/*t.Run("PrimaryKey", func(t *testing.T) {
 				t.Run("Simple", func(t *testing.T) {
-					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT PRIMARY KEY)`, &sql.CreateTableStatement{
+					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT PRIMARY KEY)`, &parser.CreateTableStatement{
 						Create: pos(0),
 						Table:  pos(7),
-						Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+						Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 						Lparen: pos(17),
 						Columns: []*sql.ColumnDefinition{
 							{
-								Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-								Type: &sql.Type{
-									Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+								Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+								Type: &parser.Type{
+									Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 								},
 								Constraints: []sql.Constraint{
-									&sql.PrimaryKeyConstraint{
+									&parser.PrimaryKeyConstraint{
 										Primary: pos(28),
 										Key:     pos(36),
 									},
@@ -814,9 +991,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("Full", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT CONSTRAINT cons1 PRIMARY KEY AUTOINCREMENT)`).(*sql.CreateTableStatement)
-					if diff := deep.Equal(stmt.Columns[0].Constraints[0], &sql.PrimaryKeyConstraint{
+					if diff := deep.Equal(stmt.Columns[0].Constraints[0], &parser.PrimaryKeyConstraint{
 						Constraint:    pos(28),
-						Name:          &sql.Ident{Name: "cons1", NamePos: pos(39)},
+						Name:          &parser.Ident{Name: "cons1", NamePos: pos(39)},
 						Primary:       pos(45),
 						Key:           pos(53),
 						Autoincrement: pos(57),
@@ -831,21 +1008,21 @@ func TestParser_ParseStatement(t *testing.T) {
 
 			/*t.Run("Unique", func(t *testing.T) {
 				t.Run("Simple", func(t *testing.T) {
-					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT CONSTRAINT con1 UNIQUE)`, &sql.CreateTableStatement{
+					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT CONSTRAINT con1 UNIQUE)`, &parser.CreateTableStatement{
 						Create: pos(0),
 						Table:  pos(7),
-						Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+						Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 						Lparen: pos(17),
 						Columns: []*sql.ColumnDefinition{
 							{
-								Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-								Type: &sql.Type{
-									Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+								Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+								Type: &parser.Type{
+									Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 								},
 								Constraints: []sql.Constraint{
-									&sql.UniqueConstraint{
+									&parser.UniqueConstraint{
 										Constraint: pos(28),
-										Name:       &sql.Ident{Name: "con1", NamePos: pos(39)},
+										Name:       &parser.Ident{Name: "con1", NamePos: pos(39)},
 										Unique:     pos(44),
 									},
 								},
@@ -856,25 +1033,25 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 			})*/
 			/*t.Run("Check", func(t *testing.T) {
-				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT CHECK (col1 > 1))`, &sql.CreateTableStatement{
+				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT CHECK (col1 > 1))`, &parser.CreateTableStatement{
 					Create: pos(0),
 					Table:  pos(7),
-					Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+					Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 					Lparen: pos(17),
 					Columns: []*sql.ColumnDefinition{
 						{
-							Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-							Type: &sql.Type{
-								Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+							Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+							Type: &parser.Type{
+								Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 							},
 							Constraints: []sql.Constraint{
-								&sql.CheckConstraint{
+								&parser.CheckConstraint{
 									Check:  pos(28),
 									Lparen: pos(34),
-									Expr: &sql.BinaryExpr{
-										X:  &sql.Ident{Name: "col1", NamePos: pos(35)},
+									Expr: &parser.BinaryExpr{
+										X:  &parser.Ident{Name: "col1", NamePos: pos(35)},
 										Op: sql.GT, OpPos: pos(40),
-										Y: &sql.NumberLit{Value: "1", ValuePos: pos(42)},
+										Y: &parser.NumberLit{Value: "1", ValuePos: pos(42)},
 									},
 									Rparen: pos(43),
 								},
@@ -886,22 +1063,22 @@ func TestParser_ParseStatement(t *testing.T) {
 			})*/
 			/*t.Run("Default", func(t *testing.T) {
 				t.Run("Expr", func(t *testing.T) {
-					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT DEFAULT (1))`, &sql.CreateTableStatement{
+					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT DEFAULT (1))`, &parser.CreateTableStatement{
 						Create: pos(0),
 						Table:  pos(7),
-						Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+						Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 						Lparen: pos(17),
 						Columns: []*sql.ColumnDefinition{
 							{
-								Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-								Type: &sql.Type{
-									Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+								Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+								Type: &parser.Type{
+									Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 								},
 								Constraints: []sql.Constraint{
-									&sql.DefaultConstraint{
+									&parser.DefaultConstraint{
 										Default: pos(28),
 										Lparen:  pos(36),
-										Expr:    &sql.NumberLit{Value: "1", ValuePos: pos(37)},
+										Expr:    &parser.NumberLit{Value: "1", ValuePos: pos(37)},
 										Rparen:  pos(38),
 									},
 								},
@@ -912,45 +1089,45 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("String", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT DEFAULT 'foo')`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.DefaultConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.DefaultConstraint{
 						Default: pos(28),
-						Expr:    &sql.StringLit{Value: "foo", ValuePos: pos(36)},
+						Expr:    &parser.StringLit{Value: "foo", ValuePos: pos(36)},
 					}); diff != "" {
 						t.Fatal(diff)
 					}
 				})
 				t.Run("Blob", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT DEFAULT x'0F0F')`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.DefaultConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.DefaultConstraint{
 						Default: pos(28),
-						Expr:    &sql.BlobLit{Value: "0F0F", ValuePos: pos(36)},
+						Expr:    &parser.BlobLit{Value: "0F0F", ValuePos: pos(36)},
 					}); diff != "" {
 						t.Fatal(diff)
 					}
 				})
 				t.Run("Number", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT DEFAULT 1)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.DefaultConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.DefaultConstraint{
 						Default: pos(28),
-						Expr:    &sql.NumberLit{Value: "1", ValuePos: pos(36)},
+						Expr:    &parser.NumberLit{Value: "1", ValuePos: pos(36)},
 					}); diff != "" {
 						t.Fatal(diff)
 					}
 				})
 				t.Run("Null", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT DEFAULT NULL)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.DefaultConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.DefaultConstraint{
 						Default: pos(28),
-						Expr:    &sql.NullLit{Pos: pos(36)},
+						Expr:    &parser.NullLit{Pos: pos(36)},
 					}); diff != "" {
 						t.Fatal(diff)
 					}
 				})
 				t.Run("Bool", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT DEFAULT true)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.DefaultConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.DefaultConstraint{
 						Default: pos(28),
-						Expr:    &sql.BoolLit{Value: true, ValuePos: pos(36)},
+						Expr:    &parser.BoolLit{Value: true, ValuePos: pos(36)},
 					}); diff != "" {
 						t.Fatal(diff)
 					}
@@ -964,21 +1141,21 @@ func TestParser_ParseStatement(t *testing.T) {
 			})*/
 			/*t.Run("ForeignKey", func(t *testing.T) {
 				t.Run("Simple", func(t *testing.T) {
-					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2))`, &sql.CreateTableStatement{
+					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2))`, &parser.CreateTableStatement{
 						Create: pos(0),
 						Table:  pos(7),
-						Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+						Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 						Lparen: pos(17),
 						Columns: []*sql.ColumnDefinition{
 							{
-								Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-								Type: &sql.Type{
-									Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+								Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+								Type: &parser.Type{
+									Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 								},
 								Constraints: []sql.Constraint{
-									&sql.ForeignKeyConstraint{
+									&parser.ForeignKeyConstraint{
 										References:    pos(28),
-										ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+										ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 										ForeignLparen: pos(43),
 										ForeignColumns: []*sql.Ident{
 											{Name: "col2", NamePos: pos(44)},
@@ -993,9 +1170,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("OnDeleteSetNull", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) ON DELETE SET NULL)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1015,9 +1192,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("OnDeleteSetDefault", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) ON DELETE SET DEFAULT)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1037,9 +1214,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("OnDeleteSetDefault", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) ON DELETE CASCADE)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1058,9 +1235,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("OnDeleteSetRestrict", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) ON DELETE RESTRICT)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1079,9 +1256,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("OnDeleteSetNoAction", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) ON DELETE NO ACTION)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1101,9 +1278,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("Multiple", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) ON DELETE CASCADE ON UPDATE RESTRICT)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1127,9 +1304,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("Deferrable", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) DEFERRABLE)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1142,9 +1319,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("NotDeferrable", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) NOT DEFERRABLE)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1158,9 +1335,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("InitiallyDeferred", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) DEFERRABLE INITIALLY DEFERRED)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1175,9 +1352,9 @@ func TestParser_ParseStatement(t *testing.T) {
 				})
 				t.Run("InitiallyImmediate", func(t *testing.T) {
 					stmt := ParseStatementOrFail(t, `CREATE TABLE tbl (col1 TEXT REFERENCES foo (col2) DEFERRABLE INITIALLY IMMEDIATE)`).(*sql.CreateTableStatement)
-					if diff := deepEqual(stmt.Columns[0].Constraints[0], &sql.ForeignKeyConstraint{
+					if diff := deepEqual(stmt.Columns[0].Constraints[0], &parser.ForeignKeyConstraint{
 						References:    pos(28),
-						ForeignTable:  &sql.Ident{Name: "foo", NamePos: pos(39)},
+						ForeignTable:  &parser.Ident{Name: "foo", NamePos: pos(39)},
 						ForeignLparen: pos(43),
 						ForeignColumns: []*sql.Ident{
 							{Name: "col2", NamePos: pos(44)},
@@ -1199,21 +1376,21 @@ func TestParser_ParseStatement(t *testing.T) {
 				!!Not supporting  PRIMARY KEY, UNIQUE, CHECK or REFERENCES table constraints!!
 
 				t.Run("PrimaryKey", func(t *testing.T) {
-					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, PRIMARY KEY (col1, col2))`, &sql.CreateTableStatement{
+					AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, PRIMARY KEY (col1, col2))`, &parser.CreateTableStatement{
 						Create: pos(0),
 						Table:  pos(7),
-						Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+						Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 						Lparen: pos(17),
 						Columns: []*sql.ColumnDefinition{
 							{
-								Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-								Type: &sql.Type{
-									Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+								Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+								Type: &parser.Type{
+									Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 								},
 							},
 						},
 						Constraints: []sql.Constraint{
-							&sql.PrimaryKeyConstraint{
+							&parser.PrimaryKeyConstraint{
 								Primary: pos(29),
 								Key:     pos(37),
 								Lparen:  pos(41),
@@ -1234,23 +1411,23 @@ func TestParser_ParseStatement(t *testing.T) {
 					AssertParseStatementError(t, `CREATE TABLE tbl (col1 TEXT, PRIMARY KEY (foo x`, `1:47: expected comma or right paren, found x`)
 				})*/
 			/*t.Run("Unique", func(t *testing.T) {
-				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, CONSTRAINT con1 UNIQUE (col1, col2))`, &sql.CreateTableStatement{
+				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, CONSTRAINT con1 UNIQUE (col1, col2))`, &parser.CreateTableStatement{
 					Create: pos(0),
 					Table:  pos(7),
-					Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+					Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 					Lparen: pos(17),
 					Columns: []*sql.ColumnDefinition{
 						{
-							Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-							Type: &sql.Type{
-								Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+							Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+							Type: &parser.Type{
+								Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 							},
 						},
 					},
 					Constraints: []sql.Constraint{
-						&sql.UniqueConstraint{
+						&parser.UniqueConstraint{
 							Constraint: pos(29),
-							Name:       &sql.Ident{Name: "con1", NamePos: pos(40)},
+							Name:       &parser.Ident{Name: "con1", NamePos: pos(40)},
 							Unique:     pos(45),
 							Lparen:     pos(52),
 							Columns: []*sql.Ident{
@@ -1267,27 +1444,27 @@ func TestParser_ParseStatement(t *testing.T) {
 				AssertParseStatementError(t, `CREATE TABLE tbl (col1 TEXT, UNIQUE (x y`, `1:40: expected comma or right paren, found y`)
 			})*/
 			/*(t.Run("Check", func(t *testing.T) {
-				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, CHECK(foo = bar))`, &sql.CreateTableStatement{
+				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, CHECK(foo = bar))`, &parser.CreateTableStatement{
 					Create: pos(0),
 					Table:  pos(7),
-					Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+					Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 					Lparen: pos(17),
 					Columns: []*sql.ColumnDefinition{
 						{
-							Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-							Type: &sql.Type{
-								Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+							Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+							Type: &parser.Type{
+								Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 							},
 						},
 					},
 					Constraints: []sql.Constraint{
-						&sql.CheckConstraint{
+						&parser.CheckConstraint{
 							Check:  pos(29),
 							Lparen: pos(34),
-							Expr: &sql.BinaryExpr{
-								X:  &sql.Ident{Name: "foo", NamePos: pos(35)},
+							Expr: &parser.BinaryExpr{
+								X:  &parser.Ident{Name: "foo", NamePos: pos(35)},
 								Op: sql.EQ, OpPos: pos(39),
-								Y: &sql.Ident{Name: "bar", NamePos: pos(41)},
+								Y: &parser.Ident{Name: "bar", NamePos: pos(41)},
 							},
 							Rparen: pos(44),
 						},
@@ -1300,21 +1477,21 @@ func TestParser_ParseStatement(t *testing.T) {
 				AssertParseStatementError(t, `CREATE TABLE tbl (col1 TEXT, CHECK (true`, `1:40: expected right paren, found 'EOF'`)
 			})*/
 			/*t.Run("ForeignKey", func(t *testing.T) {
-				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, FOREIGN KEY (col1, col2) REFERENCES tbl2 (x, y))`, &sql.CreateTableStatement{
+				AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, FOREIGN KEY (col1, col2) REFERENCES tbl2 (x, y))`, &parser.CreateTableStatement{
 					Create: pos(0),
 					Table:  pos(7),
-					Name:   &sql.Ident{Name: "tbl", NamePos: pos(13)},
+					Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
 					Lparen: pos(17),
 					Columns: []*sql.ColumnDefinition{
 						{
-							Name: &sql.Ident{Name: "col1", NamePos: pos(18)},
-							Type: &sql.Type{
-								Name: &sql.Ident{Name: "TEXT", NamePos: pos(23)},
+							Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
+							Type: &parser.Type{
+								Name: &parser.Ident{Name: "TEXT", NamePos: pos(23)},
 							},
 						},
 					},
 					Constraints: []sql.Constraint{
-						&sql.ForeignKeyConstraint{
+						&parser.ForeignKeyConstraint{
 							Foreign:    pos(29),
 							ForeignKey: pos(37),
 							Lparen:     pos(41),
@@ -1324,7 +1501,7 @@ func TestParser_ParseStatement(t *testing.T) {
 							},
 							Rparen:        pos(52),
 							References:    pos(54),
-							ForeignTable:  &sql.Ident{Name: "tbl2", NamePos: pos(65)},
+							ForeignTable:  &parser.Ident{Name: "tbl2", NamePos: pos(65)},
 							ForeignLparen: pos(70),
 							ForeignColumns: []*sql.Ident{
 								{Name: "x", NamePos: pos(71)},
@@ -1373,10 +1550,10 @@ func TestParser_ParseStatement(t *testing.T) {
 	})
 
 	/*t.Run("CreateView", func(t *testing.T) {
-		AssertParseStatement(t, `CREATE VIEW vw (col1, col2) AS SELECT x, y`, &sql.CreateViewStatement{
+		AssertParseStatement(t, `CREATE VIEW vw (col1, col2) AS SELECT x, y`, &parser.CreateViewStatement{
 			Create: pos(0),
 			View:   pos(7),
-			Name:   &sql.Ident{NamePos: pos(12), Name: "vw"},
+			Name:   &parser.Ident{NamePos: pos(12), Name: "vw"},
 			Lparen: pos(15),
 			Columns: []*sql.Ident{
 				{NamePos: pos(16), Name: "col1"},
@@ -1384,38 +1561,38 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 			Rparen: pos(26),
 			As:     pos(28),
-			Select: &sql.SelectStatement{
+			Select: &parser.SelectStatement{
 				Select: pos(31),
 				Columns: []*sql.ResultColumn{
-					{Expr: &sql.Ident{NamePos: pos(38), Name: "x"}},
-					{Expr: &sql.Ident{NamePos: pos(41), Name: "y"}},
+					{Expr: &parser.Ident{NamePos: pos(38), Name: "x"}},
+					{Expr: &parser.Ident{NamePos: pos(41), Name: "y"}},
 				},
 			},
 		})
-		AssertParseStatement(t, `CREATE VIEW vw AS SELECT x`, &sql.CreateViewStatement{
+		AssertParseStatement(t, `CREATE VIEW vw AS SELECT x`, &parser.CreateViewStatement{
 			Create: pos(0),
 			View:   pos(7),
-			Name:   &sql.Ident{NamePos: pos(12), Name: "vw"},
+			Name:   &parser.Ident{NamePos: pos(12), Name: "vw"},
 			As:     pos(15),
-			Select: &sql.SelectStatement{
+			Select: &parser.SelectStatement{
 				Select: pos(18),
 				Columns: []*sql.ResultColumn{
-					{Expr: &sql.Ident{NamePos: pos(25), Name: "x"}},
+					{Expr: &parser.Ident{NamePos: pos(25), Name: "x"}},
 				},
 			},
 		})
-		AssertParseStatement(t, `CREATE VIEW IF NOT EXISTS vw AS SELECT x`, &sql.CreateViewStatement{
+		AssertParseStatement(t, `CREATE VIEW IF NOT EXISTS vw AS SELECT x`, &parser.CreateViewStatement{
 			Create:      pos(0),
 			View:        pos(7),
 			If:          pos(12),
 			IfNot:       pos(15),
 			IfNotExists: pos(19),
-			Name:        &sql.Ident{NamePos: pos(26), Name: "vw"},
+			Name:        &parser.Ident{NamePos: pos(26), Name: "vw"},
 			As:          pos(29),
-			Select: &sql.SelectStatement{
+			Select: &parser.SelectStatement{
 				Select: pos(32),
 				Columns: []*sql.ResultColumn{
-					{Expr: &sql.Ident{NamePos: pos(39), Name: "x"}},
+					{Expr: &parser.Ident{NamePos: pos(39), Name: "x"}},
 				},
 			},
 		})
@@ -1430,17 +1607,17 @@ func TestParser_ParseStatement(t *testing.T) {
 	})*/
 
 	/*t.Run("DropView", func(t *testing.T) {
-		AssertParseStatement(t, `DROP VIEW vw`, &sql.DropViewStatement{
+		AssertParseStatement(t, `DROP VIEW vw`, &parser.DropViewStatement{
 			Drop: pos(0),
 			View: pos(5),
-			Name: &sql.Ident{NamePos: pos(10), Name: "vw"},
+			Name: &parser.Ident{NamePos: pos(10), Name: "vw"},
 		})
-		AssertParseStatement(t, `DROP VIEW IF EXISTS vw`, &sql.DropViewStatement{
+		AssertParseStatement(t, `DROP VIEW IF EXISTS vw`, &parser.DropViewStatement{
 			Drop:     pos(0),
 			View:     pos(5),
 			If:       pos(10),
 			IfExists: pos(13),
-			Name:     &sql.Ident{NamePos: pos(20), Name: "vw"},
+			Name:     &parser.Ident{NamePos: pos(20), Name: "vw"},
 		})
 		AssertParseStatementError(t, `DROP`, `1:1: expected TABLE, VIEW, INDEX, or TRIGGER`)
 		AssertParseStatementError(t, `DROP VIEW`, `1:9: expected view name, found 'EOF'`)
@@ -1449,59 +1626,59 @@ func TestParser_ParseStatement(t *testing.T) {
 	})*/
 
 	/*t.Run("CreateIndex", func(t *testing.T) {
-		AssertParseStatement(t, `CREATE INDEX idx ON tbl (x ASC, y DESC, z)`, &sql.CreateIndexStatement{
+		AssertParseStatement(t, `CREATE INDEX idx ON tbl (x ASC, y DESC, z)`, &parser.CreateIndexStatement{
 			Create: pos(0),
 			Index:  pos(7),
-			Name:   &sql.Ident{NamePos: pos(13), Name: "idx"},
+			Name:   &parser.Ident{NamePos: pos(13), Name: "idx"},
 			On:     pos(17),
-			Table:  &sql.Ident{NamePos: pos(20), Name: "tbl"},
+			Table:  &parser.Ident{NamePos: pos(20), Name: "tbl"},
 			Lparen: pos(24),
 			Columns: []*sql.IndexedColumn{
-				{X: &sql.Ident{NamePos: pos(25), Name: "x"}, Asc: pos(27)},
-				{X: &sql.Ident{NamePos: pos(32), Name: "y"}, Desc: pos(34)},
-				{X: &sql.Ident{NamePos: pos(40), Name: "z"}},
+				{X: &parser.Ident{NamePos: pos(25), Name: "x"}, Asc: pos(27)},
+				{X: &parser.Ident{NamePos: pos(32), Name: "y"}, Desc: pos(34)},
+				{X: &parser.Ident{NamePos: pos(40), Name: "z"}},
 			},
 			Rparen: pos(41),
 		})
-		AssertParseStatement(t, `CREATE UNIQUE INDEX idx ON tbl (x)`, &sql.CreateIndexStatement{
+		AssertParseStatement(t, `CREATE UNIQUE INDEX idx ON tbl (x)`, &parser.CreateIndexStatement{
 			Create: pos(0),
 			Unique: pos(7),
 			Index:  pos(14),
-			Name:   &sql.Ident{NamePos: pos(20), Name: "idx"},
+			Name:   &parser.Ident{NamePos: pos(20), Name: "idx"},
 			On:     pos(24),
-			Table:  &sql.Ident{NamePos: pos(27), Name: "tbl"},
+			Table:  &parser.Ident{NamePos: pos(27), Name: "tbl"},
 			Lparen: pos(31),
 			Columns: []*sql.IndexedColumn{
-				{X: &sql.Ident{NamePos: pos(32), Name: "x"}},
+				{X: &parser.Ident{NamePos: pos(32), Name: "x"}},
 			},
 			Rparen: pos(33),
 		})
-		AssertParseStatement(t, `CREATE INDEX idx ON tbl (x) WHERE true`, &sql.CreateIndexStatement{
+		AssertParseStatement(t, `CREATE INDEX idx ON tbl (x) WHERE true`, &parser.CreateIndexStatement{
 			Create: pos(0),
 			Index:  pos(7),
-			Name:   &sql.Ident{NamePos: pos(13), Name: "idx"},
+			Name:   &parser.Ident{NamePos: pos(13), Name: "idx"},
 			On:     pos(17),
-			Table:  &sql.Ident{NamePos: pos(20), Name: "tbl"},
+			Table:  &parser.Ident{NamePos: pos(20), Name: "tbl"},
 			Lparen: pos(24),
 			Columns: []*sql.IndexedColumn{
-				{X: &sql.Ident{NamePos: pos(25), Name: "x"}},
+				{X: &parser.Ident{NamePos: pos(25), Name: "x"}},
 			},
 			Rparen:    pos(26),
 			Where:     pos(28),
-			WhereExpr: &sql.BoolLit{ValuePos: pos(34), Value: true},
+			WhereExpr: &parser.BoolLit{ValuePos: pos(34), Value: true},
 		})
-		AssertParseStatement(t, `CREATE INDEX IF NOT EXISTS idx ON tbl (x)`, &sql.CreateIndexStatement{
+		AssertParseStatement(t, `CREATE INDEX IF NOT EXISTS idx ON tbl (x)`, &parser.CreateIndexStatement{
 			Create:      pos(0),
 			Index:       pos(7),
 			If:          pos(13),
 			IfNot:       pos(16),
 			IfNotExists: pos(20),
-			Name:        &sql.Ident{NamePos: pos(27), Name: "idx"},
+			Name:        &parser.Ident{NamePos: pos(27), Name: "idx"},
 			On:          pos(31),
-			Table:       &sql.Ident{NamePos: pos(34), Name: "tbl"},
+			Table:       &parser.Ident{NamePos: pos(34), Name: "tbl"},
 			Lparen:      pos(38),
 			Columns: []*sql.IndexedColumn{
-				{X: &sql.Ident{NamePos: pos(39), Name: "x"}},
+				{X: &parser.Ident{NamePos: pos(39), Name: "x"}},
 			},
 			Rparen: pos(40),
 		})
@@ -1518,199 +1695,21 @@ func TestParser_ParseStatement(t *testing.T) {
 	})*/
 
 	/*t.Run("DropIndex", func(t *testing.T) {
-		AssertParseStatement(t, `DROP INDEX idx`, &sql.DropIndexStatement{
+		AssertParseStatement(t, `DROP INDEX idx`, &parser.DropIndexStatement{
 			Drop:  pos(0),
 			Index: pos(5),
-			Name:  &sql.Ident{NamePos: pos(11), Name: "idx"},
+			Name:  &parser.Ident{NamePos: pos(11), Name: "idx"},
 		})
-		AssertParseStatement(t, `DROP INDEX IF EXISTS idx`, &sql.DropIndexStatement{
+		AssertParseStatement(t, `DROP INDEX IF EXISTS idx`, &parser.DropIndexStatement{
 			Drop:     pos(0),
 			Index:    pos(5),
 			If:       pos(11),
 			IfExists: pos(14),
-			Name:     &sql.Ident{NamePos: pos(21), Name: "idx"},
+			Name:     &parser.Ident{NamePos: pos(21), Name: "idx"},
 		})
 		AssertParseStatementError(t, `DROP INDEX`, `1:10: expected index name, found 'EOF'`)
 		AssertParseStatementError(t, `DROP INDEX IF`, `1:13: expected EXISTS, found 'EOF'`)
 		AssertParseStatementError(t, `DROP INDEX IF EXISTS`, `1:20: expected index name, found 'EOF'`)
-	})*/
-
-	/*t.Run("CreateTrigger", func(t *testing.T) {
-		AssertParseStatement(t, `CREATE TRIGGER trig DELETE ON tbl BEGIN INSERT INTO new DEFAULT VALUES; UPDATE new SET x = 1; END`, &sql.CreateTriggerStatement{
-			Create:  pos(0),
-			Trigger: pos(7),
-			Name:    &sql.Ident{NamePos: pos(15), Name: "trig"},
-			Delete:  pos(20),
-			On:      pos(27),
-			Table:   &sql.Ident{NamePos: pos(30), Name: "tbl"},
-			Begin:   pos(34),
-			Body: []sql.Statement{
-				&sql.InsertStatement{
-					Insert:        pos(40),
-					Into:          pos(47),
-					Table:         &sql.Ident{NamePos: pos(52), Name: "new"},
-					Default:       pos(56),
-					DefaultValues: pos(64),
-				},
-				&sql.UpdateStatement{
-					Update: pos(72),
-					Table: &sql.QualifiedTableName{
-						Name: &sql.Ident{NamePos: pos(79), Name: "new"},
-					},
-					Set: pos(83),
-					Assignments: []*sql.Assignment{{
-						Columns: []*sql.Ident{{NamePos: pos(87), Name: "x"}},
-						Eq:      pos(89),
-						Expr:    &sql.NumberLit{ValuePos: pos(91), Value: "1"},
-					}},
-				},
-			},
-			End: pos(94),
-		})
-		AssertParseStatement(t, `CREATE TRIGGER IF NOT EXISTS trig BEFORE INSERT ON tbl BEGIN DELETE FROM new; END`, &sql.CreateTriggerStatement{
-			Create:      pos(0),
-			Trigger:     pos(7),
-			If:          pos(15),
-			IfNot:       pos(18),
-			IfNotExists: pos(22),
-			Name:        &sql.Ident{NamePos: pos(29), Name: "trig"},
-			Before:      pos(34),
-			Insert:      pos(41),
-			On:          pos(48),
-			Table:       &sql.Ident{NamePos: pos(51), Name: "tbl"},
-			Begin:       pos(55),
-			Body: []sql.Statement{
-				&sql.DeleteStatement{
-					Delete: pos(61),
-					From:   pos(68),
-					Table: &sql.QualifiedTableName{
-						Name: &sql.Ident{NamePos: pos(73), Name: "new"},
-					},
-				},
-			},
-			End: pos(78),
-		})
-		AssertParseStatement(t, `CREATE TRIGGER trig INSTEAD OF UPDATE ON tbl BEGIN SELECT *; END`, &sql.CreateTriggerStatement{
-			Create:    pos(0),
-			Trigger:   pos(7),
-			Name:      &sql.Ident{NamePos: pos(15), Name: "trig"},
-			Instead:   pos(20),
-			InsteadOf: pos(28),
-			Update:    pos(31),
-			On:        pos(38),
-			Table:     &sql.Ident{NamePos: pos(41), Name: "tbl"},
-			Begin:     pos(45),
-			Body: []sql.Statement{
-				&sql.SelectStatement{
-					Select:  pos(51),
-					Columns: []*sql.ResultColumn{{Star: pos(58)}},
-				},
-			},
-			End: pos(61),
-		})
-		AssertParseStatement(t, `CREATE TRIGGER trig INSTEAD OF UPDATE OF x, y ON tbl FOR EACH ROW WHEN true BEGIN SELECT *; END`, &sql.CreateTriggerStatement{
-			Create:    pos(0),
-			Trigger:   pos(7),
-			Name:      &sql.Ident{NamePos: pos(15), Name: "trig"},
-			Instead:   pos(20),
-			InsteadOf: pos(28),
-			Update:    pos(31),
-			UpdateOf:  pos(38),
-			UpdateOfColumns: []*sql.Ident{
-				{NamePos: pos(41), Name: "x"},
-				{NamePos: pos(44), Name: "y"},
-			},
-			On:         pos(46),
-			Table:      &sql.Ident{NamePos: pos(49), Name: "tbl"},
-			For:        pos(53),
-			ForEach:    pos(57),
-			ForEachRow: pos(62),
-			When:       pos(66),
-			WhenExpr:   &sql.BoolLit{ValuePos: pos(71), Value: true},
-			Begin:      pos(76),
-			Body: []sql.Statement{
-				&sql.SelectStatement{
-					Select:  pos(82),
-					Columns: []*sql.ResultColumn{{Star: pos(89)}},
-				},
-			},
-			End: pos(92),
-		})
-		AssertParseStatement(t, `CREATE TRIGGER trig AFTER UPDATE ON tbl BEGIN WITH cte (x) AS (SELECT y) SELECT *; END`, &sql.CreateTriggerStatement{
-			Create:  pos(0),
-			Trigger: pos(7),
-			Name:    &sql.Ident{NamePos: pos(15), Name: "trig"},
-			After:   pos(20),
-			Update:  pos(26),
-			On:      pos(33),
-			Table:   &sql.Ident{NamePos: pos(36), Name: "tbl"},
-			Begin:   pos(40),
-			Body: []sql.Statement{
-				&sql.SelectStatement{
-					WithClause: &sql.WithClause{
-						With: pos(46),
-						CTEs: []*sql.CTE{
-							{
-								TableName:     &sql.Ident{NamePos: pos(51), Name: "cte"},
-								ColumnsLparen: pos(55),
-								Columns: []*sql.Ident{
-									{NamePos: pos(56), Name: "x"},
-								},
-								ColumnsRparen: pos(57),
-								As:            pos(59),
-								SelectLparen:  pos(62),
-								Select: &sql.SelectStatement{
-									Select: pos(63),
-									Columns: []*sql.ResultColumn{
-										{Expr: &sql.Ident{NamePos: pos(70), Name: "y"}},
-									},
-								},
-								SelectRparen: pos(71),
-							},
-						},
-					},
-					Select:  pos(73),
-					Columns: []*sql.ResultColumn{{Star: pos(80)}},
-				},
-			},
-			End: pos(83),
-		})
-
-		AssertParseStatementError(t, `CREATE TRIGGER`, `1:14: expected index name, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER IF`, `1:17: expected NOT, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER IF NOT`, `1:21: expected EXISTS, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig INSTEAD`, `1:27: expected OF, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER`, `1:25: expected DELETE, INSERT, or UPDATE, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig UPDATE OF`, `1:29: expected column name, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig UPDATE OF x,`, `1:32: expected column name, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT`, `1:32: expected ON, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON `, `1:36: expected table name, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl FOR`, `1:43: expected EACH, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl FOR EACH`, `1:48: expected ROW, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl WHEN`, `1:44: expected expression, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl`, `1:39: expected BEGIN, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN`, `1:45: expected statement, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN SELECT`, `1:52: expected expression, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN SELECT *`, `1:54: expected semicolon, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE TRIGGER trig AFTER INSERT ON tbl BEGIN SELECT *;`, `1:55: expected statement, found 'EOF'`)
-	})*/
-
-	/*t.Run("DropTrigger", func(t *testing.T) {
-		AssertParseStatement(t, `DROP TRIGGER trig`, &sql.DropTriggerStatement{
-			Drop:    pos(0),
-			Trigger: pos(5),
-			Name:    &sql.Ident{NamePos: pos(13), Name: "trig"},
-		})
-		AssertParseStatement(t, `DROP TRIGGER IF EXISTS trig`, &sql.DropTriggerStatement{
-			Drop:     pos(0),
-			Trigger:  pos(5),
-			If:       pos(13),
-			IfExists: pos(16),
-			Name:     &sql.Ident{NamePos: pos(23), Name: "trig"},
-		})
-		AssertParseStatementError(t, `DROP TRIGGER`, `1:12: expected trigger name, found 'EOF'`)
-		AssertParseStatementError(t, `DROP TRIGGER IF`, `1:15: expected EXISTS, found 'EOF'`)
-		AssertParseStatementError(t, `DROP TRIGGER IF EXISTS`, `1:22: expected trigger name, found 'EOF'`)
 	})*/
 
 	t.Run("Select", func(t *testing.T) {
@@ -1785,27 +1784,27 @@ func TestParser_ParseStatement(t *testing.T) {
 				Alias: &parser.Ident{NamePos: pos(21), Name: "tbl2"},
 			},
 		})
-		/*AssertParseStatement(t, `SELECT * FROM tbl INDEXED BY idx`, &sql.SelectStatement{
+		/*AssertParseStatement(t, `SELECT * FROM tbl INDEXED BY idx`, &parser.SelectStatement{
 			Select: pos(0),
 			Columns: []*sql.ResultColumn{
 				{Star: pos(7)},
 			},
 			From: pos(9),
-			Source: &sql.QualifiedTableName{
-				Name:      &sql.Ident{NamePos: pos(14), Name: "tbl"},
+			Source: &parser.QualifiedTableName{
+				Name:      &parser.Ident{NamePos: pos(14), Name: "tbl"},
 				Indexed:   pos(18),
 				IndexedBy: pos(26),
-				Index:     &sql.Ident{NamePos: pos(29), Name: "idx"},
+				Index:     &parser.Ident{NamePos: pos(29), Name: "idx"},
 			},
 		})*/
-		/*AssertParseStatement(t, `SELECT * FROM tbl NOT INDEXED`, &sql.SelectStatement{
+		/*AssertParseStatement(t, `SELECT * FROM tbl NOT INDEXED`, &parser.SelectStatement{
 			Select: pos(0),
 			Columns: []*sql.ResultColumn{
 				{Star: pos(7)},
 			},
 			From: pos(9),
-			Source: &sql.QualifiedTableName{
-				Name:       &sql.Ident{NamePos: pos(14), Name: "tbl"},
+			Source: &parser.QualifiedTableName{
+				Name:       &parser.Ident{NamePos: pos(14), Name: "tbl"},
 				Not:        pos(18),
 				NotIndexed: pos(22),
 			},
@@ -1987,12 +1986,12 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 		})
 
-		/*AssertParseStatement(t, `WITH cte (foo, bar) AS (SELECT baz), xxx AS (SELECT yyy) SELECT bat`, &sql.SelectStatement{
-			WithClause: &sql.WithClause{
+		/*AssertParseStatement(t, `WITH cte (foo, bar) AS (SELECT baz), xxx AS (SELECT yyy) SELECT bat`, &parser.SelectStatement{
+			WithClause: &parser.WithClause{
 				With: pos(0),
 				CTEs: []*sql.CTE{
 					{
-						TableName:     &sql.Ident{NamePos: pos(5), Name: "cte"},
+						TableName:     &parser.Ident{NamePos: pos(5), Name: "cte"},
 						ColumnsLparen: pos(9),
 						Columns: []*sql.Ident{
 							{NamePos: pos(10), Name: "foo"},
@@ -2001,22 +2000,22 @@ func TestParser_ParseStatement(t *testing.T) {
 						ColumnsRparen: pos(18),
 						As:            pos(20),
 						SelectLparen:  pos(23),
-						Select: &sql.SelectStatement{
+						Select: &parser.SelectStatement{
 							Select: pos(24),
 							Columns: []*sql.ResultColumn{
-								{Expr: &sql.Ident{NamePos: pos(31), Name: "baz"}},
+								{Expr: &parser.Ident{NamePos: pos(31), Name: "baz"}},
 							},
 						},
 						SelectRparen: pos(34),
 					},
 					{
-						TableName:    &sql.Ident{NamePos: pos(37), Name: "xxx"},
+						TableName:    &parser.Ident{NamePos: pos(37), Name: "xxx"},
 						As:           pos(41),
 						SelectLparen: pos(44),
-						Select: &sql.SelectStatement{
+						Select: &parser.SelectStatement{
 							Select: pos(45),
 							Columns: []*sql.ResultColumn{
-								{Expr: &sql.Ident{NamePos: pos(52), Name: "yyy"}},
+								{Expr: &parser.Ident{NamePos: pos(52), Name: "yyy"}},
 							},
 						},
 						SelectRparen: pos(55),
@@ -2025,22 +2024,22 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 			Select: pos(57),
 			Columns: []*sql.ResultColumn{
-				{Expr: &sql.Ident{NamePos: pos(64), Name: "bat"}},
+				{Expr: &parser.Ident{NamePos: pos(64), Name: "bat"}},
 			},
 		})*/
-		/*AssertParseStatement(t, `WITH RECURSIVE cte AS (SELECT foo) SELECT bar`, &sql.SelectStatement{
-			WithClause: &sql.WithClause{
+		/*AssertParseStatement(t, `WITH RECURSIVE cte AS (SELECT foo) SELECT bar`, &parser.SelectStatement{
+			WithClause: &parser.WithClause{
 				With:      pos(0),
 				Recursive: pos(5),
 				CTEs: []*sql.CTE{
 					{
-						TableName:    &sql.Ident{NamePos: pos(15), Name: "cte"},
+						TableName:    &parser.Ident{NamePos: pos(15), Name: "cte"},
 						As:           pos(19),
 						SelectLparen: pos(22),
-						Select: &sql.SelectStatement{
+						Select: &parser.SelectStatement{
 							Select: pos(23),
 							Columns: []*sql.ResultColumn{
-								{Expr: &sql.Ident{NamePos: pos(30), Name: "foo"}},
+								{Expr: &parser.Ident{NamePos: pos(30), Name: "foo"}},
 							},
 						},
 						SelectRparen: pos(33),
@@ -2049,7 +2048,7 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 			Select: pos(35),
 			Columns: []*sql.ResultColumn{
-				{Expr: &sql.Ident{NamePos: pos(42), Name: "bar"}},
+				{Expr: &parser.Ident{NamePos: pos(42), Name: "bar"}},
 			},
 		})*/
 
@@ -2177,22 +2176,22 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 		})
 
-		/*AssertParseStatement(t, `VALUES (1, 2), (3, 4)`, &sql.SelectStatement{
+		/*AssertParseStatement(t, `VALUES (1, 2), (3, 4)`, &parser.SelectStatement{
 			Values: pos(0),
 			ValueLists: []*sql.ExprList{
 				{
 					Lparen: pos(7),
 					Exprs: []sql.Expr{
-						&sql.NumberLit{ValuePos: pos(8), Value: "1"},
-						&sql.NumberLit{ValuePos: pos(11), Value: "2"},
+						&parser.NumberLit{ValuePos: pos(8), Value: "1"},
+						&parser.NumberLit{ValuePos: pos(11), Value: "2"},
 					},
 					Rparen: pos(12),
 				},
 				{
 					Lparen: pos(15),
 					Exprs: []sql.Expr{
-						&sql.NumberLit{ValuePos: pos(16), Value: "3"},
-						&sql.NumberLit{ValuePos: pos(19), Value: "4"},
+						&parser.NumberLit{ValuePos: pos(16), Value: "3"},
+						&parser.NumberLit{ValuePos: pos(19), Value: "4"},
 					},
 					Rparen: pos(20),
 				},
@@ -2436,11 +2435,11 @@ func TestParser_ParseStatement(t *testing.T) {
 			}},
 		})*/
 
-		/*AssertParseStatement(t, `WITH cte (foo) AS (SELECT bar) INSERT INTO tbl VALUES (1)`, &sql.InsertStatement{
-			WithClause: &sql.WithClause{
+		/*AssertParseStatement(t, `WITH cte (foo) AS (SELECT bar) INSERT INTO tbl VALUES (1)`, &parser.InsertStatement{
+			WithClause: &parser.WithClause{
 				With: pos(0),
 				CTEs: []*sql.CTE{{
-					TableName:     &sql.Ident{NamePos: pos(5), Name: "cte"},
+					TableName:     &parser.Ident{NamePos: pos(5), Name: "cte"},
 					ColumnsLparen: pos(9),
 					Columns: []*sql.Ident{
 						{NamePos: pos(10), Name: "foo"},
@@ -2448,10 +2447,10 @@ func TestParser_ParseStatement(t *testing.T) {
 					ColumnsRparen: pos(13),
 					As:            pos(15),
 					SelectLparen:  pos(18),
-					Select: &sql.SelectStatement{
+					Select: &parser.SelectStatement{
 						Select: pos(19),
 						Columns: []*sql.ResultColumn{
-							{Expr: &sql.Ident{NamePos: pos(26), Name: "bar"}},
+							{Expr: &parser.Ident{NamePos: pos(26), Name: "bar"}},
 						},
 					},
 					SelectRparen: pos(29),
@@ -2459,21 +2458,21 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 			Insert: pos(31),
 			Into:   pos(38),
-			Table:  &sql.Ident{NamePos: pos(43), Name: "tbl"},
+			Table:  &parser.Ident{NamePos: pos(43), Name: "tbl"},
 			Values: pos(47),
 			ValueLists: []*sql.ExprList{{
 				Lparen: pos(54),
 				Exprs: []sql.Expr{
-					&sql.NumberLit{ValuePos: pos(55), Value: "1"},
+					&parser.NumberLit{ValuePos: pos(55), Value: "1"},
 				},
 				Rparen: pos(56),
 			}},
 		})*/
-		/*AssertParseStatement(t, `WITH cte (foo) AS (SELECT bar) INSERT INTO tbl VALUES (1)`, &sql.InsertStatement{
-			WithClause: &sql.WithClause{
+		/*AssertParseStatement(t, `WITH cte (foo) AS (SELECT bar) INSERT INTO tbl VALUES (1)`, &parser.InsertStatement{
+			WithClause: &parser.WithClause{
 				With: pos(0),
 				CTEs: []*sql.CTE{{
-					TableName:     &sql.Ident{NamePos: pos(5), Name: "cte"},
+					TableName:     &parser.Ident{NamePos: pos(5), Name: "cte"},
 					ColumnsLparen: pos(9),
 					Columns: []*sql.Ident{
 						{NamePos: pos(10), Name: "foo"},
@@ -2481,10 +2480,10 @@ func TestParser_ParseStatement(t *testing.T) {
 					ColumnsRparen: pos(13),
 					As:            pos(15),
 					SelectLparen:  pos(18),
-					Select: &sql.SelectStatement{
+					Select: &parser.SelectStatement{
 						Select: pos(19),
 						Columns: []*sql.ResultColumn{
-							{Expr: &sql.Ident{NamePos: pos(26), Name: "bar"}},
+							{Expr: &parser.Ident{NamePos: pos(26), Name: "bar"}},
 						},
 					},
 					SelectRparen: pos(29),
@@ -2492,12 +2491,12 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 			Insert: pos(31),
 			Into:   pos(38),
-			Table:  &sql.Ident{NamePos: pos(43), Name: "tbl"},
+			Table:  &parser.Ident{NamePos: pos(43), Name: "tbl"},
 			Values: pos(47),
 			ValueLists: []*sql.ExprList{{
 				Lparen: pos(54),
 				Exprs: []sql.Expr{
-					&sql.NumberLit{ValuePos: pos(55), Value: "1"},
+					&parser.NumberLit{ValuePos: pos(55), Value: "1"},
 				},
 				Rparen: pos(56),
 			}},
@@ -2752,12 +2751,12 @@ func TestParser_ParseStatement(t *testing.T) {
 				Expr:    &parser.IntegerLit{ValuePos: pos(29), Value: "1"},
 			}},
 		})
-		/*AssertParseStatement(t, `WITH cte (x) AS (SELECT y) UPDATE tbl SET x = 1`, &sql.UpdateStatement{
-			WithClause: &sql.WithClause{
+		/*AssertParseStatement(t, `WITH cte (x) AS (SELECT y) UPDATE tbl SET x = 1`, &parser.UpdateStatement{
+			WithClause: &parser.WithClause{
 				With: pos(0),
 				CTEs: []*sql.CTE{
 					{
-						TableName:     &sql.Ident{NamePos: pos(5), Name: "cte"},
+						TableName:     &parser.Ident{NamePos: pos(5), Name: "cte"},
 						ColumnsLparen: pos(9),
 						Columns: []*sql.Ident{
 							{NamePos: pos(10), Name: "x"},
@@ -2765,10 +2764,10 @@ func TestParser_ParseStatement(t *testing.T) {
 						ColumnsRparen: pos(11),
 						As:            pos(13),
 						SelectLparen:  pos(16),
-						Select: &sql.SelectStatement{
+						Select: &parser.SelectStatement{
 							Select: pos(17),
 							Columns: []*sql.ResultColumn{
-								{Expr: &sql.Ident{NamePos: pos(24), Name: "y"}},
+								{Expr: &parser.Ident{NamePos: pos(24), Name: "y"}},
 							},
 						},
 						SelectRparen: pos(25),
@@ -2776,14 +2775,14 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 			},
 			Update: pos(27),
-			Table: &sql.QualifiedTableName{
-				Name: &sql.Ident{NamePos: pos(34), Name: "tbl"},
+			Table: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(34), Name: "tbl"},
 			},
 			Set: pos(38),
 			Assignments: []*sql.Assignment{{
 				Columns: []*sql.Ident{{NamePos: pos(42), Name: "x"}},
 				Eq:      pos(44),
-				Expr:    &sql.NumberLit{ValuePos: pos(46), Value: "1"},
+				Expr:    &parser.NumberLit{ValuePos: pos(46), Value: "1"},
 			}},
 		})*/
 
@@ -2817,12 +2816,12 @@ func TestParser_ParseStatement(t *testing.T) {
 				Y: &parser.IntegerLit{ValuePos: pos(26), Value: "1"},
 			},
 		})
-		/*AssertParseStatement(t, `WITH cte (x) AS (SELECT y) DELETE FROM tbl`, &sql.DeleteStatement{
-			WithClause: &sql.WithClause{
+		/*AssertParseStatement(t, `WITH cte (x) AS (SELECT y) DELETE FROM tbl`, &parser.DeleteStatement{
+			WithClause: &parser.WithClause{
 				With: pos(0),
 				CTEs: []*sql.CTE{
 					{
-						TableName:     &sql.Ident{NamePos: pos(5), Name: "cte"},
+						TableName:     &parser.Ident{NamePos: pos(5), Name: "cte"},
 						ColumnsLparen: pos(9),
 						Columns: []*sql.Ident{
 							{NamePos: pos(10), Name: "x"},
@@ -2830,10 +2829,10 @@ func TestParser_ParseStatement(t *testing.T) {
 						ColumnsRparen: pos(11),
 						As:            pos(13),
 						SelectLparen:  pos(16),
-						Select: &sql.SelectStatement{
+						Select: &parser.SelectStatement{
 							Select: pos(17),
 							Columns: []*sql.ResultColumn{
-								{Expr: &sql.Ident{NamePos: pos(24), Name: "y"}},
+								{Expr: &parser.Ident{NamePos: pos(24), Name: "y"}},
 							},
 						},
 						SelectRparen: pos(25),
@@ -2842,8 +2841,8 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 			Delete: pos(27),
 			From:   pos(34),
-			Table: &sql.QualifiedTableName{
-				Name: &sql.Ident{NamePos: pos(39), Name: "tbl"},
+			Table: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(39), Name: "tbl"},
 			},
 		})*/
 		/*AssertParseStatement(t, `DELETE FROM tbl ORDER BY x, y LIMIT 1 OFFSET 2`, &parser.DeleteStatement{
@@ -3540,34 +3539,34 @@ func TestParser_ParseExpr(t *testing.T) {
 
 	/*t.Run("Raise", func(t *testing.T) {
 
-		AssertParseExpr(t, `RAISE(IGNORE)`, &sql.Raise{
+		AssertParseExpr(t, `RAISE(IGNORE)`, &parser.Raise{
 			Raise:  pos(0),
 			Lparen: pos(5),
 			Ignore: pos(6),
 			Rparen: pos(12),
 		})
-		AssertParseExpr(t, `RAISE(ROLLBACK, 'bad error')`, &sql.Raise{
+		AssertParseExpr(t, `RAISE(ROLLBACK, 'bad error')`, &parser.Raise{
 			Raise:    pos(0),
 			Lparen:   pos(5),
 			Rollback: pos(6),
 			Comma:    pos(14),
-			Error:    &sql.StringLit{ValuePos: pos(16), Value: "bad error"},
+			Error:    &parser.StringLit{ValuePos: pos(16), Value: "bad error"},
 			Rparen:   pos(27),
 		})
-		AssertParseExpr(t, `RAISE(ABORT, 'error')`, &sql.Raise{
+		AssertParseExpr(t, `RAISE(ABORT, 'error')`, &parser.Raise{
 			Raise:  pos(0),
 			Lparen: pos(5),
 			Abort:  pos(6),
 			Comma:  pos(11),
-			Error:  &sql.StringLit{ValuePos: pos(13), Value: "error"},
+			Error:  &parser.StringLit{ValuePos: pos(13), Value: "error"},
 			Rparen: pos(20),
 		})
-		AssertParseExpr(t, `RAISE(FAIL, 'error')`, &sql.Raise{
+		AssertParseExpr(t, `RAISE(FAIL, 'error')`, &parser.Raise{
 			Raise:  pos(0),
 			Lparen: pos(5),
 			Fail:   pos(6),
 			Comma:  pos(10),
-			Error:  &sql.StringLit{ValuePos: pos(12), Value: "error"},
+			Error:  &parser.StringLit{ValuePos: pos(12), Value: "error"},
 			Rparen: pos(19),
 		})
 		AssertParseExprError(t, `RAISE`, `1:5: expected left paren, found 'EOF'`)

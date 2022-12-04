@@ -2,6 +2,7 @@
 package pql
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"strconv"
@@ -342,6 +343,33 @@ const (
 	stateLeadingZeros = "zeros"
 	stateMantissa     = "mantissa"
 )
+
+// FromInt64 converts an int64 into a Decimal.
+func FromInt64(i int64, scale int64) Decimal {
+	us := i * Pow10(scale)
+	return NewDecimal(us, scale)
+}
+
+// FromFloat64 converts a float into a Decimal.
+func FromFloat64(f float64) Decimal {
+	scale := decimalPlaces(fmt.Sprintf("%v", f))
+	us := int64(f * math.Pow(10, float64(scale)))
+	return NewDecimal(us, int64(scale))
+}
+
+func decimalPlaces(v string) int {
+	i := strings.IndexByte(v, '.')
+	if i > -1 {
+		return len(v) - i - 1
+	}
+	return 0
+}
+
+// FromFloat64WithScale converts a float into a Decimal.
+func FromFloat64WithScale(f float64, scale int) (Decimal, error) {
+	us := int64(f * math.Pow(10, float64(scale)))
+	return NewDecimal(us, int64(scale)), nil
+}
 
 // ParseDecimal parses a string into a Decimal.
 func ParseDecimal(s string) (Decimal, error) {

@@ -60,7 +60,7 @@ func TestAlterTableStatement_String(t *testing.T) {
 		Name:          &parser.Ident{Name: "foo"},
 		OldColumnName: &parser.Ident{Name: "col1"},
 		NewColumnName: &parser.Ident{Name: "col2"},
-	}, `ALTER TABLE "foo" RENAME COLUMN "col1" TO "col2"`)
+	}, `ALTER TABLE foo RENAME COLUMN col1 TO col2`)
 
 	AssertStatementStringer(t, &parser.AlterTableStatement{
 		Name: &parser.Ident{Name: "foo"},
@@ -68,11 +68,11 @@ func TestAlterTableStatement_String(t *testing.T) {
 			Name: &parser.Ident{Name: "bar"},
 			Type: &parser.Type{Name: &parser.Ident{Name: "INTEGER"}},
 		},
-	}, `ALTER TABLE "foo" ADD COLUMN "bar" INTEGER`)
+	}, `ALTER TABLE foo ADD COLUMN bar INTEGER`)
 	AssertStatementStringer(t, &parser.AlterTableStatement{
 		Name:           &parser.Ident{Name: "foo"},
 		DropColumnName: &parser.Ident{Name: "bar"},
-	}, `ALTER TABLE "foo" DROP COLUMN "bar"`)
+	}, `ALTER TABLE foo DROP COLUMN bar`)
 }
 
 /*func TestAnalyzeStatement_String(t *testing.T) {
@@ -130,7 +130,7 @@ func TestCreateTableStatement_String(t *testing.T) {
 				Type: &parser.Type{Name: &parser.Ident{Name: "STRING"}},
 			},
 		},
-	}, `CREATE TABLE IF NOT EXISTS "foo" ("bar" INTEGER, "baz" STRING)`)
+	}, `CREATE TABLE IF NOT EXISTS foo (bar INTEGER, baz STRING)`)
 
 	AssertStatementStringer(t, &parser.CreateTableStatement{
 		Name:        &parser.Ident{Name: "foo"},
@@ -212,15 +212,15 @@ func TestCreateTableStatement_String(t *testing.T) {
 				},
 			},
 		},
-	}, `CREATE TABLE IF NOT EXISTS "foo" (`+
-		`"boolcol" BOOL, `+
-		`"decimalcol" DECIMAL MIN 100.25 MAX 1000.75, `+
-		`"idcol" ID CACHETYPE RANKED SIZE 10000, `+
-		`"idsetcol" IDSET CACHETYPE RANKED SIZE 10000, `+
-		`"intcol" INTEGER MIN 100 MAX 1000, `+
-		`"stringcol" STRING CACHETYPE RANKED SIZE 10000, `+
-		`"stringsetcol" STRINGSET CACHETYPE RANKED SIZE 10000, `+
-		`"timestampcol" TIMESTAMP TIMEUNIT 's' EPOCH '2021-01-01T00:00:00Z'`+
+	}, `CREATE TABLE IF NOT EXISTS foo (`+
+		`boolcol BOOL, `+
+		`decimalcol DECIMAL MIN 100.25 MAX 1000.75, `+
+		`idcol ID CACHETYPE RANKED SIZE 10000, `+
+		`idsetcol IDSET CACHETYPE RANKED SIZE 10000, `+
+		`intcol INTEGER MIN 100 MAX 1000, `+
+		`stringcol STRING CACHETYPE RANKED SIZE 10000, `+
+		`stringsetcol STRINGSET CACHETYPE RANKED SIZE 10000, `+
+		`timestampcol TIMESTAMP TIMEUNIT 's' EPOCH '2021-01-01T00:00:00Z'`+
 		`)`)
 }
 
@@ -361,51 +361,35 @@ func OLDTestCreateTableStatement_String(t *testing.T) {
 	}, `CREATE TABLE "foo" AS SELECT *`)
 }
 
-func TestCreateTriggerStatement_String(t *testing.T) {
-	t.Skip("CREATE TRIGGER is currently disabled in the parser")
-	AssertStatementStringer(t, &parser.CreateTriggerStatement{
-		Name:   &parser.Ident{Name: "trig"},
-		Insert: pos(0),
-		Table:  &parser.Ident{Name: "tbl"},
-		Body: []parser.Statement{
-			&parser.DeleteStatement{Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl2"}}},
+func TestCreateFunctionStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.CreateFunctionStatement{
+		Name: &parser.Ident{Name: "func"},
+		Parameters: []*parser.ParameterDefinition{
+			{
+				Name: &parser.Variable{Name: "@param1"},
+				Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
+			},
 		},
-	}, `CREATE TRIGGER "trig" INSERT ON "tbl" BEGIN DELETE FROM "tbl2"; END`)
-
-	AssertStatementStringer(t, &parser.CreateTriggerStatement{
-		Name:       &parser.Ident{Name: "trig"},
-		Before:     pos(0),
-		Delete:     pos(0),
-		ForEachRow: pos(0),
-		Table:      &parser.Ident{Name: "tbl"},
-		Body: []parser.Statement{
-			&parser.DeleteStatement{Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "x"}}},
+		ReturnDef: &parser.ParameterDefinition{
+			Name: &parser.Variable{Name: "@scalar"},
+			Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
 		},
-	}, `CREATE TRIGGER "trig" BEFORE DELETE ON "tbl" FOR EACH ROW BEGIN DELETE FROM "x"; END`)
+	}, `CREATE FUNCTION func (@param1 int) RETURNS @scalar int AS BEGIN END`)
 
-	AssertStatementStringer(t, &parser.CreateTriggerStatement{
+	AssertStatementStringer(t, &parser.CreateFunctionStatement{
 		IfNotExists: pos(0),
-		Name:        &parser.Ident{Name: "trig"},
-		After:       pos(0),
-		Update:      pos(0),
-		Table:       &parser.Ident{Name: "tbl"},
-		WhenExpr:    &parser.BoolLit{Value: true},
-		Body: []parser.Statement{
-			&parser.DeleteStatement{Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "x"}}},
+		Name:        &parser.Ident{Name: "func"},
+		Parameters: []*parser.ParameterDefinition{
+			{
+				Name: &parser.Variable{Name: "@param1"},
+				Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
+			},
 		},
-	}, `CREATE TRIGGER IF NOT EXISTS "trig" AFTER UPDATE ON "tbl" WHEN TRUE BEGIN DELETE FROM "x"; END`)
-
-	AssertStatementStringer(t, &parser.CreateTriggerStatement{
-		Name:            &parser.Ident{Name: "trig"},
-		InsteadOf:       pos(0),
-		Update:          pos(0),
-		UpdateOf:        pos(0),
-		UpdateOfColumns: []*parser.Ident{{Name: "x"}, {Name: "y"}},
-		Table:           &parser.Ident{Name: "tbl"},
-		Body: []parser.Statement{
-			&parser.DeleteStatement{Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "x"}}},
+		ReturnDef: &parser.ParameterDefinition{
+			Name: &parser.Variable{Name: "@scalar"},
+			Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
 		},
-	}, `CREATE TRIGGER "trig" INSTEAD OF UPDATE OF "x", "y" ON "tbl" BEGIN DELETE FROM "x"; END`)
+	}, `CREATE FUNCTION IF NOT EXISTS func (@param1 int) RETURNS @scalar int AS BEGIN END`)
 }
 
 func TestCreateViewStatement_String(t *testing.T) {
@@ -433,7 +417,7 @@ func TestCreateViewStatement_String(t *testing.T) {
 func TestDeleteStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.DeleteStatement{
 		Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}, Alias: &parser.Ident{Name: "tbl2"}},
-	}, `DELETE FROM "tbl" AS "tbl2"`)
+	}, `DELETE FROM tbl AS tbl2`)
 
 	// AssertStatementStringer(t, &sql.DeleteStatement{
 	// 	Table: &sql.QualifiedTableName{Name: &sql.Ident{Name: "tbl"}, Index: &sql.Ident{Name: "idx"}},
@@ -483,21 +467,21 @@ func TestDropIndexStatement_String(t *testing.T) {
 func TestDropTableStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.DropTableStatement{
 		Name: &parser.Ident{Name: "tbl"},
-	}, `DROP TABLE "tbl"`)
+	}, `DROP TABLE tbl`)
 
 	AssertStatementStringer(t, &parser.DropTableStatement{
 		IfExists: pos(0),
 		Name:     &parser.Ident{Name: "tbl"},
-	}, `DROP TABLE IF EXISTS "tbl"`)
+	}, `DROP TABLE IF EXISTS tbl`)
 }
 
 func TestDropTriggerStatement_String(t *testing.T) {
 	t.Skip("DROP TRIGGER is currently disabled in the parser")
-	AssertStatementStringer(t, &parser.DropTriggerStatement{
+	AssertStatementStringer(t, &parser.DropFunctionStatement{
 		Name: &parser.Ident{Name: "trig"},
 	}, `DROP TRIGGER "trig"`)
 
-	AssertStatementStringer(t, &parser.DropTriggerStatement{
+	AssertStatementStringer(t, &parser.DropFunctionStatement{
 		IfExists: pos(0),
 		Name:     &parser.Ident{Name: "trig"},
 	}, `DROP TRIGGER IF EXISTS "trig"`)
@@ -597,7 +581,7 @@ func TestInsertStatement_String(t *testing.T) {
 				Exprs: []parser.Expr{&parser.NullLit{}, &parser.NullLit{}},
 			},
 		},
-	}, `INSERT INTO "tbl" ("x", "y") VALUES (NULL, NULL)`)
+	}, `INSERT INTO tbl (x, y) VALUES (NULL, NULL)`)
 
 	AssertStatementStringer(t, &parser.InsertStatement{
 		Table: &parser.Ident{Name: "tbl"},
@@ -613,7 +597,7 @@ func TestInsertStatement_String(t *testing.T) {
 				Exprs: []parser.Expr{&parser.IntegerLit{Value: "3"}, &parser.IntegerLit{Value: "4"}},
 			},
 		},
-	}, `INSERT INTO "tbl" ("x", "y") VALUES (1, 2), (3, 4)`)
+	}, `INSERT INTO tbl (x, y) VALUES (1, 2), (3, 4)`)
 
 	// AssertStatementStringer(t, &sql.InsertStatement{
 	// 	WithClause: &sql.WithClause{
@@ -687,14 +671,14 @@ func TestSelectStatement_String(t *testing.T) {
 			{Expr: &parser.Ident{Name: "x"}, Alias: &parser.Ident{Name: "y"}},
 			{Expr: &parser.Ident{Name: "z"}},
 		},
-	}, `SELECT "x" AS "y", "z"`)
+	}, `SELECT x AS y, z`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Distinct: pos(0),
 		Columns: []*parser.ResultColumn{
 			{Expr: &parser.Ident{Name: "x"}},
 		},
-	}, `SELECT DISTINCT "x"`)
+	}, `SELECT DISTINCT x`)
 
 	// AssertStatementStringer(t, &sql.SelectStatement{
 	// 	All: pos(0),
@@ -709,7 +693,7 @@ func TestSelectStatement_String(t *testing.T) {
 		WhereExpr:    &parser.BoolLit{Value: true},
 		GroupByExprs: []parser.Expr{&parser.Ident{Name: "x"}, &parser.Ident{Name: "y"}},
 		HavingExpr:   &parser.Ident{Name: "z"},
-	}, `SELECT * FROM "tbl" WHERE TRUE GROUP BY "x", "y" HAVING "z"`)
+	}, `SELECT * FROM tbl WHERE TRUE GROUP BY x, y HAVING z`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -717,7 +701,7 @@ func TestSelectStatement_String(t *testing.T) {
 			X:     &parser.SelectStatement{Columns: []*parser.ResultColumn{{Star: pos(0)}}},
 			Alias: &parser.Ident{Name: "tbl"},
 		},
-	}, `SELECT * FROM (SELECT *) AS "tbl"`)
+	}, `SELECT * FROM (SELECT *) AS tbl`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -753,7 +737,7 @@ func TestSelectStatement_String(t *testing.T) {
 				},
 			},
 		},
-	}, `SELECT * FROM "tbl" WINDOW "win1" AS ("base" PARTITION BY "x", "y" ORDER BY "x" ASC NULLS FIRST, "y" DESC NULLS LAST RANGE UNBOUNDED PRECEDING), "win2" AS ("base2")`)
+	}, `SELECT * FROM tbl WINDOW win1 AS (base PARTITION BY x, y ORDER BY x ASC NULLS FIRST, y DESC NULLS LAST RANGE UNBOUNDED PRECEDING), win2 AS (base2)`)
 
 	// AssertStatementStringer(t, &sql.SelectStatement{
 	// 	WithClause: &sql.WithClause{
@@ -813,7 +797,7 @@ func TestSelectStatement_String(t *testing.T) {
 			{X: &parser.Ident{Name: "x"}},
 			{X: &parser.Ident{Name: "y"}},
 		},
-	}, `SELECT * ORDER BY "x", "y"`)
+	}, `SELECT * ORDER BY x, y`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -822,7 +806,7 @@ func TestSelectStatement_String(t *testing.T) {
 			Operator: &parser.JoinOperator{Comma: pos(0)},
 			Y:        &parser.QualifiedTableName{Name: &parser.Ident{Name: "y"}},
 		},
-	}, `SELECT * FROM "x", "y"`)
+	}, `SELECT * FROM x, y`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -832,7 +816,7 @@ func TestSelectStatement_String(t *testing.T) {
 			Y:          &parser.QualifiedTableName{Name: &parser.Ident{Name: "y"}},
 			Constraint: &parser.OnConstraint{X: &parser.BoolLit{Value: true}},
 		},
-	}, `SELECT * FROM "x" JOIN "y" ON TRUE`)
+	}, `SELECT * FROM x JOIN y ON TRUE`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -844,7 +828,7 @@ func TestSelectStatement_String(t *testing.T) {
 				Columns: []*parser.Ident{{Name: "a"}, {Name: "b"}},
 			},
 		},
-	}, `SELECT * FROM "x" NATURAL INNER JOIN "y" USING ("a", "b")`)
+	}, `SELECT * FROM x NATURAL INNER JOIN y USING (a, b)`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -853,7 +837,7 @@ func TestSelectStatement_String(t *testing.T) {
 			Operator: &parser.JoinOperator{Left: pos(0)},
 			Y:        &parser.QualifiedTableName{Name: &parser.Ident{Name: "y"}},
 		},
-	}, `SELECT * FROM "x" LEFT JOIN "y"`)
+	}, `SELECT * FROM x LEFT JOIN y`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -862,7 +846,7 @@ func TestSelectStatement_String(t *testing.T) {
 			Operator: &parser.JoinOperator{Left: pos(0), Outer: pos(0)},
 			Y:        &parser.QualifiedTableName{Name: &parser.Ident{Name: "y"}},
 		},
-	}, `SELECT * FROM "x" LEFT OUTER JOIN "y"`)
+	}, `SELECT * FROM x LEFT OUTER JOIN y`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
@@ -871,7 +855,7 @@ func TestSelectStatement_String(t *testing.T) {
 			Operator: &parser.JoinOperator{Cross: pos(0)},
 			Y:        &parser.QualifiedTableName{Name: &parser.Ident{Name: "y"}},
 		},
-	}, `SELECT * FROM "x" CROSS JOIN "y"`)
+	}, `SELECT * FROM x CROSS JOIN y`)
 }
 
 func TestUpdateStatement_String(t *testing.T) {
@@ -882,7 +866,7 @@ func TestUpdateStatement_String(t *testing.T) {
 			{Columns: []*parser.Ident{{Name: "y"}}, Expr: &parser.IntegerLit{Value: "200"}},
 		},
 		WhereExpr: &parser.BoolLit{Value: true},
-	}, `UPDATE "tbl" SET "x" = 100, "y" = 200 WHERE TRUE`)
+	}, `UPDATE tbl SET x = 100, y = 200 WHERE TRUE`)
 
 	AssertStatementStringer(t, &parser.UpdateStatement{
 		UpdateOrRollback: pos(0),
@@ -890,7 +874,7 @@ func TestUpdateStatement_String(t *testing.T) {
 		Assignments: []*parser.Assignment{
 			{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
 		},
-	}, `UPDATE OR ROLLBACK "tbl" SET "x" = 100`)
+	}, `UPDATE OR ROLLBACK tbl SET x = 100`)
 
 	AssertStatementStringer(t, &parser.UpdateStatement{
 		UpdateOrAbort: pos(0),
@@ -898,7 +882,7 @@ func TestUpdateStatement_String(t *testing.T) {
 		Assignments: []*parser.Assignment{
 			{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
 		},
-	}, `UPDATE OR ABORT "tbl" SET "x" = 100`)
+	}, `UPDATE OR ABORT tbl SET x = 100`)
 
 	AssertStatementStringer(t, &parser.UpdateStatement{
 		UpdateOrReplace: pos(0),
@@ -906,7 +890,7 @@ func TestUpdateStatement_String(t *testing.T) {
 		Assignments: []*parser.Assignment{
 			{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
 		},
-	}, `UPDATE OR REPLACE "tbl" SET "x" = 100`)
+	}, `UPDATE OR REPLACE tbl SET x = 100`)
 
 	AssertStatementStringer(t, &parser.UpdateStatement{
 		UpdateOrFail: pos(0),
@@ -914,7 +898,7 @@ func TestUpdateStatement_String(t *testing.T) {
 		Assignments: []*parser.Assignment{
 			{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
 		},
-	}, `UPDATE OR FAIL "tbl" SET "x" = 100`)
+	}, `UPDATE OR FAIL tbl SET x = 100`)
 
 	AssertStatementStringer(t, &parser.UpdateStatement{
 		UpdateOrIgnore: pos(0),
@@ -922,7 +906,7 @@ func TestUpdateStatement_String(t *testing.T) {
 		Assignments: []*parser.Assignment{
 			{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
 		},
-	}, `UPDATE OR IGNORE "tbl" SET "x" = 100`)
+	}, `UPDATE OR IGNORE tbl SET x = 100`)
 
 	// AssertStatementStringer(t, &sql.UpdateStatement{
 	// 	WithClause: &sql.WithClause{
@@ -941,8 +925,8 @@ func TestUpdateStatement_String(t *testing.T) {
 }
 
 func TestIdent_String(t *testing.T) {
-	AssertExprStringer(t, &parser.Ident{Name: "foo"}, `"foo"`)
-	AssertExprStringer(t, &parser.Ident{Name: "foo \" bar"}, `"foo "" bar"`)
+	AssertExprStringer(t, &parser.Ident{Name: "foo", Quoted: true}, `"foo"`)
+	AssertExprStringer(t, &parser.Ident{Name: "foo \" bar", Quoted: true}, `"foo "" bar"`)
 }
 
 func TestStringLit_String(t *testing.T) {
@@ -1021,7 +1005,7 @@ func TestCaseExpr_String(t *testing.T) {
 			{Condition: &parser.IntegerLit{Value: "2"}, Body: &parser.BoolLit{Value: false}},
 		},
 		ElseExpr: &parser.NullLit{},
-	}, `CASE "foo" WHEN 1 THEN TRUE WHEN 2 THEN FALSE ELSE NULL END`)
+	}, `CASE foo WHEN 1 THEN TRUE WHEN 2 THEN FALSE ELSE NULL END`)
 
 	AssertExprStringer(t, &parser.CaseExpr{
 		Blocks: []*parser.CaseBlock{
@@ -1036,8 +1020,8 @@ func TestExprList_String(t *testing.T) {
 }
 
 func TestQualifiedRef_String(t *testing.T) {
-	AssertExprStringer(t, &parser.QualifiedRef{Table: &parser.Ident{Name: "tbl"}, Column: &parser.Ident{Name: "col"}}, `"tbl"."col"`)
-	AssertExprStringer(t, &parser.QualifiedRef{Table: &parser.Ident{Name: "tbl"}, Star: pos(0)}, `"tbl".*`)
+	AssertExprStringer(t, &parser.QualifiedRef{Table: &parser.Ident{Name: "tbl"}, Column: &parser.Ident{Name: "col"}}, `tbl.col`)
+	AssertExprStringer(t, &parser.QualifiedRef{Table: &parser.Ident{Name: "tbl"}, Star: pos(0)}, `tbl.*`)
 }
 
 func TestCall_String(t *testing.T) {
@@ -1065,7 +1049,7 @@ func TestCall_String(t *testing.T) {
 		Over: &parser.OverClause{
 			Name: &parser.Ident{Name: "win"},
 		},
-	}, `foo() OVER "win"`)
+	}, `foo() OVER win`)
 
 	t.Run("FrameSpec", func(t *testing.T) {
 		AssertExprStringer(t, &parser.Call{
