@@ -33,14 +33,14 @@ func (*ColumnDefinition) node()        {}
 func (*CommitStatement) node()         {}
 func (*CreateIndexStatement) node()    {}
 func (*CreateTableStatement) node()    {}
-func (*CreateTriggerStatement) node()  {}
+func (*CreateFunctionStatement) node() {}
 func (*CreateViewStatement) node()     {}
 func (*DateLit) node()                 {}
 func (*DefaultConstraint) node()       {}
 func (*DeleteStatement) node()         {}
 func (*DropIndexStatement) node()      {}
 func (*DropTableStatement) node()      {}
-func (*DropTriggerStatement) node()    {}
+func (*DropFunctionStatement) node()   {}
 func (*DropViewStatement) node()       {}
 func (*Exists) node()                  {}
 func (*ExplainStatement) node()        {}
@@ -51,7 +51,7 @@ func (*ForeignKeyArg) node()           {}
 func (*ForeignKeyConstraint) node()    {}
 func (*FrameSpec) node()               {}
 func (*Ident) node()                   {}
-func (*VariableRef) node()             {}
+func (*Variable) node()                {}
 func (*IndexedColumn) node()           {}
 func (*InsertStatement) node()         {}
 func (*JoinClause) node()              {}
@@ -98,29 +98,29 @@ type Statement interface {
 	stmt()
 }
 
-func (*AlterTableStatement) stmt()    {}
-func (*AnalyzeStatement) stmt()       {}
-func (*BeginStatement) stmt()         {}
-func (*BulkInsertStatement) stmt()    {}
-func (*ShowTablesStatement) stmt()    {}
-func (*ShowColumnsStatement) stmt()   {}
-func (*CommitStatement) stmt()        {}
-func (*CreateIndexStatement) stmt()   {}
-func (*CreateTableStatement) stmt()   {}
-func (*CreateTriggerStatement) stmt() {}
-func (*CreateViewStatement) stmt()    {}
-func (*DeleteStatement) stmt()        {}
-func (*DropIndexStatement) stmt()     {}
-func (*DropTableStatement) stmt()     {}
-func (*DropTriggerStatement) stmt()   {}
-func (*DropViewStatement) stmt()      {}
-func (*ExplainStatement) stmt()       {}
-func (*InsertStatement) stmt()        {}
-func (*ReleaseStatement) stmt()       {}
-func (*RollbackStatement) stmt()      {}
-func (*SavepointStatement) stmt()     {}
-func (*SelectStatement) stmt()        {}
-func (*UpdateStatement) stmt()        {}
+func (*AlterTableStatement) stmt()     {}
+func (*AnalyzeStatement) stmt()        {}
+func (*BeginStatement) stmt()          {}
+func (*BulkInsertStatement) stmt()     {}
+func (*ShowTablesStatement) stmt()     {}
+func (*ShowColumnsStatement) stmt()    {}
+func (*CommitStatement) stmt()         {}
+func (*CreateIndexStatement) stmt()    {}
+func (*CreateTableStatement) stmt()    {}
+func (*CreateFunctionStatement) stmt() {}
+func (*CreateViewStatement) stmt()     {}
+func (*DeleteStatement) stmt()         {}
+func (*DropIndexStatement) stmt()      {}
+func (*DropTableStatement) stmt()      {}
+func (*DropFunctionStatement) stmt()   {}
+func (*DropViewStatement) stmt()       {}
+func (*ExplainStatement) stmt()        {}
+func (*InsertStatement) stmt()         {}
+func (*ReleaseStatement) stmt()        {}
+func (*RollbackStatement) stmt()       {}
+func (*SavepointStatement) stmt()      {}
+func (*SelectStatement) stmt()         {}
+func (*UpdateStatement) stmt()         {}
 
 // CloneStatement returns a deep copy stmt.
 func CloneStatement(stmt Statement) Statement {
@@ -141,7 +141,7 @@ func CloneStatement(stmt Statement) Statement {
 		return stmt.Clone()
 	case *CreateTableStatement:
 		return stmt.Clone()
-	case *CreateTriggerStatement:
+	case *CreateFunctionStatement:
 		return stmt.Clone()
 	case *CreateViewStatement:
 		return stmt.Clone()
@@ -151,7 +151,7 @@ func CloneStatement(stmt Statement) Statement {
 		return stmt.Clone()
 	case *DropTableStatement:
 		return stmt.Clone()
-	case *DropTriggerStatement:
+	case *DropFunctionStatement:
 		return stmt.Clone()
 	case *DropViewStatement:
 		return stmt.Clone()
@@ -218,7 +218,7 @@ func (*DateLit) expr()          {}
 func (*Exists) expr()           {}
 func (*ExprList) expr()         {}
 func (*Ident) expr()            {}
-func (*VariableRef) expr()      {}
+func (*Variable) expr()         {}
 func (*NullLit) expr()          {}
 func (*IntegerLit) expr()       {}
 func (*FloatLit) expr()         {}
@@ -268,7 +268,7 @@ func CloneExpr(expr Expr) Expr {
 		return expr.Clone()
 	case *UnaryExpr:
 		return expr.Clone()
-	case *VariableRef:
+	case *Variable:
 		return expr.Clone()
 
 	default:
@@ -1436,7 +1436,10 @@ func cloneIdents(a []*Ident) []*Ident {
 
 // String returns the string representation of the expression.
 func (i *Ident) String() string {
-	return `"` + strings.Replace(i.Name, `"`, `""`, -1) + `"`
+	if i.Quoted {
+		return `"` + strings.Replace(i.Name, `"`, `""`, -1) + `"`
+	}
+	return i.Name
 }
 
 // IdentName returns the name of ident. Returns a blank string if ident is nil.
@@ -1447,25 +1450,25 @@ func IdentName(ident *Ident) string {
 	return ident.Name
 }
 
-type VariableRef struct {
+type Variable struct {
 	NamePos       Pos    // variable position
 	Name          string // variable name
 	VariableIndex int
 	VarDataType   ExprDataType
 }
 
-func (expr *VariableRef) IsLiteral() bool { return false }
+func (expr *Variable) IsLiteral() bool { return false }
 
-func (expr *VariableRef) DataType() ExprDataType {
+func (expr *Variable) DataType() ExprDataType {
 	return expr.VarDataType
 }
 
-func (expr *VariableRef) Pos() Pos {
+func (expr *Variable) Pos() Pos {
 	return expr.NamePos
 }
 
 // Clone returns a deep copy of i.
-func (i *VariableRef) Clone() *VariableRef {
+func (i *Variable) Clone() *Variable {
 	if i == nil {
 		return nil
 	}
@@ -1474,11 +1477,11 @@ func (i *VariableRef) Clone() *VariableRef {
 }
 
 // String returns the string representation of the expression.
-func (i *VariableRef) String() string {
-	return `"` + i.Name + `"`
+func (i *Variable) String() string {
+	return i.Name
 }
 
-func (i *VariableRef) VarName() string {
+func (i *Variable) VarName() string {
 	return i.Name[1:]
 }
 
@@ -2632,98 +2635,68 @@ func (s *DropIndexStatement) String() string {
 	return buf.String()
 }
 
-type CreateTriggerStatement struct {
+type ParameterDefinition struct {
+	Name *Variable // parameter name
+	Type *Type     // data type
+}
+
+type CreateFunctionStatement struct {
 	Create      Pos    // position of CREATE keyword
-	Trigger     Pos    // position of TRIGGER keyword
+	Function    Pos    // position of FUNCTION keyword
 	If          Pos    // position of IF keyword
 	IfNot       Pos    // position of NOT keyword after IF
 	IfNotExists Pos    // position of EXISTS keyword after IF NOT
 	Name        *Ident // index name
 
-	Before    Pos // position of BEFORE keyword
-	After     Pos // position of AFTER keyword
-	Instead   Pos // position of INSTEAD keyword
-	InsteadOf Pos // position of OF keyword after INSTEAD
+	Lparen     Pos                    // position of parameter LParen
+	Parameters []*ParameterDefinition // parameters
+	Rparen     Pos                    // position of parameter RParen
 
-	Delete          Pos      // position of DELETE keyword
-	Insert          Pos      // position of INSERT keyword
-	Update          Pos      // position of UPDATE keyword
-	UpdateOf        Pos      // position of OF keyword after UPDATE
-	UpdateOfColumns []*Ident // columns list for UPDATE OF
-	On              Pos      // position of ON keyword
-	Table           *Ident   // table name
+	Returns   Pos                  // position of RETURNS keyword
+	ReturnDef *ParameterDefinition // return def
 
-	For        Pos // position of FOR keyword
-	ForEach    Pos // position of EACH keyword after FOR
-	ForEachRow Pos // position of ROW keyword after FOR EACH
-
-	When     Pos  // position of WHEN keyword
-	WhenExpr Expr // conditional expression
+	As Pos // position of AS keyword
 
 	Begin Pos         // position of BEGIN keyword
-	Body  []Statement // trigger body
+	Body  []Statement // function body
 	End   Pos         // position of END keyword
 }
 
 // Clone returns a deep copy of s.
-func (s *CreateTriggerStatement) Clone() *CreateTriggerStatement {
+func (s *CreateFunctionStatement) Clone() *CreateFunctionStatement {
 	if s == nil {
 		return nil
 	}
 	other := *s
 	other.Name = s.Name.Clone()
-	other.UpdateOfColumns = cloneIdents(s.UpdateOfColumns)
-	other.Table = s.Table.Clone()
-	other.WhenExpr = CloneExpr(s.WhenExpr)
 	other.Body = cloneStatements(s.Body)
 	return &other
 }
 
 // String returns the string representation of the statement.
-func (s *CreateTriggerStatement) String() string {
+func (s *CreateFunctionStatement) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("CREATE TRIGGER")
+	buf.WriteString("CREATE FUNCTION")
 	if s.IfNotExists.IsValid() {
 		buf.WriteString(" IF NOT EXISTS")
 	}
 	fmt.Fprintf(&buf, " %s", s.Name.String())
 
-	if s.Before.IsValid() {
-		buf.WriteString(" BEFORE")
-	} else if s.After.IsValid() {
-		buf.WriteString(" AFTER")
-	} else if s.InsteadOf.IsValid() {
-		buf.WriteString(" INSTEAD OF")
-	}
-
-	if s.Delete.IsValid() {
-		buf.WriteString(" DELETE")
-	} else if s.Insert.IsValid() {
-		buf.WriteString(" INSERT")
-	} else if s.Update.IsValid() {
-		buf.WriteString(" UPDATE")
-		if s.UpdateOf.IsValid() {
-			buf.WriteString(" OF ")
-			for i, col := range s.UpdateOfColumns {
-				if i != 0 {
-					buf.WriteString(", ")
-				}
-				buf.WriteString(col.String())
+	if len(s.Parameters) > 0 {
+		buf.WriteString(" (")
+		for idx, p := range s.Parameters {
+			if idx > 0 {
+				buf.WriteString(", ")
 			}
+			fmt.Fprintf(&buf, "%s %s", p.Name.Name, p.Type.Name)
 		}
+		buf.WriteString(")")
 	}
 
-	fmt.Fprintf(&buf, " ON %s", s.Table.String())
+	buf.WriteString(" RETURNS ")
+	fmt.Fprintf(&buf, "%s %s", s.ReturnDef.Name, s.ReturnDef.Type.Name)
 
-	if s.ForEachRow.IsValid() {
-		buf.WriteString(" FOR EACH ROW")
-	}
-
-	if s.WhenExpr != nil {
-		fmt.Fprintf(&buf, " WHEN %s", s.WhenExpr.String())
-	}
-
-	buf.WriteString(" BEGIN")
+	buf.WriteString(" AS BEGIN")
 	for i := range s.Body {
 		fmt.Fprintf(&buf, " %s;", s.Body[i].String())
 	}
@@ -2732,7 +2705,7 @@ func (s *CreateTriggerStatement) String() string {
 	return buf.String()
 }
 
-type DropTriggerStatement struct {
+type DropFunctionStatement struct {
 	Drop     Pos    // position of DROP keyword
 	Trigger  Pos    // position of TRIGGER keyword
 	If       Pos    // position of IF keyword
@@ -2741,7 +2714,7 @@ type DropTriggerStatement struct {
 }
 
 // Clone returns a deep copy of s.
-func (s *DropTriggerStatement) Clone() *DropTriggerStatement {
+func (s *DropFunctionStatement) Clone() *DropFunctionStatement {
 	if s == nil {
 		return nil
 	}
@@ -2750,7 +2723,7 @@ func (s *DropTriggerStatement) Clone() *DropTriggerStatement {
 	return &other
 }
 
-func (s *DropTriggerStatement) String() string {
+func (s *DropFunctionStatement) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("DROP TRIGGER")
 	if s.IfExists.IsValid() {

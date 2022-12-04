@@ -30,8 +30,11 @@ func (p *PlanOpTop) Schema() types.Schema {
 }
 
 func (p *PlanOpTop) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
-	// TODO (pok) actually implement top
-	return p.ChildOp.Iterator(ctx, row)
+	iter, err := p.ChildOp.Iterator(ctx, row)
+	if err != nil {
+		return nil, err
+	}
+	return newTopIter(p.expr, iter), nil
 }
 
 func (p *PlanOpTop) Children() []types.PlanOperator {
@@ -74,4 +77,48 @@ func (p *PlanOpTop) Warnings() []string {
 	w = append(w, p.warnings...)
 	w = append(w, p.ChildOp.Warnings()...)
 	return w
+}
+
+type topIter struct {
+	child types.RowIterator
+	expr  types.PlanExpression
+
+	rowCount int64
+	topValue int64
+
+	hasStarted *struct{}
+}
+
+func newTopIter(expr types.PlanExpression, child types.RowIterator) *topIter {
+	return &topIter{
+		child: child,
+		expr:  expr,
+	}
+}
+
+func (i *topIter) Next(ctx context.Context) (types.Row, error) {
+	if i.hasStarted == nil {
+		topEval, err := i.expr.Evaluate(nil)
+		if err != nil {
+			return nil, err
+		}
+		var ok bool
+		i.topValue, ok = topEval.(int64)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected top expression result type %T", topEval)
+		}
+		i.hasStarted = &struct{}{}
+
+	}
+
+	if i.rowCount >= i.topValue {
+		return nil, types.ErrNoMoreRows
+	}
+
+	row, err := i.child.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	i.rowCount++
+	return row, nil
 }

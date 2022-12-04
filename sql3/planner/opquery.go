@@ -123,7 +123,6 @@ func newQueryIterator(requests pilosa.ExecutionRequestsAPI, query *PlanOpQuery, 
 
 func (i *queryIterator) Next(ctx context.Context) (types.Row, error) {
 	if i.hasStarted == nil {
-		i.hasStarted = &struct{}{}
 
 		requestId, ok := fbcontext.RequestID(ctx)
 		if !ok {
@@ -134,6 +133,7 @@ func (i *queryIterator) Next(ctx context.Context) (types.Row, error) {
 		userId, _ = fbcontext.UserID(ctx)
 
 		i.requests.AddRequest(requestId, userId, time.Now(), i.query.sql)
+		i.hasStarted = &struct{}{}
 	}
 
 	row, err := i.child.Next(ctx)

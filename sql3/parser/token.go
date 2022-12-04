@@ -205,6 +205,8 @@ const (
 	RENAME
 	REPLACE
 	RESTRICT
+	RETURNS
+	RETURN
 	ROLLBACK
 	ROW
 	ROWS
@@ -426,6 +428,8 @@ var tokens = [...]string{
 	RENAME:            "RENAME",
 	REPLACE:           "REPLACE",
 	RESTRICT:          "RESTRICT",
+	RETURNS:           "RETURNS",
+	RETURN:            "RETURN",
 	ROLLBACK:          "ROLLBACK",
 	ROW:               "ROW",
 	ROWS:              "ROWS",
