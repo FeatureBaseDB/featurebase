@@ -300,9 +300,9 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 		/*	case VIEW:
 				return p.parseCreateViewStatement(pos)
 			case INDEX, UNIQUE:
-				return p.parseCreateIndexStatement(pos)
-			case TRIGGER:
-				return p.parseCreateTriggerStatement(pos)*/
+				return p.parseCreateIndexStatement(pos)*/
+	case FUNCTION:
+		return p.parseCreateFunctionStatement(pos)
 	default:
 		return nil, p.errorExpected(pos, tok, "TABLE")
 	}
@@ -318,9 +318,9 @@ func (p *Parser) parseDropStatement() (Statement, error) {
 		/*	case VIEW:
 				return p.parseDropViewStatement(pos)
 			case INDEX:
-				return p.parseDropIndexStatement(pos)
-			case TRIGGER:
-				return p.parseDropTriggerStatement(pos)*/
+				return p.parseDropIndexStatement(pos)*/
+	case FUNCTION:
+		return p.parseDropFunctionStatement(pos)
 	default:
 		return nil, p.errorExpected(pos, tok, "TABLE")
 	}
@@ -1173,12 +1173,43 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 	return &stmt, nil
 }*/
 
-/*func (p *Parser) parseCreateTriggerStatement(createPos Pos) (_ *CreateTriggerStatement, err error) {
-	assert(p.peek() == TRIGGER)
+func (p *Parser) parseParameterDefinitions() (_ []*ParameterDefinition, err error) {
+	var params []*ParameterDefinition
+	for {
+		switch {
+		case p.peek() == VARIABLE:
+			col, err := p.parseParameterDefinition()
+			params = append(params, col)
+			if err != nil {
+				return params, err
+			}
+			if p.peek() == COMMA {
+				p.scan()
+			}
+		case p.peek() == RP:
+			return params, nil
+		default:
+			return params, p.errorExpected(p.pos, p.tok, "parameter name, or right paren")
+		}
+	}
+}
 
-	var stmt CreateTriggerStatement
+func (p *Parser) parseParameterDefinition() (_ *ParameterDefinition, err error) {
+	var param ParameterDefinition
+	if param.Name, err = p.parseVariable("parameter name"); err != nil {
+		return &param, err
+	} else if param.Type, err = p.parseType(); err != nil {
+		return &param, err
+	}
+	return &param, nil
+}
+
+func (p *Parser) parseCreateFunctionStatement(createPos Pos) (_ *CreateFunctionStatement, err error) {
+	assert(p.peek() == FUNCTION)
+
+	var stmt CreateFunctionStatement
 	stmt.Create = createPos
-	stmt.Trigger, _, _ = p.scan()
+	stmt.Function, _, _ = p.scan()
 
 	// Parse optional "IF NOT EXISTS".
 	if p.peek() == IF {
@@ -1195,135 +1226,83 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 		stmt.IfNotExists, _, _ = p.scan()
 	}
 
-	if stmt.Name, err = p.parseIdent("index name"); err != nil {
+	if stmt.Name, err = p.parseIdent("function name"); err != nil {
 		return &stmt, err
 	}
 
-	// Parse BEFORE, AFTER, or INSTEAD OF
-	switch p.peek() {
-	case BEFORE:
-		stmt.Before, _, _ = p.scan()
-	case AFTER:
-		stmt.After, _, _ = p.scan()
-	case INSTEAD:
-		stmt.Instead, _, _ = p.scan()
-		if p.peek() != OF {
-			return &stmt, p.errorExpected(p.pos, p.tok, "OF")
-		}
-		stmt.InsteadOf, _, _ = p.scan()
-	}
+	// parameters
+	if p.peek() == LP {
+		stmt.Lparen, _, _ = p.scan()
 
-	// Parse DELETE, INSERT, UPDATE, or UPDATE OF [columns]
-	switch p.peek() {
-	case DELETE:
-		stmt.Delete, _, _ = p.scan()
-	case INSERT:
-		stmt.Insert, _, _ = p.scan()
-	case UPDATE:
-		stmt.Update, _, _ = p.scan()
-		if p.peek() == OF {
-			stmt.UpdateOf, _, _ = p.scan()
-			for {
-				col, err := p.parseIdent("column name")
-				if err != nil {
-					return &stmt, err
-				}
-				stmt.UpdateOfColumns = append(stmt.UpdateOfColumns, col)
-
-				if p.peek() != COMMA {
-					break
-				}
-				p.scan()
-			}
-		}
-	default:
-		return &stmt, p.errorExpected(p.pos, p.tok, "DELETE, INSERT, or UPDATE")
-	}
-
-	// Parse "ON table-name".
-	if p.peek() != ON {
-		return &stmt, p.errorExpected(p.pos, p.tok, "ON")
-	}
-	stmt.On, _, _ = p.scan()
-	if stmt.Table, err = p.parseIdent("table name"); err != nil {
-		return &stmt, err
-	}
-
-	// Parse optional "FOR EACH ROW".
-	if p.peek() == FOR {
-		stmt.For, _, _ = p.scan()
-		if p.peek() != EACH {
-			return &stmt, p.errorExpected(p.pos, p.tok, "EACH")
-		}
-		stmt.ForEach, _, _ = p.scan()
-		if p.peek() != ROW {
-			return &stmt, p.errorExpected(p.pos, p.tok, "ROW")
-		}
-		stmt.ForEachRow, _, _ = p.scan()
-	}
-
-	// Parse optional "WHEN expr".
-	if p.peek() == WHEN {
-		stmt.When, _, _ = p.scan()
-		if stmt.WhenExpr, err = p.ParseExpr(); err != nil {
+		stmt.Parameters, err = p.parseParameterDefinitions()
+		if err != nil {
 			return &stmt, err
 		}
+
+		if p.peek() != RP {
+			return &stmt, p.errorExpected(p.pos, p.tok, ")")
+		}
+		stmt.Rparen, _, _ = p.scan()
 	}
 
-	// Parse trigger body.
+	if p.peek() != RETURNS {
+		return &stmt, p.errorExpected(p.pos, p.tok, "RETURNS")
+	}
+	stmt.Returns, _, _ = p.scan()
+	stmt.ReturnDef, err = p.parseParameterDefinition()
+	if err != nil {
+		return &stmt, err
+	}
+
+	if p.peek() != AS {
+		return &stmt, p.errorExpected(p.pos, p.tok, "AS")
+	}
+	stmt.As, _, _ = p.scan()
+
 	if p.peek() != BEGIN {
 		return &stmt, p.errorExpected(p.pos, p.tok, "BEGIN")
 	}
 	stmt.Begin, _, _ = p.scan()
 
 	for {
-		s, err := p.parseTriggerBodyStatement()
+		s, err := p.parseFunctionBodyStatement()
 		if err != nil {
 			return &stmt, err
 		}
-		stmt.Body = append(stmt.Body, s)
+		if s != nil {
+			stmt.Body = append(stmt.Body, s)
+		}
 
 		if p.peek() == END {
 			break
 		}
 	}
+
+	if p.peek() != END {
+		return &stmt, p.errorExpected(p.pos, p.tok, "END")
+	}
 	stmt.End, _, _ = p.scan()
 
 	return &stmt, nil
-}*/
+}
 
-/*func (p *Parser) parseTriggerBodyStatement() (stmt Statement, err error) {
+func (p *Parser) parseFunctionBodyStatement() (stmt Statement, err error) {
 	switch p.peek() {
-	case SELECT, VALUES:
-		stmt, err = p.parseSelectStatement(false, nil)
-	case INSERT, REPLACE:
-		stmt, err = p.parseInsertStatement(nil)
-	case UPDATE:
-		stmt, err = p.parseUpdateStatement(nil)
-	case DELETE:
-		stmt, err = p.parseDeleteStatement(nil)
-	//case WITH:
-	//	stmt, err = p.parseWithStatement()
+	case END:
+		break
 	default:
 		return nil, p.errorExpected(p.pos, p.tok, "statement")
 	}
 	if err != nil {
 		return stmt, err
 	}
-
-	// Ensure trailing semicolon exists.
-	if p.peek() != SEMI {
-		return stmt, p.errorExpected(p.pos, p.tok, "semicolon")
-	}
-	p.scan()
-
 	return stmt, nil
-}*/
+}
 
-/*func (p *Parser) parseDropTriggerStatement(dropPos Pos) (_ *DropTriggerStatement, err error) {
-	assert(p.peek() == TRIGGER)
+func (p *Parser) parseDropFunctionStatement(dropPos Pos) (_ *DropFunctionStatement, err error) {
+	assert(p.peek() == FUNCTION)
 
-	var stmt DropTriggerStatement
+	var stmt DropFunctionStatement
 	stmt.Drop = dropPos
 	stmt.Trigger, _, _ = p.scan()
 
@@ -1336,18 +1315,31 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 		stmt.IfExists, _, _ = p.scan()
 	}
 
-	if stmt.Name, err = p.parseIdent("trigger name"); err != nil {
+	if stmt.Name, err = p.parseIdent("function name"); err != nil {
 		return &stmt, err
 	}
 
 	return &stmt, nil
-}*/
+}
 
 func (p *Parser) parseIdent(desc string) (*Ident, error) {
 	pos, tok, lit := p.scan()
 	switch tok {
 	case IDENT, QIDENT:
 		return &Ident{Name: lit, NamePos: pos, Quoted: tok == QIDENT}, nil
+	default:
+		return nil, p.errorExpected(pos, tok, desc)
+	}
+}
+
+func (p *Parser) parseVariable(desc string) (*Variable, error) {
+	pos, tok, lit := p.scan()
+	switch tok {
+	case VARIABLE:
+		return &Variable{
+			Name:    lit,
+			NamePos: pos,
+		}, nil
 	default:
 		return nil, p.errorExpected(pos, tok, desc)
 	}
@@ -2567,7 +2559,7 @@ func (p *Parser) parseOperand() (expr Expr, err error) {
 		}
 		return ident, nil
 	case VARIABLE:
-		return &VariableRef{Name: lit, NamePos: pos}, nil
+		return &Variable{Name: lit, NamePos: pos}, nil
 	case MIN, MAX:
 		ident := &Ident{Name: lit, NamePos: pos, Quoted: tok == QIDENT}
 		return p.parseCall(ident)

@@ -2,11 +2,7 @@ package parser
 
 import (
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
-
-	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 // TODO(pok) make all these lower case
@@ -358,25 +354,6 @@ func (dt *DataTypeTimestamp) TypeDescription() string {
 
 func (*DataTypeTimestamp) TypeInfo() map[string]interface{} {
 	return nil
-}
-
-func StringToDecimal(v string) (pql.Decimal, error) {
-	fvalue, err := strconv.ParseFloat(v, 64)
-	if err != nil {
-		return pql.NewDecimal(0, 0), err
-	}
-	return FloatToDecimal(fvalue), nil
-}
-
-func FloatToDecimal(v float64) pql.Decimal {
-	scale := NumDecimalPlaces(fmt.Sprintf("%v", v))
-	unscaledValue := int64(v * math.Pow(10, float64(scale)))
-	return pql.NewDecimal(unscaledValue, int64(scale))
-}
-
-func FloatToDecimalWithScale(v float64, s int64) pql.Decimal {
-	unscaledValue := int64(v * math.Pow(10, float64(s)))
-	return pql.NewDecimal(unscaledValue, int64(s))
 }
 
 func NumDecimalPlaces(v string) int {

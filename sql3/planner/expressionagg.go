@@ -5,7 +5,6 @@ package planner
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -346,19 +345,17 @@ func (n *sumPlanExpression) WithChildren(children ...types.PlanExpression) (type
 	return newSumPlanExpression(children[0], n.returnDataType), nil
 }
 
-// aggregator for AVG
+// aggregator for AVG()
 type aggregateAvg struct {
-	sum  float64
+	sum  interface{}
 	rows int64
 	expr types.PlanExpression
 }
 
 func NewAggAvgBuffer(child types.PlanExpression) *aggregateAvg {
-	const (
-		sum  = float64(0)
-		rows = int64(0)
-	)
-	return &aggregateAvg{sum, rows, child}
+	return &aggregateAvg{
+		expr: child,
+	}
 }
 
 func (a *aggregateAvg) Update(ctx context.Context, row types.Row) error {
@@ -370,24 +367,87 @@ func (a *aggregateAvg) Update(ctx context.Context, row types.Row) error {
 	if v == nil {
 		return nil
 	}
-	a.sum += v.(float64)
+
+	aggExpr, ok := a.expr.(*avgPlanExpression)
+	if !ok {
+		return sql3.NewErrInternalf("unexpected aggregate expression type '%T'", a.expr)
+	}
+
+	// we're going to do the sum in the return type
+	switch returnType := aggExpr.returnDataType.(type) {
+	case *parser.DataTypeDecimal:
+
+		// get the current agg value
+		var ok bool
+		var aggVal pql.Decimal
+		if a.sum == nil {
+			aggVal = pql.NewDecimal(0, returnType.Scale)
+		} else {
+			aggVal, ok = a.sum.(pql.Decimal)
+			if !ok {
+				return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+			}
+		}
+
+		switch dataType := aggExpr.arg.Type().(type) {
+		case *parser.DataTypeDecimal:
+			thisVal, ok := v.(pql.Decimal)
+			if !ok {
+				return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+			}
+
+			a.sum = pql.AddDecimal(thisVal, aggVal)
+
+		case *parser.DataTypeInt:
+			thisIVal, ok := v.(int64)
+			if !ok {
+				return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+			}
+
+			thisVal := pql.FromInt64(thisIVal, returnType.Scale)
+			a.sum = pql.AddDecimal(thisVal, aggVal)
+
+		default:
+			return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
+		}
+	default:
+		return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", returnType)
+	}
 	a.rows += 1
 
-	//return nil
-	return sql3.NewErrInternalf("implement me")
+	return nil
 }
 
 func (a *aggregateAvg) Eval(ctx context.Context) (interface{}, error) {
-	// This case is triggered when no rows exist.
-	if a.sum == 0 && a.rows == 0 {
+	// bail if we have no aggregate at all
+	if a.sum == nil && a.rows == 0 {
 		return nil, nil
 	}
 
-	if a.rows == 0 {
-		return float64(0), nil
+	aggExpr, ok := a.expr.(*avgPlanExpression)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected aggregate expression type '%T'", a.expr)
 	}
 
-	return a.sum / float64(a.rows), nil
+	switch returnType := aggExpr.returnDataType.(type) {
+	case *parser.DataTypeDecimal:
+
+		// if no rows, average is 0
+		if a.rows == 0 {
+			return pql.NewDecimal(0, returnType.Scale), nil
+		}
+		count := pql.FromInt64(a.rows, returnType.Scale)
+
+		sum, ok := a.sum.(pql.Decimal)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected type conversion '%T'", a.sum)
+		}
+		return pql.DivideDecimal(sum, count), nil
+
+	default:
+		return nil, sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", returnType)
+	}
+
 }
 
 // avgPlanExpression handles AVG()
@@ -458,37 +518,76 @@ func (n *avgPlanExpression) WithChildren(children ...types.PlanExpression) (type
 	return newAvgPlanExpression(children[0], n.returnDataType), nil
 }
 
-// aggregator for MIN
-type aggreagateMin struct {
+// aggregator for MIN()
+type aggregateMin struct {
 	val  interface{}
 	expr types.PlanExpression
 }
 
-func NewAggMinBuffer(child types.PlanExpression) *aggreagateMin {
-	return &aggreagateMin{nil, child}
+func NewAggMinBuffer(child types.PlanExpression) *aggregateMin {
+	return &aggregateMin{nil, child}
 }
 
-func (m *aggreagateMin) Update(ctx context.Context, row types.Row) error {
+func (m *aggregateMin) Update(ctx context.Context, row types.Row) error {
 	v, err := m.expr.Evaluate(row)
 	if err != nil {
 		return err
 	}
 
-	if reflect.TypeOf(v) == nil {
+	// skip if nil
+	if v == nil {
 		return nil
 	}
 
+	// if we have no min, then set the value
 	if m.val == nil {
 		m.val = v
 		return nil
 	}
 
-	//return nil
-	return sql3.NewErrInternalf("implement me")
+	aggExpr, ok := m.expr.(*minPlanExpression)
+	if !ok {
+		return sql3.NewErrInternalf("unexpected aggregate expression type '%T'", m.expr)
+	}
 
+	switch dataType := aggExpr.arg.Type().(type) {
+	case *parser.DataTypeDecimal:
+		thisVal, ok := v.(pql.Decimal)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		aggVal, ok := m.val.(pql.Decimal)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		if thisVal.LessThan(aggVal) {
+			m.val = thisVal
+		}
+
+	case *parser.DataTypeInt:
+		thisVal, ok := v.(int64)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		aggVal, ok := m.val.(int64)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		if thisVal < aggVal {
+			m.val = thisVal
+		}
+
+	default:
+		return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
+	}
+	return nil
 }
 
-func (m *aggreagateMin) Eval(ctx context.Context) (interface{}, error) {
+func (m *aggregateMin) Eval(ctx context.Context) (interface{}, error) {
 	return m.val, nil
 }
 
@@ -560,7 +659,7 @@ func (n *minPlanExpression) WithChildren(children ...types.PlanExpression) (type
 	return newMinPlanExpression(children[0], n.returnDataType), nil
 }
 
-// aggregator for MAX
+// aggregator for MAX()
 type aggregateMax struct {
 	val  interface{}
 	expr types.PlanExpression
@@ -576,18 +675,58 @@ func (m *aggregateMax) Update(ctx context.Context, row types.Row) error {
 		return err
 	}
 
-	if reflect.TypeOf(v) == nil {
+	// skip if nil
+	if v == nil {
 		return nil
 	}
 
+	// if we have no min, then set the value
 	if m.val == nil {
 		m.val = v
 		return nil
 	}
 
-	//return nil
-	return sql3.NewErrInternalf("implement me")
+	aggExpr, ok := m.expr.(*maxPlanExpression)
+	if !ok {
+		return sql3.NewErrInternalf("unexpected aggregate expression type '%T'", m.expr)
+	}
 
+	switch dataType := aggExpr.arg.Type().(type) {
+	case *parser.DataTypeDecimal:
+		thisVal, ok := v.(pql.Decimal)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		aggVal, ok := m.val.(pql.Decimal)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		if thisVal.GreaterThan(aggVal) {
+			m.val = thisVal
+		}
+
+	case *parser.DataTypeInt:
+		thisVal, ok := v.(int64)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		aggVal, ok := m.val.(int64)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		if thisVal > aggVal {
+			m.val = thisVal
+		}
+
+	default:
+		return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
+	}
+
+	return nil
 }
 
 func (m *aggregateMax) Eval(ctx context.Context) (interface{}, error) {
@@ -736,7 +875,7 @@ func (n *percentilePlanExpression) WithChildren(children ...types.PlanExpression
 	return newPercentilePlanExpression(children[0], children[1], n.returnDataType), nil
 }
 
-// aggregator for last
+// aggregator for LAST()
 type aggregateLast struct {
 	val  interface{}
 	expr types.PlanExpression
@@ -764,7 +903,7 @@ func (l *aggregateLast) Eval(ctx context.Context) (interface{}, error) {
 	return l.val, nil
 }
 
-// aggregator for first
+// aggregator for FIRST()
 type aggregateFirst struct {
 	val  interface{}
 	expr types.PlanExpression
