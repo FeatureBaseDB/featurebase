@@ -7,41 +7,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
-	fb "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/mds/controller"
 	mdshttp "github.com/molecula/featurebase/v3/dax/mds/http"
 	"github.com/molecula/featurebase/v3/errors"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 const (
 	defaultScheme = "http"
-	defaultPath   = "/mds"
 )
-
-// Ensure type implements interface.
-var _ fb.MDS = (*Client)(nil)
 
 // Client is an HTTP client that operates on the MDS endpoints exposed by the
 // main MDS service.
 type Client struct {
 	address dax.Address
+	logger  logger.Logger
 }
 
 // New returns a new instance of Client.
-func New(address dax.Address) *Client {
+func New(address dax.Address, logger logger.Logger) *Client {
 	return &Client{
 		address: address,
+		logger:  logger,
 	}
 }
 
 // Health returns true if the client address returns status OK at its /health
 // endpoint.
 func (c *Client) Health() bool {
-	url := fmt.Sprintf("%s%s/health", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/health", c.address.WithScheme(defaultScheme))
 
 	if resp, err := http.Get(url); err != nil {
 		return false
@@ -53,7 +50,7 @@ func (c *Client) Health() bool {
 }
 
 func (c *Client) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
-	url := fmt.Sprintf("%s%s/table", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/table", c.address.WithScheme(defaultScheme))
 
 	// Encode the request.
 	postBody, err := json.Marshal(qtid)
@@ -63,7 +60,7 @@ func (c *Client) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.Qua
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	log.Printf("POST table request: url: %s", url)
+	c.logger.Debugf("POST table request: url: %s", url)
 	resp, err := http.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "posting table request")
@@ -84,7 +81,7 @@ func (c *Client) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.Qua
 }
 
 func (c *Client) TableID(ctx context.Context, qual dax.TableQualifier, name dax.TableName) (dax.QualifiedTableID, error) {
-	url := fmt.Sprintf("%s%s/table-id", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/table-id", c.address.WithScheme(defaultScheme))
 
 	dflt := dax.QualifiedTableID{}
 
@@ -121,7 +118,7 @@ func (c *Client) TableID(ctx context.Context, qual dax.TableQualifier, name dax.
 }
 
 func (c *Client) Tables(ctx context.Context, qual dax.TableQualifier, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
-	url := fmt.Sprintf("%s%s/tables", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/tables", c.address.WithScheme(defaultScheme))
 
 	req := mdshttp.TablesRequest{
 		OrganizationID: qual.OrganizationID,
@@ -157,7 +154,7 @@ func (c *Client) Tables(ctx context.Context, qual dax.TableQualifier, ids ...dax
 }
 
 func (c *Client) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {
-	url := fmt.Sprintf("%s%s/create-table", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/create-table", c.address.WithScheme(defaultScheme))
 
 	// Encode the request.
 	postBody, err := json.Marshal(qtbl)
@@ -182,7 +179,7 @@ func (c *Client) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) erro
 }
 
 func (c *Client) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error {
-	url := fmt.Sprintf("%s%s/drop-table", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/drop-table", c.address.WithScheme(defaultScheme))
 
 	// Encode the request.
 	postBody, err := json.Marshal(qtid)
@@ -207,7 +204,7 @@ func (c *Client) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error
 }
 
 func (c *Client) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld *dax.Field) error {
-	url := fmt.Sprintf("%s%s/create-field", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/create-field", c.address.WithScheme(defaultScheme))
 
 	req := mdshttp.CreateFieldRequest{
 		TableKey: qtid.Key(),
@@ -236,7 +233,7 @@ func (c *Client) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld
 }
 
 func (c *Client) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
-	url := fmt.Sprintf("%s%s/drop-field", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/drop-field", c.address.WithScheme(defaultScheme))
 
 	// Encode the request.
 	req := mdshttp.DropFieldRequest{
@@ -266,7 +263,7 @@ func (c *Client) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldNa
 }
 
 func (c *Client) IngestShard(ctx context.Context, qtid dax.QualifiedTableID, shard dax.ShardNum) (dax.Address, error) {
-	url := fmt.Sprintf("%s%s/ingest-shard", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/ingest-shard", c.address.WithScheme(defaultScheme))
 
 	var host dax.Address
 
@@ -303,7 +300,7 @@ func (c *Client) IngestShard(ctx context.Context, qtid dax.QualifiedTableID, sha
 }
 
 func (c *Client) IngestPartition(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum) (dax.Address, error) {
-	url := fmt.Sprintf("%s%s/ingest-partition", c.address.WithScheme(defaultScheme), defaultPath)
+	url := fmt.Sprintf("%s/ingest-partition", c.address.WithScheme(defaultScheme))
 
 	var host dax.Address
 
@@ -340,8 +337,8 @@ func (c *Client) IngestPartition(ctx context.Context, qtid dax.QualifiedTableID,
 }
 
 func (c *Client) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.ShardNum) ([]controller.ComputeNode, error) {
-	url := fmt.Sprintf("%s%s/compute-nodes", c.address.WithScheme(defaultScheme), defaultPath)
-	log.Printf("ComputeNodes url: %s", url)
+	url := fmt.Sprintf("%s/compute-nodes", c.address.WithScheme(defaultScheme))
+	c.logger.Debugf("ComputeNodes url: %s", url)
 
 	var nodes []controller.ComputeNode
 
@@ -378,8 +375,8 @@ func (c *Client) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, sh
 }
 
 func (c *Client) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitions ...dax.PartitionNum) ([]controller.TranslateNode, error) {
-	url := fmt.Sprintf("%s%s/translate-nodes", c.address.WithScheme(defaultScheme), defaultPath)
-	log.Printf("TranslateNodes url: %s", url)
+	url := fmt.Sprintf("%s/translate-nodes", c.address.WithScheme(defaultScheme))
+	c.logger.Debugf("TranslateNodes url: %s", url)
 
 	var nodes []controller.TranslateNode
 
@@ -416,8 +413,8 @@ func (c *Client) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, 
 }
 
 func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
-	url := fmt.Sprintf("%s%s/register-node", c.address.WithScheme(defaultScheme), defaultPath)
-	log.Printf("RegisterNode url: %s", url)
+	url := fmt.Sprintf("%s/register-node", c.address.WithScheme(defaultScheme))
+	c.logger.Debugf("RegisterNode url: %s", url)
 
 	req := &mdshttp.RegisterNodeRequest{
 		Address:   node.Address,
@@ -447,8 +444,8 @@ func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
 }
 
 func (c *Client) CheckInNode(ctx context.Context, node *dax.Node) error {
-	url := fmt.Sprintf("%s%s/check-in-node", c.address.WithScheme(defaultScheme), defaultPath)
-	log.Printf("CheckInNode url: %s", url)
+	url := fmt.Sprintf("%s/check-in-node", c.address.WithScheme(defaultScheme))
+	c.logger.Debugf("CheckInNode url: %s", url)
 
 	req := &mdshttp.CheckInNodeRequest{
 		Address:   node.Address,
@@ -457,6 +454,32 @@ func (c *Client) CheckInNode(ctx context.Context, node *dax.Node) error {
 
 	// Encode the request.
 	postBody, err := json.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return errors.Wrap(err, "posting translate-nodes request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	return nil
+}
+
+func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) error {
+	url := fmt.Sprintf("%s/snapshot", c.address.WithScheme(defaultScheme))
+	c.logger.Debugf("Snapshot url: %s", url)
+
+	// Encode the request.
+	postBody, err := json.Marshal(qtid)
 	if err != nil {
 		return errors.Wrap(err, "marshalling post request")
 	}

@@ -14,7 +14,6 @@ var keyedInsertTest = TableTest{
 			srcHdr("event", fldTypeStringSet),
 			srcHdr("ievent", fldTypeIDSet),
 		),
-		nil,
 	),
 	SQLTests: []SQLTest{
 		{

@@ -620,6 +620,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/oauth-config", handler.handleOAuthConfig).Methods("GET").Name("GetOAuthConfig")
 
 	router.HandleFunc("/health", handler.handleGetHealth).Methods("GET").Name("GetHealth")
+	router.HandleFunc("/directive", handler.handleGetDirective).Methods("GET").Name("GetDirective")
 	router.HandleFunc("/directive", handler.handlePostDirective).Methods("POST").Name("PostDirective")
 	router.HandleFunc("/snapshot/shard-data", handler.handlePostSnapshotShardData).Methods("POST").Name("PostShapshotShardData")
 	router.HandleFunc("/snapshot/table-keys", handler.handlePostSnapshotTableKeys).Methods("POST").Name("PostShapshotTableKeys")
@@ -3997,6 +3998,30 @@ func getTokens(r *http.Request) (string, string) {
 	}
 
 	return access, refresh
+}
+
+func (h *Handler) handleGetDirective(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	applied, err := h.api.DirectiveApplied(r.Context())
+	if err != nil {
+		http.Error(w, "getting directive applied error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := struct {
+		Applied bool `json:"applied"`
+	}{
+		Applied: applied,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.logger.Errorf("write status response error: %s", err)
+	}
 }
 
 func (h *Handler) handlePostDirective(w http.ResponseWriter, r *http.Request) {

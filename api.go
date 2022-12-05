@@ -3090,8 +3090,17 @@ func (api *API) RBFDebugInfo() map[string]*rbf.DebugInfo {
 	return infos
 }
 
+// Directive applies the provided Directive to the local computer.
 func (api *API) Directive(ctx context.Context, d *dax.Directive) error {
 	return api.ApplyDirective(ctx, d)
+}
+
+// DirectiveApplied returns true if the computer's current Directive has been
+// applied and is ready to be queried. This it temporary (primarily for tests)
+// and needs to be refactored as we improve the logic around mds-to-computer
+// communication.
+func (api *API) DirectiveApplied(ctx context.Context) (bool, error) {
+	return api.holder.DirectiveApplied(), nil
 }
 
 // SnapshotShardData triggers the node to perform a shard snapshot based on the
@@ -3134,6 +3143,7 @@ func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDat
 
 	// Update the cached directive on the holder.
 	api.holder.SetDirective(&req.Directive)
+	api.holder.SetDirectiveApplied(true)
 
 	// Finally, delete the log file for the previous version.
 	return api.writeLogWriter.DeleteShard(ctx, qtid, partitionNum, req.ShardNum, req.FromVersion)
@@ -3182,6 +3192,7 @@ func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKey
 
 	// Update the cached directive on the holder.
 	api.holder.SetDirective(&req.Directive)
+	api.holder.SetDirectiveApplied(true)
 
 	// Finally, delete the log file for the previous version.
 	return api.writeLogWriter.DeleteTableKeys(ctx, qtid, req.PartitionNum, req.FromVersion)
@@ -3223,6 +3234,7 @@ func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKey
 
 	// Update the cached directive on the holder.
 	api.holder.SetDirective(&req.Directive)
+	api.holder.SetDirectiveApplied(true)
 
 	// Finally, delete the log file for the previous version.
 	return api.writeLogWriter.DeleteFieldKeys(ctx, qtid, req.Field, req.FromVersion)

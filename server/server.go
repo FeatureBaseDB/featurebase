@@ -26,17 +26,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/systemlayer"
-	"golang.org/x/sync/errgroup"
-
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
 	"github.com/molecula/featurebase/v3/batch"
 	"github.com/molecula/featurebase/v3/boltdb"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/dax/computer/alpha"
+	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	petcd "github.com/molecula/featurebase/v3/etcd"
 	"github.com/molecula/featurebase/v3/gcnotify"
@@ -49,10 +47,12 @@ import (
 	"github.com/molecula/featurebase/v3/statik"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/statsd"
+	"github.com/molecula/featurebase/v3/systemlayer"
 	"github.com/molecula/featurebase/v3/syswrap"
 	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type loggerLogger interface {
@@ -77,9 +77,9 @@ type Command struct {
 	logger         loggerLogger
 	queryLogger    loggerLogger
 
-	mds         pilosa.MDS
-	writeLogger pilosa.WriteLogger
-	snapshotter pilosa.Snapshotter
+	Registrar   computer.Registrar
+	writeLogger computer.WriteLogger
+	snapshotter computer.Snapshotter
 
 	Handler      pilosa.HandlerI
 	httpHandler  http.Handler
@@ -150,9 +150,6 @@ func OptCommandSetConfig(config *Config) CommandOption {
 // OptCommandInjections injects the interface implementations.
 func OptCommandInjections(inj Injections) CommandOption {
 	return func(c *Command) error {
-		if inj.MDS != nil {
-			c.mds = inj.MDS
-		}
 		if inj.WriteLogger != nil {
 			c.writeLogger = inj.WriteLogger
 		}
@@ -165,9 +162,8 @@ func OptCommandInjections(inj Injections) CommandOption {
 }
 
 type Injections struct {
-	MDS           pilosa.MDS
-	WriteLogger   pilosa.WriteLogger
-	Snapshotter   pilosa.Snapshotter
+	WriteLogger   computer.WriteLogger
+	Snapshotter   computer.Snapshotter
 	IsComputeNode bool
 }
 
@@ -269,10 +265,7 @@ func (m *Command) setupResourceLimits() error {
 }
 
 // StartNoServe starts the pilosa server, but doesn't serve on the http handler.
-func (m *Command) StartNoServe() (err error) {
-	// Seed random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
-
+func (m *Command) StartNoServe(addr dax.Address) (err error) {
 	// setupServer
 	err = m.setupServer()
 	if err != nil {
@@ -288,41 +281,46 @@ func (m *Command) StartNoServe() (err error) {
 		return errors.Wrap(err, "opening server")
 	}
 
+	// Start the "check-in" background process which periodically checks in with
+	// MDS.
+	go m.checkIn(addr)
+
 	return nil
 }
 
-// Register registers the node with the MDS service using whatever MDS
-// implementation was injected during setup.
-func (m *Command) Register() (err error) {
-	if m.mds == nil {
-		return errors.New("no MDS implementation with which to register")
+// checkIn calls the CheckIn function set on m.checkInFn every interval period.
+// If the interval period is 0, the check-in is disabled.
+func (m *Command) checkIn(addr dax.Address) {
+	interval := m.Config.CheckInInterval
+
+	if interval == 0 {
+		return
 	}
 
-	node := &dax.Node{
-		Address: dax.Address(m.Config.Advertise),
-		RoleTypes: []dax.RoleType{
-			dax.RoleTypeCompute,
-			dax.RoleTypeTranslate,
-		},
-	}
-	return m.mds.RegisterNode(context.Background(), node)
-}
+	for {
+		select {
+		case <-m.done:
+			return
+		case <-time.After(interval):
+			m.logger.Debugf("node check-in in last %s, address: %s", interval, m.Config.Advertise)
 
-// CheckIn is called periodically to check in with the MDS service using
-// whatever MDS implementation was injected during setup.
-func (m *Command) CheckIn() (err error) {
-	if m.mds == nil {
-		return errors.New("no MDS implementation with which to check-in")
-	}
+			if m.Registrar == nil {
+				m.logger.Printf("no MDS implementation with which to check-in on node: %s", m.Config.Advertise)
+			}
 
-	node := &dax.Node{
-		Address: dax.Address(m.Config.Advertise),
-		RoleTypes: []dax.RoleType{
-			dax.RoleTypeCompute,
-			dax.RoleTypeTranslate,
-		},
+			node := &dax.Node{
+				Address: addr,
+				RoleTypes: []dax.RoleType{
+					dax.RoleTypeCompute,
+					dax.RoleTypeTranslate,
+				},
+			}
+
+			if err := m.Registrar.CheckInNode(context.Background(), node); err != nil {
+				m.logger.Errorf("checking in node: %s, %v", node.Address, err)
+			}
+		}
 	}
-	return m.mds.CheckInNode(context.Background(), node)
 }
 
 // Start starts the pilosa server - it returns once the server is running.
@@ -569,9 +567,6 @@ func (m *Command) setupServer() error {
 		snap = alpha.NewAlphaSnapshot(m.snapshotter)
 	}
 
-	m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
-	e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
-
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
 		fapi := &pilosa.FeatureBaseSchemaAPI{API: api}
 		fsapi := &pilosa.FeatureBaseSystemAPI{API: api}
@@ -605,12 +600,30 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerMaxQueryMemory(m.Config.MaxQueryMemory),
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
-		pilosa.OptServerDisCo(e, e, e, e),
 		pilosa.OptServerExecutionPlannerFn(executionPlannerFn),
 		pilosa.OptServerWriteLogReader(wlr),
 		pilosa.OptServerWriteLogWriter(wlw),
 		pilosa.OptServerSnapshotReadWriter(snap),
 		pilosa.OptServerIsDataframeEnabled(m.Config.Dataframe.Enable),
+	}
+
+	if m.isComputeNode {
+		nodeID := "localcmd"
+		serverOptions = append(serverOptions,
+			pilosa.OptServerDisCo(
+				disco.NewInMemDisCo(nodeID),
+				disco.NewLocalNoder([]*disco.Node{
+					{ID: nodeID, URI: *advertiseURI, IsPrimary: true, State: disco.NodeStateStarted},
+				}),
+				disco.InMemSharder,
+				disco.InMemSchemator,
+			),
+			pilosa.OptServerNodeID(nodeID),
+		)
+	} else {
+		m.Config.Etcd.Id = m.Config.Name // TODO(twg) rethink this
+		e := petcd.NewEtcd(m.Config.Etcd, m.logger, m.Config.Cluster.ReplicaN, version)
+		serverOptions = append(serverOptions, pilosa.OptServerDisCo(e, e, e, e))
 	}
 
 	if m.Config.LookupDBDSN != "" {

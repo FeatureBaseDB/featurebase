@@ -16,6 +16,7 @@ func TestAddress(t *testing.T) {
 			expHostPort string
 			expHost     string
 			expPort     uint16
+			expPath     string
 		}{
 			{
 				// blank address
@@ -97,6 +98,15 @@ func TestAddress(t *testing.T) {
 				expHost:     "",
 				expPort:     53308,
 			},
+			{
+				// with path:
+				addr:        "localhost:8080/foo/bar",
+				expScheme:   "",
+				expHostPort: "localhost:8080",
+				expHost:     "localhost",
+				expPort:     8080,
+				expPath:     "foo/bar",
+			},
 		}
 
 		for i, test := range tests {
@@ -105,6 +115,7 @@ func TestAddress(t *testing.T) {
 				assert.Equal(t, test.expHostPort, test.addr.HostPort())
 				assert.Equal(t, test.expHost, test.addr.Host())
 				assert.Equal(t, test.expPort, test.addr.Port())
+				assert.Equal(t, test.expPath, test.addr.Path())
 			})
 		}
 	})
@@ -129,6 +140,11 @@ func TestAddress(t *testing.T) {
 				addr:    "http://foo:8080",
 				scheme:  "",
 				expAddr: "foo:8080",
+			},
+			{
+				addr:    "http://foo:8080/bar",
+				scheme:  "",
+				expAddr: "foo:8080/bar",
 			},
 		}
 
@@ -164,6 +180,11 @@ func TestAddress(t *testing.T) {
 				addr:    "foo:8080",
 				scheme:  "grpc",
 				expAddr: "grpc://foo:8080",
+			},
+			{
+				addr:    "foo:8080/bar",
+				scheme:  "grpc",
+				expAddr: "grpc://foo:8080/bar",
 			},
 		}
 

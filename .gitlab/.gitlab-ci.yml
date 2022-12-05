@@ -283,23 +283,16 @@ run go tests:
 run go tests dax/test/dax:
   stage: test
   tags:
-    - shell
     - aws
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  before_script:
-    - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:
     - echo "Building FB and Datagen docker images for DAX tests"
-    - make docker-image-featurebase-test
-    - make docker-image-datagen
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | paste -s -d, -)
-    - mkdir -p coverage-from-docker
     - go test -coverprofile=coverage-dax-integration.out -covermode=atomic -coverpkg=${PKG_LIST} -timeout=20m ./dax/test/dax
   artifacts:
     paths:
-      - coverage*.out
-      - coverage-from-docker/*.out
+      - coverage-dax-integration.out
 
 # idk tests
 run go tests idk race:
@@ -313,6 +306,7 @@ run go tests idk race:
     - echo "Running test-all-race"
     - cd ./idk/
     - echo $PROJECT
+    - echo $CI_COMMIT_REF_SLUG
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-race
   after_script:
     - cd ./idk/
@@ -339,6 +333,7 @@ run go tests idk shard transactional:
     - echo "Running shard transactional tests"
     - cd ./idk/
     - echo $PROJECT
+    - echo $CI_COMMIT_REF_SLUG
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
     - cd ./idk/
@@ -364,6 +359,7 @@ run go tests idk 533:
     - echo "Running confluent 5.3.3 test-all"
     - cd ./idk/
     - echo $PROJECT
+    - echo $CI_COMMIT_REF_SLUG
     - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
   after_script:
     - cd ./idk/
@@ -389,6 +385,7 @@ run go tests idk sasl:
     - echo "Running test-all-kafka-sasl"
     - cd ./idk/
     - echo $PROJECT
+    - echo $CI_COMMIT_REF_SLUG
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-kafka-sasl
   after_script:
     - cd ./idk/
@@ -478,6 +475,7 @@ build arm container fb:
   before_script:
     - echo "${DOCKER_DEPLOY_TOKEN}" | docker login -u ${DOCKER_DEPLOY_USER} --password-stdin ${CI_REGISTRY}
   script:
+    - echo $CI_COMMIT_REF_SLUG
     - tag=${CI_REGISTRY_IMAGE}/featurebase:linux-arm64-${CI_COMMIT_REF_SLUG}
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - docker build --build-arg GO_VERSION=$GOVERSION --build-arg ARCH=arm64 --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH -t $tag -f .gitlab/Dockerfile .

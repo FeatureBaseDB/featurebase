@@ -38,11 +38,11 @@ func NewImporter(mds MDS, qtbl *dax.QualifiedTable) *importer {
 // have a client for.
 func (m *importer) fbClient(address dax.Address) (*featurebaseclient.Client, error) {
 	// Set up a FeatureBase client with address.
-	return featurebaseclient.NewClient(address.String(),
+	return featurebaseclient.NewClient(address.HostPort(),
 		featurebaseclient.OptClientRetries(2),
 		featurebaseclient.OptClientTotalPoolSize(1000),
 		featurebaseclient.OptClientPoolSizePerRoute(400),
-		featurebaseclient.OptClientPathPrefix(dax.ServicePrefixComputer),
+		featurebaseclient.OptClientPathPrefix(address.Path()),
 		//featurebaseclient.OptClientStatsClient(m.stats),
 	)
 }

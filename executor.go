@@ -18,6 +18,7 @@ import (
 
 	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/lib/pq"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/proto"
@@ -6032,7 +6033,8 @@ func (e *executor) remoteExec(ctx context.Context, node *disco.Node, index strin
 		MaxMemory:    maxMemory,
 	}
 
-	resp, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
+	addr := dax.Address(node.URI.String())
+	resp, err := e.client.QueryNode(ctx, addr, index, pbreq)
 	if err != nil {
 		return nil, err
 	}

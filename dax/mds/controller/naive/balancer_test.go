@@ -30,6 +30,12 @@ func TestBalancer(t *testing.T) {
 		db, cleanup := newBoltBalancer(t)
 		defer cleanup()
 		bal := boltdb.NewBalancer("test", db, logger.NewStandardLogger(os.Stderr))
+		// addJob is a wrapper around bal.AddJobs() which we added when the
+		// function signature of bal.AddJobs changed to take multiple jobs (and
+		// it therefore no longer satisfied the fn type in this test).
+		addJob := func(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error) {
+			return bal.AddJobs(ctx, job)
+		}
 		tests := []struct {
 			fn       func(context.Context, fmt.Stringer) ([]dax.WorkerDiff, error)
 			input    string
@@ -38,7 +44,7 @@ func TestBalancer(t *testing.T) {
 		}{
 			{
 				// Add job.
-				fn:       bal.AddJob,
+				fn:       addJob,
 				input:    "p2",
 				expDiff:  []dax.WorkerDiff{},
 				expState: []dax.WorkerInfo{},
@@ -63,7 +69,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add another job out of order.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p1",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -81,7 +87,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add another job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p3",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -99,7 +105,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add a duplicate job.
-				fn:      bal.AddJob,
+				fn:      addJob,
 				input:   "p2",
 				expDiff: []dax.WorkerDiff{},
 				expState: []dax.WorkerInfo{
@@ -127,6 +133,12 @@ func TestBalancer(t *testing.T) {
 		db, cleanup := newBoltBalancer(t)
 		defer cleanup()
 		bal := boltdb.NewBalancer("test", db, logger.NewStandardLogger(os.Stderr))
+		// addJob is a wrapper around bal.AddJobs() which we added when the
+		// function signature of bal.AddJobs changed to take multiple jobs (and
+		// it therefore no longer satisfied the fn type in this test).
+		addJob := func(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error) {
+			return bal.AddJobs(ctx, job)
+		}
 		tests := []struct {
 			fn       func(context.Context, fmt.Stringer) ([]dax.WorkerDiff, error)
 			input    string
@@ -182,7 +194,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p2",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -204,7 +216,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p3",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -226,7 +238,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p1",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -268,7 +280,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p4",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -294,7 +306,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p5",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -320,7 +332,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p0",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -346,7 +358,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p6",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -372,7 +384,7 @@ func TestBalancer(t *testing.T) {
 			},
 			{
 				// Add job.
-				fn:    bal.AddJob,
+				fn:    addJob,
 				input: "p7",
 				expDiff: []dax.WorkerDiff{
 					{
@@ -535,7 +547,7 @@ func TestBalancer(t *testing.T) {
 
 		_, err := bal.AddWorker(ctx, newStringWrapper("n1"))
 		assert.NoError(t, err)
-		_, err = bal.AddJob(ctx, newStringWrapper("p1"))
+		_, err = bal.AddJobs(ctx, newStringWrapper("p1"))
 		assert.NoError(t, err)
 
 		exp := dax.WorkerInfo{
@@ -565,7 +577,7 @@ func TestBalancer(t *testing.T) {
 		_, err = bal.AddWorker(ctx, newStringWrapper("n2"))
 		assert.NoError(t, err)
 		for i := 0; i < 12; i++ {
-			_, err = bal.AddJob(ctx, newStringWrapper(fmt.Sprintf("p%d", i)))
+			_, err = bal.AddJobs(ctx, newStringWrapper(fmt.Sprintf("p%d", i)))
 			assert.NoError(t, err)
 		}
 
@@ -661,7 +673,7 @@ func TestBalancer(t *testing.T) {
 		_, err = bal.AddWorker(ctx, newStringWrapper("n2"))
 		assert.NoError(t, err)
 		for i := 0; i < 13; i++ {
-			_, err = bal.AddJob(ctx, newStringWrapper(fmt.Sprintf("p%d", i)))
+			_, err = bal.AddJobs(ctx, newStringWrapper(fmt.Sprintf("p%d", i)))
 			assert.NoError(t, err)
 		}
 

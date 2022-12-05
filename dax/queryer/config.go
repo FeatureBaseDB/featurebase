@@ -12,10 +12,6 @@ import (
 // We initially did that with something called "Injections", but that separation
 // was a bit premature.
 type Config struct {
-	MDSAddress string `toml:"mds-address"`
-
-	MDS    MDS    `toml:"-"`
-	Router Router `toml:"-"`
-
-	Logger logger.Logger `toml:"-"`
+	MDSAddress string        `toml:"mds-address"`
+	Logger     logger.Logger `toml:"-"`
 }

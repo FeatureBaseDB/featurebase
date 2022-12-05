@@ -21,6 +21,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/molecula/featurebase/v3/authn"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
@@ -592,11 +593,12 @@ func (c *InternalClient) Nodes(ctx context.Context) ([]*disco.Node, error) {
 func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Query")
 	defer span.Finish()
-	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
+	addr := dax.Address(c.defaultURI.String())
+	return c.QueryNode(ctx, addr, index, queryRequest)
 }
 
 // QueryNode executes query against the index, sending the request to the node specified.
-func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
+func (c *InternalClient) QueryNode(ctx context.Context, addr dax.Address, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "QueryNode")
 	defer span.Finish()
 
@@ -611,7 +613,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pnet.URI, index str
 	}
 
 	// Create HTTP request.
-	u := uri.Path(fmt.Sprintf("%s/index/%s/query", c.prefix(), index))
+	u := fmt.Sprintf("%s/index/%s/query", addr.WithScheme("http"), index)
 	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")

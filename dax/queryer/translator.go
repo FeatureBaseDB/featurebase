@@ -28,11 +28,11 @@ func NewMDSTranslator(mds MDS) *MDSTranslator {
 
 func fbClient(address dax.Address) (*featurebase_client.Client, error) {
 	// Set up a FeatureBase client with address.
-	return featurebase_client.NewClient(address.String(),
+	return featurebase_client.NewClient(address.HostPort(),
 		featurebase_client.OptClientRetries(2),
 		featurebase_client.OptClientTotalPoolSize(1000),
 		featurebase_client.OptClientPoolSizePerRoute(400),
-		featurebase_client.OptClientPathPrefix(dax.ServicePrefixComputer),
+		featurebase_client.OptClientPathPrefix(address.Path()),
 		//featurebase_client.OptClientStatsClient(m.stats),
 	)
 }
@@ -261,7 +261,7 @@ func (m *MDSTranslator) TranslateFieldListIDs(ctx context.Context, index, field 
 
 func makeTranslateIDsRequest(fbClient *featurebase_client.Client, table, field string, ids []uint64) ([]string, error) {
 	method := "POST"
-	path := "/" + dax.ServicePrefixComputer + "/internal/translate/ids"
+	path := "/internal/translate/ids"
 	headers := map[string]string{
 		"Content-Type": "application/x-protobuf",
 		"Accept":       "application/x-protobuf",

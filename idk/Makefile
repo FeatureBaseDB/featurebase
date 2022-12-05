@@ -164,7 +164,7 @@ start-all: testenv build-wait
 	$(DOCKER_COMPOSE) run -T  wait pilosa curl --silent --fail http://pilosa:10101/status
 	$(DOCKER_COMPOSE) run -T  wait pilosa-tls curl --silent --cacert /certs/ca.crt --key /certs/theclient.key --cert /certs/theclient.crt --fail https://pilosa-tls:10111/status
 	$(DOCKER_COMPOSE) run -T  wait pilosa-auth curl --silent --fail http://pilosa-auth:10105/version
-	$(DOCKER_COMPOSE) run -T wait dax curl --silent --fail http://dax:8080/computer/status
+	$(DOCKER_COMPOSE) run -T wait dax curl --silent --fail http://dax:8080/computer0/status
 	$(DOCKER_COMPOSE) run -T  wait kafka nc -z kafka 9092
 	$(DOCKER_COMPOSE) run -T  wait schema-registry curl --silent --fail http://schema-registry:8081/config
 
