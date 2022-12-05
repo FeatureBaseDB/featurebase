@@ -162,7 +162,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 		Fields: make([]*featurebase.WireQueryField, len(columns)),
 	}
 	for i, col := range columns {
-		btype, err := dax.BaseTypeFromString(col.Type.TypeName())
+		btype, err := dax.BaseTypeFromString(col.Type.BaseTypeName())
 		if err != nil {
 			applyError(errors.Wrap(err, "getting fieldtype from string"))
 			return ret, nil

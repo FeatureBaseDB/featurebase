@@ -209,7 +209,7 @@ var setFunctionTests = TableTest{
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, 1)",
 			),
-			ExpErr: "types 'STRINGSET' and 'INT' are not equatable",
+			ExpErr: "types 'stringset' and 'int' are not equatable",
 		},
 		{
 			// SetContainsWrongTypeInt
@@ -217,7 +217,7 @@ var setFunctionTests = TableTest{
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(ievent, 'foo')",
 			),
-			ExpErr: "types 'IDSET' and 'STRING' are not equatable",
+			ExpErr: "types 'idset' and 'string' are not equatable",
 		},
 		{
 			// SetContainsWrongTypeSet
@@ -225,7 +225,7 @@ var setFunctionTests = TableTest{
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, ['foo'])",
 			),
-			ExpErr: "types 'STRINGSET' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'stringset' and 'stringset' are not equatable",
 		},
 	},
 }
@@ -265,13 +265,13 @@ var setParameterTests = TableTest{
 			SQLs: sqls(
 				"select setcontains(['POST', 'GET'], 1)",
 			),
-			ExpErr: "types 'STRINGSET' and 'INT' are not equatable",
+			ExpErr: "types 'stringset' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select setcontains([1, 2], '1')",
 			),
-			ExpErr: "types 'IDSET' and 'STRING' are not equatable",
+			ExpErr: "types 'idset' and 'string' are not equatable",
 		},
 
 		{
@@ -293,14 +293,14 @@ var setParameterTests = TableTest{
 				"select setcontainsall(['POST', 'GET'], [1, 2])",
 				"select setcontainsany(['POST', 'GET'], [1, 2])",
 			),
-			ExpErr: "types 'STRING' and 'ID' are not equatable",
+			ExpErr: "types 'string' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select setcontainsall([1, 2], ['1', '2'])",
 				"select setcontainsany([1, 2], ['1', '2'])",
 			),
-			ExpErr: "types 'ID' and 'STRING' are not equatable",
+			ExpErr: "types 'id' and 'string' are not equatable",
 		},
 	},
 }

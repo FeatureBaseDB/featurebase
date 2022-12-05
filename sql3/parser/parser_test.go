@@ -627,8 +627,8 @@ func TestParser_ParseStatement(t *testing.T) {
 			Show:   pos(0),
 			Tables: pos(5),
 		})
-		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS, found 'EOF'`)
-		AssertParseStatementError(t, `SHOW BLAH`, `1:6: expected TABLES, COLUMNS, found BLAH`)
+		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS or CREATE, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW BLAH`, `1:6: expected TABLES, COLUMNS or CREATE, found BLAH`)
 	})
 
 	t.Run("ShowColumns", func(t *testing.T) {
@@ -641,11 +641,27 @@ func TestParser_ParseStatement(t *testing.T) {
 				NamePos: pos(18),
 			},
 		})
-		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS or CREATE, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW COLUMNS`, `1:12: expected FROM, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW COLUMNS FOO`, `1:14: expected FROM, found FOO`)
 		AssertParseStatementError(t, `SHOW COLUMNS FROM`, `1:17: expected table name, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW COLUMNS FROM 12`, `1:19: expected table name, found 12`)
+	})
+
+	t.Run("ShowCreateTable", func(t *testing.T) {
+		AssertParseStatement(t, `SHOW CREATE TABLE FOO`, &parser.ShowCreateTableStatement{
+			Show:   pos(0),
+			Create: pos(5),
+			Table:  pos(12),
+			TableName: &parser.Ident{
+				Name:    "FOO",
+				NamePos: pos(18),
+			},
+		})
+		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS or CREATE, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW CREATE`, `1:11: expected TABLES, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW CREATE TABLE`, `1:17: expected table name, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW CREATE TABLE 12`, `1:19: expected table name, found 12`)
 	})
 
 	t.Run("Explain", func(t *testing.T) {

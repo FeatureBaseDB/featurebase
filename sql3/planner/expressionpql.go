@@ -225,7 +225,7 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			if strings.EqualFold(lhs.columnName, "_id") {
 				return nil, sql3.NewErrInvalidColumnInFilterExpression(0, 0, "_id", "is/is not null")
 			}
-			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeName(), "is/is not null")
+			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeDescription(), "is/is not null")
 
 		case *parser.DataTypeInt, *parser.DataTypeDecimal, *parser.DataTypeTimestamp:
 			return &pql.Call{
@@ -239,7 +239,7 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		default:
-			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeName(), "is/is not null")
+			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeDescription(), "is/is not null")
 		}
 
 	case parser.BETWEEN, parser.NOTBETWEEN:

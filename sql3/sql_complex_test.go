@@ -164,16 +164,42 @@ func TestPlanner_Show(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(results) != 5 {
+		if len(results) != 6 {
 			t.Fatal(fmt.Errorf("unexpected result set length"))
 		}
 
 		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
+			wireQueryFieldString("owner"),
+			wireQueryFieldString("last_updated_user"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldBool("track_existence"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldInt("shard_width"),
+			wireQueryFieldString("description"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("ShowCreateTable", func(t *testing.T) {
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SHOW CREATE TABLE %i`, c))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(results) != 1 {
+			t.Fatal(fmt.Errorf("unexpected result set length: %d", len(results)))
+		}
+
+		if diff := cmp.Diff([][]interface{}{
+			{string("create table testplannershowi (_id id, f int min 0 max 1000, x int min 0 max 1000);")},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("ddl"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -189,6 +215,7 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
 			wireQueryFieldString("internal_type"),
@@ -218,6 +245,7 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
 			wireQueryFieldString("internal_type"),
@@ -598,6 +626,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 			t.Fatal(err)
 		}
 		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
 			wireQueryFieldString("internal_type"),
@@ -1432,7 +1461,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j1 (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE';`, tmpfile.Name()))
-		if err == nil || !strings.Contains(err.Error(), `value '_id' cannot be converted to type 'ID'`) {
+		if err == nil || !strings.Contains(err.Error(), `value '_id' cannot be converted to type 'id'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 

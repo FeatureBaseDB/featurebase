@@ -13,114 +13,116 @@ type Node interface {
 	fmt.Stringer
 }
 
-func (*AlterTableStatement) node()     {}
-func (*AnalyzeStatement) node()        {}
-func (*Assignment) node()              {}
-func (*ShowTablesStatement) node()     {}
-func (*ShowColumnsStatement) node()    {}
-func (*BeginStatement) node()          {}
-func (*BinaryExpr) node()              {}
-func (*BoolLit) node()                 {}
-func (*BulkInsertMapDefinition) node() {}
-func (*BulkInsertStatement) node()     {}
-func (*CacheTypeConstraint) node()     {}
-func (*Call) node()                    {}
-func (*CaseBlock) node()               {}
-func (*CaseExpr) node()                {}
-func (*CastExpr) node()                {}
-func (*CheckConstraint) node()         {}
-func (*ColumnDefinition) node()        {}
-func (*CommitStatement) node()         {}
-func (*CreateIndexStatement) node()    {}
-func (*CreateTableStatement) node()    {}
-func (*CreateFunctionStatement) node() {}
-func (*CreateViewStatement) node()     {}
-func (*DateLit) node()                 {}
-func (*DefaultConstraint) node()       {}
-func (*DeleteStatement) node()         {}
-func (*DropIndexStatement) node()      {}
-func (*DropTableStatement) node()      {}
-func (*DropFunctionStatement) node()   {}
-func (*DropViewStatement) node()       {}
-func (*Exists) node()                  {}
-func (*ExplainStatement) node()        {}
-func (*ExprList) node()                {}
-func (*FilterClause) node()            {}
-func (*FloatLit) node()                {}
-func (*ForeignKeyArg) node()           {}
-func (*ForeignKeyConstraint) node()    {}
-func (*FrameSpec) node()               {}
-func (*Ident) node()                   {}
-func (*Variable) node()                {}
-func (*IndexedColumn) node()           {}
-func (*InsertStatement) node()         {}
-func (*JoinClause) node()              {}
-func (*JoinOperator) node()            {}
-func (*KeyPartitionsOption) node()     {}
-func (*MinConstraint) node()           {}
-func (*MaxConstraint) node()           {}
-func (*NotNullConstraint) node()       {}
-func (*NullLit) node()                 {}
-func (*IntegerLit) node()              {}
-func (*OnConstraint) node()            {}
-func (*OrderingTerm) node()            {}
-func (*OverClause) node()              {}
-func (*ParenExpr) node()               {}
-func (*SetLiteralExpr) node()          {}
-func (*ParenSource) node()             {}
-func (*PrimaryKeyConstraint) node()    {}
-func (*QualifiedRef) node()            {}
-func (*QualifiedTableName) node()      {}
-func (*Range) node()                   {}
-func (*ReleaseStatement) node()        {}
-func (*ResultColumn) node()            {}
-func (*RollbackStatement) node()       {}
-func (*SavepointStatement) node()      {}
-func (*SelectStatement) node()         {}
-func (*ShardWidthOption) node()        {}
-func (*StringLit) node()               {}
-func (*TableValuedFunction) node()     {}
-func (*TimeUnitConstraint) node()      {}
-func (*TimeQuantumConstraint) node()   {}
-func (*TupleLiteralExpr) node()        {}
-func (*Type) node()                    {}
-func (*UnaryExpr) node()               {}
-func (*UniqueConstraint) node()        {}
-func (*UpdateStatement) node()         {}
-func (*UpsertClause) node()            {}
-func (*UsingConstraint) node()         {}
-func (*Window) node()                  {}
-func (*WindowDefinition) node()        {}
-func (*WithClause) node()              {}
+func (*AlterTableStatement) node()      {}
+func (*AnalyzeStatement) node()         {}
+func (*Assignment) node()               {}
+func (*ShowTablesStatement) node()      {}
+func (*ShowColumnsStatement) node()     {}
+func (*ShowCreateTableStatement) node() {}
+func (*BeginStatement) node()           {}
+func (*BinaryExpr) node()               {}
+func (*BoolLit) node()                  {}
+func (*BulkInsertMapDefinition) node()  {}
+func (*BulkInsertStatement) node()      {}
+func (*CacheTypeConstraint) node()      {}
+func (*Call) node()                     {}
+func (*CaseBlock) node()                {}
+func (*CaseExpr) node()                 {}
+func (*CastExpr) node()                 {}
+func (*CheckConstraint) node()          {}
+func (*ColumnDefinition) node()         {}
+func (*CommitStatement) node()          {}
+func (*CreateIndexStatement) node()     {}
+func (*CreateTableStatement) node()     {}
+func (*CreateFunctionStatement) node()  {}
+func (*CreateViewStatement) node()      {}
+func (*DateLit) node()                  {}
+func (*DefaultConstraint) node()        {}
+func (*DeleteStatement) node()          {}
+func (*DropIndexStatement) node()       {}
+func (*DropTableStatement) node()       {}
+func (*DropFunctionStatement) node()    {}
+func (*DropViewStatement) node()        {}
+func (*Exists) node()                   {}
+func (*ExplainStatement) node()         {}
+func (*ExprList) node()                 {}
+func (*FilterClause) node()             {}
+func (*FloatLit) node()                 {}
+func (*ForeignKeyArg) node()            {}
+func (*ForeignKeyConstraint) node()     {}
+func (*FrameSpec) node()                {}
+func (*Ident) node()                    {}
+func (*Variable) node()                 {}
+func (*IndexedColumn) node()            {}
+func (*InsertStatement) node()          {}
+func (*JoinClause) node()               {}
+func (*JoinOperator) node()             {}
+func (*KeyPartitionsOption) node()      {}
+func (*MinConstraint) node()            {}
+func (*MaxConstraint) node()            {}
+func (*NotNullConstraint) node()        {}
+func (*NullLit) node()                  {}
+func (*IntegerLit) node()               {}
+func (*OnConstraint) node()             {}
+func (*OrderingTerm) node()             {}
+func (*OverClause) node()               {}
+func (*ParenExpr) node()                {}
+func (*SetLiteralExpr) node()           {}
+func (*ParenSource) node()              {}
+func (*PrimaryKeyConstraint) node()     {}
+func (*QualifiedRef) node()             {}
+func (*QualifiedTableName) node()       {}
+func (*Range) node()                    {}
+func (*ReleaseStatement) node()         {}
+func (*ResultColumn) node()             {}
+func (*RollbackStatement) node()        {}
+func (*SavepointStatement) node()       {}
+func (*SelectStatement) node()          {}
+func (*ShardWidthOption) node()         {}
+func (*StringLit) node()                {}
+func (*TableValuedFunction) node()      {}
+func (*TimeUnitConstraint) node()       {}
+func (*TimeQuantumConstraint) node()    {}
+func (*TupleLiteralExpr) node()         {}
+func (*Type) node()                     {}
+func (*UnaryExpr) node()                {}
+func (*UniqueConstraint) node()         {}
+func (*UpdateStatement) node()          {}
+func (*UpsertClause) node()             {}
+func (*UsingConstraint) node()          {}
+func (*Window) node()                   {}
+func (*WindowDefinition) node()         {}
+func (*WithClause) node()               {}
 
 type Statement interface {
 	Node
 	stmt()
 }
 
-func (*AlterTableStatement) stmt()     {}
-func (*AnalyzeStatement) stmt()        {}
-func (*BeginStatement) stmt()          {}
-func (*BulkInsertStatement) stmt()     {}
-func (*ShowTablesStatement) stmt()     {}
-func (*ShowColumnsStatement) stmt()    {}
-func (*CommitStatement) stmt()         {}
-func (*CreateIndexStatement) stmt()    {}
-func (*CreateTableStatement) stmt()    {}
-func (*CreateFunctionStatement) stmt() {}
-func (*CreateViewStatement) stmt()     {}
-func (*DeleteStatement) stmt()         {}
-func (*DropIndexStatement) stmt()      {}
-func (*DropTableStatement) stmt()      {}
-func (*DropFunctionStatement) stmt()   {}
-func (*DropViewStatement) stmt()       {}
-func (*ExplainStatement) stmt()        {}
-func (*InsertStatement) stmt()         {}
-func (*ReleaseStatement) stmt()        {}
-func (*RollbackStatement) stmt()       {}
-func (*SavepointStatement) stmt()      {}
-func (*SelectStatement) stmt()         {}
-func (*UpdateStatement) stmt()         {}
+func (*AlterTableStatement) stmt()      {}
+func (*AnalyzeStatement) stmt()         {}
+func (*BeginStatement) stmt()           {}
+func (*BulkInsertStatement) stmt()      {}
+func (*ShowTablesStatement) stmt()      {}
+func (*ShowColumnsStatement) stmt()     {}
+func (*ShowCreateTableStatement) stmt() {}
+func (*CommitStatement) stmt()          {}
+func (*CreateIndexStatement) stmt()     {}
+func (*CreateTableStatement) stmt()     {}
+func (*CreateFunctionStatement) stmt()  {}
+func (*CreateViewStatement) stmt()      {}
+func (*DeleteStatement) stmt()          {}
+func (*DropIndexStatement) stmt()       {}
+func (*DropTableStatement) stmt()       {}
+func (*DropFunctionStatement) stmt()    {}
+func (*DropViewStatement) stmt()        {}
+func (*ExplainStatement) stmt()         {}
+func (*InsertStatement) stmt()          {}
+func (*ReleaseStatement) stmt()         {}
+func (*RollbackStatement) stmt()        {}
+func (*SavepointStatement) stmt()       {}
+func (*SelectStatement) stmt()          {}
+func (*UpdateStatement) stmt()          {}
 
 // CloneStatement returns a deep copy stmt.
 func CloneStatement(stmt Statement) Statement {
@@ -489,6 +491,23 @@ func (s *ShowColumnsStatement) String() string {
 	buf.WriteString("SHOW COLUMNS ")
 	if s.TableName != nil {
 		buf.WriteString(" FROM")
+		fmt.Fprintf(&buf, " %s", s.TableName.String())
+	}
+	return buf.String()
+}
+
+type ShowCreateTableStatement struct {
+	Show      Pos    // position of SHOW
+	Create    Pos    // position of CREATE
+	Table     Pos    // position of CREATE
+	TableName *Ident // name of table
+}
+
+// String returns the string representation of the statement.
+func (s *ShowCreateTableStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("SHOW CREATE TABLE ")
+	if s.TableName != nil {
 		fmt.Fprintf(&buf, " %s", s.TableName.String())
 	}
 	return buf.String()

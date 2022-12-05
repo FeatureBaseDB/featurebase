@@ -68,7 +68,7 @@ func TestExpressions(t *testing.T) {
 		assert.Equal(t, slop.String(), "'foo'")
 
 		ctop := newCastPlanExpression(newIntLiteralPlanExpression(10), parser.NewDataTypeString())
-		assert.Equal(t, ctop.String(), "cast(10 as STRING)")
+		assert.Equal(t, ctop.String(), "cast(10 as string)")
 
 		elop := newExprListExpression([]types.PlanExpression{newStringLiteralPlanExpression("foo"), newStringLiteralPlanExpression("bar")})
 		assert.Equal(t, elop.String(), "('foo', 'bar')")

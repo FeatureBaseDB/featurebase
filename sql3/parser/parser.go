@@ -163,8 +163,10 @@ func (p *Parser) parseShowStatement() (Statement, error) {
 		return p.parseShowTablesStatement(show)
 	case COLUMNS:
 		return p.parseShowColumnsStatement(show)
+	case CREATE:
+		return p.parseShowCreateStatement(show)
 	default:
-		return nil, p.errorExpected(p.pos, p.tok, "TABLES, COLUMNS")
+		return nil, p.errorExpected(p.pos, p.tok, "TABLES, COLUMNS or CREATE")
 	}
 }
 
@@ -198,6 +200,33 @@ func (p *Parser) parseShowColumnsStatement(showPos Pos) (_ *ShowColumnsStatement
 	default:
 		return nil, p.errorExpected(p.pos, p.tok, "FROM")
 	}
+}
+
+func (p *Parser) parseShowCreateStatement(showPos Pos) (Statement, error) {
+	assert(p.peek() == CREATE)
+	create, _, _ := p.scan()
+
+	switch p.peek() {
+	case TABLE:
+		return p.parseShowCreateTableStatement(showPos, create)
+	default:
+		return nil, p.errorExpected(p.pos, p.tok, "TABLES")
+	}
+}
+
+func (p *Parser) parseShowCreateTableStatement(showPos Pos, createPos Pos) (_ *ShowCreateTableStatement, err error) {
+	assert(p.peek() == TABLE)
+	table, _, _ := p.scan()
+
+	var stmt ShowCreateTableStatement
+	stmt.Show = showPos
+	stmt.Create = createPos
+	stmt.Table = table
+
+	if stmt.TableName, err = p.parseIdent("table name"); err != nil {
+		return &stmt, err
+	}
+	return &stmt, nil
 }
 
 /*func (p *Parser) parseBeginStatement() (*BeginStatement, error) {

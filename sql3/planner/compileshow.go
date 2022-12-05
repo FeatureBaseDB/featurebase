@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strings"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -18,32 +19,61 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 		return nil, errors.Wrap(err, "getting schema")
 	}
 
-	columns := []types.PlanExpression{&qualifiedRefPlanExpression{
-		tableName:   "fb$tables",
-		columnName:  "name",
-		columnIndex: 0,
-		dataType:    parser.NewDataTypeString(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$tables",
-		columnName:  "created_at",
-		columnIndex: 1,
-		dataType:    parser.NewDataTypeTimestamp(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$tables",
-		columnName:  "track_existence",
-		columnIndex: 2,
-		dataType:    parser.NewDataTypeBool(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$tables",
-		columnName:  "keys",
-		columnIndex: 3,
-		dataType:    parser.NewDataTypeBool(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$tables",
-		columnName:  "shard_width",
-		columnIndex: 4,
-		dataType:    parser.NewDataTypeInt(),
-	}}
+	columns := []types.PlanExpression{
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "_id",
+			columnIndex: 0,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "name",
+			columnIndex: 1,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "owner",
+			columnIndex: 2,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "last_updated_user",
+			columnIndex: 3,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "created_at",
+			columnIndex: 4,
+			dataType:    parser.NewDataTypeTimestamp(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "track_existence",
+			columnIndex: 5,
+			dataType:    parser.NewDataTypeBool(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "keys",
+			columnIndex: 6,
+			dataType:    parser.NewDataTypeBool(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "shard_width",
+			columnIndex: 7,
+			dataType:    parser.NewDataTypeInt(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "description",
+			columnIndex: 8,
+			dataType:    parser.NewDataTypeString(),
+		}}
 
 	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(indexInfo)), p.sql), nil
 }
@@ -59,76 +89,127 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsS
 	}
 
 	columns := []types.PlanExpression{&qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "name",
+		tableName:   "fb_table_columns",
+		columnName:  "_id",
 		columnIndex: 0,
 		dataType:    parser.NewDataTypeString(),
-	}, &qualifiedRefPlanExpression{ // the SQL3 data type description
-		tableName:   "fb$table_columns",
-		columnName:  "type",
+	}, &qualifiedRefPlanExpression{
+		tableName:   "fb_table_columns",
+		columnName:  "name",
 		columnIndex: 1,
 		dataType:    parser.NewDataTypeString(),
-	}, &qualifiedRefPlanExpression{ // the FeatureBase 'native' data type description
-		tableName:   "fb$table_columns",
-		columnName:  "internal_type",
+	}, &qualifiedRefPlanExpression{ // the SQL3 data type description
+		tableName:   "fb_table_columns",
+		columnName:  "type",
 		columnIndex: 2,
 		dataType:    parser.NewDataTypeString(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "created_at",
+	}, &qualifiedRefPlanExpression{ // the FeatureBase 'native' data type description
+		tableName:   "fb_table_columns",
+		columnName:  "internal_type",
 		columnIndex: 3,
-		dataType:    parser.NewDataTypeTimestamp(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "keys",
-		columnIndex: 4,
-		dataType:    parser.NewDataTypeBool(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "cache_type",
-		columnIndex: 5,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "cache_size",
-		columnIndex: 6,
-		dataType:    parser.NewDataTypeInt(),
+		tableName:   "fb_table_columns",
+		columnName:  "created_at",
+		columnIndex: 4,
+		dataType:    parser.NewDataTypeTimestamp(),
 	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "scale",
+		tableName:   "fb_table_columns",
+		columnName:  "keys",
+		columnIndex: 5,
+		dataType:    parser.NewDataTypeBool(),
+	}, &qualifiedRefPlanExpression{
+		tableName:   "fb_table_columns",
+		columnName:  "cache_type",
+		columnIndex: 6,
+		dataType:    parser.NewDataTypeString(),
+	}, &qualifiedRefPlanExpression{
+		tableName:   "fb_table_columns",
+		columnName:  "cache_size",
 		columnIndex: 7,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "min",
+		tableName:   "fb_table_columns",
+		columnName:  "scale",
 		columnIndex: 8,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "max",
+		tableName:   "fb_table_columns",
+		columnName:  "min",
 		columnIndex: 9,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "timeunit",
+		tableName:   "fb_table_columns",
+		columnName:  "max",
 		columnIndex: 10,
-		dataType:    parser.NewDataTypeString(),
-	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "epoch",
-		columnIndex: 11,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "timequantum",
-		columnIndex: 12,
+		tableName:   "fb_table_columns",
+		columnName:  "timeunit",
+		columnIndex: 11,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
-		tableName:   "fb$table_columns",
-		columnName:  "ttl",
+		tableName:   "fb_table_columns",
+		columnName:  "epoch",
+		columnIndex: 12,
+		dataType:    parser.NewDataTypeInt(),
+	}, &qualifiedRefPlanExpression{
+		tableName:   "fb_table_columns",
+		columnName:  "timequantum",
 		columnIndex: 13,
+		dataType:    parser.NewDataTypeString(),
+	}, &qualifiedRefPlanExpression{
+		tableName:   "fb_table_columns",
+		columnName:  "ttl",
+		columnIndex: 14,
 		dataType:    parser.NewDataTypeString(),
 	}}
 
 	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseColumns(index)), p.sql), nil
+}
+
+func (p *ExecutionPlanner) compileShowCreateTableStatement(stmt *parser.ShowCreateTableStatement) (_ types.PlanOperator, err error) {
+	tableName := parser.IdentName(stmt.TableName)
+	_, err = p.schemaAPI.IndexInfo(context.Background(), tableName)
+	if err != nil {
+		if errors.Is(err, pilosa.ErrIndexNotFound) {
+			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
+		}
+		return nil, err
+	}
+
+	// get the system table
+	systemTable, ok := systemTables[fbTableDDL]
+	if !ok {
+		return nil, sql3.NewErrInternalf("unable to find system table fb_table_ddl")
+	}
+
+	// make an op for the system table
+	systemTableScan := NewPlanOpSystemTable(p, systemTable)
+
+	// get the columns from the schmema
+	columns := systemTable.schema
+
+	// get the ref name column and build projections
+	projections := make([]types.PlanExpression, 0)
+	var nameRef *qualifiedRefPlanExpression
+	for idx, col := range columns {
+		if strings.EqualFold(col.ColumnName, "name") {
+			nameRef = newQualifiedRefPlanExpression(col.RelationName, col.ColumnName, idx, col.Type)
+		}
+		if strings.EqualFold(col.ColumnName, "ddl") {
+			projections = append(projections, newQualifiedRefPlanExpression(col.RelationName, col.ColumnName, idx, col.Type))
+		}
+	}
+	if nameRef == nil || len(projections) == 0 {
+		return nil, sql3.NewErrInternalf("unable to find system table columns")
+	}
+
+	// make a filter espression
+	filterExpr := newBinOpPlanExpression(nameRef, parser.EQ, newStringLiteralPlanExpression(tableName), parser.NewDataTypeBool())
+
+	// make a filter op
+	filter := NewPlanOpFilter(p, filterExpr, systemTableScan)
+
+	return NewPlanOpQuery(p, NewPlanOpProjection(projections, filter), p.sql), nil
 }

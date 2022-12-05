@@ -76,7 +76,7 @@ func (p *PlanOpBulkInsert) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	sc := make([]string, 0)
 	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
 	}
 	result["_schema"] = sc
 	result["tableName"] = p.tableName
@@ -99,7 +99,7 @@ func (p *PlanOpBulkInsert) Plan() map[string]interface{} {
 	for _, m := range p.options.mapExpressions {
 		mapItem := make(map[string]interface{})
 		options["name"] = m.name
-		options["type"] = m.colType.TypeName()
+		options["type"] = m.colType.TypeDescription()
 		options["expr"] = m.expr.Plan()
 		mapList = append(mapList, mapItem)
 	}
@@ -274,15 +274,15 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 		case *parser.DataTypeID, *parser.DataTypeInt:
 			intVal, err := strconv.ParseInt(evalValue, 10, 64)
 			if err != nil {
-				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 			}
 			result[idx] = intVal
 
 		case *parser.DataTypeIDSet:
-			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 
 		case *parser.DataTypeStringSet:
-			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 
 		case *parser.DataTypeTimestamp:
 			intVal, err := strconv.ParseInt(evalValue, 10, 64)
@@ -294,7 +294,7 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 				} else if tm, err := time.ParseInLocation("2006-01-02", evalValue, time.UTC); err == nil {
 					result[idx] = tm
 				} else {
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 				}
 			}
 			result[idx] = time.UnixMilli(intVal).UTC()
@@ -305,14 +305,14 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 		case *parser.DataTypeBool:
 			bval, err := strconv.ParseInt(evalValue, 10, 64)
 			if err != nil {
-				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 			}
 			result[idx] = bval
 
 		case *parser.DataTypeDecimal:
 			dval, err := pql.ParseDecimal(evalValue)
 			if err != nil {
-				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeName())
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 			}
 			result[idx] = dval
 
@@ -494,24 +494,24 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 					if v == float64(int64(v)) {
 						result[idx] = int64(v)
 					} else {
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 					}
 
 				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case string:
 					intVal, err := strconv.ParseInt(v, 10, 64)
 					if err != nil {
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 					}
 					result[idx] = intVal
 
 				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
@@ -520,31 +520,31 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeIDSet:
 				switch v := evalValue.(type) {
 				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case []interface{}:
 					setValue := make([]int64, 0)
 					for _, i := range v {
 						f, ok := i.(float64)
 						if !ok {
-							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
 						if f == float64(int64(f)) {
 							setValue = append(setValue, int64(f))
 						} else {
-							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
 					}
 					result[idx] = setValue
 
 				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
@@ -553,27 +553,27 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeStringSet:
 				switch v := evalValue.(type) {
 				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case []interface{}:
 					setValue := make([]string, 0)
 					for _, i := range v {
 						f, ok := i.(string)
 						if !ok {
-							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
 						setValue = append(setValue, f)
 					}
 					result[idx] = setValue
 
 				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
@@ -586,11 +586,11 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 					if v == float64(int64(v)) {
 						result[idx] = time.UnixMilli(int64(v)).UTC()
 					} else {
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 					}
 
 				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case string:
 					if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
@@ -600,14 +600,14 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 					} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
 						result[idx] = tm
 					} else {
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 					}
 
 				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
@@ -616,19 +616,19 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeString:
 				switch v := evalValue.(type) {
 				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case string:
 					result[idx] = v
 
 				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
@@ -637,19 +637,19 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeBool:
 				switch v := evalValue.(type) {
 				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case bool:
 					result[idx] = v
 
 				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
@@ -661,16 +661,16 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 					result[idx] = pql.FromFloat64(v)
 
 				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeName())
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)

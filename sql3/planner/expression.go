@@ -82,7 +82,7 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 			} else if tm, err := time.ParseInLocation("2006-01-02", val, time.UTC); err == nil {
 				return tm, nil
 			} else {
-				return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, targetType.TypeName())
+				return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, targetType.TypeDescription())
 			}
 		}
 
@@ -126,7 +126,7 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 	default:
 		return nil, sql3.NewErrInternalf("unhandled source type '%T'", sourceType)
 	}
-	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Column, targetType.TypeName(), sourceType.TypeName())
+	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Column, targetType.TypeDescription(), sourceType.TypeDescription())
 }
 
 // unaryOpPlanExpression is a unary op
@@ -173,7 +173,7 @@ func (n *unaryOpPlanExpression) String() string {
 func (n *unaryOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["op"] = n.op
 	result["rhs"] = n.rhs.Plan()
 	return result
@@ -649,7 +649,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
 
 	default:
-		return nil, sql3.NewErrInternalf("unhandled type '%s'", coercedDataType.TypeName())
+		return nil, sql3.NewErrInternalf("unhandled type '%s'", coercedDataType.TypeDescription())
 	}
 }
 
@@ -664,7 +664,7 @@ func (n *binOpPlanExpression) String() string {
 func (n *binOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["op"] = n.op
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
@@ -735,7 +735,7 @@ func (n *rangePlanExpression) String() string {
 func (n *rangePlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
 	return result
@@ -950,7 +950,7 @@ func (n *casePlanExpression) String() string {
 func (n *casePlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	if n.baseExpr != nil {
 		result["baseExpr"] = n.baseExpr.Plan()
 	}
@@ -1035,7 +1035,7 @@ func (n *caseBlockPlanExpression) String() string {
 func (n *caseBlockPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["condition"] = n.condition.Plan()
 	result["body"] = n.body.Plan()
 	return result
@@ -1104,7 +1104,7 @@ func (n *subqueryPlanExpression) String() string {
 func (n *subqueryPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["subquery"] = n.op.Plan()
 	return result
 }
@@ -1212,7 +1212,7 @@ func (n *betweenOpPlanExpression) String() string {
 func (n *betweenOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
 	return result
@@ -1285,13 +1285,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case *parser.DataTypeInt, *parser.DataTypeID:
 		nl, nlok := evalLhs.(int64)
 		if !nlok {
-			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeName())
+			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeDescription())
 		}
 
 		for _, lm := range listMembers {
 			l, lok := lm.(int64)
 			if !lok {
-				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeName())
+				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeDescription())
 			}
 			if nl == l {
 				result = true
@@ -1302,13 +1302,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case *parser.DataTypeBool:
 		nl, nlok := evalLhs.(bool)
 		if !nlok {
-			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeName())
+			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeDescription())
 		}
 
 		for _, lm := range listMembers {
 			l, lok := lm.(bool)
 			if !lok {
-				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeName())
+				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeDescription())
 			}
 			if nl == l {
 				result = true
@@ -1319,13 +1319,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case *parser.DataTypeDecimal:
 		nl, nlok := evalLhs.(pql.Decimal)
 		if !nlok {
-			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeName())
+			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeDescription())
 		}
 
 		for _, lm := range listMembers {
 			l, lok := lm.(pql.Decimal)
 			if !lok {
-				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeName())
+				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeDescription())
 			}
 			if nl.EqualTo(l) {
 				result = true
@@ -1336,13 +1336,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case *parser.DataTypeIDSet:
 		nl, nlok := evalLhs.([]int64)
 		if !nlok {
-			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeName())
+			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeDescription())
 		}
 
 		for _, lm := range listMembers {
 			l, lok := lm.([]int64)
 			if !lok {
-				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeName())
+				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeDescription())
 			}
 			if intSetContainsAll(nl, l) {
 				result = true
@@ -1353,13 +1353,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case *parser.DataTypeString:
 		nl, nlok := evalLhs.(string)
 		if !nlok {
-			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeName())
+			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeDescription())
 		}
 
 		for _, lm := range listMembers {
 			l, lok := lm.(string)
 			if !lok {
-				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeName())
+				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeDescription())
 			}
 			if nl == l {
 				result = true
@@ -1370,13 +1370,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case *parser.DataTypeStringSet:
 		nl, nlok := evalLhs.([]string)
 		if !nlok {
-			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeName())
+			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeDescription())
 		}
 
 		for _, lm := range listMembers {
 			l, lok := lm.([]string)
 			if !lok {
-				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeName())
+				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeDescription())
 			}
 			if stringSetContainsAll(nl, l) {
 				result = true
@@ -1387,13 +1387,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case *parser.DataTypeTimestamp:
 		nl, nlok := evalLhs.(time.Time)
 		if !nlok {
-			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeName())
+			return nil, sql3.NewErrInternalf("unable to convert lhs expression to type '%s'", n.lhs.Type().TypeDescription())
 		}
 
 		for _, lm := range listMembers {
 			l, lok := lm.(time.Time)
 			if !lok {
-				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeName())
+				return nil, sql3.NewErrInternalf("unable to convert list expression to type '%s'", n.lhs.Type().TypeDescription())
 			}
 			if nl == l {
 				result = true
@@ -1430,7 +1430,7 @@ func (n *inOpPlanExpression) String() string {
 func (n *inOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
 	return result
@@ -1500,7 +1500,7 @@ func (n *callPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
 	result["name"] = n.name
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	ps := make([]interface{}, 0)
 	for _, e := range n.args {
 		ps = append(ps, e.Plan())
@@ -1555,7 +1555,7 @@ func (n *aliasPlanExpression) String() string {
 func (n *aliasPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["aliasName"] = n.aliasName
 	result["expr"] = n.expr.Plan()
 	return result
@@ -1651,7 +1651,7 @@ func (n *qualifiedRefPlanExpression) Plan() map[string]interface{} {
 	result["tableName"] = n.tableName
 	result["columnName"] = n.columnName
 	result["columnIndex"] = n.columnIndex
-	result["dataType"] = n.dataType.TypeName()
+	result["dataType"] = n.dataType.TypeDescription()
 	return result
 }
 
@@ -1711,7 +1711,7 @@ func (n *variableRefPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
 	result["name"] = n.name
-	result["dataType"] = n.dataType.TypeName()
+	result["dataType"] = n.dataType.TypeDescription()
 	return result
 }
 
@@ -1745,7 +1745,7 @@ func (n *nullLiteralPlanExpression) String() string {
 func (n *nullLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	return result
 }
 
@@ -1783,7 +1783,7 @@ func (n *intLiteralPlanExpression) String() string {
 func (n *intLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
 }
@@ -1823,7 +1823,7 @@ func (n *floatLiteralPlanExpression) String() string {
 func (n *floatLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
 }
@@ -1862,7 +1862,7 @@ func (n *boolLiteralPlanExpression) String() string {
 func (n *boolLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
 }
@@ -1901,7 +1901,7 @@ func (n *dateLiteralPlanExpression) String() string {
 func (n *dateLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
 }
@@ -1940,7 +1940,7 @@ func (n *stringLiteralPlanExpression) String() string {
 func (n *stringLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
 }
@@ -2158,13 +2158,13 @@ func (n *castPlanExpression) Type() parser.ExprDataType {
 }
 
 func (n *castPlanExpression) String() string {
-	return fmt.Sprintf("cast(%s as %s)", n.lhs.String(), n.targetType.TypeName())
+	return fmt.Sprintf("cast(%s as %s)", n.lhs.String(), n.targetType.TypeDescription())
 }
 
 func (n *castPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	return result
 }
@@ -2346,7 +2346,7 @@ func (n *exprTupleLiteralPlanExpression) Evaluate(currentRow []interface{}) (int
 	// if it is a string, do a coercion
 	if val, ok := timestampEval.(string); ok {
 		if tm, err := timestampFromString(val); err != nil {
-			return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, n.members[0].Type().TypeName())
+			return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, n.members[0].Type().TypeDescription())
 		} else {
 			timestampEval = tm
 		}

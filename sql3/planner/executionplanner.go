@@ -68,6 +68,8 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 		rootOperator, err = p.compileShowTablesStatement(stmt)
 	case *parser.ShowColumnsStatement:
 		rootOperator, err = p.compileShowColumnsStatement(stmt)
+	case *parser.ShowCreateTableStatement:
+		rootOperator, err = p.compileShowCreateTableStatement(stmt)
 	case *parser.CreateTableStatement:
 		rootOperator, err = p.compileCreateTableStatement(stmt)
 	case *parser.AlterTableStatement:
@@ -95,6 +97,8 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 	case *parser.ShowTablesStatement:
 		return nil
 	case *parser.ShowColumnsStatement:
+		return nil
+	case *parser.ShowCreateTableStatement:
 		return nil
 	case *parser.CreateTableStatement:
 		return p.analyzeCreateTableStatement(stmt)
