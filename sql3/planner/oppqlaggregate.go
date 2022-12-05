@@ -38,7 +38,7 @@ func (p *PlanOpPQLAggregate) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	ps := make([]string, 0)
 	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
+		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
 	}
 	result["_schema"] = ps
 	result["tableName"] = p.tableName

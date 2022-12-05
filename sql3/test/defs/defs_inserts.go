@@ -115,14 +115,14 @@ var insertTest = TableTest{
 			SQLs: sqls(
 				"insert into testinsert (_id, a, event) values (4, 40, [101, 150])",
 			),
-			ExpErr: "an expression of type 'IDSET' cannot be assigned to type 'STRINGSET'",
+			ExpErr: "an expression of type 'idset' cannot be assigned to type 'stringset'",
 		},
 		{
 			// InsertSetsTypeError2
 			SQLs: sqls(
 				"insert into testinsert (_id, a, ievent) values (4, 40, ['POST', 'GET'])",
 			),
-			ExpErr: "an expression of type 'STRINGSET' cannot be assigned to type 'IDSET'",
+			ExpErr: "an expression of type 'stringset' cannot be assigned to type 'idset'",
 		},
 	},
 }

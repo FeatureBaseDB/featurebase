@@ -338,13 +338,13 @@ var nullFilterTests = TableTest{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where b1 is null",
 			),
-			ExpErr: "unsupported type 'BOOL' for is/is not null filter expression",
+			ExpErr: "unsupported type 'bool' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where b1 is not null",
 			),
-			ExpErr: "unsupported type 'BOOL' for is/is not null filter expression",
+			ExpErr: "unsupported type 'bool' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
@@ -374,49 +374,49 @@ var nullFilterTests = TableTest{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where id1 is null",
 			),
-			ExpErr: "unsupported type 'ID' for is/is not null filter expression",
+			ExpErr: "unsupported type 'id' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where id1 is not null",
 			),
-			ExpErr: "unsupported type 'ID' for is/is not null filter expression",
+			ExpErr: "unsupported type 'id' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ids1 is null",
 			),
-			ExpErr: "unsupported type 'IDSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'idset' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ids1 is not null",
 			),
-			ExpErr: "unsupported type 'IDSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'idset' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where s1 is null",
 			),
-			ExpErr: "unsupported type 'STRING' for is/is not null filter expression",
+			ExpErr: "unsupported type 'string' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where s1 is not null",
 			),
-			ExpErr: "unsupported type 'STRING' for is/is not null filter expression",
+			ExpErr: "unsupported type 'string' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ss1 is null",
 			),
-			ExpErr: "unsupported type 'STRINGSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'stringset' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ss1 is not null",
 			),
-			ExpErr: "unsupported type 'STRINGSET' for is/is not null filter expression",
+			ExpErr: "unsupported type 'stringset' for is/is not null filter expression",
 		},
 		{
 			SQLs: sqls(

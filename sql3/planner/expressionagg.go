@@ -126,7 +126,7 @@ func (n *countPlanExpression) String() string {
 func (n *countPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["arg"] = n.arg.Plan()
 	return result
 }
@@ -194,7 +194,7 @@ func (n *countDistinctPlanExpression) String() string {
 func (n *countDistinctPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["arg"] = n.arg.Plan()
 	return result
 }
@@ -327,7 +327,7 @@ func (n *sumPlanExpression) String() string {
 func (n *sumPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["arg"] = n.arg.Plan()
 	return result
 }
@@ -500,7 +500,7 @@ func (n *avgPlanExpression) String() string {
 func (n *avgPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["arg"] = n.arg.Plan()
 	return result
 }
@@ -641,7 +641,7 @@ func (n *minPlanExpression) String() string {
 func (n *minPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["arg"] = n.arg.Plan()
 	return result
 }
@@ -783,7 +783,7 @@ func (n *maxPlanExpression) String() string {
 func (n *maxPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["arg"] = n.arg.Plan()
 	return result
 }
@@ -855,7 +855,7 @@ func (n *percentilePlanExpression) String() string {
 func (n *percentilePlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
-	result["dataType"] = n.Type().TypeName()
+	result["dataType"] = n.Type().TypeDescription()
 	result["arg"] = n.arg.Plan()
 	result["ntharg"] = n.nthArg.Plan()
 	return result

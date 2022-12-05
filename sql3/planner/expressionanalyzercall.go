@@ -130,7 +130,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		//second column is the nth value
 		targetType := parser.NewDataTypeDecimal(4)
 		if !typesAreAssignmentCompatible(targetType, call.Args[1].DataType()) {
-			return nil, sql3.NewErrParameterTypeMistmatch(call.Args[1].Pos().Line, call.Args[1].Pos().Column, targetType.TypeName(), call.Args[1].DataType().TypeName())
+			return nil, sql3.NewErrParameterTypeMistmatch(call.Args[1].Pos().Line, call.Args[1].Pos().Column, targetType.TypeDescription(), call.Args[1].DataType().TypeDescription())
 		}
 
 		//make sure it's literal

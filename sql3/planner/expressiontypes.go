@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 )
@@ -75,33 +76,33 @@ func fieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
 // resolves type names to type representations
 func dataTypeFromParserType(typ *parser.Type) (parser.ExprDataType, error) {
 	typeName := parser.IdentName(typ.Name)
-	switch strings.ToUpper(typeName) {
-	case parser.FieldTypeBool:
+	switch strings.ToLower(typeName) {
+	case dax.BaseTypeBool:
 		return parser.NewDataTypeBool(), nil
 
-	case parser.FieldTypeDecimal:
+	case dax.BaseTypeDecimal:
 		scale, err := strconv.Atoi(typ.Scale.Value)
 		if err != nil {
 			return nil, err
 		}
 		return parser.NewDataTypeDecimal(int64(scale)), nil
 
-	case parser.FieldTypeID:
+	case dax.BaseTypeID:
 		return parser.NewDataTypeID(), nil
 
-	case parser.FieldTypeIDSet:
+	case dax.BaseTypeIDSet:
 		return parser.NewDataTypeIDSet(), nil
 
-	case parser.FieldTypeInt:
+	case dax.BaseTypeInt:
 		return parser.NewDataTypeInt(), nil
 
-	case parser.FieldTypeString:
+	case dax.BaseTypeString:
 		return parser.NewDataTypeString(), nil
 
-	case parser.FieldTypeStringSet:
+	case dax.BaseTypeStringSet:
 		return parser.NewDataTypeStringSet(), nil
 
-	case parser.FieldTypeTimestamp:
+	case dax.BaseTypeTimestamp:
 		return parser.NewDataTypeTimestamp(), nil
 
 	default:
@@ -603,7 +604,7 @@ func typesCoercedForArithmeticOperator(testTypeL parser.ExprDataType, testTypeR 
 		}
 
 	}
-	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Column, testTypeL.TypeName(), testTypeR.TypeName())
+	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Column, testTypeL.TypeDescription(), testTypeR.TypeDescription())
 }
 
 // returns the target type given two operand types for a bitwise operation (or an error)
@@ -635,7 +636,7 @@ func typesCoercedForBitwiseOperator(testTypeL parser.ExprDataType, testTypeR par
 			return parser.NewDataTypeDecimal(rhsType.Scale), nil
 		}
 	}
-	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Column, testTypeL.TypeName(), testTypeR.TypeName())
+	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Column, testTypeL.TypeDescription(), testTypeR.TypeDescription())
 }
 
 // returns the target type given two operand types type coercion operation (or an error)
@@ -709,7 +710,7 @@ func typeCoerceType(testTypeL parser.ExprDataType, testTypeR parser.ExprDataType
 	default:
 		return nil, sql3.NewErrInternalf("unhandled lhs type '%t'", testTypeL)
 	}
-	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Line, testTypeL.TypeName(), testTypeR.TypeName())
+	return nil, sql3.NewErrTypeMismatch(atPos.Line, atPos.Line, testTypeL.TypeDescription(), testTypeR.TypeDescription())
 }
 
 // returns true if source type can be cast to target type

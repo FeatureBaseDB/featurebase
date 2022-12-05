@@ -47,7 +47,7 @@ var timeQuantumQueryTest = TableTest{
 			SQLs: sqls(
 				"select _id not like '%f_' from not_like_all_types",
 			),
-			ExpErr: "operator 'NOTLIKE' incompatible with type 'ID'",
+			ExpErr: "operator 'NOTLIKE' incompatible with type 'id'",
 		},
 	},
 }

@@ -26,14 +26,14 @@ var orderByTests = TableTest{
 			SQLs: sqls(
 				"select * from order_by_test order by a_string_set asc",
 			),
-			ExpErr: "unable to sort a column of type 'STRINGSET'",
+			ExpErr: "unable to sort a column of type 'stringset'",
 		},
 		{
 			name: "order-by-idset",
 			SQLs: sqls(
 				"select * from order_by_test order by an_id_set asc",
 			),
-			ExpErr: "unable to sort a column of type 'IDSET'",
+			ExpErr: "unable to sort a column of type 'idset'",
 		},
 	},
 }

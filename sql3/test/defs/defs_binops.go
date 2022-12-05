@@ -204,7 +204,7 @@ var binOpExprWithIntInt = TableTest{
 			SQLs: sqls(
 				"select a || b from binoptesti_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -226,97 +226,97 @@ var binOpExprWithIntBool = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptesti_b;",
 			),
-			ExpErr: "types 'INT' and 'BOOL' are not equatable",
+			ExpErr: "types 'int' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptesti_b;",
 			),
-			ExpErr: "types 'INT' and 'BOOL' are not equatable",
+			ExpErr: "types 'int' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptesti_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptesti_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptesti_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptesti_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptesti_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'BOOL'",
+			ExpErr: "operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptesti_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'BOOL'",
+			ExpErr: "operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptesti_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptesti_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptesti_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptesti_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptesti_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptesti_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptesti_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'BOOL'",
+			ExpErr: "operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptesti_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -517,7 +517,7 @@ var binOpExprWithIntID = TableTest{
 			SQLs: sqls(
 				"select b || _id from binoptesti_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -611,25 +611,25 @@ var binOpExprWithIntDecimal = TableTest{
 			SQLs: sqls(
 				"select a & d from binoptesti_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptesti_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptesti_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptesti_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
@@ -683,13 +683,13 @@ var binOpExprWithIntDecimal = TableTest{
 			SQLs: sqls(
 				"select a % d from binoptesti_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptesti_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -711,97 +711,97 @@ var binOpExprWithIntTimestamp = TableTest{
 			SQLs: sqls(
 				"select a != ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a >= ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -823,97 +823,97 @@ var binOpExprWithIntIDSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptesti_ids;",
 			),
-			ExpErr: "types 'INT' and 'IDSET' are not equatable",
+			ExpErr: "types 'int' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptesti_ids;",
 			),
-			ExpErr: "types 'INT' and 'IDSET' are not equatable",
+			ExpErr: "types 'int' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptesti_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptesti_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptesti_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptesti_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptesti_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'IDSET'",
+			ExpErr: " operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptesti_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'IDSET'",
+			ExpErr: " operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptesti_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptesti_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptesti_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'IDSET'",
+			ExpErr: " operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptesti_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'IDSET'",
+			ExpErr: " operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptesti_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'IDSET'",
+			ExpErr: " operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptesti_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'IDSET'",
+			ExpErr: " operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptesti_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'IDSET'",
+			ExpErr: " operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptesti_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -935,97 +935,97 @@ var binOpExprWithIntString = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptesti_s;",
 			),
-			ExpErr: "types 'INT' and 'STRING' are not equatable",
+			ExpErr: "types 'int' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptesti_s;",
 			),
-			ExpErr: "types 'INT' and 'STRING' are not equatable",
+			ExpErr: "types 'int' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptesti_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptesti_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptesti_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptesti_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptesti_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRING'",
+			ExpErr: " operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptesti_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRING'",
+			ExpErr: " operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptesti_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRING'",
+			ExpErr: " operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptesti_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRING'",
+			ExpErr: " operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptesti_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRING'",
+			ExpErr: " operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptesti_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRING'",
+			ExpErr: " operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptesti_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRING'",
+			ExpErr: " operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptesti_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRING'",
+			ExpErr: " operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptesti_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRING'",
+			ExpErr: " operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptesti_s;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -1047,97 +1047,97 @@ var binOpExprWithIntStringSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptesti_ss;",
 			),
-			ExpErr: "types 'INT' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'int' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptesti_ss;",
 			),
-			ExpErr: "types 'INT' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'int' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptesti_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptesti_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptesti_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptesti_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptesti_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptesti_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptesti_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptesti_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptesti_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptesti_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptesti_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptesti_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptesti_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptesti_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -1160,97 +1160,97 @@ var binOpExprWithBoolInt = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestb_i;",
 			),
-			ExpErr: "types 'BOOL' and 'INT' are not equatable",
+			ExpErr: "types 'bool' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestb_i;",
 			),
-			ExpErr: "types 'BOOL' and 'INT' are not equatable",
+			ExpErr: "types 'bool' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestb_i;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestb_i;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestb_i;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestb_i;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestb_i;",
 			),
-			ExpErr: "operator '&' incompatible with type 'BOOL'",
+			ExpErr: "operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestb_i;",
 			),
-			ExpErr: "operator '|' incompatible with type 'BOOL'",
+			ExpErr: "operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestb_i;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestb_i;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestb_i;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestb_i;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestb_i;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestb_i;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestb_i;",
 			),
-			ExpErr: "operator '%' incompatible with type 'BOOL'",
+			ExpErr: "operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestb_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -1296,85 +1296,85 @@ var binOpExprWithBoolBool = TableTest{
 			SQLs: sqls(
 				"select a <= b from binoptestb_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestb_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestb_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestb_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestb_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'BOOL'",
+			ExpErr: "operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestb_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'BOOL'",
+			ExpErr: "operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestb_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestb_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestb_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestb_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestb_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestb_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestb_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'BOOL'",
+			ExpErr: "operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestb_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -1395,97 +1395,97 @@ var binOpExprWithBoolID = TableTest{
 			SQLs: sqls(
 				"select b != _id from binoptestb_id;",
 			),
-			ExpErr: "types 'BOOL' and 'ID' are not equatable",
+			ExpErr: "types 'bool' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select b = _id from binoptestb_id;",
 			),
-			ExpErr: "types 'BOOL' and 'ID' are not equatable",
+			ExpErr: "types 'bool' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select b <= _id from binoptestb_id;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b >= _id from binoptestb_id;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b < _id from binoptestb_id;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b > _id from binoptestb_id;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b & _id from binoptestb_id;",
 			),
-			ExpErr: "operator '&' incompatible with type 'BOOL'",
+			ExpErr: "operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b | _id from binoptestb_id;",
 			),
-			ExpErr: "operator '|' incompatible with type 'BOOL'",
+			ExpErr: "operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b << _id from binoptestb_id;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b >> _id from binoptestb_id;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b + _id from binoptestb_id;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b - _id from binoptestb_id;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b * _id from binoptestb_id;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b / _id from binoptestb_id;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b % _id from binoptestb_id;",
 			),
-			ExpErr: "operator '%' incompatible with type 'BOOL'",
+			ExpErr: "operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select b || _id from binoptestb_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -1507,97 +1507,97 @@ var binOpExprWithBoolDecimal = TableTest{
 			SQLs: sqls(
 				"select a != d from binoptestb_d;",
 			),
-			ExpErr: "types 'BOOL' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'bool' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = d from binoptestb_d;",
 			),
-			ExpErr: "types 'BOOL' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'bool' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= d from binoptestb_d;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= d from binoptestb_d;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < d from binoptestb_d;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > d from binoptestb_d;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & d from binoptestb_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'BOOL'",
+			ExpErr: "operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptestb_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'BOOL'",
+			ExpErr: "operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptestb_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptestb_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + d from binoptestb_d;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - d from binoptestb_d;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * d from binoptestb_d;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / d from binoptestb_d;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % d from binoptestb_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'BOOL'",
+			ExpErr: "operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptestb_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -1619,97 +1619,97 @@ var binOpExprWithBoolTimestamp = TableTest{
 			SQLs: sqls(
 				"select a != ts from binoptestb_ts;",
 			),
-			ExpErr: "types 'BOOL' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'bool' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptestb_ts;",
 			),
-			ExpErr: "types 'BOOL' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'bool' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'BOOL'",
+			ExpErr: "operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'BOOL'",
+			ExpErr: "operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'BOOL'",
+			ExpErr: "operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptestb_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -1731,97 +1731,97 @@ var binOpExprWithBoolIDSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestb_ids;",
 			),
-			ExpErr: "types 'BOOL' and 'IDSET' are not equatable",
+			ExpErr: "types 'bool' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestb_ids;",
 			),
-			ExpErr: "types 'BOOL' and 'IDSET' are not equatable",
+			ExpErr: "types 'bool' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestb_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'BOOL'",
+			ExpErr: " operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestb_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'BOOL'",
+			ExpErr: " operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestb_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'BOOL'",
+			ExpErr: " operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestb_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'BOOL'",
+			ExpErr: " operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestb_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'BOOL'",
+			ExpErr: " operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestb_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'BOOL'",
+			ExpErr: " operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestb_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'BOOL'",
+			ExpErr: " operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestb_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'BOOL'",
+			ExpErr: " operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestb_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'BOOL'",
+			ExpErr: " operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestb_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'BOOL'",
+			ExpErr: " operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestb_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'BOOL'",
+			ExpErr: " operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestb_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'BOOL'",
+			ExpErr: " operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestb_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'BOOL'",
+			ExpErr: " operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestb_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -1843,97 +1843,97 @@ var binOpExprWithBoolString = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestb_s;",
 			),
-			ExpErr: "types 'BOOL' and 'STRING' are not equatable",
+			ExpErr: "types 'bool' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestb_s;",
 			),
-			ExpErr: "types 'BOOL' and 'STRING' are not equatable",
+			ExpErr: "types 'bool' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestb_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'BOOL'",
+			ExpErr: " operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestb_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'BOOL'",
+			ExpErr: " operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestb_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'BOOL'",
+			ExpErr: " operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestb_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'BOOL'",
+			ExpErr: " operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestb_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'BOOL'",
+			ExpErr: " operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestb_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'BOOL'",
+			ExpErr: " operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestb_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'BOOL'",
+			ExpErr: " operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestb_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'BOOL'",
+			ExpErr: " operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestb_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'BOOL'",
+			ExpErr: " operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestb_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'BOOL'",
+			ExpErr: " operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestb_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'BOOL'",
+			ExpErr: " operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestb_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'BOOL'",
+			ExpErr: " operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestb_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'BOOL'",
+			ExpErr: " operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestb_s;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -1955,97 +1955,97 @@ var binOpExprWithBoolStringSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestb_ss;",
 			),
-			ExpErr: "types 'BOOL' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'bool' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestb_ss;",
 			),
-			ExpErr: "types 'BOOL' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'bool' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestb_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'BOOL'",
+			ExpErr: " operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestb_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'BOOL'",
+			ExpErr: " operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestb_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'BOOL'",
+			ExpErr: " operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestb_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'BOOL'",
+			ExpErr: " operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestb_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'BOOL'",
+			ExpErr: " operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestb_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'BOOL'",
+			ExpErr: " operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestb_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'BOOL'",
+			ExpErr: " operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestb_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'BOOL'",
+			ExpErr: " operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestb_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'BOOL'",
+			ExpErr: " operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestb_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'BOOL'",
+			ExpErr: " operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestb_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'BOOL'",
+			ExpErr: " operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestb_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'BOOL'",
+			ExpErr: " operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestb_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'BOOL'",
+			ExpErr: " operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestb_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -2247,7 +2247,7 @@ var binOpExprWithIDInt = TableTest{
 			SQLs: sqls(
 				"select _id || b from binoptestid_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'ID'",
+			ExpErr: "operator '||' incompatible with type 'id'",
 		},
 	},
 }
@@ -2268,97 +2268,97 @@ var binOpExprWithIDBool = TableTest{
 			SQLs: sqls(
 				"select _id != b from binoptestid_b;",
 			),
-			ExpErr: "types 'ID' and 'BOOL' are not equatable",
+			ExpErr: "types 'id' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select _id = b from binoptestid_b;",
 			),
-			ExpErr: "types 'ID' and 'BOOL' are not equatable",
+			ExpErr: "types 'id' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select _id <= b from binoptestid_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id >= b from binoptestid_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id < b from binoptestid_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id > b from binoptestid_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id & b from binoptestid_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'BOOL'",
+			ExpErr: "operator '&' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id | b from binoptestid_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'BOOL'",
+			ExpErr: "operator '|' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id << b from binoptestid_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id >> b from binoptestid_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id + b from binoptestid_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id - b from binoptestid_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id * b from binoptestid_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id / b from binoptestid_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id % b from binoptestid_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'BOOL'",
+			ExpErr: "operator '%' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id || b from binoptestid_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'ID'",
+			ExpErr: "operator '||' incompatible with type 'id'",
 		},
 	},
 }
@@ -2559,7 +2559,7 @@ var binOpExprWithIDID = TableTest{
 			SQLs: sqls(
 				"select _id || b from binoptestid_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'ID'",
+			ExpErr: "operator '||' incompatible with type 'id'",
 		},
 	},
 }
@@ -2653,25 +2653,25 @@ var binOpExprWithIDDecimal = TableTest{
 			SQLs: sqls(
 				"select a & d from binoptesti_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptesti_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptesti_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptesti_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
@@ -2725,13 +2725,13 @@ var binOpExprWithIDDecimal = TableTest{
 			SQLs: sqls(
 				"select a % d from binoptesti_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptesti_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -2753,97 +2753,97 @@ var binOpExprWithIDTimestamp = TableTest{
 			SQLs: sqls(
 				"select a != ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a >= ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptesti_ts;",
 			),
-			ExpErr: "types 'INT' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'int' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptesti_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -2865,97 +2865,97 @@ var binOpExprWithIDIDSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptesti_ids;",
 			),
-			ExpErr: "types 'INT' and 'IDSET' are not equatable",
+			ExpErr: "types 'int' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptesti_ids;",
 			),
-			ExpErr: "types 'INT' and 'IDSET' are not equatable",
+			ExpErr: "types 'int' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptesti_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptesti_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptesti_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptesti_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptesti_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'IDSET'",
+			ExpErr: " operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptesti_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'IDSET'",
+			ExpErr: " operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptesti_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptesti_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptesti_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'IDSET'",
+			ExpErr: " operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptesti_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'IDSET'",
+			ExpErr: " operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptesti_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'IDSET'",
+			ExpErr: " operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptesti_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'IDSET'",
+			ExpErr: " operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptesti_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'IDSET'",
+			ExpErr: " operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptesti_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -2977,97 +2977,97 @@ var binOpExprWithIDString = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptesti_s;",
 			),
-			ExpErr: "types 'INT' and 'STRING' are not equatable",
+			ExpErr: "types 'int' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptesti_s;",
 			),
-			ExpErr: "types 'INT' and 'STRING' are not equatable",
+			ExpErr: "types 'int' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptesti_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptesti_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptesti_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptesti_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptesti_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRING'",
+			ExpErr: " operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptesti_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRING'",
+			ExpErr: " operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptesti_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRING'",
+			ExpErr: " operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptesti_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRING'",
+			ExpErr: " operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptesti_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRING'",
+			ExpErr: " operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptesti_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRING'",
+			ExpErr: " operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptesti_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRING'",
+			ExpErr: " operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptesti_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRING'",
+			ExpErr: " operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptesti_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRING'",
+			ExpErr: " operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptesti_s;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -3089,97 +3089,97 @@ var binOpExprWithIDStringSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptesti_ss;",
 			),
-			ExpErr: "types 'INT' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'int' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptesti_ss;",
 			),
-			ExpErr: "types 'INT' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'int' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptesti_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptesti_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptesti_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptesti_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptesti_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptesti_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptesti_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptesti_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptesti_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptesti_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptesti_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptesti_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptesti_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptesti_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -3274,25 +3274,25 @@ var binOpExprWithDecInt = TableTest{
 			SQLs: sqls(
 				"select d & b from binoptestdec_i;",
 			),
-			ExpErr: "operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestdec_i;",
 			),
-			ExpErr: "operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestdec_i;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestdec_i;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
@@ -3346,13 +3346,13 @@ var binOpExprWithDecInt = TableTest{
 			SQLs: sqls(
 				"select d % b from binoptestdec_i;",
 			),
-			ExpErr: "operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestdec_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -3374,97 +3374,97 @@ var binOpExprWithDecBool = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestdec_b;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'BOOL' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestdec_b;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'BOOL' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestdec_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestdec_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestdec_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestdec_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestdec_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestdec_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestdec_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestdec_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestdec_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestdec_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestdec_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'BOOL'",
+			ExpErr: "operator '*' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestdec_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'BOOL'",
+			ExpErr: "operator '/' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestdec_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestdec_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -3558,25 +3558,25 @@ var binOpExprWithDecID = TableTest{
 			SQLs: sqls(
 				"select d & b from binoptestdec_id;",
 			),
-			ExpErr: "operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestdec_id;",
 			),
-			ExpErr: "operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestdec_id;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestdec_id;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
@@ -3630,13 +3630,13 @@ var binOpExprWithDecID = TableTest{
 			SQLs: sqls(
 				"select d % b from binoptestdec_id;",
 			),
-			ExpErr: "operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestdec_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -3730,25 +3730,25 @@ var binOpExprWithDecDecimal = TableTest{
 			SQLs: sqls(
 				"select a & d from binoptestdec_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptestdec_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptestdec_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptestdec_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
@@ -3802,13 +3802,13 @@ var binOpExprWithDecDecimal = TableTest{
 			SQLs: sqls(
 				"select a % d from binoptestdec_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptestdec_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -3830,97 +3830,97 @@ var binOpExprWithDecTimestamp = TableTest{
 			SQLs: sqls(
 				"select a != ts from binoptestdec_ts;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptestdec_ts;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptestdec_ts;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a >= ts from binoptestdec_ts;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptestdec_ts;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptestdec_ts;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptestdec_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -3942,97 +3942,97 @@ var binOpExprWithDecIDSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestdec_ids;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'IDSET' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestdec_ids;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'IDSET' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'IDSET'",
+			ExpErr: " operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'IDSET'",
+			ExpErr: " operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'IDSET'",
+			ExpErr: " operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'IDSET'",
+			ExpErr: " operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestdec_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestdec_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -4054,97 +4054,97 @@ var binOpExprWithDecString = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestdec_s;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'STRING' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestdec_s;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'STRING' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestdec_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestdec_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestdec_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestdec_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestdec_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestdec_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestdec_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestdec_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestdec_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRING'",
+			ExpErr: " operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestdec_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRING'",
+			ExpErr: " operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestdec_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRING'",
+			ExpErr: " operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestdec_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRING'",
+			ExpErr: " operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestdec_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestdec_s;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -4166,97 +4166,97 @@ var binOpExprWithDecStringSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestdec_ss;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestdec_ss;",
 			),
-			ExpErr: "types 'DECIMAL(2)' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'decimal(2)' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '&' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '|' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '<<' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '>>' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestdec_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'DECIMAL(2)'",
+			ExpErr: " operator '%' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestdec_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -4279,97 +4279,97 @@ var binOpExprWithTSInt = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestts_i;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'INT' are not equatable",
+			ExpErr: "types 'timestamp' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestts_i;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'INT' are not equatable",
+			ExpErr: "types 'timestamp' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestts_i;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'INT' are not equatable",
+			ExpErr: "types 'timestamp' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestts_i;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'INT' are not equatable",
+			ExpErr: "types 'timestamp' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestts_i;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'INT' are not equatable",
+			ExpErr: "types 'timestamp' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestts_i;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'INT' are not equatable",
+			ExpErr: "types 'timestamp' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestts_i;",
 			),
-			ExpErr: "operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestts_i;",
 			),
-			ExpErr: "operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestts_i;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestts_i;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestts_i;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestts_i;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestts_i;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestts_i;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestts_i;",
 			),
-			ExpErr: "operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestts_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -4391,97 +4391,97 @@ var binOpExprWithTSBool = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestts_b;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'BOOL' are not equatable",
+			ExpErr: "types 'timestamp' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestts_b;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'BOOL' are not equatable",
+			ExpErr: "types 'timestamp' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestts_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'BOOL'",
+			ExpErr: "operator '<=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestts_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'BOOL'",
+			ExpErr: "operator '>=' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestts_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'BOOL'",
+			ExpErr: "operator '<' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestts_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'BOOL'",
+			ExpErr: "operator '>' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestts_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestts_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestts_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestts_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestts_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestts_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestts_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestts_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestts_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestts_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -4503,97 +4503,97 @@ var binOpExprWithTSID = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestts_id;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'ID' are not equatable",
+			ExpErr: "types 'timestamp' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestts_id;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'ID' are not equatable",
+			ExpErr: "types 'timestamp' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestts_id;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'ID' are not equatable",
+			ExpErr: "types 'timestamp' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestts_id;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'ID' are not equatable",
+			ExpErr: "types 'timestamp' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestts_id;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'ID' are not equatable",
+			ExpErr: "types 'timestamp' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestts_id;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'ID' are not equatable",
+			ExpErr: "types 'timestamp' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestts_id;",
 			),
-			ExpErr: "operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestts_id;",
 			),
-			ExpErr: "operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestts_id;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestts_id;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestts_id;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestts_id;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestts_id;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestts_id;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestts_id;",
 			),
-			ExpErr: "operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestts_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -4615,97 +4615,97 @@ var binOpExprWithTSDecimal = TableTest{
 			SQLs: sqls(
 				"select a != d from binoptestts_d;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'timestamp' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = d from binoptestts_d;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'timestamp' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= d from binoptestts_d;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'timestamp' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a >= d from binoptestts_d;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'timestamp' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a < d from binoptestts_d;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'timestamp' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a > d from binoptestts_d;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'timestamp' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a & d from binoptestts_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptestts_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptestts_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptestts_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a + d from binoptestts_d;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - d from binoptestts_d;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * d from binoptestts_d;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / d from binoptestts_d;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % d from binoptestts_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptestts_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -4794,61 +4794,61 @@ var binOpExprWithTSTimestamp = TableTest{
 			SQLs: sqls(
 				"select a & ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptestts_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -4870,97 +4870,97 @@ var binOpExprWithTSIDSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestts_ids;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'IDSET' are not equatable",
+			ExpErr: "types 'timestamp' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestts_ids;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'IDSET' are not equatable",
+			ExpErr: "types 'timestamp' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestts_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestts_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestts_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestts_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestts_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestts_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestts_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestts_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestts_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestts_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestts_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestts_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestts_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestts_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -4982,97 +4982,97 @@ var binOpExprWithTSString = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestts_s;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'STRING' are not equatable",
+			ExpErr: "types 'timestamp' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestts_s;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'STRING' are not equatable",
+			ExpErr: "types 'timestamp' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestts_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestts_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestts_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestts_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestts_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestts_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestts_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestts_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestts_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestts_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestts_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestts_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestts_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestts_s;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -5094,97 +5094,97 @@ var binOpExprWithTSStringSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestts_ss;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'timestamp' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestts_ss;",
 			),
-			ExpErr: "types 'TIMESTAMP' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'timestamp' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestts_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestts_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestts_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestts_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestts_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '&' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestts_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '|' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestts_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '<<' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestts_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '>>' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestts_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '+' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestts_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestts_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '*' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestts_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '/' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestts_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'TIMESTAMP'",
+			ExpErr: " operator '%' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestts_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -5207,97 +5207,97 @@ var binOpExprWithIDSetInt = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestids_i;",
 			),
-			ExpErr: "types 'IDSET' and 'INT' are not equatable",
+			ExpErr: "types 'idset' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestids_i;",
 			),
-			ExpErr: "types 'IDSET' and 'INT' are not equatable",
+			ExpErr: "types 'idset' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestids_i;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'IDSET'",
+			ExpErr: "operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestids_i;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'IDSET'",
+			ExpErr: "operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestids_i;",
 			),
-			ExpErr: "operator '<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestids_i;",
 			),
-			ExpErr: "operator '>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestids_i;",
 			),
-			ExpErr: "operator '&' incompatible with type 'IDSET'",
+			ExpErr: "operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestids_i;",
 			),
-			ExpErr: "operator '|' incompatible with type 'IDSET'",
+			ExpErr: "operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestids_i;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestids_i;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestids_i;",
 			),
-			ExpErr: "operator '+' incompatible with type 'IDSET'",
+			ExpErr: "operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestids_i;",
 			),
-			ExpErr: "operator '-' incompatible with type 'IDSET'",
+			ExpErr: "operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestids_i;",
 			),
-			ExpErr: "operator '*' incompatible with type 'IDSET'",
+			ExpErr: "operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestids_i;",
 			),
-			ExpErr: "operator '/' incompatible with type 'IDSET'",
+			ExpErr: "operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestids_i;",
 			),
-			ExpErr: "operator '%' incompatible with type 'IDSET'",
+			ExpErr: "operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestids_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -5319,97 +5319,97 @@ var binOpExprWithIDSetBool = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestids_b;",
 			),
-			ExpErr: "types 'IDSET' and 'BOOL' are not equatable",
+			ExpErr: "types 'idset' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestids_b;",
 			),
-			ExpErr: "types 'IDSET' and 'BOOL' are not equatable",
+			ExpErr: "types 'idset' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestids_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'IDSET'",
+			ExpErr: "operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestids_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'IDSET'",
+			ExpErr: "operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestids_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestids_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestids_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'IDSET'",
+			ExpErr: "operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestids_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'IDSET'",
+			ExpErr: "operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestids_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestids_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestids_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'IDSET'",
+			ExpErr: "operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestids_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'IDSET'",
+			ExpErr: "operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestids_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'IDSET'",
+			ExpErr: "operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestids_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'IDSET'",
+			ExpErr: "operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestids_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'IDSET'",
+			ExpErr: "operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestids_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -5431,97 +5431,97 @@ var binOpExprWithIDSetID = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestids_id;",
 			),
-			ExpErr: "types 'IDSET' and 'ID' are not equatable",
+			ExpErr: "types 'idset' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestids_id;",
 			),
-			ExpErr: "types 'IDSET' and 'ID' are not equatable",
+			ExpErr: "types 'idset' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestids_id;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'IDSET'",
+			ExpErr: "operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestids_id;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'IDSET'",
+			ExpErr: "operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestids_id;",
 			),
-			ExpErr: "operator '<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestids_id;",
 			),
-			ExpErr: "operator '>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestids_id;",
 			),
-			ExpErr: "operator '&' incompatible with type 'IDSET'",
+			ExpErr: "operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestids_id;",
 			),
-			ExpErr: "operator '|' incompatible with type 'IDSET'",
+			ExpErr: "operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestids_id;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestids_id;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestids_id;",
 			),
-			ExpErr: "operator '+' incompatible with type 'IDSET'",
+			ExpErr: "operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestids_id;",
 			),
-			ExpErr: "operator '-' incompatible with type 'IDSET'",
+			ExpErr: "operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestids_id;",
 			),
-			ExpErr: "operator '*' incompatible with type 'IDSET'",
+			ExpErr: "operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestids_id;",
 			),
-			ExpErr: "operator '/' incompatible with type 'IDSET'",
+			ExpErr: "operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestids_id;",
 			),
-			ExpErr: "operator '%' incompatible with type 'IDSET'",
+			ExpErr: "operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestids_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -5543,97 +5543,97 @@ var binOpExprWithIDSetDecimal = TableTest{
 			SQLs: sqls(
 				"select a != d from binoptestids_d;",
 			),
-			ExpErr: "types 'IDSET' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'idset' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = d from binoptestids_d;",
 			),
-			ExpErr: "types 'IDSET' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'idset' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= d from binoptestids_d;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'IDSET'",
+			ExpErr: "operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= d from binoptestids_d;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'IDSET'",
+			ExpErr: "operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < d from binoptestids_d;",
 			),
-			ExpErr: "operator '<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > d from binoptestids_d;",
 			),
-			ExpErr: "operator '>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & d from binoptestids_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'IDSET'",
+			ExpErr: "operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptestids_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'IDSET'",
+			ExpErr: "operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptestids_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptestids_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + d from binoptestids_d;",
 			),
-			ExpErr: "operator '+' incompatible with type 'IDSET'",
+			ExpErr: "operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - d from binoptestids_d;",
 			),
-			ExpErr: "operator '-' incompatible with type 'IDSET'",
+			ExpErr: "operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * d from binoptestids_d;",
 			),
-			ExpErr: "operator '*' incompatible with type 'IDSET'",
+			ExpErr: "operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / d from binoptestids_d;",
 			),
-			ExpErr: "operator '/' incompatible with type 'IDSET'",
+			ExpErr: "operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % d from binoptestids_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'IDSET'",
+			ExpErr: "operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptestids_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -5655,97 +5655,97 @@ var binOpExprWithIDSetTimestamp = TableTest{
 			SQLs: sqls(
 				"select a != ts from binoptestids_ts;",
 			),
-			ExpErr: "types 'IDSET' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'idset' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptestids_ts;",
 			),
-			ExpErr: "types 'IDSET' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'idset' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptestids_ts;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= ts from binoptestids_ts;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptestids_ts;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptestids_ts;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'IDSET'",
+			ExpErr: "operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'IDSET'",
+			ExpErr: "operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'IDSET'",
+			ExpErr: "operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'IDSET'",
+			ExpErr: "operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'IDSET'",
+			ExpErr: "operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'IDSET'",
+			ExpErr: "operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'IDSET'",
+			ExpErr: "operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'IDSET'",
+			ExpErr: "operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'IDSET'",
+			ExpErr: "operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptestids_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -5791,85 +5791,85 @@ var binOpExprWithIDSetIDSet = TableTest{
 			SQLs: sqls(
 				"select a <= b from binoptestids_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestids_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestids_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestids_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestids_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'IDSET'",
+			ExpErr: " operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestids_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'IDSET'",
+			ExpErr: " operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestids_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestids_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestids_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'IDSET'",
+			ExpErr: " operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestids_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'IDSET'",
+			ExpErr: " operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestids_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'IDSET'",
+			ExpErr: " operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestids_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'IDSET'",
+			ExpErr: " operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestids_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'IDSET'",
+			ExpErr: " operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestids_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -5891,97 +5891,97 @@ var binOpExprWithIDSetString = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestids_s;",
 			),
-			ExpErr: "types 'IDSET' and 'STRING' are not equatable",
+			ExpErr: "types 'idset' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestids_s;",
 			),
-			ExpErr: "types 'IDSET' and 'STRING' are not equatable",
+			ExpErr: "types 'idset' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestids_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestids_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestids_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestids_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestids_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'IDSET'",
+			ExpErr: " operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestids_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'IDSET'",
+			ExpErr: " operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestids_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestids_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestids_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'IDSET'",
+			ExpErr: " operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestids_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'IDSET'",
+			ExpErr: " operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestids_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'IDSET'",
+			ExpErr: " operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestids_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'IDSET'",
+			ExpErr: " operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestids_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'IDSET'",
+			ExpErr: " operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestids_s;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -6003,97 +6003,97 @@ var binOpExprWithIDSetStringSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestids_ss;",
 			),
-			ExpErr: "types 'IDSET' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'idset' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestids_ss;",
 			),
-			ExpErr: "types 'IDSET' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'idset' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestids_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'IDSET'",
+			ExpErr: " operator '<=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestids_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'IDSET'",
+			ExpErr: " operator '>=' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestids_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestids_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestids_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'IDSET'",
+			ExpErr: " operator '&' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestids_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'IDSET'",
+			ExpErr: " operator '|' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestids_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'IDSET'",
+			ExpErr: " operator '<<' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestids_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'IDSET'",
+			ExpErr: " operator '>>' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestids_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'IDSET'",
+			ExpErr: " operator '+' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestids_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'IDSET'",
+			ExpErr: " operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestids_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'IDSET'",
+			ExpErr: " operator '*' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestids_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'IDSET'",
+			ExpErr: " operator '/' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestids_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'IDSET'",
+			ExpErr: " operator '%' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestids_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -6116,97 +6116,97 @@ var binOpExprWithStringInt = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptests_i;",
 			),
-			ExpErr: "types 'STRING' and 'INT' are not equatable",
+			ExpErr: "types 'string' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptests_i;",
 			),
-			ExpErr: "types 'STRING' and 'INT' are not equatable",
+			ExpErr: "types 'string' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptests_i;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRING'",
+			ExpErr: "operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptests_i;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRING'",
+			ExpErr: "operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptests_i;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRING'",
+			ExpErr: "operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptests_i;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRING'",
+			ExpErr: "operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptests_i;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRING'",
+			ExpErr: "operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptests_i;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRING'",
+			ExpErr: "operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptests_i;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRING'",
+			ExpErr: "operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptests_i;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRING'",
+			ExpErr: "operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptests_i;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRING'",
+			ExpErr: "operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptests_i;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRING'",
+			ExpErr: "operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptests_i;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRING'",
+			ExpErr: "operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptests_i;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRING'",
+			ExpErr: "operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptests_i;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRING'",
+			ExpErr: "operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptests_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'INT'",
+			ExpErr: "operator '||' incompatible with type 'int'",
 		},
 	},
 }
@@ -6228,97 +6228,97 @@ var binOpExprWithStringBool = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptests_b;",
 			),
-			ExpErr: "types 'STRING' and 'BOOL' are not equatable",
+			ExpErr: "types 'string' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptests_b;",
 			),
-			ExpErr: "types 'STRING' and 'BOOL' are not equatable",
+			ExpErr: "types 'string' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptests_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRING'",
+			ExpErr: "operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptests_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRING'",
+			ExpErr: "operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptests_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRING'",
+			ExpErr: "operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptests_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRING'",
+			ExpErr: "operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptests_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRING'",
+			ExpErr: "operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptests_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRING'",
+			ExpErr: "operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptests_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRING'",
+			ExpErr: "operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptests_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRING'",
+			ExpErr: "operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptests_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRING'",
+			ExpErr: "operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptests_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRING'",
+			ExpErr: "operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptests_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRING'",
+			ExpErr: "operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptests_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRING'",
+			ExpErr: "operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptests_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRING'",
+			ExpErr: "operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptests_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'BOOL'",
+			ExpErr: "operator '||' incompatible with type 'bool'",
 		},
 	},
 }
@@ -6340,97 +6340,97 @@ var binOpExprWithStringID = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptests_id;",
 			),
-			ExpErr: "types 'STRING' and 'ID' are not equatable",
+			ExpErr: "types 'string' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptests_id;",
 			),
-			ExpErr: "types 'STRING' and 'ID' are not equatable",
+			ExpErr: "types 'string' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptests_id;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRING'",
+			ExpErr: "operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptests_id;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRING'",
+			ExpErr: "operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptests_id;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRING'",
+			ExpErr: "operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptests_id;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRING'",
+			ExpErr: "operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptests_id;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRING'",
+			ExpErr: "operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptests_id;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRING'",
+			ExpErr: "operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptests_id;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRING'",
+			ExpErr: "operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptests_id;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRING'",
+			ExpErr: "operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptests_id;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRING'",
+			ExpErr: "operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptests_id;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRING'",
+			ExpErr: "operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptests_id;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRING'",
+			ExpErr: "operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptests_id;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRING'",
+			ExpErr: "operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptests_id;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRING'",
+			ExpErr: "operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptests_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'ID'",
+			ExpErr: "operator '||' incompatible with type 'id'",
 		},
 	},
 }
@@ -6452,97 +6452,97 @@ var binOpExprWithStringDecimal = TableTest{
 			SQLs: sqls(
 				"select a != d from binoptests_d;",
 			),
-			ExpErr: "types 'STRING' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'string' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = d from binoptests_d;",
 			),
-			ExpErr: "types 'STRING' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'string' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= d from binoptests_d;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRING'",
+			ExpErr: "operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= d from binoptests_d;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRING'",
+			ExpErr: "operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < d from binoptests_d;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRING'",
+			ExpErr: "operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > d from binoptests_d;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRING'",
+			ExpErr: "operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & d from binoptests_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRING'",
+			ExpErr: "operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptests_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRING'",
+			ExpErr: "operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptests_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRING'",
+			ExpErr: "operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptests_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRING'",
+			ExpErr: "operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a + d from binoptests_d;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRING'",
+			ExpErr: "operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - d from binoptests_d;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRING'",
+			ExpErr: "operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * d from binoptests_d;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRING'",
+			ExpErr: "operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / d from binoptests_d;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRING'",
+			ExpErr: "operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % d from binoptests_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRING'",
+			ExpErr: "operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptests_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '||' incompatible with type 'decimal(2)'",
 		},
 	},
 }
@@ -6564,97 +6564,97 @@ var binOpExprWithStringTimestamp = TableTest{
 			SQLs: sqls(
 				"select a != ts from binoptests_ts;",
 			),
-			ExpErr: "types 'STRING' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'string' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptests_ts;",
 			),
-			ExpErr: "types 'STRING' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'string' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptests_ts;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= ts from binoptests_ts;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptests_ts;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptests_ts;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptests_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRING'",
+			ExpErr: "operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptests_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRING'",
+			ExpErr: "operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptests_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRING'",
+			ExpErr: "operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptests_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRING'",
+			ExpErr: "operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptests_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRING'",
+			ExpErr: "operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptests_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRING'",
+			ExpErr: "operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptests_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRING'",
+			ExpErr: "operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptests_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRING'",
+			ExpErr: "operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptests_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRING'",
+			ExpErr: "operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptests_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '||' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -6676,97 +6676,97 @@ var binOpExprWithStringIDSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptests_ids;",
 			),
-			ExpErr: "types 'STRING' and 'IDSET' are not equatable",
+			ExpErr: "types 'string' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptests_ids;",
 			),
-			ExpErr: "types 'STRING' and 'IDSET' are not equatable",
+			ExpErr: "types 'string' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptests_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptests_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptests_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptests_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptests_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRING'",
+			ExpErr: " operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptests_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRING'",
+			ExpErr: " operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptests_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRING'",
+			ExpErr: " operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptests_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRING'",
+			ExpErr: " operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptests_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRING'",
+			ExpErr: " operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptests_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRING'",
+			ExpErr: " operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptests_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRING'",
+			ExpErr: " operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptests_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRING'",
+			ExpErr: " operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptests_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRING'",
+			ExpErr: " operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptests_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'IDSET'",
+			ExpErr: "operator '||' incompatible with type 'idset'",
 		},
 	},
 }
@@ -6812,79 +6812,79 @@ var binOpExprWithStringString = TableTest{
 			SQLs: sqls(
 				"select a <= b from binoptests_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptests_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptests_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptests_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptests_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRING'",
+			ExpErr: " operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptests_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRING'",
+			ExpErr: " operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptests_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRING'",
+			ExpErr: " operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptests_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRING'",
+			ExpErr: " operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptests_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRING'",
+			ExpErr: " operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptests_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRING'",
+			ExpErr: " operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptests_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRING'",
+			ExpErr: " operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptests_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRING'",
+			ExpErr: " operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptests_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRING'",
+			ExpErr: " operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
@@ -6918,97 +6918,97 @@ var binOpExprWithStringStringSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptests_ss;",
 			),
-			ExpErr: "types 'STRING' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'string' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptests_ss;",
 			),
-			ExpErr: "types 'STRING' and 'STRINGSET' are not equatable",
+			ExpErr: "types 'string' and 'stringset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptests_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRING'",
+			ExpErr: " operator '<=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptests_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRING'",
+			ExpErr: " operator '>=' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptests_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRING'",
+			ExpErr: " operator '<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptests_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRING'",
+			ExpErr: " operator '>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptests_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRING'",
+			ExpErr: " operator '&' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptests_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRING'",
+			ExpErr: " operator '|' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptests_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRING'",
+			ExpErr: " operator '<<' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptests_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRING'",
+			ExpErr: " operator '>>' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptests_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRING'",
+			ExpErr: " operator '+' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptests_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRING'",
+			ExpErr: " operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptests_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRING'",
+			ExpErr: " operator '*' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptests_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRING'",
+			ExpErr: " operator '/' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptests_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRING'",
+			ExpErr: " operator '%' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptests_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7031,97 +7031,97 @@ var binOpExprWithStringSetInt = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestss_i;",
 			),
-			ExpErr: "types 'STRINGSET' and 'INT' are not equatable",
+			ExpErr: "types 'stringset' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestss_i;",
 			),
-			ExpErr: "types 'STRINGSET' and 'INT' are not equatable",
+			ExpErr: "types 'stringset' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestss_i;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestss_i;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestss_i;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestss_i;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestss_i;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestss_i;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestss_i;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestss_i;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestss_i;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestss_i;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestss_i;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestss_i;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestss_i;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestss_i;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7143,97 +7143,97 @@ var binOpExprWithStringSetBool = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestss_b;",
 			),
-			ExpErr: "types 'STRINGSET' and 'BOOL' are not equatable",
+			ExpErr: "types 'stringset' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestss_b;",
 			),
-			ExpErr: "types 'STRINGSET' and 'BOOL' are not equatable",
+			ExpErr: "types 'stringset' and 'bool' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestss_b;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestss_b;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestss_b;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestss_b;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestss_b;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestss_b;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestss_b;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestss_b;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestss_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestss_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestss_b;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestss_b;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestss_b;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestss_b;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7255,97 +7255,97 @@ var binOpExprWithStringSetID = TableTest{
 			SQLs: sqls(
 				"select d != b from binoptestss_id;",
 			),
-			ExpErr: "types 'STRINGSET' and 'ID' are not equatable",
+			ExpErr: "types 'stringset' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d = b from binoptestss_id;",
 			),
-			ExpErr: "types 'STRINGSET' and 'ID' are not equatable",
+			ExpErr: "types 'stringset' and 'id' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select d <= b from binoptestss_id;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >= b from binoptestss_id;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d < b from binoptestss_id;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d > b from binoptestss_id;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d & b from binoptestss_id;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d | b from binoptestss_id;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d << b from binoptestss_id;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d >> b from binoptestss_id;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d + b from binoptestss_id;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d - b from binoptestss_id;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d * b from binoptestss_id;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d / b from binoptestss_id;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d % b from binoptestss_id;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select d || b from binoptestss_id;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7367,97 +7367,97 @@ var binOpExprWithStringSetDecimal = TableTest{
 			SQLs: sqls(
 				"select a != d from binoptestss_d;",
 			),
-			ExpErr: "types 'STRINGSET' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'stringset' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = d from binoptestss_d;",
 			),
-			ExpErr: "types 'STRINGSET' and 'DECIMAL(2)' are not equatable",
+			ExpErr: "types 'stringset' and 'decimal(2)' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= d from binoptestss_d;",
 			),
-			ExpErr: "operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= d from binoptestss_d;",
 			),
-			ExpErr: "operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < d from binoptestss_d;",
 			),
-			ExpErr: "operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > d from binoptestss_d;",
 			),
-			ExpErr: "operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & d from binoptestss_d;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | d from binoptestss_d;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << d from binoptestss_d;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> d from binoptestss_d;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + d from binoptestss_d;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - d from binoptestss_d;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * d from binoptestss_d;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / d from binoptestss_d;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % d from binoptestss_d;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || d from binoptestss_d;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7479,97 +7479,97 @@ var binOpExprWithStringSetTimestamp = TableTest{
 			SQLs: sqls(
 				"select a != ts from binoptestss_ts;",
 			),
-			ExpErr: "types 'STRINGSET' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'stringset' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptestss_ts;",
 			),
-			ExpErr: "types 'STRINGSET' and 'TIMESTAMP' are not equatable",
+			ExpErr: "types 'stringset' and 'timestamp' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptestss_ts;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= ts from binoptestss_ts;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptestss_ts;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptestss_ts;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || ts from binoptestss_ts;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7591,97 +7591,97 @@ var binOpExprWithStringSetIDSet = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestss_ids;",
 			),
-			ExpErr: "types 'STRINGSET' and 'IDSET' are not equatable",
+			ExpErr: "types 'stringset' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestss_ids;",
 			),
-			ExpErr: "types 'STRINGSET' and 'IDSET' are not equatable",
+			ExpErr: "types 'stringset' and 'idset' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestss_ids;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestss_ids;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestss_ids;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestss_ids;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestss_ids;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestss_ids;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestss_ids;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestss_ids;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestss_ids;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestss_ids;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestss_ids;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestss_ids;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestss_ids;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestss_ids;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7703,97 +7703,97 @@ var binOpExprWithStringSetString = TableTest{
 			SQLs: sqls(
 				"select a != b from binoptestss_s;",
 			),
-			ExpErr: "types 'STRINGSET' and 'STRING' are not equatable",
+			ExpErr: "types 'stringset' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a = b from binoptestss_s;",
 			),
-			ExpErr: "types 'STRINGSET' and 'STRING' are not equatable",
+			ExpErr: "types 'stringset' and 'string' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select a <= b from binoptestss_s;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestss_s;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestss_s;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestss_s;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestss_s;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestss_s;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestss_s;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestss_s;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestss_s;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestss_s;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestss_s;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestss_s;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestss_s;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestss_s;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }
@@ -7839,85 +7839,85 @@ var binOpExprWithStringSetStringSet = TableTest{
 			SQLs: sqls(
 				"select a <= b from binoptestss_ss;",
 			),
-			ExpErr: " operator '<=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >= b from binoptestss_ss;",
 			),
-			ExpErr: " operator '>=' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>=' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a < b from binoptestss_ss;",
 			),
-			ExpErr: " operator '<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a > b from binoptestss_ss;",
 			),
-			ExpErr: " operator '>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a & b from binoptestss_ss;",
 			),
-			ExpErr: " operator '&' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '&' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a | b from binoptestss_ss;",
 			),
-			ExpErr: " operator '|' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '|' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a << b from binoptestss_ss;",
 			),
-			ExpErr: " operator '<<' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '<<' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a >> b from binoptestss_ss;",
 			),
-			ExpErr: " operator '>>' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '>>' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a + b from binoptestss_ss;",
 			),
-			ExpErr: " operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '+' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a - b from binoptestss_ss;",
 			),
-			ExpErr: " operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a * b from binoptestss_ss;",
 			),
-			ExpErr: " operator '*' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '*' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a / b from binoptestss_ss;",
 			),
-			ExpErr: " operator '/' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '/' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a % b from binoptestss_ss;",
 			),
-			ExpErr: " operator '%' incompatible with type 'STRINGSET'",
+			ExpErr: " operator '%' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select a || b from binoptestss_ss;",
 			),
-			ExpErr: "operator '||' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '||' incompatible with type 'stringset'",
 		},
 	},
 }

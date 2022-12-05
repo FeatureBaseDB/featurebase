@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/big"
 	"mime"
 	"net"
 	"net/http"
@@ -1437,30 +1436,36 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	// Write the closing bracket on any exit from this method.
 	defer func() {
+		var execTime int64 = 0
+		// we are going to make best effort here - don't actually care about the error
+		// if there was an error, the request.ElapsedTime will be zero
+		request, _ := h.api.server.SystemLayer.ExecutionRequests().GetRequest(requestID.String())
+		execTime = request.ElapsedTime.Microseconds()
+
 		var value []byte
-		request, err := h.api.server.SystemLayer.ExecutionRequests().GetRequest(requestID.String())
+		value, err = json.Marshal(execTime)
 		if err != nil {
-			value = big.NewInt(-1).Bytes()
+			w.Write([]byte(`,"exec_time": 0`))
 		} else {
-			value, err = json.Marshal(request.ElapsedTime.Microseconds())
-			if err != nil {
-				value = big.NewInt(-1).Bytes()
-			}
+			w.Write([]byte(`,"exec_time":`))
+			w.Write(value)
 		}
-		w.Write([]byte(`,"exec_time":`))
-		w.Write(value)
 		w.Write([]byte("}"))
 	}()
 
 	// writeError is a helper function that can be called anywhere during the
 	// output handling to insert an error into the json output.
-	writeError := func(err error) {
+	writeError := func(err error, withComma bool) {
 		if err != nil {
 			errMsg, err := json.Marshal(err.Error())
 			if err != nil {
 				errMsg = []byte(`"PROBLEM ENCODING ERROR MESSAGE"`)
 			}
-			w.Write([]byte(`,"error":`))
+			if withComma {
+				w.Write([]byte(`,"error":`))
+			} else {
+				w.Write([]byte(`"error":`))
+			}
 			w.Write(errMsg)
 		}
 	}
@@ -1498,7 +1503,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	// Get a query iterator.
 	iter, err := rootOperator.Iterator(ctx, nil)
 	if err != nil {
-		writeError(err)
+		writeError(err, false)
 		writeWarnings(rootOperator.Warnings())
 		return
 	}
@@ -1509,15 +1514,15 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 		Fields: make([]*WireQueryField, len(columns)),
 	}
 	for i, col := range columns {
-		btype, err := dax.BaseTypeFromString(col.Type.TypeName())
+		btype, err := dax.BaseTypeFromString(col.Type.BaseTypeName())
 		if err != nil {
-			writeError(err)
+			writeError(err, false)
 			writeWarnings(rootOperator.Warnings())
 			return
 		}
 		schema.Fields[i] = &WireQueryField{
 			Name:     dax.FieldName(col.ColumnName),
-			Type:     strings.ToLower(col.Type.TypeDescription()), // TODO(tlt): remove this once sql3 uses BaseTypes.
+			Type:     col.Type.TypeDescription(),
 			BaseType: btype,
 			TypeInfo: col.Type.TypeInfo(),
 		}
@@ -1528,7 +1533,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 		h.logger.Errorf("write schema response error: %s", err)
 		// Provide an empty list as the schema value to maintain valid json.
 		w.Write([]byte("[]"))
-		writeError(err)
+		writeError(err, false)
 		writeWarnings(rootOperator.Warnings())
 		return
 	}
@@ -1564,7 +1569,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	w.Write([]byte("]"))
 
-	writeError(rowErr)
+	writeError(rowErr, true)
 	writeWarnings(rootOperator.Warnings())
 	writePlan(rootOperator.Plan())
 }

@@ -88,7 +88,7 @@ func (n *PlanOpOrderBy) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", n)
 	sc := make([]string, 0)
 	for _, e := range n.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
+		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
 	}
 	result["_schema"] = sc
 
@@ -97,7 +97,7 @@ func (n *PlanOpOrderBy) Plan() map[string]interface{} {
 	for _, e := range n.orderByFields {
 		ps = append(ps, &map[string]interface{}{
 			"index":        e.Index,
-			"exprType":     e.ExprType.TypeName(),
+			"exprType":     e.ExprType.TypeDescription(),
 			"order":        e.Order,
 			"nullOrdering": e.NullOrdering,
 		})

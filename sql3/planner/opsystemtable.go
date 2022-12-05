@@ -3,31 +3,16 @@
 package planner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
-
-//fb_exec_requests
-//	session
-//	user
-//	start_time
-//	end_time
-//	status
-//	plan
-//	wait_type
-//	wait_time
-//	wait_resource
-//	cpu_time
-//	elapsed_time
-//	reads
-//	writes
-//	logical_reads
-//	row_count
 
 // exclude this file from SonarCloud dupe eval
 
@@ -35,6 +20,8 @@ const (
 	fbClusterInfo  = "fb_cluster_info"
 	fbClusterNodes = "fb_cluster_nodes"
 	fbExecRequests = "fb_exec_requests"
+
+	fbTableDDL = "fb_table_ddl"
 )
 
 type systemTable struct {
@@ -209,6 +196,27 @@ var systemTables = map[string]*systemTable{
 			},
 		},
 	},
+
+	fbTableDDL: {
+		name: fbTableDDL,
+		schema: types.Schema{
+			&types.PlannerColumn{
+				RelationName: fbTableDDL,
+				ColumnName:   "id",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbTableDDL,
+				ColumnName:   "name",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbTableDDL,
+				ColumnName:   "ddl",
+				Type:         parser.NewDataTypeString(),
+			},
+		},
+	},
 }
 
 // PlanOpSystemTable handles system tables
@@ -231,7 +239,7 @@ func (p *PlanOpSystemTable) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	ps := make([]string, 0)
 	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
+		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
 	}
 	result["_schema"] = ps
 	return result
@@ -269,6 +277,10 @@ func (p *PlanOpSystemTable) Iterator(ctx context.Context, row types.Row) (types.
 		}, nil
 	case fbExecRequests:
 		return &fbExecRequestsRowIter{
+			planner: p.planner,
+		}, nil
+	case fbTableDDL:
+		return &fbTableDDLRowIter{
 			planner: p.planner,
 		}, nil
 	default:
@@ -372,6 +384,139 @@ func (i *fbExecRequestsRowIter) Next(ctx context.Context) (types.Row, error) {
 			n.RowCount,
 			n.SQL,
 			n.Plan,
+		}
+		// Move to next result element.
+		i.result = i.result[1:]
+		return row, nil
+	}
+	return nil, types.ErrNoMoreRows
+}
+
+type fbTableDDLRow struct {
+	id   string
+	name string
+	ddl  string
+}
+
+type fbTableDDLRowIter struct {
+	planner *ExecutionPlanner
+	result  []*fbTableDDLRow
+}
+
+var _ types.RowIterator = (*fbTableDDLRowIter)(nil)
+
+func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
+	if i.result == nil {
+		schema, err := i.planner.schemaAPI.Schema(ctx, false)
+		if err != nil {
+			return nil, err
+		}
+		i.result = make([]*fbTableDDLRow, len(schema))
+
+		for idx, table := range schema {
+
+			index, err := i.planner.schemaAPI.IndexInfo(context.Background(), table.Name)
+			if err != nil {
+				return nil, err
+			}
+
+			// build the ddl for this table
+
+			var buf bytes.Buffer
+			buf.WriteString("create table ")
+			fmt.Fprintf(&buf, "%s", index.Name)
+			buf.WriteString(" (")
+
+			for idx, col := range index.Fields {
+				if idx > 0 {
+					buf.WriteString(", ")
+				}
+				fmt.Fprintf(&buf, "%s", col.Name)
+				dataType := fieldSQLDataType(col)
+				fmt.Fprintf(&buf, " %s", dataType.TypeDescription())
+
+				switch dt := dataType.(type) {
+				case *parser.DataTypeID, *parser.DataTypeString:
+					if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+					}
+					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
+						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+					}
+
+				case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
+					if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+					}
+					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
+						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+					}
+
+				case *parser.DataTypeIDSetQuantum, *parser.DataTypeStringSetQuantum:
+					if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+					}
+					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
+						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+					}
+					if !col.Options.TimeQuantum.IsEmpty() {
+						fmt.Fprintf(&buf, " timequantum '%s'", col.Options.TimeQuantum)
+					}
+					if col.Options.TTL > 0 {
+						fmt.Fprintf(&buf, " ttl '%s'", col.Options.TTL.String())
+					}
+
+				case *parser.DataTypeInt:
+					minValue, maxValue := pql.MinMax(0)
+
+					min := col.Options.Min
+					if !min.EqualTo(minValue) {
+						fmt.Fprintf(&buf, " min %d", min.ToInt64(0))
+					}
+
+					max := col.Options.Max
+					if !max.EqualTo(maxValue) {
+						fmt.Fprintf(&buf, " max %d", max.ToInt64(0))
+					}
+
+				case *parser.DataTypeDecimal:
+					minValue, maxValue := pql.MinMax(dt.Scale)
+
+					min := col.Options.Min
+					if !min.EqualTo(minValue) {
+						fmt.Fprintf(&buf, " min %v", min)
+					}
+
+					max := col.Options.Max
+					if !max.EqualTo(maxValue) {
+						fmt.Fprintf(&buf, " max %v", max)
+					}
+
+				case *parser.DataTypeTimestamp:
+					if len(col.Options.TimeUnit) > 0 {
+						fmt.Fprintf(&buf, " timeunit '%s'", col.Options.TimeUnit)
+					}
+					// TODO(pok) how do we get epoch out of col?
+
+				}
+			}
+			buf.WriteString(");")
+			ddl := buf.String()
+
+			i.result[idx] = &fbTableDDLRow{
+				id:   table.Name,
+				name: table.Name,
+				ddl:  ddl,
+			}
+		}
+	}
+
+	if len(i.result) > 0 {
+		n := i.result[0]
+		row := []interface{}{
+			n.id,
+			n.name,
+			n.ddl,
 		}
 		// Move to next result element.
 		i.result = i.result[1:]

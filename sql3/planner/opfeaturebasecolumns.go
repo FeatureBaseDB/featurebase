@@ -31,7 +31,7 @@ func (p *PlanOpFeatureBaseColumns) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	ps := make([]string, 0)
 	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
+		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
 	}
 	result["_schema"] = ps
 	return result
@@ -52,72 +52,77 @@ func (p *PlanOpFeatureBaseColumns) Warnings() []string {
 func (p *PlanOpFeatureBaseColumns) Schema() types.Schema {
 	return types.Schema{
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
+			ColumnName:   "_id",
+			Type:         parser.NewDataTypeString(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_table_columns",
 			ColumnName:   "name",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "type",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "internal_type",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "created_at",
 			Type:         parser.NewDataTypeTimestamp(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "keys",
 			Type:         parser.NewDataTypeBool(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "cache_type",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "cache_size",
 			Type:         parser.NewDataTypeInt(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "scale",
 			Type:         parser.NewDataTypeInt(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "min",
 			Type:         parser.NewDataTypeInt(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "max",
 			Type:         parser.NewDataTypeInt(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "timeunit",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "epoch",
 			Type:         parser.NewDataTypeInt(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "timequantum",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$table_columns",
+			RelationName: "fb_table_columns",
 			ColumnName:   "ttl",
 			Type:         parser.NewDataTypeInt(),
 		},
@@ -153,7 +158,8 @@ func (i *showColumnsRowIter) Next(ctx context.Context) (types.Row, error) {
 
 		row := []interface{}{
 			fields[i.rowIndex].Name,
-			fieldSQLDataType(fields[i.rowIndex]).TypeName(),
+			fields[i.rowIndex].Name,
+			fieldSQLDataType(fields[i.rowIndex]).TypeDescription(),
 			fields[i.rowIndex].Options.Type,
 			tm.Format(time.RFC3339),
 			fields[i.rowIndex].Options.Keys,

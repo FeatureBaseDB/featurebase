@@ -28,13 +28,13 @@ func (p *ExecutionPlanner) analyzeFunctionDatePart(call *parser.Call, scope pars
 	// interval
 	intervalType := parser.NewDataTypeString()
 	if !typesAreAssignmentCompatible(intervalType, call.Args[0].DataType()) {
-		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeName(), intervalType.TypeName())
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeDescription(), intervalType.TypeDescription())
 	}
 
 	// date
 	dateType := parser.NewDataTypeTimestamp()
 	if !typesAreAssignmentCompatible(dateType, call.Args[1].DataType()) {
-		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[1].DataType().TypeName(), dateType.TypeName())
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[1].DataType().TypeDescription(), dateType.TypeDescription())
 	}
 
 	//return int

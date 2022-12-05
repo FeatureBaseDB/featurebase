@@ -176,7 +176,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 
 			// Type check against same ordinal position in column type list.
 			if !typesAreAssignmentCompatible(typeNames[i], e.DataType()) {
-				return sql3.NewErrTypeAssignmentIncompatible(expr.Pos().Line, expr.Pos().Column, e.DataType().TypeName(), typeNames[i].TypeName())
+				return sql3.NewErrTypeAssignmentIncompatible(expr.Pos().Line, expr.Pos().Column, e.DataType().TypeDescription(), typeNames[i].TypeDescription())
 			}
 
 			tuple.Exprs[i] = e

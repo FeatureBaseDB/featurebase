@@ -337,7 +337,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 				if stmt.TransformList != nil {
 					t := stmt.TransformList[idx]
 					if !typesAreAssignmentCompatible(colDataType, t.DataType()) {
-						return sql3.NewErrTypeAssignmentIncompatible(t.Pos().Line, t.Pos().Column, t.DataType().TypeName(), colDataType.TypeName())
+						return sql3.NewErrTypeAssignmentIncompatible(t.Pos().Line, t.Pos().Column, t.DataType().TypeDescription(), colDataType.TypeDescription())
 					}
 				} else {
 					// this assumes that map and col list have already been checked for length
@@ -347,7 +347,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 						return err
 					}
 					if !typesAreAssignmentCompatible(colDataType, t) {
-						return sql3.NewErrTypeAssignmentIncompatible(me.MapExpr.Pos().Line, me.MapExpr.Pos().Column, t.TypeName(), colDataType.TypeName())
+						return sql3.NewErrTypeAssignmentIncompatible(me.MapExpr.Pos().Line, me.MapExpr.Pos().Column, t.TypeDescription(), colDataType.TypeDescription())
 					}
 				}
 				break

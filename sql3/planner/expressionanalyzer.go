@@ -279,14 +279,14 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 		//now check all the other blocks to make sure that each body is assignment compatible with that type
 		for _, blk := range e.Blocks {
 			if !typesAreAssignmentCompatible(caseType, blk.Body.DataType()) {
-				return nil, sql3.NewErrTypeAssignmentIncompatible(blk.Body.Pos().Line, blk.Body.Pos().Column, caseType.TypeName(), blk.Body.DataType().TypeName())
+				return nil, sql3.NewErrTypeAssignmentIncompatible(blk.Body.Pos().Line, blk.Body.Pos().Column, caseType.TypeDescription(), blk.Body.DataType().TypeDescription())
 			}
 		}
 
 		//if there is an else check that too
 		if e.ElseExpr != nil {
 			if !typesAreAssignmentCompatible(caseType, e.ElseExpr.DataType()) {
-				return nil, sql3.NewErrTypeAssignmentIncompatible(e.ElseExpr.Pos().Line, e.ElseExpr.Pos().Column, caseType.TypeName(), e.ElseExpr.DataType().TypeName())
+				return nil, sql3.NewErrTypeAssignmentIncompatible(e.ElseExpr.Pos().Line, e.ElseExpr.Pos().Column, caseType.TypeDescription(), e.ElseExpr.DataType().TypeDescription())
 			}
 		}
 
@@ -720,7 +720,7 @@ func (p *ExecutionPlanner) analyzeRangeExpression(expr *parser.Range, scope pars
 		return nil, sql3.NewErrTypeCannotBeUsedAsRangeSubscript(expr.Y.Pos().Line, expr.Y.Pos().Column, expr.Y.DataType().TypeDescription())
 	}
 	if !typesOfRangeBoundsAreTheSame(expr.X.DataType(), expr.Y.DataType()) {
-		return nil, sql3.NewErrIncompatibleTypesForRangeSubscripts(expr.Pos().Line, expr.Pos().Column, expr.X.DataType().TypeName(), expr.Y.DataType().TypeName())
+		return nil, sql3.NewErrIncompatibleTypesForRangeSubscripts(expr.Pos().Line, expr.Pos().Column, expr.X.DataType().TypeDescription(), expr.Y.DataType().TypeDescription())
 	}
 
 	expr.ResultDataType = parser.NewDataTypeRange(expr.X.DataType())
