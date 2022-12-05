@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 type createTableField struct {
@@ -49,7 +50,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 		typeName := parser.IdentName(col.Type.Name)
 
 		if strings.ToLower(columnName) == "_id" {
-			if strings.EqualFold(typeName, parser.FieldTypeString) {
+			if strings.EqualFold(typeName, dax.BaseTypeString) {
 				isKeyed = true
 			}
 			continue
@@ -181,10 +182,10 @@ func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createT
 		}
 	}
 
-	switch strings.ToUpper(typeName) {
-	case parser.FieldTypeBool:
+	switch strings.ToLower(typeName) {
+	case dax.BaseTypeBool:
 		column.fos = append(column.fos, pilosa.OptFieldTypeBool())
-	case parser.FieldTypeDecimal:
+	case dax.BaseTypeDecimal:
 		// Get the scale value.
 		scale, err = strconv.ParseInt(col.Type.Scale.Value, 10, 64)
 		if err != nil {
@@ -201,27 +202,27 @@ func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createT
 		}
 
 		column.fos = append(column.fos, pilosa.OptFieldTypeDecimal(scale, min, max))
-	case parser.FieldTypeID:
+	case dax.BaseTypeID:
 		column.fos = append(column.fos, pilosa.OptFieldTypeMutex(cacheType, cacheSize))
-	case parser.FieldTypeIDSet:
+	case dax.BaseTypeIDSet:
 		if timeQuantum != "" {
 			column.fos = append(column.fos, pilosa.OptFieldTypeTime(timeQuantum, ttl))
 		} else {
 			column.fos = append(column.fos, pilosa.OptFieldTypeSet(cacheType, cacheSize))
 		}
-	case parser.FieldTypeInt:
+	case dax.BaseTypeInt:
 		column.fos = append(column.fos, pilosa.OptFieldTypeInt(min.ToInt64(0), max.ToInt64(0)))
-	case parser.FieldTypeString:
+	case dax.BaseTypeString:
 		column.fos = append(column.fos, pilosa.OptFieldTypeMutex(cacheType, cacheSize))
 		column.fos = append(column.fos, pilosa.OptFieldKeys())
-	case parser.FieldTypeStringSet:
+	case dax.BaseTypeStringSet:
 		if timeQuantum != "" {
 			column.fos = append(column.fos, pilosa.OptFieldTypeTime(timeQuantum, ttl))
 		} else {
 			column.fos = append(column.fos, pilosa.OptFieldTypeSet(cacheType, cacheSize))
 		}
 		column.fos = append(column.fos, pilosa.OptFieldKeys())
-	case parser.FieldTypeTimestamp:
+	case dax.BaseTypeTimestamp:
 		column.fos = append(column.fos, pilosa.OptFieldTypeTimestamp(epoch, timeUnit))
 	}
 	return column, nil
@@ -246,7 +247,7 @@ func (p *ExecutionPlanner) analyzeCreateTableStatement(stmt *parser.CreateTableS
 
 		if strings.ToLower(columnName) == "_id" {
 			//check the type
-			if !(strings.EqualFold(typeName, parser.FieldTypeID) || strings.EqualFold(typeName, parser.FieldTypeString)) {
+			if !(strings.EqualFold(typeName, dax.BaseTypeID) || strings.EqualFold(typeName, dax.BaseTypeString)) {
 				return sql3.NewErrTableIDColumnType(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column)
 			}
 			//make sure we have no constraints
@@ -324,7 +325,7 @@ func (p *ExecutionPlanner) analyzeColumn(typeName string, col *parser.ColumnDefi
 		switch c := con.(type) {
 		case *parser.CacheTypeConstraint:
 			//make sure we have a set or mutex type
-			if !(strings.EqualFold(typeName, parser.FieldTypeString) || strings.EqualFold(typeName, parser.FieldTypeStringSet) || strings.EqualFold(typeName, parser.FieldTypeID) || strings.EqualFold(typeName, parser.FieldTypeIDSet)) {
+			if !(strings.EqualFold(typeName, dax.BaseTypeString) || strings.EqualFold(typeName, dax.BaseTypeStringSet) || strings.EqualFold(typeName, dax.BaseTypeID) || strings.EqualFold(typeName, dax.BaseTypeIDSet)) {
 				return sql3.NewErrBadColumnConstraint(col.Name.NamePos.Line, col.Name.NamePos.Column, "CACHETYPE", typeName)
 			}
 			//check the type of the expression for SIZE
@@ -362,7 +363,7 @@ func (p *ExecutionPlanner) analyzeColumn(typeName string, col *parser.ColumnDefi
 
 		case *parser.TimeUnitConstraint:
 			//make sure we have an timestamp type
-			if !strings.EqualFold(typeName, parser.FieldTypeTimestamp) {
+			if !strings.EqualFold(typeName, dax.BaseTypeTimestamp) {
 				return sql3.NewErrBadColumnConstraint(col.Name.NamePos.Line, col.Name.NamePos.Column, "TIMEUNIT", typeName)
 			}
 			//check the type of the expression
@@ -384,7 +385,7 @@ func (p *ExecutionPlanner) analyzeColumn(typeName string, col *parser.ColumnDefi
 
 		case *parser.TimeQuantumConstraint:
 			//make sure we have a set type
-			if !(strings.EqualFold(typeName, parser.FieldTypeStringSet) || strings.EqualFold(typeName, parser.FieldTypeIDSet)) {
+			if !(strings.EqualFold(typeName, dax.BaseTypeStringSet) || strings.EqualFold(typeName, dax.BaseTypeIDSet)) {
 				return sql3.NewErrBadColumnConstraint(col.Name.NamePos.Line, col.Name.NamePos.Column, "TIMEQUANTUM", typeName)
 			}
 			//check the type of the expression

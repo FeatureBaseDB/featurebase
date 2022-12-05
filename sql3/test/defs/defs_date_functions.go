@@ -26,13 +26,13 @@ var datePartTests = TableTest{
 			SQLs: sqls(
 				"select datepart(1, 2)",
 			),
-			ExpErr: "an expression of type 'INT' cannot be passed to a parameter of type 'STRING'",
+			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select datepart('1', 2)",
 			),
-			ExpErr: "an expression of type 'INT' cannot be passed to a parameter of type 'TIMESTAMP'",
+			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'timestamp'",
 		},
 		{
 			SQLs: sqls(

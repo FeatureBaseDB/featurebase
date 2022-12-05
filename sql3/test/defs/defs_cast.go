@@ -81,7 +81,7 @@ var castIntLiteral = TableTest{
 			SQLs: sqls(
 				"select cast(1 as idset)",
 			),
-			ExpErr: "'INT' cannot be cast to 'IDSET'",
+			ExpErr: "'int' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
@@ -99,7 +99,7 @@ var castIntLiteral = TableTest{
 			SQLs: sqls(
 				"select cast(1 as stringset)",
 			),
-			ExpErr: "'INT' cannot be cast to 'STRINGSET'",
+			ExpErr: "'int' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(
@@ -191,7 +191,7 @@ var castInt = TableTest{
 			SQLs: sqls(
 				"select _id, cast(i1 as idset) from cast_int",
 			),
-			ExpErr: "'INT' cannot be cast to 'IDSET'",
+			ExpErr: "'int' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
@@ -210,7 +210,7 @@ var castInt = TableTest{
 			SQLs: sqls(
 				"select _id, cast(i1 as stringset) from cast_int",
 			),
-			ExpErr: "'INT' cannot be cast to 'STRINGSET'",
+			ExpErr: "'int' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(
@@ -277,19 +277,19 @@ var castBool = TableTest{
 			SQLs: sqls(
 				"select _id, cast(b1 as decimal(2)) from cast_bool",
 			),
-			ExpErr: "'BOOL' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'bool' cannot be cast to 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(b1 as id) from cast_bool",
 			),
-			ExpErr: "'BOOL' cannot be cast to 'ID'",
+			ExpErr: "'bool' cannot be cast to 'id'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(b1 as idset) from cast_bool",
 			),
-			ExpErr: "'BOOL' cannot be cast to 'IDSET'",
+			ExpErr: "'bool' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
@@ -308,13 +308,13 @@ var castBool = TableTest{
 			SQLs: sqls(
 				"select _id, cast(b1 as stringset) from cast_bool",
 			),
-			ExpErr: "'BOOL' cannot be cast to 'STRINGSET'",
+			ExpErr: "'bool' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(b1 as timestamp) from cast_bool",
 			),
-			ExpErr: "'BOOL' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'bool' cannot be cast to 'timestamp'",
 		},
 	},
 }
@@ -342,13 +342,13 @@ var castDecimal = TableTest{
 			SQLs: sqls(
 				"select _id, cast(d1 as int) from cast_dec",
 			),
-			ExpErr: "'DECIMAL(2)' cannot be cast to 'INT'",
+			ExpErr: "'decimal(2)' cannot be cast to 'int'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(d1 as bool) from cast_dec",
 			),
-			ExpErr: "'DECIMAL(2)' cannot be cast to 'BOOL'",
+			ExpErr: "'decimal(2)' cannot be cast to 'bool'",
 		},
 		{
 			SQLs: sqls(
@@ -367,13 +367,13 @@ var castDecimal = TableTest{
 			SQLs: sqls(
 				"select _id, cast(d1 as id) from cast_dec",
 			),
-			ExpErr: "'DECIMAL(2)' cannot be cast to 'ID'",
+			ExpErr: "'decimal(2)' cannot be cast to 'id'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(d1 as idset) from cast_dec",
 			),
-			ExpErr: "'DECIMAL(2)' cannot be cast to 'IDSET'",
+			ExpErr: "'decimal(2)' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
@@ -392,13 +392,13 @@ var castDecimal = TableTest{
 			SQLs: sqls(
 				"select _id, cast(d1 as stringset) from cast_dec",
 			),
-			ExpErr: "'DECIMAL(2)' cannot be cast to 'STRINGSET'",
+			ExpErr: "'decimal(2)' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(d1 as timestamp) from cast_dec",
 			),
-			ExpErr: "'DECIMAL(2)' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'decimal(2)' cannot be cast to 'timestamp'",
 		},
 	},
 }
@@ -478,25 +478,25 @@ var castID = TableTest{
 			SQLs: sqls(
 				"select _id, cast(id1 as idset) from cast_id",
 			),
-			ExpErr: "'ID' cannot be cast to 'IDSET'",
+			ExpErr: "'id' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(id1 as string) from cast_id",
 			),
-			ExpErr: "'ID' cannot be cast to 'STRING'",
+			ExpErr: "'id' cannot be cast to 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(id1 as stringset) from cast_id",
 			),
-			ExpErr: "'ID' cannot be cast to 'STRINGSET'",
+			ExpErr: "'id' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(id1 as timestamp) from cast_id",
 			),
-			ExpErr: "'ID' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'id' cannot be cast to 'timestamp'",
 		},
 	},
 }
@@ -524,25 +524,25 @@ var castIDSet = TableTest{
 			SQLs: sqls(
 				"select _id, cast(ids1 as int) from cast_ids",
 			),
-			ExpErr: "'IDSET' cannot be cast to 'INT'",
+			ExpErr: "'idset' cannot be cast to 'int'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ids1 as bool) from cast_ids",
 			),
-			ExpErr: "'IDSET' cannot be cast to 'BOOL'",
+			ExpErr: "'idset' cannot be cast to 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ids1 as decimal(2)) from cast_ids",
 			),
-			ExpErr: "'IDSET' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'idset' cannot be cast to 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ids1 as id) from cast_ids",
 			),
-			ExpErr: "'IDSET' cannot be cast to 'ID'",
+			ExpErr: "'idset' cannot be cast to 'id'",
 		},
 		{
 			SQLs: sqls(
@@ -574,13 +574,13 @@ var castIDSet = TableTest{
 			SQLs: sqls(
 				"select _id, cast(ids1 as stringset) from cast_ids",
 			),
-			ExpErr: "'IDSET' cannot be cast to 'STRINGSET'",
+			ExpErr: "'idset' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ids1 as timestamp) from cast_ids",
 			),
-			ExpErr: "'IDSET' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'idset' cannot be cast to 'timestamp'",
 		},
 	},
 }
@@ -608,7 +608,7 @@ var castString = TableTest{
 			SQLs: sqls(
 				"select _id, cast(s1 as int) from cast_string",
 			),
-			ExpErr: "'foo' cannot be cast to 'INT'",
+			ExpErr: "'foo' cannot be cast to 'int'",
 		},
 		{
 			SQLs: sqls(
@@ -627,7 +627,7 @@ var castString = TableTest{
 			SQLs: sqls(
 				"select _id, cast(s1 as bool) from cast_string",
 			),
-			ExpErr: "'foo' cannot be cast to 'BOOL'",
+			ExpErr: "'foo' cannot be cast to 'bool'",
 		},
 		{
 			SQLs: sqls(
@@ -646,7 +646,7 @@ var castString = TableTest{
 			SQLs: sqls(
 				"select _id, cast(s1 as decimal(2)) from cast_string",
 			),
-			ExpErr: "'foo' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'foo' cannot be cast to 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
@@ -665,7 +665,7 @@ var castString = TableTest{
 			SQLs: sqls(
 				"select _id, cast(s1 as id) from cast_string",
 			),
-			ExpErr: "'foo' cannot be cast to 'ID'",
+			ExpErr: "'foo' cannot be cast to 'id'",
 		},
 		{
 			SQLs: sqls(
@@ -684,7 +684,7 @@ var castString = TableTest{
 			SQLs: sqls(
 				"select _id, cast(s1 as idset) from cast_string",
 			),
-			ExpErr: "'STRING' cannot be cast to 'IDSET'",
+			ExpErr: "'string' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
@@ -703,13 +703,13 @@ var castString = TableTest{
 			SQLs: sqls(
 				"select _id, cast(s1 as stringset) from cast_string",
 			),
-			ExpErr: "'STRING' cannot be cast to 'STRINGSET'",
+			ExpErr: "'string' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(s1 as timestamp) from cast_string",
 			),
-			ExpErr: "'foo' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'foo' cannot be cast to 'timestamp'",
 		},
 		{
 			SQLs: sqls(
@@ -750,31 +750,31 @@ var castStringSet = TableTest{
 			SQLs: sqls(
 				"select _id, cast(ss1 as int) from cast_ss",
 			),
-			ExpErr: "'STRINGSET' cannot be cast to 'INT'",
+			ExpErr: "'stringset' cannot be cast to 'int'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ss1 as bool) from cast_ss",
 			),
-			ExpErr: "'STRINGSET' cannot be cast to 'BOOL'",
+			ExpErr: "'stringset' cannot be cast to 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ss1 as decimal(2)) from cast_ss",
 			),
-			ExpErr: "'STRINGSET' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'stringset' cannot be cast to 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ss1 as id) from cast_ss",
 			),
-			ExpErr: "'STRINGSET' cannot be cast to 'ID'",
+			ExpErr: "'stringset' cannot be cast to 'id'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(ss1 as idset) from cast_ss",
 			),
-			ExpErr: "'STRINGSET' cannot be cast to 'IDSET'",
+			ExpErr: "'stringset' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
@@ -807,7 +807,7 @@ var castStringSet = TableTest{
 			SQLs: sqls(
 				"select _id, cast(ss1 as timestamp) from cast_ss",
 			),
-			ExpErr: "'STRINGSET' cannot be cast to 'TIMESTAMP'",
+			ExpErr: "'stringset' cannot be cast to 'timestamp'",
 		},
 	},
 }
@@ -848,25 +848,25 @@ var castTimestamp = TableTest{
 			SQLs: sqls(
 				"select _id, cast(t1 as bool) from cast_ts",
 			),
-			ExpErr: "'TIMESTAMP' cannot be cast to 'BOOL'",
+			ExpErr: "'timestamp' cannot be cast to 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(t1 as decimal(2)) from cast_ts",
 			),
-			ExpErr: "'TIMESTAMP' cannot be cast to 'DECIMAL(2)'",
+			ExpErr: "'timestamp' cannot be cast to 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(t1 as id) from cast_ts",
 			),
-			ExpErr: "'TIMESTAMP' cannot be cast to 'ID'",
+			ExpErr: "'timestamp' cannot be cast to 'id'",
 		},
 		{
 			SQLs: sqls(
 				"select _id, cast(t1 as idset) from cast_ts",
 			),
-			ExpErr: "'TIMESTAMP' cannot be cast to 'IDSET'",
+			ExpErr: "'timestamp' cannot be cast to 'idset'",
 		},
 		{
 			SQLs: sqls(
@@ -885,7 +885,7 @@ var castTimestamp = TableTest{
 			SQLs: sqls(
 				"select _id, cast(t1 as stringset) from cast_ts",
 			),
-			ExpErr: "'TIMESTAMP' cannot be cast to 'STRINGSET'",
+			ExpErr: "'timestamp' cannot be cast to 'stringset'",
 		},
 		{
 			SQLs: sqls(

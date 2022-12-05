@@ -3,43 +3,39 @@ package parser
 import (
 	"fmt"
 	"strings"
-)
 
-// TODO(pok) make all these lower case
-const (
-	FieldTypeBool             = "BOOL"
-	FieldTypeDecimal          = "DECIMAL"
-	FieldTypeID               = "ID"
-	FieldTypeIDSet            = "IDSET"
-	FieldTypeIDSetQuantum     = "IDSETQ"
-	FieldTypeInt              = "INT"
-	FieldTypeString           = "STRING"
-	FieldTypeStringSet        = "STRINGSET"
-	FieldTypeStringSetQuantum = "STRINGSETQ"
-	FieldTypeTimestamp        = "TIMESTAMP"
+	"github.com/molecula/featurebase/v3/dax"
 )
 
 func IsValidTypeName(typeName string) bool {
-	switch strings.ToUpper(typeName) {
-	case FieldTypeBool,
-		FieldTypeDecimal,
-		FieldTypeID,
-		FieldTypeIDSet,
-		FieldTypeInt,
-		FieldTypeString,
-		FieldTypeStringSet,
-		FieldTypeTimestamp:
+	switch strings.ToLower(typeName) {
+	case dax.BaseTypeBool,
+		dax.BaseTypeDecimal,
+		dax.BaseTypeID,
+		dax.BaseTypeIDSet,
+		dax.BaseTypeInt,
+		dax.BaseTypeString,
+		dax.BaseTypeStringSet,
+		dax.BaseTypeTimestamp:
 		return true
 	default:
 		return false
 	}
 }
 
+// ExprDataType is the interface for all language layer types
 type ExprDataType interface {
 	exprDataType()
-	TypeName() string
-	TypeDescription() string
+	// the base type name e.g. int or decimal
+	BaseTypeName() string
+	// additional type information - intended to be used outside the language
+	// layer (marshalled over json, or otherwise serialized so that consumers
+	// have access to complete type information)
+	// TypeInfo is not used inside the language layer itself, as the concrete
+	// types (e.g. DataTypeString) are used
 	TypeInfo() map[string]interface{}
+	// the full type specification as a string - intended to be human readable
+	TypeDescription() string
 }
 
 func (*DataTypeVoid) exprDataType()             {}
@@ -64,12 +60,12 @@ func NewDataTypeVoid() *DataTypeVoid {
 	return &DataTypeVoid{}
 }
 
-func (*DataTypeVoid) TypeName() string {
-	return "VOID"
+func (*DataTypeVoid) BaseTypeName() string {
+	return "void"
 }
 
 func (dt *DataTypeVoid) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeVoid) TypeInfo() map[string]interface{} {
@@ -86,12 +82,12 @@ func NewDataTypeRange(subscriptType ExprDataType) *DataTypeRange {
 	}
 }
 
-func (dt *DataTypeRange) TypeName() string {
-	return fmt.Sprintf("RANGE(%s)", dt.SubscriptType.TypeName())
+func (dt *DataTypeRange) BaseTypeName() string {
+	return "range"
 }
 
 func (dt *DataTypeRange) TypeDescription() string {
-	return dt.TypeName()
+	return fmt.Sprintf("range(%s)", dt.SubscriptType.TypeDescription())
 }
 
 func (*DataTypeRange) TypeInfo() map[string]interface{} {
@@ -108,19 +104,19 @@ func NewDataTypeTuple(members []ExprDataType) *DataTypeTuple {
 	}
 }
 
-func (dt *DataTypeTuple) TypeName() string {
+func (dt *DataTypeTuple) BaseTypeName() string {
+	return "tuple"
+}
+
+func (dt *DataTypeTuple) TypeDescription() string {
 	ms := ""
 	for idx, m := range dt.Members {
-		ms = ms + m.TypeName()
+		ms = ms + m.TypeDescription()
 		if idx+1 < len(dt.Members) {
 			ms = ms + ", "
 		}
 	}
-	return fmt.Sprintf("TUPLE(%s)", ms)
-}
-
-func (dt *DataTypeTuple) TypeDescription() string {
-	return dt.TypeName()
+	return fmt.Sprintf("tuple(%s)", ms)
 }
 
 func (*DataTypeTuple) TypeInfo() map[string]interface{} {
@@ -142,19 +138,19 @@ func NewDataTypeSubtable(columns []*SubtableColumn) *DataTypeSubtable {
 	}
 }
 
-func (dt *DataTypeSubtable) TypeName() string {
+func (dt *DataTypeSubtable) BaseTypeName() string {
+	return "subtable"
+}
+
+func (dt *DataTypeSubtable) TypeDescription() string {
 	ms := ""
 	for idx, m := range dt.Columns {
-		ms = ms + m.DataType.TypeName()
+		ms = ms + m.DataType.TypeDescription()
 		if idx+1 < len(dt.Columns) {
 			ms = ms + ", "
 		}
 	}
-	return fmt.Sprintf("SUBTABLE(%s)", ms)
-}
-
-func (dt *DataTypeSubtable) TypeDescription() string {
-	return dt.TypeName()
+	return fmt.Sprintf("subtable(%s)", ms)
 }
 
 func (*DataTypeSubtable) TypeInfo() map[string]interface{} {
@@ -168,12 +164,12 @@ func NewDataTypeBool() *DataTypeBool {
 	return &DataTypeBool{}
 }
 
-func (*DataTypeBool) TypeName() string {
-	return FieldTypeBool
+func (*DataTypeBool) BaseTypeName() string {
+	return dax.BaseTypeBool
 }
 
 func (dt *DataTypeBool) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeBool) TypeInfo() map[string]interface{} {
@@ -190,12 +186,12 @@ func NewDataTypeDecimal(scale int64) *DataTypeDecimal {
 	}
 }
 
-func (d *DataTypeDecimal) TypeName() string {
-	return FieldTypeDecimal
+func (d *DataTypeDecimal) BaseTypeName() string {
+	return dax.BaseTypeDecimal
 }
 
 func (d *DataTypeDecimal) TypeDescription() string {
-	return fmt.Sprintf("%s(%d)", FieldTypeDecimal, d.Scale)
+	return fmt.Sprintf("%s(%d)", dax.BaseTypeDecimal, d.Scale)
 }
 
 func (d *DataTypeDecimal) TypeInfo() map[string]interface{} {
@@ -211,12 +207,12 @@ func NewDataTypeID() *DataTypeID {
 	return &DataTypeID{}
 }
 
-func (*DataTypeID) TypeName() string {
-	return FieldTypeID
+func (*DataTypeID) BaseTypeName() string {
+	return dax.BaseTypeID
 }
 
 func (dt *DataTypeID) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeID) TypeInfo() map[string]interface{} {
@@ -230,18 +226,19 @@ func NewDataTypeIDSet() *DataTypeIDSet {
 	return &DataTypeIDSet{}
 }
 
-func (*DataTypeIDSet) TypeName() string {
-	return FieldTypeIDSet
+func (*DataTypeIDSet) BaseTypeName() string {
+	return dax.BaseTypeIDSet
 }
 
 func (dt *DataTypeIDSet) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeIDSet) TypeInfo() map[string]interface{} {
 	return nil
 }
 
+// TODO (pok) should time quantum be it's own type and not a constraint?
 type DataTypeIDSetQuantum struct {
 }
 
@@ -249,12 +246,12 @@ func NewDataTypeIDSetQuantum() *DataTypeIDSetQuantum {
 	return &DataTypeIDSetQuantum{}
 }
 
-func (*DataTypeIDSetQuantum) TypeName() string {
-	return FieldTypeIDSetQuantum
+func (*DataTypeIDSetQuantum) BaseTypeName() string {
+	return dax.BaseTypeIDSet
 }
 
 func (dt *DataTypeIDSetQuantum) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeIDSetQuantum) TypeInfo() map[string]interface{} {
@@ -268,12 +265,12 @@ func NewDataTypeInt() *DataTypeInt {
 	return &DataTypeInt{}
 }
 
-func (*DataTypeInt) TypeName() string {
-	return FieldTypeInt
+func (*DataTypeInt) BaseTypeName() string {
+	return dax.BaseTypeInt
 }
 
 func (dt *DataTypeInt) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeInt) TypeInfo() map[string]interface{} {
@@ -287,12 +284,12 @@ func NewDataTypeString() *DataTypeString {
 	return &DataTypeString{}
 }
 
-func (*DataTypeString) TypeName() string {
-	return FieldTypeString
+func (*DataTypeString) BaseTypeName() string {
+	return dax.BaseTypeString
 }
 
 func (dt *DataTypeString) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeString) TypeInfo() map[string]interface{} {
@@ -306,12 +303,12 @@ func NewDataTypeStringSet() *DataTypeStringSet {
 	return &DataTypeStringSet{}
 }
 
-func (*DataTypeStringSet) TypeName() string {
-	return FieldTypeStringSet
+func (*DataTypeStringSet) BaseTypeName() string {
+	return dax.BaseTypeStringSet
 }
 
 func (dt *DataTypeStringSet) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeStringSet) TypeInfo() map[string]interface{} {
@@ -325,12 +322,12 @@ func NewDataTypeStringSetQuantum() *DataTypeStringSetQuantum {
 	return &DataTypeStringSetQuantum{}
 }
 
-func (*DataTypeStringSetQuantum) TypeName() string {
-	return FieldTypeStringSetQuantum
+func (*DataTypeStringSetQuantum) BaseTypeName() string {
+	return dax.BaseTypeStringSet
 }
 
 func (dt *DataTypeStringSetQuantum) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeStringSetQuantum) TypeInfo() map[string]interface{} {
@@ -344,12 +341,12 @@ func NewDataTypeTimestamp() *DataTypeTimestamp {
 	return &DataTypeTimestamp{}
 }
 
-func (*DataTypeTimestamp) TypeName() string {
-	return FieldTypeTimestamp
+func (*DataTypeTimestamp) BaseTypeName() string {
+	return dax.BaseTypeTimestamp
 }
 
 func (dt *DataTypeTimestamp) TypeDescription() string {
-	return dt.TypeName()
+	return dt.BaseTypeName()
 }
 
 func (*DataTypeTimestamp) TypeInfo() map[string]interface{} {

@@ -73,19 +73,19 @@ var unaryOpExprWithBool = TableTest{
 			SQLs: sqls(
 				"select -i from unoptest_b;",
 			),
-			ExpErr: "operator '-' incompatible with type 'BOOL'",
+			ExpErr: "operator '-' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select !i from unoptest_b;",
 			),
-			ExpErr: "operator '!' incompatible with type 'BOOL'",
+			ExpErr: "operator '!' incompatible with type 'bool'",
 		},
 		{
 			SQLs: sqls(
 				"select +i from unoptest_b;",
 			),
-			ExpErr: "operator '+' incompatible with type 'BOOL'",
+			ExpErr: "operator '+' incompatible with type 'bool'",
 		},
 	},
 }
@@ -169,7 +169,7 @@ var unaryOpExprWithDecimal = TableTest{
 			SQLs: sqls(
 				"select !d from unoptestd;",
 			),
-			ExpErr: "operator '!' incompatible with type 'DECIMAL(2)'",
+			ExpErr: "operator '!' incompatible with type 'decimal(2)'",
 		},
 		{
 			SQLs: sqls(
@@ -202,19 +202,19 @@ var unaryOpExprWithTimestamp = TableTest{
 			SQLs: sqls(
 				"select -ts from unoptestts;",
 			),
-			ExpErr: "operator '-' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '-' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select !ts from unoptestts;",
 			),
-			ExpErr: "operator '!' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '!' incompatible with type 'timestamp'",
 		},
 		{
 			SQLs: sqls(
 				"select +ts from unoptestts;",
 			),
-			ExpErr: "operator '+' incompatible with type 'TIMESTAMP'",
+			ExpErr: "operator '+' incompatible with type 'timestamp'",
 		},
 	},
 }
@@ -235,19 +235,19 @@ var unaryOpExprWithIDSet = TableTest{
 			SQLs: sqls(
 				"select -ids from unoptestids;",
 			),
-			ExpErr: "operator '-' incompatible with type 'IDSET'",
+			ExpErr: "operator '-' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select !ids from unoptestids;",
 			),
-			ExpErr: "operator '!' incompatible with type 'IDSET'",
+			ExpErr: "operator '!' incompatible with type 'idset'",
 		},
 		{
 			SQLs: sqls(
 				"select +ids from unoptestids;",
 			),
-			ExpErr: "operator '+' incompatible with type 'IDSET'",
+			ExpErr: "operator '+' incompatible with type 'idset'",
 		},
 	},
 }
@@ -268,19 +268,19 @@ var unaryOpExprWithString = TableTest{
 			SQLs: sqls(
 				"select -s from unoptest_s;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRING'",
+			ExpErr: "operator '-' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select !s from unoptest_s;",
 			),
-			ExpErr: "operator '!' incompatible with type 'STRING'",
+			ExpErr: "operator '!' incompatible with type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select +s from unoptest_s;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRING'",
+			ExpErr: "operator '+' incompatible with type 'string'",
 		},
 	},
 }
@@ -301,19 +301,19 @@ var unaryOpExprWithStringSet = TableTest{
 			SQLs: sqls(
 				"select -s from unoptestss;",
 			),
-			ExpErr: "operator '-' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '-' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select !s from unoptestss;",
 			),
-			ExpErr: "operator '!' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '!' incompatible with type 'stringset'",
 		},
 		{
 			SQLs: sqls(
 				"select +s from unoptestss;",
 			),
-			ExpErr: "operator '+' incompatible with type 'STRINGSET'",
+			ExpErr: "operator '+' incompatible with type 'stringset'",
 		},
 	},
 }

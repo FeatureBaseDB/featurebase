@@ -31,7 +31,7 @@ func (p *PlanOpFeatureBaseTables) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	ps := make([]string, 0)
 	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeName()))
+		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
 	}
 	result["_schema"] = ps
 	return result
@@ -52,29 +52,49 @@ func (p *PlanOpFeatureBaseTables) Warnings() []string {
 func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 	return types.Schema{
 		&types.PlannerColumn{
-			RelationName: "fb$tables",
+			RelationName: "fb_tables",
+			ColumnName:   "_id",
+			Type:         parser.NewDataTypeString(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_tables",
 			ColumnName:   "name",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$tables",
+			RelationName: "fb_tables",
+			ColumnName:   "owner",
+			Type:         parser.NewDataTypeString(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_tables",
+			ColumnName:   "last_updated_user",
+			Type:         parser.NewDataTypeString(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_tables",
 			ColumnName:   "created_at",
 			Type:         parser.NewDataTypeTimestamp(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$tables",
+			RelationName: "fb_tables",
 			ColumnName:   "track_existence",
 			Type:         parser.NewDataTypeBool(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$tables",
+			RelationName: "fb_tables",
 			ColumnName:   "keys",
 			Type:         parser.NewDataTypeBool(),
 		},
 		&types.PlannerColumn{
-			RelationName: "fb$tables",
+			RelationName: "fb_tables",
 			ColumnName:   "shard_width",
 			Type:         parser.NewDataTypeInt(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_tables",
+			ColumnName:   "description",
+			Type:         parser.NewDataTypeString(),
 		},
 	}
 }
@@ -105,10 +125,14 @@ func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
 		tm := time.Unix(0, i.indexInfo[i.rowIndex].CreatedAt)
 		row := []interface{}{
 			i.indexInfo[i.rowIndex].Name,
+			i.indexInfo[i.rowIndex].Name,
+			i.indexInfo[i.rowIndex].Owner,
+			i.indexInfo[i.rowIndex].LastUpdateUser,
 			tm.Format(time.RFC3339),
 			i.indexInfo[i.rowIndex].Options.TrackExistence,
 			i.indexInfo[i.rowIndex].Options.Keys,
 			i.indexInfo[i.rowIndex].ShardWidth,
+			i.indexInfo[i.rowIndex].Options.Description,
 		}
 		i.rowIndex += 1
 		return row, nil

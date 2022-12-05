@@ -3,7 +3,6 @@ package test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	featurebase "github.com/molecula/featurebase/v3"
@@ -59,8 +58,8 @@ func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interf
 	for _, oc := range ocolumns {
 		cols = append(cols, &featurebase.WireQueryField{
 			Name:     dax.FieldName(oc.ColumnName),
-			Type:     strings.ToLower(oc.Type.TypeDescription()),
-			BaseType: dax.BaseType(strings.ToLower(oc.Type.TypeName())),
+			Type:     oc.Type.TypeDescription(),
+			BaseType: dax.BaseType(oc.Type.BaseTypeName()),
 			TypeInfo: oc.Type.TypeInfo(),
 		})
 	}
