@@ -13,7 +13,6 @@ var timestampLiterals = TableTest{
 			srcHdr("event", fldTypeStringSet),
 			srcHdr("ievent", fldTypeIDSet),
 		),
-		srcRows(),
 	),
 	SQLTests: []SQLTest{
 		{

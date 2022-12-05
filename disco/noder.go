@@ -81,9 +81,9 @@ func (n *localNoder) PrimaryNodeID(hasher Hasher) string {
 	return primaryNode.ID
 }
 
-// ClusterState is a no-op implementation of the Stator ClusterState method.
+// ClusterState for localNoder just assumes the cluster is normal.
 func (n *localNoder) ClusterState(context.Context) (ClusterState, error) {
-	return ClusterStateUnknown, nil
+	return ClusterStateNormal, nil
 }
 
 func (n *localNoder) SetState(ctx context.Context, state NodeState) error {

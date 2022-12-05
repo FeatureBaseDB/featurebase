@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Address is a string of the form [scheme]://[host]:[port]
+// Address is a string of the form [scheme]://[host]:[port]/[path]
 type Address string
 
 // String returns the Address as a string type.
@@ -22,7 +22,7 @@ func (a Address) Scheme() string {
 }
 
 // HostPort returns the [host]:[port] portion of the Address; in other words,
-// the Address stripped of any scheme.
+// the Address stripped of any scheme and path.
 func (a Address) HostPort() string {
 	return parse(a).hostPort()
 }
@@ -38,14 +38,20 @@ func (a Address) Port() uint16 {
 	return parse(a).port
 }
 
+// Path returns the [path] portion of the Address.
+func (a Address) Path() string {
+	return parse(a).path
+}
+
 // OverrideScheme overrides Address's current scheme with the one provided. If
-// an empty scheme is provided, OverrideScheme will return just the host:port.
+// an empty scheme is provided, OverrideScheme will return just the
+// host:port/path.
 func (a Address) OverrideScheme(scheme string) string {
 	addr := parse(a)
 	if scheme == "" {
-		return addr.hostPort()
+		return addr.hostPortPath()
 	}
-	return scheme + "://" + addr.hostPort()
+	return scheme + "://" + addr.hostPortPath()
 }
 
 // WithScheme ensures that the string returned contains the scheme portion of a
@@ -64,13 +70,14 @@ func (a Address) WithScheme(dflt string) string {
 	if addr.scheme != "" {
 		return a.String()
 	}
-	return dflt + "://" + addr.hostPort()
+	return dflt + "://" + addr.hostPortPath()
 }
 
 type addr struct {
 	scheme string
 	host   string
 	port   uint16
+	path   string
 }
 
 // parse breaks the address up into scheme://host:port. It currently assumes
@@ -80,15 +87,24 @@ func parse(a Address) addr {
 	var scheme string
 	var host string
 	var port uint16
+	var path string
 
 	aStr := string(a)
 
-	var hostPort string
+	var hostPortPath string
 	if parts := strings.Split(aStr, "://"); len(parts) > 1 {
 		scheme = parts[0]
-		hostPort = parts[1]
+		hostPortPath = parts[1]
 	} else {
-		hostPort = aStr
+		hostPortPath = aStr
+	}
+
+	var hostPort string
+	if parts := strings.SplitN(hostPortPath, "/", 2); len(parts) == 2 {
+		hostPort = parts[0]
+		path = parts[1]
+	} else {
+		hostPort = parts[0]
 	}
 
 	if parts := strings.Split(hostPort, ":"); len(parts) == 2 {
@@ -106,6 +122,7 @@ func parse(a Address) addr {
 		scheme: scheme,
 		host:   host,
 		port:   port,
+		path:   path,
 	}
 }
 
@@ -114,6 +131,21 @@ func (a addr) hostPort() string {
 		return a.host
 	}
 	return fmt.Sprintf("%s:%d", a.host, a.port)
+}
+
+func (a addr) hostPortPath() string {
+	ret := ""
+	if a.port == 0 {
+		ret = a.host
+	} else {
+		ret = fmt.Sprintf("%s:%d", a.host, a.port)
+	}
+
+	if a.path != "" {
+		ret += "/" + a.path
+	}
+
+	return ret
 }
 
 // AddressManager is an interface for any service which needs to maintain a list

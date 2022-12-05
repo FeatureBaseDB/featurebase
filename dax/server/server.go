@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -23,21 +24,16 @@ import (
 
 	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
+	computersvc "github.com/molecula/featurebase/v3/dax/computer/service"
 	daxhttp "github.com/molecula/featurebase/v3/dax/http"
 	"github.com/molecula/featurebase/v3/dax/mds"
-	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
-	controlleralpha "github.com/molecula/featurebase/v3/dax/mds/controller/alpha"
 	controllerhttp "github.com/molecula/featurebase/v3/dax/mds/controller/http"
+	mdssvc "github.com/molecula/featurebase/v3/dax/mds/service"
 	"github.com/molecula/featurebase/v3/dax/queryer"
-	queryeralpha "github.com/molecula/featurebase/v3/dax/queryer/alpha"
-	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	snapshotterclient "github.com/molecula/featurebase/v3/dax/snapshotter/client"
-	"github.com/molecula/featurebase/v3/dax/writelogger"
-	writeloggerclient "github.com/molecula/featurebase/v3/dax/writelogger/client"
+	queryersvc "github.com/molecula/featurebase/v3/dax/queryer/service"
 	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/logger"
 	fbnet "github.com/molecula/featurebase/v3/net"
-	featurebaseserver "github.com/molecula/featurebase/v3/server"
 )
 
 // Command represents the state of the dax server command.
@@ -60,35 +56,28 @@ type Command struct {
 	advertiseURI *fbnet.URI
 	tlsConfig    *tls.Config
 
-	// registerFns is a list of functions to call once the service is up and
-	// running. This is typically used to register the service with MDS.
-	registerFns []registerFn
-
-	// checkInFn is a function to call periodically in order to check-in with a
-	// monitorinig service such as MDS.
-	checkInFn checkInFn
-
 	logger    logger.Logger
 	logOutput io.Writer
-}
 
-type registerFn func() error
-type checkInFn func() error
+	svcmgr *dax.ServiceManager
+}
 
 type CommandOption func(c *Command) error
 
 func OptCommandConfig(config *Config) CommandOption {
 	return func(c *Command) error {
 		defer c.Config.MustValidate()
-		if c.Config != nil {
-			// c.Config.Etcd = config.Etcd
-			// c.Config.Auth = config.Auth
-			// c.Config.TLS = config.TLS
-			// c.Config.Controller = config.Controller
-			// c.Config.WriteLogger = config.WriteLogger
-			return nil
-		}
 		c.Config = config
+		return nil
+	}
+}
+
+// OptCommandServiceManager allows the ability to pass in a ServiceManage that
+// has been initialized outside of the Command. This is useful for testing where
+// we want to controll the service manager during a test run.
+func OptCommandServiceManager(svcmgr *dax.ServiceManager) CommandOption {
+	return func(c *Command) error {
+		c.svcmgr = svcmgr
 		return nil
 	}
 }
@@ -100,9 +89,9 @@ func NewCommand(stderr io.Writer, opts ...CommandOption) *Command {
 
 		stderr: stderr,
 
-		registerFns: make([]registerFn, 0),
-
 		done: make(chan struct{}),
+
+		svcmgr: dax.NewServiceManager(),
 	}
 
 	for _, opt := range opts {
@@ -119,16 +108,16 @@ func NewCommand(stderr io.Writer, opts ...CommandOption) *Command {
 // Start starts the DAX server.
 func (m *Command) Start() (err error) {
 	// Seed random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
+	seed := m.Config.Seed
+	if seed == 0 {
+		seed = time.Now().UTC().UnixNano()
+	}
+	log.Printf("Random seed: %d", seed)
+	rand.Seed(seed)
 
 	if err := m.setupServer(); err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
-
-	// // Initialize server.
-	// if err = m.Server.Open(); err != nil {
-	// 	return errors.Wrap(err, "opening server")
-	// }
 
 	// Serve HTTP.
 	go func() {
@@ -138,40 +127,15 @@ func (m *Command) Start() (err error) {
 	}()
 	m.logger.Printf("listening as %s\n", m.listenURI)
 
-	// Register the service(s) by calling any registerFn they have implemented.
-	for i := range m.registerFns {
-		if err := m.registerFns[i](); err != nil {
-			return errors.Wrap(err, "calling register function")
-		}
+	if err := m.setupServices(); err != nil {
+		return errors.Wrap(err, "setting up services")
 	}
 
-	// Start the "check-in" background process which periodically checks in with
-	// MDS.
-	go m.checkIn()
+	if err := m.svcmgr.StartAll(); err != nil {
+		return errors.Wrap(err, "starting all services")
+	}
 
 	return nil
-}
-
-// checkIn calls the CheckIn function set on m.checkInFn every interval period.
-// If the interval period is 0, the check-in is disabled.
-func (m *Command) checkIn() {
-	interval := m.Config.Computer.Config.CheckInInterval
-
-	if interval == 0 || m.checkInFn == nil {
-		return
-	}
-
-	for {
-		select {
-		case <-m.done:
-			return
-		case <-time.After(interval):
-			m.logger.Debugf("node check-in in last %s, address: %s", interval, m.Config.Advertise)
-			if err := m.checkInFn(); err != nil {
-				m.logger.Errorf("checking in node: %s, %v", m.Config.Advertise, err)
-			}
-		}
-	}
 }
 
 // Wait waits for the server to be closed or interrupted.
@@ -209,6 +173,16 @@ func (m *Command) Close() error {
 	}
 }
 
+// URI returns the advertise URI at which the command can be reached.
+func (m *Command) URI() *fbnet.URI {
+	return m.advertiseURI
+}
+
+// Address returns the advertise address at which the command can be reached.
+func (m *Command) Address() dax.Address {
+	return dax.Address(m.advertiseURI.Normalize())
+}
+
 // // ParseConfig parses s into a Config.
 // func ParseConfig(s string) (Config, error) {
 // 	var c Config
@@ -236,6 +210,11 @@ func (m *Command) setupServer() error {
 	if err := m.setupLogger(); err != nil {
 		return errors.Wrap(err, "setting up logger")
 	}
+
+	if m.svcmgr != nil {
+		m.svcmgr.Logger = m.logger
+	}
+
 	conf, err := json.MarshalIndent(m.Config, "", "\t")
 	if err != nil {
 		return errors.Wrap(err, "marshalling config")
@@ -286,175 +265,106 @@ func (m *Command) setupServer() error {
 		daxhttp.OptHandlerLogger(m.logger),
 	}
 
-	// Set up WriteLogger.
-	var wlSvc *writelogger.WriteLogger
-	if m.Config.WriteLogger.Run {
-		wlSvc = writelogger.New(writelogger.Config{
-			DataDir: m.Config.WriteLogger.Config.DataDir,
-			Logger:  m.logger,
-		})
-		handlerOpts = append(handlerOpts, daxhttp.OptHandlerWriteLogger(wlSvc))
+	drouter := m.svcmgr.HTTPHandler()
+
+	// Set up Handler based on which services are running in process.
+	m.Handler, err = daxhttp.NewHandler(drouter, handlerOpts...)
+	if err != nil {
+		return errors.Wrap(err, "new handler")
 	}
 
-	// Set up Snapshotter.
-	var ssSvc *snapshotter.Snapshotter
-	if m.Config.Snapshotter.Run {
-		ssSvc = snapshotter.New(snapshotter.Config{
-			DataDir: m.Config.Snapshotter.Config.DataDir,
-			Logger:  m.logger,
-		})
-		handlerOpts = append(handlerOpts, daxhttp.OptHandlerSnapshotter(ssSvc))
-	}
+	return nil
+}
 
+// setupServices uses the configuration to set up the configured services.
+func (m *Command) setupServices() error {
 	// Set up MDS.
-	var mdsSvc *mds.MDS
-
-	// alphaDirector is used in the case where both the `mds` and `computer`
-	// services are running in the same process. It maintains the mapping
-	// between computer address and its API.
-	alphaDirector := controlleralpha.NewDirector()
-
-	alphaRouter := queryeralpha.NewRouter()
-
 	if m.Config.MDS.Run {
-		mdsSvcCfg := mds.Config{
+		mdsCfg := mds.Config{
 			RegistrationBatchTimeout: m.Config.MDS.Config.RegistrationBatchTimeout,
-			StorageMethod:            m.Config.StorageMethod,
-			StorageDSN:               m.Config.StorageDSN,
+			StorageMethod:            m.Config.MDS.Config.StorageMethod,
+			DataDir:                  m.Config.MDS.Config.DataDir,
 			Logger:                   m.logger,
-		}
-
-		// If the computer service is being run locally (in process) with MDS,
-		// then we want to use an implementation of the controller.Director
-		// interface which calls the interface methods *directly* on the compute
-		// node service (as opposed to going over http).
-		if m.Config.Computer.Run {
-			mdsSvcCfg.Director = alphaDirector
-		} else {
-			mdsSvcCfg.Director = controllerhttp.NewDirector(
+			Director: controllerhttp.NewDirector(
 				controllerhttp.DirectorConfig{
-					DirectivePath:       dax.ServicePrefixComputer + "/directive",
-					SnapshotRequestPath: dax.ServicePrefixComputer + "/snapshot",
+					DirectivePath:       "directive",
+					SnapshotRequestPath: "snapshot",
 					Logger:              m.logger,
-				})
+				}),
 		}
 
-		mdsSvc = mds.New(mdsSvcCfg)
-		handlerOpts = append(handlerOpts, daxhttp.OptHandlerMDS(mdsSvc))
-
-		// Start mds services.
-		if err := mdsSvc.Run(); err != nil {
-			return errors.Wrap(err, "running mds")
+		m.svcmgr.MDS = mdssvc.New(m.advertiseURI, mds.New(mdsCfg))
+		if err := m.svcmgr.MDSStart(); err != nil {
+			return errors.Wrap(err, "starting mds service")
 		}
 	}
 
 	// Set up Queryer.
 	if m.Config.Queryer.Run {
-		qryrSvcCfg := queryer.Config{
+		qryrCfg := queryer.Config{
 			Logger: m.logger,
 		}
 
-		var qryrSvcMDS queryer.MDS
-		var mdsRunning bool
+		m.svcmgr.Queryer = queryersvc.New(m.advertiseURI, queryer.New(qryrCfg), m.logger)
 
-		// This intentionally gives precedence to an MDSAddress over an MDS
-		// sub-service running in the same process.
+		var mdsAddr dax.Address
 		if m.Config.Queryer.Config.MDSAddress != "" {
-			qryrSvcMDS = mdsclient.New(dax.Address(m.Config.Queryer.Config.MDSAddress))
-		} else if m.Config.MDS.Run {
-			qryrSvcMDS = mdsSvc
-			mdsRunning = true
+			mdsAddr = dax.Address(m.Config.Queryer.Config.MDSAddress + "/" + dax.ServicePrefixMDS)
+		} else if m.svcmgr.MDS != nil {
+			mdsAddr = m.svcmgr.MDS.Address()
 		} else {
-			return errors.Errorf("queryer can't run without MDS")
-		}
-		qryrSvcCfg.MDS = qryrSvcMDS
-
-		// If the computer service is being run locally (in process) with MDS,
-		// then we want to use an importer which bypasses http requests and
-		// instead calls the respective services directly.
-		if mdsRunning && m.Config.Computer.Run {
-			qryrSvcCfg.Router = alphaRouter
+			return errors.Errorf("queryer requires MDS")
 		}
 
-		qryrSvc := queryer.New(qryrSvcCfg)
-		handlerOpts = append(handlerOpts, daxhttp.OptHandlerQueryer(qryrSvc))
+		// Set MDS
+		if err := m.svcmgr.Queryer.SetMDS(mdsAddr); err != nil {
+			return errors.Wrap(err, "setting mds")
+		}
+
+		// Start queryer.
+		if err := m.svcmgr.QueryerStart(); err != nil {
+			return errors.Wrap(err, "starting queryer service")
+		}
 	}
+
+	// rootDataDir holds the initial value in Config.DataDir. Because we change
+	// that value for every computer instance, we need to know what it started
+	// out as. A better solution might be to make a copy of Computer.Config on
+	// every iteration and create the new Command based on the copy (which can
+	// have a unique DataDir).
+	rootDataDir := m.Config.Computer.Config.DataDir
 
 	// Set up Computer.
 	if m.Config.Computer.Run {
-		// Set the FeatureBase.Config values based on the top-level Config
-		// values.
-		m.Config.Computer.Config.Listener = m.ln
-		m.Config.Computer.Config.Bind = uri.HostPort()
-		m.Config.Computer.Config.Advertise = m.advertiseURI.HostPort()
-
-		var mdsImpl featurebase.MDS
-		if m.Config.Computer.Config.MDSAddress != "" {
-			mdsImpl = mdsclient.New(dax.Address(m.Config.Computer.Config.MDSAddress))
-		} else if mdsSvc != nil {
-			mdsImpl = mdsSvc
-		} else {
-			return errors.Errorf("computer requires MDS")
+		n := m.Config.Computer.N
+		if n == 0 {
+			n = 1
 		}
 
-		var writeLoggerImpl featurebase.WriteLogger
-		if m.Config.Computer.Config.WriteLogger != "" {
-			writeLoggerImpl = writeloggerclient.New(dax.Address(m.Config.Computer.Config.WriteLogger))
-		} else if wlSvc != nil {
-			writeLoggerImpl = wlSvc
-		} else {
-			m.logger.Warnf("No writelogger configured, dynamic scaling will not function properly.")
+		for i := 0; i < n; i++ {
+			m.logger.Printf("Set up computer (%d)", i)
+			cfg := computersvc.CommandConfig{
+				WriteLoggerRun:    m.Config.WriteLogger.Run,
+				WriteLoggerConfig: m.Config.WriteLogger.Config,
+				SnapshotterRun:    m.Config.Snapshotter.Run,
+				SnapshotterConfig: m.Config.Snapshotter.Config,
+				ComputerConfig:    m.Config.Computer.Config,
+
+				Listener:    m.ln,
+				RootDataDir: rootDataDir,
+
+				Stderr: m.stderr,
+				Logger: m.logger,
+			}
+
+			if cfg.ComputerConfig.MDSAddress == "" && m.svcmgr.MDS != nil {
+				cfg.ComputerConfig.MDSAddress = string(m.svcmgr.MDS.Address())
+			}
+
+			// Add new computer service.
+			_ = m.svcmgr.AddComputer(
+				computersvc.New(dax.Address(m.advertiseURI.HostPort()), cfg, m.logger))
 		}
-
-		var snapshotterImpl featurebase.Snapshotter
-		if m.Config.Computer.Config.Snapshotter != "" {
-			snapshotterImpl = snapshotterclient.New(dax.Address(m.Config.Computer.Config.Snapshotter))
-		} else if ssSvc != nil {
-			snapshotterImpl = ssSvc
-		} else {
-			m.logger.Warnf("No snapshotter configured.")
-		}
-
-		fbcmd := featurebaseserver.NewCommand(m.stderr,
-			featurebaseserver.OptCommandSetConfig(&m.Config.Computer.Config),
-			featurebaseserver.OptCommandServerOptions(
-				featurebase.OptServerIsComputeNode(true),
-				featurebase.OptServerLogger(m.logger),
-			),
-			featurebaseserver.OptCommandInjections(featurebaseserver.Injections{
-				MDS:           mdsImpl,
-				WriteLogger:   writeLoggerImpl,
-				Snapshotter:   snapshotterImpl,
-				IsComputeNode: true,
-			}),
-		)
-
-		// Register the API with the local Director.
-		if err := alphaDirector.AddCmd(dax.Address(m.advertiseURI.HostPort()), fbcmd); err != nil {
-			return errors.Wrap(err, "adding cmd to director")
-		}
-
-		// Register the API with the local Router.
-		if err := alphaRouter.AddCmd(dax.Address(m.advertiseURI.HostPort()), fbcmd); err != nil {
-			return errors.Wrap(err, "adding cmd to router")
-		}
-
-		if err := fbcmd.StartNoServe(); err != nil {
-			return errors.Wrap(err, "start featurebase command")
-		}
-
-		// Add the cmd.Register function to the list of functions to call after
-		// setup.
-		m.registerFns = append(m.registerFns, fbcmd.Register)
-		m.checkInFn = fbcmd.CheckIn
-
-		handlerOpts = append(handlerOpts, daxhttp.OptHandlerComputer(fbcmd.HTTPHandler()))
-	}
-
-	// Set up Handler based on which services are running in process.
-	m.Handler, err = daxhttp.NewHandler(handlerOpts...)
-	if err != nil {
-		return errors.Wrap(err, "new handler")
 	}
 
 	return nil

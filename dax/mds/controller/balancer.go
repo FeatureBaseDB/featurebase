@@ -10,7 +10,7 @@ import (
 type Balancer interface {
 	AddWorker(ctx context.Context, worker fmt.Stringer) ([]dax.WorkerDiff, error)
 	RemoveWorker(ctx context.Context, worker fmt.Stringer) ([]dax.WorkerDiff, error)
-	AddJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error)
+	AddJobs(ctx context.Context, job ...fmt.Stringer) ([]dax.WorkerDiff, error)
 	RemoveJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error)
 	Balance(ctx context.Context) ([]dax.WorkerDiff, error)
 	CurrentState(ctx context.Context) ([]dax.WorkerInfo, error)
@@ -46,7 +46,7 @@ func (b *NopBalancer) AddWorker(ctx context.Context, worker fmt.Stringer) ([]dax
 func (b *NopBalancer) RemoveWorker(ctx context.Context, worker fmt.Stringer) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) AddJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error) {
+func (b *NopBalancer) AddJobs(ctx context.Context, job ...fmt.Stringer) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
 func (b *NopBalancer) RemoveJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error) {

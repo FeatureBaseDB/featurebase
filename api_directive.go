@@ -66,6 +66,7 @@ func (api *API) ApplyDirective(ctx context.Context, d *dax.Directive) error {
 	// TODO(tlt): despite what this comment says, this logic is not sound; we
 	// shouldn't be setting the directive until enactiveDirective() succeeds.
 	api.holder.SetDirective(d)
+	defer api.holder.SetDirectiveApplied(true)
 
 	return api.enactDirective(ctx, &previousDirective, d)
 }

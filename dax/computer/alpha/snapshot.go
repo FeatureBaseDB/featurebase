@@ -12,7 +12,6 @@ import (
 	"context"
 	"io"
 
-	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/errors"
@@ -25,10 +24,10 @@ var _ computer.SnapshotReadWriter = &alphaSnapshot{}
 // example, an http client or a locally running sub-service) to store its
 // snapshots.
 type alphaSnapshot struct {
-	ss featurebase.Snapshotter
+	ss computer.Snapshotter
 }
 
-func NewAlphaSnapshot(sser featurebase.Snapshotter) *alphaSnapshot {
+func NewAlphaSnapshot(sser computer.Snapshotter) *alphaSnapshot {
 	return &alphaSnapshot{
 		ss: sser,
 	}

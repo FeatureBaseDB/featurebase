@@ -9,7 +9,6 @@ var boolTests = TableTest{
 			srcHdr("_id", fldTypeID),
 			srcHdr("a_bool", fldTypeBool),
 		),
-		srcRows(),
 	),
 	SQLTests: []SQLTest{
 		{

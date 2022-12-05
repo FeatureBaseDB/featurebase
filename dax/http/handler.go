@@ -7,16 +7,10 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/mds"
-	mdshttp "github.com/molecula/featurebase/v3/dax/mds/http"
 	"github.com/molecula/featurebase/v3/dax/queryer"
-	queryerhttp "github.com/molecula/featurebase/v3/dax/queryer/http"
 	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	snapshotterhttp "github.com/molecula/featurebase/v3/dax/snapshotter/http"
 	"github.com/molecula/featurebase/v3/dax/writelogger"
-	writeloggerhttp "github.com/molecula/featurebase/v3/dax/writelogger/http"
 	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/logger"
 )
@@ -118,7 +112,7 @@ func OptHandlerComputer(handler http.Handler) HandlerOption {
 }
 
 // NewHandler returns a new instance of Handler with a default logger.
-func NewHandler(opts ...HandlerOption) (*Handler, error) {
+func NewHandler(router http.Handler, opts ...HandlerOption) (*Handler, error) {
 	handler := &Handler{
 		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
@@ -131,7 +125,7 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 		}
 	}
 
-	handler.Handler = newRouter(handler)
+	handler.Handler = router
 
 	handler.server = &http.Server{Handler: handler}
 
@@ -157,47 +151,6 @@ func (h *Handler) Close() error {
 		err = h.server.Close()
 	}
 	return errors.Wrap(err, "shutdown/close http server")
-}
-
-// newRouter creates a new mux http router.
-func newRouter(handler *Handler) http.Handler {
-	router := mux.NewRouter()
-
-	router.HandleFunc("/health", handler.handleGetHealth).Methods("GET").Name("GetHealth")
-
-	if handler.mds != nil {
-		pre := "/" + dax.ServicePrefixMDS
-		router.PathPrefix(pre).Handler(
-			http.StripPrefix(pre, mdshttp.Handler(handler.mds)))
-	}
-
-	if handler.writeLogger != nil {
-		pre := "/" + dax.ServicePrefixWriteLogger
-		router.PathPrefix(pre).Handler(
-			http.StripPrefix(pre, writeloggerhttp.Handler(handler.writeLogger, handler.logger)))
-	}
-
-	if handler.snapshotter != nil {
-		pre := "/" + dax.ServicePrefixSnapshotter
-		router.PathPrefix(pre).Handler(
-			http.StripPrefix(pre, snapshotterhttp.Handler(handler.snapshotter)))
-	}
-
-	if handler.queryer != nil {
-		pre := "/" + dax.ServicePrefixQueryer
-		router.PathPrefix(pre).Handler(
-			http.StripPrefix(pre, queryerhttp.Handler(handler.queryer)))
-	}
-
-	if handler.computer != nil {
-		pre := "/" + dax.ServicePrefixComputer
-		router.PathPrefix(pre).Handler(
-			http.StripPrefix(pre, handler.computer))
-	}
-
-	var h http.Handler = router
-
-	return h
 }
 
 // ServeHTTP handles an HTTP request.

@@ -97,11 +97,14 @@ func (tt TableTest) CreateTable() string {
 	return tt.Table.createTable()
 }
 
-func (tt TableTest) InsertInto(t *testing.T) string {
+func (tt TableTest) InsertInto(t *testing.T, rowSets ...int) string {
 	if !tt.HasTable() {
 		return ""
 	}
-	return tt.Table.insertInto(t)
+	if len(rowSets) == 0 {
+		rowSets = []int{0}
+	}
+	return tt.Table.insertInto(t, rowSets)
 }
 
 type SQLTest struct {
@@ -109,6 +112,7 @@ type SQLTest struct {
 	SQLs           []string
 	ExpHdrs        []*featurebase.WireQueryField
 	ExpRows        [][]interface{}
+	ExpRowsPlus1   [][][]interface{}
 	ExpErr         string
 	Compare        compareMethod
 	SortStringKeys bool
@@ -127,12 +131,13 @@ func (s SQLTest) Name(i int) string {
 }
 
 type PQLTest struct {
-	name    string
-	PQLs    []string
-	Table   string
-	ExpHdrs []*featurebase.WireQueryField
-	ExpRows [][]interface{}
-	ExpErr  string
+	name         string
+	PQLs         []string
+	Table        string
+	ExpHdrs      []*featurebase.WireQueryField
+	ExpRows      [][]interface{}
+	ExpRowsPlus1 [][][]interface{}
+	ExpErr       string
 }
 
 // Name returns a string name which can be used to distingish test runs. It
@@ -153,7 +158,7 @@ type sourceColumn struct {
 	options string
 }
 
-func tbl(name string, columns []sourceColumn, rows []sourceRow) source {
+func tbl(name string, columns []sourceColumn, rows ...[]sourceRow) source {
 	return source{
 		name:    name,
 		columns: columns,
@@ -242,7 +247,7 @@ func (sr sourceRows) insertTuples(t *testing.T) string {
 type source struct {
 	name    string
 	columns []sourceColumn
-	rows    []sourceRow
+	rows    [][]sourceRow
 }
 
 func (s source) createTable() string {
@@ -264,9 +269,11 @@ func (s source) createTable() string {
 	return ct
 }
 
-func (s source) insertInto(t *testing.T) string {
+func (s source) insertInto(t *testing.T, rowSets []int) string {
 	ii := "INSERT INTO " + s.name + " VALUES "
-	ii += sourceRows(s.rows).insertTuples(t)
+	for _, rowSet := range rowSets {
+		ii += sourceRows(s.rows[rowSet]).insertTuples(t)
+	}
 	return ii
 }
 
@@ -289,6 +296,10 @@ func hdr(name string, typ featurebase.WireQueryField) *featurebase.WireQueryFiel
 // row helpers for expected results
 func rows(rows ...[]interface{}) [][]interface{} {
 	return rows
+}
+
+func rowSets(rowSets ...[][]interface{}) [][][]interface{} {
+	return rowSets
 }
 
 func row(cells ...interface{}) []interface{} {

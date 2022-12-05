@@ -9,6 +9,7 @@ import (
 	"github.com/molecula/featurebase/v3/dax"
 	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
 	"github.com/molecula/featurebase/v3/errors"
+	"github.com/molecula/featurebase/v3/logger"
 )
 
 // Ensure type implements interface.
@@ -18,12 +19,14 @@ import (
 type schemaManager struct {
 	client *mdsclient.Client
 	qual   dax.TableQualifier
+	logger logger.Logger
 }
 
-func NewSchemaManager(mdsAddress dax.Address, qual dax.TableQualifier) *schemaManager {
+func NewSchemaManager(mdsAddress dax.Address, qual dax.TableQualifier, logger logger.Logger) *schemaManager {
 	return &schemaManager{
-		client: mdsclient.New(mdsAddress),
+		client: mdsclient.New(mdsAddress, logger),
 		qual:   qual,
+		logger: logger,
 	}
 }
 

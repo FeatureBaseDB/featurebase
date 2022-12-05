@@ -4,14 +4,13 @@ package mds
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
 
-	fb "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/boltdb"
+	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/dax/mds/controller"
 	naiveboltdb "github.com/molecula/featurebase/v3/dax/mds/controller/naive/boltdb"
 	"github.com/molecula/featurebase/v3/dax/mds/poller"
@@ -23,26 +22,26 @@ import (
 
 type Config struct {
 	// Controller
-	Director controller.Director
+	Director controller.Director `toml:"-"`
 	// RegistrationBatchTimeout is the time that the controller will
 	// wait after a node registers itself to see if any more nodes
 	// will register before sending out directives to all nodes which
 	// have been registered.
-	RegistrationBatchTimeout time.Duration
+	RegistrationBatchTimeout time.Duration `toml:"registration-batch-timeout"`
 
 	// Poller
-	PollInterval time.Duration
+	PollInterval time.Duration `toml:"poll-interval"`
 
 	// Storage
-	StorageMethod string
-	StorageDSN    string
+	StorageMethod string `toml:"-"`
+	DataDir       string `toml:"-"`
 
 	// Logger
-	Logger logger.Logger
+	Logger logger.Logger `toml:"-"`
 }
 
 // Ensure type implements interface.
-var _ fb.MDS = (*MDS)(nil)
+var _ computer.Registrar = (*MDS)(nil)
 
 // MDS provides public MDS methods for an MDS service.
 type MDS struct {
@@ -52,48 +51,60 @@ type MDS struct {
 	poller     *poller.Poller
 	schemar    schemar.Schemar
 
+	// Because we stopped using a storage method interface, and always use bolt,
+	// we need to be sure to close the boltDBs that are created in mds.New()
+	// whenever mds.Close() is called. These are pointers to those DBs so we can
+	// close them.
+	schemarDB    *boltdb.DB
+	controllerDB *boltdb.DB
+
 	logger logger.Logger
 }
 
 // New returns a new instance of MDS.
 func New(cfg Config) *MDS {
 	// Set up logger.
-	var logr = logger.NopLogger
+	var logr logger.Logger = logger.StderrLogger
 	if cfg.Logger != nil {
 		logr = cfg.Logger
 	}
 
 	// Storage methods.
 	if cfg.StorageMethod != "boltdb" && cfg.StorageMethod != "" {
-		log.Printf("storagemethod %s not supported, try 'boltdb'", cfg.StorageMethod)
+		logr.Printf("storagemethod %s not supported, try 'boltdb'", cfg.StorageMethod)
 	}
-	if cfg.StorageDSN == "" {
+
+	cfg.StorageMethod = "boltdb"
+
+	if cfg.DataDir == "" {
 		dir, err := os.MkdirTemp("", "mds_*")
 		if err != nil {
 			logr.Printf("Making temp dir for MDS storage: %v", err)
 			os.Exit(1)
 		}
-		cfg.StorageDSN = fmt.Sprintf("file:%s", dir)
-		logr.Warnf("no StorageDSN given (like 'file:/path/to/directory') using temp dir at '%s'", cfg.StorageDSN)
+		cfg.DataDir = dir
+		logr.Warnf("no DataDir given (like '/path/to/directory') using temp dir at '%s'", cfg.DataDir)
 	}
-	schemarDB, err := boltdb.NewSvcBolt(cfg.StorageDSN, "schemar", schemarboltdb.SchemarBuckets...)
+
+	schemarDB, err := boltdb.NewSvcBolt(cfg.DataDir, "schemar", schemarboltdb.SchemarBuckets...)
 	if err != nil {
 		logr.Printf("Error creating schemar db: %v", err)
 		os.Exit(1)
 	}
+
 	schemar := schemarboltdb.NewSchemar(schemarDB, logr)
 
-	boltDB, err := boltdb.NewSvcBolt(cfg.StorageDSN, "balancer", naiveboltdb.NaiveBalancerBuckets...)
+	controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "balancer", naiveboltdb.NaiveBalancerBuckets...)
 	if err != nil {
-		log.Println(errors.Wrap(err, "creating balancer bolt"))
+		logr.Printf(errors.Wrap(err, "creating balancer bolt").Error())
 		os.Exit(1)
 	}
 
 	controllerCfg := controller.Config{
 		Director:          cfg.Director,
 		Schemar:           schemar,
-		ComputeBalancer:   naiveboltdb.NewBalancer("compute", boltDB, logr),
-		TranslateBalancer: naiveboltdb.NewBalancer("translate", boltDB, logr),
+		ComputeBalancer:   naiveboltdb.NewBalancer("compute", controllerDB, logr),
+		TranslateBalancer: naiveboltdb.NewBalancer("translate", controllerDB, logr),
 
 		RegistrationBatchTimeout: cfg.RegistrationBatchTimeout,
 
@@ -101,7 +112,7 @@ func New(cfg Config) *MDS {
 		// just reusing this bolt for internal controller svcs
 		// rn... ultimately controller shouldn't know what bolt is at
 		// all
-		BoltDB: boltDB,
+		BoltDB: controllerDB,
 
 		Logger: logr,
 	}
@@ -126,6 +137,9 @@ func New(cfg Config) *MDS {
 		poller:     poller,
 		schemar:    schemar,
 
+		schemarDB:    schemarDB,
+		controllerDB: controllerDB,
+
 		logger: logr,
 	}
 }
@@ -134,8 +148,8 @@ func New(cfg Config) *MDS {
 // mds specific endpoints
 ////////////////////////////////////////////////////
 
-// Run starts MDS services, such as the Poller.
-func (m *MDS) Run() error {
+// Start starts MDS services, such as the Poller.
+func (m *MDS) Start() error {
 	// Initialize the poller (in the case where this MDS instance has restarted
 	// or is a replacement). Then start the poller.
 	if err := m.controller.InitializePoller(context.Background()); err != nil {
@@ -151,6 +165,14 @@ func (m *MDS) Run() error {
 func (m *MDS) Stop() error {
 	m.poller.Stop()
 	m.controller.Stop()
+
+	if m.schemarDB != nil {
+		m.schemarDB.Close()
+	}
+	if m.controllerDB != nil {
+		m.controllerDB.Close()
+	}
+
 	return nil
 }
 

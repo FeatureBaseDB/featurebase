@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/molecula/featurebase/v3/dax/mds"
 	"github.com/molecula/featurebase/v3/dax/queryer"
 	"github.com/molecula/featurebase/v3/dax/snapshotter"
 	"github.com/molecula/featurebase/v3/dax/writelogger"
@@ -32,6 +33,12 @@ type Config struct {
 	// route to an interface that Bind is listening on.
 	Advertise string `toml:"advertise"`
 
+	// Seed is used to seed the default rand.Source. If Seed is 0 (i.e. not set)
+	// the default rand.Source will be seeded using the current time. Note: this
+	// is not very useful at the moment because Table.CreateID() uses package
+	// crypto/rand which doesn't honor this seed.
+	Seed int64 `toml:"seed"`
+
 	// Verbose toggles verbose logging which can be useful for debugging.
 	Verbose bool `toml:"verbose"`
 
@@ -43,19 +50,11 @@ type Config struct {
 	Snapshotter SnapshotterOptions `toml:"snapshotter"`
 	Queryer     QueryerOptions     `toml:"queryer"`
 	Computer    ComputerOptions    `toml:"computer"`
-
-	// Storage methods.
-	StorageMethod string `toml:"storage-method"`
-	StorageDSN    string `toml:"storage-dsn"`
 }
 
 type MDSOptions struct {
-	Run    bool      `toml:"run"`
-	Config MDSConfig `toml:"config"`
-}
-
-type MDSConfig struct {
-	RegistrationBatchTimeout time.Duration `toml:"registration-batch-timeout"`
+	Run    bool       `toml:"run"`
+	Config mds.Config `toml:"config"`
 }
 
 type WriteLoggerOptions struct {
@@ -75,6 +74,7 @@ type QueryerOptions struct {
 
 type ComputerOptions struct {
 	Run    bool            `toml:"run"`
+	N      int             `toml:"n"`
 	Config fbserver.Config `toml:"config"`
 }
 
@@ -82,15 +82,15 @@ type ComputerOptions struct {
 func NewConfig() *Config {
 	c := &Config{
 		MDS: MDSOptions{
-			Config: MDSConfig{
+			Config: mds.Config{
 				RegistrationBatchTimeout: time.Second * 3,
+				StorageMethod:            defaultStorageMethod,
 			},
 		},
 		Bind: ":" + defaultBindPort,
 		Computer: ComputerOptions{
 			Config: *fbserver.NewConfig(),
 		},
-		StorageMethod: defaultStorageMethod,
 	}
 	return c
 }

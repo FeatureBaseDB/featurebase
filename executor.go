@@ -19,14 +19,15 @@ import (
 
 	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/lib/pq"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/proto"
-	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/shardwidth"
-	"github.com/featurebasedb/featurebase/v3/task"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/proto"
+	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/molecula/featurebase/v3/shardwidth"
+	"github.com/molecula/featurebase/v3/task"
+	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -6033,7 +6034,8 @@ func (e *executor) remoteExec(ctx context.Context, node *disco.Node, index strin
 		MaxMemory:    maxMemory,
 	}
 
-	resp, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
+	addr := dax.Address(node.URI.String())
+	resp, err := e.client.QueryNode(ctx, addr, index, pbreq)
 	if err != nil {
 		return nil, err
 	}

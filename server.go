@@ -658,11 +658,16 @@ func (s *Server) Open() error {
 	// Set node ID.
 	s.nodeID = s.disCo.ID()
 
+	nodeState := disco.NodeStateUnknown
+	if s.cluster.isComputeNode {
+		nodeState = disco.NodeStateStarted
+	}
+
 	node := &disco.Node{
 		ID:        s.nodeID,
 		URI:       s.uri,
 		GRPCURI:   s.grpcURI,
-		State:     disco.NodeStateUnknown,
+		State:     nodeState,
 		IsPrimary: s.IsPrimary(),
 	}
 

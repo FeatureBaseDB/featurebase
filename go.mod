@@ -20,10 +20,6 @@ require (
 	github.com/confluentinc/confluent-kafka-go v1.9.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/denisenkom/go-mssqldb v0.11.0
-	github.com/docker/distribution v2.8.1+incompatible // indirect
-	github.com/docker/docker v20.10.17+incompatible
-	github.com/docker/go-connections v0.4.0
-	github.com/docker/go-units v0.4.0 // indirect
 	github.com/felixge/fgprof v0.9.2
 	github.com/getsentry/sentry-go v0.13.0
 	github.com/glycerine/vprint v0.0.0-20200730000117-76cea49a68ea
@@ -44,7 +40,6 @@ require (
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/lib/pq v1.10.5
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
-	github.com/opencontainers/image-spec v1.0.2
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
@@ -147,12 +142,9 @@ require (
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
@@ -196,7 +188,6 @@ require (
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gotest.tools/v3 v3.0.2 // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
 )
 

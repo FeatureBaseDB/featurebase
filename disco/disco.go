@@ -155,6 +155,57 @@ func (n *nopDisCo) DeleteNode(context.Context, string) error {
 	return nil
 }
 
+// Ensure type implements interface.
+var _ DisCo = &inMemDisCo{}
+
+func NewInMemDisCo(id string) *inMemDisCo {
+	return &inMemDisCo{
+		id: id,
+	}
+}
+
+// inMemDisCo represents a DisCo that is aware of itself.
+type inMemDisCo struct {
+	id string
+}
+
+// Close no-op.
+func (n *inMemDisCo) Close() error {
+	return nil
+}
+
+// Start is a no-op implementation of the DisCo Start method.
+func (n *inMemDisCo) Start(ctx context.Context) (InitialClusterState, error) {
+	return InitialClusterStateNew, nil
+}
+
+// ID is a no-op implementation of the DisCo ID method.
+func (n *inMemDisCo) ID() string {
+	return n.id
+}
+
+// IsLeader is a no-op implementation of the DisCo IsLeader method.
+func (n *inMemDisCo) IsLeader() bool {
+	return true
+}
+
+// Leader is a no-op implementation of the DisCo Leader method.
+func (n *inMemDisCo) Leader() *Peer {
+	return nil
+}
+
+// Peers is a no-op implementation of the DisCo Peers method.
+func (n *inMemDisCo) Peers() []*Peer {
+	return nil
+}
+
+// DeleteNode a no-op implementation of the DisCo DeleteNode method.
+func (n *inMemDisCo) DeleteNode(context.Context, string) error {
+	return nil
+}
+
+////////////////////////////////////////////////
+
 // NopSharder represents a Sharder that doesn't do anything.
 var NopSharder Sharder = &nopSharder{}
 
