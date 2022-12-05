@@ -32,6 +32,14 @@ func partition(t dax.TableKey, p dax.VersionedPartition) pUnit {
 	return pUnit{t, p}
 }
 
+func partitions(t dax.TableKey, p ...dax.VersionedPartition) []pUnit {
+	ret := make([]pUnit, 0, len(p))
+	for _, vp := range p {
+		ret = append(ret, pUnit{t, vp})
+	}
+	return ret
+}
+
 func decodePartition(j dax.Job) (pUnit, error) {
 	s := string(j)
 	parts := strings.Split(s, "|")

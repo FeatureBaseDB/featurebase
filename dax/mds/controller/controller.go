@@ -72,6 +72,7 @@ func New(cfg Config) *Controller {
 		logger: logger.NopLogger,
 
 		nodeChan: make(chan *dax.Node, 10),
+		stopping: make(chan struct{}),
 	}
 
 	if cfg.Logger != nil {
@@ -510,7 +511,7 @@ func (c *Controller) nodesTranslateReadOrWrite(ctx context.Context, role *dax.Tr
 				if err != nil {
 					return nil, false, NewErrInternal(err.Error())
 				}
-				diffs, err := bal.AddJob(ctx, j)
+				diffs, err := bal.AddJobs(ctx, j)
 				if err != nil {
 					return nil, false, errors.Wrap(err, "adding job")
 				}
@@ -697,7 +698,7 @@ func (c *Controller) nodesComputeReadOrWrite(ctx context.Context, role *dax.Comp
 				if err != nil {
 					return nil, false, NewErrInternal(err.Error())
 				}
-				diffs, err := bal.AddJob(ctx, j)
+				diffs, err := bal.AddJobs(ctx, j)
 				if err != nil {
 					return nil, false, errors.Wrap(err, "adding job")
 				}
@@ -811,29 +812,29 @@ func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) 
 		// and therefore need to be sent an updated Directive.
 		workerSet := NewAddressSet()
 
-		// Generate the list of partitions to be added.
-		partitions := make(dax.VersionedPartitions, qtbl.PartitionN)
+		// Generate the list of partitionsToAdd to be added.
+		partitionsToAdd := make(dax.VersionedPartitions, qtbl.PartitionN)
 		for partitionNum := 0; partitionNum < qtbl.PartitionN; partitionNum++ {
-			partitions[partitionNum] = dax.NewVersionedPartition(dax.PartitionNum(partitionNum), 0)
+			partitionsToAdd[partitionNum] = dax.NewVersionedPartition(dax.PartitionNum(partitionNum), 0)
 		}
 
 		// Add partitions to versionStore. Version is intentionally set to 0
 		// here as this is the initial instance of the partition.
-		if err := c.versionStore.AddPartitions(ctx, qtid, partitions...); err != nil {
+		if err := c.versionStore.AddPartitions(ctx, qtid, partitionsToAdd...); err != nil {
 			return NewErrInternal(err.Error())
 		}
 
-		for _, p := range partitions {
-			// We don't currently use the returned diff, other than to determine
-			// which worker was affected, because we send the full Directive
-			// every time.
-			diffs, err := c.TranslateBalancer.AddJob(ctx, partition(qtbl.Key(), p))
-			if err != nil {
-				return errors.Wrap(err, "adding job")
-			}
-			for _, diff := range diffs {
-				workerSet.Add(dax.Address(diff.WorkerID))
-			}
+		stringers := make([]fmt.Stringer, 0, len(partitionsToAdd))
+		for _, p := range partitionsToAdd {
+			stringers = append(stringers, partition(qtbl.Key(), p))
+		}
+
+		diffs, err := c.TranslateBalancer.AddJobs(ctx, stringers...)
+		if err != nil {
+			return errors.Wrap(err, "adding job")
+		}
+		for _, diff := range diffs {
+			workerSet.Add(dax.Address(diff.WorkerID))
 		}
 
 		// Convert the slice of addresses into a slice of addressMethod containing
@@ -866,7 +867,7 @@ func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) 
 		// We don't currently use the returned diff, other than to determine
 		// which worker was affected, because we send the full Directive
 		// every time.
-		diffs, err := c.TranslateBalancer.AddJob(ctx, partition(qtbl.Key(), p))
+		diffs, err := c.TranslateBalancer.AddJobs(ctx, partition(qtbl.Key(), p))
 		if err != nil {
 			return errors.Wrap(err, "adding job")
 		}
@@ -980,7 +981,7 @@ func (c *Controller) AddShards(ctx context.Context, qtid dax.QualifiedTableID, s
 		// We don't currently use the returned diff, other than to determine
 		// which worker was affected, because we send the full Directive every
 		// time.
-		diffs, err := c.ComputeBalancer.AddJob(ctx, shard(qtid.Key(), s))
+		diffs, err := c.ComputeBalancer.AddJobs(ctx, shard(qtid.Key(), s))
 		if err != nil {
 			return errors.Wrap(err, "adding job")
 		}

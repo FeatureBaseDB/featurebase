@@ -986,8 +986,18 @@ func (m *Main) setupClient() (*tls.Config, error) {
 			pilosaclient.OptClientPoolSizePerRoute(400),
 		)
 	}
+
 	if m.useMDS() {
-		opts = append(opts, pilosaclient.OptClientPathPrefix(dax.ServicePrefixComputer))
+		// We should only have one "pilosa host" here. Get the path from that
+		// and use it as the client path prefix.
+		var prefix string
+		for i := range m.PilosaHosts {
+			addr := dax.Address(m.PilosaHosts[i])
+			prefix = addr.Path()
+			m.PilosaHosts = []string{addr.HostPort()}
+			break
+		}
+		opts = append(opts, pilosaclient.OptClientPathPrefix(prefix))
 	}
 
 	m.client, err = pilosaclient.NewClient(m.PilosaHosts, opts...)
@@ -1001,7 +1011,7 @@ func (m *Main) setupClient() (*tls.Config, error) {
 
 		// MDS doesn't auto-create a table based on IDK ingest; the table must
 		// already exist.
-		mdsClient := mdsclient.New(dax.Address(m.MDSAddress))
+		mdsClient := mdsclient.New(dax.Address(m.MDSAddress), m.log)
 		qual := dax.NewTableQualifier(m.OrganizationID, m.DatabaseID)
 		qtid, err := mdsClient.TableID(ctx, qual, m.TableName)
 		if err != nil {
@@ -1014,7 +1024,7 @@ func (m *Main) setupClient() (*tls.Config, error) {
 
 		m.Qtbl = qtbl
 		m.Index = string(qtbl.Key())
-		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qual)
+		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qual, m.log)
 
 		m.NewImporterFn = func() pilosabatch.Importer {
 			return mds.NewImporter(mdsClient, qtbl)

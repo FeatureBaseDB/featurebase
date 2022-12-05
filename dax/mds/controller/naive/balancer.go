@@ -4,15 +4,21 @@ package naive
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/dax/mds/controller"
 	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/logger"
 )
+
+// Ensure type implements interface.
+var _ controller.Balancer = (*Balancer)(nil)
 
 // Balancer is a naive implementation of the controller.Balancer interface. It
 // helps manage the relationships between workers and jobs. The logic it uses to
@@ -47,14 +53,14 @@ type WorkerJobService interface {
 	CreateWorker(ctx context.Context, balancerName string, worker dax.Worker) error
 	DeleteWorker(ctx context.Context, balancerName string, worker dax.Worker) error
 
-	CreateJob(ctx context.Context, balancerName string, worker dax.Worker, job dax.Job) error
+	CreateJobs(ctx context.Context, balancerName string, worker dax.Worker, job ...dax.Job) error
 	DeleteJob(ctx context.Context, balancerName string, worker dax.Worker, job dax.Job) error
-	JobCount(ctx context.Context, balancerName string, worker dax.Worker) (int, error)
+	JobCounts(ctx context.Context, balancerName string, worker ...dax.Worker) (map[dax.Worker]int, error)
 	ListJobs(ctx context.Context, balancerName string, worker dax.Worker) (dax.Jobs, error)
 }
 
 type FreeJobService interface {
-	CreateFreeJob(ctx context.Context, balancerName string, job dax.Job) error
+	CreateFreeJobs(ctx context.Context, balancerName string, job ...dax.Job) error
 	DeleteFreeJob(ctx context.Context, balancerName string, job dax.Job) error
 	ListFreeJobs(ctx context.Context, balancerName string) (dax.Jobs, error)
 	MergeFreeJobs(ctx context.Context, balancerName string, jobs dax.Jobs) error
@@ -164,15 +170,30 @@ func (b *Balancer) removeWorker(ctx context.Context, worker dax.Worker) (interna
 	return diff, nil
 }
 
-// AddJob adds a job to an existing worker. If there are no existing workers,
-// the job is placed into the free list and will be assigned to a worker once
-// one becomes available.
-func (b *Balancer) AddJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error) {
-	b.logger.Debugf("%s: AddJob(%s)", b.name, job.String())
+// AddJobs adds one or more jobs to an existing worker. If there are no existing
+// workers, the jobs are placed into the free list and will be assigned to a
+// worker once one becomes available.
+func (b *Balancer) AddJobs(ctx context.Context, jobs ...fmt.Stringer) ([]dax.WorkerDiff, error) {
+	start := time.Now()
+	defer func() {
+		log.Printf("ELAPSED: Balancer.AddJob: %v", time.Since(start))
+	}()
+
+	jobsToAdd := make([]dax.Job, 0, len(jobs))
+	for _, job := range jobs {
+		jobsToAdd = append(jobsToAdd, dax.Job(job.String()))
+	}
+
+	if len(jobsToAdd) == 1 {
+		b.logger.Debugf("%s: AddJobs (%s)", b.name, jobsToAdd[0])
+	} else {
+		b.logger.Debugf("%s: AddJobs (%d)", b.name, len(jobsToAdd))
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	diff, err := b.addJob(ctx, dax.Job(job.String()))
+	diff, err := b.addJobs(ctx, jobsToAdd...)
 	if err != nil {
 		return nil, errors.Wrap(err, "adding job")
 	}
@@ -180,11 +201,11 @@ func (b *Balancer) AddJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDi
 	return diff.output(), nil
 }
 
-func (b *Balancer) addJob(ctx context.Context, job dax.Job) (internalDiffs, error) {
+func (b *Balancer) addJobs(ctx context.Context, jobs ...dax.Job) (internalDiffs, error) {
 	if cnt, err := b.current.WorkerCount(ctx, b.name); err != nil {
 		return nil, errors.Wrap(err, "getting worker count")
 	} else if cnt == 0 {
-		if err := b.freeJobs.CreateFreeJob(ctx, b.name, job); err != nil {
+		if err := b.freeJobs.CreateFreeJobs(ctx, b.name, jobs...); err != nil {
 			return nil, errors.Wrap(err, "creating free job")
 		}
 		// TODO: we might want to inform the user that a job is in the free list
@@ -192,38 +213,59 @@ func (b *Balancer) addJob(ctx context.Context, job dax.Job) (internalDiffs, erro
 		return internalDiffs{}, nil
 	}
 
-	// Make sure this job doesn't already exist.
-	if _, ok, err := b.workerForJob(ctx, job); err != nil {
-		return nil, errors.Wrapf(err, "getting worker for job: %s", job)
-	} else if ok {
-		// The job is already being tracked.
-		return internalDiffs{}, nil
-	}
-
-	// Find the worker with the fewest number of jobs and assign it this job.
-	var lowCount int = math.MaxInt
-	var lowWorker dax.Worker
-
-	workerIDs, err := b.current.ListWorkers(ctx, b.name)
+	workerJobs, err := b.current.WorkersJobs(ctx, b.name)
 	if err != nil {
-		return nil, errors.Wrap(err, "listing workers")
+		return nil, errors.Wrapf(err, "getting workers jobs: %s", b.name)
+	}
+	jset := dax.NewSet[dax.Job]()
+	for _, workerInfo := range workerJobs {
+		jset.Merge(dax.NewSet(workerInfo.Jobs...))
 	}
 
-	for _, workerID := range workerIDs {
-		if l, err := b.current.JobCount(ctx, b.name, workerID); err != nil {
-			return nil, errors.Wrapf(err, "getting job count for worker: %s", workerID)
-		} else if l < lowCount {
-			lowCount = l
-			lowWorker = workerID
-		}
-	}
-
-	if err := b.current.CreateJob(ctx, b.name, lowWorker, job); err != nil {
-		return nil, errors.Wrap(err, "creating job")
+	workerIDs := make(dax.Workers, 0, len(workerJobs))
+	jobCounts := make(map[dax.Worker]int, 0)
+	for _, v := range workerJobs {
+		workerIDs = append(workerIDs, v.ID)
+		jobCounts[v.ID] = len(v.Jobs)
 	}
 
 	diffs := newInternalDiffs()
-	diffs.added(lowWorker, job)
+
+	jobsToCreate := make(map[dax.Worker][]dax.Job)
+
+	for _, job := range jobs {
+		// Skip any job that already exists.
+		if jset.Contains(job) {
+			continue
+		}
+
+		// Find the worker with the fewest number of jobs and assign it this job.
+		var lowCount int = math.MaxInt
+		var lowWorker dax.Worker
+
+		// We loop over workerIDs here instead of jobCounts because jobCounts is
+		// a map and it can return results in an unexpected order, which is a
+		// problem for testing.
+		for _, worker := range workerIDs {
+			jobCount := jobCounts[worker]
+			if jobCount < lowCount {
+				lowCount = jobCount
+				lowWorker = worker
+			}
+		}
+
+		jobsToCreate[lowWorker] = append(jobsToCreate[lowWorker], job)
+		jobCounts[lowWorker]++
+	}
+
+	for worker, jobs := range jobsToCreate {
+		if err := b.current.CreateJobs(ctx, b.name, worker, jobs...); err != nil {
+			return nil, errors.Wrap(err, "creating job")
+		}
+		for _, job := range jobs {
+			diffs.added(worker, job)
+		}
+	}
 
 	return diffs, nil
 }
@@ -314,11 +356,11 @@ func (b *Balancer) balance(ctx context.Context, diffs internalDiffs) (internalDi
 		return nil, errors.Wrapf(err, "listing workers: %s", b.name)
 	} else {
 		for _, worker := range workers {
-			cnt, err := b.current.JobCount(ctx, b.name, worker)
+			jobCounts, err := b.current.JobCounts(ctx, b.name, worker)
 			if err != nil {
 				return nil, errors.Wrapf(err, "getting job count: %s", worker)
 			}
-			numJobs += cnt
+			numJobs += jobCounts[worker]
 		}
 	}
 
@@ -340,10 +382,11 @@ func (b *Balancer) balance(ctx context.Context, diffs internalDiffs) (internalDi
 			numTargetJobs += 1
 		}
 
-		numCurrentJobs, err := b.current.JobCount(ctx, b.name, workerInfo.ID)
+		jobCounts, err := b.current.JobCounts(ctx, b.name, workerInfo.ID)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting job count: %s", workerInfo.ID)
 		}
+		numCurrentJobs := jobCounts[workerInfo.ID]
 
 		// If we don't need to remove jobs from this worker, then just continue
 		// on to the next worker.
@@ -364,7 +407,7 @@ func (b *Balancer) balance(ctx context.Context, diffs internalDiffs) (internalDi
 			} else {
 				diffs.merge(rj)
 			}
-			if aj, err := b.addJob(ctx, sortedJobs[i]); err != nil {
+			if aj, err := b.addJobs(ctx, sortedJobs[i]); err != nil {
 				return nil, errors.Wrapf(err, "adding job: %s", sortedJobs[i])
 			} else {
 				diffs.merge(aj)
@@ -511,7 +554,7 @@ func (b *Balancer) processFreeJobs(ctx context.Context) (internalDiffs, error) {
 		return nil, errors.Wrapf(err, "listing free jobs: %s", b.name)
 	}
 	for _, job := range jobs {
-		if aj, err := b.addJob(ctx, job); err != nil {
+		if aj, err := b.addJobs(ctx, job); err != nil {
 			return nil, errors.Wrapf(err, "adding job: %s", job)
 		} else {
 			diffs.merge(aj)

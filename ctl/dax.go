@@ -14,12 +14,10 @@ func BuildDAXFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.BoolVar(&srv.Config.Verbose, "verbose", srv.Config.Verbose, "Enable verbose logging")
 	flags.StringVar(&srv.Config.LogPath, "log-path", srv.Config.LogPath, "Log path")
 
-	flags.StringVar(&srv.Config.StorageMethod, "storage-method", srv.Config.StorageMethod, "Method to use for persistent storage.")
-	flags.StringVar(&srv.Config.StorageDSN, "storage-dsn", srv.Config.StorageDSN, "Datasource Name when using an applicable storage method.")
-
 	// MDS
 	flags.BoolVar(&srv.Config.MDS.Run, "mds.run", srv.Config.MDS.Run, "Run the MDS service in process.")
 	flags.DurationVar(&srv.Config.MDS.Config.RegistrationBatchTimeout, "mds.config.registration-batch-timeout", srv.Config.MDS.Config.RegistrationBatchTimeout, "Timeout for node registration batches.")
+	flags.StringVar(&srv.Config.MDS.Config.DataDir, "mds.config.data-dir", srv.Config.MDS.Config.DataDir, "MDS directory to use in process.")
 
 	// WriteLogger
 	flags.BoolVar(&srv.Config.WriteLogger.Run, "writelogger.run", srv.Config.WriteLogger.Run, "Run the WriteLogger service in process.")
@@ -35,5 +33,6 @@ func BuildDAXFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Computer
 	flags.BoolVar(&srv.Config.Computer.Run, "computer.run", srv.Config.Computer.Run, "Run the Computer service in process.")
+	flags.IntVar(&srv.Config.Computer.N, "computer.n", srv.Config.Computer.N, "The number of Computer services to run in process.")
 	flags.AddFlagSet(serverFlagSet(&srv.Config.Computer.Config, "computer.config"))
 }

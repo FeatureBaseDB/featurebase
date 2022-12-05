@@ -140,6 +140,14 @@ type Holder struct {
 	// directive is the latest directive applied to the node.
 	directive *dax.Directive
 
+	// directiveApplied is used for testing (in an attempt to avoid sleeps). It
+	// should be removed once we sort out the logic between MDS and computer
+	// nodes. For example, MDS really needs to send out directives
+	// asynchronously and allow a computer to load data from
+	// snapshotter/writelogger; then MDS should only start directing queries to
+	// that computer once it has completed applying the snapshot.
+	directiveApplied bool
+
 	versionStore dax.VersionStore
 }
 
@@ -173,7 +181,25 @@ func (h *Holder) SetDirective(d *dax.Directive) {
 	// of the existing directive's version.
 	if h.directive == nil || d.Version > h.directive.Version {
 		h.directive = d
+		h.directiveApplied = false
 	}
+}
+
+// DirectiveApplied returns true if the Holder's latest directive has been fully
+// applied and is safe for queries. This is primarily used in testing and will
+// likely evolve to something smarter.
+func (h *Holder) DirectiveApplied() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.directiveApplied
+}
+
+// SetDirectiveApplied sets the value of directiveApplied. See the node on the
+// DirectiveApplied method.
+func (h *Holder) SetDirectiveApplied(a bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.directiveApplied = a
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {

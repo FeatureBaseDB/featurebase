@@ -13,7 +13,6 @@ var insertTest = TableTest{
 			srcHdr("event", fldTypeStringSet),
 			srcHdr("ievent", fldTypeIDSet),
 		),
-		nil,
 	),
 	SQLTests: []SQLTest{
 		{

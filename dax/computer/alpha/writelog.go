@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"io"
 
-	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/errors"
@@ -35,10 +34,10 @@ var _ computer.WriteLogWriter = &alphaWriteLog{}
 // (or perhaps "computer") is the top level package (i.e. "pilosa"). Until we
 // can correct the packaging, we will likely have weird cases like this.
 type alphaWriteLog struct {
-	wl featurebase.WriteLogger
+	wl computer.WriteLogger
 }
 
-func NewAlphaWriteLog(wler featurebase.WriteLogger) *alphaWriteLog {
+func NewAlphaWriteLog(wler computer.WriteLogger) *alphaWriteLog {
 	return &alphaWriteLog{
 		wl: wler,
 	}
@@ -126,7 +125,7 @@ func (w *alphaWriteLog) TableKeyReader(ctx context.Context, qtid dax.QualifiedTa
 }
 
 type tableKeyReader struct {
-	wl        featurebase.WriteLogger
+	wl        computer.WriteLogger
 	table     dax.TableKey
 	partition dax.PartitionNum
 	version   int
@@ -134,7 +133,7 @@ type tableKeyReader struct {
 	closer    io.Closer
 }
 
-func newTableKeyReader(wl featurebase.WriteLogger, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int) *tableKeyReader {
+func newTableKeyReader(wl computer.WriteLogger, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int) *tableKeyReader {
 	r := &tableKeyReader{
 		wl:        wl,
 		table:     qtid.Key(),
@@ -195,7 +194,7 @@ func (w *alphaWriteLog) FieldKeyReader(ctx context.Context, qtid dax.QualifiedTa
 }
 
 type fieldKeyReader struct {
-	wl      featurebase.WriteLogger
+	wl      computer.WriteLogger
 	table   dax.TableKey
 	field   dax.FieldName
 	version int
@@ -203,7 +202,7 @@ type fieldKeyReader struct {
 	closer  io.Closer
 }
 
-func newFieldKeyReader(wl featurebase.WriteLogger, qtid dax.QualifiedTableID, field dax.FieldName, version int) *fieldKeyReader {
+func newFieldKeyReader(wl computer.WriteLogger, qtid dax.QualifiedTableID, field dax.FieldName, version int) *fieldKeyReader {
 	r := &fieldKeyReader{
 		wl:      wl,
 		table:   qtid.Key(),
@@ -264,7 +263,7 @@ func (w *alphaWriteLog) ShardReader(ctx context.Context, qtid dax.QualifiedTable
 }
 
 type shardReader struct {
-	wl        featurebase.WriteLogger
+	wl        computer.WriteLogger
 	table     dax.TableKey
 	partition dax.PartitionNum
 	shard     dax.ShardNum
@@ -273,7 +272,7 @@ type shardReader struct {
 	closer    io.Closer
 }
 
-func newShardReader(wl featurebase.WriteLogger, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int) *shardReader {
+func newShardReader(wl computer.WriteLogger, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int) *shardReader {
 	r := &shardReader{
 		wl:        wl,
 		table:     qtid.Key(),

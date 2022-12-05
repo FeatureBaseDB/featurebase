@@ -56,10 +56,10 @@ func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedT
 	main.DatabaseID = qtbl.Qualifier().DatabaseID
 	main.TableName = qtbl.Name
 	main.Qtbl = qtbl
-	main.SchemaManager = mds.NewSchemaManager(address, qtbl.Qualifier())
+	main.SchemaManager = mds.NewSchemaManager(address, qtbl.Qualifier(), logger.StderrLogger)
 	main.Index = string(qtbl.Key())
 
-	mdsClient := mdsclient.New(dax.Address(address))
+	mdsClient := mdsclient.New(dax.Address(address), logger.StderrLogger)
 	main.NewImporterFn = func() batch.Importer {
 		return mds.NewImporter(mdsClient, qtbl)
 	}
@@ -1755,7 +1755,7 @@ func TestBatchTargetMDS(t *testing.T) {
 		mdsHost = "dax:8080"
 	}
 
-	mdsAddress := dax.Address(mdsHost)
+	mdsAddress := dax.Address(mdsHost + "/" + dax.ServicePrefixMDS)
 	orgID := dax.OrganizationID("acme")
 	dbID := dax.DatabaseID("db1")
 
@@ -1867,7 +1867,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				ctx := context.Background()
 
 				// Create the table in MDS Schemar.
-				mdsClient := mdsclient.New(mdsAddress)
+				mdsClient := mdsclient.New(mdsAddress, logger.StderrLogger)
 				if err := mdsClient.CreateTable(ctx, qtbl); err != nil {
 					t.Fatalf("creating table: %v", err)
 				}

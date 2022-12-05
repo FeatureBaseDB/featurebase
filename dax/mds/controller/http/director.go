@@ -12,9 +12,13 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/dax/mds/controller"
 	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/logger"
 )
+
+// Ensure type implements interface.
+var _ controller.Director = (*Director)(nil)
 
 // Director is an http implementation of the Director interface.
 type Director struct {
@@ -32,7 +36,7 @@ type Director struct {
 }
 
 func NewDirector(cfg DirectorConfig) *Director {
-	var logr logger.Logger = logger.NopLogger
+	var logr = logger.NopLogger
 	if cfg.Logger != nil {
 		logr = cfg.Logger
 	}

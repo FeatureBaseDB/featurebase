@@ -109,7 +109,7 @@ func (w *workerJobService) getWorkers(ctx context.Context, tx *boltdb.Tx, balanc
 
 		worker, err := keyWorker(k)
 		if err != nil {
-			return nil, errors.Wrapf(err, "getting worker from key: %v", k)
+			return nil, errors.Wrapf(err, "getting worker from key: %s", k)
 		}
 
 		workers = append(workers, worker)
@@ -128,7 +128,7 @@ func getWorkerInfos(ctx context.Context, tx *boltdb.Tx, balancerName string) (da
 	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
 		worker, err := keyWorker(k)
 		if err != nil {
-			return nil, errors.Wrapf(err, "getting worker from key: %v", k)
+			return nil, errors.Wrapf(err, "getting worker from key: %s", k)
 		}
 
 		jobs := dax.NewSet[dax.Job]()
@@ -212,7 +212,7 @@ func (w *workerJobService) DeleteWorker(ctx context.Context, balancerName string
 	return tx.Commit()
 }
 
-func (w *workerJobService) CreateJob(ctx context.Context, balancerName string, worker dax.Worker, job dax.Job) error {
+func (w *workerJobService) CreateJobs(ctx context.Context, balancerName string, worker dax.Worker, jobs ...dax.Job) error {
 	tx, err := w.db.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
@@ -235,7 +235,9 @@ func (w *workerJobService) CreateJob(ctx context.Context, balancerName string, w
 		}
 	}
 
-	jobset.Add(job)
+	for _, job := range jobs {
+		jobset.Add(job)
+	}
 	val, err := encodeJobSet(jobset)
 	if err != nil {
 		return errors.Wrap(err, "encoding job set")
@@ -313,30 +315,36 @@ func (w *workerJobService) ListJobs(ctx context.Context, balancerName string, wo
 	return jobset.Sorted(), nil
 }
 
-func (w *workerJobService) JobCount(ctx context.Context, balancerName string, worker dax.Worker) (int, error) {
+func (w *workerJobService) JobCounts(ctx context.Context, balancerName string, workers ...dax.Worker) (map[dax.Worker]int, error) {
 	tx, err := w.db.BeginTx(ctx, false)
 	if err != nil {
-		return 0, errors.Wrapf(err, "getting tx: %s", balancerName)
+		return nil, errors.Wrapf(err, "getting tx: %s", balancerName)
 	}
 	defer tx.Rollback()
 
 	bkt := tx.Bucket(bucketNaiveBalancer)
 	if bkt == nil {
-		return 0, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNaiveBalancer)
+		return nil, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNaiveBalancer)
 	}
 
-	jobset := dax.NewSet[dax.Job]()
+	m := make(map[dax.Worker]int)
 
-	// get worker
-	wrkr := bkt.Get(workerKey(balancerName, worker))
-	if wrkr != nil {
-		jobset, err = decodeJobSet(wrkr)
-		if err != nil {
-			return 0, errors.Wrap(err, "decoding job set")
+	for _, worker := range workers {
+		jobset := dax.NewSet[dax.Job]()
+
+		// get worker
+		wrkr := bkt.Get(workerKey(balancerName, worker))
+		if wrkr != nil {
+			jobset, err = decodeJobSet(wrkr)
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding job set")
+			}
 		}
+
+		m[worker] = len(jobset)
 	}
 
-	return len(jobset), nil
+	return m, nil
 }
 
 // encodeJobSet encode the jobSet into a JSON array of strings.
@@ -378,8 +386,8 @@ func newFreeJobService(db *boltdb.DB) *freeJobService {
 	}
 }
 
-func (f *freeJobService) CreateFreeJob(ctx context.Context, balancerName string, job dax.Job) error {
-	return f.MergeFreeJobs(ctx, balancerName, dax.Jobs{job})
+func (f *freeJobService) CreateFreeJobs(ctx context.Context, balancerName string, jobs ...dax.Job) error {
+	return f.MergeFreeJobs(ctx, balancerName, jobs)
 }
 
 func (f *freeJobService) DeleteFreeJob(ctx context.Context, balancerName string, job dax.Job) error {
@@ -500,7 +508,7 @@ func workerKey(bal string, worker dax.Worker) []byte {
 
 // keyWorker gets the worker out of the key.
 func keyWorker(key []byte) (dax.Worker, error) {
-	parts := strings.Split(string(key), "/")
+	parts := strings.SplitN(string(key), "/", 3)
 	if len(parts) != 3 {
 		return "", errors.New(errors.ErrUncoded, "worker key format expected: `workers/balancer/worker`")
 	}

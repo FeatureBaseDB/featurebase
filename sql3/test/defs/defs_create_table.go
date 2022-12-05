@@ -55,7 +55,6 @@ var alterTable = TableTest{
 			srcHdr("_id", fldTypeID),
 			srcHdr("a_int", fldTypeInt),
 		),
-		srcRows(),
 	),
 	SQLTests: []SQLTest{
 		{

@@ -15,7 +15,6 @@ import (
 	"github.com/molecula/featurebase/v3/dax/mds/schemar"
 	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/net"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/tracing"
@@ -1982,15 +1981,7 @@ func (o *orchestrator) remoteExec(ctx context.Context, node dax.Address, index s
 		EmbeddedData: embed,
 	}
 
-	scheme := node.Scheme()
-	if scheme == "" {
-		scheme = "http"
-	}
-	resp, err := o.client.QueryNode(ctx, &net.URI{
-		Scheme: scheme,
-		Host:   node.Host(),
-		Port:   node.Port(),
-	}, index, pbreq)
+	resp, err := o.client.QueryNode(ctx, node, index, pbreq)
 	if err != nil {
 		return nil, err
 	}

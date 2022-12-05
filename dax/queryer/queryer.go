@@ -32,51 +32,62 @@ import (
 type Queryer struct {
 	orchestrator *orchestrator
 
-	MDS    MDS
-	router Router
+	mds MDS
 
 	logger logger.Logger
 }
 
 // New returns a new instance of Queryer.
 func New(cfg Config) *Queryer {
-	fbClient, err := featurebase.NewInternalClient("fakehostname:8080",
-		&http.Client{},
-		featurebase.WithSerializer(proto.Serializer{}),
-		featurebase.WithPathPrefix(dax.ServicePrefixComputer),
-	)
-	if err != nil {
-		panic(err) // should be impossible
-	}
-
-	var logr = logger.NopLogger
-	if cfg.Logger != nil {
-		logr = cfg.Logger
-	}
-
 	q := &Queryer{
-		MDS:    NewNopMDS(),
-		router: NewNopRouter(),
-		orchestrator: &orchestrator{
-			schema:   NewSchemaInfoAPI(cfg.MDS),
-			trans:    NewMDSTranslator(cfg.MDS),
-			topology: &MDSTopology{mds: cfg.MDS},
-			// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
-			client: fbClient,
-			stats:  stats.NopStatsClient,
-			logger: logr,
-		},
-		logger: logr,
+		mds:          NewNopMDS(),
+		orchestrator: nil,
+		logger:       logger.NopLogger,
 	}
 
-	if cfg.MDS != nil {
-		q.MDS = cfg.MDS
-	}
-	if cfg.Router != nil {
-		q.router = cfg.Router
+	if cfg.Logger != nil {
+		q.logger = cfg.Logger
 	}
 
 	return q
+}
+
+func (q *Queryer) SetMDS(mds MDS) error {
+	q.mds = mds
+
+	// fbClient is an instance of internal client. It's used in one place in the
+	// orchestrator (o.client.QueryNode()), but in that case, the host is
+	// replaces with the actual host (another computer node) to connect to.
+	// That's why we set it up with a dummy host here.
+	fbClient, err := featurebase.NewInternalClient("fakehostname:8080",
+		&http.Client{},
+		featurebase.WithSerializer(proto.Serializer{}),
+		featurebase.WithPathPrefix("should-not-be-used"),
+	)
+	if err != nil {
+		return errors.Wrap(err, "setting up internal client")
+	}
+
+	q.orchestrator = &orchestrator{
+		schema:   NewSchemaInfoAPI(q.mds),
+		trans:    NewMDSTranslator(q.mds),
+		topology: &MDSTopology{mds: q.mds},
+		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
+		client: fbClient,
+		stats:  stats.NopStatsClient,
+		logger: q.logger,
+	}
+
+	return nil
+}
+
+func (q *Queryer) Start() error {
+	if q.mds == nil {
+		return errors.New(errors.ErrUncoded, "queryer requires mds to be configured")
+	} else if q.orchestrator == nil {
+		return errors.New(errors.ErrUncoded, "queryer requires orchestrator to be configured")
+	}
+	return nil
 }
 
 func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.WireQueryResponse, error) {
@@ -112,16 +123,16 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	}
 
 	// ComputeAPI
-	capi := NewQualifiedComputeAPI(qual, q.MDS, q.router)
+	capi := NewQualifiedComputeAPI(qual, q.mds)
 
 	// SchemaAPI
-	sapi := NewQualifiedSchemaAPI(qual, q.MDS)
+	sapi := NewQualifiedSchemaAPI(qual, q.mds)
 
 	// Orchestrator
-	orch := newQualifiedOrchestrator(q.orchestrator, qual, q.MDS)
+	orch := newQualifiedOrchestrator(q.orchestrator, qual, q.mds)
 
 	// Importer
-	imp := newBatchImporter(idkmds.NewImporter(q.MDS, nil), qual, q.MDS)
+	imp := newBatchImporter(idkmds.NewImporter(q.mds, nil), qual, q.mds)
 
 	// TODO(tlt): this obviously doesn't work; we don't have an API here. We
 	// need a dax-compatible implementation of the SystemAPI (or at least a
@@ -321,7 +332,7 @@ func (q *Queryer) indexToQualifiedTableKey(ctx context.Context, qual dax.TableQu
 		return dax.TableKey(index), nil
 	}
 
-	qtid, err := q.MDS.TableID(ctx, qual, dax.TableName(index))
+	qtid, err := q.mds.TableID(ctx, qual, dax.TableName(index))
 	if err != nil {
 		return "", errors.Wrap(err, "converting index to qualified table id")
 	}

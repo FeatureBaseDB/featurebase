@@ -84,7 +84,7 @@ type Config struct {
 	// This is for use by test infrastructure, where it's useful to
 	// be able to dynamically generate the bindings by actually binding
 	// to :0, and avoid "address already in use" errors.
-	GRPCListener *net.TCPListener
+	GRPCListener net.Listener
 
 	// Advertise is the address advertised by the server to other nodes
 	// in the cluster. It should be reachable by all other nodes and should

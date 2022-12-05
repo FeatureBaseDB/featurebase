@@ -14,34 +14,23 @@ import (
 var _ featurebase.ComputeAPI = &qualifiedComputeAPI{}
 
 type qualifiedComputeAPI struct {
-	mds    MDS
-	router Router
-	qual   dax.TableQualifier
+	mds  MDS
+	qual dax.TableQualifier
 }
 
-func NewQualifiedComputeAPI(qual dax.TableQualifier, mds MDS, router Router) *qualifiedComputeAPI {
-	c := &qualifiedComputeAPI{
-		mds:    mds,
-		router: NewNopRouter(),
-		qual:   qual,
+func NewQualifiedComputeAPI(qual dax.TableQualifier, mds MDS) *qualifiedComputeAPI {
+	return &qualifiedComputeAPI{
+		mds:  mds,
+		qual: qual,
 	}
-
-	if router != nil {
-		c.router = router
-	}
-
-	return c
 }
 
-// importer is use to get the Importer based on the provided address. If the
-// computeAPI has been configured with entries in an ImporterRouter (which is a
-// map of dax.Address to in-process compute API), then it will use that.
-// Otherwise, it sets up an http client based on the provided address.
+// importer is used to get the Importer based on the provided address. We used
+// to maintain a map of different importers (pointers to computers) running
+// in-process, but since getting rid of that logic this method is currently just
+// a wrapper around NewComputeImporter. I'm leaving it like this for now in case
+// it makes sense for this to become a cache of computer clients.
 func (c *qualifiedComputeAPI) importer(addr dax.Address) (Importer, error) {
-	if imp := c.router.Importer(addr); imp != nil {
-		return imp, nil
-	}
-
 	return NewComputeImporter(addr), nil
 }
 
