@@ -1689,6 +1689,84 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 	})
 
+	t.Run("BulkInsertDecimals", func(t *testing.T) {
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table iris (
+			_id id,
+			sepallength decimal(2),
+			sepalwidth decimal(2),
+			petallength decimal(2),
+			petalwidth decimal(2),
+			species string cachetype ranked size 1000
+		) keypartitions 12 shardwidth 65536;`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+		into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
+		map('id' id,
+		'sepalLength' DECIMAL,
+		'sepalWidth' DECIMAL,
+		'petalLength' DECIMAL,
+		'petalWidth' DECIMAL,
+		'species' STRING)
+		from
+		'{"id": 1, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+		{"id": 2, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+		{"id": 3, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
+		with
+			format 'NDJSON'
+			input 'STREAM';`)
+		if err == nil || !strings.Contains(err.Error(), `decimal scale expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+		into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
+		map('id' id,
+		'sepalLength' DECIMAL(2),
+		'sepalWidth' DECIMAL(2),
+		'petalLength' DECIMAL(2),
+		'petalWidth' DECIMAL(2),
+		'species' STRING)
+		from
+		'{"id": 1, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+		{"id": 2, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+		{"id": 3, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
+		with
+			format 'NDJSON'
+			input 'STREAM';`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+	})
+
+	t.Run("BulkInsertDupeColumnPlusNullsInJson", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table dataviz (_id string, guid string, aba string,amount int, 
+			audit_id id, bools bool, bools-exist bool, browser string, browser_version string, central_group string, device string, 
+			error_description string, event_date_str string, event_epoch int, event_length int, event_type string, fidb string, 
+			gt_status string, gt_type string, operating_system string, os_version string, transaction_id string, user_id id);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+		into dataviz (_id, aba, amount, audit_id, bools, bools-exist, browser, browser_version, central_group, device, error_description, event_date_str, event_epoch,event_length,event_type,fidb,gt_status,gt_type,_id,operating_system,os_version,transaction_id,user_id)
+		map('guid' string,'aba' string, 'amount' int, 'audit_id' id, 'event_success' bool, 'db_success' bool, 'browser' string, 'browser_version' string, 'central_group' string, 'device' string, 'error_description' string, 'event_date_str' string, 'event_epoch' int, 'event_length' int, 'event_type' string, 'fidb' string, 'gt_status' string, 'gt_type' string, 'guid' string, 'operating_system' string, 'os_version' string, 'transaction_id' string, 'user_id' id)
+		from
+		x'{"event_type": "logon", "fidb": "Q2DB_5061", "guid": "70823998-fdf7-4e7a-bea9-a6b1b3538ed6", "aba": "314977104", "audit_id": 11848579444, "user_id": 601961, "central_group": "RETAIL USERS PROTECTED", "event_epoch": 1629548181, "event_date_str": "2021-08-21 07:00:00", "event_length": 523, "device": "Desktop", "browser": "Firefox", "browser_version": "67", "operating_system": "Windows", "os_version": "10", "event_success": true, "transaction_id": null, "amount": null, "gt_type": null, "gt_status": null, "error_description": "Success", "audit_action": "LogonUser", "postal_code": "97818", "zoneid": -1, "country": "US", "subdivision": "OR", "agg_allblocks": null, "agg_antiautomation": null, "agg_countryblocks": null, "agg_ratelimiting": null, "agg_threatfeedsexternal": null, "agg_threatfeedsinternal": null, "db_failure": null, "db_success": null, "product_or_inst_name": null, "sum_pfm_balances": null, "sum_pfm_accounts": null, "institution_count": null, "product_count": null}
+		{"event_type": "logon", "fidb": "Q2DB_5061", "guid": "70823998-fdf7-4e7a-bea9-a6b1b3538ed6", "aba": "314977104", "audit_id": 11848581121, "user_id": 517782, "central_group": "RETAIL USERS PROTECTED", "event_epoch": 1629548202, "event_date_str": "2021-08-21 07:00:00", "event_length": 270, "device": "Mobile", "browser": "Mobile Safari", "browser_version": "14", "operating_system": "iOS", "os_version": "unknown", "event_success": true, "transaction_id": null, "amount": null, "gt_type": null, "gt_status": null, "error_description": "Success", "audit_action": "LogonUser", "postal_code": "78664", "zoneid": -1, "country": "US", "subdivision": "TX", "agg_allblocks": null, "agg_antiautomation": null, "agg_countryblocks": null, "agg_ratelimiting": null, "agg_threatfeedsexternal": null, "agg_threatfeedsinternal": null, "db_failure": null, "db_success": null, "product_or_inst_name": null, "sum_pfm_balances": null, "sum_pfm_accounts": null, "institution_count": null, "product_count": null}
+		{"event_type": "gt_auth", "fidb": "Q2DB_3454", "guid": "fa307c33-2c30-4b7c-8b58-d60f87d3ddda", "aba": "107001481", "audit_id": 3653480727, "user_id": 545135, "central_group": "AFB New Relationship Retail", "event_epoch": 1629548207, "event_date_str": "2021-08-21 07:00:00", "event_length": 0, "device": "Mobile", "browser": "Mobile Safari", "browser_version": "14", "operating_system": "iOS", "os_version": "unknown", "event_success": true, "transaction_id": 2550927, "amount": 6000, "gt_type": "FundsTransfer", "gt_status": "Processed", "error_description": "Success", "audit_action": "AuthorizeFundsTransfer", "postal_code": "", "zoneid": 2, "country": "US", "subdivision": "", "agg_allblocks": null, "agg_antiautomation": null, "agg_countryblocks": null, "agg_ratelimiting": null, "agg_threatfeedsexternal": null, "agg_threatfeedsinternal": null, "db_failure": null, "db_success": null, "product_or_inst_name": null, "sum_pfm_balances": null, "sum_pfm_accounts": null, "institution_count": null, "product_count": null}'
+			With
+			format 'NDJSON'
+			input 'STREAM';`)
+		if err == nil || !strings.Contains(err.Error(), `duplicate column '_id'`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestPlanner_SelectSelectSource(t *testing.T) {

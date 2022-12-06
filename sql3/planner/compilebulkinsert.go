@@ -323,7 +323,8 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 	}
 
 	// check columns being inserted to are actual columns and that one of them is the _id column
-	// also do type checking
+	// also do type checking, and check there are no dupes
+	columnNameMap := make(map[string]struct{})
 	foundID := false
 	for idx, cm := range stmt.Columns {
 		found := false
@@ -356,6 +357,15 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		if !found {
 			return sql3.NewErrColumnNotFound(cm.NamePos.Line, cm.NamePos.Line, cm.Name)
 		}
+
+		// Ensure the column name hasn't already appeared in the list of
+		// columns.
+		colName := strings.ToLower(cm.Name)
+		if _, found := columnNameMap[colName]; found {
+			return sql3.NewErrDuplicateColumn(cm.NamePos.Line, cm.NamePos.Column, colName)
+		}
+		columnNameMap[colName] = struct{}{}
+
 		if strings.EqualFold(cm.Name, "_id") {
 			foundID = true
 		}
