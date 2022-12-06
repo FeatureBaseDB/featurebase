@@ -38,6 +38,11 @@ const (
 	ErrSetExpressionExpected                     errors.Code = "ErrSetExpressionExpected"
 	ErrSingleRowExpected                         errors.Code = "ErrSingleRowExpected"
 
+	// type related errors
+
+	// decimal
+	ErrDecimalScaleExpected errors.Code = "ErrDecimalScaleExpected"
+
 	ErrInvalidCast         errors.Code = "ErrInvalidCast"
 	ErrInvalidTypeCoercion errors.Code = "ErrInvalidTypeCoercion"
 
@@ -391,6 +396,17 @@ func NewErrSingleRowExpected(line, col int) error {
 	return errors.New(
 		ErrSingleRowExpected,
 		fmt.Sprintf("[%d:%d] single row expected", line, col),
+	)
+}
+
+// type errors
+
+// decimal related
+
+func NewErrDecimalScaleExpected(line, col int) error {
+	return errors.New(
+		ErrDecimalScaleExpected,
+		fmt.Sprintf("[%d:%d] decimal scale expected", line, col),
 	)
 }
 
