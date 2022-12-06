@@ -10,6 +10,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	fbbatch "github.com/molecula/featurebase/v3/batch"
+	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/pkg/errors"
@@ -184,7 +185,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 	// record ID ("_id") since that's stored in row.ID.
 	row.Values = make([]interface{}, len(i.targetColumns)-1)
 
-	for _, tuple := range i.insertValues {
+	for rowNumber, tuple := range i.insertValues {
 		// Evaluate and set the record ID.
 		if eval, err := tuple[posID].Evaluate(nil); err != nil {
 			return nil, errors.Wrapf(err, "evaluating record id: %v", tuple[posID])
@@ -218,6 +219,8 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 			if err != nil {
 				return nil, errors.Wrapf(err, "evaluating tuple value: %v", iv)
 			}
+
+			columnName := idxInfo.Fields[posVals[idx]].Name
 
 			// batch.Add does not typically look at field type to determine how
 			// to handle a particular value in a row. Instead, it uses value
@@ -254,6 +257,32 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 				default:
 					row.Values[posVals[idx]] = eval
 				}
+
+			case pilosa.FieldTypeInt:
+				if eval != nil {
+					v, ok := eval.(int64)
+					if !ok {
+						return nil, sql3.NewErrInternalf("unexpected type %v", eval)
+					}
+					// check the min and max constraints here
+					if v < opts.Min.ToInt64(0) || v > opts.Max.ToInt64(0) {
+						return nil, sql3.NewErrInsertValueOutOfRange(0, 0, columnName, rowNumber+1, v)
+					}
+				}
+				row.Values[posVals[idx]] = eval
+
+			case pilosa.FieldTypeDecimal:
+				if eval != nil {
+					v, ok := eval.(pql.Decimal)
+					if !ok {
+						return nil, sql3.NewErrInternalf("unexpected type %v", eval)
+					}
+					// check the min and max constraints here
+					if v.LessThan(opts.Min) || v.GreaterThan(opts.Max) {
+						return nil, sql3.NewErrInsertValueOutOfRange(0, 0, columnName, rowNumber+1, v)
+					}
+				}
+				row.Values[posVals[idx]] = eval
 
 			case pilosa.FieldTypeTimestamp:
 				switch v := eval.(type) {
