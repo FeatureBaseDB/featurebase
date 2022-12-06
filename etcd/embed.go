@@ -229,10 +229,10 @@ func NewEtcd(opt Options, logger logger.Logger, replicas int, version string) *E
 
 	if e.options.HeartbeatTTL == 0 {
 		e.options.HeartbeatTTL = 5 // seconds
-		// !! DEBUG
-		// e.options.HeartbeatTTL = 3600 // seconds
-		// !! DEBUG
 	}
+	// !! DEBUG
+	// e.options.HeartbeatTTL = 3600 // seconds
+	// !! DEBUG
 	return e
 }
 

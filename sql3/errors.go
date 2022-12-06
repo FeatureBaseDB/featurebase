@@ -89,6 +89,10 @@ const (
 	ErrParameterTypeMistmatch               errors.Code = "ErrParameterTypeMistmatch"
 	ErrCallParameterValueInvalid            errors.Code = "ErrCallParameterValueInvalid"
 
+	// insert errors
+
+	ErrInsertValueOutOfRange errors.Code = "ErrInsertValueOutOfRange"
+
 	// bulk insert errors
 
 	ErrReadingDatasource       errors.Code = "ErrReadingDatasource"
@@ -573,6 +577,15 @@ func NewErrCallParameterValueInvalid(line, col int, badParameterValue string, pa
 	return errors.New(
 		ErrCallParameterValueInvalid,
 		fmt.Sprintf("[%d:%d] invalid value '%s' for parameter '%s'", line, col, badParameterValue, parameterName),
+	)
+}
+
+// insert
+
+func NewErrInsertValueOutOfRange(line, col int, columnName string, rowNumber int, badValue interface{}) error {
+	return errors.New(
+		ErrInsertValueOutOfRange,
+		fmt.Sprintf("[%d:%d] inserting value into column '%s', row %d, value '%v' out of range", line, col, columnName, rowNumber, badValue),
 	)
 }
 
