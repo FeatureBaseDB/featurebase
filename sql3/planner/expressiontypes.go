@@ -81,6 +81,9 @@ func dataTypeFromParserType(typ *parser.Type) (parser.ExprDataType, error) {
 		return parser.NewDataTypeBool(), nil
 
 	case dax.BaseTypeDecimal:
+		if typ.Scale == nil {
+			return nil, sql3.NewErrDecimalScaleExpected(typ.Name.NamePos.Line, typ.Name.NamePos.Column)
+		}
 		scale, err := strconv.Atoi(typ.Scale.Value)
 		if err != nil {
 			return nil, err

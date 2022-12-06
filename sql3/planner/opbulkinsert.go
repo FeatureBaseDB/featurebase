@@ -484,6 +484,12 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 				return nil, err
 			}
 
+			// if nil (null) then return nil
+			if evalValue == nil {
+				result[idx] = nil
+				continue
+			}
+
 			mapColumn := i.options.mapExpressions[idx]
 			switch mapColumn.colType.(type) {
 			case *parser.DataTypeID, *parser.DataTypeInt:
@@ -616,7 +622,12 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeString:
 				switch v := evalValue.(type) {
 				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					// if a whole number make it an int
+					if v == float64(int64(v)) {
+						result[idx] = fmt.Sprintf("%d", int64(v))
+					} else {
+						result[idx] = fmt.Sprintf("%f", v)
+					}
 
 				case []interface{}:
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
@@ -664,7 +675,12 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					// try to parse from a string
+					dv, err := pql.ParseDecimal(v)
+					if err != nil {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					}
+					result[idx] = dv
 
 				case bool:
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
@@ -742,6 +758,10 @@ func (i *bulkInsertNDJsonRowIter) Next(ctx context.Context) (types.Row, error) {
 }
 
 func processColumnValue(rawValue interface{}, targetType parser.ExprDataType) (types.PlanExpression, error) {
+	if rawValue == nil {
+		return newNullLiteralPlanExpression(), nil
+	}
+
 	switch targetType.(type) {
 	case *parser.DataTypeID, *parser.DataTypeInt:
 		ival, ok := rawValue.(int64)
