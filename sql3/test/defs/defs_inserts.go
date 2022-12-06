@@ -9,7 +9,7 @@ var insertTest = TableTest{
 			srcHdr("b", fldTypeInt, "min 0", "max 1000"),
 			srcHdr("s", fldTypeString),
 			srcHdr("bl", fldTypeBool),
-			srcHdr("d", fldTypeDecimal2),
+			srcHdr("d", fldTypeDecimal2, "min 0", "max 1000"),
 			srcHdr("event", fldTypeStringSet),
 			srcHdr("ievent", fldTypeIDSet),
 		),
@@ -123,6 +123,34 @@ var insertTest = TableTest{
 				"insert into testinsert (_id, a, ievent) values (4, 40, ['POST', 'GET'])",
 			),
 			ExpErr: "an expression of type 'stringset' cannot be assigned to type 'idset'",
+		},
+		{
+			name: "min constraint",
+			SQLs: sqls(
+				"insert into testinsert (_id, a) values (400, -1)",
+			),
+			ExpErr: "inserting value into column 'a', row 1, value '-1' out of range",
+		},
+		{
+			name: "max constraint",
+			SQLs: sqls(
+				"insert into testinsert (_id, a) values (400, 1001)",
+			),
+			ExpErr: "inserting value into column 'a', row 1, value '1001' out of range",
+		},
+		{
+			name: "min constraint decimal",
+			SQLs: sqls(
+				"insert into testinsert (_id, d) values (400, -1.00)",
+			),
+			ExpErr: "inserting value into column 'd', row 1, value '-1' out of range",
+		},
+		{
+			name: "max constraint decimal",
+			SQLs: sqls(
+				"insert into testinsert (_id, d) values (400, 1001.00)",
+			),
+			ExpErr: "inserting value into column 'd', row 1, value '1001' out of range",
 		},
 	},
 }

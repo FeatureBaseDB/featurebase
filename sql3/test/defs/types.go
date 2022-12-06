@@ -274,6 +274,7 @@ func (s source) insertInto(t *testing.T, rowSets []int) string {
 	for _, rowSet := range rowSets {
 		ii += sourceRows(s.rows[rowSet]).insertTuples(t)
 	}
+	log.Printf("INSERT: %s", ii)
 	return ii
 }
 
