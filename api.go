@@ -3428,38 +3428,10 @@ type CreateFieldObj struct {
 	Options []FieldOption
 }
 
-// ComputeAPI is a subset of the API methods which have to do with compute
-// operations such as import.
-type ComputeAPI interface {
-	Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error
-	ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error
-	Txf() *TxFactory
-}
-
 // QueryAPI is a subset of the API methods which have to do with query.
 type QueryAPI interface {
 	Query(ctx context.Context, req *QueryRequest) (QueryResponse, error)
 }
-
-// Ensure type implements interface.
-var _ ComputeAPI = (*NopComputeAPI)(nil)
-
-// NopComputeAPI is a no-op implementation of the ComputeAPI interface.
-type NopComputeAPI struct{}
-
-func NewNopComputeAPI() *NopComputeAPI {
-	return &NopComputeAPI{}
-}
-
-func (c *NopComputeAPI) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) error {
-	return nil
-}
-
-func (c *NopComputeAPI) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error {
-	return nil
-}
-
-func (c *NopComputeAPI) Txf() *TxFactory { return nil }
 
 // Ensure type implements interface.
 var _ SchemaAPI = (*FeatureBaseSchemaAPI)(nil)
