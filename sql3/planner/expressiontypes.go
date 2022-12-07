@@ -753,6 +753,8 @@ func typesCanBeCast(sourceType parser.ExprDataType, targetType parser.ExprDataTy
 			*parser.DataTypeDecimal,
 			*parser.DataTypeID:
 			return true
+		case *parser.DataTypeString:
+			return true
 		}
 
 	case *parser.DataTypeIDSet:
