@@ -44,6 +44,26 @@ var createTable = TableTest{
 				"create table foo (_id id, i1 int) shardwidth 131072",
 			),
 		},
+		{
+			name: "commentInt",
+			SQLs: sqls(
+				"create table foo (_id id, i1 int) comment 34",
+			),
+			ExpErr: "string literal expected",
+		},
+		{
+			name: "commentStringNoQuote",
+			SQLs: sqls(
+				"create table foo (_id id, i1 int) comment bad",
+			),
+			ExpErr: "expected literal, found bad",
+		},
+		{
+			name: "commentString",
+			SQLs: sqls(
+				"create table bar (_id id, i1 int) comment 'this should work'",
+			),
+		},
 	},
 }
 
