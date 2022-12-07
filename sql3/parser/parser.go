@@ -445,10 +445,28 @@ func (p *Parser) parseTableOption() (_ TableOption, err error) {
 	switch p.peek() {
 	case KEYPARTITIONS:
 		return p.parseKeyPartitionsOption(optionPos)
+	case COMMENT:
+		return p.parseCommentOption(optionPos)
 	default:
 		assert(p.peek() == SHARDWIDTH)
 		return p.parseShardWidthOption(optionPos)
 	}
+}
+
+func (p *Parser) parseCommentOption(optionPos Pos) (_ *CommentOption, err error) {
+	assert(p.peek() == COMMENT)
+
+	var opt CommentOption
+
+	opt.Comment, _, _ = p.scan()
+
+	if isLiteralToken(p.peek()) {
+		opt.Expr = p.mustParseLiteral()
+	} else {
+		return &opt, p.errorExpected(p.pos, p.tok, "literal")
+	}
+
+	return &opt, nil
 }
 
 func (p *Parser) parseKeyPartitionsOption(optionPos Pos) (_ *KeyPartitionsOption, err error) {
@@ -3418,7 +3436,7 @@ func (e Error) Error() string {
 // isTableOptionStartToken returns true if tok is the initial token of a table option.
 func isTableOptionStartToken(tok Token) bool {
 	switch tok {
-	case KEYPARTITIONS, SHARDWIDTH:
+	case KEYPARTITIONS, SHARDWIDTH, COMMENT:
 		return true
 	default:
 		return false

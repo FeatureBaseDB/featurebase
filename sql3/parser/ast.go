@@ -93,6 +93,7 @@ func (*UsingConstraint) node()          {}
 func (*Window) node()                   {}
 func (*WindowDefinition) node()         {}
 func (*WithClause) node()               {}
+func (*CommentOption) node()            {}
 
 type Statement interface {
 	Node
@@ -771,6 +772,7 @@ type TableOption interface {
 
 func (*KeyPartitionsOption) option() {}
 func (*ShardWidthOption) option()    {}
+func (*CommentOption) option()       {}
 
 type KeyPartitionsOption struct {
 	KeyPartitions Pos  // position of KEYPARTITIONS keyword
@@ -793,6 +795,19 @@ type ShardWidthOption struct {
 func (o *ShardWidthOption) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("SHARDWIDTH (")
+	buf.WriteString(o.Expr.String())
+	buf.WriteString(")")
+	return buf.String()
+}
+
+type CommentOption struct {
+	Comment Pos  // position of COMMENT keyword
+	Expr    Expr // expression
+}
+
+func (o *CommentOption) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("COMMENT (")
 	buf.WriteString(o.Expr.String())
 	buf.WriteString(")")
 	return buf.String()

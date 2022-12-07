@@ -30,6 +30,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 
 	// apply table options
 	keyPartitions := 0
+	description := ""
 	for _, option := range stmt.Options {
 		switch o := option.(type) {
 		case *parser.KeyPartitionsOption:
@@ -39,6 +40,9 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 				return nil, err
 			}
 			keyPartitions = int(i)
+		case *parser.CommentOption:
+			e := o.Expr.(*parser.StringLit)
+			description = e.Value
 		}
 	}
 
@@ -63,7 +67,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 
 		columns = append(columns, column)
 	}
-	return NewPlanOpQuery(p, NewPlanOpCreateTable(p, tableName, failIfExists, isKeyed, keyPartitions, columns), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpCreateTable(p, tableName, failIfExists, isKeyed, keyPartitions, description, columns), p.sql), nil
 }
 
 // compiles a column def
@@ -299,6 +303,13 @@ func (p *ExecutionPlanner) analyzeCreateTableStatement(stmt *parser.CreateTableS
 			isPwrOf2 := (i & (i - 1)) == 0
 			if (i == 0) || !isPwrOf2 || i < (1<<16) {
 				return sql3.NewErrInvalidShardWidthValue(o.Expr.Pos().Line, o.Expr.Pos().Column, i)
+			}
+
+		case *parser.CommentOption:
+
+			_, ok := o.Expr.(*parser.StringLit)
+			if !ok {
+				return sql3.NewErrStringLiteral(o.Expr.Pos().Line, o.Expr.Pos().Column)
 			}
 
 		default:

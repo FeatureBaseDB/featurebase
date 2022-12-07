@@ -18,11 +18,13 @@ type PlanOpCreateTable struct {
 	failIfExists  bool
 	isKeyed       bool
 	keyPartitions int
+	description   string
 	columns       []*createTableField
 	warnings      []string
 }
 
-func NewPlanOpCreateTable(p *ExecutionPlanner, tableName string, failIfExists bool, isKeyed bool, keyPartitions int, columns []*createTableField) *PlanOpCreateTable {
+// NewPlanOpCreateTable returns a new PlanOpCreateTable planoperator
+func NewPlanOpCreateTable(p *ExecutionPlanner, tableName string, failIfExists bool, isKeyed bool, keyPartitions int, description string, columns []*createTableField) *PlanOpCreateTable {
 	return &PlanOpCreateTable{
 		planner:       p,
 		tableName:     tableName,
@@ -30,6 +32,7 @@ func NewPlanOpCreateTable(p *ExecutionPlanner, tableName string, failIfExists bo
 		isKeyed:       isKeyed,
 		keyPartitions: keyPartitions,
 		columns:       columns,
+		description:   description,
 		warnings:      make([]string, 0),
 	}
 }
@@ -75,6 +78,7 @@ func (p *PlanOpCreateTable) Iterator(ctx context.Context, row types.Row) (types.
 		isKeyed:       p.isKeyed,
 		keyPartitions: p.keyPartitions,
 		columns:       p.columns,
+		description:   p.description,
 	}, nil
 }
 
@@ -88,6 +92,7 @@ type createTableRowIter struct {
 	failIfExists  bool
 	isKeyed       bool
 	keyPartitions int
+	description   string
 	columns       []*createTableField
 }
 
@@ -99,6 +104,7 @@ func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 		Keys:           i.isKeyed,
 		TrackExistence: true,
 		PartitionN:     i.keyPartitions,
+		Description:    i.description,
 	}
 
 	fields := make([]pilosa.CreateFieldObj, len(i.columns))
