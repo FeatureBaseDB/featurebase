@@ -33,7 +33,6 @@ import (
 	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
-	"github.com/molecula/featurebase/v3/dax/computer/alpha"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	petcd "github.com/molecula/featurebase/v3/etcd"
@@ -77,9 +76,9 @@ type Command struct {
 	logger         loggerLogger
 	queryLogger    loggerLogger
 
-	Registrar   computer.Registrar
-	writeLogger computer.WriteLogger
-	snapshotter computer.Snapshotter
+	Registrar       computer.Registrar
+	writeLogService computer.WriteLogService
+	snapshotService computer.SnapshotService
 
 	Handler      pilosa.HandlerI
 	httpHandler  http.Handler
@@ -151,10 +150,10 @@ func OptCommandSetConfig(config *Config) CommandOption {
 func OptCommandInjections(inj Injections) CommandOption {
 	return func(c *Command) error {
 		if inj.WriteLogger != nil {
-			c.writeLogger = inj.WriteLogger
+			c.writeLogService = inj.WriteLogger
 		}
 		if inj.Snapshotter != nil {
-			c.snapshotter = inj.Snapshotter
+			c.snapshotService = inj.Snapshotter
 		}
 		c.isComputeNode = inj.IsComputeNode
 		return nil
@@ -162,8 +161,8 @@ func OptCommandInjections(inj Injections) CommandOption {
 }
 
 type Injections struct {
-	WriteLogger   computer.WriteLogger
-	Snapshotter   computer.Snapshotter
+	WriteLogger   computer.WriteLogService
+	Snapshotter   computer.SnapshotService
 	IsComputeNode bool
 }
 
@@ -555,16 +554,16 @@ func (m *Command) setupServer() error {
 	// WriteLogger setup.
 	var wlw computer.WriteLogWriter = computer.NewNopWriteLogWriter()
 	var wlr computer.WriteLogReader = computer.NewNopWriteLogReader()
-	if m.writeLogger != nil {
-		alphaWriteLog := alpha.NewAlphaWriteLog(m.writeLogger)
-		wlr = alphaWriteLog
-		wlw = alphaWriteLog
+	if m.writeLogService != nil {
+		wlrw := computer.NewWriteLogReadWriter(m.writeLogService)
+		wlr = wlrw
+		wlw = wlrw
 	}
 
 	// Snapshotter setup.
 	var snap computer.SnapshotReadWriter = computer.NewNopSnapshotReadWriter()
-	if m.snapshotter != nil {
-		snap = alpha.NewAlphaSnapshot(m.snapshotter)
+	if m.snapshotService != nil {
+		snap = computer.NewSnapshotReadWriter(m.snapshotService)
 	}
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
@@ -572,7 +571,7 @@ func (m *Command) setupServer() error {
 		fsapi := &pilosa.FeatureBaseSystemAPI{API: api}
 		fimp := &batch.FeaturebaseImporter{API: api}
 
-		return planner.NewExecutionPlanner(e, fapi, fsapi, api, m.Server.SystemLayer, fimp, m.logger, sql)
+		return planner.NewExecutionPlanner(e, fapi, fsapi, m.Server.SystemLayer, fimp, m.logger, sql)
 	}
 
 	serverOptions := []pilosa.ServerOption{

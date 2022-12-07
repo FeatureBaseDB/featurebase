@@ -1,4 +1,4 @@
-package alpha
+package computer
 
 import (
 	"fmt"

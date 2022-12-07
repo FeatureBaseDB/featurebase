@@ -26,7 +26,6 @@ type ExecutionPlanner struct {
 	executor       pilosa.Executor
 	schemaAPI      pilosa.SchemaAPI
 	systemAPI      pilosa.SystemAPI
-	computeAPI     pilosa.ComputeAPI
 	systemLayerAPI pilosa.SystemLayerAPI
 	importer       batch.Importer
 	logger         logger.Logger
@@ -34,12 +33,11 @@ type ExecutionPlanner struct {
 	scopeStack     *scopeStack
 }
 
-func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, computeAPI pilosa.ComputeAPI, systemLayerAPI pilosa.SystemLayerAPI, importer batch.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
+func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer batch.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
 	return &ExecutionPlanner{
 		executor:       executor,
 		schemaAPI:      newSystemTableDefintionsWrapper(schemaAPI),
 		systemAPI:      systemAPI,
-		computeAPI:     computeAPI,
 		systemLayerAPI: systemLayerAPI,
 		importer:       importer,
 		logger:         logger,

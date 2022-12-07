@@ -122,9 +122,6 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 		return ret, nil
 	}
 
-	// ComputeAPI
-	capi := NewQualifiedComputeAPI(qual, q.mds)
-
 	// SchemaAPI
 	sapi := NewQualifiedSchemaAPI(qual, q.mds)
 
@@ -141,7 +138,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 
 	systemLayer := systemlayer.NewSystemLayer()
 
-	pl := planner.NewExecutionPlanner(orch, sapi, sysapi, capi, systemLayer, imp, q.orchestrator.logger, sql)
+	pl := planner.NewExecutionPlanner(orch, sapi, sysapi, systemLayer, imp, q.orchestrator.logger, sql)
 
 	planOp, err := pl.CompilePlan(ctx, st)
 	if err != nil {
