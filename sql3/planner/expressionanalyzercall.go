@@ -241,6 +241,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 
 	case "SUBTABLE":
 		return p.analyzeFunctionSubtable(call, scope)
+	case "REVERSE":
+		return p.analyseFunctionReverse(call, scope)
 
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)

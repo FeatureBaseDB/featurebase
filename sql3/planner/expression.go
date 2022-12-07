@@ -1476,6 +1476,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateSetContainsAll(currentRow)
 	case "DATEPART":
 		return n.EvaluateDatepart(currentRow)
+	case "REVERSE":
+		return n.EvaluateReverse(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}

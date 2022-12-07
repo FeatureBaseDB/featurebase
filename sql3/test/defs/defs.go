@@ -23,6 +23,7 @@ var TableTests []TableTest = []TableTest{
 	setFunctionTests,
 	setParameterTests,
 	datePartTests,
+	stringScalarFunctionsTests,
 
 	insertTest,
 	keyedInsertTest,
