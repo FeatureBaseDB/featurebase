@@ -16,10 +16,15 @@ ifErr() {
     fi
 }
 
-echo "installing go"
+echo "installing wget"
 sudo yum install wget -y
 ifErr "installing wget"
 
+echo "installing nss-tools"
+sudo yum install nss-tools -y
+ifErr "installing nss-tools"
+
+echo "installing git"
 sudo yum install git -y
 ifErr "installing git"
 

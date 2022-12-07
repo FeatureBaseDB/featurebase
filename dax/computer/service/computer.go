@@ -155,7 +155,7 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 	cfg.ComputerConfig.GRPCListener = &nopListener{}
 	cfg.ComputerConfig.DataDir = cfg.RootDataDir + "/" + cfg.Name
 
-	var writeLoggerImpl computer.WriteLogger
+	var writeLoggerImpl computer.WriteLogService
 	if cfg.ComputerConfig.WriteLogger != "" {
 		writeLoggerImpl = writeloggerclient.New(dax.Address(cfg.ComputerConfig.WriteLogger))
 	} else if wlSvc != nil {
@@ -164,7 +164,7 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 		cfg.Logger.Warnf("No writelogger configured, dynamic scaling will not function properly.")
 	}
 
-	var snapshotterImpl computer.Snapshotter
+	var snapshotterImpl computer.SnapshotService
 	if cfg.ComputerConfig.Snapshotter != "" {
 		snapshotterImpl = snapshotterclient.New(dax.Address(cfg.ComputerConfig.Snapshotter))
 	} else if ssSvc != nil {
