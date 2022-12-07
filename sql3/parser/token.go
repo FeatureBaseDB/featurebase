@@ -28,7 +28,6 @@ const (
 	// Special tokens
 	ILLEGAL Token = iota
 	EOF
-	COMMENT
 	SPACE
 
 	literal_beg
@@ -103,6 +102,7 @@ const (
 	COLUMNS
 	COLUMNKW
 	COMMIT
+	COMMENT
 	CONFLICT
 	CONSTRAINT
 	CREATE
@@ -256,7 +256,6 @@ const (
 var tokens = [...]string{
 	ILLEGAL: "ILLEGAL",
 	EOF:     "EOF",
-	COMMENT: "COMMENT",
 	SPACE:   "SPACE",
 
 	IDENT:    "IDENT",
@@ -326,6 +325,7 @@ var tokens = [...]string{
 	COLUMNS:           "COLUMNS",
 	COLUMNKW:          "COLUMNKW",
 	COMMIT:            "COMMIT",
+	COMMENT:           "COMMENT",
 	CONFLICT:          "CONFLICT",
 	CONSTRAINT:        "CONSTRAINT",
 	CREATE:            "CREATE",
