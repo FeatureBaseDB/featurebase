@@ -484,7 +484,14 @@ var castID = TableTest{
 			SQLs: sqls(
 				"select _id, cast(id1 as string) from cast_id",
 			),
-			ExpErr: "'id' cannot be cast to 'string'",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), string("20")),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
