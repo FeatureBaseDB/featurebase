@@ -303,7 +303,7 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 			result[idx] = evalValue
 
 		case *parser.DataTypeBool:
-			bval, err := strconv.ParseInt(evalValue, 10, 64)
+			bval, err := strconv.ParseBool(evalValue)
 			if err != nil {
 				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 			}
@@ -472,7 +472,7 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 		err := json.Unmarshal([]byte(jsonValue), &v)
 
 		if err != nil {
-			return nil, err
+			return nil, sql3.NewErrParsingJSON(0, 0, jsonValue, err.Error())
 		}
 
 		// type check against the output type of the map operation
@@ -481,7 +481,7 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 			evalValue, err := expr(ctx, v)
 			if err != nil {
-				return nil, err
+				return nil, sql3.NewErrEvaluatingJSONPathExpr(0, 0, i.mapExpressionResults[idx], jsonValue, err.Error())
 			}
 
 			// if nil (null) then return nil
@@ -526,7 +526,12 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeIDSet:
 				switch v := evalValue.(type) {
 				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					// if v is a whole number then make it an int, and then turn that into an idset
+					if v == float64(int64(v)) {
+						result[idx] = []int64{int64(v)}
+					} else {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					}
 
 				case []interface{}:
 					setValue := make([]int64, 0)
@@ -573,7 +578,7 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 					result[idx] = setValue
 
 				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					result[idx] = []string{v}
 
 				case bool:
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
@@ -648,7 +653,12 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			case *parser.DataTypeBool:
 				switch v := evalValue.(type) {
 				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					// if a whole number make it an int, and convert to a bool
+					if v == float64(int64(v)) {
+						result[idx] = v > 0
+					} else {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					}
 
 				case []interface{}:
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
