@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -14,9 +15,9 @@ import (
 )
 
 func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (types.PlanOperator, error) {
-	indexInfo, err := p.schemaAPI.Schema(context.Background(), false)
+	tbls, err := p.schemaAPI.Tables(context.Background())
 	if err != nil {
-		return nil, errors.Wrap(err, "getting schema")
+		return nil, errors.Wrap(err, "getting tables")
 	}
 
 	columns := []types.PlanExpression{
@@ -75,12 +76,13 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 			dataType:    parser.NewDataTypeString(),
 		}}
 
-	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(indexInfo)), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(pilosa.TablesToIndexInfos(tbls))), p.sql), nil
 }
 
 func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.TableName)
-	index, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	tname := dax.TableName(tableName)
+	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
@@ -165,13 +167,13 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsS
 		dataType:    parser.NewDataTypeString(),
 	}}
 
-	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseColumns(index)), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseColumns(tbl)), p.sql), nil
 }
 
 func (p *ExecutionPlanner) compileShowCreateTableStatement(stmt *parser.ShowCreateTableStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.TableName)
-	_, err = p.schemaAPI.IndexInfo(context.Background(), tableName)
-	if err != nil {
+	tname := dax.TableName(tableName)
+	if _, err := p.schemaAPI.TableByName(context.Background(), tname); err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
 		}

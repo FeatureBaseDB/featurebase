@@ -1774,6 +1774,8 @@ func TestBatchTargetMDS(t *testing.T) {
 				fieldType: dax.BaseTypeDecimal,
 				fieldOptions: dax.FieldOptions{
 					Scale: 4,
+					Min:   pql.NewDecimal(-100, 0),
+					Max:   pql.NewDecimal(100, 0),
 				},
 				fieldFn: decimalFn,
 				in: [][]interface{}{
@@ -1868,6 +1870,8 @@ func TestBatchTargetMDS(t *testing.T) {
 					t.Fatalf("creating table: %v", err)
 				}
 
+				// qtblWithID is the same as qtbl above, but now MDS has
+				// assigned the table a unique ID.
 				qtblWithID, err := mdsClient.Table(ctx, qtbl.QualifiedID())
 				assert.NoError(t, err)
 
@@ -1881,7 +1885,6 @@ func TestBatchTargetMDS(t *testing.T) {
 
 				ingester.NewSource = func() (Source, error) { return ts, nil }
 				ingester.BatchSize = 10
-				//ingester.PrimaryKeyFields = []string{"rcid"}
 				ingester.IDField = "id"
 
 				if err := ingester.Run(); err != nil {

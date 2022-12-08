@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -313,7 +314,8 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 	case *parser.QualifiedTableName:
 		// check table exists
 		tableName := parser.IdentName(source.Name)
-		table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+		tname := dax.TableName(tableName)
+		tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 		if err != nil {
 			if errors.Is(err, pilosa.ErrIndexNotFound) {
 				return sql3.NewErrTableNotFound(source.Name.NamePos.Line, source.Name.NamePos.Column, tableName)
@@ -322,12 +324,12 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		}
 
 		// populate the output columns from the source
-		for idx, fld := range table.Fields {
+		for i, fld := range tbl.Fields {
 			soc := &parser.SourceOutputColumn{
 				TableName:   tableName,
-				ColumnName:  fld.Name,
-				ColumnIndex: idx,
-				Datatype:    fieldSQLDataType(fld),
+				ColumnName:  string(fld.Name),
+				ColumnIndex: i,
+				Datatype:    fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 			}
 			source.OutputColumns = append(source.OutputColumns, soc)
 		}

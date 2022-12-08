@@ -7,20 +7,20 @@ import (
 	"fmt"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 // PlanOpFeatureBaseColumns wraps an Index that is returned from schemaAPI.Schema().
 type PlanOpFeatureBaseColumns struct {
-	index    *pilosa.IndexInfo
+	tbl      *dax.Table
 	warnings []string
 }
 
-func NewPlanOpFeatureBaseColumns(index *pilosa.IndexInfo) *PlanOpFeatureBaseColumns {
+func NewPlanOpFeatureBaseColumns(tbl *dax.Table) *PlanOpFeatureBaseColumns {
 	node := &PlanOpFeatureBaseColumns{
-		index:    index,
+		tbl:      tbl,
 		warnings: make([]string, 0),
 	}
 	return node
@@ -135,34 +135,35 @@ func (p *PlanOpFeatureBaseColumns) Children() []types.PlanOperator {
 
 func (p *PlanOpFeatureBaseColumns) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
 	return &showColumnsRowIter{
-		index: p.index,
+		tbl: p.tbl,
 	}, nil
 }
 
 func (p *PlanOpFeatureBaseColumns) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
-	return NewPlanOpFeatureBaseColumns(p.index), nil
+	return NewPlanOpFeatureBaseColumns(p.tbl), nil
 }
 
 type showColumnsRowIter struct {
-	index    *pilosa.IndexInfo
+	tbl      *dax.Table
 	rowIndex int
 }
 
 var _ types.RowIterator = (*showColumnsRowIter)(nil)
 
 func (i *showColumnsRowIter) Next(ctx context.Context) (types.Row, error) {
-	if i.rowIndex < len(i.index.Fields) {
-		fields := i.index.Fields
+	if i.rowIndex < len(i.tbl.Fields) {
+		fields := i.tbl.Fields
 
-		tm := time.Unix(0, fields[i.rowIndex].CreatedAt)
+		//tm := time.Unix(0, fields[i.rowIndex].CreatedAt)
+		tm := time.Unix(0, 0)
 
 		row := []interface{}{
 			fields[i.rowIndex].Name,
 			fields[i.rowIndex].Name,
-			fieldSQLDataType(fields[i.rowIndex]).TypeDescription(),
-			fields[i.rowIndex].Options.Type,
+			fields[i.rowIndex].Type,
+			fields[i.rowIndex].Type,
 			tm.Format(time.RFC3339),
-			fields[i.rowIndex].Options.Keys,
+			fields[i.rowIndex].StringKeys(),
 			fields[i.rowIndex].Options.CacheType,
 			fields[i.rowIndex].Options.CacheSize,
 			fields[i.rowIndex].Options.Scale,

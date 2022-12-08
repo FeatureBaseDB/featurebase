@@ -33,7 +33,7 @@ save-%-logs:
 
 TCMD ?= ./...
 # do "make startup", then e.g. "make test-run-local TCMD='-run=MyFavTest ./kafka'"
-test-run-local:
+test-run-local: vendor
 	pwd
 	$(DOCKER_COMPOSE) build batch-test
 	$(DOCKER_COMPOSE) run -T batch-test go test -mod=vendor -tags=odbc,dynamic $(TCMD)

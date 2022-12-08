@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -21,7 +22,8 @@ import (
 func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Table)
 
-	table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	tname := dax.TableName(tableName)
+	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return nil, sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -103,9 +105,9 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 	// build the target columns
 	options.targetColumns = make([]*qualifiedRefPlanExpression, 0)
 	for _, m := range stmt.Columns {
-		for idx, fld := range table.Fields {
-			if strings.EqualFold(fld.Name, m.Name) {
-				options.targetColumns = append(options.targetColumns, newQualifiedRefPlanExpression(tableName, m.Name, idx, fieldSQLDataType(fld)))
+		for idx, fld := range tbl.Fields {
+			if strings.EqualFold(string(fld.Name), m.Name) {
+				options.targetColumns = append(options.targetColumns, newQualifiedRefPlanExpression(tableName, m.Name, idx, fieldSQLDataType(pilosa.FieldToFieldInfo(fld))))
 				break
 			}
 		}
@@ -151,7 +153,8 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertStatement) error {
 	//check referred to table exists
 	tableName := parser.IdentName(stmt.Table)
-	table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	tname := dax.TableName(tableName)
+	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -289,10 +292,10 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		// the column list of the table referenced
 
 		stmt.Columns = []*parser.Ident{}
-		for _, fld := range table.Fields {
+		for _, fld := range tbl.Fields {
 			stmt.Columns = append(stmt.Columns, &parser.Ident{
 				NamePos: parser.Pos{Line: 0, Column: 0},
-				Name:    fld.Name,
+				Name:    string(fld.Name),
 			})
 		}
 	}
@@ -328,10 +331,10 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 	foundID := false
 	for idx, cm := range stmt.Columns {
 		found := false
-		for _, fld := range table.Fields {
-			if strings.EqualFold(cm.Name, fld.Name) {
+		for _, fld := range tbl.Fields {
+			if strings.EqualFold(cm.Name, string(fld.Name)) {
 				found = true
-				colDataType := fieldSQLDataType(fld)
+				colDataType := fieldSQLDataType(pilosa.FieldToFieldInfo(fld))
 
 				// if we have transforms check that type and target colum ref are assignment compatible
 				// else check that the map expressions type and target column ref are assignment compatible

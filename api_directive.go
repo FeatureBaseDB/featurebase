@@ -924,57 +924,10 @@ func (api *API) createTableAndFields(tbl *dax.QualifiedTable, partitions dax.Ver
 
 // createField creates a FeatureBase Field in the provided FeatureBase Index
 // based on the provided field's type.
-//
-// TODO: `time` fields
 func createField(idx *Index, fld *dax.Field) error {
-	// Set the cache type and size (or use default) for those fields which
-	// require them.
-	cacheType := DefaultCacheType
-	cacheSize := uint32(DefaultCacheSize)
-	if fld.Options.CacheType != "" {
-		cacheType = fld.Options.CacheType
-		cacheSize = fld.Options.CacheSize
-	}
-
-	opts := []FieldOption{}
-
-	switch fld.Type {
-	case dax.BaseTypeBool:
-		opts = append(opts,
-			OptFieldTypeBool(),
-		)
-	case dax.BaseTypeDecimal:
-		opts = append(opts,
-			OptFieldTypeDecimal(fld.Options.Scale),
-		)
-	case dax.BaseTypeID:
-		opts = append(opts,
-			OptFieldTypeMutex(cacheType, cacheSize),
-		)
-	case dax.BaseTypeIDSet:
-		opts = append(opts,
-			OptFieldTypeSet(cacheType, cacheSize),
-		)
-	case dax.BaseTypeInt:
-		opts = append(opts,
-			OptFieldTypeInt(fld.Options.Min.ToInt64(0), fld.Options.Max.ToInt64(0)),
-		)
-	case dax.BaseTypeString:
-		opts = append(opts,
-			OptFieldTypeMutex(cacheType, cacheSize),
-			OptFieldKeys(),
-		)
-	case dax.BaseTypeStringSet:
-		opts = append(opts,
-			OptFieldTypeSet(cacheType, cacheSize),
-			OptFieldKeys(),
-		)
-	case dax.BaseTypeTimestamp:
-		opts = append(opts,
-			OptFieldTypeTimestamp(fld.Options.Epoch, fld.Options.TimeUnit),
-		)
-	default:
-		return errors.Errorf("unsupport field type: %s", fld.Type)
+	opts, err := FieldOptionsFromField(fld)
+	if err != nil {
+		return errors.Wrapf(err, "creating field options from field: %s", fld.Name)
 	}
 
 	if _, err := idx.CreateField(string(fld.Name), "", opts...); err != nil {

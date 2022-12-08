@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -20,7 +21,8 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 	targetColumns := []*qualifiedRefPlanExpression{}
 	insertValues := [][]types.PlanExpression{}
 
-	table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	tname := dax.TableName(tableName)
+	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return nil, sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -37,19 +39,19 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 				continue
 			}
 
-			for idx, field := range table.Fields {
-				if strings.EqualFold(colName, field.Name) {
-					targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, colName, idx, fieldSQLDataType(field)))
+			for idx, field := range tbl.Fields {
+				if strings.EqualFold(colName, string(field.Name)) {
+					targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, colName, idx, fieldSQLDataType(pilosa.FieldToFieldInfo(field))))
 					break
 				}
 			}
 		}
 	} else {
-		for idx, field := range table.Fields {
-			if strings.EqualFold("_exists", field.Name) {
+		for idx, field := range tbl.Fields {
+			if strings.EqualFold("_exists", string(field.Name)) {
 				continue
 			}
-			targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, field.Name, idx, fieldSQLDataType(field)))
+			targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, string(field.Name), idx, fieldSQLDataType(pilosa.FieldToFieldInfo(field))))
 		}
 	}
 
@@ -74,7 +76,8 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) error {
 	// Check that referred table exists.
 	tableName := parser.IdentName(stmt.Table)
-	table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	tname := dax.TableName(tableName)
+	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -88,11 +91,11 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 	// fields in the table.
 	if len(stmt.Columns) == 0 {
 		// Generate the list of types from the FeatureBase index.
-		for _, field := range table.Fields {
-			if strings.EqualFold("_exists", field.Name) {
+		for _, field := range tbl.Fields {
+			if strings.EqualFold("_exists", string(field.Name)) {
 				continue
 			}
-			typeNames = append(typeNames, fieldSQLDataType(field))
+			typeNames = append(typeNames, fieldSQLDataType(pilosa.FieldToFieldInfo(field)))
 		}
 		// Make sure (implicit) insert list and expression list have the same
 		// number of items.
@@ -115,7 +118,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 				// Determine, from the existing table, whether the _id is of
 				// type ID or STRING.
 				var idType parser.ExprDataType
-				if table.Options.Keys {
+				if tbl.StringKeys() {
 					idType = parser.NewDataTypeString()
 				} else {
 					idType = parser.NewDataTypeID()
@@ -127,9 +130,9 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 
 			// Find the column in the existing table.
 			columnFound := false
-			for _, field := range table.Fields {
-				if strings.EqualFold(colName, field.Name) {
-					typeName = fieldSQLDataType(field)
+			for _, field := range tbl.Fields {
+				if strings.EqualFold(colName, string(field.Name)) {
+					typeName = fieldSQLDataType(pilosa.FieldToFieldInfo(field))
 					columnFound = true
 					break
 				}

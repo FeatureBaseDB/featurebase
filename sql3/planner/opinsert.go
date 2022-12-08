@@ -10,6 +10,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	fbbatch "github.com/molecula/featurebase/v3/batch"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -143,10 +144,12 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 	// IndexInfo used in the import (and created below) will be based on the
 	// information from idxInfoBase, but the fields may be a limited subset, and
 	// may be in a different order.
-	idxInfoBase, err := i.planner.schemaAPI.IndexInfo(ctx, i.tableName)
+	tname := dax.TableName(i.tableName)
+	tbl, err := i.planner.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
 	}
+	idxInfoBase := pilosa.TableToIndexInfo(tbl)
 
 	// idxInfo is a subset of idxInfoBase, containing only those fields included
 	// in the INSERT INTO statement (i.e. only i.targetcolumns), and in the

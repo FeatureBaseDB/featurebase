@@ -407,32 +407,27 @@ var _ types.RowIterator = (*fbTableDDLRowIter)(nil)
 
 func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.result == nil {
-		schema, err := i.planner.schemaAPI.Schema(ctx, false)
+		tbls, err := i.planner.schemaAPI.Tables(ctx)
 		if err != nil {
 			return nil, err
 		}
-		i.result = make([]*fbTableDDLRow, len(schema))
 
-		for idx, table := range schema {
+		i.result = make([]*fbTableDDLRow, len(tbls))
 
-			index, err := i.planner.schemaAPI.IndexInfo(context.Background(), table.Name)
-			if err != nil {
-				return nil, err
-			}
-
+		for idx, tbl := range tbls {
 			// build the ddl for this table
 
 			var buf bytes.Buffer
 			buf.WriteString("create table ")
-			fmt.Fprintf(&buf, "%s", index.Name)
+			fmt.Fprintf(&buf, "%s", tbl.Name)
 			buf.WriteString(" (")
 
-			for idx, col := range index.Fields {
+			for idx, col := range tbl.Fields {
 				if idx > 0 {
 					buf.WriteString(", ")
 				}
 				fmt.Fprintf(&buf, "%s", col.Name)
-				dataType := fieldSQLDataType(col)
+				dataType := fieldSQLDataType(pilosa.FieldToFieldInfo(col))
 				fmt.Fprintf(&buf, " %s", dataType.TypeDescription())
 
 				switch dt := dataType.(type) {
@@ -504,8 +499,8 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 			ddl := buf.String()
 
 			i.result[idx] = &fbTableDDLRow{
-				id:   table.Name,
-				name: table.Name,
+				id:   string(tbl.Name),
+				name: string(tbl.Name),
 				ddl:  ddl,
 			}
 		}

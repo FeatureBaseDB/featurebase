@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
@@ -87,13 +89,21 @@ var _ types.RowIterator = (*alterTableRowIter)(nil)
 func (i *alterTableRowIter) Next(ctx context.Context) (types.Row, error) {
 	switch i.operation {
 	case alterOpAdd:
-		_, err := i.planner.schemaAPI.CreateField(ctx, i.tableName, i.columnDef.name, i.columnDef.fos...)
+		tname := dax.TableName(i.tableName)
+		fname := dax.FieldName(i.columnDef.name)
+		fos := i.columnDef.fos
+
+		fld, err := pilosa.FieldFromFieldOptions(fname, fos...)
 		if err != nil {
 			return nil, err
 		}
 
+		if err := i.planner.schemaAPI.CreateField(ctx, tname, fld); err != nil {
+			return nil, err
+		}
+
 	case alterOpDrop:
-		err := i.planner.schemaAPI.DeleteField(ctx, i.tableName, i.oldColumnName)
+		err := i.planner.schemaAPI.DeleteField(ctx, dax.TableName(i.tableName), dax.FieldName(i.oldColumnName))
 		if err != nil {
 			return nil, err
 		}
