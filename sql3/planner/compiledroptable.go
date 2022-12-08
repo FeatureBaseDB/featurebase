@@ -5,10 +5,11 @@ package planner
 import (
 	"context"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/pkg/errors"
 )
 
@@ -16,12 +17,13 @@ import (
 // PlanOperator.
 func (p *ExecutionPlanner) compileDropTableStatement(stmt *parser.DropTableStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Name)
-	index, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	tname := dax.TableName(tableName)
+	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return nil, sql3.NewErrTableNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, tableName)
 		}
 		return nil, err
 	}
-	return NewPlanOpQuery(p, NewPlanOpDropTable(p, index), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpDropTable(p, pilosa.TableToIndexInfo(tbl)), p.sql), nil
 }

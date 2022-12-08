@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/pkg/errors"
 )
 
@@ -80,18 +81,19 @@ func (p *PlanOpPQLTableScan) UpdateFilters(filterCondition types.PlanExpression)
 func (p *PlanOpPQLTableScan) Schema() types.Schema {
 	result := make(types.Schema, 0)
 
-	table, err := p.planner.schemaAPI.IndexInfo(context.Background(), p.tableName)
+	tname := dax.TableName(p.tableName)
+	table, err := p.planner.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		return result
 	}
 
 	for _, col := range p.columns {
 		for _, fld := range table.Fields {
-			if strings.EqualFold(fld.Name, col) {
+			if strings.EqualFold(string(fld.Name), col) {
 				result = append(result, &types.PlannerColumn{
-					ColumnName:   fld.Name,
+					ColumnName:   string(fld.Name),
 					RelationName: p.tableName,
-					Type:         fieldSQLDataType(fld),
+					Type:         fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 				})
 				break
 			}
@@ -147,7 +149,8 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 
 		//go get the schema def and map names to indexes in the resultant row
-		table, err := i.planner.schemaAPI.IndexInfo(context.Background(), i.tableName)
+		tname := dax.TableName(i.tableName)
+		table, err := i.planner.schemaAPI.TableByName(context.Background(), tname)
 		if err != nil {
 			if errors.Is(err, pilosa.ErrIndexNotFound) {
 				return nil, sql3.NewErrInternalf("table not found '%s'", i.tableName)
@@ -159,12 +162,12 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		i.columnMap = make(map[string]*targetColumn)
 		for idx, col := range i.columns {
 			for _, fld := range table.Fields {
-				if strings.EqualFold(col, fld.Name) {
-					i.columnMap[fld.Name] = &targetColumn{
+				if strings.EqualFold(col, string(fld.Name)) {
+					i.columnMap[string(fld.Name)] = &targetColumn{
 						columnIdx:    idx,
 						srcColumnIdx: -1,
-						columnName:   fld.Name,
-						dataType:     fieldSQLDataType(fld),
+						columnName:   string(fld.Name),
+						dataType:     fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 					}
 					break
 				}

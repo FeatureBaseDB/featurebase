@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -27,7 +28,8 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 	tableName := parser.IdentName(stmt.Name)
 
 	// does the table exist
-	table, err := p.schemaAPI.IndexInfo(context.Background(), tableName)
+	tname := dax.TableName(tableName)
+	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
 			return nil, sql3.NewErrTableNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, tableName)
@@ -40,8 +42,8 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 
 		// does this column exist
 		found := false
-		for _, f := range table.Fields {
-			if strings.EqualFold(f.Name, columnName) {
+		for _, f := range tbl.Fields {
+			if strings.EqualFold(string(f.Name), columnName) {
 				found = true
 				break
 			}
@@ -56,8 +58,8 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 		columnName := parser.IdentName(col.Name)
 
 		// does this column exist
-		for _, f := range table.Fields {
-			if strings.EqualFold(f.Name, columnName) {
+		for _, f := range tbl.Fields {
+			if strings.EqualFold(string(f.Name), columnName) {
 				return nil, sql3.NewErrDuplicateColumn(col.Name.NamePos.Line, col.Name.NamePos.Column, columnName)
 			}
 		}

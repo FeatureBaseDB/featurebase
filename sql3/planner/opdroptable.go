@@ -6,8 +6,9 @@ import (
 	"context"
 	"fmt"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 // PlanOpDropTable plan operator to drop a table.
@@ -81,7 +82,7 @@ func (i *dropTableRowIter) Next(ctx context.Context) (types.Row, error) {
 		return nil, err
 	}
 
-	err = i.planner.schemaAPI.DeleteIndex(ctx, i.index.Name)
+	err = i.planner.schemaAPI.DeleteTable(ctx, dax.TableName(i.index.Name))
 	if err != nil {
 		return nil, err
 	}

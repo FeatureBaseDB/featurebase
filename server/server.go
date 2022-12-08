@@ -567,7 +567,7 @@ func (m *Command) setupServer() error {
 	}
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
-		fapi := &pilosa.FeatureBaseSchemaAPI{API: api}
+		fapi := pilosa.NewOnPremSchema(api)
 		fsapi := &pilosa.FeatureBaseSystemAPI{API: api}
 		fimp := &batch.FeaturebaseImporter{API: api}
 

@@ -123,7 +123,7 @@ func (b *batchImporter) indexToQualifiedTableKey(ctx context.Context, index stri
 
 	qtid, err := b.schemar.TableID(ctx, b.qual, dax.TableName(index))
 	if err != nil {
-		return "", errors.Wrap(err, "converting index to qualified table id")
+		return "", errors.Wrapf(err, "converting index to qualified table id: %s", index)
 	}
 	return qtid.Key(), nil
 }

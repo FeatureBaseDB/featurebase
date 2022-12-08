@@ -183,8 +183,6 @@ type Batch struct {
 	clearFrags     fragments
 
 	useShardTransactionalEndpoint bool
-
-	mdsHost string
 }
 
 func (b *Batch) Len() int { return len(b.ids) }

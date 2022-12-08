@@ -125,8 +125,6 @@ services:
       - ./docker-sasl/ssl_keys:/ssl_keys
       - ./testdata:/testdata
     depends_on:
-      #- kafka
-      #- postgres
       - fakeidp
   wait:
     build:

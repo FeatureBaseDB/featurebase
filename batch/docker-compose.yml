@@ -23,7 +23,7 @@ services:
 
   wait:
     depends_on:
-        - "featurebase"
+      - "featurebase"
     build:
       context: .
       dockerfile: Dockerfile-wait
