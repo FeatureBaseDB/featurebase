@@ -108,6 +108,8 @@ const (
 	ErrInvalidInputSpecifier   errors.Code = "ErrInvalidInputSpecifier"
 	ErrInvalidBatchSize        errors.Code = "ErrInvalidBatchSize"
 	ErrTypeConversionOnMap     errors.Code = "ErrTypeConversionOnMap"
+	ErrParsingJSON             errors.Code = "ErrParsingJSON"
+	ErrEvaluatingJSONPathExpr  errors.Code = "ErrEvaluatingJSONPathExpr"
 
 	// optimizer errors
 	ErrAggregateNotAllowedInGroupBy errors.Code = "ErrIdPercentileNotAllowedInGroupBy"
@@ -660,6 +662,20 @@ func NewErrTypeConversionOnMap(line, col int, value interface{}, typeName string
 	return errors.New(
 		ErrTypeConversionOnMap,
 		fmt.Sprintf("[%d:%d] value '%v' cannot be converted to type '%s'", line, col, value, typeName),
+	)
+}
+
+func NewErrParsingJSON(line, col int, jsonString string, errorText string) error {
+	return errors.New(
+		ErrParsingJSON,
+		fmt.Sprintf("[%d:%d] unable to parse JSON '%s': %s", line, col, jsonString, errorText),
+	)
+}
+
+func NewErrEvaluatingJSONPathExpr(line, col int, exprText string, jsonString string, errorText string) error {
+	return errors.New(
+		ErrEvaluatingJSONPathExpr,
+		fmt.Sprintf("[%d:%d] unable to evaluate JSONPath expression '%s' in '%s': %s", line, col, exprText, jsonString, errorText),
 	)
 }
 

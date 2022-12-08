@@ -1680,12 +1680,55 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		map ('$._id' id, '$.id1' id, '$.i1' int, '$.ids1' idset, '$.ss1' stringset, '$.ts1' timestamp, '$.s1' string, '$.b1' bool, '$.d1' decimal(2))
 	
 	from 
-		x'{ "_id": 1, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": true, "d1": 11.34 }' 
+		x'{ "_id": 1, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": true, "d1": 11.34 }
+		{ "_id": 2, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 0, "d1": 11.34 }
+		{ "_id": 3, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }
+		{ "_id": 4, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }' 
 	with 
 		format 'NDJSON' 
 		input 'STREAM';`)
 		if err != nil {
 			t.Fatal(err)
+		}
+	})
+
+	t.Run("BulkNDJsonBadJsonPath", func(t *testing.T) {
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
+		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
+	
+		map ('$._id' id, '$.id1' id, '$.i1' int, '$.ids1' idset, '$.ss1' stringset, '$.ts1' timestamp, '$.s1' string, '$.blah' bool, '$.d1' decimal(2))
+	
+	from 
+		x'{ "_id": 1, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": true, "d1": 11.34 }
+		{ "_id": 2, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 0, "d1": 11.34 }
+		{ "_id": 3, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }
+		{ "_id": 4, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }' 
+	with 
+		format 'NDJSON' 
+		input 'STREAM';`)
+		if err == nil || !strings.Contains(err.Error(), `unknown key blah`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("BulkNDJsonBadJson", func(t *testing.T) {
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
+		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
+	
+		map ('$._id' id, '$.id1' id, '$.i1' int, '$.ids1' idset, '$.ss1' stringset, '$.ts1' timestamp, '$.s1' string, '$.b1' bool, '$.d1' decimal(2))
+	
+	from 
+		x'{ "_id": 1, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny" "b1": true, "d1": 11.34 }
+		{ "_id": 2, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 0, "d1": 11.34 }
+		{ "_id": 3, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }
+		{ "_id": 4, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }' 
+	with 
+		format 'NDJSON' 
+		input 'STREAM';`)
+		if err == nil || !strings.Contains(err.Error(), `: invalid character '"' after object key:value pair`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
