@@ -27,6 +27,7 @@ type QueryProps = {
   results: ResultType[];
   error?: ResultType;
   loading: boolean;
+  isSQL3: boolean;
   onRemoveResult: (resultIdx: number) => void;
   onClear: () => void;
   onQuery: (query: string, type: 'PQL' | 'SQL', index?: string) => void;
@@ -37,6 +38,7 @@ export const Query: FC<QueryProps> = ({
   results,
   error,
   loading,
+  isSQL3,
   onRemoveResult,
   onClear,
   onQuery
@@ -172,6 +174,7 @@ export const Query: FC<QueryProps> = ({
             {results.map((result, idx) => (
               <Paper key={`query-result-${idx}`} className={css.results}>
                 <QueryResults
+                  isSQL3={isSQL3}
                   collapsibleQuery={false}
                   results={result}
                   onRemoveResult={() => onRemoveResult(idx)}

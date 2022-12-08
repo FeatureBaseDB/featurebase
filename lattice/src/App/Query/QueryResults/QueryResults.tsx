@@ -14,12 +14,14 @@ import css from './QueryResults.module.scss';
 type QueryResultsProps = {
   collapsibleQuery?: boolean;
   results: ResultType;
+  isSQL3?: boolean
   onRemoveResult?: () => void;
 };
 
 export const QueryResults: FC<QueryResultsProps> = ({
   collapsibleQuery = true,
   results,
+  isSQL3,
   onRemoveResult,
 }) => {
   const [showQuery, setShowQuery] = useState<boolean>(false);
@@ -31,22 +33,38 @@ export const QueryResults: FC<QueryResultsProps> = ({
 
   const headers = results.headers;
   const data = results.rows.map((row) => {
+
     let rowData = {};
     row.forEach((col, colIdx) => {
-      const header = headers[colIdx];
-      if (header.datatype.includes('[]')) {
-        const dataTypeVal = `${header.datatype.slice(2)}arrayval`;
-        rowData[header.name] = col[dataTypeVal].valsList.join(', ');
-      } else if (header.datatype === 'decimal') {
-        const decimalVal = col[`${header.datatype}val`];
-        if (decimalVal) {
-          const { value, scale } = decimalVal;
-          rowData[header.name] = value / Math.pow(10, scale);
+      
+      if (isSQL3) {
+        const header = headers[colIdx];
+        if (Array.isArray(col)) {
+          let displayString = col.join(", ");
+          rowData[header.name] = displayString;
+        } else if (headers[colIdx]['base-type'] == "decimal") {
+          const scale = headers[colIdx]['type-info']['scale'];
+          rowData[header.name] = Number(col) / Math.pow(10, scale);
         } else {
-          rowData[header.name] = decimalVal;
+          rowData[header.name] = col;
         }
+
       } else {
-        rowData[header.name] = col[`${header.datatype}val`];
+        const header = headers[colIdx];
+        if (header.datatype.includes('[]')) {
+          const dataTypeVal = `${header.datatype.slice(2)}arrayval`;
+          rowData[header.name] = col[dataTypeVal].valsList.join(', ');
+        } else if (header.datatype === 'decimal') {
+          const decimalVal = col[`${header.datatype}val`];
+          if (decimalVal) {
+            const { value, scale } = decimalVal;
+            rowData[header.name] = value / Math.pow(10, scale);
+          } else {
+            rowData[header.name] = decimalVal;
+          }
+        } else {
+          rowData[header.name] = col[`${header.datatype}val`];
+        }
       }
     });
 
