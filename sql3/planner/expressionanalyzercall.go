@@ -243,6 +243,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		return p.analyzeFunctionSubtable(call, scope)
 	case "REVERSE":
 		return p.analyseFunctionReverse(call, scope)
+	case "SUBSTRING":
+		return p.analyseFunctionSubstring(call, scope)
 
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
