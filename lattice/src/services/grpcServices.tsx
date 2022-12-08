@@ -25,4 +25,4 @@ export const querySQL = (sql: string, onMessage, onEnd) => {
   const querySQLRequest = new QuerySQLRequest();
   querySQLRequest.setSql(sql);
   invokeStream(Pilosa.QuerySQL, querySQLRequest, onMessage, onEnd);
-}
+};
