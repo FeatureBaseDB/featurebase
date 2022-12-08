@@ -41,12 +41,22 @@ export const QueryContainer: FC<{}> = () => {
   const [results, setResults] = useState<ResultType[]>([]);
   const [errorResult, setErrorResult] = useState<ResultType>();
   const [loading, setLoading] = useState<boolean>(false);
+  const [isSQL3, setIsSQL3] = useState<boolean>(false)
 
   useEffectOnce(() => {
     pilosa.get.schema().then((res) => {
       setIndexes(res.data.indexes);
     });
   });
+
+  const handleHTTPQueryMessages = (response) => {
+    setIsSQL3(true)
+    streamingResults.headers = response.data.schema.fields;
+    streamingResults.rows = response.data.data;
+    setErrorResult(undefined);
+    setResults([streamingResults]);
+    setLoading(false);
+  }
 
   const handleQueryMessages = (message: RowResponse) => {
     if (streamingResults.totalMessageCount < MAX_MESSAGES) {
@@ -84,6 +94,7 @@ export const QueryContainer: FC<{}> = () => {
       streamingResults.roundtrip = moment
         .duration(moment().diff(startTime))
         .as('milliseconds');
+
       setErrorResult(undefined);
       setResults([streamingResults, ...results]);
     }
@@ -119,7 +130,18 @@ export const QueryContainer: FC<{}> = () => {
           setLoading(false);
         }
       } else {
-        querySQL(query, handleQueryMessages, handleQueryEnd);
+        pilosa.post.sql(query)
+          .then((res) => {
+            setIsSQL3(true);
+            handleHTTPQueryMessages(res);
+          }).catch((e) => {
+            if (e.response.status === 404) {
+              setIsSQL3(false);
+              querySQL(query, handleQueryMessages, handleQueryEnd);
+            }
+
+
+          });
       }
     }
   };
@@ -139,6 +161,7 @@ export const QueryContainer: FC<{}> = () => {
       loading={loading}
       onClear={() => setResults([])}
       onRemoveResult={removeResultItem}
+      isSQL3={isSQL3}
     />
   );
 };

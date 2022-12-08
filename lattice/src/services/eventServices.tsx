@@ -44,7 +44,7 @@ export const pilosa = {
     },
     queryHistory() {
       return api.get('/query-history');
-    },
+    }
   },
   post: {
     finishTransaction(id) {
@@ -53,5 +53,8 @@ export const pilosa = {
     query(index, query) {
       return api.post(`/index/${index}/query`, query);
     },
+    sql(query) {
+      return api.post(`/sql`, query);
+    }
   },
 };
