@@ -70,9 +70,10 @@ func testStringSliceCombos(t *testing.T, importer Importer, sapi featurebase.Sch
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 5, idx, idx.Fields)
@@ -251,9 +252,10 @@ func testImportBatchInts(t *testing.T, importer Importer, sapi featurebase.Schem
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields)
@@ -334,9 +336,10 @@ func testImportBatchSorting(t *testing.T, importer Importer, sapi featurebase.Sc
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 100, idx, idx.Fields)
@@ -399,9 +402,10 @@ func testTrimNull(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, q
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields)
@@ -516,9 +520,10 @@ func testStringSliceEmptyAndNil(t *testing.T, importer Importer, sapi featurebas
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	// first create a batch and test adding a single value with empty
@@ -641,9 +646,10 @@ func testStringSlice(t *testing.T, importer Importer, sapi featurebase.SchemaAPI
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields)
@@ -765,9 +771,10 @@ func testSingleClearBatchRegression(t *testing.T, importer Importer, sapi featur
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	// Set a bit.
@@ -856,9 +863,10 @@ func testBatches(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qa
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 10, idx, idx.Fields)
@@ -1295,9 +1303,10 @@ func testBatchesStringIDs(t *testing.T, importer Importer, sapi featurebase.Sche
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields)
@@ -1579,9 +1588,10 @@ func testBatchStaleness(t *testing.T, importer Importer, sapi featurebase.Schema
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields, OptMaxStaleness(time.Millisecond))
@@ -1625,9 +1635,10 @@ func testImportBatchMultipleInts(t *testing.T, importer Importer, sapi featureba
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 6, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
@@ -1685,9 +1696,10 @@ func testImportBatchMultipleTimestamps(t *testing.T, importer Importer, sapi fea
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b1, err := NewBatch(importer, 6, idx, idx.Fields)
@@ -1778,9 +1790,10 @@ func testImportBatchSetsAndClears(t *testing.T, importer Importer, sapi featureb
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 6, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
@@ -1867,9 +1880,10 @@ func testTopNCacheRegression(t *testing.T, importer Importer, sapi featurebase.S
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
@@ -1949,9 +1963,10 @@ func testMultipleIntSameBatch(t *testing.T, importer Importer, sapi featurebase.
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 4, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
@@ -2018,9 +2033,10 @@ func mutexClearRegression(t *testing.T, importer Importer, sapi featurebase.Sche
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 11, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
@@ -2098,9 +2114,10 @@ func mutexNilClearID(t *testing.T, importer Importer, sapi featurebase.SchemaAPI
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 11, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
@@ -2187,9 +2204,10 @@ func mutexNilClearKey(t *testing.T, importer Importer, sapi featurebase.SchemaAP
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields)
@@ -2284,9 +2302,10 @@ func testImportBatchBools(t *testing.T, importer Importer, sapi featurebase.Sche
 		},
 	}
 
-	createIndexAndFields(t, ctx, sapi, idx)
+	tbl := featurebase.IndexInfoToTable(idx)
+	assert.NoError(t, sapi.CreateTable(ctx, tbl))
 	defer func() {
-		assert.NoError(t, sapi.DeleteIndex(ctx, idx.Name))
+		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
 	b, err := NewBatch(importer, 3, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
@@ -2321,41 +2340,4 @@ func testImportBatchBools(t *testing.T, importer Importer, sapi featurebase.Sche
 	count, ok := resp.Results[0].(uint64)
 	assert.True(t, ok, "wrong return type: %T", resp.Results[0])
 	assert.Equal(t, uint64(2), count)
-}
-
-func createIndexAndFields(t *testing.T, ctx context.Context, sapi featurebase.SchemaAPI, idx *featurebase.IndexInfo) {
-	fields := make([]featurebase.CreateFieldObj, 0, len(idx.Fields))
-	for _, fld := range idx.Fields {
-		opts := []featurebase.FieldOption{}
-		if fld.Options.Keys {
-			opts = append(opts, featurebase.OptFieldKeys())
-		}
-		switch fld.Options.Type {
-		case featurebase.FieldTypeMutex:
-			opts = append(opts, featurebase.OptFieldTypeMutex(fld.Options.CacheType, fld.Options.CacheSize))
-		case featurebase.FieldTypeSet:
-			opts = append(opts, featurebase.OptFieldTypeSet(fld.Options.CacheType, fld.Options.CacheSize))
-		case featurebase.FieldTypeInt:
-			opts = append(opts, featurebase.OptFieldTypeInt(fld.Options.Min.ToInt64(0), fld.Options.Max.ToInt64(0)))
-		case featurebase.FieldTypeTime:
-			opts = append(opts, featurebase.OptFieldTypeTime(fld.Options.TimeQuantum, fld.Options.TTL.String(), fld.Options.NoStandardView))
-		case featurebase.FieldTypeTimestamp:
-			opts = append(opts, featurebase.OptFieldTypeTimestamp(time.Unix(0, 0), fld.Options.TimeUnit))
-		case featurebase.FieldTypeBool:
-			opts = append(opts, featurebase.OptFieldTypeBool())
-		default:
-			t.Fatalf("unsupported field type: %s", fld.Options.Type)
-		}
-		field := featurebase.CreateFieldObj{
-			Name:    fld.Name,
-			Options: opts,
-		}
-		fields = append(fields, field)
-	}
-
-	assert.NoError(t, sapi.CreateIndexAndFields(ctx,
-		idx.Name,
-		idx.Options,
-		fields,
-	))
 }

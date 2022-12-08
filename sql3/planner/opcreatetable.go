@@ -6,8 +6,9 @@ import (
 	"context"
 	"fmt"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/pkg/errors"
 )
 
@@ -100,23 +101,38 @@ var _ types.RowIterator = (*createTableRowIter)(nil)
 
 func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 	//create the table
-	options := pilosa.IndexOptions{
-		Keys:           i.isKeyed,
-		TrackExistence: true,
-		PartitionN:     i.keyPartitions,
-		Description:    i.description,
+
+	fields := make([]*dax.Field, 0, len(i.columns)+1)
+
+	// add the _id column
+	var idType dax.BaseType = dax.BaseTypeID
+	if i.isKeyed {
+		idType = dax.BaseTypeString
+	}
+	fields = append(fields, &dax.Field{
+		Name: "_id",
+		Type: idType,
+	})
+
+	for _, f := range i.columns {
+		fld, err := pilosa.FieldFromFieldOptions(dax.FieldName(f.name), f.fos...)
+		if err != nil {
+			return nil, errors.Wrapf(err, "creating field from field options: %s", f.name)
+		}
+		fields = append(fields, fld)
 	}
 
-	fields := make([]pilosa.CreateFieldObj, len(i.columns))
-	for i, f := range i.columns {
-		fields[i] = pilosa.CreateFieldObj{
-			Name:    f.name,
-			Options: f.fos,
-		}
+	tbl := &dax.Table{
+		Name:   dax.TableName(i.tableName),
+		Fields: fields,
+		// TODO(tlt): once we can support different partitionN's per table,
+		// replace dax.DefaultPartitionN with i.keyPartitions.
+		PartitionN: dax.DefaultPartitionN,
+		// TODO(tlt): add Description to dax.Table; = i.description
 	}
 
 	// TODO (pok) add ability to add description here
-	if err := i.planner.schemaAPI.CreateIndexAndFields(ctx, i.tableName, options, fields); err != nil {
+	if err := i.planner.schemaAPI.CreateTable(ctx, tbl); err != nil {
 		if _, ok := errors.Cause(err).(pilosa.ConflictError); ok {
 			if i.failIfExists {
 				return nil, err

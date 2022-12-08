@@ -5,6 +5,7 @@ import (
 
 	featurebase "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/client/types"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/errors"
 )
 
@@ -16,74 +17,67 @@ var _ featurebase.SchemaAPI = &schemaAPI{}
 // used for those tests, it may not be functionally complete, and should not be
 // used otherwise without further testing and review of this code.
 type schemaAPI struct {
-	*Client
+	client *Client
 }
 
 func NewSchemaAPI(c *Client) *schemaAPI {
 	return &schemaAPI{
-		Client: c,
+		client: c,
 	}
 }
 
-func (s *schemaAPI) CreateIndexAndFields(ctx context.Context, indexName string, options featurebase.IndexOptions, fields []featurebase.CreateFieldObj) error {
-	schema, err := s.Client.Schema()
+func (s *schemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
+	return nil, nil
+}
+func (s *schemaAPI) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
+	return nil, nil
+}
+func (s *schemaAPI) Tables(ctx context.Context) ([]*dax.Table, error) {
+	return nil, nil
+}
+
+func (s *schemaAPI) CreateTable(ctx context.Context, tbl *dax.Table) error {
+	schema, err := s.client.Schema()
 	if err != nil {
 		return errors.Wrap(err, "getting schema")
 	}
 
+	ii := featurebase.TableToIndexInfo(tbl)
+
 	// Add the index.
-	idx := schema.Index(indexName,
-		OptIndexKeys(options.Keys),
+	idx := schema.Index(ii.Name,
+		OptIndexKeys(ii.Options.Keys),
 		OptIndexTrackExistence(true),
 	)
-	if err := s.Client.CreateIndex(idx); err != nil {
+	if err := s.client.CreateIndex(idx); err != nil {
 		return errors.Wrap(err, "creating index")
 	}
 
 	// Now add fields.
-	for _, f := range fields {
-		fld, err := s.addFieldToIndex(idx, f.Name, f.Options...)
+	for _, f := range ii.Fields {
+		fld, err := s.addFieldToIndex(idx, f.Name, f.Options)
 		if err != nil {
 			return errors.Wrapf(err, "adding field to index")
 		}
-		if err := s.Client.CreateField(fld); err != nil {
+		if err := s.client.CreateField(fld); err != nil {
 			return errors.Wrapf(err, "creating field")
 		}
 	}
 
 	return nil
 }
-
-func (s *schemaAPI) CreateField(ctx context.Context, indexName string, fieldName string, opts ...featurebase.FieldOption) (*featurebase.Field, error) {
-	schema, err := s.Client.Schema()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting schema")
-	}
-
-	if !schema.HasIndex(indexName) {
-		return nil, featurebase.ErrIndexNotFound
-	}
-
-	idx := schema.Index(indexName)
-
-	fld, err := s.addFieldToIndex(idx, fieldName, opts...)
-	if err != nil {
-		return nil, errors.Wrapf(err, "adding field to index")
-	}
-
-	if err := s.Client.CreateField(fld); err != nil {
-		return nil, errors.Wrapf(err, "creating field")
-	}
-
-	return nil, nil
+func (s *schemaAPI) CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error {
+	return nil
 }
 
-func (s *schemaAPI) addFieldToIndex(idx *Index, fieldName string, opts ...featurebase.FieldOption) (*Field, error) {
-	ffos := &featurebase.FieldOptions{}
-	for _, opt := range opts {
-		opt(ffos)
-	}
+func (s *schemaAPI) DeleteTable(ctx context.Context, tname dax.TableName) error {
+	return s.client.DeleteIndexByName(string(tname))
+}
+func (s *schemaAPI) DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error {
+	return nil
+}
 
+func (s *schemaAPI) addFieldToIndex(idx *Index, fieldName string, ffos featurebase.FieldOptions) (*Field, error) {
 	cfos := []FieldOption{}
 
 	switch ffos.Type {
@@ -115,52 +109,6 @@ func (s *schemaAPI) addFieldToIndex(idx *Index, fieldName string, opts ...featur
 	}
 
 	return idx.Field(fieldName, cfos...), nil
-}
-
-func (s *schemaAPI) DeleteField(ctx context.Context, indexName string, fieldName string) error {
-	schema, err := s.Client.Schema()
-	if err != nil {
-		return errors.Wrap(err, "getting schema")
-	}
-
-	if !schema.HasIndex(indexName) {
-		return featurebase.ErrIndexNotFound
-	}
-
-	idx := schema.Index(indexName)
-
-	return s.Client.DeleteField(&Field{
-		name:  fieldName,
-		index: idx,
-	})
-}
-
-func (s *schemaAPI) DeleteIndex(ctx context.Context, indexName string) error {
-	return s.Client.DeleteIndexByName(indexName)
-}
-
-func (s *schemaAPI) IndexInfo(ctx context.Context, indexName string) (*featurebase.IndexInfo, error) {
-	schema, err := s.Client.Schema()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting schema")
-	}
-
-	if !schema.HasIndex(indexName) {
-		return nil, featurebase.ErrIndexNotFound
-	}
-
-	idx := schema.Index(indexName)
-	return FromClientIndex(idx), nil
-}
-
-// FieldInfo returns the same information as Schema(), but only for a single
-// index.
-func (s *schemaAPI) FieldInfo(ctx context.Context, indexName, fieldName string) (*featurebase.FieldInfo, error) {
-	return nil, nil
-}
-
-func (s *schemaAPI) Schema(ctx context.Context, withViews bool) ([]*featurebase.IndexInfo, error) {
-	return nil, errors.New("", "schemaAPI.Schema is not implemented")
 }
 
 var _ featurebase.QueryAPI = &queryAPI{}

@@ -530,7 +530,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 					}
 
 					fbField, ok := fbFields[fld.name]
-					assert.True(t, ok)
+					assert.True(t, ok, "expected field: %s", fld.name)
 					assert.Equal(t, fld.expOptions, fbField.Options)
 				})
 			}

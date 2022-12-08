@@ -5,9 +5,10 @@ package planner
 import (
 	"context"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/pkg/errors"
 )
 
@@ -18,66 +19,100 @@ type systemTableDefintionsWrapper struct {
 	schemaAPI pilosa.SchemaAPI
 }
 
-func newSystemTableDefintionsWrapper(schemaAPI pilosa.SchemaAPI) *systemTableDefintionsWrapper {
+func newSystemTableDefintionsWrapper(api pilosa.SchemaAPI) *systemTableDefintionsWrapper {
 	return &systemTableDefintionsWrapper{
-		schemaAPI: schemaAPI,
+		schemaAPI: api,
 	}
 }
 
-func (s *systemTableDefintionsWrapper) CreateIndexAndFields(ctx context.Context, indexName string, options pilosa.IndexOptions, fields []pilosa.CreateFieldObj) error {
-	return s.schemaAPI.CreateIndexAndFields(ctx, indexName, options, fields)
-}
-
-func (s *systemTableDefintionsWrapper) CreateField(ctx context.Context, indexName string, fieldName string, opts ...pilosa.FieldOption) (*pilosa.Field, error) {
-	return s.schemaAPI.CreateField(ctx, indexName, fieldName, opts...)
-}
-
-func (s *systemTableDefintionsWrapper) DeleteField(ctx context.Context, indexName string, fieldName string) error {
-	return s.schemaAPI.DeleteField(ctx, indexName, fieldName)
-}
-
-func (s *systemTableDefintionsWrapper) DeleteIndex(ctx context.Context, indexName string) error {
-	return s.schemaAPI.DeleteIndex(ctx, indexName)
-}
-
-func (s *systemTableDefintionsWrapper) IndexInfo(ctx context.Context, indexName string) (*pilosa.IndexInfo, error) {
-	i, err := s.schemaAPI.IndexInfo(ctx, indexName)
+func (s *systemTableDefintionsWrapper) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
+	tbl, err := s.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if errors.Is(err, pilosa.ErrIndexNotFound) {
-			st, ok := systemTables[indexName]
+			st, ok := systemTables[string(tname)]
 			if !ok {
 				return nil, pilosa.ErrIndexNotFound
 			}
 
-			return indexInfoFromSystemTable(st)
+			return indexInfoFromSystemTableB(st)
 		}
 		return nil, err
 	}
-	return i, nil
+	return tbl, nil
 }
 
-func (s *systemTableDefintionsWrapper) FieldInfo(ctx context.Context, indexName, fieldName string) (*pilosa.FieldInfo, error) {
-	return nil, pilosa.ErrNotImplemented
+func (s *systemTableDefintionsWrapper) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
+	return s.schemaAPI.TableByID(ctx, tid)
 }
 
-func (s *systemTableDefintionsWrapper) Schema(ctx context.Context, withViews bool) ([]*pilosa.IndexInfo, error) {
-	schema, err := s.schemaAPI.Schema(ctx, withViews)
+func (s *systemTableDefintionsWrapper) Tables(ctx context.Context) ([]*dax.Table, error) {
+	tbls, err := s.schemaAPI.Tables(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting tables")
 	}
-	for _, st := range systemTables {
 
-		i, err := indexInfoFromSystemTable(st)
+	// Append the system tables.
+	for tblName, st := range systemTables {
+		ii, err := indexInfoFromSystemTable(st)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "converting system table to table: %s", tblName)
 		}
-		schema = append(schema, i)
+		tbls = append(tbls, pilosa.IndexInfoToTable(ii))
 	}
-	return schema, err
+
+	return tbls, nil
+}
+
+func (s *systemTableDefintionsWrapper) CreateTable(ctx context.Context, tbl *dax.Table) error {
+	return s.schemaAPI.CreateTable(ctx, tbl)
+}
+
+func (s *systemTableDefintionsWrapper) CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error {
+	return s.schemaAPI.CreateField(ctx, tname, fld)
+}
+
+func (s *systemTableDefintionsWrapper) DeleteTable(ctx context.Context, tname dax.TableName) error {
+	return s.schemaAPI.DeleteTable(ctx, tname)
+}
+
+func (s *systemTableDefintionsWrapper) DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error {
+	return s.schemaAPI.DeleteField(ctx, tname, fname)
+}
+
+func indexInfoFromSystemTableB(st *systemTable) (*dax.Table, error) {
+	fields := make([]*dax.Field, 0)
+
+	for _, f := range st.schema {
+		var baseType dax.BaseType
+		switch f.Type.(type) {
+		case *parser.DataTypeInt:
+			baseType = dax.BaseTypeInt
+		case *parser.DataTypeBool:
+			baseType = dax.BaseTypeBool
+		case *parser.DataTypeString:
+			baseType = dax.BaseTypeString
+		case *parser.DataTypeTimestamp:
+			baseType = dax.BaseTypeTimestamp
+		default:
+			return nil, sql3.NewErrInternalf("unexpected system table field type '%T'", f.Type)
+		}
+
+		fld := &dax.Field{
+			Name: dax.FieldName(f.ColumnName),
+			Type: baseType,
+		}
+		fields = append(fields, fld)
+	}
+
+	tbl := &dax.Table{
+		Name:   dax.TableName(st.name),
+		Fields: fields,
+	}
+
+	return tbl, nil
 }
 
 func indexInfoFromSystemTable(st *systemTable) (*pilosa.IndexInfo, error) {
-
 	fields := make([]*pilosa.FieldInfo, 0)
 
 	for _, f := range st.schema {

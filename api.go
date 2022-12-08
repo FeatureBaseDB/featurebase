@@ -3374,25 +3374,16 @@ func shardInShards(i dax.ShardNum, s dax.VersionedShards) bool {
 	return false
 }
 
-// SchemaAPI is a subset of the API methods which have to do with schema. This
-// interface was introduced in order to remove, from the sql3 package, the
-// pointer to API, and instead use this interface. In the current FeatureBase,
-// this interface can be implemented directly with API (well, not directly, but
-// with FeatureBaseSchemaAPI, which is a wrapper around API). But in an
-// implementation for DAX, for example, we might want something else servicing
-// the schema-related calls to the SchemaAPI.
 type SchemaAPI interface {
-	CreateIndexAndFields(ctx context.Context, indexName string, options IndexOptions, fields []CreateFieldObj) error
-	CreateField(ctx context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error)
-	DeleteField(ctx context.Context, indexName string, fieldName string) error
-	DeleteIndex(ctx context.Context, indexName string) error
+	TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error)
+	TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error)
+	Tables(ctx context.Context) ([]*dax.Table, error)
 
-	// Schema returns the list of tables and fields. While it might make sense
-	// to have this as part of the SchemaInfoAPI interface instead of here, it's
-	// never used by consumers of that interface.
-	Schema(ctx context.Context, withViews bool) ([]*IndexInfo, error)
+	CreateTable(ctx context.Context, tbl *dax.Table) error
+	CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error
 
-	SchemaInfoAPI
+	DeleteTable(ctx context.Context, tname dax.TableName) error
+	DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error
 }
 
 type SchemaInfoAPI interface {
@@ -3431,74 +3422,6 @@ type CreateFieldObj struct {
 // QueryAPI is a subset of the API methods which have to do with query.
 type QueryAPI interface {
 	Query(ctx context.Context, req *QueryRequest) (QueryResponse, error)
-}
-
-// Ensure type implements interface.
-var _ SchemaAPI = (*FeatureBaseSchemaAPI)(nil)
-
-// FeatureBaseSchemaAPI is a wrapper around pilosa.API. It implements the
-// SchemaAPI interface with methods which are not a part of pilosa.API.
-type FeatureBaseSchemaAPI struct {
-	*API
-}
-
-func (fapi *FeatureBaseSchemaAPI) CreateIndexAndFields(ctx context.Context, indexName string, options IndexOptions, fields []CreateFieldObj) error {
-	// Add the index.
-	if _, err := fapi.CreateIndex(ctx, indexName, options); err != nil {
-		return err
-	}
-
-	// Now add fields.
-	for _, f := range fields {
-		if _, err := fapi.CreateField(ctx, indexName, f.Name, f.Options...); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// IndexInfo wraps the API.IndexInfo method and prepends an _id field to its
-// list of fields.
-func (fapi *FeatureBaseSchemaAPI) IndexInfo(ctx context.Context, indexName string) (*IndexInfo, error) {
-	idx, err := fapi.API.IndexInfo(ctx, indexName)
-	if err != nil {
-		return nil, err
-	}
-
-	// sortedFields will contain the sorted list of fields from IndexInfo, along
-	// with the primary key field (which will always be at the beginning of the
-	// list).
-	sortedFields := make([]*FieldInfo, 0, len(idx.Fields)+1)
-
-	// Add the primary key field to the beginning of the list.
-	idKeys := idx.Options.Keys
-	idType := "id"
-	if idKeys {
-		idType = "string"
-	}
-
-	idFld := &FieldInfo{
-		Name:      "_id",
-		CreatedAt: idx.CreatedAt,
-		Options: FieldOptions{
-			Type: idType,
-			Keys: idKeys,
-		},
-	}
-	sortedFields = append(sortedFields, idFld)
-
-	// Sort idx.Fields by CreatedAt before adding them to sortedFields.
-	sort.Slice(idx.Fields, func(i, j int) bool {
-		return idx.Fields[i].CreatedAt < idx.Fields[j].CreatedAt
-	})
-
-	// Add the sorted fields to sortedFields.
-	sortedFields = append(sortedFields, idx.Fields...)
-
-	idx.Fields = sortedFields
-
-	return idx, nil
 }
 
 // FeatureBaseSystemAPI is a wrapper around pilosa.API. It implements the
