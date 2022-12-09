@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	fbcontext "github.com/molecula/featurebase/v3/context"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/computer"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/rbf"
+	fbcontext "github.com/featurebasedb/featurebase/v3/context"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/rbf"
 
 	//"github.com/featurebasedb/featurebase/v3/pg"
 	"github.com/featurebasedb/featurebase/v3/pql"

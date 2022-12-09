@@ -4,7 +4,7 @@ package test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 // TestQualifiedTable is a test helper function for creating a table based on a

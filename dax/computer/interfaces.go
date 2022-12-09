@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 // Registrar represents the methods which Computer uses to register itself with

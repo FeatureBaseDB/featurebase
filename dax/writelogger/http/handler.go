@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/molecula/featurebase/v3/dax/writelogger"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 func Handler(w *writelogger.WriteLogger, logger logger.Logger) http.Handler {

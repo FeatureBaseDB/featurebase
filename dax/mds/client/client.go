@@ -9,11 +9,11 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/mds/controller"
-	mdshttp "github.com/molecula/featurebase/v3/dax/mds/http"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
+	mdshttp "github.com/featurebasedb/featurebase/v3/dax/mds/http"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 const (

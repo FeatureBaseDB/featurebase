@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	featurebase_client "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/dax"
-	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	featurebase_client "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // Ensure type implements interface.

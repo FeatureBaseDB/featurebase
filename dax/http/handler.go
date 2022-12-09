@@ -7,12 +7,12 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax/mds"
-	"github.com/molecula/featurebase/v3/dax/queryer"
-	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	"github.com/molecula/featurebase/v3/dax/writelogger"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	"github.com/featurebasedb/featurebase/v3/dax/queryer"
+	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
+	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // Handler represents an HTTP handler.

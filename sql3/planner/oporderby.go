@@ -8,10 +8,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/parser"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // orderByOrder is the direction of the order by (ascending or descending).

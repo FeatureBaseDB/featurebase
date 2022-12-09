@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 // Node is used in API requests, like RegisterNode (before being assigned

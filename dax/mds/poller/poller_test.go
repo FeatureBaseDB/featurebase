@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	mds_http "github.com/molecula/featurebase/v3/dax/mds/http"
-	"github.com/molecula/featurebase/v3/dax/mds/poller"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	mds_http "github.com/featurebasedb/featurebase/v3/dax/mds/http"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/poller"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/assert"
 )
 

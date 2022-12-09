@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/pql"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/stretchr/testify/assert"
 )
 

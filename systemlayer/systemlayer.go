@@ -1,6 +1,6 @@
 package systemlayer
 
-import pilosa "github.com/molecula/featurebase/v3"
+import pilosa "github.com/featurebasedb/featurebase/v3"
 
 // SystemLayer is a struct to hold internal FeatureBase state
 // Initially this is just the execution requests, but later may include other

@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/sql3/parser"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // PlanOpFeatureBaseColumns wraps an Index that is returned from schemaAPI.Schema().

@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/molecula/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/server"
 	toml "github.com/pelletier/go-toml"
 )
 

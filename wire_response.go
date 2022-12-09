@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/pkg/errors"
 )
 

@@ -5,10 +5,10 @@ import (
 	"context"
 	"testing"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	fbcontext "github.com/molecula/featurebase/v3/context"
-	"github.com/molecula/featurebase/v3/dax"
-	plannertypes "github.com/molecula/featurebase/v3/sql3/planner/types"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	fbcontext "github.com/featurebasedb/featurebase/v3/context"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	plannertypes "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	uuid "github.com/satori/go.uuid"
 )
 

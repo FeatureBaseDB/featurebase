@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/test"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/test"
 )
 
 func TestExportCommand_Validation(t *testing.T) {

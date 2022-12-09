@@ -1,7 +1,7 @@
 package ctl
 
 import (
-	"github.com/molecula/featurebase/v3/dax/server"
+	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/spf13/cobra"
 )
 

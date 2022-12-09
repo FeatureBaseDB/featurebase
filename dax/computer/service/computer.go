@@ -6,17 +6,17 @@ import (
 	"net"
 	"net/http"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/computer"
-	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
-	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	snapshotterclient "github.com/molecula/featurebase/v3/dax/snapshotter/client"
-	"github.com/molecula/featurebase/v3/dax/writelogger"
-	writeloggerclient "github.com/molecula/featurebase/v3/dax/writelogger/client"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
-	fbserver "github.com/molecula/featurebase/v3/server"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
+	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
+	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
+	snapshotterclient "github.com/featurebasedb/featurebase/v3/dax/snapshotter/client"
+	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
+	writeloggerclient "github.com/featurebasedb/featurebase/v3/dax/writelogger/client"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	fbserver "github.com/featurebasedb/featurebase/v3/server"
 )
 
 // Ensure type implements interface.

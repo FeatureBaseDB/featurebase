@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	featurebaseclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/mds/controller/partitioner"
-	"github.com/molecula/featurebase/v3/roaring"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	featurebaseclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/partitioner"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

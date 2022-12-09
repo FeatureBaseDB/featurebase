@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	clienttypes "github.com/molecula/featurebase/v3/client/types"
-	"github.com/molecula/featurebase/v3/pql"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	clienttypes "github.com/featurebasedb/featurebase/v3/client/types"
+	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/pkg/errors"
 )
 

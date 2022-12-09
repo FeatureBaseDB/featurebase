@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // NodePoller is an interface to anything which has the ability to poll a

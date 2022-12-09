@@ -12,10 +12,10 @@ import (
 	"sync"
 
 	"github.com/glycerine/vprint"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/logger"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/idk"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 
 	"github.com/featurebasedb/featurebase/v3/idk/common"

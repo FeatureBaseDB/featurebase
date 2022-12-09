@@ -3,7 +3,7 @@ package defs
 import (
 	"time"
 
-	"github.com/molecula/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/pql"
 )
 
 var unaryOpExprWithInt = TableTest{

@@ -7,8 +7,8 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
+	"github.com/featurebasedb/featurebase/v3/rbf"
 )
 
 func Handler(s *snapshotter.Snapshotter) http.Handler {

@@ -16,9 +16,9 @@ import (
 	"github.com/apache/arrow/go/v10/parquet/file"
 	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	"github.com/gomem/gomem/pkg/dataframe"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/tracing"
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 
 	ivy "robpike.io/ivy/arrow"

@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/mds/controller"
-	"github.com/molecula/featurebase/v3/errors"
-	featurebaseserver "github.com/molecula/featurebase/v3/server"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	featurebaseserver "github.com/featurebasedb/featurebase/v3/server"
 )
 
 // Ensure type implements interface.

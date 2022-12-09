@@ -3,7 +3,7 @@ package naive
 import (
 	"sort"
 
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 // jobSetDiffs is used internally to capture the diffs as they're happening. We

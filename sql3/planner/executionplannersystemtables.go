@@ -5,10 +5,10 @@ package planner
 import (
 	"context"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/pkg/errors"
 )
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 func TestGenerateConfigCommand_Run(t *testing.T) {

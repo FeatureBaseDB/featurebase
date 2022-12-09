@@ -9,7 +9,7 @@ import (
 	"os"
 
 	"github.com/gorilla/securecookie"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // Keygen represents a command for generating a cryptographic key.

@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/mds"
-	"github.com/molecula/featurebase/v3/dax/mds/controller"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
 )
 
 func Handler(mds *mds.MDS) http.Handler {

@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/rbf"
 )
 
 // RBFCheckCommand represents a command for running a consistency check on RBF.

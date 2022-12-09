@@ -3,7 +3,7 @@ package queryer
 import (
 	"context"
 
-	featurebase "github.com/molecula/featurebase/v3"
+	featurebase "github.com/featurebasedb/featurebase/v3"
 )
 
 // Ensure type implements interface.

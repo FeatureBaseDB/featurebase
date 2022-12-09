@@ -9,11 +9,11 @@ import (
 	"io"
 	"net/http"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	queryerhttp "github.com/molecula/featurebase/v3/dax/queryer/http"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	queryerhttp "github.com/featurebasedb/featurebase/v3/dax/queryer/http"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 const (

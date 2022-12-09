@@ -12,14 +12,13 @@ import (
 	"strings"
 
 	"github.com/chzyer/readline"
-	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/jedib0t/go-pretty/text"
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	queryerhttp "github.com/molecula/featurebase/v3/dax/queryer/http"
-	"github.com/molecula/featurebase/v3/fbcloud"
-	"github.com/molecula/featurebase/v3/logger"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	queryerhttp "github.com/featurebasedb/featurebase/v3/dax/queryer/http"
+	"github.com/featurebasedb/featurebase/v3/fbcloud"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 

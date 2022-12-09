@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/computer"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

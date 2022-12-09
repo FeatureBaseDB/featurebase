@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	daxtest "github.com/molecula/featurebase/v3/dax/test"
-	"github.com/molecula/featurebase/v3/test"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	daxtest "github.com/featurebasedb/featurebase/v3/dax/test"
+	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/stretchr/testify/assert"
 )
 

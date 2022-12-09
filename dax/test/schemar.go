@@ -4,11 +4,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/dax/boltdb"
-	"github.com/molecula/featurebase/v3/dax/mds/schemar"
-	schemarbolt "github.com/molecula/featurebase/v3/dax/mds/schemar/boltdb"
-	testbolt "github.com/molecula/featurebase/v3/dax/test/boltdb"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
+	schemarbolt "github.com/featurebasedb/featurebase/v3/dax/mds/schemar/boltdb"
+	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 func NewSchemar(t *testing.T) (schemar schemar.Schemar, cleanup func()) {

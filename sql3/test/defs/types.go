@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 // fldType constants are providing a map of a defined test type to the

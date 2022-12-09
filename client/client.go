@@ -1,5 +1,4 @@
-// Copyright 2022 Molecula Corp. (DBA FeatureBase).
-// SPDX-License-Identifier: Apache-2.0
+// Copyright 2021 Molecula Corp. All rights reserved.
 // package ctl contains all pilosa subcommands other than 'server'. These are
 // generally administration, testing, and debugging tools.
 package client
@@ -21,7 +20,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/client/types"
 	fbproto "github.com/featurebasedb/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
 	"github.com/featurebasedb/featurebase/v3/logger"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
@@ -29,17 +30,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/stats"
-	"github.com/golang/protobuf/proto" //nolint:staticcheck
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/client/types"
-	fbproto "github.com/molecula/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
-	"github.com/molecula/featurebase/v3/logger"
-	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/pb"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/roaring"
-	"github.com/molecula/featurebase/v3/stats"
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

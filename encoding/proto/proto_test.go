@@ -10,8 +10,8 @@ import (
 	"github.com/apache/arrow/go/v10/arrow/array"
 	"github.com/apache/arrow/go/v10/arrow/memory"
 	"github.com/gomem/gomem/pkg/dataframe"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/pb"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/pb"
 )
 
 func testOneRoundTrip(t *testing.T, s pilosa.Serializer, obj pilosa.Message, expectedMarshalErr error, expectedUnmarshalErr error, expectedMismatchErr error) {
