@@ -29,7 +29,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
-	"github.com/molecula/featurebase/v3/batch"
 	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
@@ -569,9 +568,9 @@ func (m *Command) setupServer() error {
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
 		fapi := pilosa.NewOnPremSchema(api)
 		fsapi := &pilosa.FeatureBaseSystemAPI{API: api}
-		fimp := &batch.FeaturebaseImporter{API: api}
+		imp := pilosa.NewOnPremImporter(api)
 
-		return planner.NewExecutionPlanner(e, fapi, fsapi, m.Server.SystemLayer, fimp, m.logger, sql)
+		return planner.NewExecutionPlanner(e, fapi, fsapi, m.Server.SystemLayer, imp, m.logger, sql)
 	}
 
 	serverOptions := []pilosa.ServerOption{

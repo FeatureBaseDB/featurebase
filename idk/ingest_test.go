@@ -19,6 +19,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/idk/idktest"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/golang-jwt/jwt"
+	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	batch "github.com/molecula/featurebase/v3/batch"
 	pilosaclient "github.com/molecula/featurebase/v3/client"
@@ -60,8 +61,8 @@ func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedT
 	main.Index = string(qtbl.Key())
 
 	mdsClient := mdsclient.New(dax.Address(address), logger.StderrLogger)
-	main.NewImporterFn = func() batch.Importer {
-		return mds.NewImporter(mdsClient, qtbl)
+	main.NewImporterFn = func() pilosa.Importer {
+		return mds.NewImporter(mdsClient, qtbl.TableQualifier, &qtbl.Table)
 	}
 }
 
