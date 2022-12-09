@@ -1313,20 +1313,15 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 	shardWidth := b.shardWidth()
 	emptyClearRows := make(map[int]uint64)
 
-	// create _exists fragments if needed
-	// TODO(tlt): maybe make this a separate flag for backward compatibility?
-	// (because dax.Table doesn't have this).
-	//if b.index.Options.TrackExistence {
-	if true {
-		var curBM *roaring.Bitmap
-		curShard := ^uint64(0) // impossible sentinel value for shard.
-		for _, col := range b.ids {
-			if col/shardWidth != curShard {
-				curShard = col / shardWidth
-				curBM = frags.GetOrCreate(curShard, "_exists", "")
-			}
-			curBM.DirectAdd(col % shardWidth)
+	// create _exists fragments
+	var curBM *roaring.Bitmap
+	curShard := ^uint64(0) // impossible sentinel value for shard.
+	for _, col := range b.ids {
+		if col/shardWidth != curShard {
+			curShard = col / shardWidth
+			curBM = frags.GetOrCreate(curShard, "_exists", "")
 		}
+		curBM.DirectAdd(col % shardWidth)
 	}
 
 	for i, rowIDs := range b.rowIDs {

@@ -66,10 +66,6 @@ func (i *onPremImporter) ImportRoaringShard(ctx context.Context, tid dax.TableID
 	return i.api.ImportRoaringShard(ctx, string(tid), shard, request)
 }
 
-// EncodeImportValues is kind of weird. We're trying to mimic what the client
-// does here (because the Importer interface was originally based off of the
-// client methods). So we end up generating a protobuf-encode byte slice. And we
-// don't really use path.
 func (i *onPremImporter) EncodeImportValues(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error) {
 	// This intentionally no-ops. See comment on struct.
 	return "", nil, nil
