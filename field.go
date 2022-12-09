@@ -1501,7 +1501,7 @@ func (f *Field) ClearValue(qcx *Qcx, columnID uint64) (changed bool, err error) 
 }
 
 func (f *Field) MaxForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: false, Index: f.idx, Shard: shard})
 	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1531,7 +1531,7 @@ func (f *Field) MaxForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, erro
 // (this field must be an Int or Decimal field). It also returns the
 // number of times the minimum value appears.
 func (f *Field) MinForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: false, Index: f.idx, Shard: shard})
 	defer finisher(&err)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
