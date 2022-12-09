@@ -1,7 +1,9 @@
 package planner
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
@@ -63,8 +65,40 @@ func (n *callPlanExpression) EvaluateReverse(currentRow []interface{}) (interfac
 	return string(runes), nil
 }
 
+func (p *ExecutionPlanner) analyzeFunctionUpper(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	//one argument for Upper Function
+	if len(call.Args) != 1 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+
+	if !typeIsString(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
+// Convert string to Upper case
+func (n *callPlanExpression) EvaluateUpper(currentRow []interface{}) (interface{}, error) {
+	argOneEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	stringArgOne, ok := argOneEval.(string)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type converion %T", argOneEval)
+	}
+	// convert to Upper
+	res := strings.ToUpper(stringArgOne)
+	return fmt.Sprintf("%s", res), nil
+}
+
 // Takes string, startIndex and length and returns the substring.
 func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interface{}, error) {
+
 	argOneEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
 		return nil, err
