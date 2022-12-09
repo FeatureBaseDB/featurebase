@@ -1478,6 +1478,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateDatepart(currentRow)
 	case "REVERSE":
 		return n.EvaluateReverse(currentRow)
+	case "UPPER":
+		return n.EvaluateUpper(currentRow)
 	case "SUBSTRING":
 		return n.EvaluateSubstring(currentRow)
 	default:

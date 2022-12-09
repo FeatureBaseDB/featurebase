@@ -10,9 +10,10 @@ var stringScalarFunctionsTests = TableTest{
 			srcHdr("a", fldTypeInt, "min 0", "max 1000"),
 			srcHdr("b", fldTypeInt, "min 0", "max 1000"),
 			srcHdr("ts", fldTypeTimestamp),
+			srcHdr("a_string", fldTypeString),
 		),
 		srcRows(
-			srcRow(int64(1), int64(10), int64(100), knownTimestamp()),
+			srcRow(int64(1), int64(10), int64(100), knownTimestamp(), "hello"),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -106,6 +107,33 @@ var stringScalarFunctionsTests = TableTest{
 				row(string("tset")),
 			),
 			Compare: CompareExactUnordered,
+		},
+		{
+			name: "ConvertingStringtoUpper",
+			SQLs: sqls(
+				"select upper('this')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("THIS")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "IncorrectArgumentsforUpper",
+			SQLs: sqls(
+				"select upper('a','b')",
+			),
+			ExpErr: "'upper': count of formal parameters (1) does not match count of actual parameters (2)",
+		},
+		{
+			name: "IncorrectInputforUpper",
+			SQLs: sqls(
+				"select upper(1)",
+			),
+			ExpErr: "string expression expected",
 		},
 	},
 }
