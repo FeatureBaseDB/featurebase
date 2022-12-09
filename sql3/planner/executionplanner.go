@@ -6,7 +6,6 @@ import (
 	"context"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/batch"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
@@ -27,13 +26,13 @@ type ExecutionPlanner struct {
 	schemaAPI      pilosa.SchemaAPI
 	systemAPI      pilosa.SystemAPI
 	systemLayerAPI pilosa.SystemLayerAPI
-	importer       batch.Importer
+	importer       pilosa.Importer
 	logger         logger.Logger
 	sql            string
 	scopeStack     *scopeStack
 }
 
-func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer batch.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
+func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer pilosa.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
 	return &ExecutionPlanner{
 		executor:       executor,
 		schemaAPI:      newSystemTableDefintionsWrapper(schemaAPI),

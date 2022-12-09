@@ -6,7 +6,6 @@ import (
 	"time"
 
 	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/batch"
 	featurebaseclient "github.com/molecula/featurebase/v3/client"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/mds/controller/partitioner"
@@ -15,20 +14,22 @@ import (
 )
 
 // Ensure type implements interface.
-var _ batch.Importer = &importer{}
+var _ featurebase.Importer = &importer{}
 
 // importer
 type importer struct {
 	mds MDS
 
 	mu   sync.Mutex
-	qtbl *dax.QualifiedTable
+	qual dax.TableQualifier
+	tbl  *dax.Table
 }
 
-func NewImporter(mds MDS, qtbl *dax.QualifiedTable) *importer {
+func NewImporter(mds MDS, qual dax.TableQualifier, tbl *dax.Table) *importer {
 	return &importer{
 		mds:  mds,
-		qtbl: qtbl,
+		qual: qual,
+		tbl:  tbl,
 	}
 }
 
@@ -57,8 +58,8 @@ func (m *importer) FinishTransaction(ctx context.Context, id string) (*featureba
 	return nil, nil
 }
 
-func (m *importer) CreateIndexKeys(ctx context.Context, idx *featurebase.IndexInfo, keys ...string) (map[string]uint64, error) {
-	qtbl, err := m.getQtbl(ctx, idx.Name)
+func (m *importer) CreateTableKeys(ctx context.Context, tid dax.TableID, keys ...string) (map[string]uint64, error) {
+	qtbl, err := m.getQtbl(ctx, tid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting qtbl")
 	}
@@ -84,7 +85,8 @@ func (m *importer) CreateIndexKeys(ctx context.Context, idx *featurebase.IndexIn
 			return nil, errors.Wrap(err, "getting featurebase client")
 		}
 
-		stringToIDMap, err := fbClient.CreateIndexKeys(featurebaseclient.ToClientIndex(idx), ks...)
+		cidx := featurebaseclient.QTableToClientIndex(qtbl)
+		stringToIDMap, err := fbClient.CreateIndexKeys(cidx, ks...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "creating index keys for partition: %d", partition)
 		}
@@ -97,8 +99,8 @@ func (m *importer) CreateIndexKeys(ctx context.Context, idx *featurebase.IndexIn
 	return out, nil
 }
 
-func (m *importer) CreateFieldKeys(ctx context.Context, index string, field *featurebase.FieldInfo, keys ...string) (map[string]uint64, error) {
-	qtbl, err := m.getQtbl(ctx, index)
+func (m *importer) CreateFieldKeys(ctx context.Context, tid dax.TableID, fname dax.FieldName, keys ...string) (map[string]uint64, error) {
+	qtbl, err := m.getQtbl(ctx, tid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting qtbl")
 	}
@@ -121,7 +123,7 @@ func (m *importer) CreateFieldKeys(ctx context.Context, index string, field *fea
 		return nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.ToClientField(index, field)
+	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fname)
 	if err != nil {
 		return nil, errors.Wrap(err, "converting fieldinfo to client field")
 	}
@@ -129,8 +131,8 @@ func (m *importer) CreateFieldKeys(ctx context.Context, index string, field *fea
 	return fbClient.CreateFieldKeys(cfld, keys...)
 }
 
-func (m *importer) ImportRoaringBitmap(ctx context.Context, index string, field *featurebase.FieldInfo, shard uint64, views map[string]*roaring.Bitmap, clear bool) error {
-	qtbl, err := m.getQtbl(ctx, index)
+func (m *importer) ImportRoaringBitmap(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, views map[string]*roaring.Bitmap, clear bool) error {
+	qtbl, err := m.getQtbl(ctx, tid)
 	if err != nil {
 		return errors.Wrapf(err, "getting qtbl")
 	}
@@ -146,7 +148,7 @@ func (m *importer) ImportRoaringBitmap(ctx context.Context, index string, field 
 		return errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.ToClientField(index, field)
+	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fld.Name)
 	if err != nil {
 		return errors.Wrap(err, "converting fieldinfo to client field")
 	}
@@ -154,8 +156,8 @@ func (m *importer) ImportRoaringBitmap(ctx context.Context, index string, field 
 	return fbClient.ImportRoaringBitmap(cfld, shard, views, clear)
 }
 
-func (m *importer) ImportRoaringShard(ctx context.Context, index string, shard uint64, request *featurebase.ImportRoaringShardRequest) error {
-	qtbl, err := m.getQtbl(ctx, index)
+func (m *importer) ImportRoaringShard(ctx context.Context, tid dax.TableID, shard uint64, request *featurebase.ImportRoaringShardRequest) error {
+	qtbl, err := m.getQtbl(ctx, tid)
 	if err != nil {
 		return errors.Wrapf(err, "getting qtbl")
 	}
@@ -171,11 +173,11 @@ func (m *importer) ImportRoaringShard(ctx context.Context, index string, shard u
 		return errors.Wrap(err, "getting featurebase client")
 	}
 
-	return fbClient.ImportRoaringShard(index, shard, request)
+	return fbClient.ImportRoaringShard(string(qtbl.Key()), shard, request)
 }
 
-func (m *importer) EncodeImportValues(ctx context.Context, index string, field *featurebase.FieldInfo, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error) {
-	qtbl, err := m.getQtbl(ctx, index)
+func (m *importer) EncodeImportValues(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error) {
+	qtbl, err := m.getQtbl(ctx, tid)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "getting qtbl")
 	}
@@ -191,7 +193,7 @@ func (m *importer) EncodeImportValues(ctx context.Context, index string, field *
 		return "", nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.ToClientField(index, field)
+	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fld.Name)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "converting fieldinfo to client field")
 	}
@@ -199,8 +201,8 @@ func (m *importer) EncodeImportValues(ctx context.Context, index string, field *
 	return fbClient.EncodeImportValues(cfld, shard, vals, ids, clear)
 }
 
-func (m *importer) EncodeImport(ctx context.Context, index string, field *featurebase.FieldInfo, shard uint64, vals, ids []uint64, clear bool) (path string, data []byte, err error) {
-	qtbl, err := m.getQtbl(ctx, index)
+func (m *importer) EncodeImport(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, vals, ids []uint64, clear bool) (path string, data []byte, err error) {
+	qtbl, err := m.getQtbl(ctx, tid)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "getting qtbl")
 	}
@@ -216,7 +218,7 @@ func (m *importer) EncodeImport(ctx context.Context, index string, field *featur
 		return "", nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.ToClientField(index, field)
+	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fld.Name)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "converting fieldinfo to client field")
 	}
@@ -224,8 +226,8 @@ func (m *importer) EncodeImport(ctx context.Context, index string, field *featur
 	return fbClient.EncodeImport(cfld, shard, vals, ids, clear)
 }
 
-func (m *importer) DoImport(ctx context.Context, index string, field *featurebase.FieldInfo, shard uint64, path string, data []byte) error {
-	qtbl, err := m.getQtbl(ctx, index)
+func (m *importer) DoImport(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, path string, data []byte) error {
+	qtbl, err := m.getQtbl(ctx, tid)
 	if err != nil {
 		return errors.Wrapf(err, "getting qtbl")
 	}
@@ -241,7 +243,7 @@ func (m *importer) DoImport(ctx context.Context, index string, field *featurebas
 		return errors.Wrap(err, "getting featurebase client")
 	}
 
-	return fbClient.DoImport(index, shard, path, data)
+	return fbClient.DoImport(string(qtbl.Key()), shard, path, data)
 }
 
 func (m *importer) StatsTiming(name string, value time.Duration, rate float64) {}
@@ -254,23 +256,22 @@ func (m *importer) StatsTiming(name string, value time.Duration, rate float64) {
 // yet. So this method allows us to use the table which is passed into each
 // method to determine the table. We look it up from mds schema once and save it
 // in m.qtbl for any further method calls.
-func (m *importer) getQtbl(ctx context.Context, table string) (*dax.QualifiedTable, error) {
+func (m *importer) getQtbl(ctx context.Context, tid dax.TableID) (*dax.QualifiedTable, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.qtbl != nil {
-		return m.qtbl, nil
+	if m.tbl != nil {
+		return dax.NewQualifiedTable(m.qual, m.tbl), nil
 	}
 
-	tkey := dax.TableKey(table)
-	qtid := tkey.QualifiedTableID()
+	qtid := dax.NewQualifiedTableID(m.qual, tid)
 
 	qtbl, err := m.mds.Table(ctx, qtid)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting table")
 	}
 
-	m.qtbl = qtbl
+	m.tbl = &qtbl.Table
 
 	return qtbl, nil
 }

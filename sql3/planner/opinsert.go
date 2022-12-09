@@ -173,7 +173,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 		counter++
 	}
 
-	batch, err := fbbatch.NewBatch(i.planner.importer, batchSize, idxInfo, idxInfo.Fields,
+	batch, err := fbbatch.NewBatch(i.planner.importer, batchSize, tbl, idxInfo.Fields,
 		fbbatch.OptUseShardTransactionalEndpoint(true),
 	)
 	if err != nil {

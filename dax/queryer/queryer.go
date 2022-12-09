@@ -129,7 +129,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	orch := newQualifiedOrchestrator(q.orchestrator, qual, q.mds)
 
 	// Importer
-	imp := newBatchImporter(idkmds.NewImporter(q.mds, nil), qual, q.mds)
+	imp := idkmds.NewImporter(q.mds, qual, nil)
 
 	// TODO(tlt): this obviously doesn't work; we don't have an API here. We
 	// need a dax-compatible implementation of the SystemAPI (or at least a

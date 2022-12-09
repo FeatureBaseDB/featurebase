@@ -24,9 +24,9 @@ func TestAgainstCluster(t *testing.T) {
 	cli, err := client.NewClient("featurebase:10101")
 	assert.NoError(t, err)
 
-	importer := client.NewImporter(cli)
 	sapi := client.NewSchemaAPI(cli)
 	qapi := client.NewQueryAPI(cli)
+	importer := client.NewImporter(cli, sapi)
 
 	t.Run("string-slice-combos", func(t *testing.T) { testStringSliceCombos(t, importer, sapi, qapi) })
 	t.Run("import-batch-ints", func(t *testing.T) { testImportBatchInts(t, importer, sapi, qapi) })
@@ -49,7 +49,7 @@ func TestAgainstCluster(t *testing.T) {
 	t.Run("test-mutex-nil-clear-key", func(t *testing.T) { mutexNilClearKey(t, importer, sapi, qapi) })
 }
 
-func testStringSliceCombos(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testStringSliceCombos(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -76,7 +76,7 @@ func testStringSliceCombos(t *testing.T, importer Importer, sapi featurebase.Sch
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 5, idx, idx.Fields)
+	b, err := NewBatch(importer, 5, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("creating new batch: %v", err)
 	}
@@ -233,7 +233,7 @@ func ingestRecords(records []Row, batch *Batch) error {
 	return nil
 }
 
-func testImportBatchInts(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testImportBatchInts(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -258,7 +258,7 @@ func testImportBatchInts(t *testing.T, importer Importer, sapi featurebase.Schem
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields)
+	b, err := NewBatch(importer, 3, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -309,7 +309,7 @@ func testImportBatchInts(t *testing.T, importer Importer, sapi featurebase.Schem
 	}
 }
 
-func testImportBatchSorting(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testImportBatchSorting(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -342,7 +342,7 @@ func testImportBatchSorting(t *testing.T, importer Importer, sapi featurebase.Sc
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 100, idx, idx.Fields)
+	b, err := NewBatch(importer, 100, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -382,7 +382,7 @@ func testImportBatchSorting(t *testing.T, importer Importer, sapi featurebase.Sc
 	assert.Equal(t, uint64(100), count)
 }
 
-func testTrimNull(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testTrimNull(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	fieldName := "empty"
@@ -408,7 +408,7 @@ func testTrimNull(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, q
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields)
+	b, err := NewBatch(importer, 3, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -440,7 +440,7 @@ func testTrimNull(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, q
 		assert.Equal(t, []uint64{}, row.Columns())
 	}
 
-	b, err = NewBatch(importer, 4, idx, idx.Fields)
+	b, err = NewBatch(importer, 4, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -499,7 +499,7 @@ func testTrimNull(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, q
 	}
 }
 
-func testStringSliceEmptyAndNil(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testStringSliceEmptyAndNil(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -529,7 +529,7 @@ func testStringSliceEmptyAndNil(t *testing.T, importer Importer, sapi featurebas
 	// first create a batch and test adding a single value with empty
 	// string - this failed with a translation error at one point, and
 	// how we catch it and treat it like a nil.
-	b, err := NewBatch(importer, 2, idx, idx.Fields)
+	b, err := NewBatch(importer, 2, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("creating new batch: %v", err)
 	}
@@ -546,7 +546,7 @@ func testStringSliceEmptyAndNil(t *testing.T, importer Importer, sapi featurebas
 	}
 
 	// now create a batch and add a mixture of string slice values
-	b, err = NewBatch(importer, 6, idx, idx.Fields)
+	b, err = NewBatch(importer, 6, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("creating new batch: %v", err)
 	}
@@ -625,7 +625,7 @@ func testStringSliceEmptyAndNil(t *testing.T, importer Importer, sapi featurebas
 	}
 }
 
-func testStringSlice(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testStringSlice(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -652,7 +652,7 @@ func testStringSlice(t *testing.T, importer Importer, sapi featurebase.SchemaAPI
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields)
+	b, err := NewBatch(importer, 3, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("creating new batch: %v", err)
 	}
@@ -750,7 +750,7 @@ func testStringSlice(t *testing.T, importer Importer, sapi featurebase.SchemaAPI
 	assert.Equal(t, []uint64{0, 1}, row.Columns())
 }
 
-func testSingleClearBatchRegression(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testSingleClearBatchRegression(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -783,7 +783,7 @@ func testSingleClearBatchRegression(t *testing.T, importer Importer, sapi featur
 		Query: "Set(1, zero='row1')",
 	})
 
-	b, err := NewBatch(importer, 1, idx, idx.Fields)
+	b, err := NewBatch(importer, 1, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
@@ -809,7 +809,7 @@ func testSingleClearBatchRegression(t *testing.T, importer Importer, sapi featur
 	assert.Equal(t, []uint64{}, row.Columns())
 }
 
-func testBatches(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testBatches(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -869,7 +869,7 @@ func testBatches(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qa
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 10, idx, idx.Fields)
+	b, err := NewBatch(importer, 10, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
@@ -1264,7 +1264,7 @@ func testBatches(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qa
 	// TODO test importing across multiple shards
 }
 
-func testBatchesStringIDs(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testBatchesStringIDs(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -1309,7 +1309,7 @@ func testBatchesStringIDs(t *testing.T, importer Importer, sapi featurebase.Sche
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields)
+	b, err := NewBatch(importer, 3, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
@@ -1568,7 +1568,7 @@ func TestQuantizedTime(t *testing.T) {
 	}
 }
 
-func testBatchStaleness(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testBatchStaleness(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -1594,7 +1594,7 @@ func testBatchStaleness(t *testing.T, importer Importer, sapi featurebase.Schema
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields, OptMaxStaleness(time.Millisecond))
+	b, err := NewBatch(importer, 3, tbl, idx.Fields, OptMaxStaleness(time.Millisecond))
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -1615,7 +1615,7 @@ func testBatchStaleness(t *testing.T, importer Importer, sapi featurebase.Schema
 	}
 }
 
-func testImportBatchMultipleInts(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testImportBatchMultipleInts(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -1641,7 +1641,7 @@ func testImportBatchMultipleInts(t *testing.T, importer Importer, sapi featureba
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 6, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b, err := NewBatch(importer, 6, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -1676,7 +1676,7 @@ func testImportBatchMultipleInts(t *testing.T, importer Importer, sapi featureba
 
 // testImportBatchMultipleTimestamps tests if nils are handles correctly for TS
 // in batch imports
-func testImportBatchMultipleTimestamps(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testImportBatchMultipleTimestamps(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	fieldName := "ts2"
@@ -1702,11 +1702,11 @@ func testImportBatchMultipleTimestamps(t *testing.T, importer Importer, sapi fea
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b1, err := NewBatch(importer, 6, idx, idx.Fields)
+	b1, err := NewBatch(importer, 6, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting batch 1: %v", err)
 	}
-	b2, err := NewBatch(importer, 6, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b2, err := NewBatch(importer, 6, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting batch 2: %v", err)
 	}
@@ -1770,7 +1770,7 @@ func testImportBatchMultipleTimestamps(t *testing.T, importer Importer, sapi fea
 	}
 }
 
-func testImportBatchSetsAndClears(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testImportBatchSetsAndClears(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -1796,7 +1796,7 @@ func testImportBatchSetsAndClears(t *testing.T, importer Importer, sapi featureb
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 6, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b, err := NewBatch(importer, 6, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -1860,7 +1860,7 @@ func testImportBatchSetsAndClears(t *testing.T, importer Importer, sapi featureb
 // it didn't get removed from the cache because a full recalculation
 // had no way to clear the cache, it would just reset existing
 // values. We added Clear on the cache interface to fix this.
-func testTopNCacheRegression(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testTopNCacheRegression(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -1886,7 +1886,7 @@ func testTopNCacheRegression(t *testing.T, importer Importer, sapi featurebase.S
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b, err := NewBatch(importer, 3, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -1944,7 +1944,7 @@ func testTopNCacheRegression(t *testing.T, importer Importer, sapi featurebase.S
 // with different values that only the last value is set and the bits aren't
 // mixed together. It adds a different ID in between the two same ones which
 // triggered a bug because we were sorting by shard rather than ID.
-func testMultipleIntSameBatch(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testMultipleIntSameBatch(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -1969,7 +1969,7 @@ func testMultipleIntSameBatch(t *testing.T, importer Importer, sapi featurebase.
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 4, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b, err := NewBatch(importer, 4, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -2013,7 +2013,7 @@ func testMultipleIntSameBatch(t *testing.T, importer Importer, sapi featurebase.
 // one in a batch did not get any bits set in their clear bitmap, and
 // in fact, all the bits were set in the clear bitmap for the first
 // shard.
-func mutexClearRegression(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func mutexClearRegression(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -2039,7 +2039,7 @@ func mutexClearRegression(t *testing.T, importer Importer, sapi featurebase.Sche
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 11, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b, err := NewBatch(importer, 11, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -2094,7 +2094,7 @@ func mutexClearRegression(t *testing.T, importer Importer, sapi featurebase.Sche
 }
 
 // test clearing record with explict nil
-func mutexNilClearID(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func mutexNilClearID(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -2120,7 +2120,7 @@ func mutexNilClearID(t *testing.T, importer Importer, sapi featurebase.SchemaAPI
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 11, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b, err := NewBatch(importer, 11, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting batch: %v", err)
 	}
@@ -2182,7 +2182,7 @@ func mutexNilClearID(t *testing.T, importer Importer, sapi featurebase.SchemaAPI
 }
 
 // similar test to above but with string keys
-func mutexNilClearKey(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func mutexNilClearKey(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -2210,7 +2210,7 @@ func mutexNilClearKey(t *testing.T, importer Importer, sapi featurebase.SchemaAP
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields)
+	b, err := NewBatch(importer, 3, tbl, idx.Fields)
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
@@ -2284,7 +2284,7 @@ func mutexNilClearKey(t *testing.T, importer Importer, sapi featurebase.SchemaAP
 	assert.Equal(t, []string{"0"}, fRow.Keys)
 }
 
-func testImportBatchBools(t *testing.T, importer Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
+func testImportBatchBools(t *testing.T, importer featurebase.Importer, sapi featurebase.SchemaAPI, qapi featurebase.QueryAPI) {
 	ctx := context.Background()
 
 	idx := &featurebase.IndexInfo{
@@ -2308,7 +2308,7 @@ func testImportBatchBools(t *testing.T, importer Importer, sapi featurebase.Sche
 		assert.NoError(t, sapi.DeleteTable(ctx, tbl.Name))
 	}()
 
-	b, err := NewBatch(importer, 3, idx, idx.Fields, OptUseShardTransactionalEndpoint(true))
+	b, err := NewBatch(importer, 3, tbl, idx.Fields, OptUseShardTransactionalEndpoint(true))
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
