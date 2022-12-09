@@ -691,9 +691,6 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 func TestDecimalField_MinMaxForShard(t *testing.T) {
 	_, _, f := newTestField(t, OptFieldTypeDecimal(3))
 
-	qcx := f.idx.holder.txf.NewQcx()
-	defer qcx.Abort()
-
 	options := &ImportOptions{}
 	for i, test := range []struct {
 		name      string
@@ -737,12 +734,19 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			if err := f.importFloatValue(qcx, test.columnIDs, test.values, 0, options); err != nil {
+			qcx := f.idx.holder.txf.NewQcx()
+
+			err := f.importFloatValue(qcx, test.columnIDs, test.values, 0, options)
+			if err != nil {
+				qcx.Abort()
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
+			qcx.Abort()
 
 			shard := uint64(0)
 
+			qcx = f.idx.holder.txf.NewQcx()
+			defer qcx.Abort()
 			maxvc, err := f.MaxForShard(qcx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
