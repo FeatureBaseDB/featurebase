@@ -3,7 +3,7 @@ package dax
 import (
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 const (

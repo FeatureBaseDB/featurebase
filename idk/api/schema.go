@@ -5,9 +5,9 @@ import (
 	"io"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	pilosaclient "github.com/molecula/featurebase/v3/client"
-	clienttypes "github.com/molecula/featurebase/v3/client/types"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
+	clienttypes "github.com/featurebasedb/featurebase/v3/client/types"
 	"github.com/pkg/errors"
 )
 

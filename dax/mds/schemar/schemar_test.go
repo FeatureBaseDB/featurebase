@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/dax"
-	daxtest "github.com/molecula/featurebase/v3/dax/test"
-	"github.com/molecula/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	daxtest "github.com/featurebasedb/featurebase/v3/dax/test"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/stretchr/testify/assert"
 )
 

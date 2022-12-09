@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 type Director interface {

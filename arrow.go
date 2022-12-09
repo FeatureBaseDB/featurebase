@@ -12,8 +12,8 @@ import (
 	"github.com/apache/arrow/go/v10/arrow/array"
 	"github.com/apache/arrow/go/v10/arrow/memory"
 	"github.com/gomem/gomem/pkg/dataframe"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/tracing"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 )
 

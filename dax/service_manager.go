@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // ServiceKey is a unique key used to identify one service managed by the

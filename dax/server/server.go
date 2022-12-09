@@ -22,18 +22,18 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	computersvc "github.com/molecula/featurebase/v3/dax/computer/service"
-	daxhttp "github.com/molecula/featurebase/v3/dax/http"
-	"github.com/molecula/featurebase/v3/dax/mds"
-	controllerhttp "github.com/molecula/featurebase/v3/dax/mds/controller/http"
-	mdssvc "github.com/molecula/featurebase/v3/dax/mds/service"
-	"github.com/molecula/featurebase/v3/dax/queryer"
-	queryersvc "github.com/molecula/featurebase/v3/dax/queryer/service"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
-	fbnet "github.com/molecula/featurebase/v3/net"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	computersvc "github.com/featurebasedb/featurebase/v3/dax/computer/service"
+	daxhttp "github.com/featurebasedb/featurebase/v3/dax/http"
+	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	controllerhttp "github.com/featurebasedb/featurebase/v3/dax/mds/controller/http"
+	mdssvc "github.com/featurebasedb/featurebase/v3/dax/mds/service"
+	"github.com/featurebasedb/featurebase/v3/dax/queryer"
+	queryersvc "github.com/featurebasedb/featurebase/v3/dax/queryer/service"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	fbnet "github.com/featurebasedb/featurebase/v3/net"
 )
 
 // Command represents the state of the dax server command.

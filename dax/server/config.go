@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax/mds"
-	"github.com/molecula/featurebase/v3/dax/queryer"
-	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	"github.com/molecula/featurebase/v3/dax/writelogger"
-	"github.com/molecula/featurebase/v3/errors"
-	fbserver "github.com/molecula/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	"github.com/featurebasedb/featurebase/v3/dax/queryer"
+	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
+	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	fbserver "github.com/featurebasedb/featurebase/v3/server"
 )
 
 const (

@@ -9,8 +9,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 var ErrNotImplemented = errors.New(errors.ErrUncoded, "not implemented")

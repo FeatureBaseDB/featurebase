@@ -1,7 +1,7 @@
 package queryer
 
 import (
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // Config defines the configuration parameters for Queryer. At the moment, it's

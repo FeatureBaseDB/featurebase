@@ -3,8 +3,8 @@ package pilosa_test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/vprint"
+	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 )
 
 func TestEtcd_StartStop(t *testing.T) {

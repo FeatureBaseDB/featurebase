@@ -3,10 +3,10 @@ package queryer
 import (
 	"context"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/mds/schemar"
-	"github.com/molecula/featurebase/v3/errors"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 // Ensure type implements interface.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
+	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/pkg/errors"
 )
 

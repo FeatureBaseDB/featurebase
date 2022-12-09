@@ -4,13 +4,13 @@ import (
 	"context"
 	"net/http"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	featurebase_client "github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/mds/controller/partitioner"
-	"github.com/molecula/featurebase/v3/disco"
-	"github.com/molecula/featurebase/v3/encoding/proto"
-	"github.com/molecula/featurebase/v3/errors"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	featurebase_client "github.com/featurebasedb/featurebase/v3/client"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/partitioner"
+	"github.com/featurebasedb/featurebase/v3/disco"
+	"github.com/featurebasedb/featurebase/v3/encoding/proto"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 // Ensure type implements interface.

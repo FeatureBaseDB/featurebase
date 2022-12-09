@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 func (p *ExecutionPlanner) analyseFunctionReverse(call *parser.Call, scope parser.Statement) (parser.Expr, error) {

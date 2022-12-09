@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/rbf"
 )
 
 // RBFPageCommand represents a command for printing data for a single RBF page.

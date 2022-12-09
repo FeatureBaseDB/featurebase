@@ -3,11 +3,11 @@ package service
 import (
 	"net/http"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/mds"
-	mdshttp "github.com/molecula/featurebase/v3/dax/mds/http"
-	"github.com/molecula/featurebase/v3/errors"
-	fbnet "github.com/molecula/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	mdshttp "github.com/featurebasedb/featurebase/v3/dax/mds/http"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	fbnet "github.com/featurebasedb/featurebase/v3/net"
 )
 
 // Ensure type implements interface.

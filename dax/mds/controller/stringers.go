@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 // pUnit represents a table/partition combination. As a Stringer, it can be

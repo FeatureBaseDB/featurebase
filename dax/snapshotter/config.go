@@ -1,6 +1,6 @@
 package snapshotter
 
-import "github.com/molecula/featurebase/v3/logger"
+import "github.com/featurebasedb/featurebase/v3/logger"
 
 type Config struct {
 	DataDir string        `toml:"data-dir"`

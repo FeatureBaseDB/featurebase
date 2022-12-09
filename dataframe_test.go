@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/apache/arrow/go/v10/arrow"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/test"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/server"
+	"github.com/featurebasedb/featurebase/v3/test"
 )
 
 func TestExecutor_Apply(t *testing.T) {

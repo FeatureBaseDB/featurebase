@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/molecula/featurebase/v3/dax"
-	snapshotterhttp "github.com/molecula/featurebase/v3/dax/snapshotter/http"
-	"github.com/molecula/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	snapshotterhttp "github.com/featurebasedb/featurebase/v3/dax/snapshotter/http"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 const defaultScheme = "http"

@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/test"
 )
 
 func TestChkSumCommand_Run(t *testing.T) {

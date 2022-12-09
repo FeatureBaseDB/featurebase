@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 )
 
 // ExecutionRequests is an internal struct that keeps a list of sql execution requests

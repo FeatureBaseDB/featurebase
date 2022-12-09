@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/batch/egpool"
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/roaring"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/batch/egpool"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 

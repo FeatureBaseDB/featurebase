@@ -8,16 +8,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/boltdb"
-	"github.com/molecula/featurebase/v3/dax/computer"
-	"github.com/molecula/featurebase/v3/dax/mds/controller"
-	naiveboltdb "github.com/molecula/featurebase/v3/dax/mds/controller/naive/boltdb"
-	"github.com/molecula/featurebase/v3/dax/mds/poller"
-	"github.com/molecula/featurebase/v3/dax/mds/schemar"
-	schemarboltdb "github.com/molecula/featurebase/v3/dax/mds/schemar/boltdb"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
+	naiveboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/naive/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/poller"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
+	schemarboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/schemar/boltdb"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 type Config struct {

@@ -3,13 +3,13 @@ package service
 import (
 	"net/http"
 
-	"github.com/molecula/featurebase/v3/dax"
-	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
-	"github.com/molecula/featurebase/v3/dax/queryer"
-	queryerhttp "github.com/molecula/featurebase/v3/dax/queryer/http"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
-	fbnet "github.com/molecula/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
+	"github.com/featurebasedb/featurebase/v3/dax/queryer"
+	queryerhttp "github.com/featurebasedb/featurebase/v3/dax/queryer/http"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	fbnet "github.com/featurebasedb/featurebase/v3/net"
 )
 
 // Ensure type implements interface.

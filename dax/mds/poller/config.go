@@ -3,8 +3,8 @@ package poller
 import (
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 type Config struct {

@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/boltdb"
-	"github.com/molecula/featurebase/v3/dax/mds/schemar"
-	"github.com/molecula/featurebase/v3/errors"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
+	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"golang.org/x/sync/errgroup"
 )
 

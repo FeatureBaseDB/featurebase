@@ -6,11 +6,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/dax"
-	daxbolt "github.com/molecula/featurebase/v3/dax/boltdb"
-	"github.com/molecula/featurebase/v3/dax/mds/controller/naive/boltdb"
-	testbolt "github.com/molecula/featurebase/v3/dax/test/boltdb"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	daxbolt "github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/naive/boltdb"
+	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/assert"
 )
 

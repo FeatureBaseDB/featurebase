@@ -9,9 +9,9 @@ import (
 	"io"
 	"strings"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/ctl"
-	"github.com/molecula/featurebase/v3/logger"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"

@@ -7,10 +7,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/dax"
-	sql_test "github.com/molecula/featurebase/v3/sql3/test"
-	"github.com/molecula/featurebase/v3/sql3/test/defs"
-	"github.com/molecula/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
+	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
+	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

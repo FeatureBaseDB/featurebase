@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 // Poller maintains a list of nodes to poll. It also polls them.

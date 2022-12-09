@@ -3,7 +3,7 @@ package boltdb_test
 import (
 	"testing"
 
-	"github.com/molecula/featurebase/v3/dax/test/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
 )
 
 // Ensure the test database can open & close.

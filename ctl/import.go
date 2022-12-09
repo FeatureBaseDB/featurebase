@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"time"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/authn"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/server"
+	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/authn"
+	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/pkg/errors"
 )
 

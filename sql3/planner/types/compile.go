@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 type CompilePlanner interface {

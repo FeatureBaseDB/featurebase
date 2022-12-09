@@ -1,6 +1,6 @@
 package controller
 
-import "github.com/molecula/featurebase/v3/dax"
+import "github.com/featurebasedb/featurebase/v3/dax"
 
 // ComputeNode represents a compute node and the table/shards for which it is
 // responsible.

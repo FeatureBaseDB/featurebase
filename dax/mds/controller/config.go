@@ -3,9 +3,9 @@ package controller
 import (
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax/boltdb"
-	"github.com/molecula/featurebase/v3/dax/mds/schemar"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 type NewBalancerFn func(string, logger.Logger) Balancer

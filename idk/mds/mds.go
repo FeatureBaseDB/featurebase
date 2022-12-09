@@ -4,7 +4,7 @@ package mds
 import (
 	"context"
 
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 // MDS represents the MDS methods which importer uses.

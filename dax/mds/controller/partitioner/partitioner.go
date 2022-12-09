@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 // Partitioner encapsulates helper methods for determining partitions
