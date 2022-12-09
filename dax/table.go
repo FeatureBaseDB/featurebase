@@ -162,6 +162,9 @@ type Table struct {
 	Name       TableName `json:"name,omitempty"`
 	Fields     []*Field  `json:"fields"`
 	PartitionN int       `json:"partitionN"`
+
+	Description string `json:"description,omitempty"`
+	CreatedAt   int64  `json:"createdAt,omitempty"`
 }
 
 // CreateID generates a unique identifier for Table. If Table has already been
@@ -518,6 +521,8 @@ type Field struct {
 	Name    FieldName    `json:"name"`
 	Type    BaseType     `json:"type"`
 	Options FieldOptions `json:"options"`
+
+	CreatedAt int64 `json:"createdAt,omitempty"`
 }
 
 // String returns the field name as a string.

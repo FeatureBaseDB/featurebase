@@ -72,6 +72,7 @@ func (s *onPremSchema) CreateTable(ctx context.Context, tbl *dax.Table) error {
 		Keys:           keyed,
 		TrackExistence: true,
 		PartitionN:     tbl.PartitionN,
+		Description:    tbl.Description,
 	}
 
 	// Add the index.
@@ -135,6 +136,9 @@ func IndexInfoToTable(ii *IndexInfo) *dax.Table {
 		Name:       dax.TableName(ii.Name),
 		Fields:     make([]*dax.Field, 0, len(ii.Fields)+1), // +1 to account for the _id field
 		PartitionN: dax.DefaultPartitionN,
+
+		Description: ii.Options.Description,
+		CreatedAt:   ii.CreatedAt,
 	}
 
 	// // sortedFields will contain the sorted list of fields from IndexInfo.
@@ -154,8 +158,9 @@ func IndexInfoToTable(ii *IndexInfo) *dax.Table {
 		idType = dax.BaseTypeString
 	}
 	tbl.Fields = append(tbl.Fields, &dax.Field{
-		Name: "_id",
-		Type: idType,
+		Name:      "_id",
+		Type:      idType,
+		CreatedAt: ii.CreatedAt,
 	})
 
 	// Populate the rest of the fields.
@@ -243,6 +248,8 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 			TTL:            fo.TTL,
 			ForeignIndex:   foreignIndex,
 		},
+
+		CreatedAt: fi.CreatedAt,
 	}
 }
 
@@ -271,10 +278,11 @@ func TablesToIndexInfos(tbls []*dax.Table) []*IndexInfo {
 func TableToIndexInfo(tbl *dax.Table) *IndexInfo {
 	ii := &IndexInfo{
 		Name:      string(tbl.Name), // TODO(tlt): this should be TableKey i think
-		CreatedAt: 0,
+		CreatedAt: tbl.CreatedAt,
 		Options: IndexOptions{
 			Keys:           tbl.StringKeys(),
 			TrackExistence: true,
+			Description:    tbl.Description,
 		},
 		ShardWidth: ShardWidth,
 	}
@@ -320,7 +328,7 @@ func FieldToFieldInfo(fld *dax.Field) *FieldInfo {
 
 	return &FieldInfo{
 		Name:      string(fld.Name),
-		CreatedAt: 0, // TODO(tlt): we need to handle this on MDS schemar
+		CreatedAt: fld.CreatedAt,
 		Options: FieldOptions{
 			Type:           fieldToFieldType(fld),
 			Base:           base,
