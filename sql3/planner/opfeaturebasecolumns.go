@@ -154,8 +154,7 @@ func (i *showColumnsRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.rowIndex < len(i.tbl.Fields) {
 		fields := i.tbl.Fields
 
-		//tm := time.Unix(0, fields[i.rowIndex].CreatedAt)
-		tm := time.Unix(0, 0)
+		tm := time.Unix(0, fields[i.rowIndex].CreatedAt)
 
 		row := []interface{}{
 			fields[i.rowIndex].Name,
