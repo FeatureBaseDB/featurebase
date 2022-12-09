@@ -27,13 +27,27 @@ func NewSchemaAPI(c *Client) *schemaAPI {
 }
 
 func (s *schemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
-	return nil, nil
+	return nil, errors.New(errors.ErrUncoded, "schemaAPI.TableByName not implemented")
 }
 func (s *schemaAPI) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
-	return nil, nil
+	schema, err := s.client.Schema()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting schema")
+	}
+
+	idx := schema.Index(string(tid))
+	if idx == nil {
+		return nil, errors.Errorf("index not found: %s", tid)
+	}
+
+	ii := FromClientIndex(idx)
+	tbl := featurebase.IndexInfoToTable(ii)
+
+	return tbl, nil
 }
+
 func (s *schemaAPI) Tables(ctx context.Context) ([]*dax.Table, error) {
-	return nil, nil
+	return nil, errors.New(errors.ErrUncoded, "schemaAPI.Tables not implemented")
 }
 
 func (s *schemaAPI) CreateTable(ctx context.Context, tbl *dax.Table) error {
@@ -67,14 +81,14 @@ func (s *schemaAPI) CreateTable(ctx context.Context, tbl *dax.Table) error {
 	return nil
 }
 func (s *schemaAPI) CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error {
-	return nil
+	return errors.New(errors.ErrUncoded, "schemaAPI.CreateField not implemented")
 }
 
 func (s *schemaAPI) DeleteTable(ctx context.Context, tname dax.TableName) error {
 	return s.client.DeleteIndexByName(string(tname))
 }
 func (s *schemaAPI) DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error {
-	return nil
+	return errors.New(errors.ErrUncoded, "schemaAPI.DeleteField not implemented")
 }
 
 func (s *schemaAPI) addFieldToIndex(idx *Index, fieldName string, ffos featurebase.FieldOptions) (*Field, error) {

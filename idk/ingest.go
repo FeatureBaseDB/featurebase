@@ -124,7 +124,7 @@ type Main struct {
 	index      *pilosaclient.Index
 	grpcClient *pilosagrpc.GRPCClient
 
-	NewImporterFn func() pilosabatch.Importer `flag:"-"`
+	NewImporterFn func() pilosacore.Importer `flag:"-"`
 
 	SchemaManager SchemaManager       `flag:"-"`
 	Qtbl          *dax.QualifiedTable `flag:"-"`
@@ -1026,8 +1026,8 @@ func (m *Main) setupClient() (*tls.Config, error) {
 		m.Index = string(qtbl.Key())
 		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qual, m.log)
 
-		m.NewImporterFn = func() pilosabatch.Importer {
-			return mds.NewImporter(mdsClient, qtbl)
+		m.NewImporterFn = func() pilosacore.Importer {
+			return mds.NewImporter(mdsClient, qtbl.Qualifier(), &qtbl.Table)
 		}
 	} else {
 		m.SchemaManager = m.client
@@ -1859,15 +1859,19 @@ func (m *Main) newBatch(fields []*pilosaclient.Field) (pilosabatch.RecordBatch, 
 		pilosabatch.OptKeyTranslateBatchSize(m.KeyTranslateBatchSize),
 		pilosabatch.OptUseShardTransactionalEndpoint(m.UseShardTransactionalEndpoint),
 	}
-	var importer pilosabatch.Importer
+	var importer pilosacore.Importer
 	if m.useMDS() {
 		importer = m.NewImporterFn()
 	} else {
-		importer = pilosaclient.NewImporter(m.client)
+		sapi := pilosaclient.NewSchemaAPI(m.client)
+		importer = pilosaclient.NewImporter(m.client, sapi)
 	}
 	opts = append(opts, pilosabatch.OptImporter(importer))
 
-	return pilosabatch.NewBatch(importer, m.BatchSize, pilosaclient.FromClientIndex(m.index), pilosaclient.FromClientFields(fields), opts...)
+	ii := pilosaclient.FromClientIndex(m.index)
+	tbl := pilosacore.IndexInfoToTable(ii)
+
+	return pilosabatch.NewBatch(importer, m.BatchSize, tbl, pilosaclient.FromClientFields(fields), opts...)
 }
 
 // validateField ensures that the field is configured correctly.

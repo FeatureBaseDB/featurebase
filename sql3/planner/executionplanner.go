@@ -5,12 +5,11 @@ package planner
 import (
 	"context"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/batch"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/sql3"
+	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 // PlannerScope holds scope for the planner
@@ -27,13 +26,13 @@ type ExecutionPlanner struct {
 	schemaAPI      pilosa.SchemaAPI
 	systemAPI      pilosa.SystemAPI
 	systemLayerAPI pilosa.SystemLayerAPI
-	importer       batch.Importer
+	importer       pilosa.Importer
 	logger         logger.Logger
 	sql            string
 	scopeStack     *scopeStack
 }
 
-func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer batch.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
+func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer pilosa.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
 	return &ExecutionPlanner{
 		executor:       executor,
 		schemaAPI:      newSystemTableDefintionsWrapper(schemaAPI),

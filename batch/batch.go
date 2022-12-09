@@ -10,11 +10,12 @@ import (
 	"sync"
 	"time"
 
-	featurebase "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/batch/egpool"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/roaring"
+	featurebase "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/batch/egpool"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/logger"
+	"github.com/molecula/featurebase/v3/pql"
+	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -95,8 +96,8 @@ type agedTranslation struct {
 //
 // nil values are ignored.
 type Batch struct {
-	importer  Importer
-	index     *featurebase.IndexInfo
+	importer  featurebase.Importer
+	tbl       *dax.Table
 	header    []*featurebase.FieldInfo
 	headerMap map[string]*featurebase.FieldInfo
 
@@ -234,7 +235,7 @@ func OptUseShardTransactionalEndpoint(use bool) BatchOption {
 	}
 }
 
-func OptImporter(i Importer) BatchOption {
+func OptImporter(i featurebase.Importer) BatchOption {
 	return func(b *Batch) error {
 		b.importer = i
 		return nil
@@ -245,7 +246,7 @@ func OptImporter(i Importer) BatchOption {
 // index, set of fields, and will take "size" records before returning
 // ErrBatchNowFull. The positions of the Fields in 'fields' correspond to the
 // positions of values in the Row's Values passed to Batch.Add().
-func NewBatch(importer Importer, size int, index *featurebase.IndexInfo, fields []*featurebase.FieldInfo, opts ...BatchOption) (*Batch, error) {
+func NewBatch(importer featurebase.Importer, size int, tbl *dax.Table, fields []*featurebase.FieldInfo, opts ...BatchOption) (*Batch, error) {
 	if len(fields) == 0 {
 		return nil, errors.New("can't batch with no fields")
 	} else if size == 0 {
@@ -301,7 +302,7 @@ func NewBatch(importer Importer, size int, index *featurebase.IndexInfo, fields 
 		header:                fields,
 		headerMap:             headerMap,
 		prevDuration:          time.Minute * 11,
-		index:                 index,
+		tbl:                   tbl,
 		ids:                   make([]uint64, 0, size),
 		rowIDs:                rowIDs,
 		clearRowIDs:           make(map[int]map[int]uint64),
@@ -868,7 +869,7 @@ func (b *Batch) doTranslation() error {
 
 		// Create the keys.
 		start := time.Now()
-		trans, err := b.createIndexKeys(b.index, keys...)
+		trans, err := b.createIndexKeys(keys...)
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
@@ -1065,12 +1066,12 @@ func (b *Batch) doTranslation() error {
 	return eg.Wait()
 }
 
-func (b *Batch) createIndexKeys(index *featurebase.IndexInfo, keys ...string) (map[string]uint64, error) {
+func (b *Batch) createIndexKeys(keys ...string) (map[string]uint64, error) {
 	ctx := context.Background()
 
 	batchSize := b.keyTranslateBatchSize
 	if batchSize <= 0 || len(keys) <= batchSize {
-		return b.importer.CreateIndexKeys(ctx, index, keys...)
+		return b.importer.CreateTableKeys(ctx, b.tbl.ID, keys...)
 	}
 
 	results := make(map[string]uint64, len(keys))
@@ -1080,7 +1081,7 @@ func (b *Batch) createIndexKeys(index *featurebase.IndexInfo, keys ...string) (m
 			keySlice = keySlice[:batchSize]
 		}
 
-		trans, err := b.importer.CreateIndexKeys(ctx, index, keySlice...)
+		trans, err := b.importer.CreateTableKeys(ctx, b.tbl.ID, keySlice...)
 		if err != nil {
 			return nil, err
 		} else if len(trans) != len(keySlice) {
@@ -1101,7 +1102,7 @@ func (b *Batch) createFieldKeys(field *featurebase.FieldInfo, keys ...string) (m
 
 	batchSize := b.keyTranslateBatchSize
 	if batchSize <= 0 || len(keys) <= batchSize {
-		return b.importer.CreateFieldKeys(ctx, b.index.Name, field, keys...)
+		return b.importer.CreateFieldKeys(ctx, b.tbl.ID, dax.FieldName(field.Name), keys...)
 	}
 
 	results := make(map[string]uint64, len(keys))
@@ -1111,7 +1112,7 @@ func (b *Batch) createFieldKeys(field *featurebase.FieldInfo, keys ...string) (m
 			keySlice = keySlice[:batchSize]
 		}
 
-		trans, err := b.importer.CreateFieldKeys(ctx, b.index.Name, field, keySlice...)
+		trans, err := b.importer.CreateFieldKeys(ctx, b.tbl.ID, dax.FieldName(field.Name), keySlice...)
 		if err != nil {
 			return nil, err
 		} else if len(trans) != len(keySlice) {
@@ -1191,7 +1192,7 @@ func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
 		shard := shard
 		request := request
 		eg.Go(func() error {
-			return b.importer.ImportRoaringShard(ctx, b.index.Name, shard, request)
+			return b.importer.ImportRoaringShard(ctx, b.tbl.ID, shard, request)
 		})
 	}
 	err := eg.Wait()
@@ -1224,17 +1225,25 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 			clearViewMap := clearFrags.GetViewMap(shard, field)
 			if len(clearViewMap) > 0 {
 				startx := time.Now()
-				err := b.importer.ImportRoaringBitmap(ctx, b.index.Name, b.indexField(field), shard, clearViewMap, true)
+				fld, err := b.tableField(dax.FieldName(field))
 				if err != nil {
+					return errors.Wrapf(err, "getting tablefield: %s", field)
+				}
+				if err := b.importer.ImportRoaringBitmap(ctx, b.tbl.ID, fld, shard, clearViewMap, true); err != nil {
 					return errors.Wrapf(err, "import clearing clearing data for %s", field)
 				}
 				b.log.Debugf("imp-roar-clr %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(startx))
 			}
 
 			starty := time.Now()
-			err := b.importer.ImportRoaringBitmap(ctx, b.index.Name, b.indexField(field), shard, viewMap, false)
+			fld, err := b.tableField(dax.FieldName(field))
+			if err != nil {
+				return errors.Wrapf(err, "getting tablefield: %s", field)
+			}
+
+			ferr := b.importer.ImportRoaringBitmap(ctx, b.tbl.ID, fld, shard, viewMap, false)
 			b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
-			return errors.Wrapf(err, "importing data for %s", field)
+			return errors.Wrapf(ferr, "importing data for %s", field)
 		})
 	}
 	eg.Go(func() error { return b.importValueData() })
@@ -1251,20 +1260,26 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 	return nil
 }
 
-// indexField is a helper function which was introduced when we switched the
+// tableField is a helper function which was introduced when we switched the
 // index and field types from being client types (e.g client.Index,
 // client.Field) to being featurebase types (e.g. featurebase.IndexInfo,
-// featurebase.FieldInfo). Unlike client.Index, featurebase.IndexInfo is not
-// expected to contain the "_exists" field. So calling Field("_exists") on
-// IndexInfo results in a nil field. This method creates an instance of
-// FieldInfo for the "_exists" field.
-func (b *Batch) indexField(field string) *featurebase.FieldInfo {
-	if field == existenceFieldName {
-		return &featurebase.FieldInfo{
+// featurebase.FieldInfo), and then to being dax types (e.g. dax.Table,
+// dax.Field). Unlike client.Index, featurebase.IndexInfo (and also dax.Table)
+// is not expected to contain the "_exists" field. So calling Field("_exists")
+// on IndexInfo results in a nil field. This method creates an instance of
+// dax.Field for the "_exists" field.
+func (b *Batch) tableField(fname dax.FieldName) (*dax.Field, error) {
+	if fname == existenceFieldName {
+		return &dax.Field{
 			Name: existenceFieldName,
-		}
+		}, nil
 	}
-	return b.index.Field(field)
+
+	fld, ok := b.tbl.Field(fname)
+	if !ok {
+		return nil, errors.Errorf("field not in table: %s", fname)
+	}
+	return fld, nil
 }
 
 func anyCause(cause error, errs ...error) error {
@@ -1299,7 +1314,10 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 	emptyClearRows := make(map[int]uint64)
 
 	// create _exists fragments if needed
-	if b.index.Options.TrackExistence {
+	// TODO(tlt): maybe make this a separate flag for backward compatibility?
+	// (because dax.Table doesn't have this).
+	//if b.index.Options.TrackExistence {
+	if true {
 		var curBM *roaring.Bitmap
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		for _, col := range b.ids {
@@ -1678,13 +1696,15 @@ func (b *Batch) importValueData() error {
 				endIdx := i
 				shard := curShard
 				field := b.headerMap[fieldName]
-				path, data, err := b.importer.EncodeImportValues(ctx, b.index.Name, field, shard, bvalues[startIdx:endIdx], ids[startIdx:endIdx], false)
+				fld := featurebase.FieldInfoToField(field)
+				path, data, err := b.importer.EncodeImportValues(ctx, b.tbl.ID, fld, shard, bvalues[startIdx:endIdx], ids[startIdx:endIdx], false)
 				if err != nil {
 					return errors.Wrap(err, "encoding import values")
 				}
 				eg.Go(func() error {
 					start := time.Now()
-					err := b.importer.DoImport(ctx, b.index.Name, field, shard, path, data)
+					fld := featurebase.FieldInfoToField(field)
+					err := b.importer.DoImport(ctx, b.tbl.ID, fld, shard, path, data)
 					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
 					return errors.Wrapf(err, "importing values for field = %s", field.Name)
 				})
@@ -1771,13 +1791,15 @@ func (b *Batch) importMutexData() error {
 				endIdx := i
 				shard := curShard
 				field := field
-				path, data, err := b.importer.EncodeImport(ctx, b.index.Name, field, shard, rowIDs[startIdx:endIdx], ids[startIdx:endIdx], false)
+				fld := featurebase.FieldInfoToField(field)
+				path, data, err := b.importer.EncodeImport(ctx, b.tbl.ID, fld, shard, rowIDs[startIdx:endIdx], ids[startIdx:endIdx], false)
 				if err != nil {
 					return errors.Wrap(err, "encoding mutex import")
 				}
 				eg.Go(func() error {
 					start := time.Now()
-					err := b.importer.DoImport(ctx, b.index.Name, field, shard, path, data)
+					fld := featurebase.FieldInfoToField(field)
+					err := b.importer.DoImport(ctx, b.tbl.ID, fld, shard, path, data)
 					b.log.Debugf("imp-mux %s,shard:%d,data:%d %v", field.Name, shard, len(data), time.Since(start))
 					return errors.Wrapf(err, "importing values for field = %s", field.Name)
 				})

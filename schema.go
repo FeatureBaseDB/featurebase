@@ -141,16 +141,10 @@ func IndexInfoToTable(ii *IndexInfo) *dax.Table {
 		CreatedAt:   ii.CreatedAt,
 	}
 
-	// // sortedFields will contain the sorted list of fields from IndexInfo.
-	// sortedFields := make([]*FieldInfo, 0, len(ii.Fields))
-
 	// Sort ii.Fields by CreatedAt before adding them to sortedFields.
 	sort.Slice(ii.Fields, func(i, j int) bool {
 		return ii.Fields[i].CreatedAt < ii.Fields[j].CreatedAt
 	})
-
-	// // Add the sorted fields to sortedFields.
-	// sortedFields = append(sortedFields, ii.Fields...)
 
 	// Add the _id Field.
 	var idType dax.BaseType = dax.BaseTypeID
