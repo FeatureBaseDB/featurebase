@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/boltdb"
@@ -59,6 +60,18 @@ func (s *Schemar) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) err
 	// Ensure that a primary key field is present and valid.
 	if !qtbl.HasValidPrimaryKey() {
 		return schemar.NewErrInvalidPrimaryKey()
+	}
+
+	// Set the CreateAt value for the table.
+	// TODO(tlt): We may want to consider erroring here if the value is != 0.
+	if qtbl.CreatedAt == 0 {
+		now := timestamp()
+		qtbl.CreatedAt = now
+
+		// Set CreatedAt for all of the fields as well.
+		for i := range qtbl.Fields {
+			qtbl.Fields[i].CreatedAt = now
+		}
 	}
 
 	//////////// end validation
@@ -383,4 +396,8 @@ func (s *Schemar) TableID(ctx context.Context, qual dax.TableQualifier, name dax
 	defer tx.Rollback()
 
 	return s.tableIDByName(tx, qual, name)
+}
+
+func timestamp() int64 {
+	return time.Now().UnixNano()
 }

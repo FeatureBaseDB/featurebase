@@ -128,10 +128,10 @@ func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 		// TODO(tlt): once we can support different partitionN's per table,
 		// replace dax.DefaultPartitionN with i.keyPartitions.
 		PartitionN: dax.DefaultPartitionN,
-		// TODO(tlt): add Description to dax.Table; = i.description
+
+		Description: i.description,
 	}
 
-	// TODO (pok) add ability to add description here
 	if err := i.planner.schemaAPI.CreateTable(ctx, tbl); err != nil {
 		if _, ok := errors.Cause(err).(pilosa.ConflictError); ok {
 			if i.failIfExists {
