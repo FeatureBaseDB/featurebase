@@ -105,12 +105,19 @@ func emptyResult(c *pql.Call) interface{} {
 }
 
 // Execute executes a PQL query.
-func (o *orchestrator) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *featurebase.ExecOptions) (featurebase.QueryResponse, error) {
+func (o *orchestrator) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q *pql.Query, shards []uint64, opt *featurebase.ExecOptions) (featurebase.QueryResponse, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "orchestrator.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()
 
 	resp := featurebase.QueryResponse{}
+
+	qtbl, ok := tableKeyer.(*dax.QualifiedTable)
+	if !ok {
+		return resp, errors.New(errors.ErrUncoded, "orchestrator.Execute expects a dax.QualifiedTable")
+	}
+
+	index := string(qtbl.Key())
 
 	// Check for query cancellation.
 	if err := validateQueryContext(ctx); err != nil {
@@ -3465,21 +3472,15 @@ func newQualifiedOrchestrator(orch *orchestrator, qual dax.TableQualifier, schem
 	}
 }
 
-func (o *qualifiedOrchestrator) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *featurebase.ExecOptions) (featurebase.QueryResponse, error) {
+func (o *qualifiedOrchestrator) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q *pql.Query, shards []uint64, opt *featurebase.ExecOptions) (featurebase.QueryResponse, error) {
 	resp := featurebase.QueryResponse{}
 
-	tkey, err := o.indexToQualifiedTableKey(ctx, index)
-	if err != nil {
-		return resp, errors.Wrap(err, "converting index to qualified table key")
+	tbl, ok := tableKeyer.(*dax.Table)
+	if !ok {
+		return resp, errors.New(errors.ErrUncoded, "qualifiedOrchestrator.Execute expects a dax.Table")
 	}
 
-	return o.orchestrator.Execute(ctx, string(tkey), q, shards, opt)
-}
+	qtbl := dax.NewQualifiedTable(o.qual, tbl)
 
-func (o *qualifiedOrchestrator) indexToQualifiedTableKey(ctx context.Context, index string) (dax.TableKey, error) {
-	qtid, err := o.schemar.TableID(ctx, o.qual, dax.TableName(index))
-	if err != nil {
-		return "", errors.Wrap(err, "converting index to qualified table id")
-	}
-	return qtid.Key(), nil
+	return o.orchestrator.Execute(ctx, qtbl, q, shards, opt)
 }

@@ -250,7 +250,7 @@ func (api *API) query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		EmbeddedData:  req.EmbeddedData, // precomputed values that needed to be passed with the request
 		MaxMemory:     req.MaxMemory,
 	}
-	resp, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
+	resp, err := api.server.executor.Execute(ctx, dax.StringTableKeyer(req.Index), q, req.Shards, execOpts)
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "executing")
 	}
