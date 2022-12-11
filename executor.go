@@ -46,7 +46,7 @@ const (
 )
 
 type Executor interface {
-	Execute(context.Context, string, *pql.Query, []uint64, *ExecOptions) (QueryResponse, error)
+	Execute(context.Context, dax.TableKeyer, *pql.Query, []uint64, *ExecOptions) (QueryResponse, error)
 }
 
 // executor recursively executes calls in a PQL query across all shards.
@@ -177,7 +177,9 @@ func (e *executor) InitStats() {
 }
 
 // Execute executes a PQL query.
-func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *ExecOptions) (QueryResponse, error) {
+func (e *executor) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q *pql.Query, shards []uint64, opt *ExecOptions) (QueryResponse, error) {
+	index := string(tableKeyer.Key())
+
 	span, ctx := tracing.StartSpanFromContext(ctx, "executor.Execute")
 	span.LogKV("pql", q.String())
 	defer span.Finish()

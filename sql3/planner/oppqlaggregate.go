@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
@@ -251,7 +252,12 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, sql3.NewErrInternalf("unhandled aggregate type '%d'", i.aggregate.AggType())
 		}
 
-		queryResponse, err := i.planner.executor.Execute(ctx, i.tableName, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
+		tbl, err := i.planner.schemaAPI.TableByName(ctx, dax.TableName(i.tableName))
+		if err != nil {
+			return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
+		}
+
+		queryResponse, err := i.planner.executor.Execute(ctx, tbl, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err
 		}

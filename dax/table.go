@@ -103,6 +103,23 @@ type OrganizationID string
 // value could be any string.
 type DatabaseID string
 
+// TableKeyer is an interface implemented by any type which can produce, and be
+// represented by, a TableKey. In the case of a QualifiedTable, its TableKey
+// might be something like `tbl__org__db__tableid`, while a general pilosa
+// implemenation might represent a table as a basic table name `foo`.
+type TableKeyer interface {
+	Key() TableKey
+}
+
+// StringTableKeyer is a helper type which can wrap a string, making it a
+// TableKeyer. This is useful for certain calls to Execute() which take a string
+// index name.
+type StringTableKeyer string
+
+func (s StringTableKeyer) Key() TableKey {
+	return TableKey(s)
+}
+
 // TableKey is a globally unique identifier for a table; it is effectively the
 // compound key: (org, database, table). This is (hopefully) the value that will
 // be used when interfacing with services which are unaware of table qualifiers.
@@ -165,6 +182,10 @@ type Table struct {
 
 	Description string `json:"description,omitempty"`
 	CreatedAt   int64  `json:"createdAt,omitempty"`
+}
+
+func (t *Table) Key() TableKey {
+	return TableKey(t.ID)
 }
 
 // CreateID generates a unique identifier for Table. If Table has already been
@@ -433,7 +454,7 @@ func (qtid QualifiedTableID) Key() TableKey {
 }
 
 // Equals returns true if `other` is the same as qtid. Note: the `Name` value is
-// ignored in this comparison; only `TableQaulifer` and `ID` are considered.
+// ignored in this comparison; only `TableQualifer` and `ID` are considered.
 func (qtid QualifiedTableID) Equals(other QualifiedTableID) bool {
 	if qtid.TableQualifier == other.TableQualifier && qtid.ID == other.ID {
 		return true

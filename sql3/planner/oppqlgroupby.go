@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
@@ -205,15 +206,22 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 			call.Args["filter"] = cond
 		}
 
-		queryResponse, err := i.planner.executor.Execute(ctx, i.tableName, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
+		tbl, err := i.planner.schemaAPI.TableByName(ctx, dax.TableName(i.tableName))
+		if err != nil {
+			return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
+		}
+
+		queryResponse, err := i.planner.executor.Execute(ctx, tbl, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		tbl, ok := queryResponse.Results[0].(*pilosa.GroupCounts)
+
+		gcs, ok := queryResponse.Results[0].(*pilosa.GroupCounts)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected Extract() result type: %T", queryResponse.Results[0])
 		}
-		i.result = tbl.Groups()
+
+		i.result = gcs.Groups()
 	}
 
 	if len(i.result) > 0 {

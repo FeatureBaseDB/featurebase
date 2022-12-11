@@ -214,12 +214,17 @@ func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table d
 		return nil, errors.Errorf("must have exactly 1 query, but got: %+v", qry.Calls)
 	}
 
-	tkey, err := q.indexToQualifiedTableKey(ctx, qual, string(table))
+	qtid, err := q.mds.TableID(ctx, qual, dax.TableName(table))
 	if err != nil {
-		return nil, errors.Wrapf(err, "converting index to qualified table key: %s", table)
+		return nil, errors.Wrap(err, "converting index to qualified table id")
 	}
 
-	results, err := q.orchestrator.Execute(ctx, string(tkey), qry, nil, &featurebase.ExecOptions{})
+	qtbl, err := q.mds.Table(ctx, qtid)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting table for qtid")
+	}
+
+	results, err := q.orchestrator.Execute(ctx, qtbl, qry, nil, &featurebase.ExecOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "orchestrator.Execute")
 	}
@@ -320,18 +325,4 @@ func rowToSliceInterface(header []*fbproto.ColumnInfo, row *fbproto.Row) []inter
 		}
 	}
 	return ret
-}
-
-// TODO(tlt): this method was copied from queryer/batchImporter. Can we centralize
-// this logic?
-func (q *Queryer) indexToQualifiedTableKey(ctx context.Context, qual dax.TableQualifier, index string) (dax.TableKey, error) {
-	if strings.HasPrefix(index, dax.PrefixTable+dax.TableKeyDelimiter) {
-		return dax.TableKey(index), nil
-	}
-
-	qtid, err := q.mds.TableID(ctx, qual, dax.TableName(index))
-	if err != nil {
-		return "", errors.Wrap(err, "converting index to qualified table id")
-	}
-	return qtid.Key(), nil
 }
