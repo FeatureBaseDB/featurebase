@@ -216,18 +216,26 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 				},
 			)
 		}
-		queryResponse, err := i.planner.executor.Execute(ctx, i.tableName, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
+
+		tbl, err := i.planner.schemaAPI.TableByName(ctx, dax.TableName(i.tableName))
+		if err != nil {
+			return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
+		}
+
+		queryResponse, err := i.planner.executor.Execute(ctx, tbl, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		tbl, ok := queryResponse.Results[0].(pilosa.ExtractedTable)
+
+		extbl, ok := queryResponse.Results[0].(pilosa.ExtractedTable)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected Extract() result type: %T", queryResponse.Results[0])
 		}
-		i.result = tbl.Columns
+
+		i.result = extbl.Columns
 
 		//set the source index
-		for idx, fld := range tbl.Fields {
+		for idx, fld := range extbl.Fields {
 			mappedColumn, ok := i.columnMap[fld.Name]
 			if !ok {
 				return nil, sql3.NewErrInternalf("mapped column not found for column named '%s'", fld.Name)
