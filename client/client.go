@@ -1842,15 +1842,5 @@ func (c *Client) ApplyDataframeChangeset(indexName string, cr *pilosa.ChangesetR
 		})
 	}
 	err = eg.Wait()
-
-	//	status, body, err := c.HTTPRequest(http.MethodPost, path, buffer.Bytes(), headers)
-	/*
-		var result map[string]interface{}
-		err = json.Unmarshal(body, &result)
-		if err != nil {
-			return nil, errors.Wrap(err, "unmarshalling response")
-		}
-	*/
-
 	return nil, err
 }
