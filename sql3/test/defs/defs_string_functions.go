@@ -135,5 +135,58 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			ExpErr: "string expression expected",
 		},
+		{
+			name: "ReplaceAllString",
+			SQLs: sqls(
+				"select replaceall('hello database','data','feature')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("hello featurebase")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "ReplaceAllStringMultiple",
+			SQLs: sqls(
+				"select replaceall('Buffalo Buffalo buffalo buffalo Buffalo', 'Buffalo', 'Buffalo buffalo');",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("Buffalo buffalo Buffalo buffalo buffalo buffalo Buffalo buffalo")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "ReplaceAllReverseSubstringUpper",
+			SQLs: sqls(
+				"select replaceall(reverse('gnitset'),substring('testing',4),upper('ed'));",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("testED")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "IncorrectArgumentsReplaceAll",
+			SQLs: sqls(
+				"select replaceall('ab','b')",
+			),
+			ExpErr: "'replaceall': count of formal parameters (3) does not match count of actual parameters (2)",
+		},
+		{
+			name: "IncorrectInputforReplaceAll",
+			SQLs: sqls(
+				"select replaceall('test','e',1)",
+			),
+			ExpErr: "string expression expected",
+		},
 	},
 }
