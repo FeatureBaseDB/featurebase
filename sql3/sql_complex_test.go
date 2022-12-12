@@ -1808,6 +1808,65 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 	})
 
+	t.Run("BulkInsertCSVStringIDSet", func(t *testing.T) {
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test (
+			_id STRING,
+			id_col ID,
+			string_col STRING cachetype ranked size 1000,
+			int_col int,
+			decimal_col DECIMAL(2),
+			bool_col BOOL
+			time_col TIMESTAMP,
+			stringset_col STRINGSET,
+			ideset_col IDSET
+		);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test (
+			_id,
+			id_col,
+			string_col,
+			int_col,
+			decimal_col,
+			bool_col,
+			time_col,
+			stringset_col,
+			ideset_col)
+			map (
+			0 ID,
+			1 STRING,
+			2 INT,
+			3 DECIMAL(2),
+			4 BOOL,
+			5 TIMESTAMP,
+			6 STRINGSET,
+			7 IDSET)
+			transform(
+			@1,
+			@0,
+			@1,
+			@2,
+			@3,
+			@4,
+			@5,
+			@6,
+			@7)
+			FROM
+			x'8924809397503602651,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset1,1
+			64575677503602651,TEST2,321,31.2,1,2014-07-15T01:18:46Z,stringset1,1
+			8924809397503602651,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset2,2'
+			with
+				BATCHSIZE 10000
+				format 'CSV'
+				input 'STREAM';`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 }
 
 func TestPlanner_SelectSelectSource(t *testing.T) {
