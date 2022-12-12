@@ -14,15 +14,17 @@ import (
 )
 
 // Ensure type implements interface.
-var _ Translator = (*MDSTranslator)(nil)
+var _ Translator = (*mdsTranslator)(nil)
 
-type MDSTranslator struct {
-	mds MDS
+type mdsTranslator struct {
+	noder   dax.Noder
+	schemar dax.Schemar
 }
 
-func NewMDSTranslator(mds MDS) *MDSTranslator {
-	return &MDSTranslator{
-		mds: mds,
+func NewMDSTranslator(noder dax.Noder, schemar dax.Schemar) *mdsTranslator {
+	return &mdsTranslator{
+		noder:   noder,
+		schemar: schemar,
 	}
 }
 
@@ -37,11 +39,11 @@ func fbClient(address dax.Address) (*featurebase_client.Client, error) {
 	)
 }
 
-func (m *MDSTranslator) CreateIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
+func (m *mdsTranslator) CreateIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
 	tkey := dax.TableKey(table)
 	qtid := tkey.QualifiedTableID()
 
-	qtbl, err := m.mds.Table(ctx, qtid)
+	qtbl, err := m.schemar.TableByID(ctx, qtid)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting table")
 	}
@@ -53,7 +55,7 @@ func (m *MDSTranslator) CreateIndexKeys(ctx context.Context, table string, keys 
 
 	out := make(map[string]uint64)
 	for pNum := range pMap {
-		address, err := m.mds.IngestPartition(ctx, qtid, pNum)
+		address, err := m.noder.IngestPartition(ctx, qtid, pNum)
 		if err != nil {
 			return nil, errors.Wrapf(err, "calling ingest-partition on table: %s, partition: %d", table, pNum)
 		}
@@ -78,9 +80,9 @@ func (m *MDSTranslator) CreateIndexKeys(ctx context.Context, table string, keys 
 	return out, nil
 }
 
-func (m *MDSTranslator) CreateFieldKeys(ctx context.Context, table string, field string, keys []string) (map[string]uint64, error) {
+func (m *mdsTranslator) CreateFieldKeys(ctx context.Context, table string, field string, keys []string) (map[string]uint64, error) {
 	qtid := dax.TableKey(table).QualifiedTableID()
-	address, err := m.mds.IngestPartition(ctx, qtid, dax.PartitionNum(0))
+	address, err := m.noder.IngestPartition(ctx, qtid, dax.PartitionNum(0))
 	if err != nil {
 		return nil, errors.Wrapf(err, "calling ingest-partition on table: %s, partition: %d", table, dax.PartitionNum(0))
 	}
@@ -96,11 +98,11 @@ func (m *MDSTranslator) CreateFieldKeys(ctx context.Context, table string, field
 	return fbClient.CreateFieldKeys(fld, keys...)
 }
 
-func (m *MDSTranslator) FindIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
+func (m *mdsTranslator) FindIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
 	tkey := dax.TableKey(table)
 	qtid := tkey.QualifiedTableID()
 
-	qtbl, err := m.mds.Table(ctx, qtid)
+	qtbl, err := m.schemar.TableByID(ctx, qtid)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting table")
 	}
@@ -115,7 +117,7 @@ func (m *MDSTranslator) FindIndexKeys(ctx context.Context, table string, keys []
 		pNums = append(pNums, k)
 	}
 
-	translateNodes, err := m.mds.TranslateNodes(ctx, qtid, pNums...)
+	translateNodes, err := m.noder.TranslateNodes(ctx, qtid, pNums...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting translate nodes for partitions on table: %s", table)
 	}
@@ -149,9 +151,9 @@ func (m *MDSTranslator) FindIndexKeys(ctx context.Context, table string, keys []
 	return out, nil
 }
 
-func (m *MDSTranslator) FindFieldKeys(ctx context.Context, table, field string, keys []string) (map[string]uint64, error) {
+func (m *mdsTranslator) FindFieldKeys(ctx context.Context, table, field string, keys []string) (map[string]uint64, error) {
 	qtid := dax.TableKey(table).QualifiedTableID()
-	address, err := m.mds.IngestPartition(ctx, qtid, dax.PartitionNum(0))
+	address, err := m.noder.IngestPartition(ctx, qtid, dax.PartitionNum(0))
 	if err != nil {
 		return nil, errors.Wrapf(err, "calling ingest-partition on table: %s, partition: %d", table, dax.PartitionNum(0))
 	}
@@ -167,7 +169,7 @@ func (m *MDSTranslator) FindFieldKeys(ctx context.Context, table, field string, 
 	return fbClient.FindFieldKeys(fld, keys...)
 }
 
-func (m *MDSTranslator) TranslateIndexIDs(ctx context.Context, index string, ids []uint64) ([]string, error) {
+func (m *mdsTranslator) TranslateIndexIDs(ctx context.Context, index string, ids []uint64) ([]string, error) {
 	idsByPartition := splitIDsByPartition(index, ids, 1<<20) // TODO(jaffee), don't hardcode shardwidth...need to get this from index info
 	daxPartitions := make([]dax.PartitionNum, 0)
 	for partition := range idsByPartition {
@@ -176,7 +178,7 @@ func (m *MDSTranslator) TranslateIndexIDs(ctx context.Context, index string, ids
 
 	qtid := dax.TableKey(index).QualifiedTableID()
 
-	nodes, err := m.mds.TranslateNodes(ctx, qtid, daxPartitions...)
+	nodes, err := m.noder.TranslateNodes(ctx, qtid, daxPartitions...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "calling translate-nodes on table: %s, partitions: %v", index, daxPartitions)
 	}
@@ -210,7 +212,7 @@ func (m *MDSTranslator) TranslateIndexIDs(ctx context.Context, index string, ids
 	return ret, nil
 }
 
-func (m *MDSTranslator) TranslateIndexIDSet(ctx context.Context, table string, ids map[uint64]struct{}) (map[uint64]string, error) {
+func (m *mdsTranslator) TranslateIndexIDSet(ctx context.Context, table string, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, 0, len(ids))
 	for id := range ids {
 		idList = append(idList, id)
@@ -227,7 +229,7 @@ func (m *MDSTranslator) TranslateIndexIDSet(ctx context.Context, table string, i
 	}
 	return ret, nil
 }
-func (m *MDSTranslator) TranslateFieldIDs(ctx context.Context, table, field string, ids map[uint64]struct{}) (map[uint64]string, error) {
+func (m *mdsTranslator) TranslateFieldIDs(ctx context.Context, table, field string, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, 0, len(ids))
 	for id := range ids {
 		idList = append(idList, id)
@@ -244,9 +246,9 @@ func (m *MDSTranslator) TranslateFieldIDs(ctx context.Context, table, field stri
 	}
 	return ret, nil
 }
-func (m *MDSTranslator) TranslateFieldListIDs(ctx context.Context, index, field string, ids []uint64) ([]string, error) {
+func (m *mdsTranslator) TranslateFieldListIDs(ctx context.Context, index, field string, ids []uint64) ([]string, error) {
 	qtid := dax.TableKey(index).QualifiedTableID()
-	address, err := m.mds.IngestPartition(ctx, qtid, dax.PartitionNum(0))
+	address, err := m.noder.IngestPartition(ctx, qtid, dax.PartitionNum(0))
 	if err != nil {
 		return nil, errors.Wrapf(err, "calling ingest-partition on table: %s, partition: %d", index, dax.PartitionNum(0))
 	}

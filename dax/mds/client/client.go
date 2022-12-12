@@ -49,6 +49,20 @@ func (c *Client) Health() bool {
 	return true
 }
 
+// TODO(tlt): collapse Table into this
+func (c *Client) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
+	return c.Table(ctx, qtid)
+}
+
+// TODO(tlt): collapse TableID into this
+func (c *Client) TableByName(ctx context.Context, qual dax.TableQualifier, tname dax.TableName) (*dax.QualifiedTable, error) {
+	qtid, err := c.TableID(ctx, qual, tname)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting table id")
+	}
+	return c.Table(ctx, qtid)
+}
+
 func (c *Client) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
 	url := fmt.Sprintf("%s/table", c.address.WithScheme(defaultScheme))
 
@@ -336,11 +350,11 @@ func (c *Client) IngestPartition(ctx context.Context, qtid dax.QualifiedTableID,
 	return isr.Address, nil
 }
 
-func (c *Client) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.ShardNum) ([]controller.ComputeNode, error) {
+func (c *Client) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.ShardNum) ([]dax.ComputeNode, error) {
 	url := fmt.Sprintf("%s/compute-nodes", c.address.WithScheme(defaultScheme))
 	c.logger.Debugf("ComputeNodes url: %s", url)
 
-	var nodes []controller.ComputeNode
+	var nodes []dax.ComputeNode
 
 	req := &mdshttp.ComputeNodesRequest{
 		Table:  qtid,
@@ -374,11 +388,11 @@ func (c *Client) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, sh
 	return cnr.ComputeNodes, nil
 }
 
-func (c *Client) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitions ...dax.PartitionNum) ([]controller.TranslateNode, error) {
+func (c *Client) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitions ...dax.PartitionNum) ([]dax.TranslateNode, error) {
 	url := fmt.Sprintf("%s/translate-nodes", c.address.WithScheme(defaultScheme))
 	c.logger.Debugf("TranslateNodes url: %s", url)
 
-	var nodes []controller.TranslateNode
+	var nodes []dax.TranslateNode
 
 	req := &mdshttp.TranslateNodesRequest{
 		Table:      qtid,
