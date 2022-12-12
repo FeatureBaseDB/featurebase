@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
@@ -30,9 +31,13 @@ import (
 // that the externally-facing Molecula API would proxy query requests to a pool
 // of "Queryer" nodes, which handle incoming query requests.
 type Queryer struct {
-	orchestrator *orchestrator
+	mu            sync.RWMutex
+	orchestrators map[dax.TableQualifier]*qualifiedOrchestrator
 
-	mds MDS
+	fbClient *featurebase.InternalClient
+
+	noder   dax.Noder
+	schemar dax.Schemar
 
 	logger logger.Logger
 }
@@ -40,9 +45,10 @@ type Queryer struct {
 // New returns a new instance of Queryer.
 func New(cfg Config) *Queryer {
 	q := &Queryer{
-		mds:          NewNopMDS(),
-		orchestrator: nil,
-		logger:       logger.NopLogger,
+		noder:         dax.NewNopNoder(),
+		schemar:       dax.NewNopSchemar(),
+		orchestrators: make(map[dax.TableQualifier]*qualifiedOrchestrator),
+		logger:        logger.NopLogger,
 	}
 
 	if cfg.Logger != nil {
@@ -52,8 +58,63 @@ func New(cfg Config) *Queryer {
 	return q
 }
 
-func (q *Queryer) SetMDS(mds MDS) error {
-	q.mds = mds
+// Orchestrator gets (or creates) an instance of qualifiedOrchestrator based on
+// the provided dax.TableQualifier.
+func (q *Queryer) Orchestrator(qual dax.TableQualifier) *qualifiedOrchestrator {
+	// Try to get orchestrator under a read lock first.
+	if orch := func() *qualifiedOrchestrator {
+		q.mu.RLock()
+		defer q.mu.RUnlock()
+		if orch, ok := q.orchestrators[qual]; ok {
+			return orch
+		}
+		return nil
+	}(); orch != nil {
+		return orch
+	}
+
+	// Since we didn't find an orchestrator under a read lock, obtain a write
+	// lock and try a read/write.
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if orch, ok := q.orchestrators[qual]; ok {
+		return orch
+	}
+
+	sapi := newQualifiedSchemaAPI(qual, q.schemar)
+
+	orch := &orchestrator{
+		schema:   sapi,
+		trans:    NewMDSTranslator(q.noder, q.schemar),
+		topology: &MDSTopology{noder: q.noder},
+		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
+		client: q.fbClient,
+		stats:  stats.NopStatsClient,
+		logger: q.logger,
+	}
+
+	qorch := newQualifiedOrchestrator(orch, qual)
+	q.orchestrators[qual] = qorch
+
+	return qorch
+}
+
+func (q *Queryer) SetNoder(noder dax.Noder) error {
+	q.noder = noder
+	return nil
+}
+
+func (q *Queryer) SetSchemar(schemar dax.Schemar) error {
+	q.schemar = schemar
+	return nil
+}
+
+func (q *Queryer) Start() error {
+	if q.noder == nil {
+		return errors.New(errors.ErrUncoded, "queryer requires noder to be configured")
+	} else if q.schemar == nil {
+		return errors.New(errors.ErrUncoded, "queryer requires schemar to be configured")
+	}
 
 	// fbClient is an instance of internal client. It's used in one place in the
 	// orchestrator (o.client.QueryNode()), but in that case, the host is
@@ -67,26 +128,8 @@ func (q *Queryer) SetMDS(mds MDS) error {
 	if err != nil {
 		return errors.Wrap(err, "setting up internal client")
 	}
+	q.fbClient = fbClient
 
-	q.orchestrator = &orchestrator{
-		schema:   NewSchemaInfoAPI(q.mds),
-		trans:    NewMDSTranslator(q.mds),
-		topology: &MDSTopology{mds: q.mds},
-		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
-		client: fbClient,
-		stats:  stats.NopStatsClient,
-		logger: q.logger,
-	}
-
-	return nil
-}
-
-func (q *Queryer) Start() error {
-	if q.mds == nil {
-		return errors.New(errors.ErrUncoded, "queryer requires mds to be configured")
-	} else if q.orchestrator == nil {
-		return errors.New(errors.ErrUncoded, "queryer requires orchestrator to be configured")
-	}
 	return nil
 }
 
@@ -123,13 +166,10 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	}
 
 	// SchemaAPI
-	sapi := NewQualifiedSchemaAPI(qual, q.mds)
-
-	// Orchestrator
-	orch := newQualifiedOrchestrator(q.orchestrator, qual, q.mds)
+	sapi := newQualifiedSchemaAPI(qual, q.schemar)
 
 	// Importer
-	imp := idkmds.NewImporter(q.mds, qual, nil)
+	imp := idkmds.NewImporter(q.noder, q.schemar, qual, nil)
 
 	// TODO(tlt): this obviously doesn't work; we don't have an API here. We
 	// need a dax-compatible implementation of the SystemAPI (or at least a
@@ -138,7 +178,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 
 	systemLayer := systemlayer.NewSystemLayer()
 
-	pl := planner.NewExecutionPlanner(orch, sapi, sysapi, systemLayer, imp, q.orchestrator.logger, sql)
+	pl := planner.NewExecutionPlanner(q.Orchestrator(qual), sapi, sysapi, systemLayer, imp, q.logger, sql)
 
 	planOp, err := pl.CompilePlan(ctx, st)
 	if err != nil {
@@ -214,17 +254,12 @@ func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table d
 		return nil, errors.Errorf("must have exactly 1 query, but got: %+v", qry.Calls)
 	}
 
-	qtid, err := q.mds.TableID(ctx, qual, dax.TableName(table))
+	qtbl, err := q.schemar.TableByName(ctx, qual, dax.TableName(table))
 	if err != nil {
-		return nil, errors.Wrap(err, "converting index to qualified table id")
+		return nil, errors.Wrap(err, "converting index to qualified table")
 	}
 
-	qtbl, err := q.mds.Table(ctx, qtid)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting table for qtid")
-	}
-
-	results, err := q.orchestrator.Execute(ctx, qtbl, qry, nil, &featurebase.ExecOptions{})
+	results, err := q.Orchestrator(qual).Execute(ctx, qtbl, qry, nil, &featurebase.ExecOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "orchestrator.Execute")
 	}

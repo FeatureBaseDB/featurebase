@@ -43,22 +43,25 @@ const (
 )
 
 type Topologer interface {
-	ComputeNodes(ctx context.Context, index string, shards []uint64) ([]controller.ComputeNode, error)
+	ComputeNodes(ctx context.Context, index string, shards []uint64) ([]dax.ComputeNode, error)
 }
 
 type MDSTopology struct {
-	mds MDS
+	noder dax.Noder
 }
 
-func (m *MDSTopology) ComputeNodes(ctx context.Context, index string, shards []uint64) ([]controller.ComputeNode, error) {
+func (m *MDSTopology) ComputeNodes(ctx context.Context, index string, shards []uint64) ([]dax.ComputeNode, error) {
 	var daxShards = make(dax.ShardNums, len(shards))
 	for i, s := range shards {
 		daxShards[i] = dax.ShardNum(s)
 	}
 
+	// TODO(tlt): this needs review; MDSTopology is converting from
+	// string/uint64 to qtid/shardNum?? Perhaps we can get rid of the Topologer
+	// interface altogether and replace it with dax.Noder.
 	qtid := dax.TableKey(index).QualifiedTableID()
 
-	return m.mds.ComputeNodes(ctx, qtid, daxShards...)
+	return m.noder.ComputeNodes(ctx, qtid, daxShards...)
 }
 
 // TODO(jaffee) we need version info in here ASAP. whenever schema or topo
@@ -79,7 +82,7 @@ type Translator interface {
 
 // executor recursively executes calls in a PQL query across all shards.
 type orchestrator struct {
-	schema   featurebase.SchemaInfoAPI
+	schema   featurebase.SchemaAPI
 	topology Topologer
 	trans    Translator
 
@@ -117,21 +120,9 @@ func (o *orchestrator) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q
 		return resp, errors.New(errors.ErrUncoded, "orchestrator.Execute expects a dax.QualifiedTable")
 	}
 
-	index := string(qtbl.Key())
-
 	// Check for query cancellation.
 	if err := validateQueryContext(ctx); err != nil {
 		return resp, err
-	}
-
-	// Verify that an index is set.
-	if index == "" {
-		return resp, featurebase.ErrIndexRequired
-	}
-
-	idx, err := o.schema.IndexInfo(ctx, index)
-	if err != nil {
-		return resp, errors.Wrap(err, "getting index")
 	}
 
 	// Default options.
@@ -139,7 +130,7 @@ func (o *orchestrator) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q
 		opt = &featurebase.ExecOptions{}
 	}
 
-	results, err := o.execute(ctx, index, q, shards, opt)
+	results, err := o.execute(ctx, tableKeyer, q, shards, opt)
 	if err != nil {
 		return resp, err
 	} else if err := validateQueryContext(ctx); err != nil {
@@ -147,7 +138,7 @@ func (o *orchestrator) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q
 	}
 	resp.Results = results
 
-	if err := o.translateResults(ctx, index, idx, q.Calls, results, opt.MaxMemory); err != nil {
+	if err := o.translateResults(ctx, qtbl, q.Calls, results, opt.MaxMemory); err != nil {
 		if errors.Cause(err) == featurebase.ErrTranslatingKeyNotFound {
 			// No error - return empty result
 			resp.Results = make([]interface{}, len(q.Calls))
@@ -164,9 +155,11 @@ func (o *orchestrator) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q
 	return resp, nil
 }
 
-func (o *orchestrator) execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *featurebase.ExecOptions) ([]interface{}, error) {
+func (o *orchestrator) execute(ctx context.Context, tableKeyer dax.TableKeyer, q *pql.Query, shards []uint64, opt *featurebase.ExecOptions) ([]interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.execute")
 	defer span.Finish()
+
+	index := string(tableKeyer.Key())
 
 	// Apply translations if necessary.
 	var colTranslations map[string]map[string]uint64            // colID := colTranslations[index][key]
@@ -189,7 +182,7 @@ func (o *orchestrator) execute(ctx context.Context, index string, q *pql.Query, 
 
 		// Apply call translation.
 		if !opt.Remote && !opt.PreTranslated {
-			translated, err := o.translateCall(ctx, call, index, colTranslations, rowTranslations)
+			translated, err := o.translateCall(ctx, call, tableKeyer, colTranslations, rowTranslations)
 			if err != nil {
 				return nil, errors.Wrap(err, "translating call")
 			}
@@ -210,13 +203,13 @@ func (o *orchestrator) execute(ctx context.Context, index string, q *pql.Query, 
 		if call.Name == "Count" {
 			// Handle count specially, skipping the level directly underneath it.
 			for _, child := range call.Children {
-				err := o.handlePreCallChildren(ctx, index, child, shards, opt)
+				err := o.handlePreCallChildren(ctx, tableKeyer, child, shards, opt)
 				if err != nil {
 					return nil, err
 				}
 			}
 		} else {
-			err := o.handlePreCallChildren(ctx, index, call, shards, opt)
+			err := o.handlePreCallChildren(ctx, tableKeyer, call, shards, opt)
 			if err != nil {
 				return nil, err
 			}
@@ -229,10 +222,11 @@ func (o *orchestrator) execute(ctx context.Context, index string, q *pql.Query, 
 		// already precomputed by handlePreCallChildren, though,
 		// we don't need this logic in executeCall.
 		newIndex := call.CallIndex()
+		newTableKeyer := dax.StringTableKeyer(newIndex)
 		if newIndex != "" && newIndex != index {
-			v, err = o.executeCall(ctx, newIndex, call, nil, opt)
+			v, err = o.executeCall(ctx, newTableKeyer, call, nil, opt)
 		} else {
-			v, err = o.executeCall(ctx, index, call, shards, opt)
+			v, err = o.executeCall(ctx, tableKeyer, call, shards, opt)
 		}
 		if err != nil {
 			return nil, err
@@ -255,7 +249,9 @@ func (o *orchestrator) execute(ctx context.Context, index string, q *pql.Query, 
 
 // handlePreCalls traverses the call tree looking for calls that need
 // precomputed values (e.g. Distinct, UnionRows, ConstRow...).
-func (o *orchestrator) handlePreCalls(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) error {
+func (o *orchestrator) handlePreCalls(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) error {
+	index := string(tableKeyer.Key())
+
 	if c.Name == "Precomputed" {
 		idx := c.Args["valueidx"].(int64)
 		if idx >= 0 && idx < int64(len(opt.EmbeddedData)) {
@@ -292,10 +288,11 @@ func (o *orchestrator) handlePreCalls(ctx context.Context, index string, c *pql.
 	if newIndex != "" && newIndex != index {
 		c.Type = pql.PrecallGlobal
 		index = newIndex
+		tableKeyer = dax.StringTableKeyer(index)
 		// we need to recompute shards, then
 		shards = nil
 	}
-	if err := o.handlePreCallChildren(ctx, index, c, shards, opt); err != nil {
+	if err := o.handlePreCallChildren(ctx, tableKeyer, c, shards, opt); err != nil {
 		return err
 	}
 	// child calls already handled, no precall for this, so we're done
@@ -311,7 +308,7 @@ func (o *orchestrator) handlePreCalls(ctx context.Context, index string, c *pql.
 	// We set c to look like a normal call, and actually execute it:
 	c.Type = pql.PrecallNone
 	// possibly override call index.
-	v, err := o.executeCall(ctx, index, c, shards, opt)
+	v, err := o.executeCall(ctx, tableKeyer, c, shards, opt)
 	if err != nil {
 		return err
 	}
@@ -354,12 +351,12 @@ func (o *orchestrator) dumpPrecomputedCalls(ctx context.Context, c *pql.Call) {
 }
 
 // handlePreCallChildren handles any pre-calls in the children of a given call.
-func (o *orchestrator) handlePreCallChildren(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) error {
+func (o *orchestrator) handlePreCallChildren(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) error {
 	for i := range c.Children {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := o.handlePreCalls(ctx, index, c.Children[i], shards, opt); err != nil {
+		if err := o.handlePreCalls(ctx, tableKeyer, c.Children[i], shards, opt); err != nil {
 			return err
 		}
 	}
@@ -373,7 +370,7 @@ func (o *orchestrator) handlePreCallChildren(ctx context.Context, index string, 
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if err := o.handlePreCalls(ctx, index, call, shards, opt); err != nil {
+			if err := o.handlePreCalls(ctx, tableKeyer, call, shards, opt); err != nil {
 				return err
 			}
 		}
@@ -382,7 +379,7 @@ func (o *orchestrator) handlePreCallChildren(ctx context.Context, index string, 
 }
 
 // preprocessQuery expands any calls that need preprocessing.
-func (o *orchestrator) preprocessQuery(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*pql.Call, error) {
+func (o *orchestrator) preprocessQuery(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*pql.Call, error) {
 	switch c.Name {
 	case "All":
 		_, hasLimit, err := c.UintArg("limit")
@@ -411,7 +408,7 @@ func (o *orchestrator) preprocessQuery(ctx context.Context, index string, c *pql
 		out := make([]*pql.Call, len(c.Children))
 		var changed bool
 		for i, child := range c.Children {
-			res, err := o.preprocessQuery(ctx, index, child, shards, opt)
+			res, err := o.preprocessQuery(ctx, tableKeyer, child, shards, opt)
 			if err != nil {
 				return nil, err
 			}
@@ -429,7 +426,7 @@ func (o *orchestrator) preprocessQuery(ctx context.Context, index string, c *pql
 }
 
 // executeCall executes a call.
-func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
+func (o *orchestrator) executeCall(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeCall")
 	defer span.Finish()
 
@@ -438,7 +435,7 @@ func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Cal
 	} else if err := o.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
-	indexTag := "index:" + index
+	indexTag := "index:" + string(tableKeyer.Key())
 	metricName := "query_" + strings.ToLower(c.Name) + "_total"
 	statFn := func() {
 		if !opt.Remote {
@@ -447,7 +444,7 @@ func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Cal
 	}
 
 	// Preprocess the query.
-	c, err := o.preprocessQuery(ctx, index, c, shards, opt)
+	c, err := o.preprocessQuery(ctx, tableKeyer, c, shards, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -455,23 +452,23 @@ func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Cal
 	switch c.Name {
 	case "Sum":
 		statFn()
-		res, err := o.executeSum(ctx, index, c, shards, opt)
+		res, err := o.executeSum(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeSum")
 	case "Min":
 		statFn()
-		res, err := o.executeMin(ctx, index, c, shards, opt)
+		res, err := o.executeMin(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMin")
 	case "Max":
 		statFn()
-		res, err := o.executeMax(ctx, index, c, shards, opt)
+		res, err := o.executeMax(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMax")
 	case "MinRow":
 		statFn()
-		res, err := o.executeMinRow(ctx, index, c, shards, opt)
+		res, err := o.executeMinRow(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMinRow")
 	case "MaxRow":
 		statFn()
-		res, err := o.executeMaxRow(ctx, index, c, shards, opt)
+		res, err := o.executeMaxRow(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMaxRow")
 	// case "Clear":
 	// 	statFn()
@@ -483,7 +480,7 @@ func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Cal
 	// 	return res, errors.Wrap(err, "executeClearRow")
 	case "Distinct":
 		statFn()
-		res, err := o.executeDistinct(ctx, index, c, shards, opt)
+		res, err := o.executeDistinct(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeDistinct")
 	// case "Store":
 	// 	statFn()
@@ -491,7 +488,7 @@ func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Cal
 	// 	return res, errors.Wrap(err, "executeSetRow")
 	case "Count":
 		statFn()
-		res, err := o.executeCount(ctx, index, c, shards, opt)
+		res, err := o.executeCount(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeCount")
 	// case "Set":
 	// 	statFn()
@@ -499,49 +496,49 @@ func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Cal
 	// 	return res, errors.Wrap(err, "executeSet")
 	case "TopK":
 		statFn()
-		res, err := o.executeTopK(ctx, index, c, shards, opt)
+		res, err := o.executeTopK(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeTopK")
 	case "TopN":
 		statFn()
-		res, err := o.executeTopN(ctx, index, c, shards, opt)
+		res, err := o.executeTopN(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeTopN")
 	case "Rows":
 		statFn()
-		res, err := o.executeRows(ctx, index, c, shards, opt)
+		res, err := o.executeRows(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeRows")
 	case "Extract":
 		statFn()
-		res, err := o.executeExtract(ctx, index, c, shards, opt)
+		res, err := o.executeExtract(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeExtract")
 	case "GroupBy":
 		statFn()
-		res, err := o.executeGroupBy(ctx, index, c, shards, opt)
+		res, err := o.executeGroupBy(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeGroupBy")
 	case "Options":
 		statFn()
-		res, err := o.executeOptionsCall(ctx, index, c, shards, opt)
+		res, err := o.executeOptionsCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeOptionsCall")
 	case "IncludesColumn":
-		res, err := o.executeIncludesColumnCall(ctx, index, c, shards, opt)
+		res, err := o.executeIncludesColumnCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeIncludesColumnCall")
 	case "FieldValue":
 		statFn()
-		res, err := o.executeFieldValueCall(ctx, index, c, shards, opt)
+		res, err := o.executeFieldValueCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeFieldValueCall")
 	case "Precomputed":
-		res, err := o.executePrecomputedCall(ctx, index, c, shards, opt)
+		res, err := o.executePrecomputedCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executePrecomputedCall")
 	case "UnionRows":
-		res, err := o.executeUnionRows(ctx, index, c, shards, opt)
+		res, err := o.executeUnionRows(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeUnionRows")
 	case "ConstRow":
-		res, err := o.executeConstRow(ctx, index, c)
+		res, err := o.executeConstRow(ctx, tableKeyer, c)
 		return res, errors.Wrap(err, "executeConstRow")
 	case "Limit":
-		res, err := o.executeLimitCall(ctx, index, c, shards, opt)
+		res, err := o.executeLimitCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeLimitCall")
 	case "Percentile":
-		res, err := o.executePercentile(ctx, index, c, shards, opt)
+		res, err := o.executePercentile(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executePercentile")
 	// case "Delete":
 	// 	statFn() //TODO(twg) need this?
@@ -549,7 +546,7 @@ func (o *orchestrator) executeCall(ctx context.Context, index string, c *pql.Cal
 	// 	return res, errors.Wrap(err, "executeDelete")
 	default: // o.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		statFn()
-		res, err := o.executeBitmapCall(ctx, index, c, shards, opt)
+		res, err := o.executeBitmapCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeBitmapCall")
 	}
 }
@@ -573,7 +570,7 @@ func (o *orchestrator) validateCallArgs(c *pql.Call) error {
 	return nil
 }
 
-func (o *orchestrator) executeOptionsCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
+func (o *orchestrator) executeOptionsCall(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeOptionsCall")
 	defer span.Finish()
 
@@ -594,11 +591,11 @@ func (o *orchestrator) executeOptionsCall(ctx context.Context, index string, c *
 			return nil, errors.New(errors.ErrUncoded, "Query(): shards must be a list of unsigned integers")
 		}
 	}
-	return o.executeCall(ctx, index, c.Children[0], shards, optCopy)
+	return o.executeCall(ctx, tableKeyer, c.Children[0], shards, optCopy)
 }
 
 // executeIncludesColumnCall executes an IncludesColumn() call.
-func (o *orchestrator) executeIncludesColumnCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (bool, error) {
+func (o *orchestrator) executeIncludesColumnCall(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (bool, error) {
 	// Get the shard containing the column, since that's the only
 	// shard that needs to execute this query.
 	var shard uint64
@@ -616,7 +613,7 @@ func (o *orchestrator) executeIncludesColumnCall(ctx context.Context, index stri
 		return other || v.(bool)
 	}
 
-	result, err := o.mapReduce(ctx, index, []uint64{shard}, c, opt, reduceFn)
+	result, err := o.mapReduce(ctx, tableKeyer, []uint64{shard}, c, opt, reduceFn)
 	if err != nil {
 		return false, err
 	}
@@ -624,7 +621,7 @@ func (o *orchestrator) executeIncludesColumnCall(ctx context.Context, index stri
 }
 
 // executeFieldValueCall executes a FieldValue() call.
-func (o *orchestrator) executeFieldValueCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
+func (o *orchestrator) executeFieldValueCall(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
 	fieldName, ok := c.Args["field"].(string)
 	if !ok || fieldName == "" {
 		return featurebase.ValCount{}, featurebase.ErrFieldRequired
@@ -651,7 +648,7 @@ func (o *orchestrator) executeFieldValueCall(ctx context.Context, index string, 
 		return v
 	}
 
-	result, err := o.mapReduce(ctx, index, []uint64{shard}, c, opt, reduceFn)
+	result, err := o.mapReduce(ctx, tableKeyer, []uint64{shard}, c, opt, reduceFn)
 	if err != nil {
 		return featurebase.ValCount{}, errors.Wrap(err, "map reduce")
 	}
@@ -661,7 +658,7 @@ func (o *orchestrator) executeFieldValueCall(ctx context.Context, index string, 
 }
 
 // executeLimitCall executes a Limit() call.
-func (o *orchestrator) executeLimitCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.Row, error) {
+func (o *orchestrator) executeLimitCall(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.Row, error) {
 	bitmapCall := c.Children[0]
 
 	limit, hasLimit, err := c.UintArg("limit")
@@ -678,7 +675,7 @@ func (o *orchestrator) executeLimitCall(ctx context.Context, index string, c *pq
 	}
 
 	// Execute bitmap call, storing the full result on this node.
-	res, err := o.executeCall(ctx, index, bitmapCall, shards, opt)
+	res, err := o.executeCall(ctx, tableKeyer, bitmapCall, shards, opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "limit map reduce")
 	}
@@ -737,7 +734,7 @@ func (o *orchestrator) executeLimitCall(ctx context.Context, index string, c *pq
 }
 
 // executeSum executes a Sum() call.
-func (o *orchestrator) executeSum(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
+func (o *orchestrator) executeSum(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSum")
 	defer span.Finish()
 
@@ -756,7 +753,7 @@ func (o *orchestrator) executeSum(ctx context.Context, index string, c *pql.Call
 		return other.Add(v.(featurebase.ValCount))
 	}
 
-	result, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	result, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return featurebase.ValCount{}, err
 	}
@@ -769,7 +766,7 @@ func (o *orchestrator) executeSum(ctx context.Context, index string, c *pql.Call
 	// scale summed response if it's a decimal field and this is
 	// not a remote query (we're about to return to original client).
 	if !opt.Remote {
-		field, err := o.schema.FieldInfo(ctx, index, fieldName)
+		field, err := o.schemaFieldInfo(ctx, tableKeyer, fieldName)
 		if field == nil {
 			return featurebase.ValCount{}, errors.Wrapf(err, "%q", fieldName)
 		}
@@ -786,7 +783,7 @@ func (o *orchestrator) executeSum(ctx context.Context, index string, c *pql.Call
 
 // executeDistinct executes a Distinct call on a field. It returns a
 // SignedRow for int fields and a *Row for set/mutex/time fields.
-func (o *orchestrator) executeDistinct(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
+func (o *orchestrator) executeDistinct(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinct")
 	defer span.Finish()
 
@@ -821,7 +818,7 @@ func (o *orchestrator) executeDistinct(ctx context.Context, index string, c *pql
 		}
 	}
 
-	result, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	result, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return nil, errors.Wrap(err, "mapReduce")
 	}
@@ -833,7 +830,7 @@ func (o *orchestrator) executeDistinct(ctx context.Context, index string, c *pql
 }
 
 // executeMin executes a Min() call.
-func (o *orchestrator) executeMin(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
+func (o *orchestrator) executeMin(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMin")
 	defer span.Finish()
 
@@ -851,7 +848,7 @@ func (o *orchestrator) executeMin(ctx context.Context, index string, c *pql.Call
 		return other.Smaller(v.(featurebase.ValCount))
 	}
 
-	result, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	result, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return featurebase.ValCount{}, err
 	}
@@ -864,7 +861,7 @@ func (o *orchestrator) executeMin(ctx context.Context, index string, c *pql.Call
 }
 
 // executeMax executes a Max() call.
-func (o *orchestrator) executeMax(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
+func (o *orchestrator) executeMax(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMax")
 	defer span.Finish()
 
@@ -882,7 +879,7 @@ func (o *orchestrator) executeMax(ctx context.Context, index string, c *pql.Call
 		return other.Larger(v.(featurebase.ValCount))
 	}
 
-	result, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	result, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return featurebase.ValCount{}, err
 	}
@@ -896,7 +893,7 @@ func (o *orchestrator) executeMax(ctx context.Context, index string, c *pql.Call
 
 // TODO(jaffee) fix this... valcountize assumes access to field details like base
 // executePercentile executes a Percentile() call.
-func (o *orchestrator) executePercentile(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
+func (o *orchestrator) executePercentile(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePercentile")
 	defer span.Finish()
 
@@ -923,7 +920,7 @@ func (o *orchestrator) executePercentile(ctx context.Context, index string, c *p
 	if err != nil {
 		return featurebase.ValCount{}, errors.New(errors.ErrUncoded, "Percentile(): field required")
 	}
-	field, err := o.schema.FieldInfo(ctx, index, fieldName)
+	field, err := o.schemaFieldInfo(ctx, tableKeyer, fieldName)
 	if err != nil {
 		return featurebase.ValCount{}, ErrFieldNotFound
 	}
@@ -942,7 +939,7 @@ func (o *orchestrator) executePercentile(ctx context.Context, index string, c *p
 	if filterCall != nil {
 		minCall.Children = append(minCall.Children, filterCall)
 	}
-	minVal, err := o.executeMin(ctx, index, minCall, shards, opt)
+	minVal, err := o.executeMin(ctx, tableKeyer, minCall, shards, opt)
 	if err != nil {
 		return featurebase.ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
 	}
@@ -956,7 +953,7 @@ func (o *orchestrator) executePercentile(ctx context.Context, index string, c *p
 	if filterCall != nil {
 		maxCall.Children = append(maxCall.Children, filterCall)
 	}
-	maxVal, err := o.executeMax(ctx, index, maxCall, shards, opt)
+	maxVal, err := o.executeMax(ctx, tableKeyer, maxCall, shards, opt)
 	if err != nil {
 		return featurebase.ValCount{}, errors.Wrap(err, "executing Max call for Percentile")
 	}
@@ -988,7 +985,7 @@ func (o *orchestrator) executePercentile(ctx context.Context, index string, c *p
 			Op:    pql.Token(pql.LT),
 			Value: possibleNthVal,
 		}
-		leftCountUint64, err := o.executeCount(ctx, index, countCall, shards, opt)
+		leftCountUint64, err := o.executeCount(ctx, tableKeyer, countCall, shards, opt)
 		if err != nil {
 			return featurebase.ValCount{}, errors.Wrap(err, "executing Count call L for Percentile")
 		}
@@ -999,7 +996,7 @@ func (o *orchestrator) executePercentile(ctx context.Context, index string, c *p
 			Op:    pql.Token(pql.GT),
 			Value: possibleNthVal,
 		}
-		rightCountUint64, err := o.executeCount(ctx, index, countCall, shards, opt)
+		rightCountUint64, err := o.executeCount(ctx, tableKeyer, countCall, shards, opt)
 		if err != nil {
 			return featurebase.ValCount{}, errors.Wrap(err, "executing Count call R for Percentile")
 		}
@@ -1036,7 +1033,7 @@ func cookValCount(val int64, cnt uint64, field *featurebase.FieldInfo) featureba
 }
 
 // executeMinRow executes a MinRow() call.
-func (o *orchestrator) executeMinRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ interface{}, err error) {
+func (o *orchestrator) executeMinRow(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMinRow")
 	defer span.Finish()
 
@@ -1066,11 +1063,11 @@ func (o *orchestrator) executeMinRow(ctx context.Context, index string, c *pql.C
 		return vp
 	}
 
-	return o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	return o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 }
 
 // executeMaxRow executes a MaxRow() call.
-func (o *orchestrator) executeMaxRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ interface{}, err error) {
+func (o *orchestrator) executeMaxRow(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxRow")
 	defer span.Finish()
 
@@ -1100,11 +1097,11 @@ func (o *orchestrator) executeMaxRow(ctx context.Context, index string, c *pql.C
 		return vp
 	}
 
-	return o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	return o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 }
 
 // executePrecomputedCall pretends to execute a call that we have a precomputed value for.
-func (o *orchestrator) executePrecomputedCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ *featurebase.Row, err error) {
+func (o *orchestrator) executePrecomputedCall(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ *featurebase.Row, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executePrecomputedCall")
 	defer span.Finish()
 	result := featurebase.NewRow()
@@ -1116,13 +1113,12 @@ func (o *orchestrator) executePrecomputedCall(ctx context.Context, index string,
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
-func (o *orchestrator) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ *featurebase.Row, err error) {
-
+func (o *orchestrator) executeBitmapCall(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ *featurebase.Row, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
 	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()
 
-	indexTag := "index:" + index
+	indexTag := "index:" + string(tableKeyer.Key())
 	metricName := "query_" + strings.ToLower(c.Name) + "_total"
 	if c.Name == "Row" && c.HasConditionArg() {
 		metricName = "query_row_bsi_total"
@@ -1145,7 +1141,7 @@ func (o *orchestrator) executeBitmapCall(ctx context.Context, index string, c *p
 		return other
 	}
 
-	other, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	other, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return nil, errors.Wrap(err, "map reduce")
 	}
@@ -1162,7 +1158,7 @@ func (e Error) Error() string { return string(e) }
 const ViewNotFound = Error("view not found")
 const FragmentNotFound = Error("fragment not found")
 
-func (o *orchestrator) executeTopK(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
+func (o *orchestrator) executeTopK(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopK")
 	defer span.Finish()
 
@@ -1172,7 +1168,7 @@ func (o *orchestrator) executeTopK(ctx context.Context, index string, c *pql.Cal
 		return ([]*featurebase.Row)(featurebase.AddBSI(x, y))
 	}
 
-	other, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	other, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return nil, err
 	}
@@ -1225,7 +1221,7 @@ func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 // executeTopN executes a TopN() call.
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
-func (o *orchestrator) executeTopN(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.PairsField, error) {
+func (o *orchestrator) executeTopN(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.PairsField, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopN")
 	defer span.Finish()
 
@@ -1241,7 +1237,7 @@ func (o *orchestrator) executeTopN(ctx context.Context, index string, c *pql.Cal
 	}
 
 	// Execute original query.
-	pairs, err := o.executeTopNShards(ctx, index, c, shards, opt)
+	pairs, err := o.executeTopNShards(ctx, tableKeyer, c, shards, opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "finding top results")
 	}
@@ -1262,7 +1258,7 @@ func (o *orchestrator) executeTopN(ctx context.Context, index string, c *pql.Cal
 	sort.Sort(uint64Slice(ids))
 	other.Args["ids"] = ids
 
-	trimmedList, err := o.executeTopNShards(ctx, index, other, shards, opt)
+	trimmedList, err := o.executeTopNShards(ctx, tableKeyer, other, shards, opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "retrieving full counts")
 	}
@@ -1277,7 +1273,7 @@ func (o *orchestrator) executeTopN(ctx context.Context, index string, c *pql.Cal
 	}, nil
 }
 
-func (o *orchestrator) executeTopNShards(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.PairsField, error) {
+func (o *orchestrator) executeTopNShards(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.PairsField, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopNShards")
 	defer span.Finish()
 
@@ -1297,7 +1293,7 @@ func (o *orchestrator) executeTopNShards(ctx context.Context, index string, c *p
 		return other
 	}
 
-	other, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	other, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return nil, err
 	}
@@ -1408,9 +1404,10 @@ func findGroupCounts(v interface{}) []featurebase.GroupCount {
 	return nil
 }
 
-func (o *orchestrator) executeGroupBy(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.GroupCounts, error) {
+func (o *orchestrator) executeGroupBy(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.GroupCounts, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupBy")
 	defer span.Finish()
+
 	// validate call
 	if len(c.Children) == 0 {
 		return nil, errors.New(errors.ErrUncoded, "need at least one child call")
@@ -1484,7 +1481,7 @@ func (o *orchestrator) executeGroupBy(ctx context.Context, index string, c *pql.
 				continue
 			}
 
-			r, er := o.executeRows(ctx, index, child, shards, opt)
+			r, er := o.executeRows(ctx, tableKeyer, child, shards, opt)
 			if er != nil {
 				return nil, errors.Wrap(er, "getting rows for ")
 			}
@@ -1513,7 +1510,7 @@ func (o *orchestrator) executeGroupBy(ctx context.Context, index string, c *pql.
 		return mergeGroupCounts(other, findGroupCounts(v), limit)
 	}
 	// Get full result set.
-	other, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	other, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return nil, errors.Wrap(err, "mapReduce")
 	}
@@ -1573,7 +1570,7 @@ func (o *orchestrator) executeGroupBy(ctx context.Context, index string, c *pql.
 			}
 
 			opt.PreTranslated = true
-			aggregateCount, err := o.execute(ctx, index, &pql.Query{Calls: []*pql.Call{countDistinctIntersect}}, []uint64{}, opt)
+			aggregateCount, err := o.execute(ctx, tableKeyer, &pql.Query{Calls: []*pql.Call{countDistinctIntersect}}, []uint64{}, opt)
 			if err != nil {
 				return nil, err
 			}
@@ -1692,7 +1689,7 @@ func mergeGroupCounts(a, b []featurebase.GroupCount, limit int) []featurebase.Gr
 	return ret
 }
 
-func (o *orchestrator) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (featurebase.RowIDs, error) {
+func (o *orchestrator) executeRows(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (featurebase.RowIDs, error) {
 	// Fetch field name from argument.
 	// Check "field" first for backwards compatibility.
 	// TODO: remove at Pilosa 2.0
@@ -1746,7 +1743,7 @@ func (o *orchestrator) executeRows(ctx context.Context, index string, c *pql.Cal
 		return other.Merge(v.(featurebase.RowIDs), limit)
 	}
 	// Get full result set.
-	other, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	other, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return nil, err
 	}
@@ -1784,7 +1781,7 @@ func (o *orchestrator) executeRows(ctx context.Context, index string, c *pql.Cal
 	return results, nil
 }
 
-func (o *orchestrator) executeExtract(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (featurebase.ExtractedIDMatrix, error) {
+func (o *orchestrator) executeExtract(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (featurebase.ExtractedIDMatrix, error) {
 	// Extract the column filter call.
 	if len(c.Children) < 1 {
 		return featurebase.ExtractedIDMatrix{}, errors.New(errors.ErrUncoded, "missing column filter in Extract")
@@ -1824,7 +1821,7 @@ func (o *orchestrator) executeExtract(ctx context.Context, index string, c *pql.
 	}
 
 	// Get full result set.
-	other, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	other, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return featurebase.ExtractedIDMatrix{}, err
 	}
@@ -1835,7 +1832,7 @@ func (o *orchestrator) executeExtract(ctx context.Context, index string, c *pql.
 	return results, nil
 }
 
-func (o *orchestrator) executeConstRow(ctx context.Context, index string, c *pql.Call) (res *featurebase.Row, err error) {
+func (o *orchestrator) executeConstRow(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call) (res *featurebase.Row, err error) {
 	// Fetch user-provided columns list.
 	ids, ok := c.Args["columns"].([]uint64)
 	if !ok {
@@ -1845,7 +1842,7 @@ func (o *orchestrator) executeConstRow(ctx context.Context, index string, c *pql
 	return featurebase.NewRow(ids...), nil
 }
 
-func (o *orchestrator) executeUnionRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.Row, error) {
+func (o *orchestrator) executeUnionRows(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (*featurebase.Row, error) {
 	// Turn UnionRows(Rows(...)) into Union(Row(...), ...).
 	var rows []*pql.Call
 	for _, child := range c.Children {
@@ -1858,7 +1855,7 @@ func (o *orchestrator) executeUnionRows(ctx context.Context, index string, c *pq
 		}
 
 		// Execute the call.
-		rowsResult, err := o.executeCall(ctx, index, child, shards, opt)
+		rowsResult, err := o.executeCall(ctx, tableKeyer, child, shards, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -1925,11 +1922,11 @@ func (o *orchestrator) executeUnionRows(ctx context.Context, index string, c *pq
 	}
 
 	// Execute the generated Union() call.
-	return o.executeBitmapCall(ctx, index, c, shards, opt)
+	return o.executeBitmapCall(ctx, tableKeyer, c, shards, opt)
 }
 
 // executeCount executes a count() call.
-func (o *orchestrator) executeCount(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (uint64, error) {
+func (o *orchestrator) executeCount(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (uint64, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeCount")
 	defer span.Finish()
 
@@ -1943,7 +1940,7 @@ func (o *orchestrator) executeCount(ctx context.Context, index string, c *pql.Ca
 
 	// If the child is distinct/similar, execute it directly here and count the result.
 	if child.Type == pql.PrecallGlobal {
-		result, err := o.executeCall(ctx, index, child, shards, opt)
+		result, err := o.executeCall(ctx, tableKeyer, child, shards, opt)
 		if err != nil {
 			return 0, err
 		}
@@ -1966,7 +1963,7 @@ func (o *orchestrator) executeCount(ctx context.Context, index string, c *pql.Ca
 		return other + v.(uint64)
 	}
 
-	result, err := o.mapReduce(ctx, index, shards, c, opt, reduceFn)
+	result, err := o.mapReduce(ctx, tableKeyer, shards, c, opt, reduceFn)
 	if err != nil {
 		return 0, err
 	}
@@ -2004,9 +2001,11 @@ func (o *orchestrator) remoteExec(ctx context.Context, node dax.Address, index s
 // mapReduce has to ensure that it never returns before any work it spawned has
 // terminated. It's not enough to cancel the jobs; we have to wait for them to be
 // done, or we can unmap resources they're still using.
-func (o *orchestrator) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *featurebase.ExecOptions, reduceFn reduceFunc) (result interface{}, err error) {
+func (o *orchestrator) mapReduce(ctx context.Context, tableKeyer dax.TableKeyer, shards []uint64, c *pql.Call, opt *featurebase.ExecOptions, reduceFn reduceFunc) (result interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapReduce")
 	defer span.Finish()
+
+	index := string(tableKeyer.Key())
 
 	ch := make(chan mapResponse)
 
@@ -2114,7 +2113,7 @@ func makeEmbeddedDataForShards(allRows []*featurebase.Row, shards []uint64) []*f
 	return newRows
 }
 
-func (o *orchestrator) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, index string, nodes []controller.ComputeNode, c *pql.Call, opt *featurebase.ExecOptions, reduceFn reduceFunc) (reterr error) {
+func (o *orchestrator) mapper(ctx context.Context, eg *errgroup.Group, ch chan mapResponse, index string, nodes []dax.ComputeNode, c *pql.Call, opt *featurebase.ExecOptions, reduceFn reduceFunc) (reterr error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
 
@@ -2524,13 +2523,17 @@ func fieldValidateValue(f *featurebase.FieldInfo, val interface{}) error {
 	return nil
 }
 
-func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index string, columnKeys map[string]map[string]uint64, rowKeys map[string]map[string]map[string]uint64) (*pql.Call, error) {
+func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, tableKeyer dax.TableKeyer, columnKeys map[string]map[string]uint64, rowKeys map[string]map[string]map[string]uint64) (*pql.Call, error) {
+	index := string(tableKeyer.Key())
+
 	// Check for an overriding 'index' argument.
 	// This also applies to all child calls.
 	if callIndex := c.CallIndex(); callIndex != "" {
 		index = callIndex
+		tableKeyer = dax.StringTableKeyer(index)
 	}
-	idx, err := o.schema.IndexInfo(ctx, index)
+
+	idx, err := o.schemaIndexInfo(ctx, tableKeyer)
 	if err != nil {
 		return nil, errors.Wrapf(err, "translating query on index %q", index)
 	}
@@ -2542,7 +2545,7 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index str
 	switch c.Name {
 	case "Set", "Store":
 		if field, err := c.FieldArg(); err == nil {
-			f, err := o.schema.FieldInfo(ctx, index, field)
+			f, err := o.schemaFieldInfo(ctx, tableKeyer, field)
 			if err != nil {
 				return nil, errors.Wrapf(err, "validating value for field %q", field)
 			}
@@ -2568,7 +2571,7 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index str
 
 	case "Clear", "Row", "Range", "ClearRow":
 		if field, err := c.FieldArg(); err == nil {
-			f, err := o.schema.FieldInfo(ctx, index, field)
+			f, err := o.schemaFieldInfo(ctx, tableKeyer, field)
 			if err != nil {
 				return nil, errors.Wrapf(err, "validating value for field %q", field)
 			}
@@ -2655,7 +2658,7 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index str
 			return nil, errors.New(errors.ErrUncoded, "missing field")
 		}
 
-		f, err := o.schema.FieldInfo(ctx, index, field)
+		f, err := o.schemaFieldInfo(ctx, tableKeyer, field)
 		if err != nil {
 			return nil, errors.Wrapf(err, "validating value for field %q", field)
 		}
@@ -2725,7 +2728,7 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index str
 		// Translate the previous row key.
 		if prev, ok := c.Args["previous"]; ok {
 			// Validate the type.
-			f, err := o.schema.FieldInfo(ctx, index, field)
+			f, err := o.schemaFieldInfo(ctx, tableKeyer, field)
 			if err != nil {
 				return nil, errors.Wrapf(err, "validating value for field %q", field)
 			}
@@ -2756,7 +2759,7 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index str
 			if err != nil || fieldName == "" {
 				return nil, fmt.Errorf("cannot read field name for Rows call")
 			}
-			if f, err := o.schema.FieldInfo(ctx, index, fieldName); err != nil {
+			if f, err := o.schemaFieldInfo(ctx, tableKeyer, fieldName); err != nil {
 				return nil, errors.Wrapf(err, "getting field %q", fieldName)
 			} else if !f.Options.Keys {
 				return nil, fmt.Errorf("'%s' is not a set/mutex/time field with a string key", fieldName)
@@ -2785,7 +2788,7 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index str
 
 	// Translate child calls.
 	for i, child := range c.Children {
-		translated, err := o.translateCall(ctx, child, index, columnKeys, rowKeys)
+		translated, err := o.translateCall(ctx, child, tableKeyer, columnKeys, rowKeys)
 		if err != nil {
 			return nil, err
 		}
@@ -2799,7 +2802,7 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, index str
 			continue
 		}
 
-		translated, err := o.translateCall(ctx, argCall, index, columnKeys, rowKeys)
+		translated, err := o.translateCall(ctx, argCall, tableKeyer, columnKeys, rowKeys)
 		if err != nil {
 			return nil, err
 		}
@@ -2830,9 +2833,11 @@ func (o *orchestrator) callZero(c *pql.Call) *pql.Call {
 	}
 }
 
-func (o *orchestrator) translateResults(ctx context.Context, index string, idx *featurebase.IndexInfo, calls []*pql.Call, results []interface{}, memoryAvailable int64) (err error) {
+func (o *orchestrator) translateResults(ctx context.Context, qtbl *dax.QualifiedTable, calls []*pql.Call, results []interface{}, memoryAvailable int64) (err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateResults")
 	defer span.Finish()
+
+	idx := featurebase.TableToIndexInfo(&qtbl.Table)
 
 	idMap := make(map[uint64]string)
 	if idx.Options.Keys {
@@ -2843,13 +2848,13 @@ func (o *orchestrator) translateResults(ctx context.Context, index string, idx *
 				return err
 			}
 		}
-		if idMap, err = o.trans.TranslateIndexIDSet(ctx, index, idSet); err != nil {
+		if idMap, err = o.trans.TranslateIndexIDSet(ctx, string(qtbl.Key()), idSet); err != nil {
 			return err
 		}
 	}
 
 	for i := range results {
-		results[i], err = o.translateResult(ctx, idx, calls[i], results[i], idMap)
+		results[i], err = o.translateResult(ctx, qtbl, calls[i], results[i], idMap)
 		if err != nil {
 			return err
 		}
@@ -2891,13 +2896,13 @@ func (o *orchestrator) howToTranslate(ctx context.Context, idx *featurebase.Inde
 	// First get the index and field the row specifies (if any).
 	rowIdx = idx
 	if row.Index != "" && row.Index != idx.Name {
-		rowIdx, err = o.schema.IndexInfo(ctx, row.Index)
+		rowIdx, err = o.schemaIndexInfo(ctx, dax.StringTableKeyer(row.Index))
 		if err != nil {
 			return nil, nil, 0, errors.Wrapf(err, "got a row with unknown index: %s", row.Index)
 		}
 	}
 	if row.Field != "" {
-		rowField, err = o.schema.FieldInfo(ctx, row.Index, row.Field)
+		rowField, err = o.schemaFieldInfo(ctx, dax.StringTableKeyer(row.Index), row.Field)
 		if err != nil {
 			return nil, nil, 0, errors.Wrapf(err, "got a row with unknown index/field %s/%s", idx.Name, row.Field)
 		}
@@ -2907,7 +2912,7 @@ func (o *orchestrator) howToTranslate(ctx context.Context, idx *featurebase.Inde
 	if rowField != nil {
 		// Handle the case where field has a foreign index.
 		if rowField.Options.ForeignIndex != "" {
-			fidx, err := o.schema.IndexInfo(ctx, rowField.Options.ForeignIndex)
+			fidx, err := o.schemaIndexInfo(ctx, dax.StringTableKeyer(rowField.Options.ForeignIndex))
 			if err != nil {
 				return nil, nil, 0, errors.Errorf("foreign index %s not found for field %s in index %s", rowField.Options.ForeignIndex, rowField.Name, rowIdx.Name)
 			}
@@ -2960,7 +2965,7 @@ func (o *orchestrator) collectResultIDs(ctx context.Context, idx *featurebase.In
 }
 
 // preTranslateMatrixSet translates the IDs of a set field in an extracted matrix.
-func (o *orchestrator) preTranslateMatrixSet(ctx context.Context, mat featurebase.ExtractedIDMatrix, fieldIdx uint, index, field string) (map[uint64]string, error) {
+func (o *orchestrator) preTranslateMatrixSet(ctx context.Context, mat featurebase.ExtractedIDMatrix, fieldIdx uint, tableKeyer dax.TableKeyer, field string) (map[uint64]string, error) {
 	ids := make(map[uint64]struct{}, len(mat.Columns))
 	for _, col := range mat.Columns {
 		for _, v := range col.Rows[fieldIdx] {
@@ -2968,10 +2973,14 @@ func (o *orchestrator) preTranslateMatrixSet(ctx context.Context, mat featurebas
 		}
 	}
 
+	index := string(tableKeyer.Key())
+
 	return o.trans.TranslateFieldIDs(ctx, index, field, ids)
 }
 
-func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.IndexInfo, call *pql.Call, result interface{}, idSet map[uint64]string) (_ interface{}, err error) {
+func (o *orchestrator) translateResult(ctx context.Context, qtbl *dax.QualifiedTable, call *pql.Call, result interface{}, idSet map[uint64]string) (_ interface{}, err error) {
+	idx := featurebase.TableToIndexInfo(&qtbl.Table)
+
 	switch result := result.(type) {
 	case *featurebase.Row:
 		rowIdx, rowField, strategy, err := o.howToTranslate(ctx, idx, result)
@@ -2994,8 +3003,7 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 			}
 			result.Keys = keys
 		case byRowFieldForeignIndex:
-			idx, err = o.schema.IndexInfo(ctx, rowField.Options.ForeignIndex)
-			if err != nil {
+			if _, err := o.schemaIndexInfo(ctx, dax.StringTableKeyer(rowField.Options.ForeignIndex)); err != nil {
 				return nil, errors.Wrapf(err, "foreign index %s not found for field %s in index %s", rowField.Options.ForeignIndex, rowField.Name, rowIdx.Name)
 			}
 			for _, segment := range result.Segments {
@@ -3028,7 +3036,7 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 				return nil, nil
 			}
 
-			field, err := o.schema.FieldInfo(ctx, idx.Name, fieldName)
+			field, err := o.schemaFieldInfo(ctx, qtbl, fieldName)
 			if err != nil {
 				return nil, nil
 			}
@@ -3059,7 +3067,7 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 
 	case featurebase.PairField:
 		if fieldName := callArgString(call, "field"); fieldName != "" {
-			field, err := o.schema.FieldInfo(ctx, idx.Name, fieldName)
+			field, err := o.schemaFieldInfo(ctx, qtbl, fieldName)
 			if err != nil {
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
@@ -3083,7 +3091,7 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 
 	case *featurebase.PairsField:
 		if fieldName := callArgString(call, "_field"); fieldName != "" {
-			field, err := o.schema.FieldInfo(ctx, idx.Name, fieldName)
+			field, err := o.schemaFieldInfo(ctx, qtbl, fieldName)
 			if err != nil {
 				return nil, errors.Wrapf(err, "field '%q'", fieldName)
 			}
@@ -3113,7 +3121,7 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 		groups := result.Groups()
 		for _, gl := range groups {
 			for _, g := range gl.Group {
-				field, err := o.schema.FieldInfo(ctx, idx.Name, g.Field)
+				field, err := o.schemaFieldInfo(ctx, qtbl, g.Field)
 				if err != nil {
 					return nil, errors.Wrapf(err, "getting field '%q", g.Field)
 				}
@@ -3194,7 +3202,7 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 			Field: fieldName,
 		}
 
-		if field, err := o.schema.FieldInfo(ctx, idx.Name, fieldName); err != nil {
+		if field, err := o.schemaFieldInfo(ctx, qtbl, fieldName); err != nil {
 			return nil, errors.Wrapf(err, "'%q'", fieldName)
 		} else if field.Options.Keys {
 			keys, err := o.trans.TranslateFieldListIDs(ctx, idx.Name, field.Name, result)
@@ -3214,7 +3222,7 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 		fields := make([]featurebase.ExtractedTableField, len(result.Fields))
 		mappers := make([]fieldMapper, len(result.Fields))
 		for i, v := range result.Fields {
-			field, err := o.schema.FieldInfo(ctx, idx.Name, v)
+			field, err := o.schemaFieldInfo(ctx, qtbl, v)
 			if err != nil {
 				return nil, errors.Wrapf(err, "'%q'", v)
 			}
@@ -3244,9 +3252,9 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 			case FieldTypeSet, FieldTypeTime:
 				if field.Options.Keys {
 					datatype = "[]string"
-					translations, err := o.preTranslateMatrixSet(ctx, result, uint(i), idx.Name, field.Name)
+					translations, err := o.preTranslateMatrixSet(ctx, result, uint(i), qtbl, field.Name)
 					if err != nil {
-						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
+						return nil, errors.Wrapf(err, "orch: translating IDs of field %q", v)
 					}
 					mapper = func(ids []uint64) (interface{}, error) {
 						keys := make([]string, len(ids))
@@ -3267,9 +3275,9 @@ func (o *orchestrator) translateResult(ctx context.Context, idx *featurebase.Ind
 			case FieldTypeMutex:
 				if field.Options.Keys {
 					datatype = "string"
-					translations, err := o.preTranslateMatrixSet(ctx, result, uint(i), idx.Name, field.Name)
+					translations, err := o.preTranslateMatrixSet(ctx, result, uint(i), qtbl, field.Name)
 					if err != nil {
-						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
+						return nil, errors.Wrapf(err, "orch: translating IDs of field %q", v)
 					}
 					mapper = func(ids []uint64) (interface{}, error) {
 						switch len(ids) {
@@ -3460,27 +3468,83 @@ func callArgString(call *pql.Call, key string) string {
 
 type qualifiedOrchestrator struct {
 	*orchestrator
-	qual    dax.TableQualifier
-	schemar schemar.Schemar
+	qual dax.TableQualifier
 }
 
-func newQualifiedOrchestrator(orch *orchestrator, qual dax.TableQualifier, schemar schemar.Schemar) *qualifiedOrchestrator {
+func newQualifiedOrchestrator(orch *orchestrator, qual dax.TableQualifier) *qualifiedOrchestrator {
 	return &qualifiedOrchestrator{
 		orchestrator: orch,
 		qual:         qual,
-		schemar:      schemar,
 	}
 }
 
 func (o *qualifiedOrchestrator) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q *pql.Query, shards []uint64, opt *featurebase.ExecOptions) (featurebase.QueryResponse, error) {
 	resp := featurebase.QueryResponse{}
 
-	tbl, ok := tableKeyer.(*dax.Table)
-	if !ok {
-		return resp, errors.New(errors.ErrUncoded, "qualifiedOrchestrator.Execute expects a dax.Table")
+	var qtbl *dax.QualifiedTable
+
+	switch keyer := tableKeyer.(type) {
+	case *dax.Table:
+		qtbl = dax.NewQualifiedTable(o.qual, keyer)
+	case *dax.QualifiedTable:
+		qtbl = keyer
+	default:
+		return resp, errors.Errorf("qualifiedOrchestrator.Execute expects a *dax.Table or *dax.QualifiedTable, but got: %T", tableKeyer)
 	}
 
-	qtbl := dax.NewQualifiedTable(o.qual, tbl)
-
 	return o.orchestrator.Execute(ctx, qtbl, q, shards, opt)
+}
+
+// schemaFieldInfo is a function introduced when we replaced
+// `schema.FieldInfo()` calls, where schema was a `featurebase.SchemaInfoAPI` to
+// `schema.Table().Field()` calls, where schema is a `pilosa.SchemaAPI`. In the
+// future, when we're no longer dealing with IndexInfo and FieldInfo, and
+// instead use dax.Table and dax.Field, this helper function can be factored
+// out.
+func (o *orchestrator) schemaFieldInfo(ctx context.Context, tableKeyer dax.TableKeyer, fieldName string) (*featurebase.FieldInfo, error) {
+	var tbl *dax.Table
+	var err error
+
+	switch v := tableKeyer.(type) {
+	case *dax.QualifiedTable:
+		tbl = &v.Table
+	case *dax.Table:
+		tbl = v
+	case dax.StringTableKeyer:
+		tbl, err = o.schema.TableByName(ctx, dax.TableName(v))
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting table by name: %s", v)
+		}
+	default:
+		return nil, errors.Errorf("unsupport table keyer type in schemaFieldInfo: %T", tableKeyer)
+	}
+
+	fld, ok := tbl.Field(dax.FieldName(fieldName))
+	if !ok {
+		return nil, errors.Errorf("field not found: %s", fieldName)
+	}
+
+	return featurebase.FieldToFieldInfo(fld), nil
+}
+
+// schemaIndexInfo - see comment on schemaFieldInfo.
+func (o *orchestrator) schemaIndexInfo(ctx context.Context, tableKeyer dax.TableKeyer) (*featurebase.IndexInfo, error) {
+	var tbl *dax.Table
+	var err error
+
+	switch v := tableKeyer.(type) {
+	case *dax.QualifiedTable:
+		tbl = &v.Table
+	case *dax.Table:
+		tbl = v
+	case dax.StringTableKeyer:
+		tbl, err = o.schema.TableByName(ctx, dax.TableName(v))
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting table by name: %s", v)
+		}
+	default:
+		return nil, errors.Errorf("unsupport table keyer type in schemaIndexInfo: %T", tableKeyer)
+	}
+
+	return featurebase.TableToIndexInfo(tbl), nil
 }
