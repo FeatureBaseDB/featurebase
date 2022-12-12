@@ -13,7 +13,7 @@ import (
 var _ pilosa.SchemaAPI = (*qualifiedSchemaAPI)(nil)
 
 // qualifiedSchemaAPI is a wrapper around schemaAPI. It is initialized with a
-// TableQualifer, and it uses this qualifer to convert between, for example,
+// TableQualifier, and it uses this qualifer to convert between, for example,
 // FeatureBase index name (a string) and TableKey. It requires a Schemar to do
 // that lookup/conversion.
 type qualifiedSchemaAPI struct {
