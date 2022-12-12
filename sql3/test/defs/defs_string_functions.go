@@ -188,5 +188,32 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			ExpErr: "string expression expected",
 		},
+		{
+			name: "RemovingWhitespacefromStringusingTrim",
+			SQLs: sqls(
+				"select trim('  this  ')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("this")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "IncorrectArgumentsforTrim",
+			SQLs: sqls(
+				"select trim('  a ','b')",
+			),
+			ExpErr: "'trim': count of formal parameters (1) does not match count of actual parameters (2)",
+		},
+		{
+			name: "IncorrectInputforTrim",
+			SQLs: sqls(
+				"select trim(1)",
+			),
+			ExpErr: "string expression expected",
+		},
 	},
 }
