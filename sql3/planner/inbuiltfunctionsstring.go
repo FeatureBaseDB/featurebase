@@ -1,12 +1,12 @@
 package planner
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
+	"github.com/molecula/featurebase/v3/sql3/planner/types"
 )
 
 func (p *ExecutionPlanner) analyseFunctionReverse(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
@@ -45,16 +45,33 @@ func (p *ExecutionPlanner) analyseFunctionSubstring(call *parser.Call, scope par
 	return call, nil
 }
 
-// reverses the string
-func (n *callPlanExpression) EvaluateReverse(currentRow []interface{}) (interface{}, error) {
-	argOneEval, err := n.args[0].Evaluate(currentRow)
-	if err != nil {
-		return nil, err
+func (p *ExecutionPlanner) analyseFunctionReplaceAll(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) != 3 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 3, len(call.Args))
+	}
+	// input string
+	if !typeIsString(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+	// string to find and replace
+	if !typeIsString(call.Args[1].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[1].Pos().Line, call.Args[1].Pos().Column)
+	}
+	// string to replace with
+	if !typeIsString(call.Args[2].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[2].Pos().Line, call.Args[2].Pos().Column)
 	}
 
-	stringArgOne, ok := argOneEval.(string)
-	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argOneEval)
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
+// reverses the string
+func (n *callPlanExpression) EvaluateReverse(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
 	}
 
 	// reverse the string
@@ -82,31 +99,20 @@ func (p *ExecutionPlanner) analyzeFunctionUpper(call *parser.Call, scope parser.
 
 // Convert string to Upper case
 func (n *callPlanExpression) EvaluateUpper(currentRow []interface{}) (interface{}, error) {
-	argOneEval, err := n.args[0].Evaluate(currentRow)
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
 	if err != nil {
 		return nil, err
 	}
 
-	stringArgOne, ok := argOneEval.(string)
-	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argOneEval)
-	}
 	// convert to Upper
-	res := strings.ToUpper(stringArgOne)
-	return fmt.Sprintf("%s", res), nil
+	return strings.ToUpper(stringArgOne), nil
 }
 
 // Takes string, startIndex and length and returns the substring.
 func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interface{}, error) {
-
-	argOneEval, err := n.args[0].Evaluate(currentRow)
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
 	if err != nil {
 		return nil, err
-	}
-
-	stringArgOne, ok := argOneEval.(string)
-	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argOneEval)
 	}
 
 	// this takes a sliding window approach to evaluate substring.
@@ -139,4 +145,36 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 	}
 
 	return stringArgOne[startIndex:endIndex], nil
+}
+
+// takes string, findstring, replacestring.
+// replaces all occurances of findstring with replacestring
+func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+	stringArgTwo, err := evaluateStringArg(n.args[1], currentRow)
+	if err != nil {
+		return nil, err
+	}
+	stringArgThree, err := evaluateStringArg(n.args[2], currentRow)
+	if err != nil {
+		return nil, err
+	}
+	return strings.ReplaceAll(stringArgOne, stringArgTwo, stringArgThree), nil
+}
+
+func evaluateStringArg(n types.PlanExpression, currentRow []interface{}) (string, error) {
+	argOneEval, err := n.Evaluate(currentRow)
+	if err != nil {
+		return "", err
+	}
+
+	stringArgOne, ok := argOneEval.(string)
+	if !ok {
+		return "", sql3.NewErrInternalf("unexpected type converion %T", argOneEval)
+	}
+
+	return stringArgOne, nil
 }
