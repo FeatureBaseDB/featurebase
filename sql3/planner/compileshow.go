@@ -41,7 +41,7 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
-			columnName:  "last_updated_user",
+			columnName:  "updated_by",
 			columnIndex: 3,
 			dataType:    parser.NewDataTypeString(),
 		},
@@ -53,26 +53,14 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
-			columnName:  "track_existence",
+			columnName:  "keys",
 			columnIndex: 5,
 			dataType:    parser.NewDataTypeBool(),
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
-			columnName:  "keys",
-			columnIndex: 6,
-			dataType:    parser.NewDataTypeBool(),
-		},
-		&qualifiedRefPlanExpression{
-			tableName:   "fb_tables",
-			columnName:  "shard_width",
-			columnIndex: 7,
-			dataType:    parser.NewDataTypeInt(),
-		},
-		&qualifiedRefPlanExpression{
-			tableName:   "fb_tables",
 			columnName:  "description",
-			columnIndex: 8,
+			columnIndex: 6,
 			dataType:    parser.NewDataTypeString(),
 		}}
 

@@ -172,11 +172,9 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("owner"),
-			wireQueryFieldString("last_updated_user"),
+			wireQueryFieldString("updated_by"),
 			wireQueryFieldTimestamp("created_at"),
-			wireQueryFieldBool("track_existence"),
 			wireQueryFieldBool("keys"),
-			wireQueryFieldInt("shard_width"),
 			wireQueryFieldString("description"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
