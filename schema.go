@@ -138,7 +138,10 @@ func IndexInfoToTable(ii *IndexInfo) *dax.Table {
 		PartitionN: dax.DefaultPartitionN,
 
 		Description: ii.Options.Description,
+		Owner:       ii.Owner,
 		CreatedAt:   ii.CreatedAt,
+		UpdatedAt:   ii.UpdatedAt,
+		UpdatedBy:   ii.LastUpdateUser,
 	}
 
 	// Sort ii.Fields by CreatedAt before adding them to sortedFields.
@@ -271,8 +274,11 @@ func TablesToIndexInfos(tbls []*dax.Table) []*IndexInfo {
 // TableToIndexInfo converts a dax.Table to a featurease.IndexInfo.
 func TableToIndexInfo(tbl *dax.Table) *IndexInfo {
 	ii := &IndexInfo{
-		Name:      string(tbl.Name), // TODO(tlt): this should be TableKey i think
-		CreatedAt: tbl.CreatedAt,
+		Name:           string(tbl.Name),
+		Owner:          tbl.Owner,
+		CreatedAt:      tbl.CreatedAt,
+		UpdatedAt:      tbl.UpdatedAt,
+		LastUpdateUser: tbl.UpdatedBy,
 		Options: IndexOptions{
 			Keys:           tbl.StringKeys(),
 			TrackExistence: true,

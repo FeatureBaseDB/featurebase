@@ -68,7 +68,7 @@ func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
-			ColumnName:   "last_updated_user",
+			ColumnName:   "updated_by",
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
@@ -78,18 +78,8 @@ func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
-			ColumnName:   "track_existence",
-			Type:         parser.NewDataTypeBool(),
-		},
-		&types.PlannerColumn{
-			RelationName: "fb_tables",
 			ColumnName:   "keys",
 			Type:         parser.NewDataTypeBool(),
-		},
-		&types.PlannerColumn{
-			RelationName: "fb_tables",
-			ColumnName:   "shard_width",
-			Type:         parser.NewDataTypeInt(),
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
@@ -129,9 +119,7 @@ func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
 			i.indexInfo[i.rowIndex].Owner,
 			i.indexInfo[i.rowIndex].LastUpdateUser,
 			tm.Format(time.RFC3339),
-			i.indexInfo[i.rowIndex].Options.TrackExistence,
 			i.indexInfo[i.rowIndex].Options.Keys,
-			i.indexInfo[i.rowIndex].ShardWidth,
 			i.indexInfo[i.rowIndex].Options.Description,
 		}
 		i.rowIndex += 1
