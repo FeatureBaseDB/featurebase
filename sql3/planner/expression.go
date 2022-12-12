@@ -1484,6 +1484,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateSubstring(currentRow)
 	case "REPLACEALL":
 		return n.EvaluateReplaceAll(currentRow)
+	case "TRIM":
+		return n.EvaluateTrim(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}

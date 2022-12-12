@@ -170,11 +170,37 @@ func evaluateStringArg(n types.PlanExpression, currentRow []interface{}) (string
 	if err != nil {
 		return "", err
 	}
-
 	stringArgOne, ok := argOneEval.(string)
 	if !ok {
 		return "", sql3.NewErrInternalf("unexpected type converion %T", argOneEval)
 	}
 
 	return stringArgOne, nil
+}
+
+//Analyze function for Trim
+func (p *ExecutionPlanner) analyseFunctionTrim(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	//one argument for Trim Function
+	if len(call.Args) != 1 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+
+	if !typeIsString(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
+// Execute Trim function to remove whitespaces from string
+func (n *callPlanExpression) EvaluateTrim(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// Trim the whitespace from string
+	return strings.TrimSpace(stringArgOne), nil
 }
