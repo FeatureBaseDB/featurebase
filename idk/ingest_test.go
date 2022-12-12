@@ -58,7 +58,7 @@ func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedT
 
 	mdsClient := mdsclient.New(dax.Address(address), logger.StderrLogger)
 	main.NewImporterFn = func() pilosa.Importer {
-		return mds.NewImporter(mdsClient, qtbl.TableQualifier, &qtbl.Table)
+		return mds.NewImporter(mdsClient, mdsClient, qtbl.TableQualifier, &qtbl.Table)
 	}
 }
 

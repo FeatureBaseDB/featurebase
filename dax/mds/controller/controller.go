@@ -1647,7 +1647,7 @@ func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTa
 
 /////////////
 
-func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shards dax.ShardNums, isWrite bool) ([]ComputeNode, error) {
+func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shards dax.ShardNums, isWrite bool) ([]dax.ComputeNode, error) {
 	inRole := &dax.ComputeRole{
 		TableKey: qtid.Key(),
 		Shards:   dax.NewVersionedShards(shards...),
@@ -1658,7 +1658,7 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 		return nil, errors.Wrap(err, "getting compute nodes")
 	}
 
-	computeNodes := make([]ComputeNode, 0)
+	computeNodes := make([]dax.ComputeNode, 0)
 
 	for _, node := range nodes {
 		role, ok := node.Role.(*dax.ComputeRole)
@@ -1668,7 +1668,7 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 			return nil, NewErrInternal("not a compute node")
 		}
 
-		computeNodes = append(computeNodes, ComputeNode{
+		computeNodes = append(computeNodes, dax.ComputeNode{
 			Address: node.Address,
 			Table:   role.TableKey,
 			Shards:  role.Shards.Nums(),
@@ -1678,7 +1678,7 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 	return computeNodes, nil
 }
 
-func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitions dax.PartitionNums, isWrite bool) ([]TranslateNode, error) {
+func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitions dax.PartitionNums, isWrite bool) ([]dax.TranslateNode, error) {
 	inRole := &dax.TranslateRole{
 		TableKey:   qtid.Key(),
 		Partitions: dax.NewVersionedPartitions(partitions...),
@@ -1689,7 +1689,7 @@ func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTable
 		return nil, errors.Wrap(err, "getting translate nodes")
 	}
 
-	translateNodes := make([]TranslateNode, 0)
+	translateNodes := make([]dax.TranslateNode, 0)
 
 	for _, node := range nodes {
 		role, ok := node.Role.(*dax.TranslateRole)
@@ -1699,7 +1699,7 @@ func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTable
 			return nil, NewErrInternal("not a translate node")
 		}
 
-		translateNodes = append(translateNodes, TranslateNode{
+		translateNodes = append(translateNodes, dax.TranslateNode{
 			Address:    node.Address,
 			Table:      role.TableKey,
 			Partitions: role.Partitions.Nums(),

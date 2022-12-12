@@ -3385,11 +3385,6 @@ type SchemaAPI interface {
 	DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error
 }
 
-type SchemaInfoAPI interface {
-	IndexInfo(ctx context.Context, indexName string) (*IndexInfo, error)
-	FieldInfo(ctx context.Context, indexName, fieldName string) (*FieldInfo, error)
-}
-
 type ClusterNode struct {
 	ID        string
 	State     string
