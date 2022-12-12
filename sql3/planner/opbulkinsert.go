@@ -279,10 +279,14 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 			result[idx] = intVal
 
 		case *parser.DataTypeIDSet:
-			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			intVal, err := strconv.ParseInt(evalValue, 10, 64)
+			if err != nil {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+			result[idx] = []int64{intVal}
 
 		case *parser.DataTypeStringSet:
-			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			result[idx] = []string{evalValue}
 
 		case *parser.DataTypeTimestamp:
 			intVal, err := strconv.ParseInt(evalValue, 10, 64)
