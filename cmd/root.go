@@ -106,6 +106,7 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newKeygenCommand(logdest))
 	rc.AddCommand(newCLICommand(logdest))
 	rc.AddCommand(newDAXCommand(stderr))
+	rc.AddCommand(newDataframeCsvLoaderCommand(logdest))
 
 	rc.SetOutput(stderr)
 	return rc
