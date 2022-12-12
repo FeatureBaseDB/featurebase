@@ -309,7 +309,7 @@ func (m *Command) setupServices() error {
 
 		var mdsAddr dax.Address
 		if m.Config.Queryer.Config.MDSAddress != "" {
-			mdsAddr = dax.Address(m.Config.Queryer.Config.MDSAddress + "/" + dax.ServicePrefixMDS)
+			mdsAddr = dax.Address(m.Config.Queryer.Config.MDSAddress)
 		} else if m.svcmgr.MDS != nil {
 			mdsAddr = m.svcmgr.MDS.Address()
 		} else {

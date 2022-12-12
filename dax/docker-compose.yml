@@ -8,9 +8,8 @@ services:
     environment:
       FEATUREBASE_BIND: 0.0.0.0:8080
       FEATUREBASE_VERBOSE: "true"
-      FEATUREBASE_STORAGE_METHOD: boltdb
-      FEATUREBASE_STORAGE_DSN: file:/dax-data/mds.boldtb
       FEATUREBASE_MDS_RUN: "true"
+      FEATUREBASE_CONFIG_DATA_DIR: file:/dax-data/mds
     ports:
       - "8081:8080"
 
@@ -22,7 +21,7 @@ services:
       FEATUREBASE_BIND: 0.0.0.0:8080
       FEATUREBASE_VERBOSE: "true"
       FEATUREBASE_QUERYER_RUN: "true"
-      FEATUREBASE_QUERYER_CONFIG_MDS_ADDRESS: "mds:8080"
+      FEATUREBASE_QUERYER_CONFIG_MDS_ADDRESS: "mds:8080/mds"
     depends_on:
       - mds
     ports:
@@ -34,7 +33,7 @@ services:
       dockerfile: ../Dockerfile-dax-quick
     environment:
       FEATUREBASE_COMPUTER_RUN: "true"
-      FEATUREBASE_COMPUTER_CONFIG_MDS_ADDRESS: "mds:8080"
+      FEATUREBASE_COMPUTER_CONFIG_MDS_ADDRESS: "mds:8080/mds"
       FEATUREBASE_COMPUTER_CONFIG_DATA_DIR: /dax-data/computer
       FEATUREBASE_BIND: 0.0.0.0:8080
       FEATUREBASE_VERBOSE: "true"
@@ -63,4 +62,4 @@ services:
       GEN_USE_SHARD_TRANSACTIONAL_ENDPOINT: "true"
       GEN_SOURCE: "custom"
       GEN_TARGET: "mds"
-      GEN_MDS_ADDRESS: "mds:8080"
+      GEN_MDS_ADDRESS: "mds:8080/mds"
