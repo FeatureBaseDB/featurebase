@@ -326,14 +326,14 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 	switch p.peek() {
 	case TABLE:
 		return p.parseCreateTableStatement(pos)
-		/*	case VIEW:
-				return p.parseCreateViewStatement(pos)
-			case INDEX, UNIQUE:
-				return p.parseCreateIndexStatement(pos)*/
+	case VIEW:
+		return p.parseCreateViewStatement(pos)
+		/*case INDEX, UNIQUE:
+		return p.parseCreateIndexStatement(pos)*/
 	case FUNCTION:
 		return p.parseCreateFunctionStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE")
+		return nil, p.errorExpected(pos, tok, "TABLE, VIEW or FUNCTION")
 	}
 }
 
@@ -344,14 +344,14 @@ func (p *Parser) parseDropStatement() (Statement, error) {
 	switch p.peek() {
 	case TABLE:
 		return p.parseDropTableStatement(pos)
-		/*	case VIEW:
-				return p.parseDropViewStatement(pos)
-			case INDEX:
-				return p.parseDropIndexStatement(pos)*/
+	case VIEW:
+		return p.parseDropViewStatement(pos)
+		/* case INDEX:
+		return p.parseDropIndexStatement(pos)*/
 	case FUNCTION:
 		return p.parseDropFunctionStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE")
+		return nil, p.errorExpected(pos, tok, "TABLE, VIEW or FUNCTION")
 	}
 }
 
@@ -1045,7 +1045,7 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 	return &stmt, nil
 }
 
-/*func (p *Parser) parseCreateViewStatement(createPos Pos) (_ *CreateViewStatement, err error) {
+func (p *Parser) parseCreateViewStatement(createPos Pos) (_ *CreateViewStatement, err error) {
 	assert(p.peek() == VIEW)
 
 	var stmt CreateViewStatement
@@ -1100,9 +1100,9 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 		return &stmt, err
 	}
 	return &stmt, nil
-}*/
+}
 
-/*func (p *Parser) parseDropViewStatement(dropPos Pos) (_ *DropViewStatement, err error) {
+func (p *Parser) parseDropViewStatement(dropPos Pos) (_ *DropViewStatement, err error) {
 	assert(p.peek() == VIEW)
 
 	var stmt DropViewStatement
@@ -1123,7 +1123,7 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 	}
 
 	return &stmt, nil
-}*/
+}
 
 /*func (p *Parser) parseCreateIndexStatement(createPos Pos) (_ *CreateIndexStatement, err error) {
 	assert(p.peek() == INDEX || p.peek() == UNIQUE)

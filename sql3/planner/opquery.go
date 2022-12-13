@@ -18,9 +18,6 @@ type PlanOpQuery struct {
 
 	ChildOp types.PlanOperator
 
-	// the list of aggregate terms
-	aggregates []types.PlanExpression
-
 	// all the identifiers that are referenced
 	referenceList []*qualifiedRefPlanExpression
 

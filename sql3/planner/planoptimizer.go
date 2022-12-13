@@ -23,6 +23,9 @@ type OptimizerFunc func(context.Context, *ExecutionPlanner, types.PlanOperator, 
 
 // a list of optimzer rules; order can be important important
 var optimizerFunctions = []OptimizerFunc{
+	// fix expression references for having
+	fixHavingReferences,
+
 	// push down filter predicates as far as possible,
 	pushdownFilters,
 
@@ -716,7 +719,7 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 		case *PlanOpProjection:
 			switch childOp := thisNode.ChildOp.(type) {
 
-			case *PlanOpGroupBy, *PlanOpPQLGroupBy, *PlanOpPQLMultiAggregate, *PlanOpPQLMultiGroupBy:
+			case *PlanOpGroupBy, *PlanOpHaving, *PlanOpPQLGroupBy, *PlanOpPQLMultiAggregate, *PlanOpPQLMultiGroupBy:
 				childSchema := childOp.Schema()
 
 				for idx, pj := range thisNode.Projections {
@@ -724,7 +727,7 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 						switch thisAggregate := e.(type) {
 						case types.Aggregable:
 							// if we have a Aggregable, the AggExpression() will be a qualified ref
-							// given we are in the context of a PlanOpProjection with a PlanOpGroupBy
+							// given we are in the context of a PlanOpProjection with a PlanOpGroupBy/Having
 							// we can use the ordinal position of the projection as the column index
 							for idx, sc := range childSchema {
 								if strings.EqualFold(thisAggregate.String(), sc.ColumnName) {
@@ -850,6 +853,29 @@ func fixFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator
 			}
 			expressions := thisNode.Expressions()
 			fixed, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, expressions...)
+			if err != nil {
+				return nil, true, err
+			}
+			newNode, err := thisNode.WithUpdatedExpressions(fixed...)
+			if err != nil {
+				return nil, true, err
+			}
+			return newNode, same, nil
+
+		default:
+			return node, true, nil
+		}
+	})
+}
+
+func fixHavingReferences(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
+	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
+		switch thisNode := node.(type) {
+		case *PlanOpHaving:
+			// fix references for the expressions referenced in the having predicate expression
+			schema := thisNode.Schema()
+			expressions := thisNode.Expressions()
+			fixed, same, err := fixFieldRefIndexesOnExpressionsForHaving(ctx, scope, a, schema, expressions...)
 			if err != nil {
 				return nil, true, err
 			}
@@ -1002,5 +1028,71 @@ func fixFieldRefIndexes(ctx context.Context, scope *OptimizerScope, a *Execution
 		return e, true, nil
 	}, func(parentExpr, childExpr types.PlanExpression) bool {
 		return true
+	})
+}
+
+// for a list of expressions and an operator schema, fix the references for any qualifiedRef expressions
+func fixFieldRefIndexesOnExpressionsForHaving(ctx context.Context, scope *OptimizerScope, a *ExecutionPlanner, schema types.Schema, expressions ...types.PlanExpression) ([]types.PlanExpression, bool, error) {
+	var result []types.PlanExpression
+	var res types.PlanExpression
+	var same bool
+	var err error
+	for i := range expressions {
+		e := expressions[i]
+		res, same, err = fixFieldRefIndexesForHaving(ctx, scope, a, schema, e)
+		if err != nil {
+			return nil, true, err
+		}
+		if !same {
+			if result == nil {
+				result = make([]types.PlanExpression, len(expressions))
+				copy(result, expressions)
+			}
+			result[i] = res
+		}
+	}
+	if len(result) > 0 {
+		return result, false, nil
+	}
+	return expressions, true, nil
+}
+
+func fixFieldRefIndexesForHaving(ctx context.Context, scope *OptimizerScope, a *ExecutionPlanner, schema types.Schema, exp types.PlanExpression) (types.PlanExpression, bool, error) {
+	return TransformExpr(exp, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
+		switch typedExpr := e.(type) {
+		case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
+			*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
+			*percentilePlanExpression:
+			for i, col := range schema {
+				if strings.EqualFold(typedExpr.String(), col.ColumnName) {
+					e := newQualifiedRefPlanExpression("", "", i, typedExpr.Type())
+					return e, false, nil
+				}
+			}
+			return nil, true, sql3.NewErrColumnNotFound(0, 0, typedExpr.String())
+
+		case *qualifiedRefPlanExpression:
+			for i, col := range schema {
+				newIndex := i
+				if matchesSchema(typedExpr, col) {
+					if newIndex != typedExpr.columnIndex {
+						// update the column index
+						return newQualifiedRefPlanExpression(typedExpr.tableName, typedExpr.columnName, newIndex, typedExpr.dataType), false, nil
+					}
+					return e, true, nil
+				}
+			}
+			return nil, true, sql3.NewErrColumnNotFound(0, 0, typedExpr.Name())
+		}
+		return e, true, nil
+	}, func(parentExpr, childExpr types.PlanExpression) bool {
+		switch parentExpr.(type) {
+		case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
+			*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
+			*percentilePlanExpression:
+			return false
+		default:
+			return true
+		}
 	})
 }

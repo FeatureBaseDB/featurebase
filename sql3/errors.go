@@ -58,7 +58,8 @@ const (
 
 	ErrTypeAssignmentIncompatible errors.Code = "ErrTypeAssignmentIncompatible"
 
-	ErrInvalidUngroupedColumnReference errors.Code = "ErrInvalidUngroupedColumnReference"
+	ErrInvalidUngroupedColumnReference         errors.Code = "ErrInvalidUngroupedColumnReference"
+	ErrInvalidUngroupedColumnReferenceInHaving errors.Code = "ErrInvalidUngroupedColumnReferenceInHaving"
 
 	ErrInvalidTimeUnit    errors.Code = "ErrInvalidTimeUnit"
 	ErrInvalidTimeEpoch   errors.Code = "ErrInvalidTimeEpoch"
@@ -181,6 +182,13 @@ func NewErrInvalidUngroupedColumnReference(line, col int, column string) error {
 	return errors.New(
 		ErrInvalidUngroupedColumnReference,
 		fmt.Sprintf("[%d:%d] column '%s' invalid in select list because it is not aggregated or grouped", line, col, column),
+	)
+}
+
+func NewErrInvalidUngroupedColumnReferenceInHaving(line, col int, column string) error {
+	return errors.New(
+		ErrInvalidUngroupedColumnReferenceInHaving,
+		fmt.Sprintf("[%d:%d] column '%s' invalid in the having clause because it is not contained in an aggregate or the GROUP BY clause", line, col, column),
 	)
 }
 
