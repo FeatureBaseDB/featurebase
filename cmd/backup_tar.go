@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newBackupTarCommand(logdest logger.Logger) *cobra.Command {
+func newBackupTarCommand(logdest io.Writer) *cobra.Command {
 	cmd := ctl.NewBackupTarCommand(logdest)
 	ccmd := &cobra.Command{
 		Use:   "backuptar",
