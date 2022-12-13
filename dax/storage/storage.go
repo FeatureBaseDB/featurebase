@@ -1,10 +1,10 @@
 package storage
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"path"
+	"strings"
 	"sync"
 
 	"github.com/molecula/featurebase/v3/dax"
@@ -75,6 +75,19 @@ func (mm *ManagerManager) GetShardManager(qtid dax.QualifiedTableID, partition d
 	return mm.shardManagers[key]
 }
 
+func (mm *ManagerManager) RemoveShardManager(qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	key := shardK{qtid: qtid, partition: partition, shard: shard}
+	if m, ok := mm.shardManagers[key]; ok {
+		err := m.Unlock()
+		if err != nil {
+			mm.Logger.Printf("unlocking shard manager during removal: %v", err)
+		}
+		delete(mm.shardManagers, key)
+	}
+}
+
 func (mm *ManagerManager) GetTableKeyManager(qtid dax.QualifiedTableID, partition dax.PartitionNum) *Manager {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
@@ -92,6 +105,19 @@ func (mm *ManagerManager) GetTableKeyManager(qtid dax.QualifiedTableID, partitio
 	return mm.tableKeyManagers[key]
 }
 
+func (mm *ManagerManager) RemoveTableKeyManager(qtid dax.QualifiedTableID, partition dax.PartitionNum) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	key := tableKeyK{qtid: qtid, partition: partition}
+	if m, ok := mm.tableKeyManagers[key]; ok {
+		err := m.Unlock()
+		if err != nil {
+			mm.Logger.Printf("unlocking table key manager during removal: %v", err)
+		}
+		delete(mm.tableKeyManagers, key)
+	}
+}
+
 func (mm *ManagerManager) GetFieldKeyManager(qtid dax.QualifiedTableID, field dax.FieldName) *Manager {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
@@ -107,6 +133,53 @@ func (mm *ManagerManager) GetFieldKeyManager(qtid dax.QualifiedTableID, field da
 		log:         mm.Logger,
 	}).initialize()
 	return mm.fieldKeyManagers[key]
+}
+
+func (mm *ManagerManager) RemoveFieldKeyManager(qtid dax.QualifiedTableID, field dax.FieldName) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	key := fieldKeyK{qtid: qtid, field: field}
+	if m, ok := mm.fieldKeyManagers[key]; ok {
+		err := m.Unlock()
+		if err != nil {
+			mm.Logger.Printf("unlocking field key manager during removal: %v", err)
+		}
+		delete(mm.fieldKeyManagers, key)
+	}
+}
+
+// RemoveAll unlocks and deletes all Managers held within this
+// ManagerManager.
+func (mm *ManagerManager) RemoveAll() error {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	errList := make([]error, 0)
+	for k, mgr := range mm.shardManagers {
+		err := mgr.Unlock()
+		if err != nil && !strings.Contains(err.Error(), "resource was not locked") {
+			errList = append(errList, err)
+		}
+		delete(mm.shardManagers, k)
+	}
+	for k, mgr := range mm.tableKeyManagers {
+		err := mgr.Unlock()
+		if err != nil && !strings.Contains(err.Error(), "resource was not locked") {
+			errList = append(errList, err)
+		}
+		delete(mm.tableKeyManagers, k)
+	}
+	for k, mgr := range mm.fieldKeyManagers {
+		err := mgr.Unlock()
+		if err != nil && !strings.Contains(err.Error(), "resource was not locked") {
+			errList = append(errList, err)
+		}
+		delete(mm.fieldKeyManagers, k)
+	}
+	if len(errList) > 0 {
+		return errors.Errorf("%v", errList)
+	}
+	return nil
 }
 
 // Manager wraps the snapshotter and writelogger to implement the
@@ -136,6 +209,9 @@ func (m *Manager) initialize() *Manager {
 	return m
 }
 
+// LoadLatestSnapshot finds the most recent snapshot for this resource
+// and returns a ReadCloser for that snapshot data. If there is no
+// snapshot for this resource it returns nil, nil.
 func (m *Manager) LoadLatestSnapshot() (data io.ReadCloser, err error) {
 	snaps, err := m.snapshotter.List(m.bucket, m.key)
 	if err != nil {
@@ -145,7 +221,7 @@ func (m *Manager) LoadLatestSnapshot() (data io.ReadCloser, err error) {
 
 	if len(snaps) == 0 {
 		m.loadWLsPastVersion = -1
-		return io.NopCloser(bytes.NewReader([]byte{})), nil
+		return nil, nil
 	}
 	// assuming snapshots come back in sorted order
 	latest := snaps[len(snaps)-1]
@@ -165,10 +241,11 @@ func (m *Manager) LoadLatestSnapshot() (data io.ReadCloser, err error) {
 // ListSnapshots() []SnapInfo
 // LoadSnapshot(version int) (data io.ReadCloser, err error)
 
-// LoadWriteLog can be called after LoadLatestSnapshot. It loads
-// any writelog data which has been written since the latest
+// LoadWriteLog can be called after LoadLatestSnapshot. It loads any
+// writelog data which has been written since the latest
 // snapshot. Subsequent calls to LoadWriteLog will only return new
-// data that hasn't previously been returned from LoadWriteLog.
+// data that hasn't previously been returned from LoadWriteLog. If
+// there is no writelog, it returns nil, nil.
 func (m *Manager) LoadWriteLog() (data io.ReadCloser, err error) {
 	if m.loadWLsPastVersion == -2 {
 		return nil, errors.New(errors.ErrUncoded, "LoadWriteLog called in inconsistent state, can't tell what version to load from")
@@ -193,7 +270,7 @@ func (m *Manager) LoadWriteLog() (data io.ReadCloser, err error) {
 	if len(versions) == 0 {
 		m.log.Debugf("LoadWriteLog: no logs after snapshot: %d on %s", m.loadWLsPastVersion, path.Join(m.bucket, m.key))
 		m.latestWLVersion = m.loadWLsPastVersion + 1
-		return io.NopCloser(bytes.NewReader([]byte{})), nil
+		return nil, nil
 	}
 
 	if m.locked && m.latestWLVersion != versions[0] {
@@ -296,6 +373,9 @@ func (m *Manager) SnapshotTo(wt io.WriterTo) error {
 // should have those removed by the operating system when the
 // process exits anyway.
 func (m *Manager) Unlock() error {
+	if !m.locked {
+		return errors.New(errors.ErrUncoded, "resource was not locked")
+	}
 	if err := m.writeLogger.Unlock(m.bucket, m.key); err != nil {
 		return errors.Wrap(err, "unlocking")
 	}
