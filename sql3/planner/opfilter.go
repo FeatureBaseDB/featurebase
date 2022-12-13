@@ -91,8 +91,7 @@ func (p *PlanOpFilter) WithUpdatedExpressions(exprs ...types.PlanExpression) (ty
 	if len(exprs) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
 	}
-	p.Predicate = exprs[0]
-	return p, nil
+	return NewPlanOpFilter(p.planner, exprs[0], p.ChildOp), nil
 }
 
 type filterIterator struct {

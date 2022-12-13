@@ -393,7 +393,6 @@ func TestCreateFunctionStatement_String(t *testing.T) {
 }
 
 func TestCreateViewStatement_String(t *testing.T) {
-	t.Skip("CREATE VIEW is currently disabled in the parser")
 	AssertStatementStringer(t, &parser.CreateViewStatement{
 		Name: &parser.Ident{Name: "vw"},
 		Columns: []*parser.Ident{
@@ -403,7 +402,7 @@ func TestCreateViewStatement_String(t *testing.T) {
 		Select: &parser.SelectStatement{
 			Columns: []*parser.ResultColumn{{Star: pos(0)}},
 		},
-	}, `CREATE VIEW "vw" ("x", "y") AS SELECT *`)
+	}, `CREATE VIEW vw (x, y) AS SELECT *`)
 
 	AssertStatementStringer(t, &parser.CreateViewStatement{
 		IfNotExists: pos(0),
@@ -411,7 +410,7 @@ func TestCreateViewStatement_String(t *testing.T) {
 		Select: &parser.SelectStatement{
 			Columns: []*parser.ResultColumn{{Star: pos(0)}},
 		},
-	}, `CREATE VIEW IF NOT EXISTS "vw" AS SELECT *`)
+	}, `CREATE VIEW IF NOT EXISTS vw AS SELECT *`)
 }
 
 func TestDeleteStatement_String(t *testing.T) {

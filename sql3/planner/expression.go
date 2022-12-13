@@ -343,6 +343,10 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 				return nl != nr, nil
 			case parser.EQ:
 				return nl == nr, nil
+			case parser.AND:
+				return nl && nr, nil
+			case parser.OR:
+				return nl || nr, nil
 
 			default:
 				return nil, sql3.NewErrInternalf("unhandled operator %d", n.op)
@@ -2704,32 +2708,26 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 		} else {
 			agg = newCountPlanExpression(args[0], expr.ResultDataType)
 		}
-		p.addAggregate(agg)
 		return agg, nil
 
 	case "SUM":
 		agg := newSumPlanExpression(args[0], expr.ResultDataType)
-		p.addAggregate(agg)
 		return agg, nil
 
 	case "AVG":
 		agg := newAvgPlanExpression(args[0], expr.ResultDataType)
-		p.addAggregate(agg)
 		return agg, nil
 
 	case "PERCENTILE":
 		agg := newPercentilePlanExpression(args[0], args[1], expr.ResultDataType)
-		p.addAggregate(agg)
 		return agg, nil
 
 	case "MIN":
 		agg := newMinPlanExpression(args[0], expr.ResultDataType)
-		p.addAggregate(agg)
 		return agg, nil
 
 	case "MAX":
 		agg := newMaxPlanExpression(args[0], expr.ResultDataType)
-		p.addAggregate(agg)
 		return agg, nil
 
 	default:
