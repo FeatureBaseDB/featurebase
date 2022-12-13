@@ -1401,17 +1401,6 @@ func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableI
 // snapshot that shard, then increment its shard version for logs written to the
 // WriteLogger.
 func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTableID, shardNum dax.ShardNum) error {
-	// Confirm table/shard is being tracked; get the current shard.
-	fromShardVersion, ok, err := c.versionStore.ShardVersion(ctx, qtid, shardNum)
-	if err != nil {
-		return errors.Wrapf(err, "getting shard version: %s, %d", qtid, shardNum)
-	} else if !ok {
-		return NewErrInternal(
-			fmt.Sprintf("shard to snapshot not found: %s, %d", qtid, shardNum),
-		)
-	}
-	toShardVersion := fromShardVersion + 1
-
 	// Get the node responsible for the shard.
 	bal := c.ComputeBalancer
 
@@ -1428,51 +1417,14 @@ func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTa
 
 	addr := dax.Address(workers[0].ID)
 
-	// Make a copy of the controller's versionStore, and update the current
-	// shard so that the directive sent along with the SnapshotRequest reflects
-	// the state that we want after a successful snapshot.
-	versionStoreCopy, err := c.versionStore.Copy(ctx)
-	if err != nil {
-		return errors.Wrap(err, "copying version store")
-	}
-	if err := versionStoreCopy.AddShards(ctx, qtid,
-		dax.NewVersionedShard(shardNum, toShardVersion),
-	); err != nil {
-		return NewErrInternal(err.Error())
-	}
-
-	// Convert the address into a slice of addressMethod containing the
-	// appropriate method.
-	addressMethods := applyAddressMethod([]dax.Address{addr}, dax.DirectiveMethodSnapshot)
-
-	var toDirective dax.Directive
-	if directives, err := c.buildDirectives(ctx, addressMethods, versionStoreCopy); err != nil {
-		return NewErrInternal(err.Error())
-	} else if ld := len(directives); ld != 1 {
-		msg := fmt.Sprintf("buildDirectives returned invalid number of directives: %d", ld)
-		return NewErrInternal(msg)
-	} else {
-		toDirective = *directives[0]
-	}
-
 	// Send the node a snapshot request.
 	req := &dax.SnapshotShardDataRequest{
-		Address:     addr,
-		TableKey:    qtid.Key(),
-		ShardNum:    shardNum,
-		FromVersion: fromShardVersion,
-		ToVersion:   toShardVersion,
-		Directive:   toDirective,
+		Address:  addr,
+		TableKey: qtid.Key(),
+		ShardNum: shardNum,
 	}
 
 	if err := c.Director.SendSnapshotShardDataRequest(ctx, req); err != nil {
-		return NewErrInternal(err.Error())
-	}
-
-	// A successful request means the shard version can be incremented.
-	if err := c.versionStore.AddShards(ctx, qtid,
-		dax.NewVersionedShard(shardNum, toShardVersion),
-	); err != nil {
 		return NewErrInternal(err.Error())
 	}
 

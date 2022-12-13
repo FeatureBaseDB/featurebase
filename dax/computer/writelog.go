@@ -132,13 +132,13 @@ func newTableKeyReader(wl WriteLogService, qtid dax.QualifiedTableID, partition 
 func (r *tableKeyReader) Open() error {
 	bucket := partitionBucket(r.table, r.partition)
 
-	reader, closer, err := r.wl.LogReader(bucket, keysFileName, r.version)
+	readcloser, err := r.wl.LogReader(bucket, keysFileName, r.version)
 	if err != nil {
 		return errors.Wrapf(err, "getting log reader: %s, %s, %d", bucket, keysFileName, r.version)
 	}
 
-	r.closer = closer
-	r.scanner = bufio.NewScanner(reader)
+	r.closer = readcloser
+	r.scanner = bufio.NewScanner(readcloser)
 
 	return nil
 }
@@ -201,13 +201,13 @@ func newFieldKeyReader(wl WriteLogService, qtid dax.QualifiedTableID, field dax.
 func (r *fieldKeyReader) Open() error {
 	bucket := fieldBucket(r.table, r.field)
 
-	reader, closer, err := r.wl.LogReader(bucket, keysFileName, r.version)
+	readcloser, err := r.wl.LogReader(bucket, keysFileName, r.version)
 	if err != nil {
 		return errors.Wrapf(err, "getting log reader: %s, %s, %d", bucket, keysFileName, r.version)
 	}
 
-	r.closer = closer
-	r.scanner = bufio.NewScanner(reader)
+	r.closer = readcloser
+	r.scanner = bufio.NewScanner(readcloser)
 
 	return nil
 }
@@ -273,13 +273,13 @@ func (r *shardReader) Open() error {
 	bucket := partitionBucket(r.table, r.partition)
 	shardKey := shardKey(r.shard)
 
-	reader, closer, err := r.wl.LogReader(bucket, shardKey, r.version)
+	readcloser, err := r.wl.LogReader(bucket, shardKey, r.version)
 	if err != nil {
 		return errors.Wrapf(err, "getting log reader: %s, %s, %d", bucket, shardKey, r.version)
 	}
 
-	r.closer = closer
-	r.scanner = bufio.NewScanner(reader)
+	r.closer = readcloser
+	r.scanner = bufio.NewScanner(readcloser)
 
 	return nil
 }

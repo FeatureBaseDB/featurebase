@@ -2447,7 +2447,7 @@ func (h *Handler) handleGetIndexShardSnapshot(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	rc, err := h.api.IndexShardSnapshot(r.Context(), indexName, shard)
+	rc, err := h.api.IndexShardSnapshot(r.Context(), indexName, shard, false)
 	if err != nil {
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
