@@ -44,6 +44,20 @@ func (p *ExecutionPlanner) analyseFunctionSubstring(call *parser.Call, scope par
 	return call, nil
 }
 
+func (p *ExecutionPlanner) analyzeFunctionLower(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) != 1 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+
+	if !typeIsString(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
 func (p *ExecutionPlanner) analyseFunctionReplaceAll(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 	if len(call.Args) != 3 {
 		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 3, len(call.Args))
@@ -146,6 +160,15 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 	return stringArgOne[startIndex:endIndex], nil
 }
 
+func (n *callPlanExpression) EvaluateLower(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	return strings.ToLower(stringArgOne), nil
+}
+
 // takes string, findstring, replacestring.
 // replaces all occurances of findstring with replacestring
 func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (interface{}, error) {
@@ -177,7 +200,7 @@ func evaluateStringArg(n types.PlanExpression, currentRow []interface{}) (string
 	return stringArgOne, nil
 }
 
-//Analyze function for Trim
+// Analyze function for Trim
 func (p *ExecutionPlanner) analyseFunctionTrim(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 	//one argument for Trim Function
 	if len(call.Args) != 1 {
