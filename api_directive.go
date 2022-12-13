@@ -348,29 +348,26 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 	}
 }
 
-func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey, partition dax.VersionedPartition) error {
+func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey, partition dax.PartitionNum) error {
 	qtid := tkey.QualifiedTableID()
 
-	// Load the previous snapshot. Version 0 doesn't have a snapshot
-	// file; it only has log entries.
-	if partition.Version > 0 {
-		// Load partition snapshot: version - 1
-		previousVersion := partition.Version - 1
-		rc, err := api.snapshotReadWriter.ReadTableKeys(ctx, qtid, partition.Num, previousVersion)
-		if err != nil {
-			return errors.Wrap(err, "reading table keys snapshot")
-		}
-		defer rc.Close()
+	mgr := api.serverlessStorage.GetTableKeyManager(qtid, partition)
+	rc, err := mgr.LoadLatestSnapshot()
+	if err != nil {
+		return errors.Wrap(err, "loading table key snapshot")
+	}
+	defer rc.Close()
+	if err := api.TranslateIndexDB(ctx, string(tkey), int(partition), rc); err != nil {
+		return errors.Wrap(err, "restoring table keys")
 
-		if err := api.TranslateIndexDB(ctx, string(tkey), int(partition.Num), rc); err != nil {
-			return errors.Wrap(err, "restoring table keys")
-
-		}
 	}
 
 	if err := func() error {
-		store := idx.TranslateStore(int(partition.Num))
-
+		store := idx.TranslateStore(int(partition))
+		reader, err := mgr.LoadWriteLog()
+		if err != nil {
+			return errors.Wrap(err, "loading write log table keys")
+		}
 		reader := api.writeLogReader.TableKeyReader(ctx, qtid, partition.Num, partition.Version)
 		if err := reader.Open(); err != nil {
 			// TODO: this log can be confusing because on a create
@@ -506,7 +503,7 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 	}
 }
 
-func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.VersionedShard) error {
+func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.ShardNum) error {
 	qtid := tkey.QualifiedTableID()
 
 	partition := disco.ShardToShardPartition(string(tkey), uint64(shard.Num), disco.DefaultPartitionN)

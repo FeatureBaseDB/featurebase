@@ -97,9 +97,7 @@ type Server struct { // nolint: maligned
 
 	executionPlannerFn ExecutionPlannerFn
 
-	writeLogReader     computer.WriteLogReader
-	writeLogWriter     computer.WriteLogWriter
-	snapshotReadWriter computer.SnapshotReadWriter
+	serverlessStorage *daxstorage.ManagerManager
 
 	dataframeEnabled bool
 }
@@ -429,15 +427,6 @@ func OptServerPartitionAssigner(p string) ServerOption {
 	}
 }
 
-// OptServerWriteLogReader provides an implemenation of the WriteLogReader
-// interface.
-func OptServerWriteLogReader(wlr computer.WriteLogReader) ServerOption {
-	return func(s *Server) error {
-		s.writeLogReader = wlr
-		return nil
-	}
-}
-
 func OptServerExecutionPlannerFn(fn ExecutionPlannerFn) ServerOption {
 	return func(s *Server) error {
 		s.executionPlannerFn = fn
@@ -445,20 +434,9 @@ func OptServerExecutionPlannerFn(fn ExecutionPlannerFn) ServerOption {
 	}
 }
 
-// OptServerWriteLogWriter provides an implemenation of the WriteLogWriter
-// interface.
-func OptServerWriteLogWriter(wlw computer.WriteLogWriter) ServerOption {
+func OptServerServerlessStorage(mm *daxstorage.ManagerManager) ServerOption {
 	return func(s *Server) error {
-		s.writeLogWriter = wlw
-		return nil
-	}
-}
-
-// OptServerSnapshotReadWriter provides an implemenation of the
-// SnapshotReadWriter interface.
-func OptServerSnapshotReadWriter(snap computer.SnapshotReadWriter) ServerOption {
-	return func(s *Server) error {
-		s.snapshotReadWriter = snap
+		s.serverlessStorage = mm
 		return nil
 	}
 }
@@ -579,7 +557,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.disCo = s.disCo
 	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
-	s.cluster.writeLogWriter = s.writeLogWriter
+	s.cluster.serverlessStorage = s.serverlessStorage
 	s.cluster.versionStore = versionStore
 
 	// Append the NodeID tag to stats.
