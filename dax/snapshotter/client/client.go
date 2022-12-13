@@ -1,109 +1,111 @@
 // Package client contains an http implementation of the WriteLogger client.
 package client
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
+// import (
+// 	"bytes"
+// 	"encoding/json"
+// 	"fmt"
+// 	"io"
+// 	"net/http"
+// 	"net/url"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	snapshotterhttp "github.com/featurebasedb/featurebase/v3/dax/snapshotter/http"
 	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
-const defaultScheme = "http"
+// const defaultScheme = "http"
 
-// Snapshotter is a client for the Snapshotter API methods.
-type Snapshotter struct {
-	address dax.Address
-}
+// // TODO(jaffee): remove this?
 
-func New(address dax.Address) *Snapshotter {
-	return &Snapshotter{
-		address: address,
-	}
-}
+// // Snapshotter is a client for the Snapshotter API methods.
+// type Snapshotter struct {
+// 	address dax.Address
+// }
 
-func (s *Snapshotter) Write(bucket string, key string, version int, rc io.ReadCloser) error {
-	url := fmt.Sprintf("%s/snapshotter/write-snapshot?bucket=%s&key=%s&version=%d",
-		s.address.WithScheme(defaultScheme),
-		url.QueryEscape(bucket),
-		url.QueryEscape(key),
-		version,
-	)
+// func New(address dax.Address) *Snapshotter {
+// 	return &Snapshotter{
+// 		address: address,
+// 	}
+// }
 
-	// Post the request.
-	resp, err := http.Post(url, "", rc)
-	if err != nil {
-		return errors.Wrap(err, "posting write-snapshot")
-	}
-	defer resp.Body.Close()
+// func (s *Snapshotter) Write(bucket string, key string, version int, rc io.ReadCloser) error {
+// 	url := fmt.Sprintf("%s/snapshotter/write-snapshot?bucket=%s&key=%s&version=%d",
+// 		s.address.WithScheme(defaultScheme),
+// 		url.QueryEscape(bucket),
+// 		url.QueryEscape(key),
+// 		version,
+// 	)
 
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
-	}
+// 	// Post the request.
+// 	resp, err := http.Post(url, "", rc)
+// 	if err != nil {
+// 		return errors.Wrap(err, "posting write-snapshot")
+// 	}
+// 	defer resp.Body.Close()
 
-	var wsr snapshotterhttp.WriteSnapshotResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wsr); err != nil {
-		return errors.Wrap(err, "reading response body")
-	}
+// 	if resp.StatusCode != http.StatusOK {
+// 		b, _ := io.ReadAll(resp.Body)
+// 		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+// 	}
 
-	return nil
-}
+// 	var wsr snapshotterhttp.WriteSnapshotResponse
+// 	if err := json.NewDecoder(resp.Body).Decode(&wsr); err != nil {
+// 		return errors.Wrap(err, "reading response body")
+// 	}
 
-// WriteTo is exactly the same as Write, except that it takes an io.WriteTo
-// instead of an io.ReadCloser. This needs to be cleaned up so that we're only
-// using one or the other.
-func (s *Snapshotter) WriteTo(bucket string, key string, version int, wrTo io.WriterTo) error {
-	url := fmt.Sprintf("%s/snapshotter/write-snapshot?bucket=%s&key=%s&version=%d",
-		s.address.WithScheme(defaultScheme),
-		url.QueryEscape(bucket),
-		url.QueryEscape(key),
-		version,
-	)
+// 	return nil
+// }
 
-	buf := &bytes.Buffer{}
-	if _, err := wrTo.WriteTo(buf); err != nil {
-		return errors.Wrap(err, "writing to buffer")
-	}
+// // WriteTo is exactly the same as Write, except that it takes an io.WriteTo
+// // instead of an io.ReadCloser. This needs to be cleaned up so that we're only
+// // using one or the other.
+// func (s *Snapshotter) WriteTo(bucket string, key string, version int, wrTo io.WriterTo) error {
+// 	url := fmt.Sprintf("%s/snapshotter/write-snapshot?bucket=%s&key=%s&version=%d",
+// 		s.address.WithScheme(defaultScheme),
+// 		url.QueryEscape(bucket),
+// 		url.QueryEscape(key),
+// 		version,
+// 	)
 
-	// Post the request.
-	resp, err := http.Post(url, "", buf)
-	if err != nil {
-		return errors.Wrap(err, "posting write-snapshot")
-	}
-	defer resp.Body.Close()
+// 	buf := &bytes.Buffer{}
+// 	if _, err := wrTo.WriteTo(buf); err != nil {
+// 		return errors.Wrap(err, "writing to buffer")
+// 	}
 
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
-	}
+// 	// Post the request.
+// 	resp, err := http.Post(url, "", buf)
+// 	if err != nil {
+// 		return errors.Wrap(err, "posting write-snapshot")
+// 	}
+// 	defer resp.Body.Close()
 
-	var wsr snapshotterhttp.WriteSnapshotResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wsr); err != nil {
-		return errors.Wrap(err, "reading response body")
-	}
+// 	if resp.StatusCode != http.StatusOK {
+// 		b, _ := io.ReadAll(resp.Body)
+// 		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+// 	}
 
-	return nil
-}
+// 	var wsr snapshotterhttp.WriteSnapshotResponse
+// 	if err := json.NewDecoder(resp.Body).Decode(&wsr); err != nil {
+// 		return errors.Wrap(err, "reading response body")
+// 	}
 
-func (s *Snapshotter) Read(bucket string, key string, version int) (io.ReadCloser, error) {
-	url := fmt.Sprintf("%s/snapshotter/read-snapshot?bucket=%s&key=%s&version=%d",
-		s.address.WithScheme(defaultScheme),
-		url.QueryEscape(bucket),
-		url.QueryEscape(key),
-		version,
-	)
+// 	return nil
+// }
 
-	// Get the request.
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting read-snapshot")
-	}
+// func (s *Snapshotter) Read(bucket string, key string, version int) (io.ReadCloser, error) {
+// 	url := fmt.Sprintf("%s/snapshotter/read-snapshot?bucket=%s&key=%s&version=%d",
+// 		s.address.WithScheme(defaultScheme),
+// 		url.QueryEscape(bucket),
+// 		url.QueryEscape(key),
+// 		version,
+// 	)
 
-	return resp.Body, nil
-}
+// 	// Get the request.
+// 	resp, err := http.Get(url)
+// 	if err != nil {
+// 		return nil, errors.Wrap(err, "getting read-snapshot")
+// 	}
+
+// 	return resp.Body, nil
+// }

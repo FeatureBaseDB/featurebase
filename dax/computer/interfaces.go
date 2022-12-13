@@ -43,6 +43,7 @@ type SnapshotService interface {
 // One must not call LoadWriteLog until after calling
 // LoadLatestSnapshot. One must not call Append, IncrementWLVersion,
 // or Snapshot until after successfully calling Lock.
+// TODO(jaffee), this doesn't need to be an interface. Remove.
 type ServerlessStorage interface {
 	// LoadLatestSnapshot loads the latest available snapshot in the snapshot store.
 	LoadLatestSnapshot() (data io.ReadCloser, err error)
