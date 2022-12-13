@@ -92,7 +92,7 @@ at https://docs.molecula.cloud/.
 	rc.AddCommand(newChkSumCommand(logdest))
 	rc.AddCommand(newBackupCommand(logdest))
 	rc.AddCommand(newRestoreCommand(logdest))
-	rc.AddCommand(newBackupTarCommand(logdest))
+	rc.AddCommand(newBackupTarCommand(stderr))
 	rc.AddCommand(newRestoreTarCommand(logdest))
 	rc.AddCommand(newConfigCommand(stderr))
 	rc.AddCommand(newExportCommand(logdest))
