@@ -136,6 +136,33 @@ var stringScalarFunctionsTests = TableTest{
 			ExpErr: "string expression expected",
 		},
 		{
+			name: "StringLower",
+			SQLs: sqls(
+				"select lower('AaBbCcDdEeFfGg-_0123')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("aabbccddeeffgg-_0123")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "IncorrectArgumentsforLower",
+			SQLs: sqls(
+				"select lower('LOWER','lower')",
+			),
+			ExpErr: "'lower': count of formal parameters (1) does not match count of actual parameters (2)",
+		},
+		{
+			name: "IncorrectInputforLower",
+			SQLs: sqls(
+				"select lower(1234)",
+			),
+			ExpErr: "string expression expected",
+		},
+		{
 			name: "ReplaceAllString",
 			SQLs: sqls(
 				"select replaceall('hello database','data','feature')",
