@@ -247,6 +247,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		return p.analyzeFunctionUpper(call, scope)
 	case "SUBSTRING":
 		return p.analyseFunctionSubstring(call, scope)
+	case "LOWER":
+		return p.analyzeFunctionLower(call, scope)
 	case "REPLACEALL":
 		return p.analyseFunctionReplaceAll(call, scope)
 	case "TRIM":

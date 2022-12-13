@@ -1482,6 +1482,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateUpper(currentRow)
 	case "SUBSTRING":
 		return n.EvaluateSubstring(currentRow)
+	case "LOWER":
+		return n.EvaluateLower(currentRow)
 	case "REPLACEALL":
 		return n.EvaluateReplaceAll(currentRow)
 	case "TRIM":
