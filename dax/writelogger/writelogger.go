@@ -133,13 +133,15 @@ func (w *WriteLogger) Lock(bucket, key string) error {
 	if err := os.MkdirAll(lockDir, 0777); err != nil {
 		return errors.Wrapf(err, "lock dir %s", lockDir)
 	}
-	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL, 0644)
+
+	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|syscall.O_NONBLOCK, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "opening lock file: %s", lockFile)
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.lockFiles[lockFile] = f
+
 	// fd, err = syscall.Open(lockFile, syscall.O_RDWR|syscall.O_CREAT, 0644)
 	// if err != nil {
 	// 	return 0, errors.Wrapf(err, "syscall opening %s", lockFile)
@@ -147,7 +149,7 @@ func (w *WriteLogger) Lock(bucket, key string) error {
 	// err = syscall.FcntlFlock(uintptr(fd), syscall.F_SETLK, &syscall.Flock_t{
 	// 	Type: syscall.F_WRLCK,
 	// })
-	return errors.Wrap(err, "locking")
+	return nil
 
 }
 
@@ -177,7 +179,7 @@ func (w *WriteLogger) Unlock(bucket, key string) error {
 	// err := syscall.FcntlFlock(uintptr(fd), syscall.F_SETLK, &syscall.Flock_t{
 	// 	Type: syscall.F_UNLCK,
 	// })
-	return errors.Wrap(err, "closing lock file")
+	return errors.Wrap(err, "removing lock file")
 }
 
 // paths takes a key and returns the full file path (including the root data

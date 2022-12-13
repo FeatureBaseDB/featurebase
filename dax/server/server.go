@@ -163,8 +163,7 @@ func (m *Command) Close() error {
 		return nil
 	default:
 		eg := errgroup.Group{}
-		//eg.Go(m.Server.Close)
-
+		eg.Go(m.svcmgr.StopAll)
 		err := eg.Wait()
 		//_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
 		close(m.done)

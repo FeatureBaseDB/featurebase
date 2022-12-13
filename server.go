@@ -816,6 +816,7 @@ func (s *Server) Close() error {
 		if s.holder != nil {
 			errh = s.holder.Close()
 		}
+		errSS := s.serverlessStorage.RemoveAll()
 
 		// prefer to return holder error over cluster
 		// error. This order is somewhat arbitrary. It would be better if we had
@@ -833,7 +834,10 @@ func (s *Server) Close() error {
 		if errd != nil {
 			return errors.Wrap(errd, "closing disco")
 		}
-		return errors.Wrap(errE, "closing executor")
+		if errE != nil {
+			return errors.Wrap(errE, "closing executor")
+		}
+		return errors.Wrap(errSS, "unlocking all serverless storage")
 	}
 }
 
