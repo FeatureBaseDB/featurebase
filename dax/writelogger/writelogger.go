@@ -16,9 +16,9 @@ import (
 )
 
 type WriteLogger struct {
-	mu sync.RWMutex
+	dataDir string
 
-	dataDir   string
+	mu        sync.RWMutex
 	logFiles  map[string]*os.File
 	lockFiles map[string]*os.File
 
@@ -128,8 +128,6 @@ func (w *WriteLogger) lockFile(bucket, key string) (string, string) {
 
 func (w *WriteLogger) Lock(bucket, key string) error {
 	lockDir, lockFile := w.lockFile(bucket, key)
-	fmt.Println("lock dir:", lockDir)
-	fmt.Println("lock fil:", lockFile)
 
 	if err := os.MkdirAll(lockDir, 0777); err != nil {
 		return errors.Wrapf(err, "lock dir %s", lockDir)
@@ -138,6 +136,8 @@ func (w *WriteLogger) Lock(bucket, key string) error {
 	if err != nil {
 		return errors.Wrapf(err, "opening lock file: %s", lockFile)
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.lockFiles[lockFile] = f
 	// fd, err = syscall.Open(lockFile, syscall.O_RDWR|syscall.O_CREAT, 0644)
 	// if err != nil {
@@ -151,6 +151,8 @@ func (w *WriteLogger) Lock(bucket, key string) error {
 }
 
 func (w *WriteLogger) Unlock(bucket, key string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	// TODO(jaffee) since the file isn't guaranteed to be removed if
 	// the process is killed, we should actually use flock instead of
 	// EXCL file creation. Problem with that is it makes testing
@@ -209,7 +211,7 @@ func (w *WriteLogger) logFileByKey(key string) (*os.File, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "opening file: %s", filePath)
 	}
-	fmt.Printf("opened %s for key %s\n", filePath, key)
+
 	w.logFiles[key] = f
 
 	return f, nil

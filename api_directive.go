@@ -102,19 +102,19 @@ type directiveJobTableKeys struct {
 	directiveJobType
 	idx       *Index
 	tkey      dax.TableKey
-	partition dax.VersionedPartition
+	partition dax.PartitionNum
 }
 
 type directiveJobFieldKeys struct {
 	directiveJobType
 	tkey  dax.TableKey
-	field dax.VersionedField
+	field dax.FieldName
 }
 
 type directiveJobShards struct {
 	directiveJobType
 	tkey  dax.TableKey
-	shard dax.VersionedShard
+	shard dax.ShardNum
 }
 
 // directiveWorker is a worker in a worker pool which handles portions of a
@@ -342,7 +342,7 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 			jobs <- directiveJobTableKeys{
 				idx:       idx,
 				tkey:      tkey,
-				partition: partition,
+				partition: partition.Num,
 			}
 		}
 	}
@@ -352,6 +352,8 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 	qtid := tkey.QualifiedTableID()
 
 	mgr := api.serverlessStorage.GetTableKeyManager(qtid, partition)
+
+	// load latest snapshot
 	rc, err := mgr.LoadLatestSnapshot()
 	if err != nil {
 		return errors.Wrap(err, "loading table key snapshot")
@@ -359,28 +361,18 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 	defer rc.Close()
 	if err := api.TranslateIndexDB(ctx, string(tkey), int(partition), rc); err != nil {
 		return errors.Wrap(err, "restoring table keys")
-
 	}
 
-	if err := func() error {
-		store := idx.TranslateStore(int(partition))
-		reader, err := mgr.LoadWriteLog()
+	// define write log loading in a function since we have to do it
+	// before and after locking
+	loadWriteLog := func() error {
+		writelog, err := mgr.LoadWriteLog()
 		if err != nil {
-			return errors.Wrap(err, "loading write log table keys")
+			return errors.Wrap(err, "getting write log reader for table keys")
 		}
-		reader := api.writeLogReader.TableKeyReader(ctx, qtid, partition.Num, partition.Version)
-		if err := reader.Open(); err != nil {
-			// TODO: this log can be confusing because on a create
-			// table, there is no log file yet, so an error is expected.
-			// Instead of swallowing this error, we need to check the
-			// error code and handle it differently. This means the
-			// writelogger will need to return an error indicating that
-			// the log file does not exist, but that that is expected.
-			// log.Printf("could not open log file for table: %s, partition: %d: version: %d, err: %s", table, partition.Num, partition.Version, err)
-			return nil
-		}
+		reader := storage.NewTableKeyReader(qtid, partition, writelog)
 		defer reader.Close()
-
+		store := idx.TranslateStore(int(partition))
 		for msg, err := reader.Read(); err != io.EOF; msg, err = reader.Read() {
 			if err != nil {
 				return errors.Wrap(err, "reading from log reader")
@@ -391,18 +383,21 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 				}
 			}
 		}
-
 		return nil
-	}(); err != nil {
+	}
+	// 1st write log load
+	if err := loadWriteLog(); err != nil {
 		return err
 	}
 
-	// Set the table/partition/version in the holder.
-	if err := api.holder.versionStore.AddPartitions(ctx, qtid, partition); err != nil {
-		return errors.Wrap(err, "adding partition to sharder")
+	// acquire lock on this partition's keys
+	if err := mgr.Lock(); err != nil {
+		return errors.Wrap(err, "locking table key partition")
 	}
 
-	return nil
+	// reload writelog in case of changes between last load and
+	// lock. The manager object takes care of only loading new data.
+	return loadWriteLog()
 }
 
 func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobType, fromD, toD *dax.Directive) {
@@ -414,52 +409,43 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 		for _, field := range fields {
 			jobs <- directiveJobFieldKeys{
 				tkey:  tkey,
-				field: field,
+				field: field.Name,
 			}
 		}
 	}
 }
 
-func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.VersionedField) error {
+func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.FieldName) error {
 	qtid := tkey.QualifiedTableID()
 
-	// Load the previous snapshot. Version 0 doesn't have a snapshot
-	// file; it only has log entries.
-	if field.Version > 0 {
-		// Load field snapshot: version - 1
-		previousVersion := field.Version - 1
-		rc, err := api.snapshotReadWriter.ReadFieldKeys(ctx, qtid, field.Name, previousVersion)
-		if err != nil {
-			return errors.Wrap(err, "reading field keys snapshot")
-		}
-		defer rc.Close()
+	mgr := api.serverlessStorage.GetFieldKeyManager(qtid, field)
 
-		if err := api.TranslateFieldDB(ctx, string(tkey), string(field.Name), rc); err != nil {
-			return errors.Wrap(err, "restoring field keys")
-		}
+	// load latest snapshot
+	rc, err := mgr.LoadLatestSnapshot()
+	if err != nil {
+		return errors.Wrap(err, "loading field key snapshot")
+	}
+	defer rc.Close()
+	if err := api.TranslateFieldDB(ctx, string(tkey), string(field), rc); err != nil {
+		return errors.Wrap(err, "restoring field keys")
 	}
 
-	if err := func() error {
+	// define write log loading in a function since we have to do it
+	// before and after locking
+	loadWriteLog := func() error {
+		writelog, err := mgr.LoadWriteLog()
+		if err != nil {
+			return errors.Wrap(err, "getting write log reader for field keys")
+		}
+		reader := storage.NewFieldKeyReader(qtid, field, writelog)
+		defer reader.Close()
 		// Get field in order to find the translate store.
-		fld := api.holder.Field(string(tkey), string(field.Name))
+		fld := api.holder.Field(string(tkey), string(field))
 		if fld == nil {
-			log.Printf("field not found in holder: %s", field.Name)
+			log.Printf("field not found in holder: %s", field)
 			return nil
 		}
 		store := fld.TranslateStore()
-
-		reader := api.writeLogReader.FieldKeyReader(ctx, qtid, field.Name, field.Version)
-		if err := reader.Open(); err != nil {
-			// TODO: this log can be confusing because on a create
-			// table, there is no log file yet, so an error is expected.
-			// Instead of swallowing this error, we need to check the
-			// error code and handle it differently. This means the
-			// writelogger will need to return an error indicating that
-			// the log file does not exist, but that that is expected.
-			// log.Printf("could not open log file for table: %s, field: %s: version: %d, err: %s", table, field.Name, field.Version, err)
-			return nil
-		}
-		defer reader.Close()
 
 		for msg, err := reader.Read(); err != io.EOF; msg, err = reader.Read() {
 			if err != nil {
@@ -471,18 +457,21 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 				}
 			}
 		}
-
 		return nil
-	}(); err != nil {
+	}
+	// 1st write log load
+	if err := loadWriteLog(); err != nil {
 		return err
 	}
 
-	// Set the table/field/version in the holder.
-	if err := api.holder.versionStore.AddFields(ctx, qtid, field); err != nil {
-		return errors.Wrap(err, "adding field to sharder")
+	// acquire lock on this partition's keys
+	if err := mgr.Lock(); err != nil {
+		return errors.Wrap(err, "locking field key partition")
 	}
 
-	return nil
+	// reload writelog in case of changes between last load and
+	// lock. The manager object takes care of only loading new data.
+	return loadWriteLog()
 }
 
 func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType, fromD, toD *dax.Directive) {
@@ -497,7 +486,7 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 		for _, shard := range shards {
 			jobs <- directiveJobShards{
 				tkey:  tkey,
-				shard: shard,
+				shard: shard.Num,
 			}
 		}
 	}
@@ -506,39 +495,25 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.ShardNum) error {
 	qtid := tkey.QualifiedTableID()
 
-	partition := disco.ShardToShardPartition(string(tkey), uint64(shard.Num), disco.DefaultPartitionN)
-	partitionNum := dax.PartitionNum(partition)
+	partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
 
-	// Load the previous snapshot. Version 0 doesn't have a snapshot
-	// file; it only has log entries.
-	if shard.Version > 0 {
-		// Load shard snapshot: version - 1
-		previousVersion := shard.Version - 1
-		rc, err := api.snapshotReadWriter.ReadShardData(ctx, qtid, partitionNum, shard.Num, previousVersion)
-		if err != nil {
-			return errors.Wrap(err, "reading shard data snapshot")
-		}
-
-		if err := api.RestoreShard(ctx, string(tkey), uint64(shard.Num), rc); err != nil {
-			return errors.Wrap(err, "restoring shard data")
-		}
+	mgr := api.serverlessStorage.GetShardManager(qtid, partition, shard)
+	rc, err := mgr.LoadLatestSnapshot()
+	if err != nil {
+		return errors.Wrap(err, "reading latest snapshot for shard")
+	}
+	if err := api.RestoreShard(ctx, string(tkey), uint64(shard), rc); err != nil {
+		return errors.Wrap(err, "restoring shard data")
 	}
 
-	// WriteLog reader.
-	if err := func() error {
-		reader := api.writeLogReader.ShardReader(ctx, qtid, partitionNum, shard.Num, shard.Version)
-		if err := reader.Open(); err != nil {
-			// TODO: this log can be confusing because on a create
-			// table, there is no log file yet, so an error is expected.
-			// Instead of swallowing this error, we need to check the
-			// error code and handle it differently. This means the
-			// writelogger will need to return an error indicating that
-			// the log file does not exist, but that that is expected.
-			// log.Printf("could not open log file for table: %s, partition: %d: version: %d, shard: %d, err: %s", table, partition, shard.Version, shard.Num, err)
-			return nil
+	// define write log loading in a func because we do it twice.
+	loadWriteLog := func() error {
+		writelog, err := mgr.LoadWriteLog()
+		if err != nil {
+			return errors.Wrap(err, "")
 		}
+		reader := storage.NewShardReader(qtid, partition, shard, writelog)
 		defer reader.Close()
-
 		for logMsg, err := reader.Read(); err != io.EOF; logMsg, err = reader.Read() {
 			if err != nil {
 				return errors.Wrap(err, "reading from log reader")
@@ -629,18 +604,21 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 				}
 			}
 		}
-
 		return nil
-	}(); err != nil {
+	}
+	// 1st write log load
+	if err := loadWriteLog(); err != nil {
 		return err
 	}
 
-	// Set the table/shard/version in the holder.
-	if err := api.holder.versionStore.AddShards(ctx, qtid, shard); err != nil {
-		return errors.Wrap(err, "adding shard to sharder")
+	// acquire lock on this partition's keys
+	if err := mgr.Lock(); err != nil {
+		return errors.Wrap(err, "locking field key partition")
 	}
 
-	return nil
+	// reload writelog in case of changes between last load and
+	// lock. The manager object takes care of only loading new data.
+	return loadWriteLog()
 }
 
 //////////////////////////////////////////////////////////////
