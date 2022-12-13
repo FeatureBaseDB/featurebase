@@ -1565,13 +1565,13 @@ func TestParser_ParseStatement(t *testing.T) {
 		AssertParseStatementError(t, `DROP TABLE IF EXISTS`, `1:20: expected table name, found 'EOF'`)
 	})
 
-	/*t.Run("CreateView", func(t *testing.T) {
+	t.Run("CreateView", func(t *testing.T) {
 		AssertParseStatement(t, `CREATE VIEW vw (col1, col2) AS SELECT x, y`, &parser.CreateViewStatement{
 			Create: pos(0),
 			View:   pos(7),
 			Name:   &parser.Ident{NamePos: pos(12), Name: "vw"},
 			Lparen: pos(15),
-			Columns: []*sql.Ident{
+			Columns: []*parser.Ident{
 				{NamePos: pos(16), Name: "col1"},
 				{NamePos: pos(22), Name: "col2"},
 			},
@@ -1579,7 +1579,7 @@ func TestParser_ParseStatement(t *testing.T) {
 			As:     pos(28),
 			Select: &parser.SelectStatement{
 				Select: pos(31),
-				Columns: []*sql.ResultColumn{
+				Columns: []*parser.ResultColumn{
 					{Expr: &parser.Ident{NamePos: pos(38), Name: "x"}},
 					{Expr: &parser.Ident{NamePos: pos(41), Name: "y"}},
 				},
@@ -1592,7 +1592,7 @@ func TestParser_ParseStatement(t *testing.T) {
 			As:     pos(15),
 			Select: &parser.SelectStatement{
 				Select: pos(18),
-				Columns: []*sql.ResultColumn{
+				Columns: []*parser.ResultColumn{
 					{Expr: &parser.Ident{NamePos: pos(25), Name: "x"}},
 				},
 			},
@@ -1607,7 +1607,7 @@ func TestParser_ParseStatement(t *testing.T) {
 			As:          pos(29),
 			Select: &parser.SelectStatement{
 				Select: pos(32),
-				Columns: []*sql.ResultColumn{
+				Columns: []*parser.ResultColumn{
 					{Expr: &parser.Ident{NamePos: pos(39), Name: "x"}},
 				},
 			},
@@ -1618,11 +1618,11 @@ func TestParser_ParseStatement(t *testing.T) {
 		AssertParseStatementError(t, `CREATE VIEW vw`, `1:14: expected AS, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE VIEW vw (`, `1:16: expected column name, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE VIEW vw (x`, `1:17: expected comma or right paren, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE VIEW vw AS`, `1:17: expected SELECT or VALUES, found 'EOF'`)
+		AssertParseStatementError(t, `CREATE VIEW vw AS`, `1:17: expected SELECT, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE VIEW vw AS SELECT`, `1:24: expected expression, found 'EOF'`)
-	})*/
+	})
 
-	/*t.Run("DropView", func(t *testing.T) {
+	t.Run("DropView", func(t *testing.T) {
 		AssertParseStatement(t, `DROP VIEW vw`, &parser.DropViewStatement{
 			Drop: pos(0),
 			View: pos(5),
@@ -1635,11 +1635,11 @@ func TestParser_ParseStatement(t *testing.T) {
 			IfExists: pos(13),
 			Name:     &parser.Ident{NamePos: pos(20), Name: "vw"},
 		})
-		AssertParseStatementError(t, `DROP`, `1:1: expected TABLE, VIEW, INDEX, or TRIGGER`)
+		AssertParseStatementError(t, `DROP`, `1:1: expected TABLE, VIEW or FUNCTION`)
 		AssertParseStatementError(t, `DROP VIEW`, `1:9: expected view name, found 'EOF'`)
 		AssertParseStatementError(t, `DROP VIEW IF`, `1:12: expected EXISTS, found 'EOF'`)
 		AssertParseStatementError(t, `DROP VIEW IF EXISTS`, `1:19: expected view name, found 'EOF'`)
-	})*/
+	})
 
 	/*t.Run("CreateIndex", func(t *testing.T) {
 		AssertParseStatement(t, `CREATE INDEX idx ON tbl (x ASC, y DESC, z)`, &parser.CreateIndexStatement{

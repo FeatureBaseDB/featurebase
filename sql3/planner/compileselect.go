@@ -19,6 +19,8 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 	query := NewPlanOpQuery(p, NewPlanOpNullTable(), p.sql)
 	p.scopeStack.push(query)
 
+	aggregates := make([]types.PlanExpression, 0)
+
 	// handle projections
 	projections := make([]types.PlanExpression, 0)
 	for _, c := range stmt.Columns {
@@ -30,6 +32,7 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 			planExpr = newAliasPlanExpression(c.Alias.Name, planExpr)
 		}
 		projections = append(projections, planExpr)
+		aggregates = p.gatherExprAggregates(planExpr, aggregates)
 	}
 
 	// group by clause.
@@ -43,10 +46,6 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		}
 	}
 	var err error
-
-	if stmt.Having.IsValid() {
-		query.AddWarning("HAVING is not yet supported")
-	}
 
 	// handle distinct
 	if stmt.Distinct.IsValid() {
@@ -67,14 +66,82 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 
 	// if we did have a where, insert the filter op
 	if where != nil {
+		aggregates = p.gatherExprAggregates(where, aggregates)
 		source = NewPlanOpFilter(p, where, source)
+	}
+
+	// handle the having clause
+	having, err := p.compileExpr(stmt.HavingExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	if having != nil {
+		// gather aggregates
+		aggregates = p.gatherExprAggregates(having, aggregates)
+
+		// make sure that any references are columns in the group by list, or in an aggregate
+
+		// make a list of group by expresssions
+		aggregateAndGroupByExprs := make([]types.PlanExpression, 0)
+		aggregateAndGroupByExprs = append(aggregateAndGroupByExprs, groupByExprs...)
+		// add to that the refs used by all the aggregates..
+		for _, agg := range aggregates {
+			InspectExpression(agg, func(expr types.PlanExpression) bool {
+				switch ex := expr.(type) {
+				case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
+					*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
+					*percentilePlanExpression:
+					ch := ex.Children()
+					// first arg is always the ref
+					aggregateAndGroupByExprs = append(aggregateAndGroupByExprs, ch[0])
+					return false
+				}
+				return true
+			})
+		}
+
+		// inspect the having expression, build a list of references that are not
+		// part of an aggregate
+		havingReferences := make([]*qualifiedRefPlanExpression, 0)
+		InspectExpression(having, func(expr types.PlanExpression) bool {
+			switch ex := expr.(type) {
+			case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
+				*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
+				*percentilePlanExpression:
+				return false
+			case *qualifiedRefPlanExpression:
+				havingReferences = append(havingReferences, ex)
+				return false
+			}
+			return true
+		})
+
+		// check the list of references against the aggregate and group by expressions
+		for _, nae := range havingReferences {
+			found := false
+			for _, pe := range aggregateAndGroupByExprs {
+				gbe, ok := pe.(*qualifiedRefPlanExpression)
+				if !ok {
+					continue
+				}
+				if strings.EqualFold(nae.columnName, gbe.columnName) &&
+					strings.EqualFold(nae.tableName, gbe.tableName) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, sql3.NewErrInvalidUngroupedColumnReferenceInHaving(0, 0, nae.columnName)
+			}
+		}
 	}
 
 	// do we have straight projection or a group by?
 	var compiledOp types.PlanOperator
-	if len(query.aggregates) > 0 {
+	if len(aggregates) > 0 {
 		//check that any projections that are not aggregates are in the group by list
-		var nonAggregateReferences []*qualifiedRefPlanExpression
+		nonAggregateReferences := make([]*qualifiedRefPlanExpression, 0)
 		for _, expr := range projections {
 			InspectExpression(expr, func(expr types.PlanExpression) bool {
 				switch ex := expr.(type) {
@@ -108,8 +175,12 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 				return nil, sql3.NewErrInvalidUngroupedColumnReference(0, 0, nae.columnName)
 			}
 		}
-
-		compiledOp = NewPlanOpProjection(projections, NewPlanOpGroupBy(query.aggregates, groupByExprs, source))
+		var groupByOp types.PlanOperator
+		groupByOp = NewPlanOpGroupBy(aggregates, groupByExprs, source)
+		if having != nil {
+			groupByOp = NewPlanOpHaving(p, having, groupByOp)
+		}
+		compiledOp = NewPlanOpProjection(projections, groupByOp)
 	} else {
 		compiledOp = NewPlanOpProjection(projections, source)
 	}
@@ -164,6 +235,32 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		compiledOp,
 	}
 	return query.WithChildren(children...)
+}
+
+func (p *ExecutionPlanner) gatherExprAggregates(expr types.PlanExpression, aggregates []types.PlanExpression) []types.PlanExpression {
+	result := aggregates
+	InspectExpression(expr, func(expr types.PlanExpression) bool {
+		switch ex := expr.(type) {
+		case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
+			*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
+			*percentilePlanExpression:
+			found := false
+			for _, ag := range result {
+				//compare based on string representation
+				if strings.EqualFold(ag.String(), ex.String()) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				result = append(result, ex)
+			}
+			// return false because thats as far down we want to inspect
+			return false
+		}
+		return true
+	})
+	return result
 }
 
 func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser.Source) (types.PlanOperator, error) {
@@ -410,6 +507,12 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 		}
 		stmt.TopExpr = expr
 	}
+
+	expr, err = p.analyzeExpression(stmt.HavingExpr, stmt)
+	if err != nil {
+		return err
+	}
+	stmt.HavingExpr = expr
 
 	expr, err = p.analyzeExpression(stmt.WhereExpr, stmt)
 	if err != nil {

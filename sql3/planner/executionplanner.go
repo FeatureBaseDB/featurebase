@@ -126,21 +126,6 @@ func (p *ExecutionPlanner) checkAccess(ctx context.Context, objectName string, _
 	return nil
 }
 
-// convenience function that allows the planner to keep track of aggregates so we can
-// use them during optimization
-func (p *ExecutionPlanner) addAggregate(agg types.PlanExpression) error {
-	table := p.scopeStack.read()
-	if table == nil {
-		return sql3.NewErrInternalf("unexpected symbol table state")
-	}
-
-	switch s := table.scope.(type) {
-	case *PlanOpQuery:
-		s.aggregates = append(s.aggregates, agg)
-	}
-	return nil
-}
-
 // addReference is a convenience function that allows the planner to keep track
 // of references so we can use them during optimization.
 func (p *ExecutionPlanner) addReference(ref *qualifiedRefPlanExpression) error {
