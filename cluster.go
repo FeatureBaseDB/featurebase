@@ -3,6 +3,7 @@ package pilosa
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
+	"github.com/molecula/featurebase/v3/dax/storage"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/roaring"
@@ -71,8 +73,8 @@ type cluster struct { // nolint: maligned
 
 	partitionAssigner string
 
-	writeLogWriter computer.WriteLogWriter
-	versionStore   dax.VersionStore
+	serverlessStorage *storage.ManagerManager
+	versionStore      dax.VersionStore
 
 	// isComputeNode is set to true if this node is running as a DAX compute
 	// node.
@@ -99,8 +101,6 @@ func newCluster() *cluster {
 
 		disCo: disco.NopDisCo,
 		noder: disco.NewEmptyLocalNoder(),
-
-		writeLogWriter: computer.NewNopWriteLogWriter(),
 	}
 }
 
@@ -317,6 +317,44 @@ func (c *cluster) findFieldKeys(ctx context.Context, field *Field, keys ...strin
 	return translations, nil
 }
 
+func (c *cluster) appendFieldKeysWriteLog(ctx context.Context, qtid dax.QualifiedTableID, fieldName dax.FieldName, translations map[string]uint64) error {
+	// TODO move marshaling somewhere more centralized and less... explicitly json-y
+	msg := computer.FieldKeyMap{
+		TableKey:   qtid.Key(),
+		Field:      fieldName,
+		StringToID: translations,
+	}
+
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return errors.Wrap(err, "marshalling field key map to json")
+	}
+	mgr := c.serverlessStorage.GetFieldKeyManager(qtid, fieldName)
+	err = mgr.Append(b)
+	if err != nil {
+		return errors.Wrap(err, "appending field keys")
+	}
+	return nil
+
+}
+
+func (c *cluster) appendTableKeysWriteLog(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, translations map[string]uint64) error {
+	msg := computer.PartitionKeyMap{
+		TableKey:   qtid.Key(),
+		Partition:  partition,
+		StringToID: translations,
+	}
+
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return errors.Wrap(err, "marshalling partition key map to json")
+	}
+
+	mgr := c.serverlessStorage.GetTableKeyManager(qtid, partition)
+	return errors.Wrap(mgr.Append(b), "appending table keys")
+
+}
+
 func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...string) (map[string]uint64, error) {
 	if idx := field.ForeignIndex(); idx != "" {
 		// The field uses foreign index keys.
@@ -349,17 +387,9 @@ func (c *cluster) createFieldKeys(ctx context.Context, field *Field, keys ...str
 		tkey := dax.TableKey(field.Index())
 		qtid := tkey.QualifiedTableID()
 		fieldName := dax.FieldName(field.Name())
-
-		// Get the current version for field.
-		version, found, err := c.versionStore.FieldVersion(ctx, qtid, fieldName)
+		err = c.appendFieldKeysWriteLog(ctx, qtid, fieldName, translations)
 		if err != nil {
-			return nil, errors.Wrap(err, "getting field version")
-		} else if !found {
-			return nil, errors.Errorf("no version found for table(%s) field(%s)", qtid, fieldName)
-		}
-
-		if err := c.writeLogWriter.CreateFieldKeys(ctx, qtid, fieldName, version, translations); err != nil {
-			return nil, errors.Errorf("logging field(%s/%s) keys(%v)", field.Index(), field.Name(), keys)
+			return nil, errors.Wrap(err, "appending to write log")
 		}
 
 		return translations, nil
@@ -753,16 +783,7 @@ func (c *cluster) createIndexKeys(ctx context.Context, indexName string, keys ..
 			tkey := dax.TableKey(idx.Name())
 			qtid := tkey.QualifiedTableID()
 			partitionNum := dax.PartitionNum(partitionID)
-
-			// Get the current version for partition.
-			version, found, err := c.versionStore.PartitionVersion(ctx, qtid, partitionNum)
-			if err != nil {
-				return errors.Wrap(err, "getting partition version")
-			} else if !found {
-				return errors.Errorf("no version found for table(%s) partition(%d)", qtid, partitionNum)
-			}
-
-			return c.writeLogWriter.CreateTableKeys(ctx, qtid, partitionNum, version, translations)
+			return c.appendTableKeysWriteLog(ctx, qtid, partitionNum, translations)
 		})
 	}
 

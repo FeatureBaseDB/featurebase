@@ -78,6 +78,9 @@ dc-logs-%:
 dc-prereqs:
 	mkdir -p ../.quick
 
+dc-cli:
+	featurebase cli --host localhost --port 8080 --org-id=testorg --db-id=testdb
+
 # This is just an example. For it to work, you'll first need to:
 #   featurebase cli --host localhost --port 8080 --org-id=testorg --db-id=testdb
 #   create table keysidstbl2 (_id string, slice idset);

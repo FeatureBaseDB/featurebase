@@ -450,7 +450,7 @@ func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Errorf("registration request to %s status code: %d: %s", url, resp.StatusCode, b)
 	}
 
 	return nil

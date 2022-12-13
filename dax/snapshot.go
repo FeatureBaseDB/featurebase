@@ -3,12 +3,8 @@ package dax
 type SnapshotShardDataRequest struct {
 	Address Address `json:"address"`
 
-	TableKey    TableKey `json:"table-key"`
-	ShardNum    ShardNum `json:"shard"`
-	FromVersion int      `json:"from-version"`
-	ToVersion   int      `json:"to-version"`
-
-	Directive Directive `json:"directive"`
+	TableKey TableKey `json:"table-key"`
+	ShardNum ShardNum `json:"shard"`
 }
 
 type SnapshotTableKeysRequest struct {

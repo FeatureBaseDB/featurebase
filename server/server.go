@@ -32,6 +32,7 @@ import (
 	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
+	"github.com/molecula/featurebase/v3/dax/storage"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	petcd "github.com/molecula/featurebase/v3/etcd"
@@ -75,9 +76,10 @@ type Command struct {
 	logger         loggerLogger
 	queryLogger    loggerLogger
 
-	Registrar       computer.Registrar
-	writeLogService computer.WriteLogService
-	snapshotService computer.SnapshotService
+	Registrar         computer.Registrar
+	serverlessStorage *storage.ManagerManager
+	writeLogService   computer.WriteLogService
+	snapshotService   computer.SnapshotService
 
 	Handler      pilosa.HandlerI
 	httpHandler  http.Handler
@@ -550,19 +552,8 @@ func (m *Command) setupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
-	// WriteLogger setup.
-	var wlw computer.WriteLogWriter = computer.NewNopWriteLogWriter()
-	var wlr computer.WriteLogReader = computer.NewNopWriteLogReader()
-	if m.writeLogService != nil {
-		wlrw := computer.NewWriteLogReadWriter(m.writeLogService)
-		wlr = wlrw
-		wlw = wlrw
-	}
-
-	// Snapshotter setup.
-	var snap computer.SnapshotReadWriter = computer.NewNopSnapshotReadWriter()
-	if m.snapshotService != nil {
-		snap = computer.NewSnapshotReadWriter(m.snapshotService)
+	if m.writeLogService != nil && m.snapshotService != nil {
+		m.serverlessStorage = storage.NewManagerManager(m.snapshotService, m.writeLogService, m.logger)
 	}
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
@@ -599,9 +590,7 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
 		pilosa.OptServerExecutionPlannerFn(executionPlannerFn),
-		pilosa.OptServerWriteLogReader(wlr),
-		pilosa.OptServerWriteLogWriter(wlw),
-		pilosa.OptServerSnapshotReadWriter(snap),
+		pilosa.OptServerServerlessStorage(m.serverlessStorage),
 		pilosa.OptServerIsDataframeEnabled(m.Config.Dataframe.Enable),
 	}
 
@@ -646,9 +635,7 @@ func (m *Command) setupServer() error {
 	m.API, err = pilosa.NewAPI(
 		pilosa.OptAPIServer(m.Server),
 		pilosa.OptAPIImportWorkerPoolSize(m.Config.ImportWorkerPoolSize),
-		pilosa.OptAPIWriteLogReader(wlr),
-		pilosa.OptAPIWriteLogWriter(wlw),
-		pilosa.OptAPISnapshotter(snap),
+		pilosa.OptAPIServerlessStorage(m.serverlessStorage),
 		pilosa.OptAPIDirectiveWorkerPoolSize(m.Config.DirectiveWorkerPoolSize),
 		pilosa.OptAPIIsComputeNode(m.isComputeNode),
 	)

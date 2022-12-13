@@ -223,7 +223,8 @@ build-for-quick:
 docker-image-featurebase-quick: build-for-quick
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
-	    --file Dockerfile-dax-quick ./.quick/
+	    --file Dockerfile-dax-quick \
+	    --tag dax/featurebase ./.quick/
 
 
 docker-image-datagen: vendor
