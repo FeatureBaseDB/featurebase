@@ -11,9 +11,7 @@ import (
 	"github.com/molecula/featurebase/v3/dax/computer"
 	mdsclient "github.com/molecula/featurebase/v3/dax/mds/client"
 	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	snapshotterclient "github.com/molecula/featurebase/v3/dax/snapshotter/client"
 	"github.com/molecula/featurebase/v3/dax/writelogger"
-	writeloggerclient "github.com/molecula/featurebase/v3/dax/writelogger/client"
 	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/logger"
 	fbserver "github.com/molecula/featurebase/v3/server"
@@ -157,7 +155,8 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 
 	var writeLoggerImpl computer.WriteLogService
 	if cfg.ComputerConfig.WriteLogger != "" {
-		writeLoggerImpl = writeloggerclient.New(dax.Address(cfg.ComputerConfig.WriteLogger))
+		panic("running separate writelogger is currently unsupported")
+		// writeLoggerImpl = writeloggerclient.New(dax.Address(cfg.ComputerConfig.WriteLogger))
 	} else if wlSvc != nil {
 		writeLoggerImpl = wlSvc
 	} else {
@@ -166,7 +165,8 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 
 	var snapshotterImpl computer.SnapshotService
 	if cfg.ComputerConfig.Snapshotter != "" {
-		snapshotterImpl = snapshotterclient.New(dax.Address(cfg.ComputerConfig.Snapshotter))
+		panic("running separate snapshotter is currently unsupported")
+		// snapshotterImpl = snapshotterclient.New(dax.Address(cfg.ComputerConfig.Snapshotter))
 	} else if ssSvc != nil {
 		snapshotterImpl = ssSvc
 	} else {

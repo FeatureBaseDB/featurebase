@@ -50,11 +50,11 @@ func TestWriteLogger(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Read the message.
-		reader, closer, err := wl.LogReader(bucket(table, partition), key, version)
+		readcloser, err := wl.LogReader(bucket(table, partition), key, version)
 		assert.NoError(t, err)
-		defer closer.Close()
+		defer readcloser.Close()
 
-		buf, err := io.ReadAll(reader)
+		buf, err := io.ReadAll(readcloser)
 		assert.NoError(t, err)
 
 		var out payload
