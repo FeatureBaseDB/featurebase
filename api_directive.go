@@ -41,6 +41,9 @@ func (api *API) ApplyDirective(ctx context.Context, d *dax.Directive) error {
 		if err := api.deleteAllIndexes(ctx); err != nil {
 			return errors.Wrap(err, "deleting all indexes")
 		}
+		if err := api.serverlessStorage.RemoveAll(); err != nil {
+			return errors.Wrap(err, "removing all managers")
+		}
 
 		// Set previousDirective to empty so the diff handles everything as new.
 		previousDirective = dax.Directive{}
@@ -358,9 +361,12 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 	if err != nil {
 		return errors.Wrap(err, "loading table key snapshot")
 	}
-	defer rc.Close()
-	if err := api.TranslateIndexDB(ctx, string(tkey), int(partition), rc); err != nil {
-		return errors.Wrap(err, "restoring table keys")
+	if rc != nil {
+		defer rc.Close()
+		if err := api.TranslateIndexDB(ctx, string(tkey), int(partition), rc); err != nil {
+			return errors.Wrap(err, "restoring table keys")
+		}
+
 	}
 
 	// define write log loading in a function since we have to do it
@@ -369,6 +375,9 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 		writelog, err := mgr.LoadWriteLog()
 		if err != nil {
 			return errors.Wrap(err, "getting write log reader for table keys")
+		}
+		if writelog == nil {
+			return nil
 		}
 		reader := storage.NewTableKeyReader(qtid, partition, writelog)
 		defer reader.Close()
@@ -425,9 +434,11 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 	if err != nil {
 		return errors.Wrap(err, "loading field key snapshot")
 	}
-	defer rc.Close()
-	if err := api.TranslateFieldDB(ctx, string(tkey), string(field), rc); err != nil {
-		return errors.Wrap(err, "restoring field keys")
+	if rc != nil {
+		defer rc.Close()
+		if err := api.TranslateFieldDB(ctx, string(tkey), string(field), rc); err != nil {
+			return errors.Wrap(err, "restoring field keys")
+		}
 	}
 
 	// define write log loading in a function since we have to do it
@@ -436,6 +447,9 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 		writelog, err := mgr.LoadWriteLog()
 		if err != nil {
 			return errors.Wrap(err, "getting write log reader for field keys")
+		}
+		if writelog == nil {
+			return nil
 		}
 		reader := storage.NewFieldKeyReader(qtid, field, writelog)
 		defer reader.Close()
@@ -502,8 +516,11 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 	if err != nil {
 		return errors.Wrap(err, "reading latest snapshot for shard")
 	}
-	if err := api.RestoreShard(ctx, string(tkey), uint64(shard), rc); err != nil {
-		return errors.Wrap(err, "restoring shard data")
+	if rc != nil {
+		defer rc.Close()
+		if err := api.RestoreShard(ctx, string(tkey), uint64(shard), rc); err != nil {
+			return errors.Wrap(err, "restoring shard data")
+		}
 	}
 
 	// define write log loading in a func because we do it twice.
@@ -512,12 +529,17 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 		if err != nil {
 			return errors.Wrap(err, "")
 		}
+		if writelog == nil {
+			return nil
+		}
+
 		reader := storage.NewShardReader(qtid, partition, shard, writelog)
 		defer reader.Close()
 		for logMsg, err := reader.Read(); err != io.EOF; logMsg, err = reader.Read() {
 			if err != nil {
 				return errors.Wrap(err, "reading from log reader")
 			}
+
 			switch msg := logMsg.(type) {
 			case *computer.ImportRoaringMessage:
 				req := &ImportRoaringRequest{
