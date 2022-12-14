@@ -200,9 +200,9 @@ func evaluateStringArg(n types.PlanExpression, currentRow []interface{}) (string
 	return stringArgOne, nil
 }
 
-// Analyze function for Trim
+// Analyze function for Trim/RTrim/LTrim
 func (p *ExecutionPlanner) analyseFunctionTrim(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
-	//one argument for Trim Function
+	//one argument for Trim Functions
 	if len(call.Args) != 1 {
 		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
 	}
@@ -225,4 +225,26 @@ func (n *callPlanExpression) EvaluateTrim(currentRow []interface{}) (interface{}
 
 	// Trim the whitespace from string
 	return strings.TrimSpace(stringArgOne), nil
+}
+
+// Execute RTrim function to remove trailing whitespaces from string
+func (n *callPlanExpression) EvaluateRTrim(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// Trim the trailing whitespace from string
+	return strings.TrimRight(stringArgOne, " "), nil
+}
+
+// Execute LTrim function to remove leading whitespaces from string
+func (n *callPlanExpression) EvaluateLTrim(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// Trim the leading whitespace from string
+	return strings.TrimLeft(stringArgOne, " "), nil
 }
