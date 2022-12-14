@@ -242,5 +242,59 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			ExpErr: "string expression expected",
 		},
+		{
+			name: "RemovingTrailingspacefromStringusingRTrim",
+			SQLs: sqls(
+				"select rtrim('  this  ')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("  this")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "IncorrectArgumentsforRTrim",
+			SQLs: sqls(
+				"select rtrim(' a ',' b ')",
+			),
+			ExpErr: "'rtrim': count of formal parameters (1) does not match count of actual parameters (2)",
+		},
+		{
+			name: "IncorrectInputforRTrim",
+			SQLs: sqls(
+				"select rtrim(1)",
+			),
+			ExpErr: "string expression expected",
+		},
+		{
+			name: "RemovingLeadingspacefromStringusingLTrim",
+			SQLs: sqls(
+				"select ltrim('  this  ')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("this  ")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "IncorrectArgumentsforLTrim",
+			SQLs: sqls(
+				"select ltrim(' a ',' b ')",
+			),
+			ExpErr: "'ltrim': count of formal parameters (1) does not match count of actual parameters (2)",
+		},
+		{
+			name: "IncorrectInputforLTrim",
+			SQLs: sqls(
+				"select ltrim(1)",
+			),
+			ExpErr: "string expression expected",
+		},
 	},
 }
