@@ -96,7 +96,7 @@ type Server struct { // nolint: maligned
 
 	executionPlannerFn ExecutionPlannerFn
 
-	serverlessStorage *daxstorage.ManagerManager
+	serverlessStorage *daxstorage.ResourceManager
 
 	dataframeEnabled bool
 }
@@ -433,7 +433,7 @@ func OptServerExecutionPlannerFn(fn ExecutionPlannerFn) ServerOption {
 	}
 }
 
-func OptServerServerlessStorage(mm *daxstorage.ManagerManager) ServerOption {
+func OptServerServerlessStorage(mm *daxstorage.ResourceManager) ServerOption {
 	return func(s *Server) error {
 		s.serverlessStorage = mm
 		return nil

@@ -355,14 +355,14 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey, partition dax.PartitionNum) error {
 	qtid := tkey.QualifiedTableID()
 
-	mgr := api.serverlessStorage.GetTableKeyManager(qtid, partition)
-	if mgr.IsLocked() {
+	resource := api.serverlessStorage.GetTableKeyResource(qtid, partition)
+	if resource.IsLocked() {
 		api.logger().Warnf("skipping loadTableKeys (already held) %s %d", tkey, partition)
 		return nil
 	}
 
 	// load latest snapshot
-	if rc, err := mgr.LoadLatestSnapshot(); err != nil {
+	if rc, err := resource.LoadLatestSnapshot(); err != nil {
 		return errors.Wrap(err, "loading table key snapshot")
 	} else if rc != nil {
 		defer rc.Close()
@@ -374,7 +374,7 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 	// define write log loading in a function since we have to do it
 	// before and after locking
 	loadWriteLog := func() error {
-		writelog, err := mgr.LoadWriteLog()
+		writelog, err := resource.LoadWriteLog()
 		if err != nil {
 			return errors.Wrap(err, "getting write log reader for table keys")
 		}
@@ -402,12 +402,12 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 	}
 
 	// acquire lock on this partition's keys
-	if err := mgr.Lock(); err != nil {
+	if err := resource.Lock(); err != nil {
 		return errors.Wrap(err, "locking table key partition")
 	}
 
 	// reload writelog in case of changes between last load and
-	// lock. The manager object takes care of only loading new data.
+	// lock. The resource object takes care of only loading new data.
 	return loadWriteLog()
 }
 
@@ -429,14 +429,14 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.FieldName) error {
 	qtid := tkey.QualifiedTableID()
 
-	mgr := api.serverlessStorage.GetFieldKeyManager(qtid, field)
-	if mgr.IsLocked() {
+	resource := api.serverlessStorage.GetFieldKeyResource(qtid, field)
+	if resource.IsLocked() {
 		api.logger().Warnf("skipping loadFieldKeys (already held) %s %s", tkey, field)
 		return nil
 	}
 
 	// load latest snapshot
-	if rc, err := mgr.LoadLatestSnapshot(); err != nil {
+	if rc, err := resource.LoadLatestSnapshot(); err != nil {
 		return errors.Wrap(err, "loading field key snapshot")
 	} else if rc != nil {
 		defer rc.Close()
@@ -448,7 +448,7 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 	// define write log loading in a function since we have to do it
 	// before and after locking
 	loadWriteLog := func() error {
-		writelog, err := mgr.LoadWriteLog()
+		writelog, err := resource.LoadWriteLog()
 		if err != nil {
 			return errors.Wrap(err, "getting write log reader for field keys")
 		}
@@ -483,12 +483,12 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 	}
 
 	// acquire lock on this partition's keys
-	if err := mgr.Lock(); err != nil {
+	if err := resource.Lock(); err != nil {
 		return errors.Wrap(err, "locking field key partition")
 	}
 
 	// reload writelog in case of changes between last load and
-	// lock. The manager object takes care of only loading new data.
+	// lock. The resource object takes care of only loading new data.
 	return loadWriteLog()
 }
 
@@ -515,13 +515,13 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 
 	partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
 
-	mgr := api.serverlessStorage.GetShardManager(qtid, partition, shard)
-	if mgr.IsLocked() {
+	resource := api.serverlessStorage.GetShardResource(qtid, partition, shard)
+	if resource.IsLocked() {
 		api.logger().Warnf("skipping loadShard (already held) %s %d", tkey, shard)
 		return nil
 	}
 
-	if rc, err := mgr.LoadLatestSnapshot(); err != nil {
+	if rc, err := resource.LoadLatestSnapshot(); err != nil {
 		return errors.Wrap(err, "reading latest snapshot for shard")
 	} else if rc != nil {
 		defer rc.Close()
@@ -532,7 +532,7 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 
 	// define write log loading in a func because we do it twice.
 	loadWriteLog := func() error {
-		writelog, err := mgr.LoadWriteLog()
+		writelog, err := resource.LoadWriteLog()
 		if err != nil {
 			return errors.Wrap(err, "")
 		}
@@ -641,12 +641,12 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 	}
 
 	// acquire lock on this partition's keys
-	if err := mgr.Lock(); err != nil {
+	if err := resource.Lock(); err != nil {
 		return errors.Wrap(err, "locking field key partition")
 	}
 
 	// reload writelog in case of changes between last load and
-	// lock. The manager object takes care of only loading new data.
+	// lock. The resource object takes care of only loading new data.
 	return loadWriteLog()
 }
 

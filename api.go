@@ -56,7 +56,7 @@ type API struct {
 
 	Serializer Serializer
 
-	serverlessStorage *storage.ManagerManager
+	serverlessStorage *storage.ResourceManager
 
 	directiveWorkerPoolSize int
 
@@ -86,7 +86,7 @@ func OptAPIServer(s *Server) apiOption {
 	}
 }
 
-func OptAPIServerlessStorage(mm *storage.ManagerManager) apiOption {
+func OptAPIServerlessStorage(mm *storage.ResourceManager) apiOption {
 	return func(a *API) error {
 		a.serverlessStorage = mm
 		return nil
@@ -705,8 +705,8 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					return errors.Wrap(err, "marshalling log message")
 				}
 
-				mgr := api.serverlessStorage.GetShardManager(qtid, partitionNum, shardNum)
-				err = mgr.Append(b)
+				resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+				err = resource.Append(b)
 				if err != nil {
 					return errors.Wrap(err, "appending shard data") // TODO do we need to set err0 or something?
 				}
@@ -1518,8 +1518,8 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 			return errors.Wrap(err, "marshalling log message")
 		}
 
-		mgr := api.serverlessStorage.GetShardManager(qtid, partitionNum, shardNum)
-		err = mgr.Append(b)
+		resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+		err = resource.Append(b)
 		if err != nil {
 			return errors.Wrap(err, "appending shard data") // TODO do we need to set err0 or something?
 		}
@@ -1768,8 +1768,8 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 			return err1
 		}
 
-		mgr := api.serverlessStorage.GetShardManager(qtid, partitionNum, shardNum)
-		err1 = errors.Wrap(mgr.Append(b), "appending shard data")
+		resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+		err1 = errors.Wrap(resource.Append(b), "appending shard data")
 		if err1 != nil {
 			return err1
 		}
@@ -1860,8 +1860,8 @@ func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueReque
 			return errors.Wrap(err, "marshalling log message")
 		}
 
-		mgr := api.serverlessStorage.GetShardManager(qtid, partitionNum, shardNum)
-		err = mgr.Append(b)
+		resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+		err = resource.Append(b)
 		if err != nil {
 			return errors.Wrap(err, "appending shard data") // TODO do we need to set err0 or something?
 		}
@@ -3114,13 +3114,13 @@ func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDat
 		return errors.Wrap(err, "getting index/shard readcloser")
 	}
 
-	mgr := api.serverlessStorage.GetShardManager(qtid, partitionNum, req.ShardNum)
+	resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, req.ShardNum)
 	// Bump writelog version while write Tx is held.
-	if err := mgr.IncrementWLVersion(); err != nil {
+	if err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing write log version")
 	}
 	// TODO(jaffee) look into downgrading Tx on RBF to read lock here now that WL version is incremented.
-	err = mgr.Snapshot(rc)
+	err = resource.Snapshot(rc)
 	return errors.Wrap(err, "snapshotting shard data")
 }
 
@@ -3144,12 +3144,12 @@ func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKey
 
 	// TODO(jaffee) need to ensure writes to translation data can't
 	// occur while this is happening.
-	mgr := api.serverlessStorage.GetTableKeyManager(qtid, req.PartitionNum)
-	if err := mgr.IncrementWLVersion(); err != nil {
+	resource := api.serverlessStorage.GetTableKeyResource(qtid, req.PartitionNum)
+	if err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing write log version")
 	}
 	// TODO(jaffee) downgrade (currently non-existent) lock to read-only
-	err = mgr.SnapshotTo(wrTo)
+	err = resource.SnapshotTo(wrTo)
 	return errors.Wrap(err, "snapshotting table keys")
 }
 
@@ -3165,12 +3165,12 @@ func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKey
 		return errors.Wrap(err, "getting index/field writeto")
 	}
 
-	mgr := api.serverlessStorage.GetFieldKeyManager(qtid, req.Field)
-	if err := mgr.IncrementWLVersion(); err != nil {
+	resource := api.serverlessStorage.GetFieldKeyResource(qtid, req.Field)
+	if err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing writelog version")
 	}
 	// TODO(jaffee) downgrade to read lock
-	err = mgr.SnapshotTo(wrTo)
+	err = resource.SnapshotTo(wrTo)
 	return errors.Wrap(err, "snapshotTo in FieldKeys")
 }
 

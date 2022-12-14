@@ -73,7 +73,7 @@ type cluster struct { // nolint: maligned
 
 	partitionAssigner string
 
-	serverlessStorage *storage.ManagerManager
+	serverlessStorage *storage.ResourceManager
 	versionStore      dax.VersionStore
 
 	// isComputeNode is set to true if this node is running as a DAX compute
@@ -329,8 +329,8 @@ func (c *cluster) appendFieldKeysWriteLog(ctx context.Context, qtid dax.Qualifie
 	if err != nil {
 		return errors.Wrap(err, "marshalling field key map to json")
 	}
-	mgr := c.serverlessStorage.GetFieldKeyManager(qtid, fieldName)
-	err = mgr.Append(b)
+	resource := c.serverlessStorage.GetFieldKeyResource(qtid, fieldName)
+	err = resource.Append(b)
 	if err != nil {
 		return errors.Wrap(err, "appending field keys")
 	}
@@ -350,8 +350,8 @@ func (c *cluster) appendTableKeysWriteLog(ctx context.Context, qtid dax.Qualifie
 		return errors.Wrap(err, "marshalling partition key map to json")
 	}
 
-	mgr := c.serverlessStorage.GetTableKeyManager(qtid, partition)
-	return errors.Wrap(mgr.Append(b), "appending table keys")
+	resource := c.serverlessStorage.GetTableKeyResource(qtid, partition)
+	return errors.Wrap(resource.Append(b), "appending table keys")
 
 }
 
