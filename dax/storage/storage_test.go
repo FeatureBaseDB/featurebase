@@ -41,44 +41,40 @@ func TestManagerManager(t *testing.T) {
 		ID:   dax.TableID("blah"),
 		Name: "blah",
 	}
+	var n int
+	var d, wld io.ReadCloser
 
 	// get a manager and perform normal startup routine on empty data
 	mgr := mm.GetShardManager(qtid, dax.PartitionNum(1), dax.ShardNum(1))
 
-	d, err := mgr.LoadLatestSnapshot()
+	d, err = mgr.LoadLatestSnapshot()
 	assert.NoError(t, err)
-	n, err := d.Read(make([]byte, 8))
-	assert.Equal(t, 0, n)
-	assert.Equal(t, err, io.EOF)
+	assert.Nil(t, d)
 
-	wld, err := mgr.LoadWriteLog()
+	wld, err = mgr.LoadWriteLog()
 	assert.NoError(t, err)
-	n, err = wld.Read(make([]byte, 8))
-	assert.Equal(t, 0, n)
-	assert.Equal(t, io.EOF, err)
+	assert.Nil(t, wld)
 
 	err = mgr.Lock()
 	assert.NoError(t, err)
 
 	wld, err = mgr.LoadWriteLog()
 	assert.NoError(t, err)
-	n, err = wld.Read(make([]byte, 8))
-	assert.Equal(t, 0, n)
-	assert.Equal(t, io.EOF, err)
+	assert.Nil(t, wld)
 
 	// append some data
 	err = mgr.Append([]byte("blahblah"))
 	assert.NoError(t, err)
 
+	// a new ManagerManager is necessary so we get a new Manager with
+	// new internal state instead of a cached Manager.
 	mm2 := NewManagerManager(sn, wl, logger.NewStandardLogger(os.Stderr))
 	// get second manager for same stuff
 	mgr2 := mm2.GetShardManager(qtid, dax.PartitionNum(1), dax.ShardNum(1))
 	// load snapshot on 2nd manager (empty)
 	d, err = mgr2.LoadLatestSnapshot()
 	assert.NoError(t, err)
-	n, err = d.Read(make([]byte, 8))
-	assert.Equal(t, 0, n)
-	assert.Equal(t, io.EOF, err)
+	assert.Nil(t, d)
 
 	// load WL on 2nd manager (blahblah)
 	wld, err = mgr2.LoadWriteLog()
