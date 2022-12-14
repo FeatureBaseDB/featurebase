@@ -53,14 +53,20 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
-			columnName:  "keys",
+			columnName:  "updated_at",
 			columnIndex: 5,
+			dataType:    parser.NewDataTypeTimestamp(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_tables",
+			columnName:  "keys",
+			columnIndex: 6,
 			dataType:    parser.NewDataTypeBool(),
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
 			columnName:  "description",
-			columnIndex: 6,
+			columnIndex: 7,
 			dataType:    parser.NewDataTypeString(),
 		}}
 
