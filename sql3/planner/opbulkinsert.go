@@ -540,20 +540,32 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 				case []interface{}:
 					setValue := make([]int64, 0)
 					for _, i := range v {
-						f, ok := i.(float64)
-						if !ok {
-							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-						}
-						if f == float64(int64(f)) {
-							setValue = append(setValue, int64(f))
-						} else {
+						switch v := i.(type) {
+						case float64:
+							if v == float64(int64(v)) {
+								setValue = append(setValue, int64(v))
+							} else {
+								return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+							}
+						case string:
+							intVal, err := strconv.ParseInt(v, 10, 64)
+							if err != nil {
+								return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+							}
+							setValue = append(setValue, int64(intVal))
+
+						default:
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
 					}
 					result[idx] = setValue
 
 				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					intVal, err := strconv.ParseInt(v, 10, 64)
+					if err != nil {
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					}
+					result[idx] = []int64{int64(intVal)}
 
 				case bool:
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
