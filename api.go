@@ -68,6 +68,10 @@ func (api *API) Holder() *Holder {
 	return api.holder
 }
 
+func (api *API) logger() logger.Logger {
+	return api.server.logger
+}
+
 // apiOption is a functional option type for pilosa.API
 type apiOption func(*API) error
 
