@@ -53,6 +53,29 @@ func (p *ExecutionPlanner) analyzeFunctionLower(call *parser.Call, scope parser.
 	if !typeIsString(call.Args[0].DataType()) {
 		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 	}
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
+func (p *ExecutionPlanner) analyseFunctionStringSplit(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) <= 1 || len(call.Args) > 3 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
+	}
+
+	if !typeIsString(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	// string seperator
+	if !typeIsString(call.Args[1].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[1].Pos().Line, call.Args[1].Pos().Column)
+	}
+
+	// third argument is the position. optional, defaults to 0
+	if len(call.Args) == 3 && !typeIsInteger(call.Args[2].DataType()) {
+		return nil, sql3.NewErrIntExpressionExpected(call.Args[2].Pos().Line, call.Args[2].Pos().Column)
+	}
 
 	call.ResultDataType = parser.NewDataTypeString()
 
@@ -186,6 +209,33 @@ func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (inter
 		return nil, err
 	}
 	return strings.ReplaceAll(stringArgOne, stringArgTwo, stringArgThree), nil
+}
+
+// takes a string, seperator and the position `n`, splits the string and returns n'th substring
+func (n *callPlanExpression) EvaluateStringSplit(currentRow []interface{}) (interface{}, error) {
+	inputString, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+	seperator, err := evaluateStringArg(n.args[1], currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if len(n.args) == 2 {
+		return strings.Split(inputString, seperator)[0], nil
+	}
+	pos, err := strconv.Atoi(n.args[2].String())
+	if err != nil {
+		return nil, sql3.NewErrInternalf("unexpected type converion %T", n.args[2])
+	}
+
+	res := strings.Split(inputString, seperator)
+	if pos <= 0 {
+		return res[0], nil
+	} else if len(res) > pos {
+		return res[pos], nil
+	}
+	return "", nil
 }
 
 func evaluateStringArg(n types.PlanExpression, currentRow []interface{}) (string, error) {

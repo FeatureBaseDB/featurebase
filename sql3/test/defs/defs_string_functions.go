@@ -57,6 +57,32 @@ var stringScalarFunctionsTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "StringSplitNoPos",
+			SQLs: sqls(
+				"select stringsplit('string,split', ',')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("string")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "StringSplitPos",
+			SQLs: sqls(
+				"select stringsplit('string,split,now', stringsplit(',mid,', 'mid', 1), 2)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("now")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
 			name: "SubstringNegativeIndex",
 			SQLs: sqls(
 				"select substring('testing', -10, 14)",
