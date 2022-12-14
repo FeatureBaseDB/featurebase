@@ -806,6 +806,7 @@ func (s *Server) Close() error {
 		var errh, errd error
 		var errhs error
 		var errc error
+		var errSS error
 
 		if s.cluster != nil {
 			errc = s.cluster.close()
@@ -817,7 +818,9 @@ func (s *Server) Close() error {
 		if s.holder != nil {
 			errh = s.holder.Close()
 		}
-		errSS := s.serverlessStorage.RemoveAll()
+		if s.serverlessStorage != nil {
+			errSS = s.serverlessStorage.RemoveAll()
+		}
 
 		// prefer to return holder error over cluster
 		// error. This order is somewhat arbitrary. It would be better if we had
