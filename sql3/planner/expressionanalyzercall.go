@@ -253,6 +253,10 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		return p.analyseFunctionReplaceAll(call, scope)
 	case "TRIM":
 		return p.analyseFunctionTrim(call, scope)
+	case "RTRIM":
+		return p.analyseFunctionTrim(call, scope)
+	case "LTRIM":
+		return p.analyseFunctionTrim(call, scope)
 
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
