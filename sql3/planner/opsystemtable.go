@@ -70,11 +70,6 @@ var systemTables = map[string]*systemTable{
 			},
 			&types.PlannerColumn{
 				RelationName: fbClusterInfo,
-				ColumnName:   "shard_width",
-				Type:         parser.NewDataTypeInt(),
-			},
-			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
 				ColumnName:   "replica_count",
 				Type:         parser.NewDataTypeInt(),
 			},
@@ -312,7 +307,6 @@ func (i *fbClusterInfoRowIter) Next(ctx context.Context) (types.Row, error) {
 			i.planner.systemAPI.Version(),
 			i.planner.systemAPI.ClusterState(),
 			i.planner.systemAPI.ClusterNodeCount(),
-			i.planner.systemAPI.ShardWidth(),
 			i.planner.systemAPI.ClusterReplicaCount(),
 		}
 		i.rowIndex += 1
@@ -436,7 +430,11 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
 					}
 					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+						// if we still have the default, we need to print that out if we have a non-default size
+						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+						}
+						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
 					}
 
 				case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
@@ -444,7 +442,11 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
 					}
 					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+						// if we still have the default, we need to print that out if we have a non-default size
+						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+						}
+						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
 					}
 
 				case *parser.DataTypeIDSetQuantum, *parser.DataTypeStringSetQuantum:
@@ -452,7 +454,11 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
 					}
 					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+						// if we still have the default, we need to print that out if we have a non-default size
+						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+						}
+						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
 					}
 					if !col.Options.TimeQuantum.IsEmpty() {
 						fmt.Fprintf(&buf, " timequantum '%s'", col.Options.TimeQuantum)
