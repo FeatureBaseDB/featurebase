@@ -214,7 +214,6 @@ const (
 	SELECT
 	SELECT_COLUMN
 	SET
-	SHARDWIDTH
 	SIZE
 	SHOW
 	SPAN
@@ -438,7 +437,6 @@ var tokens = [...]string{
 	SELECT_COLUMN:     "SELECT_COLUMN",
 	SET:               "SET",
 	SIZE:              "SIZE",
-	SHARDWIDTH:        "SHARDWIDTH",
 	SHOW:              "SHOW",
 	SPAN:              "SPAN",
 	TABLE:             "TABLE",

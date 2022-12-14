@@ -8,6 +8,7 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
 	"github.com/pkg/errors"
 )
@@ -135,7 +136,7 @@ func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 	if err := i.planner.schemaAPI.CreateTable(ctx, tbl); err != nil {
 		if _, ok := errors.Cause(err).(pilosa.ConflictError); ok {
 			if i.failIfExists {
-				return nil, err
+				return nil, sql3.NewErrTableExists(0, 0, i.tableName)
 			}
 		} else {
 			return nil, err
