@@ -84,7 +84,7 @@ func TestManagerManager(t *testing.T) {
 	wld, err = mgr2.LoadWriteLog()
 	assert.NoError(t, err)
 	buf := make([]byte, 16)
-	n, err = wld.Read(buf)
+	n, _ = wld.Read(buf)
 	assert.Equal(t, 9, n)
 	assert.Equal(t, "blahblah\n", string(buf[:9]))
 	n, err = wld.Read(buf)
@@ -122,7 +122,7 @@ func TestManagerManager(t *testing.T) {
 
 	// loading write log should fail since there's been a snapshot
 	// between the last load and locking.
-	wld, err = mgr2.LoadWriteLog()
+	_, err = mgr2.LoadWriteLog()
 	assert.NotNil(t, err)
 
 	// mgr2 dies due to error loading write lock
