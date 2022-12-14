@@ -357,21 +357,18 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 
 	mgr := api.serverlessStorage.GetTableKeyManager(qtid, partition)
 	if mgr.IsLocked() {
-		api.logger().Debugf("skipping loadTableKeys (already held) %s %d", tkey, partition)
+		api.logger().Warnf("skipping loadTableKeys (already held) %s %d", tkey, partition)
 		return nil
 	}
 
 	// load latest snapshot
-	rc, err := mgr.LoadLatestSnapshot()
-	if err != nil {
+	if rc, err := mgr.LoadLatestSnapshot(); err != nil {
 		return errors.Wrap(err, "loading table key snapshot")
-	}
-	if rc != nil {
+	} else if rc != nil {
 		defer rc.Close()
 		if err := api.TranslateIndexDB(ctx, string(tkey), int(partition), rc); err != nil {
 			return errors.Wrap(err, "restoring table keys")
 		}
-
 	}
 
 	// define write log loading in a function since we have to do it
@@ -434,16 +431,14 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 
 	mgr := api.serverlessStorage.GetFieldKeyManager(qtid, field)
 	if mgr.IsLocked() {
-		api.logger().Debugf("skipping loadFieldKeys (already held) %s %s", tkey, field)
+		api.logger().Warnf("skipping loadFieldKeys (already held) %s %s", tkey, field)
 		return nil
 	}
 
 	// load latest snapshot
-	rc, err := mgr.LoadLatestSnapshot()
-	if err != nil {
+	if rc, err := mgr.LoadLatestSnapshot(); err != nil {
 		return errors.Wrap(err, "loading field key snapshot")
-	}
-	if rc != nil {
+	} else if rc != nil {
 		defer rc.Close()
 		if err := api.TranslateFieldDB(ctx, string(tkey), string(field), rc); err != nil {
 			return errors.Wrap(err, "restoring field keys")
@@ -522,15 +517,13 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 
 	mgr := api.serverlessStorage.GetShardManager(qtid, partition, shard)
 	if mgr.IsLocked() {
-		api.logger().Debugf("skipping loadShard (already held) %s %d", tkey, shard)
+		api.logger().Warnf("skipping loadShard (already held) %s %d", tkey, shard)
 		return nil
 	}
 
-	rc, err := mgr.LoadLatestSnapshot()
-	if err != nil {
+	if rc, err := mgr.LoadLatestSnapshot(); err != nil {
 		return errors.Wrap(err, "reading latest snapshot for shard")
-	}
-	if rc != nil {
+	} else if rc != nil {
 		defer rc.Close()
 		if err := api.RestoreShard(ctx, string(tkey), uint64(shard), rc); err != nil {
 			return errors.Wrap(err, "restoring shard data")

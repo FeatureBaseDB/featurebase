@@ -182,11 +182,11 @@ func (mm *ManagerManager) RemoveAll() error {
 	return nil
 }
 
-// Manager wraps the snapshotter and writelogger to implement the
-// ServerlessStorage interface and maintain messy state between
-// calls. Manager is *not* threadsafe, care should be taken that
-// concurrent calls are not made to Manager methods. The exception
-// being that Snapshot and Append are safe to call concurrently.
+// Manager wraps the snapshotter and writelogger to maintain messy
+// state between calls. Manager is *not* threadsafe, care should be
+// taken that concurrent calls are not made to Manager methods. The
+// exception being that Snapshot and Append are safe to call
+// concurrently.
 type Manager struct {
 	snapshotter computer.SnapshotService
 	writeLogger computer.WriteLogService
