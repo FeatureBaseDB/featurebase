@@ -3107,18 +3107,14 @@ func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDat
 	partition := disco.ShardToShardPartition(string(req.TableKey), uint64(req.ShardNum), disco.DefaultPartitionN)
 	partitionNum := dax.PartitionNum(partition)
 
-	// Create the snapshot for the current version.  How do we ensure
-	// here that any new writes go to the new write log since we are
-	// now reading a version of the shard which exists only at this
-	// exact point in time? Ans: we'll cut over to the new storage
-	// manager and call IncrementWriteLogVersion while a write Tx is
-	// held on RBF.
+	// Open a write Tx snapshotting current version.
 	rc, err := api.IndexShardSnapshot(ctx, string(req.TableKey), uint64(req.ShardNum), true)
 	if err != nil {
 		return errors.Wrap(err, "getting index/shard readcloser")
 	}
 
 	mgr := api.serverlessStorage.GetShardManager(qtid, partitionNum, req.ShardNum)
+	// Bump writelog version while write Tx is held.
 	if err := mgr.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing write log version")
 	}
