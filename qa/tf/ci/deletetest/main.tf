@@ -4,10 +4,10 @@ module "ci-cluster" {
     region = var.region
     profile = var.profile
     fb_cluster_arch = ["x86_64"]
-    fb_data_node_type = "m5ad.16xlarge" 
+    fb_data_node_type = "m6i.16xlarge" 
     fb_data_node_count = 5
     ebs_volumes = []
-    fb_ingest_type = "m4.16xlarge"
+    fb_ingest_type = "m6i.16xlarge"
     fb_ingest_node_count = 2
     fb_ingest_disk_size_gb = 1200
     vpc_id = "vpc-05a26a122f961dc2b"
