@@ -75,10 +75,10 @@ const (
 	ErrTableIDColumnConstraints  errors.Code = "ErrTableIDColumnConstraints"
 	ErrTableIDColumnAlter        errors.Code = "ErrTableIDColumnAlter"
 	ErrTableNotFound             errors.Code = "ErrTableNotFound"
+	ErrTableExists               errors.Code = "ErrTableExists"
 	ErrColumnNotFound            errors.Code = "ErrColumnNotFound"
 	ErrTableColumnNotFound       errors.Code = "ErrTableColumnNotFound"
 	ErrInvalidKeyPartitionsValue errors.Code = "ErrInvalidKeyPartitionsValue"
-	ErrInvalidShardWidthValue    errors.Code = "ErrInvalidShardWidthValue"
 
 	ErrBadColumnConstraint         errors.Code = "ErrBadColumnConstraint"
 	ErrConflictingColumnConstraint errors.Code = "ErrConflictingColumnConstraint"
@@ -504,6 +504,13 @@ func NewErrTableNotFound(line, col int, tableName string) error {
 	)
 }
 
+func NewErrTableExists(line, col int, tableName string) error {
+	return errors.New(
+		ErrTableExists,
+		fmt.Sprintf("[%d:%d] table '%s' already exists", line, col, tableName),
+	)
+}
+
 func NewErrColumnNotFound(line, col int, columnName string) error {
 	return errors.New(
 		ErrColumnNotFound,
@@ -522,13 +529,6 @@ func NewErrInvalidKeyPartitionsValue(line, col int, keypartitions int64) error {
 	return errors.New(
 		ErrInvalidKeyPartitionsValue,
 		fmt.Sprintf("[%d:%d] invalid value '%d' for key partitions (should be a number between 1-10000)", line, col, keypartitions),
-	)
-}
-
-func NewErrInvalidShardWidthValue(line, col int, shardwidth int64) error {
-	return errors.New(
-		ErrInvalidShardWidthValue,
-		fmt.Sprintf("[%d:%d] invalid value '%d' for shardwidth (should be a number that is a power of 2 and greater or equal to 2^16)", line, col, shardwidth),
 	)
 }
 

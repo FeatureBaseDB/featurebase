@@ -68,7 +68,7 @@ func TestPlanner_Show(t *testing.T) {
 	}
 
 	t.Run("SystemTablesInfo", func(t *testing.T) {
-		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, shard_width, replica_count from fb_cluster_info`)
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, replica_count from fb_cluster_info`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +83,6 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("db_version"),
 			wireQueryFieldString("state"),
 			wireQueryFieldInt("node_count"),
-			wireQueryFieldInt("shard_width"),
 			wireQueryFieldInt("replica_count"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
@@ -204,6 +203,42 @@ func TestPlanner_Show(t *testing.T) {
 		}
 	})
 
+	t.Run("ShowCreateTableCacheTypes", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table iris1 (
+			_id id,
+			speciesid id cachetype ranked size 1000
+			species string cachetype ranked size 1000
+			speciesids idset cachetype ranked size 1000
+			speciess stringset cachetype ranked size 1000
+			speciesidsq idset timequantum 'YMD'
+			speciessq stringset timequantum 'YMD'
+			) keypartitions 12
+		`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW CREATE TABLE iris1`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(results) != 1 {
+			t.Fatal(fmt.Errorf("unexpected result set length: %d", len(results)))
+		}
+
+		if diff := cmp.Diff([][]interface{}{
+			{string("create table iris1 (_id id, speciesid id cachetype ranked size 1000, species string cachetype ranked size 1000, speciesids idset cachetype ranked size 1000, speciess stringset cachetype ranked size 1000, speciesidsq idset timequantum 'YMD', speciessq stringset timequantum 'YMD');")},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("ddl"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
 	t.Run("ShowColumns", func(t *testing.T) {
 		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SHOW COLUMNS FROM %i`, c))
 		if err != nil {
@@ -313,7 +348,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			// Build the create table statement based on the fields slice above.
 			sql := "create table " + tableName + "_" + fld.name + " (_id id, "
 			sql += fld.name + " " + fld.typ + " " + fld.constraints
-			sql += `) keypartitions 12 shardwidth 1024`
+			sql += `) keypartitions 12`
 
 			// Run the create table statement.
 			_, _, err := sql_test.MustQueryRows(t, server, sql)
@@ -478,7 +513,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			}
 		}
 		sql += strings.Join(fieldDefs, ", ")
-		sql += `) keypartitions 12 shardwidth 65536`
+		sql += `) keypartitions 12`
 
 		// Run the create table statement.
 		results, columns, err := sql_test.MustQueryRows(t, server, sql)
@@ -553,7 +588,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 			stringcol string, 
 			stringsetcol stringset, 
 			idcol id, 
-			idsetcol idset) keypartitions 12 shardwidth 65536`)
+			idsetcol idset) keypartitions 12`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -576,11 +611,11 @@ func TestPlanner_CreateTable(t *testing.T) {
 			stringcol string, 
 			stringsetcol stringset, 
 			idcol id, 
-			idsetcol idset) keypartitions 12 shardwidth 65536`)
+			idsetcol idset) keypartitions 12`)
 		if err == nil {
 			t.Fatal("expected error")
 		} else {
-			if err.Error() != "creating index: index already exists" {
+			if err.Error() != "[0:0] table 'allcoltypes' already exists" {
 				t.Fatal(err)
 			}
 		}
@@ -606,7 +641,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 			idcol id cachetype ranked size 1000,
 			idsetcol idset cachetype lru,
 			idsetcolsz idset cachetype lru size 1000,
-			idsetcolq idset timequantum 'YMD' ttl '24h') keypartitions 12 shardwidth 65536`)
+			idsetcolq idset timequantum 'YMD' ttl '24h') keypartitions 12`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1740,7 +1775,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			petallength decimal(2),
 			petalwidth decimal(2),
 			species string cachetype ranked size 1000
-		) keypartitions 12 shardwidth 65536;`)
+		) keypartitions 12;`)
 		if err != nil {
 			t.Fatal(err)
 		}

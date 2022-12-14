@@ -78,7 +78,6 @@ func (*ResultColumn) node()             {}
 func (*RollbackStatement) node()        {}
 func (*SavepointStatement) node()       {}
 func (*SelectStatement) node()          {}
-func (*ShardWidthOption) node()         {}
 func (*StringLit) node()                {}
 func (*TableValuedFunction) node()      {}
 func (*TimeUnitConstraint) node()       {}
@@ -771,7 +770,6 @@ type TableOption interface {
 }
 
 func (*KeyPartitionsOption) option() {}
-func (*ShardWidthOption) option()    {}
 func (*CommentOption) option()       {}
 
 type KeyPartitionsOption struct {
@@ -782,19 +780,6 @@ type KeyPartitionsOption struct {
 func (o *KeyPartitionsOption) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("KEYPARTITIONS (")
-	buf.WriteString(o.Expr.String())
-	buf.WriteString(")")
-	return buf.String()
-}
-
-type ShardWidthOption struct {
-	ShardWidth Pos  // position of SHARDWIDTH keyword
-	Expr       Expr // expression
-}
-
-func (o *ShardWidthOption) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("SHARDWIDTH (")
 	buf.WriteString(o.Expr.String())
 	buf.WriteString(")")
 	return buf.String()
