@@ -174,6 +174,7 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("owner"),
 			wireQueryFieldString("updated_by"),
 			wireQueryFieldTimestamp("created_at"),
+			wireQueryFieldTimestamp("updated_at"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldString("description"),
 		}, columns); diff != "" {
