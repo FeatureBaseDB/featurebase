@@ -245,6 +245,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		return p.analyseFunctionReverse(call, scope)
 	case "UPPER":
 		return p.analyzeFunctionUpper(call, scope)
+	case "STRINGSPLIT":
+		return p.analyseFunctionStringSplit(call, scope)
 	case "SUBSTRING":
 		return p.analyseFunctionSubstring(call, scope)
 	case "LOWER":
