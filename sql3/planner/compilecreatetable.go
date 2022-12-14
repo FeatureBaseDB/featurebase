@@ -170,12 +170,14 @@ func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createT
 			unit := c.Expr.(*parser.StringLit)
 			timeUnit = unit.Value
 
-			epochString := c.EpochExpr.(*parser.StringLit)
-			tm, err := time.ParseInLocation(time.RFC3339, epochString.Value, time.UTC)
-			if err != nil {
-				return nil, sql3.NewErrInvalidTimeEpoch(c.EpochExpr.Pos().Line, c.EpochExpr.Pos().Line, epochString.Value)
+			if c.EpochExpr != nil {
+				epochString := c.EpochExpr.(*parser.StringLit)
+				tm, err := time.ParseInLocation(time.RFC3339, epochString.Value, time.UTC)
+				if err != nil {
+					return nil, sql3.NewErrInvalidTimeEpoch(c.EpochExpr.Pos().Line, c.EpochExpr.Pos().Line, epochString.Value)
+				}
+				epoch = tm
 			}
-			epoch = tm
 
 		case *parser.TimeQuantumConstraint:
 			unit := c.Expr.(*parser.StringLit)
