@@ -10,7 +10,7 @@ variable "fb_cluster_arch" {
 
 variable "fb_ingest_type" {
   type    = string
-  default = "m6g.2xlarge"
+  default = "c6g.2xlarge"
 }
 
 variable "fb_ingest_node_count" {
@@ -20,7 +20,7 @@ variable "fb_ingest_node_count" {
 
 variable "fb_data_node_type" {
   type    = string
-  default = "m6g.16xlarge"
+  default = "c6g.16xlarge"
 }
 
 variable "fb_data_node_count" {

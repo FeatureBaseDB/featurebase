@@ -44,7 +44,7 @@ Parameters:
     Description: The number of EC2 instances for the FeatureBase cluster  
   FBInstanceSize:
     Type: String
-    Default: m6i.16xlarge
+    Default: m5ad.16xlarge
     Description: Class of EC2 instance used to host the deployment.  
   # note that we are using a producer, which is also the kafka host
   # and the consumer uses the kafka-static binary for ingesting data
@@ -52,10 +52,10 @@ Parameters:
   # producer/consumer related params  
   ProducerInstanceSize:
     Type: String
-    Default: m6i.16xlarge
+    Default: m4.16xlarge
   ConsumerInstanceSize:
     Type: String
-    Default: m6i.16xlarge
+    Default: m4.16xlarge
   ProducerInstanceCount:
     Type: Number
     Default: 1
