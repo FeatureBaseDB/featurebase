@@ -200,6 +200,8 @@ type Manager struct {
 	lastWLPos          int
 
 	locked bool
+
+	// dirty bool // TODO(jaffee): dirty bit so we can skip snapshotting if there's nothing in WL
 }
 
 func (m *Manager) initialize() *Manager {
@@ -207,6 +209,13 @@ func (m *Manager) initialize() *Manager {
 	m.latestWLVersion = -1
 	m.lastWLPos = -1
 	return m
+}
+
+// IsLocked checks to see if this particular instance of the Manager
+// believes it holds the lock. It does not look at the state of
+// underlying storage to verify the lock.
+func (m *Manager) IsLocked() bool {
+	return m.locked
 }
 
 // LoadLatestSnapshot finds the most recent snapshot for this resource
@@ -217,6 +226,7 @@ func (m *Manager) LoadLatestSnapshot() (data io.ReadCloser, err error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "listing snapshots")
 	}
+	m.log.Debugf("LoadLatestSnapshot %s/%s: list: %v", m.bucket, m.key, snaps)
 	m.lastWLPos = 0
 
 	if len(snaps) == 0 {
@@ -251,6 +261,11 @@ func (m *Manager) LoadWriteLog() (data io.ReadCloser, err error) {
 		return nil, errors.New(errors.ErrUncoded, "LoadWriteLog called in inconsistent state, can't tell what version to load from")
 	}
 	wLogs, err := m.writeLogger.List(m.bucket, m.key)
+	if err != nil {
+		return nil, errors.Wrap(err, "listing write logs")
+	}
+
+	m.log.Debugf("LoadWriteLog %s/%s: list: %v", m.bucket, m.key, wLogs)
 
 	versions := make([]int, 0, len(wLogs))
 	for _, log := range wLogs {
@@ -308,6 +323,7 @@ func (m *Manager) LoadWriteLog() (data io.ReadCloser, err error) {
 // means that quite a lot has happened in between LoadWriteLog and
 // Lock, and we should probably just die and start over.
 func (m *Manager) Lock() error {
+	m.log.Debugf("Lock %s/%s", m.bucket, m.key)
 	// lock is sort of arbitrarily on the write log interface
 	if err := m.writeLogger.Lock(m.bucket, m.key); err != nil {
 		return errors.Wrap(err, "acquiring lock")
@@ -320,6 +336,7 @@ func (m *Manager) Lock() error {
 // haven't properly loaded and gotten a lock for the resource
 // we're writing to.
 func (m *Manager) Append(msg []byte) error {
+	m.log.Debugf("Append %s/%s", m.bucket, m.key)
 	if m.latestWLVersion < 0 {
 		return errors.New(errors.ErrUncoded, "can't call append before loading and locking write log")
 	}
@@ -332,6 +349,7 @@ func (m *Manager) Append(msg []byte) error {
 // WL and any that complete after the snapshot are in the
 // incremented WL.
 func (m *Manager) IncrementWLVersion() error {
+	m.log.Debugf("IncrementWLVersion %s/%s", m.bucket, m.key)
 	m.latestWLVersion++
 	m.lastWLPos = -1
 	m.loadWLsPastVersion = -1
@@ -344,6 +362,7 @@ func (m *Manager) IncrementWLVersion() error {
 // truncate any write logs which are now incorporated into the
 // snapshot.
 func (m *Manager) Snapshot(rc io.ReadCloser) error {
+	m.log.Debugf("Snapshot %s/%s", m.bucket, m.key)
 	// latestWLVersion has already been incremented at this point, so
 	// we write that version minus 1.
 	err := m.snapshotter.Write(m.bucket, m.key, m.latestWLVersion-1, rc)
@@ -358,6 +377,7 @@ func (m *Manager) Snapshot(rc io.ReadCloser) error {
 // of reading from translate stores who we're hoping to off in the
 // next season.
 func (m *Manager) SnapshotTo(wt io.WriterTo) error {
+	m.log.Debugf("SnapshotTo %s/%s", m.bucket, m.key)
 	err := m.snapshotter.WriteTo(m.bucket, m.key, m.latestWLVersion-1, wt)
 	if err != nil {
 		return errors.Wrap(err, "writing snapshot SnapshotTo")
@@ -373,6 +393,7 @@ func (m *Manager) SnapshotTo(wt io.WriterTo) error {
 // should have those removed by the operating system when the
 // process exits anyway.
 func (m *Manager) Unlock() error {
+	m.log.Debugf("Unlock %s/%s", m.bucket, m.key)
 	if !m.locked {
 		return errors.New(errors.ErrUncoded, "resource was not locked")
 	}

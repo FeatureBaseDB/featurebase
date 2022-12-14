@@ -356,6 +356,10 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 	qtid := tkey.QualifiedTableID()
 
 	mgr := api.serverlessStorage.GetTableKeyManager(qtid, partition)
+	if mgr.IsLocked() {
+		api.logger().Debugf("skipping loadTableKeys (already held) %s %d", tkey, partition)
+		return nil
+	}
 
 	// load latest snapshot
 	rc, err := mgr.LoadLatestSnapshot()
@@ -429,6 +433,10 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 	qtid := tkey.QualifiedTableID()
 
 	mgr := api.serverlessStorage.GetFieldKeyManager(qtid, field)
+	if mgr.IsLocked() {
+		api.logger().Debugf("skipping loadFieldKeys (already held) %s %s", tkey, field)
+		return nil
+	}
 
 	// load latest snapshot
 	rc, err := mgr.LoadLatestSnapshot()
@@ -513,6 +521,11 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 	partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
 
 	mgr := api.serverlessStorage.GetShardManager(qtid, partition, shard)
+	if mgr.IsLocked() {
+		api.logger().Debugf("skipping loadShard (already held) %s %d", tkey, shard)
+		return nil
+	}
+
 	rc, err := mgr.LoadLatestSnapshot()
 	if err != nil {
 		return errors.Wrap(err, "reading latest snapshot for shard")

@@ -26,6 +26,7 @@ import (
 	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/dax/storage"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/rbf"
 
 	//"github.com/molecula/featurebase/v3/pg"
@@ -66,6 +67,10 @@ type API struct {
 
 func (api *API) Holder() *Holder {
 	return api.holder
+}
+
+func (api *API) logger() logger.Logger {
+	return api.server.logger
 }
 
 // apiOption is a functional option type for pilosa.API
