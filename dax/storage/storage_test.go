@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestManagerManager(t *testing.T) {
+func TestResourceManager(t *testing.T) {
 	sdd, err := os.MkdirTemp("", "snaptest*")
 	assert.NoError(t, err)
 	wdd, err := os.MkdirTemp("", "wltest*")
@@ -31,7 +31,7 @@ func TestManagerManager(t *testing.T) {
 		DataDir: wdd,
 	})
 
-	mm := NewManagerManager(sn, wl, logger.NewStandardLogger(os.Stderr))
+	mm := NewResourceManager(sn, wl, logger.NewStandardLogger(os.Stderr))
 
 	qtid := dax.QualifiedTableID{
 		TableQualifier: dax.TableQualifier{
@@ -44,40 +44,40 @@ func TestManagerManager(t *testing.T) {
 	var n int
 	var d, wld io.ReadCloser
 
-	// get a manager and perform normal startup routine on empty data
-	mgr := mm.GetShardManager(qtid, dax.PartitionNum(1), dax.ShardNum(1))
+	// get a resource and perform normal startup routine on empty data
+	resource := mm.GetShardResource(qtid, dax.PartitionNum(1), dax.ShardNum(1))
 
-	d, err = mgr.LoadLatestSnapshot()
+	d, err = resource.LoadLatestSnapshot()
 	assert.NoError(t, err)
 	assert.Nil(t, d)
 
-	wld, err = mgr.LoadWriteLog()
+	wld, err = resource.LoadWriteLog()
 	assert.NoError(t, err)
 	assert.Nil(t, wld)
 
-	err = mgr.Lock()
+	err = resource.Lock()
 	assert.NoError(t, err)
 
-	wld, err = mgr.LoadWriteLog()
+	wld, err = resource.LoadWriteLog()
 	assert.NoError(t, err)
 	assert.Nil(t, wld)
 
 	// append some data
-	err = mgr.Append([]byte("blahblah"))
+	err = resource.Append([]byte("blahblah"))
 	assert.NoError(t, err)
 
-	// a new ManagerManager is necessary so we get a new Manager with
-	// new internal state instead of a cached Manager.
-	mm2 := NewManagerManager(sn, wl, logger.NewStandardLogger(os.Stderr))
-	// get second manager for same stuff
-	mgr2 := mm2.GetShardManager(qtid, dax.PartitionNum(1), dax.ShardNum(1))
-	// load snapshot on 2nd manager (empty)
-	d, err = mgr2.LoadLatestSnapshot()
+	// a new ResourceManager is necessary so we get a new Resource with
+	// new internal state instead of a cached Resource.
+	mm2 := NewResourceManager(sn, wl, logger.NewStandardLogger(os.Stderr))
+	// get second resource for same stuff
+	resource2 := mm2.GetShardResource(qtid, dax.PartitionNum(1), dax.ShardNum(1))
+	// load snapshot on 2nd resource (empty)
+	d, err = resource2.LoadLatestSnapshot()
 	assert.NoError(t, err)
 	assert.Nil(t, d)
 
-	// load WL on 2nd manager (blahblah)
-	wld, err = mgr2.LoadWriteLog()
+	// load WL on 2nd resource (blahblah)
+	wld, err = resource2.LoadWriteLog()
 	assert.NoError(t, err)
 	buf := make([]byte, 16)
 	n, _ = wld.Read(buf)
@@ -87,49 +87,49 @@ func TestManagerManager(t *testing.T) {
 	assert.Equal(t, 0, n)
 	assert.Equal(t, io.EOF, err)
 
-	// begin snapshot procedure on 1st manager
-	err = mgr.IncrementWLVersion()
+	// begin snapshot procedure on 1st resource
+	err = resource.IncrementWLVersion()
 	assert.NoError(t, err)
 
-	// do append on 1st manager mid-snapshot
-	err = mgr.Append([]byte("blahbla2"))
+	// do append on 1st resource mid-snapshot
+	err = resource.Append([]byte("blahbla2"))
 	assert.NoError(t, err)
 
-	// snapshot 1st manager
+	// snapshot 1st resource
 	rc := io.NopCloser(bytes.NewBufferString("hahaha"))
-	err = mgr.Snapshot(rc)
+	err = resource.Snapshot(rc)
 	assert.NoError(t, err)
 
-	// append again on 1st manager
-	err = mgr.Append([]byte("blahbla3"))
+	// append again on 1st resource
+	err = resource.Append([]byte("blahbla3"))
 	assert.NoError(t, err)
 
-	// locking 2nd manager should fail
-	err = mgr2.Lock()
+	// locking 2nd resource should fail
+	err = resource2.Lock()
 	assert.NotNil(t, err)
 
-	// exit 1st manager
-	err = mgr.Unlock()
+	// exit 1st resource
+	err = resource.Unlock()
 	assert.NoError(t, err)
 
-	// locking 2nd manager should succeed
-	err = mgr2.Lock()
+	// locking 2nd resource should succeed
+	err = resource2.Lock()
 	assert.NoError(t, err)
 
 	// loading write log should fail since there's been a snapshot
 	// between the last load and locking.
-	_, err = mgr2.LoadWriteLog()
+	_, err = resource2.LoadWriteLog()
 	assert.NotNil(t, err)
 
-	// mgr2 dies due to error loading write lock
-	err = mgr2.Unlock()
+	// resource2 dies due to error loading write lock
+	err = resource2.Unlock()
 	assert.NoError(t, err)
 
-	// get third manager for same stuff
-	mm3 := NewManagerManager(sn, wl, logger.NewStandardLogger(os.Stderr))
-	mgr3 := mm3.GetShardManager(qtid, dax.PartitionNum(1), dax.ShardNum(1))
-	// load snapshot on 3nd manager
-	d, err = mgr3.LoadLatestSnapshot()
+	// get third resource for same stuff
+	mm3 := NewResourceManager(sn, wl, logger.NewStandardLogger(os.Stderr))
+	resource3 := mm3.GetShardResource(qtid, dax.PartitionNum(1), dax.ShardNum(1))
+	// load snapshot on 3nd resource
+	d, err = resource3.LoadLatestSnapshot()
 	assert.NoError(t, err)
 	buf = make([]byte, 6)
 	n, err = d.Read(buf)
@@ -137,8 +137,8 @@ func TestManagerManager(t *testing.T) {
 	assert.Equal(t, "hahaha", string(buf))
 	assert.Equal(t, nil, err)
 
-	// load write log on 3rd manager, get previous 2 writes
-	wld, err = mgr3.LoadWriteLog()
+	// load write log on 3rd resource, get previous 2 writes
+	wld, err = resource3.LoadWriteLog()
 	assert.NoError(t, err)
 	buf = make([]byte, 20)
 	n, _ = wld.Read(buf)
@@ -148,12 +148,12 @@ func TestManagerManager(t *testing.T) {
 	assert.Equal(t, 0, n)
 	assert.Equal(t, io.EOF, err)
 
-	// lock 3rd manager
-	err = mgr3.Lock()
+	// lock 3rd resource
+	err = resource3.Lock()
 	assert.NoError(t, err)
 
 	// reload write log (should be empty)
-	wld, err = mgr3.LoadWriteLog()
+	wld, err = resource3.LoadWriteLog()
 	assert.NoError(t, err)
 	n, err = wld.Read(make([]byte, 8))
 	assert.Equal(t, 0, n)

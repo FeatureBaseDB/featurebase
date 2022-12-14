@@ -76,7 +76,7 @@ type Command struct {
 	queryLogger    loggerLogger
 
 	Registrar         computer.Registrar
-	serverlessStorage *storage.ManagerManager
+	serverlessStorage *storage.ResourceManager
 	writeLogService   computer.WriteLogService
 	snapshotService   computer.SnapshotService
 
@@ -552,7 +552,7 @@ func (m *Command) setupServer() error {
 	}
 
 	if m.writeLogService != nil && m.snapshotService != nil {
-		m.serverlessStorage = storage.NewManagerManager(m.snapshotService, m.writeLogService, m.logger)
+		m.serverlessStorage = storage.NewResourceManager(m.snapshotService, m.writeLogService, m.logger)
 	}
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
