@@ -1903,6 +1903,99 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 	})
 
+	t.Run("BulkInsertNDJSONStringIDSet", func(t *testing.T) {
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-01 (
+			_id STRING,
+			id_col ID,
+			string_col STRING cachetype ranked size 1000,
+			int_col int,
+			decimal_col DECIMAL(2),
+			bool_col BOOL
+			time_col TIMESTAMP,
+			stringset_col STRINGSET,
+			ideset_col IDSET
+		);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-01 (
+			_id,
+			id_col,
+			string_col,
+			int_col,
+			decimal_col,
+			bool_col,
+			time_col,
+			stringset_col,
+			ideset_col)
+			map (
+			'id_col' ID,
+			'string_col' STRING,
+			'int_col' INT,
+			'decimal_col' DECIMAL(2),
+			'bool_col' BOOL,
+			'time_col' TIMESTAMP,
+			'stringset_col' STRINGSET,
+			'ideset_col' IDSET)
+			transform(
+			@1,
+			@0,
+			@1,
+			@2,
+			@3,
+			@4,
+			@5,
+			@6,
+			@7)
+			FROM '{"id_col": "3", "string_col": "TEST", "int_col": "-123", "decimal_col": "1.12", "bool_col": false, "time_col": "2013-07-15T01:18:46Z", "stringset_col": "stringset1","ideset_col": "1"}'
+			with
+				BATCHSIZE 10000
+				format 'NDJSON'
+				input 'STREAM';`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-01 (
+			_id,
+			id_col,
+			string_col,
+			int_col,
+			decimal_col,
+			bool_col,
+			time_col,
+			stringset_col,
+			ideset_col)
+			map (
+			'id_col' ID,
+			'string_col' STRING,
+			'int_col' INT,
+			'decimal_col' DECIMAL(2),
+			'bool_col' BOOL,
+			'time_col' TIMESTAMP,
+			'stringset_col' STRINGSET,
+			'ideset_col' IDSET)
+			transform(
+			@1,
+			@0,
+			@1,
+			@2,
+			@3,
+			@4,
+			@5,
+			@6,
+			@7)
+			FROM '{"id_col": "3", "string_col": "TEST", "int_col": "-123", "decimal_col": "1.12", "bool_col": false, "time_col": "2013-07-15T01:18:46Z", "stringset_col": "stringset1","ideset_col": ["1","2"]}'
+			with
+				BATCHSIZE 10000
+				format 'NDJSON'
+				input 'STREAM';`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestPlanner_SelectSelectSource(t *testing.T) {
