@@ -78,6 +78,11 @@ func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
+			ColumnName:   "updated_at",
+			Type:         parser.NewDataTypeTimestamp(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_tables",
 			ColumnName:   "keys",
 			Type:         parser.NewDataTypeBool(),
 		},
@@ -112,13 +117,15 @@ var _ types.RowIterator = (*showTablesRowIter)(nil)
 
 func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.rowIndex < len(i.indexInfo) {
-		tm := time.Unix(0, i.indexInfo[i.rowIndex].CreatedAt)
+		createdAt := time.Unix(0, i.indexInfo[i.rowIndex].CreatedAt)
+		updatedAt := time.Unix(0, i.indexInfo[i.rowIndex].UpdatedAt)
 		row := []interface{}{
 			i.indexInfo[i.rowIndex].Name,
 			i.indexInfo[i.rowIndex].Name,
 			i.indexInfo[i.rowIndex].Owner,
 			i.indexInfo[i.rowIndex].LastUpdateUser,
-			tm.Format(time.RFC3339),
+			createdAt.Format(time.RFC3339),
+			updatedAt.Format(time.RFC3339),
 			i.indexInfo[i.rowIndex].Options.Keys,
 			i.indexInfo[i.rowIndex].Options.Description,
 		}
