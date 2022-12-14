@@ -1403,9 +1403,7 @@ func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableI
 func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTableID, shardNum dax.ShardNum) error {
 	// Get the node responsible for the shard.
 	bal := c.ComputeBalancer
-
 	job := shard(qtid.Key(), dax.NewVersionedShard(shardNum, -1))
-
 	workers, err := bal.WorkersForJobs(ctx, []dax.Job{dax.Job(job.String())})
 	if err != nil {
 		return errors.Wrapf(err, "getting workers for jobs: %s", job)
@@ -1435,22 +1433,9 @@ func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTa
 // partition to snapshot the table keys for that partition, then increment its
 // version for logs written to the WriteLogger.
 func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partitionNum dax.PartitionNum) error {
-	// Confirm table/shard is being tracked; get the current shard.
-	fromPartitionVersion, found, err := c.versionStore.PartitionVersion(ctx, qtid, partitionNum)
-	if err != nil {
-		return errors.Wrapf(err, "getting partition version: %s, %d", qtid, partitionNum)
-	} else if !found {
-		return NewErrInternal(
-			fmt.Sprintf("partition to snapshot not found: %s, %d", qtid, partitionNum),
-		)
-	}
-	toPartitionVersion := fromPartitionVersion + 1
-
 	// Get the node responsible for the partition.
 	bal := c.TranslateBalancer
-
 	job := partition(qtid.Key(), dax.NewVersionedPartition(partitionNum, -1))
-
 	workers, err := bal.WorkersForJobs(ctx, []dax.Job{dax.Job(job.String())})
 	if err != nil {
 		return errors.Wrapf(err, "getting workers for jobs: %s", job)
@@ -1462,51 +1447,14 @@ func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTa
 
 	addr := dax.Address(workers[0].ID)
 
-	// Make a copy of the controller's versionStore, and update the current
-	// partition so that the directive sent along with the SnapshotRequest
-	// reflects the state that we want after a successful snapshot.
-	versionStoreCopy, err := c.versionStore.Copy(ctx)
-	if err != nil {
-		return errors.Wrap(err, "copying version store")
-	}
-	if err := versionStoreCopy.AddPartitions(ctx, qtid,
-		dax.NewVersionedPartition(partitionNum, toPartitionVersion),
-	); err != nil {
-		return NewErrInternal(err.Error())
-	}
-
-	// Convert the address into a slice of addressMethod containing the
-	// appropriate method.
-	addressMethods := applyAddressMethod([]dax.Address{addr}, dax.DirectiveMethodSnapshot)
-
-	var toDirective dax.Directive
-	if directives, err := c.buildDirectives(ctx, addressMethods, versionStoreCopy); err != nil {
-		return NewErrInternal(err.Error())
-	} else if ld := len(directives); ld != 1 {
-		msg := fmt.Sprintf("buildDirectives returned invalid number of directives: %d", ld)
-		return NewErrInternal(msg)
-	} else {
-		toDirective = *directives[0]
-	}
-
 	// Send the node a snapshot request.
 	req := &dax.SnapshotTableKeysRequest{
 		Address:      addr,
 		TableKey:     qtid.Key(),
 		PartitionNum: partitionNum,
-		FromVersion:  fromPartitionVersion,
-		ToVersion:    toPartitionVersion,
-		Directive:    toDirective,
 	}
 
 	if err := c.Director.SendSnapshotTableKeysRequest(ctx, req); err != nil {
-		return NewErrInternal(err.Error())
-	}
-
-	// A successful request means the partition version can be incremented.
-	if err := c.versionStore.AddPartitions(ctx, qtid,
-		dax.NewVersionedPartition(partitionNum, toPartitionVersion),
-	); err != nil {
 		return NewErrInternal(err.Error())
 	}
 
@@ -1517,20 +1465,8 @@ func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTa
 // to snapshot the keys for that field, then increment its version for logs
 // written to the WriteLogger.
 func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName) error {
-	// Confirm table/field is being tracked; get the current field.
-	fromFieldVersion, ok, err := c.versionStore.FieldVersion(ctx, qtid, field)
-	if err != nil {
-		return errors.Wrapf(err, "getting field version: %s, %s", qtid, field)
-	} else if !ok {
-		return NewErrInternal(
-			fmt.Sprintf("field to snapshot not found: %s, %s", qtid, field),
-		)
-	}
-	toFieldVersion := fromFieldVersion + 1
-
 	// Get the node responsible for the field.
 	bal := c.TranslateBalancer
-
 	// Field translation is currently handled by partition 0.
 	partitionNum := dax.PartitionNum(0)
 	job := partition(qtid.Key(), dax.NewVersionedPartition(partitionNum, -1))
@@ -1546,51 +1482,14 @@ func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTa
 
 	addr := dax.Address(workers[0].ID)
 
-	// Make a copy of the controller's versionStore, and update the current
-	// field so that the directive sent along with the SnapshotRequest reflects
-	// the state that we want after a successful snapshot.
-	versionStoreCopy, err := c.versionStore.Copy(ctx)
-	if err != nil {
-		return errors.Wrap(err, "copying version store")
-	}
-	if err := versionStoreCopy.AddFields(ctx, qtid,
-		dax.NewVersionedField(field, toFieldVersion),
-	); err != nil {
-		return NewErrInternal(err.Error())
-	}
-
-	// Convert the address into a slice of addressMethod containing the
-	// appropriate method.
-	addressMethods := applyAddressMethod([]dax.Address{addr}, dax.DirectiveMethodSnapshot)
-
-	var toDirective dax.Directive
-	if directives, err := c.buildDirectives(ctx, addressMethods, versionStoreCopy); err != nil {
-		return NewErrInternal(err.Error())
-	} else if ld := len(directives); ld != 1 {
-		msg := fmt.Sprintf("buildDirectives returned invalid number of directives: %d", ld)
-		return NewErrInternal(msg)
-	} else {
-		toDirective = *directives[0]
-	}
-
 	// Send the node a snapshot request.
 	req := &dax.SnapshotFieldKeysRequest{
-		Address:     addr,
-		TableKey:    qtid.Key(),
-		Field:       field,
-		FromVersion: fromFieldVersion,
-		ToVersion:   toFieldVersion,
-		Directive:   toDirective,
+		Address:  addr,
+		TableKey: qtid.Key(),
+		Field:    field,
 	}
 
 	if err := c.Director.SendSnapshotFieldKeysRequest(ctx, req); err != nil {
-		return NewErrInternal(err.Error())
-	}
-
-	// A successful request means the field version can be incremented.
-	if err := c.versionStore.AddFields(ctx, qtid,
-		dax.NewVersionedField(field, toFieldVersion),
-	); err != nil {
 		return NewErrInternal(err.Error())
 	}
 
