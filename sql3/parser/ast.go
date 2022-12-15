@@ -2803,14 +2803,15 @@ type BulkInsertStatement struct {
 	TransformList   []Expr // source to column map
 	TransformRparen Pos    // position of column list right paren
 
-	From       Pos  // position of FROM keyword
-	DataSource Expr // data source
-	With       Pos  // position of WITH keyword
-	BatchSize  Expr
-	RowsLimit  Expr
-	Format     Expr
-	Input      Expr
-	HeaderRow  Expr // has header row (that needs to be skipped)
+	From               Pos  // position of FROM keyword
+	DataSource         Expr // data source
+	With               Pos  // position of WITH keyword
+	BatchSize          Expr
+	RowsLimit          Expr
+	Format             Expr
+	Input              Expr
+	HeaderRow          Expr // has header row (that needs to be skipped)
+	AllowMissingValues Expr // allows missing values
 }
 
 func (s *BulkInsertStatement) String() string {

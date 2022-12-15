@@ -1392,7 +1392,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 
 	t.Run("BulkBadWith", func(t *testing.T) {
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH UNICORNS AND RAINBOWS;`)
-		if err == nil || !strings.Contains(err.Error(), `expected BATCHSIZE, ROWSLIMIT, FORMAT, INPUT or HEADER_ROW, found UNICORNS`) {
+		if err == nil || !strings.Contains(err.Error(), `expected BATCHSIZE, ROWSLIMIT, FORMAT, INPUT, ALLOW_MISSING_VALUES or HEADER_ROW, found UNICORNS`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1897,6 +1897,64 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 	})
 
+	t.Run("BulkInsertAllowMissingValues", func(t *testing.T) {
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-amv (
+			_id STRING,
+			id_col ID,
+			string_col STRING cachetype ranked size 1000,
+			int_col int,
+			decimal_col DECIMAL(2),
+			bool_col BOOL
+			time_col TIMESTAMP,
+			stringset_col STRINGSET,
+			ideset_col IDSET
+		);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-amv (
+			_id,
+			id_col,
+			string_col,
+			int_col,
+			decimal_col,
+			bool_col,
+			time_col,
+			stringset_col,
+			ideset_col)
+			map (
+			'$.id_col' ID,
+			'$.string_col' STRING,
+			'$.int_col' INT,
+			'$.decimal_col' DECIMAL(2),
+			'$.bool_col' BOOL,
+			'$.time_col' TIMESTAMP,
+			'$.stringset_col' STRINGSET,
+			'$.ideset_col' IDSET)
+			transform(
+			@1,
+			@0,
+			@1,
+			@2,
+			@3,
+			@4,
+			@5,
+			@6,
+			@7)
+			FROM '{"id_col": "3", "string_col": "TEST", "decimal_col": "1.12", "bool_col": false, "time_col": "2013-07-15T01:18:46Z", "stringset_col": "stringset1","ideset_col": 1}
+			{"id_col": "4", "string_col": "TEST2", "decimal_col": "1.12", "bool_col": false, "time_col": "2013-07-15T01:18:46Z", "stringset_col": ["stringset1","stringset3"],"ideset_col": [1,2]}
+			{"id_col": "5", "string_col": "TEST", "int_col": "321", "decimal_col": "12.1", "bool_col": 1, "time_col": "2014-07-15T01:18:46Z", "stringset_col": "stringset2","ideset_col": [1,3]}'
+			with
+				BATCHSIZE 10000
+				format 'NDJSON'
+				input 'STREAM'
+				allow_missing_values;`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 	t.Run("BulkInsertNDJSONStringIDSet", func(t *testing.T) {
 
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-01 (

@@ -41,6 +41,8 @@ type bulkInsertOptions struct {
 	format string
 	// whether the source has a header row
 	hasHeaderRow bool
+	// whether we allow missing values for NDJSON jsonpath expressions
+	allowMissingValues bool
 	// input specifier (FILE is the only one right now)
 	input string
 
@@ -88,6 +90,7 @@ func (p *PlanOpBulkInsert) Plan() map[string]interface{} {
 	options["format"] = p.options.format
 	options["input"] = p.options.input
 	options["hasHeaderRow"] = p.options.hasHeaderRow
+	options["allowMissingValues"] = p.options.allowMissingValues
 
 	colMap := make([]interface{}, 0)
 	for _, m := range p.options.targetColumns {
@@ -485,7 +488,11 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 			evalValue, err := expr(ctx, v)
 			if err != nil {
-				return nil, sql3.NewErrEvaluatingJSONPathExpr(0, 0, i.mapExpressionResults[idx], jsonValue, err.Error())
+				if i.options.allowMissingValues && strings.HasPrefix(err.Error(), "unknown key") {
+					evalValue = nil
+				} else {
+					return nil, sql3.NewErrEvaluatingJSONPathExpr(0, 0, i.mapExpressionResults[idx], jsonValue, err.Error())
+				}
 			}
 
 			// if nil (null) then return nil
