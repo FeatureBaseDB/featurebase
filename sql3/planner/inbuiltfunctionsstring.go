@@ -1,7 +1,6 @@
 package planner
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -16,6 +15,21 @@ func (p *ExecutionPlanner) analyseFunctionReverse(call *parser.Call, scope parse
 
 	if !typeIsString(call.Args[0].DataType()) {
 		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
+func (p *ExecutionPlanner) analyseFunctionChar(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	//one argument
+	if len(call.Args) != 1 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+
+	if !typeIsInteger(call.Args[0].DataType()) {
+		return nil, sql3.NewErrIntExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 	}
 
 	call.ResultDataType = parser.NewDataTypeString()
@@ -144,6 +158,17 @@ func (n *callPlanExpression) EvaluateUpper(currentRow []interface{}) (interface{
 	return strings.ToUpper(stringArgOne), nil
 }
 
+func (n *callPlanExpression) EvaluateChar(currentRow []interface{}) (interface{}, error) {
+	// Get the integer argument from the function call
+	intArg, err := evaluateIntArg(n.args[0], currentRow)
+	if err != nil {
+		return "", err
+	}
+
+	// Return the character that corresponds to the integer value
+	return string(rune(intArg)), nil
+}
+
 // Takes string, startIndex and length and returns the substring.
 func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interface{}, error) {
 	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
@@ -152,9 +177,9 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 	}
 
 	// this takes a sliding window approach to evaluate substring.
-	startIndex, err := strconv.Atoi(n.args[1].String())
+	startIndex, err := evaluateIntArg(n.args[1], currentRow)
 	if err != nil {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", n.args[1])
+		return nil, err
 	}
 	if startIndex >= len(stringArgOne) {
 		return "", nil
@@ -162,9 +187,9 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 
 	endIndex := len(stringArgOne)
 	if len(n.args) > 2 {
-		ln, err := strconv.Atoi(n.args[2].String())
+		ln, err := evaluateIntArg(n.args[2], currentRow)
 		if err != nil {
-			return nil, sql3.NewErrInternalf("unexpected type converion %T", n.args[1])
+			return nil, err
 		}
 		endIndex = startIndex + ln
 	}
@@ -223,9 +248,9 @@ func (n *callPlanExpression) EvaluateStringSplit(currentRow []interface{}) (inte
 	if len(n.args) == 2 {
 		return strings.Split(inputString, seperator)[0], nil
 	}
-	pos, err := strconv.Atoi(n.args[2].String())
+	pos, err := evaluateIntArg(n.args[2], currentRow)
 	if err != nil {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", n.args[2])
+		return nil, err
 	}
 
 	res := strings.Split(inputString, seperator)
@@ -248,6 +273,20 @@ func evaluateStringArg(n types.PlanExpression, currentRow []interface{}) (string
 	}
 
 	return stringArgOne, nil
+}
+
+func evaluateIntArg(n types.PlanExpression, currentRow []interface{}) (int, error) {
+	argOneEval, err := n.Evaluate(currentRow)
+	if err != nil {
+		return 0, err
+	}
+
+	intArgOne, ok := argOneEval.(int64)
+	if !ok {
+		return 0, sql3.NewErrInternalf("unexpected type converion %T", argOneEval)
+	}
+
+	return int(intArgOne), nil
 }
 
 // Analyze function for Trim/RTrim/LTrim

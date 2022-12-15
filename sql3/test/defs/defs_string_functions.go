@@ -135,6 +135,26 @@ var stringScalarFunctionsTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "CharInt",
+			SQLs: sqls(
+				"select char(82)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("R")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "CharString",
+			SQLs: sqls(
+				"select char('R')",
+			),
+			ExpErr: "integer expression expected",
+		},
+		{
 			name: "ConvertingStringtoUpper",
 			SQLs: sqls(
 				"select upper('this')",
