@@ -2530,7 +2530,21 @@ func (o *orchestrator) translateCall(ctx context.Context, c *pql.Call, tableKeye
 	// This also applies to all child calls.
 	if callIndex := c.CallIndex(); callIndex != "" {
 		index = callIndex
-		tableKeyer = dax.StringTableKeyer(index)
+		// TODO(tlt): checking for prefix like this is bad form. Ideally, the
+		// argument stored in the Call.Args map would be of type TableKey
+		// (currently they are restricted to type: string). In that case we
+		// could just pass it through without doing this conversion. (This would
+		// require changing the logic in Queryer.convertIndex() to set "index"
+		// to a TableKeyer).
+		if strings.HasPrefix(index, dax.PrefixTable+dax.TableKeyDelimiter) {
+			qtid, err := dax.QualifiedTableIDFromKey(index)
+			if err != nil {
+				return nil, errors.Wrapf(err, "getting qtid from key: %s", index)
+			}
+			tableKeyer = qtid
+		} else {
+			tableKeyer = dax.StringTableKeyer(index)
+		}
 	}
 
 	idx, err := o.schemaIndexInfo(ctx, tableKeyer)
@@ -3510,6 +3524,11 @@ func (o *orchestrator) schemaFieldInfo(ctx context.Context, tableKeyer dax.Table
 		tbl = &v.Table
 	case *dax.Table:
 		tbl = v
+	case dax.QualifiedTableID:
+		tbl, err = o.schema.TableByID(ctx, v.ID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting table by id: %s", v.ID)
+		}
 	case dax.StringTableKeyer:
 		tbl, err = o.schema.TableByName(ctx, dax.TableName(v))
 		if err != nil {
@@ -3537,6 +3556,11 @@ func (o *orchestrator) schemaIndexInfo(ctx context.Context, tableKeyer dax.Table
 		tbl = &v.Table
 	case *dax.Table:
 		tbl = v
+	case dax.QualifiedTableID:
+		tbl, err = o.schema.TableByID(ctx, v.ID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting table by id: %s", v.ID)
+		}
 	case dax.StringTableKeyer:
 		tbl, err = o.schema.TableByName(ctx, dax.TableName(v))
 		if err != nil {
