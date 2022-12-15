@@ -1523,7 +1523,7 @@ func (p *Parser) parseBulkInsertStatement() (_ *BulkInsertStatement, err error) 
 	}
 	stmt.With, _, _ = p.scan()
 	if !isBulkInsertOptionStartToken(p.peek(), p) {
-		return nil, p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT, INPUT or HEADER_ROW")
+		return nil, p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT, INPUT, ALLOW_MISSING_VALUES or HEADER_ROW")
 	}
 	for {
 		err := p.parseBulkInsertOption(&stmt)
@@ -1577,6 +1577,10 @@ func (p *Parser) parseBulkInsertOption(stmt *BulkInsertStatement) error {
 			} else {
 				return p.errorExpected(p.pos, p.tok, "literal")
 			}
+		case "ALLOW_MISSING_VALUES":
+			stmt.AllowMissingValues = ident
+			return nil
+
 		case "HEADER_ROW":
 			stmt.HeaderRow = ident
 			return nil
@@ -3436,7 +3440,7 @@ func isBulkInsertOptionStartToken(tok Token, p *Parser) bool {
 			return false
 		}
 		switch strings.ToUpper(ident.Name) {
-		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "INPUT", "HEADER_ROW":
+		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "INPUT", "HEADER_ROW", "ALLOW_MISSING_VALUES":
 			return true
 		}
 	}
