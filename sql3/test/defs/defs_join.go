@@ -28,7 +28,7 @@ var joinTestsOrders = TableTest{
 		"orders",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
-			srcHdr("userid", fldTypeID),
+			srcHdr("userid", fldTypeInt),
 			srcHdr("price", fldTypeDecimal2),
 		),
 		srcRows(
@@ -101,6 +101,20 @@ var joinTests = TableTest{
 				row(int64(2)),
 			),
 			Compare: CompareExactOrdered,
+		},
+	},
+	PQLTests: []PQLTest{
+		{
+			name:  "distinctjoin",
+			Table: "users",
+			PQLs:  []string{"Intersect(Distinct(Row(price > 10), index=orders, field=userid))"},
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+				row(int64(2)),
+			),
 		},
 	},
 }
