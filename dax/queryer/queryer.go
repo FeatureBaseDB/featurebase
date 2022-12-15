@@ -244,6 +244,28 @@ func (q *Queryer) parseAndQueryPQL(ctx context.Context, qual dax.TableQualifier,
 	return q.QueryPQL(ctx, qual, dax.TableName(table), query)
 }
 
+// convertIndex tries to covert any "index" specified in the call.Args map to a
+// TableKeyer. Note, since the Call.CallIndex() method currently only looks for
+// strings, we can't just set the value to a TableKeyer; we have to set it to
+// the equivalent string and then parse it back out later. A TODO would be to
+// modify Call.CallIndex() to be TableKeyer aware. I didn't do that along with
+// these changes because I'm not sure if we want to introduce dax types into the
+// pql package.
+func (q *Queryer) convertIndex(ctx context.Context, qual dax.TableQualifier, call *featurebase_pql.Call) {
+	if index := call.CallIndex(); index != "" {
+		qtbl, err := q.schemar.TableByName(ctx, qual, dax.TableName(index))
+		if err != nil {
+			return
+		}
+		call.Args["index"] = string(qtbl.Key())
+	}
+
+	// Apply to children.
+	for _, child := range call.Children {
+		q.convertIndex(ctx, qual, child)
+	}
+}
+
 func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
 	// Parse the pql into a pql.Query containing []pql.Call.
 	qry, err := featurebase_pql.NewParser(strings.NewReader(pql)).Parse()
@@ -253,6 +275,9 @@ func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table d
 	if len(qry.Calls) != 1 {
 		return nil, errors.Errorf("must have exactly 1 query, but got: %+v", qry.Calls)
 	}
+
+	// Replace any "index" arguments within the PQL with a TableKey.
+	q.convertIndex(ctx, qual, qry.Calls[0])
 
 	qtbl, err := q.schemar.TableByName(ctx, qual, dax.TableName(table))
 	if err != nil {
@@ -267,10 +292,10 @@ func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table d
 		return nil, errors.Errorf("expected single result but got %+v", results.Results)
 	}
 
-	return PQLResultToQueryResult(results.Results[0])
+	return pqlResultToQueryResult(results.Results[0])
 }
 
-func PQLResultToQueryResult(pqlResult interface{}) (*featurebase.WireQueryResponse, error) {
+func pqlResultToQueryResult(pqlResult interface{}) (*featurebase.WireQueryResponse, error) {
 	toTabler, err := server.ToTablerWrapper(pqlResult)
 	if err != nil {
 		return nil, errors.Wrap(err, "wrapping as type ToTabler")
