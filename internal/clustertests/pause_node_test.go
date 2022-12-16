@@ -161,7 +161,7 @@ func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, 
 			return nil, err
 		}
 		// open bolt db
-		ts, err := boltdb.OpenTranslateStore(filePath, index, "", partition, disco.DefaultPartitionN, false)
+		ts, err := pilosa.OpenTranslateStore(filePath, index, "", partition, disco.DefaultPartitionN, false)
 		ts.SetReadOnly(true)
 		if err != nil {
 			return nil, err

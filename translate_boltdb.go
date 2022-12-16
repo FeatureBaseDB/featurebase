@@ -26,7 +26,7 @@ var _ = pprof.StartCPUProfile
 var (
 	// ErrTranslateStoreClosed is returned when reading from an TranslateEntryReader
 	// and the underlying store is closed.
-	ErrTranslateStoreClosed = errors.New("boltdb: translate store closing")
+	ErrBoltTranslateStoreClosed = errors.New("boltdb: translate store closing")
 
 	// ErrTranslateKeyNotFound is returned when translating key
 	// and the underlying store returns an empty set
@@ -46,8 +46,8 @@ const (
 )
 
 // OpenTranslateStore opens and initializes a boltdb translation store.
-func OpenTranslateStore(path, index, field string, partitionID, partitionN int, fsyncEnabled bool) (pilosa.TranslateStore, error) {
-	s := NewTranslateStore(index, field, partitionID, partitionN, fsyncEnabled)
+func OpenTranslateStore(path, index, field string, partitionID, partitionN int, fsyncEnabled bool) (TranslateStore, error) {
+	s := NewBoltTranslateStore(index, field, partitionID, partitionN, fsyncEnabled)
 	s.Path = path
 	if err := s.Open(); err != nil {
 		return nil, err
@@ -56,9 +56,9 @@ func OpenTranslateStore(path, index, field string, partitionID, partitionN int, 
 }
 
 // Ensure type implements interface.
-var _ pilosa.TranslateStore = &TranslateStore{}
+var _ TranslateStore = &BoltTranslateStore{}
 
-// TranslateStore is an on-disk storage engine for translating string-to-uint64 values.
+// BoltTranslateStore is an on-disk storage engine for translating string-to-uint64 values.
 // An empty string will be converted into the sentinel byte slice:
 //
 //	var emptyKey = []byte{
@@ -68,7 +68,7 @@ var _ pilosa.TranslateStore = &TranslateStore{}
 //		0xc2, 0xa0, // NO-BREAK SPACE
 //		0x00,
 //	}
-type TranslateStore struct {
+type BoltTranslateStore struct {
 	mu sync.RWMutex
 	db *bolt.DB
 
@@ -88,9 +88,9 @@ type TranslateStore struct {
 	Path string
 }
 
-// NewTranslateStore returns a new instance of TranslateStore.
-func NewTranslateStore(index, field string, partitionID, partitionN int, fsyncEnabled bool) *TranslateStore {
-	return &TranslateStore{
+// NewBoltTranslateStore returns a new instance of TranslateStore.
+func NewBoltTranslateStore(index, field string, partitionID, partitionN int, fsyncEnabled bool) *BoltTranslateStore {
+	return &BoltTranslateStore{
 		index:        index,
 		field:        field,
 		partitionID:  partitionID,
@@ -102,7 +102,7 @@ func NewTranslateStore(index, field string, partitionID, partitionN int, fsyncEn
 }
 
 // Open opens the translate file.
-func (s *TranslateStore) Open() (err error) {
+func (s *BoltTranslateStore) Open() (err error) {
 
 	// add the path to the problem database if we panic handling it.
 	defer func() {
@@ -114,7 +114,7 @@ func (s *TranslateStore) Open() (err error) {
 
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0750); err != nil {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(s.Path))
-	} else if s.db, err = bolt.Open(s.Path, 0600, &bolt.Options{Timeout: 1 * time.Second, NoSync: !s.fsyncEnabled}); err != nil {
+	} else if s.db, err = bolt.Open(s.Path, 0600, &bolt.Options{Timeout: 1 * time.Second, NoSync: !s.fsyncEnabled, InitialMmapSize: 0}); err != nil {
 		return errors.Wrapf(err, "open file: %s", err)
 	}
 
@@ -137,7 +137,7 @@ func (s *TranslateStore) Open() (err error) {
 }
 
 // Close closes the underlying database.
-func (s *TranslateStore) Close() (err error) {
+func (s *BoltTranslateStore) Close() (err error) {
 	s.once.Do(func() { close(s.closing) })
 
 	if s.db != nil {
@@ -149,26 +149,26 @@ func (s *TranslateStore) Close() (err error) {
 }
 
 // PartitionID returns the partition id the store was initialized with.
-func (s *TranslateStore) PartitionID() int {
+func (s *BoltTranslateStore) PartitionID() int {
 	return s.partitionID
 }
 
 // ReadOnly returns true if the store is in read-only mode.
-func (s *TranslateStore) ReadOnly() bool {
+func (s *BoltTranslateStore) ReadOnly() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.readOnly
 }
 
 // SetReadOnly toggles whether store is in read-only mode.
-func (s *TranslateStore) SetReadOnly(v bool) {
+func (s *BoltTranslateStore) SetReadOnly(v bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.readOnly = v
 }
 
 // Size returns the number of bytes in the data file.
-func (s *TranslateStore) Size() int64 {
+func (s *BoltTranslateStore) Size() int64 {
 	if s.db == nil {
 		return 0
 	}
@@ -183,7 +183,7 @@ func (s *TranslateStore) Size() int64 {
 // FindKeys looks up the ID for each key.
 // Keys are not created if they do not exist.
 // Missing keys are not considered errors, so the length of the result may be less than that of the input.
-func (s *TranslateStore) FindKeys(keys ...string) (map[string]uint64, error) {
+func (s *BoltTranslateStore) FindKeys(keys ...string) (map[string]uint64, error) {
 	result := make(map[string]uint64, len(keys))
 	err := s.db.View(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(bucketKeys)
@@ -217,9 +217,9 @@ const translateTransactionSize = 16384
 
 // CreateKeys maps all keys to IDs, creating the IDs if they do not exist.
 // If the translator is read-only, this will return an error.
-func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
+func (s *BoltTranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 	if s.ReadOnly() {
-		return nil, pilosa.ErrTranslateStoreReadOnly
+		return nil, ErrTranslateStoreReadOnly
 	}
 
 	written := false
@@ -255,7 +255,7 @@ func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 				}
 				// see if we can re-use any IDs first
 				if id = getter.GetFreeID(); id == 0 {
-					id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+					id = GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
 				}
 				idBytes := idScratch[puts*8 : puts*8+8]
 				binary.BigEndian.PutUint64(idBytes, id)
@@ -287,7 +287,7 @@ func (s *TranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
 }
 
 // Match finds the IDs of all keys matching a filter.
-func (s *TranslateStore) Match(filter func([]byte) bool) ([]uint64, error) {
+func (s *BoltTranslateStore) Match(filter func([]byte) bool) ([]uint64, error) {
 	var matches []uint64
 	err := s.db.View(func(tx *bolt.Tx) error {
 		// This uses the id bucket instead of the key bucket so that matches are produced in sorted order.
@@ -317,7 +317,7 @@ func (s *TranslateStore) Match(filter func([]byte) bool) ([]uint64, error) {
 
 // TranslateID converts an integer ID to a string key.
 // Returns a blank string if ID does not exist.
-func (s *TranslateStore) TranslateID(id uint64) (string, error) {
+func (s *BoltTranslateStore) TranslateID(id uint64) (string, error) {
 	tx, err := s.db.Begin(false)
 	if err != nil {
 		return "", err
@@ -327,7 +327,7 @@ func (s *TranslateStore) TranslateID(id uint64) (string, error) {
 }
 
 // TranslateIDs converts a list of integer IDs to a list of string keys.
-func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
+func (s *BoltTranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -348,7 +348,7 @@ func (s *TranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 }
 
 // ForceSet writes the id/key pair to the store even if read only. Used by replication.
-func (s *TranslateStore) ForceSet(id uint64, key string) error {
+func (s *BoltTranslateStore) ForceSet(id uint64, key string) error {
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
 		if err := tx.Bucket(bucketKeys).Put([]byte(key), u64tob(id)); err != nil {
 			return err
@@ -364,13 +364,13 @@ func (s *TranslateStore) ForceSet(id uint64, key string) error {
 }
 
 // EntryReader returns a reader that streams the underlying data file.
-func (s *TranslateStore) EntryReader(ctx context.Context, offset uint64) (pilosa.TranslateEntryReader, error) {
+func (s *BoltTranslateStore) EntryReader(ctx context.Context, offset uint64) (TranslateEntryReader, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	return &TranslateEntryReader{ctx: ctx, cancel: cancel, store: s, offset: offset}, nil
+	return &BoltTranslateEntryReader{ctx: ctx, cancel: cancel, store: s, offset: offset}, nil
 }
 
 // WriteNotify returns a channel that is closed when a new entry is written.
-func (s *TranslateStore) WriteNotify() <-chan struct{} {
+func (s *BoltTranslateStore) WriteNotify() <-chan struct{} {
 	s.mu.RLock()
 	ch := s.writeNotify
 	s.mu.RUnlock()
@@ -378,7 +378,7 @@ func (s *TranslateStore) WriteNotify() <-chan struct{} {
 }
 
 // notifyWrite sends a write notification under write lock.
-func (s *TranslateStore) notifyWrite() {
+func (s *BoltTranslateStore) notifyWrite() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	close(s.writeNotify)
@@ -386,7 +386,7 @@ func (s *TranslateStore) notifyWrite() {
 }
 
 // MaxID returns the highest id in the store.
-func (s *TranslateStore) MaxID() (max uint64, err error) {
+func (s *BoltTranslateStore) MaxID() (max uint64, err error) {
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		max = maxID(tx)
 		return nil
@@ -397,7 +397,7 @@ func (s *TranslateStore) MaxID() (max uint64, err error) {
 }
 
 // WriteTo writes the contents of the store to the writer.
-func (s *TranslateStore) WriteTo(w io.Writer) (int64, error) {
+func (s *BoltTranslateStore) WriteTo(w io.Writer) (int64, error) {
 	tx, err := s.db.Begin(false)
 	if err != nil {
 		return 0, err
@@ -407,7 +407,7 @@ func (s *TranslateStore) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom reads the content and overwrites the existing store.
-func (s *TranslateStore) ReadFrom(r io.Reader) (n int64, err error) {
+func (s *BoltTranslateStore) ReadFrom(r io.Reader) (n int64, err error) {
 	// Close store.
 	if err := s.Close(); err != nil {
 		return 0, errors.Wrap(err, "closing store")
@@ -451,27 +451,27 @@ func maxID(tx *bolt.Tx) uint64 {
 	return 0
 }
 
-type TranslateEntryReader struct {
+type BoltTranslateEntryReader struct {
 	ctx    context.Context
-	store  *TranslateStore
+	store  *BoltTranslateStore
 	offset uint64
 	cancel func()
 }
 
 // Close closes the reader.
-func (r *TranslateEntryReader) Close() error {
+func (r *BoltTranslateEntryReader) Close() error {
 	r.cancel()
 	return nil
 }
 
 // ReadEntry reads the next entry from the underlying translate store.
-func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
+func (r *BoltTranslateEntryReader) ReadEntry(entry *TranslateEntry) error {
 	// Ensure reader has not been closed before read.
 	select {
 	case <-r.ctx.Done():
 		return r.ctx.Err()
 	case <-r.store.closing:
-		return ErrTranslateStoreClosed
+		return ErrBoltTranslateStoreClosed
 	default:
 	}
 
@@ -511,7 +511,7 @@ func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 		case <-r.ctx.Done():
 			return r.ctx.Err()
 		case <-r.store.closing:
-			return ErrTranslateStoreClosed
+			return ErrBoltTranslateStoreClosed
 		case <-writeNotify:
 		}
 	}
@@ -534,7 +534,7 @@ func (w *boltWrapper) Rollback() {
 		w.tx.Rollback()
 	}
 }
-func (s *TranslateStore) FreeIDs() (*roaring.Bitmap, error) {
+func (s *BoltTranslateStore) FreeIDs() (*roaring.Bitmap, error) {
 	result := roaring.NewBitmap()
 	err := s.db.View(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(bucketFree)
@@ -550,7 +550,7 @@ func (s *TranslateStore) FreeIDs() (*roaring.Bitmap, error) {
 	})
 	return result, err
 }
-func (s *TranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
+func (s *BoltTranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
 	bkt := tx.Bucket(bucketFree)
 	b := bkt.Get(freeKey)
 	buf := new(bytes.Buffer)
@@ -573,7 +573,7 @@ func (s *TranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
 
 // Delete removes the lookeup pairs in order to make avialble for reuse but doesn't commit the
 // transaction for that is tied to the associated rbf transaction being successful
-func (s *TranslateStore) Delete(records *roaring.Bitmap) (pilosa.Commitor, error) {
+func (s *BoltTranslateStore) Delete(records *roaring.Bitmap) (Commitor, error) {
 	tx, err := s.db.Begin(true)
 	if err != nil {
 		return nil, err
