@@ -34,6 +34,7 @@ import (
 	"github.com/molecula/featurebase/v3/testhook"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -5781,7 +5782,7 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 					t.Fatalf("got success, expected error similar to: %+v", test.expErr)
 				}
 				rows := res.Results[0].(pilosa.RowIdentifiers)
-				if !reflect.DeepEqual(rows.Keys, test.exp) {
+				if !assert.ElementsMatch(t, rows.Keys, test.exp) {
 					t.Fatalf("\ngot: %+v\nexp: %+v", rows.Keys, test.exp)
 				} else if rows.Rows != nil {
 					if test.exp == nil {

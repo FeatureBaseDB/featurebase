@@ -16,7 +16,6 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
-	boltdb "github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/net"
@@ -161,7 +160,7 @@ func openTranslateStores(dirPath, index string) (map[int]pilosa.TranslateStore, 
 			return nil, err
 		}
 		// open bolt db
-		ts, err := boltdb.OpenTranslateStore(filePath, index, "", partition, disco.DefaultPartitionN, false)
+		ts, err := pilosa.OpenTranslateStore(filePath, index, "", partition, disco.DefaultPartitionN, false)
 		ts.SetReadOnly(true)
 		if err != nil {
 			return nil, err

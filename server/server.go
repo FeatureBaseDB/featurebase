@@ -29,7 +29,6 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/authz"
-	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/dax/storage"
@@ -574,7 +573,7 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerMetricInterval(time.Duration(m.Config.Metric.PollInterval)),
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
-		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+		pilosa.OptServerOpenTranslateStore(pilosa.OpenTranslateStore),
 		pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
 		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),

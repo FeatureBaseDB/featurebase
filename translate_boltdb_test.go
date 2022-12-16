@@ -1,5 +1,5 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
-package boltdb_test
+package pilosa_test
 
 import (
 	"bytes"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/boltdb"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -203,7 +202,7 @@ func TestTranslateStore_MaxID(t *testing.T) {
 	}
 }
 
-func TestTranslateStore_EntryReader(t *testing.T) {
+func TestBoltTranslateStore_EntryReader(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		s := MustOpenNewTranslateStore(t)
 		defer MustCloseTranslateStore(s)
@@ -361,7 +360,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 		}()
 
 		var entry pilosa.TranslateEntry
-		if err := r.ReadEntry(&entry); err != boltdb.ErrTranslateStoreClosed {
+		if err := r.ReadEntry(&entry); err != pilosa.ErrBoltTranslateStoreClosed {
 			t.Fatalf("unexpected error: %#v", err)
 		}
 
@@ -374,7 +373,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 }
 
 // MustNewTranslateStore returns a new TranslateStore with a temporary path.
-func MustNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
+func MustNewTranslateStore(tb testing.TB) *pilosa.BoltTranslateStore {
 	f, err := testhook.TempFile(tb, "translate-store")
 	if err != nil {
 		panic(err)
@@ -382,7 +381,7 @@ func MustNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
 		panic(err)
 	}
 
-	s := boltdb.NewTranslateStore("I", "F", 0, disco.DefaultPartitionN, false)
+	s := pilosa.NewBoltTranslateStore("I", "F", 0, disco.DefaultPartitionN, false)
 	s.Path = f.Name()
 	return s
 }
@@ -502,7 +501,7 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 }
 
 // MustOpenNewTranslateStore returns a new, opened TranslateStore.
-func MustOpenNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
+func MustOpenNewTranslateStore(tb testing.TB) *pilosa.BoltTranslateStore {
 	s := MustNewTranslateStore(tb)
 	if err := s.Open(); err != nil {
 		tb.Fatalf("opening s: %v", err)
@@ -511,7 +510,7 @@ func MustOpenNewTranslateStore(tb testing.TB) *boltdb.TranslateStore {
 }
 
 // MustCloseTranslateStore closes s and removes the underlying data file.
-func MustCloseTranslateStore(s *boltdb.TranslateStore) {
+func MustCloseTranslateStore(s *pilosa.BoltTranslateStore) {
 	if err := s.Close(); err != nil {
 		panic(err)
 	}

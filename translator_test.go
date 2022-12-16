@@ -12,36 +12,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/mock"
 	"github.com/molecula/featurebase/v3/test"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
-
-func TestInMemTranslateStore_TranslateID(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, disco.DefaultPartitionN)
-
-	// Setup initial keys.
-	if _, err := s.CreateKeys("foo"); err != nil {
-		t.Fatal(err)
-	} else if _, err := s.CreateKeys("bar"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure IDs can be translated back to keys.
-	if key, err := s.TranslateID(1); err != nil {
-		t.Fatal(err)
-	} else if got, want := key, "foo"; got != want {
-		t.Fatalf("TranslateID()=%s, want %s", got, want)
-	}
-
-	if key, err := s.TranslateID(2); err != nil {
-		t.Fatal(err)
-	} else if got, want := key, "bar"; got != want {
-		t.Fatalf("TranslateID()=%s, want %s", got, want)
-	}
-}
 
 func TestMultiTranslateEntryReader(t *testing.T) {
 	t.Run("None", func(t *testing.T) {
@@ -242,97 +217,6 @@ func TestTranslation_KeyNotFound(t *testing.T) {
 			t.Fatalf("TranslateKeys(%+v): expected: %d,%d, got: %d,%d", req, id1+1, id1, resp.IDs[0], resp.IDs[1])
 		}
 	}
-}
-
-func TestInMemTranslateStore_ReadKey(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, disco.DefaultPartitionN)
-
-	ids, err := s.FindKeys("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ids) != 0 {
-		t.Errorf("unexpected IDs: %v", ids)
-	}
-
-	// Ensure next key autoincrements.
-	ids, err = s.CreateKeys("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := ids["foo"], uint64(1); got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-
-	ids, err = s.FindKeys("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := ids["foo"], uint64(1); got != want {
-		t.Fatalf("TranslateKey()=%d, want %d", got, want)
-	}
-}
-
-// Test key translation with multiple nodes.
-func TestTranslation_Primary(t *testing.T) {
-	// Ensure that field key translations requests sent to
-	// non-primary nodes are forwarded to the primary.
-	t.Run("ForwardFieldKey", func(t *testing.T) {
-		// Start a 2-node cluster.
-		c := test.MustRunCluster(t, 3)
-		defer c.Close()
-
-		node0 := c.GetPrimary()
-		node1 := c.GetNonPrimary()
-
-		ctx := context.Background()
-		index := c.Idx()
-		fld := "f"
-
-		// Create an index without keys.
-		if _, err := node1.API.CreateIndex(ctx, index,
-			pilosa.IndexOptions{
-				Keys: false,
-			}); err != nil {
-			t.Fatal(err)
-		}
-
-		// Create a field with keys.
-		if _, err := node1.API.CreateField(ctx, index, fld,
-			pilosa.OptFieldKeys(),
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		keys := []string{"one", "two", "three"}
-		for i := range keys {
-			pql := fmt.Sprintf(`Set(%d, %s="%s")`, i+1, fld, keys[i])
-
-			// Send a translation request to node1 (non-primary).
-			_, err := node1.API.Query(ctx,
-				&pilosa.QueryRequest{Index: index, Query: pql},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		for i := len(keys) - 1; i >= 0; i-- {
-			// Read the row and ensure the key was set.
-			qry := fmt.Sprintf(`Row(%s="%s")`, fld, keys[i])
-			resp, err := node0.API.Query(ctx,
-				&pilosa.QueryRequest{Index: index, Query: qry},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			row := resp.Results[0].(*pilosa.Row)
-			val := uint64(i + 1)
-			if cols := row.Columns(); !reflect.DeepEqual(cols, []uint64{val}) {
-				t.Fatalf("unexpected columns: %+v", cols)
-			}
-		}
-	})
 }
 
 func TestTranslation_TranslateIDsOnCluster(t *testing.T) {

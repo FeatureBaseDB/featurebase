@@ -75,6 +75,16 @@ testvsub:
 			echo; echo "999 done testing subpkg $$pkg"; \
 		done
 
+# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/mnt/ramfs
+ramdisk-linux:
+	mount -o size=2G -t tmpfs none /mnt/ramfs
+
+# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/Volumes/RAMDisk
+ramdisk-osx:
+	diskutil erasevolume HFS+ 'RAMDisk' `hdiutil attach -nobrowse -nomount ram://4194304`
+
+detach-ramdisk-osx:
+	hdiutil detach /Volumes/RAMDisk
 
 testvsub-race:
 	@set -e; for pkg in $(GOPACKAGES); do \
