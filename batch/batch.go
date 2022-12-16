@@ -742,23 +742,27 @@ var ErrBatchNowStale = errors.New("batch is stale and needs to be imported (howe
 func (b *Batch) Import() error {
 	ctx := context.Background()
 	start := time.Now()
-	trns, err := b.importer.StartTransaction(ctx, "", b.prevDuration*10, false, time.Hour)
-	if err != nil {
-		return errors.Wrap(err, "starting transaction")
+	if !b.useShardTransactionalEndpoint {
+		trns, err := b.importer.StartTransaction(ctx, "", b.prevDuration*10, false, time.Hour)
+		if err != nil {
+			return errors.Wrap(err, "starting transaction")
+		}
+		defer func() {
+			if trns != nil {
+				if trnsl, err := b.importer.FinishTransaction(ctx, trns.ID); err != nil {
+					b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
+				}
+			}
+		}()
 	}
 	defer func() {
-		if trns != nil {
-			if trnsl, err := b.importer.FinishTransaction(ctx, trns.ID); err != nil {
-				b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
-			}
-		}
 		b.importer.StatsTiming(MetricBatchImportDurationSeconds, time.Since(start), 1.0)
 	}()
 
 	size := len(b.ids)
 	transStart := time.Now()
 	// first we need to translate the toTranslate, then fill out the missing row IDs
-	err = b.doTranslation()
+	err := b.doTranslation()
 	if err != nil {
 		return errors.Wrap(err, "doing Translation")
 	}
