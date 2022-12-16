@@ -249,8 +249,6 @@ run go tests race:
   stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
   image: golang:$GOVERSION
   extends: .go-cache
-  before_script:
-    - if mount | awk '{if ($3 == "/mnt/ramfs") { exit -1}} ENDFILE{exit 0}'; then mount -o size=2G -t tmpfs none /mnt/ramfs; fi
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
@@ -258,7 +256,7 @@ run go tests race:
   script:
     - echo "Running featurebase race tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - RAMDISK=/mnt/ramfs go test -race -v -timeout=10m ${PKG_LIST//,/ }
+    - RAMDISK=/mnt/ramdisk go test -race -v -timeout=10m ${PKG_LIST//,/ }
   tags:
     - aws
 
@@ -272,12 +270,10 @@ run go tests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   retry: 1
-  before_script:
-    - if mount | awk '{if ($3 == "/mnt/ramfs") { exit -1}} ENDFILE{exit 0}'; then mount -o size=2G -t tmpfs none /mnt/ramfs; fi
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - RAMDISK=/mnt/ramfs go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
+    - RAMDISK=/mnt/ramdisk go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
   artifacts:
     paths:
       - coverage.out
