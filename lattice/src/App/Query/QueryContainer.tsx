@@ -51,10 +51,16 @@ export const QueryContainer: FC<{}> = () => {
 
   const handleHTTPQueryMessages = (response) => {
     setIsSQL3(true)
-    streamingResults.headers = response.data.schema.fields;
-    streamingResults.rows = response.data.data;
-    setErrorResult(undefined);
-    setResults([streamingResults]);
+    console.log(response.data.error);
+    if (response.status === 400) {
+      streamingResults.error = response.data.error;
+      setErrorResult(streamingResults);
+    } else {
+      streamingResults.headers = response.data.schema.fields;
+      streamingResults.rows = response.data.data;
+      setErrorResult(undefined);
+      setResults([streamingResults]);
+    }
     setLoading(false);
   }
 
@@ -138,6 +144,9 @@ export const QueryContainer: FC<{}> = () => {
             if (e.response.status === 404) {
               setIsSQL3(false);
               querySQL(query, handleQueryMessages, handleQueryEnd);
+            } else if (e.response.status === 400) {
+              setIsSQL3(false)
+              handleHTTPQueryMessages(e.response);
             }
 
 
