@@ -3859,7 +3859,7 @@ func (h *Handler) handlePostDataframeRestore(w http.ResponseWriter, r *http.Requ
 		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 		return
 	}
-	filename := idx.GetDataFramePath(shard) + ".parquet"
+	filename := idx.GetDataFramePath(shard) + h.api.server.executor.TableExtension()
 	dest, err := os.Create(filename)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to create restore dataframe shard %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
@@ -4183,7 +4183,7 @@ func (h *Handler) handleGetDataframe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 		return
 	}
-	filename := idx.GetDataFramePath(shard) + ".parquet"
+	filename := idx.GetDataFramePath(shard) + h.api.server.executor.TableExtension()
 	http.ServeFile(w, r, filename)
 }
 

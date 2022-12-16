@@ -98,7 +98,8 @@ type Server struct { // nolint: maligned
 
 	serverlessStorage *daxstorage.ResourceManager
 
-	dataframeEnabled bool
+	dataframeEnabled    bool
+	dataframeUseParquet bool
 }
 
 type ExecutionPlannerFn func(executor Executor, api *API, sql string) sql3.CompilePlanner
@@ -456,6 +457,13 @@ func OptServerIsDataframeEnabled(is bool) ServerOption {
 	}
 }
 
+func OptServerDataframeUseParquet(is bool) ServerOption {
+	return func(s *Server) error {
+		s.dataframeUseParquet = is
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cluster := newCluster()
@@ -527,6 +535,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.executor = newExecutor(executorOpts...)
 	s.executor.dataframeEnabled = s.dataframeEnabled
+	s.executor.datafameUseParquet = s.dataframeUseParquet
 
 	path, err := expandDirName(s.dataDir)
 	if err != nil {

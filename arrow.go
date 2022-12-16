@@ -5,12 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/array"
+	"github.com/apache/arrow/go/v10/arrow/ipc"
 	"github.com/apache/arrow/go/v10/arrow/memory"
+	"github.com/apache/arrow/go/v10/parquet"
+	"github.com/apache/arrow/go/v10/parquet/file"
+	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/tracing"
@@ -371,12 +377,14 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 	if idx == nil {
 		return nil, newNotFoundError(ErrIndexNotFound, index)
 	}
+
 	fname := idx.GetDataFramePath(shard)
-	if _, err := os.Stat(fname + ".parquet"); os.IsNotExist(err) {
+
+	if !e.dataFrameExists(fname) {
 		return &basicTable{name: name}, nil
 	}
 
-	table, err := readTableParquetCtx(context.TODO(), fname, pool)
+	table, err := e.getDataTable(ctx, fname, pool)
 	if err != nil {
 		return nil, errors.Wrap(err, "arrow readTableParquet")
 	}
@@ -402,4 +410,143 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 	}
 	table.Retain()
 	return &basicTable{resolver: resolver, table: table, filtered: filter != nil, name: name}, nil
+}
+
+func (e *executor) dataFrameExists(fname string) bool {
+	if e.typeIsParquet() {
+		if _, err := os.Stat(fname + ".parquet"); os.IsNotExist(err) {
+			return false
+		}
+		return true
+	}
+	if _, err := os.Stat(fname + ".arrow"); os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
+
+func (e *executor) getDataTable(ctx context.Context, fname string, mem memory.Allocator) (arrow.Table, error) {
+	if e.typeIsParquet() {
+		table, err := readTableParquetCtx(ctx, fname, mem)
+		return table, err
+	}
+	return readTableArrow(fname, mem)
+}
+
+func (e *executor) typeIsParquet() bool {
+	return e.datafameUseParquet
+}
+
+func (e *executor) IsDataframeFile(name string) bool {
+	if e.typeIsParquet() {
+		return strings.HasSuffix(name, ".parquet")
+	}
+	return strings.HasSuffix(name, ".arrow")
+}
+
+func (e *executor) SaveTable(name string, table arrow.Table, mem memory.Allocator) error {
+	if e.typeIsParquet() {
+		return writeTableParquet(table, name)
+	}
+	return writeTableArrow(table, name, mem)
+}
+
+func (e *executor) TableExtension() string {
+	if e.typeIsParquet() {
+		return ".parquet"
+	}
+	return ".arrow"
+}
+
+func readTableArrow(filename string, mem memory.Allocator) (arrow.Table, error) {
+	r, err := os.Open(filename + ".arrow")
+	if err != nil {
+		return nil, err
+	}
+	rr, err := ipc.NewFileReader(r, ipc.WithAllocator(mem))
+	if err != nil {
+		return nil, err
+	}
+	defer rr.Close()
+	records := make([]arrow.Record, rr.NumRecords(), rr.NumRecords())
+	i := 0
+	for {
+		rec, err := rr.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		records[i] = rec
+		i++
+	}
+	records = records[:i]
+	table := array.NewTableFromRecords(rr.Schema(), records)
+	return table, nil
+}
+
+func readTableParquetCtx(ctx context.Context, filename string, mem memory.Allocator) (arrow.Table, error) {
+	r, err := os.Open(filename + ".parquet")
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	pf, err := file.NewParquetReader(r)
+	if err != nil {
+		return nil, err
+	}
+
+	reader, err := pqarrow.NewFileReader(pf, pqarrow.ArrowReadProperties{}, mem)
+	if err != nil {
+		return nil, err
+	}
+	return reader.ReadTable(ctx)
+}
+
+func writeTableParquet(table arrow.Table, filename string) error {
+	f, err := os.Create(filename + ".parquet")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	props := parquet.NewWriterProperties(parquet.WithDictionaryDefault(false))
+	arrProps := pqarrow.DefaultWriterProps()
+	chunkSize := 10 * 1024 * 1024
+	err = pqarrow.WriteTable(table, f, int64(chunkSize), props, arrProps)
+	if err != nil {
+		return err
+	}
+	f.Sync()
+	return nil
+}
+
+func writeTableArrow(table arrow.Table, filename string, mem memory.Allocator) error {
+	f, err := os.Create(filename + ".arrow")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	writer, err := ipc.NewFileWriter(f, ipc.WithAllocator(mem), ipc.WithSchema(table.Schema()))
+	if err != nil {
+		panic(err)
+	}
+	chunkSize := int64(0)
+	tr := array.NewTableReader(table, chunkSize)
+	defer tr.Release()
+	n := 0
+	for tr.Next() {
+		arec := tr.Record()
+		err = writer.Write(arec)
+		if err != nil {
+			panic(err)
+		}
+		n++
+	}
+	err = writer.Close()
+	if err != nil {
+		panic(err)
+	}
+	f.Sync()
+	return nil
 }

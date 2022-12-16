@@ -196,8 +196,10 @@ const (
 
 // we want to set resource limits *exactly once*, and then be able
 // to report on whether or not that succeeded.
-var setupResourceLimitsOnce sync.Once
-var setupResourceLimitsErr error
+var (
+	setupResourceLimitsOnce sync.Once
+	setupResourceLimitsErr  error
+)
 
 // doSetupResourceLimits is the function which actually does the
 // resource limit setup, possibly yielding an error. it's a Command
@@ -592,6 +594,7 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerExecutionPlannerFn(executionPlannerFn),
 		pilosa.OptServerServerlessStorage(m.serverlessStorage),
 		pilosa.OptServerIsDataframeEnabled(m.Config.Dataframe.Enable),
+		pilosa.OptServerDataframeUseParquet(m.Config.Dataframe.UseParquet),
 	}
 
 	if m.isComputeNode {

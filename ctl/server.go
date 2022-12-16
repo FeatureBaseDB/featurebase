@@ -143,6 +143,7 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 	flags.BoolVar(&srv.DataDog.BlockProfile, pre("datadog.block-profile"), false, "golang pprof goroutine ")
 
 	flags.BoolVar(&srv.Dataframe.Enable, pre("dataframe.enable"), false, "EXPERIMENTAL enable support for Apply and Arrow")
+	flags.BoolVar(&srv.Dataframe.UseParquet, pre("dataframe.use-parquet"), false, "EXPERIMENTAL use parquet for file format")
 
 	return flags
 }

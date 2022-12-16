@@ -251,7 +251,8 @@ type Config struct {
 	Auth Auth
 
 	Dataframe struct {
-		Enable bool `toml:"enable"`
+		Enable     bool `toml:"enable"`
+		UseParquet bool `toml:"use-parquet"`
 	} `toml:"dataframe"`
 }
 
