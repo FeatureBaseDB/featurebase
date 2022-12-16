@@ -13,8 +13,6 @@ import (
 	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/array"
 	"github.com/apache/arrow/go/v10/arrow/memory"
-	"github.com/apache/arrow/go/v10/parquet/file"
-	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/tracing"
@@ -220,12 +218,14 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 	if idx == nil {
 		return nil, newNotFoundError(ErrIndexNotFound, index)
 	}
+
 	fname := idx.GetDataFramePath(shard)
-	if _, err := os.Stat(fname + ".parquet"); os.IsNotExist(err) {
+
+	if !e.dataFrameExists(fname) {
 		return value.NewVector([]value.Value{}), nil
 	}
 
-	table, err := readTableParquet(fname)
+	table, err := e.getDataTable(ctx, fname, pool)
 	if err != nil {
 		return nil, err
 	}
@@ -254,57 +254,20 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 	return context.Global("_"), nil
 }
 
-func readTableParquet(filename string) (arrow.Table, error) {
-	r, err := os.Open(filename + ".parquet")
-	if err != nil {
-		return nil, err
-	}
-
-	pf, err := file.NewParquetReader(r)
-	if err != nil {
-		return nil, err
-	}
-
-	reader, err := pqarrow.NewFileReader(pf, pqarrow.ArrowReadProperties{}, memory.DefaultAllocator)
-	if err != nil {
-		return nil, err
-	}
-	return reader.ReadTable(context.Background())
-}
-
-func readTableParquetCtx(ctx context.Context, filename string, mem memory.Allocator) (arrow.Table, error) {
-	r, err := os.Open(filename + ".parquet")
-	if err != nil {
-		return nil, err
-	}
-
-	pf, err := file.NewParquetReader(r)
-	if err != nil {
-		return nil, err
-	}
-
-	reader, err := pqarrow.NewFileReader(pf, pqarrow.ArrowReadProperties{}, mem)
-	if err != nil {
-		return nil, err
-	}
-	return reader.ReadTable(ctx)
-}
-
 // ///////////////////////////////////////////////////////
 // all the ingest supporting functions
 // ///////////////////////////////////////////////////////
 
-func NewShardFile(name string) (*ShardFile, error) {
-	if _, err := os.Stat(name + ".parquet"); os.IsNotExist(err) {
-		return &ShardFile{dest: name}, nil
+func NewShardFile(ctx context.Context, name string, mem memory.Allocator, e *executor) (*ShardFile, error) {
+	if !e.dataFrameExists(name) {
+		return &ShardFile{dest: name, executor: e}, nil
 	}
-
 	// else read in existing
-	table, err := readTableParquet(name)
+	table, err := e.getDataTable(ctx, name, mem)
 	if err != nil {
 		return nil, err
 	}
-	return &ShardFile{table: table, schema: table.Schema(), dest: name}, nil
+	return &ShardFile{table: table, schema: table.Schema(), dest: name, executor: e}, nil
 }
 
 type NameType struct {
@@ -349,6 +312,7 @@ type ShardFile struct {
 	added      int64
 	columns    []interface{}
 	dest       string
+	executor   *executor
 }
 
 func compareSchema(s1, s2 *arrow.Schema) bool {
@@ -427,7 +391,7 @@ func (sf *ShardFile) Process(cs *ChangesetRequest) error {
 	if err != nil {
 		return err
 	}
-	return os.Rename(rtemp+".parquet", sf.dest+".parquet")
+	return os.Rename(rtemp+sf.executor.TableExtension(), sf.dest+sf.executor.TableExtension())
 }
 
 func (sf *ShardFile) process(cs *ChangesetRequest) error {
@@ -521,22 +485,9 @@ func (sf *ShardFile) Save(name string) error {
 		}
 	}
 	rec := array.NewRecord(sf.schema, parts, sf.beforeRows+sf.added)
-	df, err := dataframe.NewDataFrameFromRecord(mem, rec)
-	if err != nil {
-		return err
-	}
-	// confirm change
-	w, err := os.Create(name + ".parquet")
-	if err != nil {
-		return err
-	}
+	table := array.NewTableFromRecords(sf.schema, []arrow.Record{rec})
 
-	err = df.ToParquet(w, 1024)
-	if err != nil {
-		return err
-	}
-	w.Close()
-	return nil
+	return sf.executor.SaveTable(name, table, mem)
 }
 
 // TODO(twg) 2022/10/03 Not a huge fan of the global variable will look at adding to executor structure
@@ -573,7 +524,8 @@ func (api *API) ApplyDataframeChangeset(ctx context.Context, index string, cs *C
 	mu := getDataframeWritelock(shard)
 	mu.Lock()
 	defer mu.Unlock()
-	shardFile, err := NewShardFile(fname)
+	mem := memory.NewGoAllocator()
+	shardFile, err := NewShardFile(ctx, fname, mem, api.server.executor)
 	if err != nil {
 		return err
 	}
@@ -600,14 +552,16 @@ func (api *API) GetDataframeSchema(ctx context.Context, indexName string) (inter
 	dir, _ := os.Open(base)
 	files, _ := dir.Readdir(0)
 	parts := make([]column, 0)
+	mem := memory.NewGoAllocator()
 	for i := range files {
 		file := files[i]
 		name := file.Name()
-		if strings.HasSuffix(name, ".parquet") {
+		if api.server.executor.IsDataframeFile(name) {
 			// strip off the parquet extenison
 			name = strings.TrimSuffix(name, filepath.Ext(name))
 			// read the parquet file and extract the schema
-			table, err := readTableParquet(filepath.Join(base, name))
+			fname := filepath.Join(base, name)
+			table, err := api.server.executor.getDataTable(ctx, fname, mem)
 			if err != nil {
 				return nil, err
 			}

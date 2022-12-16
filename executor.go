@@ -77,7 +77,8 @@ type executor struct {
 	maxMemory int64
 
 	// Temporary flag to be removed when stablized
-	dataframeEnabled bool
+	dataframeEnabled   bool
+	datafameUseParquet bool
 }
 
 // executorOption is a functional option type for pilosa.executor
