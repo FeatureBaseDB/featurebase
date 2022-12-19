@@ -261,7 +261,10 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		return p.analyseFunctionTrim(call, scope)
 	case "LTRIM":
 		return p.analyseFunctionTrim(call, scope)
-
+	case "SUFFIX":
+		return p.analyseFunctionPrefixSuffix(call, scope)
+	case "PREFIX":
+		return p.analyseFunctionPrefixSuffix(call, scope)
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

@@ -1500,6 +1500,10 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateRTrim(currentRow)
 	case "LTRIM":
 		return n.EvaluateLTrim(currentRow)
+	case "SUFFIX":
+		return n.EvaluateSuffix(currentRow)
+	case "PREFIX":
+		return n.EvaluatePrefix(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}

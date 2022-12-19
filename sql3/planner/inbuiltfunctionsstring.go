@@ -182,8 +182,13 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 	if err != nil {
 		return nil, err
 	}
+
+	if startIndex < 0 {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, startIndex)
+	}
+
 	if startIndex >= len(stringArgOne) {
-		return "", nil
+		return nil, sql3.NewErrValueOutOfRange(0, 0, startIndex)
 	}
 
 	endIndex := len(stringArgOne)
@@ -194,16 +199,13 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 		}
 		endIndex = startIndex + ln
 	}
-	if endIndex < 0 {
-		return "", nil
-	}
 
-	if startIndex < 0 {
-		startIndex = 0
+	if endIndex < startIndex {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, endIndex)
 	}
 
 	if endIndex > len(stringArgOne) {
-		return stringArgOne[startIndex:], nil
+		return nil, sql3.NewErrValueOutOfRange(0, 0, endIndex)
 	}
 
 	return stringArgOne[startIndex:endIndex], nil
@@ -337,4 +339,68 @@ func (n *callPlanExpression) EvaluateLTrim(currentRow []interface{}) (interface{
 
 	// Trim the leading whitespace from string
 	return strings.TrimLeft(stringArgOne, " "), nil
+}
+
+func (p *ExecutionPlanner) analyseFunctionPrefixSuffix(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) != 2 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
+	}
+
+	if !typeIsString(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	if !typeIsInteger(call.Args[1].DataType()) {
+		return nil, sql3.NewErrIntExpressionExpected(call.Args[1].Pos().Line, call.Args[1].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
+func (n *callPlanExpression) EvaluatePrefix(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	intArgTwo, err := evaluateIntArg(n.args[1], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// if the length is less than zero, out of range
+	if intArgTwo < 0 {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, intArgTwo)
+	}
+
+	if intArgTwo > len(stringArgOne) {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, intArgTwo)
+	}
+
+	return stringArgOne[:intArgTwo], nil
+}
+
+func (n *callPlanExpression) EvaluateSuffix(currentRow []interface{}) (interface{}, error) {
+	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	intArgTwo, err := evaluateIntArg(n.args[1], currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// if the length is less than zero, out of range
+	if intArgTwo < 0 {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, intArgTwo)
+	}
+
+	if intArgTwo > len(stringArgOne) {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, intArgTwo)
+	}
+
+	return stringArgOne[len(stringArgOne)-intArgTwo:], nil
 }
