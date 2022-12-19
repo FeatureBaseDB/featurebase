@@ -1,5 +1,6 @@
 .PHONY: build clean build-lattice cover cover-viz default docker docker-build docker-tag-push generate generate-protoc generate-pql generate-statik generate-stringer install install-protoc-gen-gofast install-protoc install-statik install-peg test docker-login
 
+SHELL := /bin/bash
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 VARIANT = Molecula
 GO=go
