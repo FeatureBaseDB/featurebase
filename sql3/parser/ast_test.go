@@ -415,7 +415,7 @@ func TestCreateViewStatement_String(t *testing.T) {
 
 func TestDeleteStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.DeleteStatement{
-		Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}, Alias: &parser.Ident{Name: "tbl2"}},
+		TableName: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}, Alias: &parser.Ident{Name: "tbl2"}},
 	}, `DELETE FROM tbl AS tbl2`)
 
 	// AssertStatementStringer(t, &sql.DeleteStatement{

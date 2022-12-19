@@ -12,14 +12,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
-// PlannerScope holds scope for the planner
-// there is a stack of these in the ExecutionPlanner and some corresponding push/pop functions
-// this allows us to do scoped operations without passing stuff down into
-// every function
-type PlannerScope struct {
-	scope types.PlanOperator
-}
-
 // ExecutionPlanner compiles SQL text into a query plan
 type ExecutionPlanner struct {
 	executor       pilosa.Executor
@@ -29,7 +21,6 @@ type ExecutionPlanner struct {
 	importer       pilosa.Importer
 	logger         logger.Logger
 	sql            string
-	scopeStack     *scopeStack
 }
 
 func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer pilosa.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
@@ -41,7 +32,6 @@ func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, s
 		importer:       importer,
 		logger:         logger,
 		sql:            sql,
-		scopeStack:     newScopeStack(),
 	}
 }
 
@@ -77,6 +67,8 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 		rootOperator, err = p.compileInsertStatement(stmt)
 	case *parser.BulkInsertStatement:
 		rootOperator, err = p.compileBulkInsertStatement(stmt)
+	case *parser.DeleteStatement:
+		rootOperator, err = p.compileDeleteStatement(stmt)
 	default:
 		return nil, sql3.NewErrInternalf("cannot plan statement: %T", stmt)
 	}
@@ -90,7 +82,8 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 	switch stmt := stmt.(type) {
 	case *parser.SelectStatement:
-		return p.analyzeSelectStatement(stmt)
+		_, err := p.analyzeSelectStatement(stmt)
+		return err
 	case *parser.ShowTablesStatement:
 		return nil
 	case *parser.ShowColumnsStatement:
@@ -107,6 +100,8 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 		return p.analyzeInsertStatement(stmt)
 	case *parser.BulkInsertStatement:
 		return p.analyzeBulkInsertStatement(stmt)
+	case *parser.DeleteStatement:
+		return p.analyzeDeleteStatement(stmt)
 	default:
 		return sql3.NewErrInternalf("cannot analyze statement: %T", stmt)
 	}
@@ -124,59 +119,4 @@ const (
 
 func (p *ExecutionPlanner) checkAccess(ctx context.Context, objectName string, _ accessType) error {
 	return nil
-}
-
-// addReference is a convenience function that allows the planner to keep track
-// of references so we can use them during optimization.
-func (p *ExecutionPlanner) addReference(ref *qualifiedRefPlanExpression) error {
-	table := p.scopeStack.read()
-	if table == nil {
-		return sql3.NewErrInternalf("unexpected symbol table state")
-	}
-
-	switch s := table.scope.(type) {
-	case *PlanOpQuery:
-		s.referenceList = append(s.referenceList, ref)
-	}
-	return nil
-}
-
-// scopeStack is a stack of PlannerScope with the usual push/pop methods.
-type scopeStack struct {
-	st []*PlannerScope
-}
-
-// newScopeStack returns a scope stack initialized with zero elements on the
-// stack.
-func newScopeStack() *scopeStack {
-	return &scopeStack{
-		st: make([]*PlannerScope, 0),
-	}
-}
-
-// push adds the provided PlanOperator (as the scope of a PlannerScope) to the
-// scope stack.
-func (ss *scopeStack) push(scope types.PlanOperator) {
-	ss.st = append(ss.st, &PlannerScope{
-		scope: scope,
-	})
-}
-
-// pop removes (and returns) the last scope pushed to the stack.
-func (ss *scopeStack) pop() *PlannerScope {
-	if len(ss.st) == 0 {
-		return nil
-	}
-	ret := ss.st[len(ss.st)-1]
-	ss.st = ss.st[:len(ss.st)-1]
-	return ret
-}
-
-// read returns the last scope pushed to the stack, but unlike pop, it does not
-// remove it.
-func (ss *scopeStack) read() *PlannerScope {
-	if len(ss.st) == 0 {
-		return nil
-	}
-	return ss.st[len(ss.st)-1]
 }

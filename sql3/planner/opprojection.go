@@ -107,22 +107,22 @@ func (p *PlanOpProjection) WithUpdatedExpressions(exprs ...types.PlanExpression)
 }
 
 func ExpressionToColumn(e types.PlanExpression) *types.PlannerColumn {
-	var name string
-	if n, ok := e.(types.IdentifiableByName); ok {
-		name = n.Name()
-	} else {
-		name = "" //e.String()
-	}
+	name := ""
+	relationName := ""
 
-	var table string
-	if t, ok := e.(types.IdentifiableByName); ok {
-		table = t.Name()
+	switch thisExpr := e.(type) {
+	case *qualifiedRefPlanExpression:
+		name = thisExpr.columnName
+		relationName = thisExpr.tableName
+
+	case *aliasPlanExpression:
+		name = thisExpr.aliasName
 	}
 
 	return &types.PlannerColumn{
 		ColumnName:   name,
+		RelationName: relationName,
 		Type:         e.Type(),
-		RelationName: table,
 	}
 }
 
