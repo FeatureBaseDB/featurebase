@@ -9,8 +9,7 @@ import (
 )
 
 const (
-	ErrInternal errors.Code = "ErrInternal"
-
+	ErrInternal         errors.Code = "ErrInternal"
 	ErrCacheKeyNotFound errors.Code = "ErrCacheKeyNotFound"
 
 	ErrDuplicateColumn   errors.Code = "ErrDuplicateColumn"
@@ -114,6 +113,9 @@ const (
 
 	// optimizer errors
 	ErrAggregateNotAllowedInGroupBy errors.Code = "ErrIdPercentileNotAllowedInGroupBy"
+
+	// function evaluation
+	ErrValueOutOfRange errors.Code = "ErrValueOutOfRange"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -693,5 +695,13 @@ func NewErrAggregateNotAllowedInGroupBy(line, col int, aggName string) error {
 	return errors.New(
 		ErrAggregateNotAllowedInGroupBy,
 		fmt.Sprintf("[%d:%d] aggregate '%s' not allowed in GROUP BY", line, col, aggName),
+	)
+}
+
+// function evaluation
+func NewErrValueOutOfRange(line, col int, val interface{}) error {
+	return errors.New(
+		ErrValueOutOfRange,
+		fmt.Sprintf("[%d:%d] value '%v' out of range", line, col, val),
 	)
 }
