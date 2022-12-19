@@ -87,26 +87,14 @@ var stringScalarFunctionsTests = TableTest{
 			SQLs: sqls(
 				"select substring('testing', -10, 14)",
 			),
-			ExpHdrs: hdrs(
-				hdr("", fldTypeString),
-			),
-			ExpRows: rows(
-				row(string("test")),
-			),
-			Compare: CompareExactUnordered,
+			ExpErr: "[0:0] value '-10' out of range",
 		},
 		{
 			name: "SubstringNoLength",
 			SQLs: sqls(
 				"select substring('testing', -5)",
 			),
-			ExpHdrs: hdrs(
-				hdr("", fldTypeString),
-			),
-			ExpRows: rows(
-				row(string("testing")),
-			),
-			Compare: CompareExactUnordered,
+			ExpErr: "[0:0] value '-5' out of range",
 		},
 		{
 			name: "ReverseSubstring",
@@ -287,6 +275,142 @@ var stringScalarFunctionsTests = TableTest{
 				"select trim(1)",
 			),
 			ExpErr: "string expression expected",
+		},
+		//Prefix()
+		{
+			name: "IncorrectArgumentsforPrefix",
+			SQLs: sqls(
+				"SELECT PREFIX('string')",
+			),
+			ExpErr: "'PREFIX': count of formal parameters (2) does not match count of actual parameters (1)",
+		},
+		{
+			name: "IncorrectInputforPrefix",
+			SQLs: sqls(
+				"SELECT PREFIX(1,'string')",
+			),
+			ExpErr: "string expression expected",
+		},
+		{
+			name: "LengthLargerThanStringforPrefix",
+			SQLs: sqls(
+				"SELECT PREFIX('string', 7)",
+			),
+			ExpErr: "[0:0] value '7' out of range",
+		},
+		{
+			name: "NegativeLengthforPrefix",
+			SQLs: sqls(
+				"SELECT PREFIX('string', -1)",
+			),
+			ExpErr: "[0:0] value '-1' out of range",
+		},
+		{
+			name: "ZeroLengthforPrefix",
+			SQLs: sqls(
+				"SELECT PREFIX('string', 0)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "GetFirstThreeforPrefix",
+			SQLs: sqls(
+				"SELECT PREFIX('string', 3)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("str")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FullStringforPrefix",
+			SQLs: sqls(
+				"SELECT PREFIX('string', 6)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("string")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		//Suffix()
+		{
+			name: "IncorrectArgumentsforSuffix",
+			SQLs: sqls(
+				"SELECT SUFFIX('string')",
+			),
+			ExpErr: "'SUFFIX': count of formal parameters (2) does not match count of actual parameters (1)",
+		},
+		{
+			name: "IncorrectInputforSuffix",
+			SQLs: sqls(
+				"SELECT SUFFIX(1,'string')",
+			),
+			ExpErr: "string expression expected",
+		},
+		{
+			name: "LengthLargerThanStringforSuffix",
+			SQLs: sqls(
+				"SELECT SUFFIX('string', 7)",
+			),
+			ExpErr: "[0:0] value '7' out of range",
+		},
+		{
+			name: "NegativeLengthforSuffix",
+			SQLs: sqls(
+				"SELECT SUFFIX('string', -1)",
+			),
+			ExpErr: "[0:0] value '-1' out of range",
+		},
+		{
+			name: "ZeroLengthforSuffix",
+			SQLs: sqls(
+				"SELECT SUFFIX('string', 0)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "GetFirstThreeforSuffix",
+			SQLs: sqls(
+				"SELECT SUFFIX('string', 3)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("ing")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FullStringforSuffix",
+			SQLs: sqls(
+				"SELECT SUFFIX('string', 6)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("string")),
+			),
+			Compare: CompareExactOrdered,
 		},
 		{
 			name: "RemovingTrailingspacefromStringusingRTrim",
