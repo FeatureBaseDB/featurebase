@@ -56,10 +56,36 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 	case *parser.Ident:
 		switch sc := scope.(type) {
 		case *parser.SelectStatement:
-			// turn *parser.Ident into *parser.QualifiedRef
 			if sc.Source == nil {
 				return nil, sql3.NewErrColumnNotFound(e.NamePos.Line, e.NamePos.Column, e.Name)
 			}
+
+			// go find the first ident in the source that matches
+			oc, err := sc.Source.OutputColumnNamed(e.Name)
+			if err != nil {
+				return nil, err
+			} else if oc == nil {
+				return nil, sql3.NewErrColumnNotFound(e.NamePos.Line, e.NamePos.Column, e.Name)
+			}
+
+			// now turn *parser.Ident into *parser.QualifiedRef
+			ident := &parser.QualifiedRef{
+				Table: &parser.Ident{
+					Name:    oc.TableName,
+					NamePos: e.NamePos,
+				},
+				Column: &parser.Ident{
+					Name:    oc.ColumnName,
+					NamePos: e.NamePos,
+				},
+				ColumnIndex: oc.ColumnIndex,
+			}
+			return p.analyzeExpression(ident, scope)
+
+		case *parser.InsertStatement:
+			return nil, sql3.NewErrColumnNotFound(e.NamePos.Line, e.NamePos.Column, e.Name)
+
+		case *parser.DeleteStatement:
 
 			// go find the first ident in the source that matches
 			oc, err := sc.Source.OutputColumnNamed(e.Name)
@@ -81,9 +107,6 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 				ColumnIndex: oc.ColumnIndex,
 			}
 			return p.analyzeExpression(ident, scope)
-
-		case *parser.InsertStatement:
-			return nil, sql3.NewErrColumnNotFound(e.NamePos.Line, e.NamePos.Column, e.Name)
 
 		default:
 			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
@@ -224,6 +247,19 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 				return nil, sql3.NewErrColumnNotFound(e.Column.NamePos.Line, e.Column.NamePos.Column, e.Column.Name)
 			}
 
+		case *parser.DeleteStatement:
+			oc, err := sc.Source.OutputColumnNamed(e.Column.Name)
+			if err != nil {
+				return nil, err
+			}
+			if oc != nil {
+				e.RefDataType = oc.Datatype
+				e.ColumnIndex = oc.ColumnIndex
+				return e, nil
+
+			}
+			return nil, sql3.NewErrColumnNotFound(e.Column.NamePos.Line, e.Column.NamePos.Column, e.Column.Name)
+
 		default:
 			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
 		}
@@ -298,7 +334,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 		return p.analyzeUnaryExpression(e, scope)
 
 	case *parser.SelectStatement:
-		err := p.analyzeSelectStatement(e)
+		selExpr, err := p.analyzeSelectStatement(e)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +342,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 		if len(e.Columns) > 1 {
 			return nil, sql3.NewErrInternalf("subquery must return only one column")
 		}
-		return e, nil
+		return selExpr, nil
 
 	default:
 		return nil, sql3.NewErrInternalf("unexpected SQL expression type: %T", expr)
@@ -367,6 +403,18 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 		return nil, err
 	}
 	expr.Y = y
+
+	// check nil for either of these expressions after they were ananlyzed, they may have been eliminated
+	// in which case we return the remaining one or nil if both have been eliminated
+	if x == nil && y == nil {
+		return nil, nil
+	}
+	if x == nil {
+		return y, nil
+	}
+	if y == nil {
+		return x, nil
+	}
 
 	//handle operator
 	switch op := expr.Op; op {
@@ -576,45 +624,71 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 				if !typesAreComparable(x.DataType(), sel.Columns[0].Expr.DataType()) {
 					return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeDescription(), ex.DataType().TypeDescription())
 				}
-
 				//need to turn this into an inner join
-				selStmt, ok := scope.(*parser.SelectStatement)
-				if !ok {
-					return nil, sql3.NewErrInternalf("unexpected scope type '%T'", scope)
-				}
-
 				operator := &parser.JoinOperator{
 					Inner: expr.OpPos,
 				}
 
 				constraint := &parser.OnConstraint{
 					X: &parser.BinaryExpr{
-						X:  expr.X,
-						Op: parser.EQ,
-						Y:  sel.Columns[0].Expr,
+						X:              expr.X,
+						Op:             parser.EQ,
+						Y:              sel.Columns[0].Expr,
+						ResultDataType: parser.NewDataTypeBool(),
 					},
 				}
 
-				if lhs, ok := selStmt.Source.(*parser.JoinClause); ok {
-					selStmt.Source = &parser.JoinClause{
-						X:        lhs.X,
-						Operator: lhs.Operator,
-						Y: &parser.JoinClause{
-							X:          lhs.Y,
+				switch scopeStmt := scope.(type) {
+				case *parser.SelectStatement:
+
+					if lhs, ok := scopeStmt.Source.(*parser.JoinClause); ok {
+						scopeStmt.Source = &parser.JoinClause{
+							X:        lhs.X,
+							Operator: lhs.Operator,
+							Y: &parser.JoinClause{
+								X:          lhs.Y,
+								Operator:   operator,
+								Y:          sel,
+								Constraint: constraint,
+							},
+							Constraint: lhs.Constraint,
+						}
+					} else {
+						scopeStmt.Source = &parser.JoinClause{
+							X:          scopeStmt.Source,
 							Operator:   operator,
 							Y:          sel,
 							Constraint: constraint,
-						},
-						Constraint: lhs.Constraint,
+						}
 					}
-				} else {
-					selStmt.Source = &parser.JoinClause{
-						X:          selStmt.Source,
-						Operator:   operator,
-						Y:          sel,
-						Constraint: constraint,
+
+				case *parser.DeleteStatement:
+					if lhs, ok := scopeStmt.Source.(*parser.JoinClause); ok {
+						scopeStmt.Source = &parser.JoinClause{
+							X:        lhs.X,
+							Operator: lhs.Operator,
+							Y: &parser.JoinClause{
+								X:          lhs.Y,
+								Operator:   operator,
+								Y:          sel,
+								Constraint: constraint,
+							},
+							Constraint: lhs.Constraint,
+						}
+					} else {
+						scopeStmt.Source = &parser.JoinClause{
+							X:          scopeStmt.Source,
+							Operator:   operator,
+							Y:          sel,
+							Constraint: constraint,
+						}
 					}
+
+				default:
+					return nil, sql3.NewErrInternalf("unexpected scope type '%T'", scope)
 				}
+				// we are eliminating this expression, since we moved it into the source, so
+				// return nil
 				return nil, nil
 			}
 

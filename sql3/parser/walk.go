@@ -352,42 +352,42 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 		}
 
 	case *DeleteStatement:
-		if n.WithClause != nil {
-			if clause, err := walk(v, n.WithClause); err != nil {
-				return node, err
-			} else if clause != nil {
-				n.WithClause = clause.(*WithClause)
-			} else {
-				n.WithClause = nil
-			}
-		}
-		if n.Table != nil {
-			if tbl, err := walk(v, n.Table); err != nil {
+		// if n.WithClause != nil {
+		// 	if clause, err := walk(v, n.WithClause); err != nil {
+		// 		return node, err
+		// 	} else if clause != nil {
+		// 		n.WithClause = clause.(*WithClause)
+		// 	} else {
+		// 		n.WithClause = nil
+		// 	}
+		// }
+		if n.Source != nil {
+			if tbl, err := walk(v, n.Source); err != nil {
 				return node, err
 			} else if tbl != nil {
-				n.Table = tbl.(*QualifiedTableName)
+				n.Source = tbl.(*QualifiedTableName)
 			} else {
-				n.Table = nil
+				n.Source = nil
 			}
 		}
 		if err := walkExpr(v, &n.WhereExpr); err != nil {
 			return node, err
 		}
-		for i := range n.OrderingTerms {
-			if term, err := walk(v, n.OrderingTerms[i]); err != nil {
-				return node, err
-			} else if term != nil {
-				n.OrderingTerms[i] = term.(*OrderingTerm)
-			} else {
-				n.OrderingTerms[i] = nil
-			}
-		}
-		if err := walkExpr(v, &n.LimitExpr); err != nil {
-			return node, err
-		}
-		if err := walkExpr(v, &n.OffsetExpr); err != nil {
-			return node, err
-		}
+		// for i := range n.OrderingTerms {
+		// 	if term, err := walk(v, n.OrderingTerms[i]); err != nil {
+		// 		return node, err
+		// 	} else if term != nil {
+		// 		n.OrderingTerms[i] = term.(*OrderingTerm)
+		// 	} else {
+		// 		n.OrderingTerms[i] = nil
+		// 	}
+		// }
+		// if err := walkExpr(v, &n.LimitExpr); err != nil {
+		// 	return node, err
+		// }
+		// if err := walkExpr(v, &n.OffsetExpr); err != nil {
+		// 	return node, err
+		// }
 
 	case *PrimaryKeyConstraint:
 		if err := walkIdent(v, &n.Name); err != nil {

@@ -20,6 +20,8 @@ var TableTests []TableTest = []TableTest{
 
 	topTests,
 
+	deleteTests,
+
 	setLiteralTests,
 	setFunctionTests,
 	setParameterTests,

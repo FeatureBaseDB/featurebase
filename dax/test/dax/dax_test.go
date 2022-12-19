@@ -111,6 +111,7 @@ func TestDAXIntegration(t *testing.T) {
 			"percentile_test/test-6",        // related to TODO in orchestrator.executePercentile
 			"alterTable/alterTableBadTable", // looks like table does not exist is a different error in DAX
 			"top-tests/test-1",              // don't know why this is failing at all
+			"delete_tests",
 		}
 
 		doSkip := func(name string) bool {
@@ -134,12 +135,18 @@ func TestDAXIntegration(t *testing.T) {
 				PQLTests: make([]defs.PQLTest, 0),
 			}
 			for j, sqltest := range test.SQLTests {
+				if doSkip(test.Name(i)) {
+					continue
+				}
 				if doSkip(test.Name(i) + "/" + sqltest.Name(j)) {
 					continue
 				}
 				tt.SQLTests = append(tt.SQLTests, sqltest)
 			}
 			for j, pqltest := range test.PQLTests {
+				if doSkip(test.Name(i)) {
+					continue
+				}
 				if doSkip(test.Name(i) + "/" + pqltest.Name(j)) {
 					continue
 				}

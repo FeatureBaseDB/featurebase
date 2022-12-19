@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/molecula/featurebase/v3/pql"
@@ -98,6 +99,60 @@ func (p *ExecutionPlanner) generatePQLCallFromExpr(ctx context.Context, expr typ
 			return nil, sql3.NewErrInternalf("unsupported scalar function '%s'", expr.name)
 		}
 
+	case *inOpPlanExpression:
+		// lhs will be qualified ref
+		lhs, ok := expr.lhs.(*qualifiedRefPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected lhs %T", expr.lhs)
+		}
+
+		// rhs is expression list - need to convert to a big OR
+
+		list, ok := expr.rhs.(*exprListPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected argument type '%T'", expr.rhs)
+		}
+
+		// if it is the _id column, we can use ConstRow with a list
+		if strings.EqualFold(lhs.columnName, "_id") {
+			values := make([]interface{}, len(list.exprs))
+			for i, m := range list.exprs {
+				pqlValue, err := planExprToValue(m)
+				if err != nil {
+					return nil, err
+				}
+				values[i] = pqlValue
+			}
+			call := &pql.Call{
+				Name: "ConstRow",
+				Args: map[string]interface{}{
+					"columns": values,
+				},
+				Type: pql.PrecallGlobal,
+			}
+			return call, nil
+		}
+		// otherwise, OR them all
+		call := &pql.Call{
+			Name:     "Union",
+			Children: []*pql.Call{},
+		}
+
+		for _, m := range list.exprs {
+			pqlValue, err := planExprToValue(m)
+			if err != nil {
+				return nil, err
+			}
+			rc := &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: pqlValue,
+				},
+			}
+			call.Children = append(call.Children, rc)
+		}
+		return call, nil
+
 	default:
 		return nil, sql3.NewErrInternalf("unexpected expression type: %T", expr)
 	}
@@ -153,13 +208,26 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		case *parser.DataTypeID:
+			// TODO (pok) range queries on _id are not supported
 			if strings.EqualFold(lhs.columnName, "_id") {
-				return &pql.Call{
+				cr := &pql.Call{
 					Name: "ConstRow",
 					Args: map[string]interface{}{
 						"columns": []interface{}{pqlValue},
 					},
 					Type: pql.PrecallGlobal,
+				}
+				// TODO (pok) when we fix FB-1828 (https://molecula.atlassian.net/browse/FB-1828)
+				// we can remove this - ConstRow returns a ghost record, thus to eliminate
+				// we interset with All
+				return &pql.Call{
+					Name: "Intersect",
+					Children: []*pql.Call{
+						{
+							Name: "All",
+						},
+						cr,
+					},
 				}, nil
 			}
 			return &pql.Call{
@@ -170,13 +238,26 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		case *parser.DataTypeString:
+			// TODO (pok) range queries on _id are not supported
 			if strings.EqualFold(lhs.columnName, "_id") {
-				return &pql.Call{
+				cr := &pql.Call{
 					Name: "ConstRow",
 					Args: map[string]interface{}{
 						"columns": []interface{}{pqlValue},
 					},
 					Type: pql.PrecallGlobal,
+				}
+				// TODO (pok) when we fix FB-1828 (https://molecula.atlassian.net/browse/FB-1828)
+				// we can remove this - ConstRow returns a ghost record, thus to eliminate
+				// we interset with All
+				return &pql.Call{
+					Name: "Intersect",
+					Children: []*pql.Call{
+						{
+							Name: "All",
+						},
+						cr,
+					},
 				}, nil
 			}
 			return &pql.Call{
@@ -191,6 +272,27 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 				Name: "Row",
 				Args: map[string]interface{}{
 					lhs.columnName: pqlValue,
+				},
+			}, nil
+
+		case *parser.DataTypeBool:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: pqlValue,
+				},
+			}, nil
+
+		case *parser.DataTypeDecimal:
+			val, ok := pqlValue.(float64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected type '%T", pqlValue)
+			}
+			d := pql.FromFloat64(val)
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: d,
 				},
 			}, nil
 
@@ -279,6 +381,14 @@ func planExprToValue(expr types.PlanExpression) (interface{}, error) {
 		return expr.value, nil
 	case *dateLiteralPlanExpression:
 		return expr.value, nil
+	case *boolLiteralPlanExpression:
+		return expr.value, nil
+	case *floatLiteralPlanExpression:
+		f, err := strconv.ParseFloat(expr.value, 64)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
 	default:
 		return nil, sql3.NewErrInternalf("cannot convert SQL expression %T to a literal value", expr)
 	}

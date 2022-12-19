@@ -78,8 +78,8 @@ func (f exprInspector) VisitExpr(e types.PlanExpression) ExprVisitor {
 	return nil
 }
 
-// WalkExpressions traverses the plan and calls ExprWalk on any expression it finds
-func WalkExpressions(v ExprVisitor, op types.PlanOperator) {
+// walkExpressions traverses the plan and calls ExprWalk on any expression it finds
+func walkExpressions(v ExprVisitor, op types.PlanOperator) {
 	InspectPlan(op, func(operator types.PlanOperator) bool {
 		if n, ok := operator.(types.ContainsExpressions); ok {
 			for _, e := range n.Expressions() {
@@ -90,13 +90,13 @@ func WalkExpressions(v ExprVisitor, op types.PlanOperator) {
 	})
 }
 
-// InspectExpressions traverses the plan and calls WalkExpressions on any
+// InspectOperatorExpressions traverses the plan and calls WalkExpressions on any
 // expression it finds.
-func InspectExpressions(op types.PlanOperator, f exprInspector) {
-	WalkExpressions(f, op)
+func InspectOperatorExpressions(op types.PlanOperator, f exprInspector) {
+	walkExpressions(f, op)
 }
 
-// InspectExpression traverses expressoins in depth-first order
+// InspectExpression traverses expressions in depth-first order
 func InspectExpression(expr types.PlanExpression, f func(expr types.PlanExpression) bool) {
 	ExprWalk(exprInspector(f), expr)
 }
