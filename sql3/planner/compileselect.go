@@ -17,7 +17,6 @@ import (
 // compileSelectStatment compiles a parser.SelectStatment AST into a PlanOperator
 func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, isSubquery bool) (types.PlanOperator, error) {
 	query := NewPlanOpQuery(p, NewPlanOpNullTable(), p.sql)
-	p.scopeStack.push(query)
 
 	aggregates := make([]types.PlanExpression, 0)
 
@@ -59,7 +58,7 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 	}
 
 	// source expression
-	source, err := p.compileSelectSource(query, stmt.Source)
+	source, err := p.compileSource(query, stmt.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -224,9 +223,6 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		compiledOp = NewPlanOpTop(topExpr, compiledOp)
 	}
 
-	// pop the scope
-	_ = p.scopeStack.pop()
-
 	// if it is a subquery, don't wrap in a PlanOpQuery
 	if isSubquery {
 		return compiledOp, nil
@@ -263,7 +259,7 @@ func (p *ExecutionPlanner) gatherExprAggregates(expr types.PlanExpression, aggre
 	return result
 }
 
-func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser.Source) (types.PlanOperator, error) {
+func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Source) (types.PlanOperator, error) {
 	if source == nil {
 		return NewPlanOpNullTable(), nil
 	}
@@ -289,11 +285,11 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser
 			}
 		}
 
-		topOp, err := p.compileSelectSource(scope, sourceExpr.X)
+		topOp, err := p.compileSource(scope, sourceExpr.X)
 		if err != nil {
 			return nil, err
 		}
-		bottomOp, err := p.compileSelectSource(scope, sourceExpr.Y)
+		bottomOp, err := p.compileSource(scope, sourceExpr.Y)
 		if err != nil {
 			return nil, err
 		}
@@ -313,22 +309,14 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser
 			return NewPlanOpSystemTable(p, st), nil
 
 		}
-		// get all the qualified refs that refer to this table
+		// get all the columns for this table - we will eliminate unused ones
+		// later on in the optimizer
 		extractColumns := make([]string, 0)
-		for _, r := range scope.referenceList {
-			if sourceExpr.MatchesTablenameOrAlias(r.tableName) {
-				found := false
-				for _, c := range extractColumns {
-					if strings.EqualFold(c, r.columnName) {
-						found = true
-						break
-					}
-				}
-				if !found {
-					extractColumns = append(extractColumns, r.columnName)
-				}
-			}
+
+		for _, oc := range sourceExpr.OutputColumns {
+			extractColumns = append(extractColumns, oc.ColumnName)
 		}
+
 		if sourceExpr.Alias != nil {
 			aliasName := parser.IdentName(sourceExpr.Alias)
 
@@ -352,14 +340,14 @@ func (p *ExecutionPlanner) compileSelectSource(scope *PlanOpQuery, source parser
 	case *parser.ParenSource:
 		if sourceExpr.Alias != nil {
 			aliasName := parser.IdentName(sourceExpr.Alias)
-			op, err := p.compileSelectSource(scope, sourceExpr.X)
+			op, err := p.compileSource(scope, sourceExpr.X)
 			if err != nil {
 				return nil, err
 			}
 			return NewPlanOpRelAlias(aliasName, op), nil
 		}
 
-		return p.compileSelectSource(scope, sourceExpr.X)
+		return p.compileSource(scope, sourceExpr.X)
 
 	case *parser.SelectStatement:
 		subQuery, err := p.compileSelectStatement(sourceExpr, true)
@@ -465,7 +453,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		return nil
 
 	case *parser.SelectStatement:
-		err := p.analyzeSelectStatement(source)
+		_, err := p.analyzeSelectStatement(source)
 		if err != nil {
 			return err
 		}
@@ -476,21 +464,21 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 	}
 }
 
-func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) error {
+func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) (parser.Expr, error) {
 	// analyze source first - needed for name resolution
 	err := p.analyzeSource(stmt.Source, stmt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := p.analyzeSelectStatementWildcards(stmt); err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, col := range stmt.Columns {
 		expr, err := p.analyzeExpression(col.Expr, stmt)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if expr != nil {
 			col.Expr = expr
@@ -499,31 +487,31 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 
 	expr, err := p.analyzeExpression(stmt.TopExpr, stmt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if expr != nil {
 		if !(expr.IsLiteral() && typeIsInteger(expr.DataType())) {
-			return sql3.NewErrIntegerLiteral(stmt.TopExpr.Pos().Line, stmt.TopExpr.Pos().Column)
+			return nil, sql3.NewErrIntegerLiteral(stmt.TopExpr.Pos().Line, stmt.TopExpr.Pos().Column)
 		}
 		stmt.TopExpr = expr
 	}
 
 	expr, err = p.analyzeExpression(stmt.HavingExpr, stmt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stmt.HavingExpr = expr
 
 	expr, err = p.analyzeExpression(stmt.WhereExpr, stmt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stmt.WhereExpr = expr
 
 	for i, g := range stmt.GroupByExprs {
 		expr, err = p.analyzeExpression(g, stmt)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if expr != nil {
 			stmt.GroupByExprs[i] = expr
@@ -532,7 +520,7 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 
 	expr, err = p.analyzeExpression(stmt.HavingExpr, stmt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if expr != nil {
 		stmt.HavingExpr = expr
@@ -541,12 +529,12 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 	for _, term := range stmt.OrderingTerms {
 		expr, err := p.analyzeOrderingTermExpression(term.X, stmt)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		term.X = expr
 	}
 
-	return nil
+	return stmt, nil
 }
 
 func (p *ExecutionPlanner) analyzeSelectStatementWildcards(stmt *parser.SelectStatement) error {

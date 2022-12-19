@@ -18,9 +18,6 @@ type PlanOpQuery struct {
 
 	ChildOp types.PlanOperator
 
-	// all the identifiers that are referenced
-	referenceList []*qualifiedRefPlanExpression
-
 	sql      string
 	warnings []string
 }

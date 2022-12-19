@@ -122,7 +122,7 @@ func (p *Parser) parseNonExplainStatement() (Statement, error) {
 	case UPDATE:
 		return p.parseUpdateStatement(nil)
 	case DELETE:
-		return p.parseDeleteStatement(nil)
+		return p.parseDeleteStatement()
 		//	case WITH:
 		//		return p.parseWithStatement()
 	case SHOW:
@@ -1883,11 +1883,11 @@ func (p *Parser) parseUpdateStatement(withClause *WithClause) (_ *UpdateStatemen
 	return &stmt, nil
 }
 
-func (p *Parser) parseDeleteStatement(withClause *WithClause) (_ *DeleteStatement, err error) {
+func (p *Parser) parseDeleteStatement( /*withClause *WithClause*/ ) (_ *DeleteStatement, err error) {
 	assert(p.peek() == DELETE)
 
 	var stmt DeleteStatement
-	stmt.WithClause = withClause
+	//stmt.WithClause = withClause
 
 	// Parse "DELETE FROM tbl"
 	stmt.Delete, _, _ = p.scan()
@@ -1900,41 +1900,19 @@ func (p *Parser) parseDeleteStatement(withClause *WithClause) (_ *DeleteStatemen
 	if err != nil {
 		return &stmt, err
 	}
-	stmt.Table, err = p.parseQualifiedTableName(ident)
+	tableName, err := p.parseQualifiedTableName(ident)
 	if err != nil {
 		return &stmt, err
 	}
+	stmt.Source = tableName
+	// keep the table name too
+	stmt.TableName = tableName.Clone()
 
-	// Parse WHERE clause.
+	// parse WHERE clause.
 	if p.peek() == WHERE {
 		stmt.Where, _, _ = p.scan()
 		if stmt.WhereExpr, err = p.ParseExpr(); err != nil {
 			return &stmt, err
-		}
-	}
-
-	// Parse ORDER BY clause. This differs from the SELECT parsing in that
-	// if an ORDER BY is specified then the LIMIT is required.
-	if p.peek() == ORDER {
-		if p.peek() == ORDER {
-			stmt.Order, _, _ = p.scan()
-			if p.peek() != BY {
-				return &stmt, p.errorExpected(p.pos, p.tok, "BY")
-			}
-			stmt.OrderBy, _, _ = p.scan()
-
-			for {
-				term, err := p.parseOrderingTerm()
-				if err != nil {
-					return &stmt, err
-				}
-				stmt.OrderingTerms = append(stmt.OrderingTerms, term)
-
-				if p.peek() != COMMA {
-					break
-				}
-				p.scan()
-			}
 		}
 	}
 

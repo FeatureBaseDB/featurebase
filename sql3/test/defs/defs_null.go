@@ -302,13 +302,24 @@ var nullFilterTests = TableTest{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where _id is null",
 			),
-			ExpErr: "'_id' column cannot be used in a is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where _id is not null",
 			),
-			ExpErr: "'_id' column cannot be used in a is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+				row(int64(2)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
@@ -338,13 +349,25 @@ var nullFilterTests = TableTest{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where b1 is null",
 			),
-			ExpErr: "unsupported type 'bool' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where b1 is not null",
 			),
-			ExpErr: "unsupported type 'bool' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
@@ -374,49 +397,97 @@ var nullFilterTests = TableTest{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where id1 is null",
 			),
-			ExpErr: "unsupported type 'id' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where id1 is not null",
 			),
-			ExpErr: "unsupported type 'id' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ids1 is null",
 			),
-			ExpErr: "unsupported type 'idset' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ids1 is not null",
 			),
-			ExpErr: "unsupported type 'idset' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where s1 is null",
 			),
-			ExpErr: "unsupported type 'string' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where s1 is not null",
 			),
-			ExpErr: "unsupported type 'string' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ss1 is null",
 			),
-			ExpErr: "unsupported type 'stringset' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
 				"select _id from null_filter_all_types where ss1 is not null",
 			),
-			ExpErr: "unsupported type 'stringset' for is/is not null filter expression",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(

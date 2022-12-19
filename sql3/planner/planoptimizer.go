@@ -24,10 +24,16 @@ type OptimizerFunc func(context.Context, *ExecutionPlanner, types.PlanOperator, 
 // a list of optimzer rules; order can be important important
 var optimizerFunctions = []OptimizerFunc{
 	// fix expression references for having
+	removeUnusedExtractColumnReferences,
+
+	// fix expression references for having
 	fixHavingReferences,
 
 	// push down filter predicates as far as possible,
 	pushdownFilters,
+
+	// try to use a PlanOpPQLFilteredDelete instead of PlanOpPQLConstRowDelete
+	tryToReplaceConstRowDeleteWithFilteredDelete,
 
 	// if we have a group by that has one TableScanOperator,
 	// try to use a PQL(multi)groupby operator instead
@@ -58,15 +64,26 @@ var optimizerFunctions = []OptimizerFunc{
 type OptimizerScope struct {
 }
 
+func dumpPlan(prefix []string, root types.PlanOperator, suffix string) {
+	// DEBUG !!
+	// for _, s := range prefix {
+	// 	log.Println(s)
+	// }
+	// jplan := root.Plan()
+	// a, _ := json.MarshalIndent(jplan, "", "    ")
+	// log.Println(string(a))
+	// log.Println()
+	// DEBUG !!
+}
+
 // optimizePlan takes a plan from the compiler and executes a series of transforms on it to optimize it
 func (p *ExecutionPlanner) optimizePlan(ctx context.Context, plan types.PlanOperator) (types.PlanOperator, error) {
 
-	// log.Println("================================================================================")
-	// log.Println("plan pre-optimzation")
-	// jplan := plan.Plan()
-	// a, _ := json.MarshalIndent(jplan, "", "    ")
-	// log.Println(string(a))
-	// log.Println("--------------------------------------------------------------------------------")
+	dumpPlan(
+		[]string{"================================================================================", "plan pre-optimzation"},
+		plan,
+		"--------------------------------------------------------------------------------",
+	)
 
 	var err error
 	var result = plan
@@ -77,12 +94,11 @@ func (p *ExecutionPlanner) optimizePlan(ctx context.Context, plan types.PlanOper
 		}
 	}
 
-	// log.Println("================================================================================")
-	// log.Println("plan ppst-optimzation")
-	// jplan = result.Plan()
-	// a, _ = json.MarshalIndent(jplan, "", "    ")
-	// log.Println(string(a))
-	// log.Println("--------------------------------------------------------------------------------")
+	dumpPlan(
+		[]string{"================================================================================", "plan post-optimzation"},
+		plan,
+		"--------------------------------------------------------------------------------",
+	)
 
 	return result, nil
 }
@@ -168,38 +184,36 @@ func (ta RelationAliasesMap) addAlias(alias types.IdentifiableByName, target typ
 	return nil
 }
 
+// build a map of alias names to relations
 func getRelationAliases(n types.PlanOperator, scope *OptimizerScope) (RelationAliasesMap, error) {
-	var aliases RelationAliasesMap
-	var aliasFn func(node types.PlanOperator) bool
 	var inspectErr error
-	aliasFn = func(node types.PlanOperator) bool {
+
+	aliases := make(RelationAliasesMap)
+	InspectPlan(n, func(node types.PlanOperator) bool {
 		if node == nil {
 			return false
 		}
 
-		if at, ok := node.(*PlanOpRelAlias); ok {
-			switch t := at.ChildOp.(type) {
+		switch node := node.(type) {
+		case *PlanOpRelAlias:
+			switch t := node.ChildOp.(type) {
 			case *PlanOpPQLTableScan:
-				inspectErr = aliases.addAlias(at, t)
+				inspectErr = aliases.addAlias(node, t)
 			case *PlanOpSubquery:
-				inspectErr = aliases.addAlias(at, t)
+				inspectErr = aliases.addAlias(node, t)
 			default:
-				panic(fmt.Sprintf("unexpected child node '%T'", at.ChildOp))
+				inspectErr = sql3.NewErrInternalf("unexpected alias child type '%T", node.ChildOp)
 			}
 			return false
-		}
 
-		switch node := node.(type) {
 		case *PlanOpPQLTableScan:
 			inspectErr = aliases.addAlias(node, node)
 			return false
+
 		}
-
 		return true
-	}
+	})
 
-	aliases = make(RelationAliasesMap)
-	InspectPlan(n, aliasFn)
 	if inspectErr != nil {
 		return nil, inspectErr
 	}
@@ -230,6 +244,61 @@ func filterPushdownAboveTablesChildSelector(c ParentContext) bool {
 	}
 
 	return true
+}
+
+// when we compile and create a PlanOpPQLTableScan we just add all the columns to the underlying extract. This is a bad idea, since
+// extracts are expensive, more so when we are askign for columns we don't actually need. This function removes those uneeded references.
+func removeUnusedExtractColumnReferences(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
+	// get all the qualifiedRefs across the plan
+	// using a map to eliminate dupes and we don't
+	// care about the order when iterating
+	refs := make(map[string]*qualifiedRefPlanExpression)
+	InspectOperatorExpressions(n, func(pe types.PlanExpression) bool {
+		switch qref := pe.(type) {
+		case *qualifiedRefPlanExpression:
+			refs[qref.String()] = qref
+			return false
+		}
+		return true
+	})
+
+	return TransformPlanOpWithParent(n, func(c ParentContext) bool { return true }, func(c ParentContext) (types.PlanOperator, bool, error) {
+		switch thisNode := c.Operator.(type) {
+		case *PlanOpPQLTableScan:
+
+			newExtractList := make([]string, 0)
+
+			// loop thru the extract list and make a new extract list
+			// with just the columns we need
+			alias, ok := c.Parent.(*PlanOpRelAlias)
+			if ok {
+				// handle the case where the parent is an alias
+				for _, ex := range thisNode.columns {
+					for _, ref := range refs {
+						if (strings.EqualFold(ref.tableName, thisNode.tableName) || strings.EqualFold(ref.tableName, alias.alias)) && strings.EqualFold(ex, ref.columnName) {
+							newExtractList = append(newExtractList, ex)
+							break
+						}
+					}
+				}
+			} else {
+				for _, ex := range thisNode.columns {
+					for _, ref := range refs {
+						if strings.EqualFold(ref.tableName, thisNode.tableName) && strings.EqualFold(ex, ref.columnName) {
+							newExtractList = append(newExtractList, ex)
+							break
+						}
+					}
+				}
+			}
+
+			// newExtractList should now contain just the cols that are referenced
+			return NewPlanOpPQLTableScan(a, thisNode.tableName, newExtractList), false, nil
+
+		default:
+			return thisNode, true, nil
+		}
+	})
 }
 
 // returns an expression given a list of expressions, if the list is > 2 expressions, all the individual
@@ -263,43 +332,43 @@ func removePushedDownConditions(ctx context.Context, a *ExecutionPlanner, node *
 	return NewPlanOpFilter(a, joinedExpr, node.ChildOp), false, nil
 }
 
-func getRelation(node types.PlanOperator) types.IdentifiableByName {
-	var relation types.IdentifiableByName
-	InspectPlan(node, func(node types.PlanOperator) bool {
-		switch n := node.(type) {
-		case *PlanOpPQLTableScan:
-			relation = n
-			return false
-		}
-		return true
-	})
-	return relation
-}
-
 func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlanner, tableNode types.PlanOperator, scope *OptimizerScope, filters *filterSet, tableAliases RelationAliasesMap) (types.PlanOperator, bool, error) {
-	// only do this if it is an alias or a pql table scan
-	switch tableNode.(type) {
-	case *PlanOpRelAlias, *PlanOpPQLTableScan:
-		// continue
-	default:
-		return nil, true, sql3.NewErrInternalf("unexpected op type '%T'", tableNode)
-	}
+	var table types.IdentifiableByName
 
-	table := getRelation(tableNode)
-	if table == nil {
+	// only do this if it is a pql table scan
+	switch rel := tableNode.(type) {
+	case *PlanOpPQLTableScan:
+		table = rel
+	default:
 		return tableNode, true, nil
 	}
 
+	// is the thing filterable?
 	ft, ok := table.(types.FilteredRelation)
 	if !ok {
 		return tableNode, true, nil
 	}
 
 	// do we have any filters for this table? if not, bail...
-	tableFilters := filters.availableFiltersForTable(table.Name())
+	availableFilters := filters.availableFiltersForTable(table.Name())
+	if len(availableFilters) == 0 {
+		return tableNode, true, nil
+	}
+
+	tableFilters := make([]types.PlanExpression, 0)
+	// can the filters be pushed down?
+	for _, tf := range availableFilters {
+		// try and generate a pql call graph, if we can't we can't push the filter down
+		_, err := a.generatePQLCallFromExpr(ctx, tf)
+		if err == nil {
+			tableFilters = append(tableFilters, tf)
+		}
+	}
+	// did we end up with any filters?
 	if len(tableFilters) == 0 {
 		return tableNode, true, nil
 	}
+
 	filters.markFiltersHandled(tableFilters...)
 
 	// fix the field refs
@@ -316,8 +385,13 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 }
 
 func pushdownFiltersToAboveRelation(ctx context.Context, a *ExecutionPlanner, tableNode types.PlanOperator, scope *OptimizerScope, filters *filterSet) (types.PlanOperator, bool, error) {
-	table := getRelation(tableNode)
-	if table == nil {
+	var table types.IdentifiableByName
+
+	// only do this if it is a pql table scan
+	switch rel := tableNode.(type) {
+	case *PlanOpPQLTableScan:
+		table = rel
+	default:
 		return tableNode, true, nil
 	}
 
@@ -341,7 +415,7 @@ func pushdownFiltersToAboveRelation(ctx context.Context, a *ExecutionPlanner, ta
 		if pushedDownFilterExpression != nil {
 			return NewPlanOpFilter(a, pushedDownFilterExpression, node), false, nil
 		}
-		return node, false, nil
+		return node, true, nil
 	default:
 		return nil, true, sql3.NewErrInternalf("unexpected op type '%T'", tableNode)
 	}
@@ -354,9 +428,12 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 		return nil, true, err
 	}
 
+	// push filter terms down into anything that supports being filtered directly
 	pushdownFiltersForFilterableRelations := func(n *PlanOpFilter, filters *filterSet) (types.PlanOperator, bool, error) {
 		return TransformPlanOpWithParent(n, filterPushdownChildSelector, func(c ParentContext) (types.PlanOperator, bool, error) {
 			switch node := c.Operator.(type) {
+
+			// for the filter in question remove any terms that have been pushed down
 			case *PlanOpFilter:
 				n, samePred, err := removePushedDownConditions(ctx, a, node, filters)
 				if err != nil {
@@ -364,6 +441,7 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 				}
 				return n, samePred, nil
 
+			// PlanOpPQLTableScan supports being filtered, PlanOpRelAlias is included here as a "transparent" op
 			case *PlanOpRelAlias, *PlanOpPQLTableScan:
 				n, samePred, err := pushdownFiltersToFilterableRelations(ctx, a, node, scope, filters, tableAliases)
 				if err != nil {
@@ -379,6 +457,7 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 	pushdownFiltersCloseToRelations := func(n types.PlanOperator, filters *filterSet) (types.PlanOperator, bool, error) {
 		return TransformPlanOpWithParent(n, filterPushdownAboveTablesChildSelector, func(c ParentContext) (types.PlanOperator, bool, error) {
 			switch node := c.Operator.(type) {
+
 			case *PlanOpFilter:
 				n, same, err := removePushedDownConditions(ctx, a, node, filters)
 				if err != nil {
@@ -388,6 +467,7 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 					return n, true, nil
 				}
 				return n, false, nil
+
 			case *PlanOpRelAlias, *PlanOpPQLTableScan:
 				_, same, err := pushdownFiltersToAboveRelation(ctx, a, node, scope, filters)
 				if err != nil {
@@ -403,27 +483,34 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 		})
 	}
 
+	// look for filter ops and push the conditions within them down to things that can be filtered
 	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-		switch n := node.(type) {
+		switch thisNode := node.(type) {
 		case *PlanOpFilter:
+
+			// get the filter conditions from this filter in a map by table
 			filtersByTable := getFiltersByRelation(n)
-			filters := newFilterSet(n.Predicate, filtersByTable, tableAliases)
+
+			// make a struct to hold the expression for this filter, the broken up filter conditions
+			// and a map of alias name to relations
+			filters := newFilterSet(thisNode.Predicate, filtersByTable, tableAliases)
 
 			// first push down filters to any op that supports a filter
-			node, sameA, err := pushdownFiltersForFilterableRelations(n, filters)
+			newNode, sameA, err := pushdownFiltersForFilterableRelations(thisNode, filters)
 			if err != nil {
 				return nil, true, err
 			}
 
 			// second push down filters as close as possible to the relations they apply to
-			node, sameB, err := pushdownFiltersCloseToRelations(node, filters)
+			var sameB bool
+			newNode, sameB, err = pushdownFiltersCloseToRelations(newNode, filters)
 			if err != nil {
 				return nil, true, err
 			}
-			return node, sameA && sameB, nil
+			return newNode, sameA && sameB, nil
 
 		default:
-			return n, true, nil
+			return node, true, nil
 		}
 	})
 }
@@ -433,9 +520,9 @@ func getFiltersByRelation(n types.PlanOperator) map[string][]types.PlanExpressio
 	filters := make(map[string][]types.PlanExpression)
 
 	InspectPlan(n, func(node types.PlanOperator) bool {
-		switch nd := node.(type) {
+		switch thisNode := node.(type) {
 		case *PlanOpFilter:
-			fs := exprToRelationFilters(nd.Predicate)
+			fs := exprToRelationFilters(thisNode.Predicate)
 
 			for k, exprs := range fs {
 				filters[k] = append(filters[k], exprs...)
@@ -458,13 +545,13 @@ func exprToRelationFilters(expr types.PlanExpression) map[string][]types.PlanExp
 		hasSubquery := false
 
 		InspectExpression(expr, func(e types.PlanExpression) bool {
-			f, ok := e.(*qualifiedRefPlanExpression)
-			if ok {
-				if !seenTables[f.tableName] {
-					seenTables[f.tableName] = true
-					lastTable = f.tableName
+			switch thisExpr := e.(type) {
+			case *qualifiedRefPlanExpression:
+				if !seenTables[thisExpr.tableName] {
+					seenTables[thisExpr.tableName] = true
+					lastTable = thisExpr.tableName
 				}
-			} else if _, isSubquery := e.(*subqueryPlanExpression); isSubquery {
+			case *subqueryPlanExpression:
 				hasSubquery = true
 				return false
 			}
@@ -476,7 +563,6 @@ func exprToRelationFilters(expr types.PlanExpression) map[string][]types.PlanExp
 			filters[lastTable] = append(filters[lastTable], expr)
 		}
 	}
-
 	return filters
 }
 
@@ -542,6 +628,28 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 		})
 	}
 	return n, true, nil
+}
+
+func tryToReplaceConstRowDeleteWithFilteredDelete(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
+	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
+		switch node := node.(type) {
+		case *PlanOpPQLConstRowDelete:
+			switch child := node.ChildOp.(type) {
+			case *PlanOpPQLTableScan:
+				if child.filter != nil {
+					_, err := a.generatePQLCallFromExpr(ctx, child.filter)
+					if err == nil {
+						return NewPlanOpPQLFilteredDelete(a, node.tableName, child.filter), false, nil
+					}
+				}
+				return node, true, nil
+			default:
+				return node, true, nil
+			}
+		default:
+			return node, true, nil
+		}
+	})
 }
 
 func tryToReplaceGroupByWithPQLGroupBy(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
