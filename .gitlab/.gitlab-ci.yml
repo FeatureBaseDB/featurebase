@@ -251,14 +251,13 @@ run go tests race:
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  retry: 1
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
   script:
     - echo "Running featurebase race tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
     - RAMDISK=/mnt/ramdisk go test -race -v -timeout=10m ${PKG_LIST//,/ }
   tags:
-    - aws
+    - docker
 
 # We run our base tests against $GOVERSION (a reasonably current version that we trust)
 # and use shardwidth22 for them. This gives us a canary for things breaking for
@@ -269,7 +268,6 @@ run go tests:
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  retry: 1
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
@@ -278,7 +276,7 @@ run go tests:
     paths:
       - coverage.out
   tags:
-    - aws
+    - docker
 
 run go tests dax/test/dax:
   stage: test

@@ -14,6 +14,7 @@ import (
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/testhook"
+	"github.com/stretchr/testify/require"
 )
 
 //var vv = pilosa.VV
@@ -456,12 +457,19 @@ func TestTranslateStore_ReadWrite(t *testing.T) {
 		buf := bytes.NewBuffer(nil)
 		expN := s.Size()
 
-		// After this, the buffer should contain batch0.
-		if n, err := s.WriteTo(buf); err != nil {
-			t.Fatalf("writing to buffer: %s", err)
-		} else if n != expN {
-			t.Fatalf("expected buffer size: %d, but got: %d", expN, n)
-		}
+		// wrap in a func so we can defer rollback. Need rollback to
+		// happen before the end of the test. I'm not entirely sure
+		// why, but it hangs if you don't.
+		func() {
+			tx, err := s.Begin(false)
+			require.NoError(t, err)
+			defer tx.Rollback()
+
+			// After this, the buffer should contain batch0.
+			n, err := tx.WriteTo(buf)
+			require.NoError(t, err)
+			require.Equal(t, expN, n)
+		}()
 
 		// Populate the store with the keys in batch1.
 		batch1IDs, err := s.CreateKeys(batch1...)

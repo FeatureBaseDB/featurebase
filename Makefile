@@ -76,9 +76,9 @@ testvsub:
 			echo; echo "999 done testing subpkg $$pkg"; \
 		done
 
-# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/mnt/ramfs
+# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/mnt/ramdisk
 ramdisk-linux:
-	mount -o size=2G -t tmpfs none /mnt/ramfs
+	mount -o size=2G -t tmpfs none /mnt/ramdisk
 
 # make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/Volumes/RAMDisk
 ramdisk-osx:
