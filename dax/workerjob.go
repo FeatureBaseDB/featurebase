@@ -27,7 +27,7 @@ type Job string
 // Jobs is a slice of Job.
 type Jobs []Job
 
-// WorkerInfo reprents a Worker and the Jobs to which it has been assigned.
+// WorkerInfo represents a Worker and the Jobs to which it has been assigned.
 type WorkerInfo struct {
 	ID   Worker
 	Jobs []Job

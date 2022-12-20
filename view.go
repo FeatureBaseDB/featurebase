@@ -213,8 +213,6 @@ func (v *view) openEmpty() error {
 			return errors.Wrap(err, "creating fragments directory")
 		}
 
-		v.holder.Logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
-
 		return nil
 	}(); err != nil {
 		v.close()
@@ -222,7 +220,6 @@ func (v *view) openEmpty() error {
 	}
 
 	_ = testhook.Opened(v.holder.Auditor, v, nil)
-	v.holder.Logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
 	return nil
 }
 

@@ -201,7 +201,7 @@ type Resource struct {
 
 	locked bool
 
-	// dirty bool // TODO(jaffee): dirty bit so we can skip snapshotting if there's nothing in WL
+	dirty bool
 }
 
 func (m *Resource) initialize() *Resource {
@@ -292,6 +292,7 @@ func (m *Resource) LoadWriteLog() (data io.ReadCloser, err error) {
 		return nil, errors.New(errors.ErrUncoded, "write log version gone since locking")
 	}
 	m.latestWLVersion = versions[0]
+	m.dirty = true
 
 	r, err := m.writeLogger.LogReaderFrom(m.bucket, m.key, versions[0], m.lastWLPos)
 	if err != nil {
@@ -340,27 +341,35 @@ func (m *Resource) Append(msg []byte) error {
 	if m.latestWLVersion < 0 {
 		return errors.New(errors.ErrUncoded, "can't call append before loading and locking write log")
 	}
+	m.dirty = true
 	return m.writeLogger.AppendMessage(m.bucket, m.key, m.latestWLVersion, msg)
 }
 
 // IncrementWLVersion should be called during snapshotting with a
-// write Tx held on the local resource. This ensures that any
-// writes which completed prior to the snapshot are in the prior
-// WL and any that complete after the snapshot are in the
-// incremented WL.
-func (m *Resource) IncrementWLVersion() error {
+// write Tx held on the local resource. This ensures that any writes
+// which completed prior to the snapshot are in the prior WL and any
+// that complete after the snapshot are in the incremented WL. If
+// there have been no writes since the latest snapshot, this returns
+// false and does nothing. In this case, Snapshot should *not* be
+// called.
+func (m *Resource) IncrementWLVersion() (bool, error) {
+	if !m.dirty {
+		return false, nil
+	}
 	m.log.Debugf("IncrementWLVersion %s/%s", m.bucket, m.key)
 	m.latestWLVersion++
 	m.lastWLPos = -1
 	m.loadWLsPastVersion = -1
-	return nil
+	m.dirty = false
+	return true, nil
 }
 
-// Snapshot takes a ReadCloser which has the contents of the
-// resource being tracked at a particular point in time and writes
-// them to the Snapshot Store. Upon a successful write it will
-// truncate any write logs which are now incorporated into the
-// snapshot.
+// Snapshot takes a ReadCloser which has the contents of the resource
+// being tracked at a particular point in time and writes them to the
+// Snapshot Store. Upon a successful write it will truncate any write
+// logs which are now incorporated into the snapshot. Do not call
+// until after calling IncrementWLVersion, and only if that method
+// returns "true".
 func (m *Resource) Snapshot(rc io.ReadCloser) error {
 	m.log.Debugf("Snapshot %s/%s", m.bucket, m.key)
 	// latestWLVersion has already been incremented at this point, so

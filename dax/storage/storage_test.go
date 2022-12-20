@@ -88,7 +88,8 @@ func TestResourceManager(t *testing.T) {
 	assert.Equal(t, io.EOF, err)
 
 	// begin snapshot procedure on 1st resource
-	err = resource.IncrementWLVersion()
+	ok, err := resource.IncrementWLVersion()
+	assert.Equal(t, true, ok)
 	assert.NoError(t, err)
 
 	// do append on 1st resource mid-snapshot

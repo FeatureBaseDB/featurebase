@@ -283,6 +283,7 @@ func (m *Command) setupServices() error {
 			RegistrationBatchTimeout: m.Config.MDS.Config.RegistrationBatchTimeout,
 			StorageMethod:            m.Config.MDS.Config.StorageMethod,
 			DataDir:                  m.Config.MDS.Config.DataDir,
+			SnappingTurtleTimeout:    m.Config.MDS.Config.SnappingTurtleTimeout,
 			Logger:                   m.logger,
 			Director: controllerhttp.NewDirector(
 				controllerhttp.DirectorConfig{
