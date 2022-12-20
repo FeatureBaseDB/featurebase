@@ -47,6 +47,7 @@ type Controller struct {
 
 	registrationBatchTimeout time.Duration
 	nodeChan                 chan *dax.Node
+	snappingTurtleTimeout    time.Duration
 	stopping                 chan struct{}
 
 	logger logger.Logger
@@ -69,10 +70,12 @@ func New(cfg Config) *Controller {
 
 		poller: dax.NewNopAddressManager(),
 
-		logger: logger.NopLogger,
+		registrationBatchTimeout: cfg.RegistrationBatchTimeout,
+		nodeChan:                 make(chan *dax.Node, 10),
+		snappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
 
-		nodeChan: make(chan *dax.Node, 10),
 		stopping: make(chan struct{}),
+		logger:   logger.NopLogger,
 	}
 
 	if cfg.Logger != nil {
@@ -106,14 +109,13 @@ func New(cfg Config) *Controller {
 		c.Schemar = cfg.Schemar
 	}
 
-	c.registrationBatchTimeout = cfg.RegistrationBatchTimeout
-
 	return c
 }
 
-// Run starts the node registration goroutine.
+// Run starts long running subroutines.
 func (c *Controller) Run() error {
 	go c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
+	go c.snappingTurtleRoutine(c.snappingTurtleTimeout)
 
 	return nil
 }

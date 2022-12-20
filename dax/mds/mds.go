@@ -29,6 +29,8 @@ type Config struct {
 	// have been registered.
 	RegistrationBatchTimeout time.Duration `toml:"registration-batch-timeout"`
 
+	SnappingTurtleTimeout time.Duration
+
 	// Poller
 	PollInterval time.Duration `toml:"poll-interval"`
 
@@ -107,6 +109,7 @@ func New(cfg Config) *MDS {
 		TranslateBalancer: naiveboltdb.NewBalancer("translate", controllerDB, logr),
 
 		RegistrationBatchTimeout: cfg.RegistrationBatchTimeout,
+		SnappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
 
 		StorageMethod: cfg.StorageMethod,
 		// just reusing this bolt for internal controller svcs

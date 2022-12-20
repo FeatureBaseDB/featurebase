@@ -3099,6 +3099,9 @@ func (api *API) DirectiveApplied(ctx context.Context) (bool, error) {
 // SnapshotShardData triggers the node to perform a shard snapshot based on the
 // provided SnapshotShardDataRequest.
 func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDataRequest) error {
+	if !api.holder.DirectiveApplied() {
+		return errors.New("don't have directive yet, can't snapshot shard")
+	}
 	// TODO(jaffee) confirm this node is actually responsible for the given
 	// shard? Not sure we need to given that this request comes from
 	// MDS, but might be a belt&suspenders situation.
@@ -3113,11 +3116,14 @@ func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDat
 	if err != nil {
 		return errors.Wrap(err, "getting index/shard readcloser")
 	}
+	defer rc.Close()
 
 	resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, req.ShardNum)
 	// Bump writelog version while write Tx is held.
-	if err := resource.IncrementWLVersion(); err != nil {
+	if ok, err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing write log version")
+	} else if !ok {
+		return nil
 	}
 	// TODO(jaffee) look into downgrading Tx on RBF to read lock here now that WL version is incremented.
 	err = resource.Snapshot(rc)
@@ -3127,6 +3133,9 @@ func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDat
 // SnapshotTableKeys triggers the node to perform a table keys snapshot based on
 // the provided SnapshotTableKeysRequest.
 func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKeysRequest) error {
+	if !api.holder.DirectiveApplied() {
+		return errors.New("don't have directive yet, can't snapshot table keys")
+	}
 	// If the index is not keyed, no-op on snapshotting its keys.
 	if idx, err := api.Index(ctx, string(req.TableKey)); err != nil {
 		return newNotFoundError(ErrIndexNotFound, string(req.TableKey))
@@ -3149,8 +3158,11 @@ func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKey
 	defer wrTo.Rollback()
 
 	resource := api.serverlessStorage.GetTableKeyResource(qtid, req.PartitionNum)
-	if err := resource.IncrementWLVersion(); err != nil {
+	if ok, err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing write log version")
+	} else if !ok {
+		// no need to snapshot, no writes
+		return nil
 	}
 	// TODO(jaffee) downgrade write tx to read-only
 	err = resource.SnapshotTo(wrTo)
@@ -3160,12 +3172,15 @@ func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKey
 // SnapshotFieldKeys triggers the node to perform a field keys snapshot based on
 // the provided SnapshotFieldKeysRequest.
 func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKeysRequest) error {
+	if !api.holder.DirectiveApplied() {
+		return errors.New("don't have directive yet, can't snapshot field keys")
+	}
 	qtid := req.TableKey.QualifiedTableID()
 
 	// Create the snapshot for the current version.
 	trans, err := api.FieldTranslateData(ctx, string(req.TableKey), string(req.Field))
 	if err != nil {
-		return errors.Wrap(err, "getting index/field writeto")
+		return errors.Wrap(err, "getting index/field translator")
 	}
 	// get a write tx to ensure no other writes while incrementing WL version.
 	wrTo, err := trans.Begin(true)
@@ -3175,8 +3190,11 @@ func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKey
 	defer wrTo.Rollback()
 
 	resource := api.serverlessStorage.GetFieldKeyResource(qtid, req.Field)
-	if err := resource.IncrementWLVersion(); err != nil {
+	if ok, err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing writelog version")
+	} else if !ok {
+		// no need to snapshot, no writes
+		return nil
 	}
 	// TODO(jaffee) downgrade to read tx
 	err = resource.SnapshotTo(wrTo)

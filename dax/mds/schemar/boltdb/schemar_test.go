@@ -143,4 +143,38 @@ func TestSchemar(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, exp, tables)
 	})
+
+	t.Run("GetTablesAll", func(t *testing.T) {
+		// get a fresh DB
+		db := testbolt.MustOpenDB(t)
+		defer testbolt.MustCloseDB(t, db)
+
+		t.Cleanup(func() {
+			testbolt.CleanupDB(t, db.Path())
+		})
+		// Initialize the buckets.
+		assert.NoError(t, db.InitializeBuckets(boltdb.SchemarBuckets...))
+
+		s := boltdb.NewSchemar(db, logger.NopLogger)
+
+		qtbl0 := daxtest.TestQualifiedTableWithID(t, qual, tableID0, tableName0, partitionN, false)
+		orgID2 := dax.OrganizationID("acme2")
+		qual2 := dax.NewTableQualifier(orgID2, dbID)
+		tableID2 := "3"
+		qtbl2 := daxtest.TestQualifiedTableWithID(t, qual2, tableID2, dax.TableName("two"), partitionN, false)
+
+		assert.NoError(t, s.CreateTable(ctx, qtbl0))
+		assert.NoError(t, s.CreateTable(ctx, qtbl2))
+
+		exp := []*dax.QualifiedTable{qtbl0, qtbl2}
+
+		tables, err := s.Tables(ctx, dax.TableQualifier{})
+		assert.NoError(t, err)
+		assert.Equal(t, exp, tables)
+
+		tables, err = s.Tables(ctx, dax.TableQualifier{OrganizationID: orgID2})
+		assert.NoError(t, err)
+		assert.Equal(t, []*dax.QualifiedTable{qtbl2}, tables)
+
+	})
 }

@@ -185,7 +185,6 @@ func (f *fragment) Open() error {
 
 	if err := func() error {
 		// Fill cache with rows persisted to disk.
-		f.holder.Logger.Debugf("open cache for index/field/view/fragment: %s/%s/%s/%d", f.index(), f.field(), f.view(), f.shard)
 		if err := f.openCache(); err != nil {
 			return errors.Wrap(err, "opening cache")
 		}
@@ -199,7 +198,6 @@ func (f *fragment) Open() error {
 	}
 
 	_ = testhook.Opened(f.holder.Auditor, f, nil)
-	f.holder.Logger.Debugf("successfully opened index/field/view/fragment: %s/%s/%s/%d", f.index(), f.field(), f.view(), f.shard)
 	return nil
 }
 

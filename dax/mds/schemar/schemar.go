@@ -13,6 +13,13 @@ type Schemar interface {
 	CreateField(context.Context, dax.QualifiedTableID, *dax.Field) error
 	DropField(context.Context, dax.QualifiedTableID, dax.FieldName) error
 	Table(context.Context, dax.QualifiedTableID) (*dax.QualifiedTable, error)
+
+	// Tables returns a list of tables. If the qualifiers DatabaseID
+	// is empty, all tables in the org will be returned. If the
+	// OrganizationID is empty, all tables will be returned. If both
+	// are populated, only tables in that databse will be returned. If
+	// greater than zero table IDs are passed in the third argument,
+	// only tables matching those IDs will be returned.
 	Tables(context.Context, dax.TableQualifier, ...dax.TableID) ([]*dax.QualifiedTable, error)
 
 	// TableID is a reverse-lookup method to get the TableID for a given

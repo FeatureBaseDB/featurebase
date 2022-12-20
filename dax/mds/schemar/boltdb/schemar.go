@@ -253,7 +253,7 @@ func (s *Schemar) tableIDByName(tx *boltdb.Tx, qual dax.TableQualifier, name dax
 }
 
 // Tables returns a list of Table for all existing tables. If one or more table
-// names is provided, then only those will be included in the output.
+// IDs is provided, then only those will be included in the output.
 func (s *Schemar) Tables(ctx context.Context, qual dax.TableQualifier, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
 	tx, err := s.db.BeginTx(ctx, false)
 	if err != nil {
@@ -276,6 +276,12 @@ func (s *Schemar) getTables(ctx context.Context, tx *boltdb.Tx, qual dax.TableQu
 	}
 
 	prefix := []byte(fmt.Sprintf(prefixFmtTables, qual.OrganizationID, qual.DatabaseID))
+	if qual.OrganizationID == "" && qual.DatabaseID == "" {
+		prefix = []byte(prefixTables)
+	} else if qual.DatabaseID == "" {
+		prefix = []byte(fmt.Sprintf(prefixFmtTablesOrg, qual.OrganizationID))
+	}
+
 	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
 		if v == nil {
 			s.logger.Printf("nil value for key: %s", k)
@@ -346,7 +352,9 @@ func (s *Schemar) DropTable(ctx context.Context, qtid dax.QualifiedTableID) erro
 }
 
 const (
-	prefixFmtTables     = "tables/%s/%s/"
+	prefixTables        = "tables/"
+	prefixFmtTablesOrg  = prefixTables + "%s/"
+	prefixFmtTables     = prefixFmtTablesOrg + "%s/"
 	prefixFmtTableNames = "tablenames/%s/%s/"
 )
 
