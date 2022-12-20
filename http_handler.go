@@ -1420,13 +1420,6 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	// put the requestId in the context
 	ctx := fbcontext.WithRequestID(r.Context(), requestID.String())
 
-	sql := string(b)
-	rootOperator, err := h.api.CompilePlan(ctx, sql)
-	if err != nil {
-		h.writeBadRequest(w, r, err)
-		return
-	}
-
 	// Write response back to client.
 	w.Header().Set("Content-Type", "application/json")
 
@@ -1499,6 +1492,13 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`,"queryPlan":`))
 			w.Write(planBytes)
 		}
+	}
+
+	sql := string(b)
+	rootOperator, err := h.api.CompilePlan(ctx, sql)
+	if err != nil {
+		writeError(err, false)
+		return
 	}
 
 	// Get a query iterator.
