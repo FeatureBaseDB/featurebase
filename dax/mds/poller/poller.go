@@ -133,24 +133,21 @@ func (p *Poller) pollAll() {
 	toRemove := []dax.Address{}
 
 	for _, addr := range addrs {
-		p.logger.Debugf("polling:   %s", addr)
-		start := time.Now()
 		up := p.nodePoller.Poll(addr)
 		if !up {
 			p.logger.Printf("poller removing %s", addr)
 			toRemove = append(toRemove, addr)
 		}
-		p.logger.Debugf("done poll: %s, %s", addr, time.Since(start))
 	}
 
 	if len(toRemove) > 0 {
-		p.logger.Debugf("removing addresses: %v", toRemove)
+		p.logger.Debugf("POLLER: removing addresses: %v", toRemove)
 		start := time.Now()
 		err := p.addressManager.RemoveAddresses(ctx, toRemove...)
 		if err != nil {
-			p.logger.Printf("removing %s: %v", toRemove, err)
+			p.logger.Printf("POLLER: error removing %s: %v", toRemove, err)
 		}
-		p.logger.Debugf("remove complete: %s", time.Since(start))
+		p.logger.Debugf("POLLER removing %v complete: %s", toRemove, time.Since(start))
 	}
 
 }
