@@ -76,9 +76,7 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	// Returns a reader from the given ID offset.
 	EntryReader(ctx context.Context, offset uint64) (TranslateEntryReader, error)
 
-	// WriteTo ensures that the TranslateStore implements io.WriterTo.
-	// It should write the contents of the store to the writer.
-	WriteTo(io.Writer) (int64, error)
+	Begin(write bool) (TranslatorTx, error)
 
 	// ReadFrom ensures that the TranslateStore implements io.ReaderFrom.
 	// It should read from the reader and replace the data store with
@@ -86,6 +84,16 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	ReadFrom(io.Reader) (int64, error)
 
 	Delete(records *roaring.Bitmap) (Commitor, error)
+}
+
+// TranslatorTx reproduces a subset of the methods on the BoltDB Tx
+// object. Others may be needed in the future and we should just add
+// them here. The idea is not to scatter direct references to bolt
+// stuff throughout the whole codebase.
+type TranslatorTx interface {
+	WriteTo(io.Writer) (int64, error)
+	Rollback() error
+	// e.g. Commit() error
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.

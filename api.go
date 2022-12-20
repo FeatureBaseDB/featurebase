@@ -967,7 +967,7 @@ func (r RedirectError) Error() string {
 }
 
 // TranslateData returns all translation data in the specified partition.
-func (api *API) TranslateData(ctx context.Context, indexName string, partition int) (io.WriterTo, error) {
+func (api *API) TranslateData(ctx context.Context, indexName string, partition int) (TranslateStore, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.TranslateData")
 	defer span.Finish()
 
@@ -1022,7 +1022,7 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 }
 
 // FieldTranslateData returns all translation data in the specified field.
-func (api *API) FieldTranslateData(ctx context.Context, indexName, fieldName string) (io.WriterTo, error) {
+func (api *API) FieldTranslateData(ctx context.Context, indexName, fieldName string) (TranslateStore, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.FieldTranslateData")
 	defer span.Finish()
 	if err := api.validate(apiFieldTranslateData); err != nil {
@@ -3136,18 +3136,22 @@ func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKey
 	qtid := req.TableKey.QualifiedTableID()
 
 	// Create the snapshot for the current version.
-	wrTo, err := api.TranslateData(ctx, string(req.TableKey), int(req.PartitionNum))
+	trans, err := api.TranslateData(ctx, string(req.TableKey), int(req.PartitionNum))
 	if err != nil {
-		return errors.Wrapf(err, "getting index/partition writeto: %s/%d", req.TableKey, req.PartitionNum)
+		return errors.Wrapf(err, "getting index/partition translate store: %s/%d", req.TableKey, req.PartitionNum)
 	}
+	// get a write tx to ensure no other writes while incrementing WL version.
+	wrTo, err := trans.Begin(true)
+	if err != nil {
+		return errors.Wrap(err, "beginning table translate write tx")
+	}
+	defer wrTo.Rollback()
 
-	// TODO(jaffee) need to ensure writes to translation data can't
-	// occur while this is happening.
 	resource := api.serverlessStorage.GetTableKeyResource(qtid, req.PartitionNum)
 	if err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing write log version")
 	}
-	// TODO(jaffee) downgrade (currently non-existent) lock to read-only
+	// TODO(jaffee) downgrade write tx to read-only
 	err = resource.SnapshotTo(wrTo)
 	return errors.Wrap(err, "snapshotting table keys")
 }
@@ -3158,17 +3162,22 @@ func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKey
 	qtid := req.TableKey.QualifiedTableID()
 
 	// Create the snapshot for the current version.
-	// TODO(jaffee) change this to get write lock
-	wrTo, err := api.FieldTranslateData(ctx, string(req.TableKey), string(req.Field))
+	trans, err := api.FieldTranslateData(ctx, string(req.TableKey), string(req.Field))
 	if err != nil {
 		return errors.Wrap(err, "getting index/field writeto")
 	}
+	// get a write tx to ensure no other writes while incrementing WL version.
+	wrTo, err := trans.Begin(true)
+	if err != nil {
+		return errors.Wrap(err, "beginning field translate write tx")
+	}
+	defer wrTo.Rollback()
 
 	resource := api.serverlessStorage.GetFieldKeyResource(qtid, req.Field)
 	if err := resource.IncrementWLVersion(); err != nil {
 		return errors.Wrap(err, "incrementing writelog version")
 	}
-	// TODO(jaffee) downgrade to read lock
+	// TODO(jaffee) downgrade to read tx
 	err = resource.SnapshotTo(wrTo)
 	return errors.Wrap(err, "snapshotTo in FieldKeys")
 }

@@ -5132,47 +5132,50 @@ func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
 	`)
 
 	resp := c.Query(t, c.Idx(), `Extract(All(), Rows(set))`)
-	expect := []interface{}{
-		pilosa.ExtractedTable{
-			Fields: []pilosa.ExtractedTableField{
-				{
-					Name: "set",
-					Type: "[]uint64",
+	expect := pilosa.ExtractedTable{
+		Fields: []pilosa.ExtractedTableField{
+			{
+				Name: "set",
+				Type: "[]uint64",
+			},
+		},
+		// The order of these probably shouldn't matter, but currently depends indirectly on the
+		// index.
+		Columns: []pilosa.ExtractedTableColumn{
+			{
+				Column: pilosa.KeyOrID{Keyed: true, Key: "h"},
+				Rows: []interface{}{
+					[]uint64{
+						1,
+						2,
+					},
 				},
 			},
-			// The order of these probably shouldn't matter, but currently depends indirectly on the
-			// index.
-			Columns: []pilosa.ExtractedTableColumn{
-				{
-					Column: pilosa.KeyOrID{Keyed: true, Key: "h"},
-					Rows: []interface{}{
-						[]uint64{
-							1,
-							2,
-						},
+			{
+				Column: pilosa.KeyOrID{Keyed: true, Key: "xyzzy"},
+				Rows: []interface{}{
+					[]uint64{
+						2,
 					},
 				},
-				{
-					Column: pilosa.KeyOrID{Keyed: true, Key: "xyzzy"},
-					Rows: []interface{}{
-						[]uint64{
-							2,
-						},
-					},
-				},
-				{
-					Column: pilosa.KeyOrID{Keyed: true, Key: "plugh"},
-					Rows: []interface{}{
-						[]uint64{},
-					},
+			},
+			{
+				Column: pilosa.KeyOrID{Keyed: true, Key: "plugh"},
+				Rows: []interface{}{
+					[]uint64{},
 				},
 			},
 		},
 	}
 
-	if !reflect.DeepEqual(expect, resp.Results) {
-		t.Errorf("expected %v but got %v", expect, resp.Results)
+	if len(resp.Results) != 1 {
+		t.Fail()
 	}
+	res := resp.Results[0].(pilosa.ExtractedTable)
+	if !reflect.DeepEqual(expect.Fields, res.Fields) {
+		t.Errorf("expected:\n%v\nbut got:\n%v", expect, resp.Results)
+	}
+	assert.ElementsMatch(t, expect.Columns, res.Columns)
 }
 
 func TestExecutor_Execute_MaxMemory(t *testing.T) {
@@ -7429,6 +7432,7 @@ func backupCluster(t *testing.T, c *test.Cluster, index string) (backupDir strin
 
 	buf := &bytes.Buffer{}
 	backupLog := logger.NewStandardLogger(buf)
+
 	backupCommand := ctl.NewBackupCommand(backupLog)
 	backupCommand.Host = c.Nodes[len(c.Nodes)-1].URL() // don't pick node 0 so we don't always get primary (better code coverage)
 	backupCommand.Index = index
