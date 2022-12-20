@@ -2790,8 +2790,15 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		tx, err := p.Begin(false)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+
 		// Stream translate data to response body.
-		if _, err := p.WriteTo(w); err != nil {
+		if _, err := tx.WriteTo(w); err != nil {
 			h.logger.Errorf("error streaming translation data: %s", err)
 		}
 		return
@@ -2816,8 +2823,14 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	tx, err := p.Begin(false)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
 	// Stream translate partition to response body.
-	if _, err := p.WriteTo(w); err != nil {
+	if _, err := tx.WriteTo(w); err != nil {
 		h.logger.Errorf("error streaming translation data: %s", err)
 	}
 }

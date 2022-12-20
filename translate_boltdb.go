@@ -396,14 +396,9 @@ func (s *BoltTranslateStore) MaxID() (max uint64, err error) {
 	return max, nil
 }
 
-// WriteTo writes the contents of the store to the writer.
-func (s *BoltTranslateStore) WriteTo(w io.Writer) (int64, error) {
-	tx, err := s.db.Begin(false)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	return tx.WriteTo(w)
+// Begin starts and returns a transaction on the underlying store.
+func (s *BoltTranslateStore) Begin(write bool) (TranslatorTx, error) {
+	return s.db.Begin(write)
 }
 
 // ReadFrom reads the content and overwrites the existing store.
