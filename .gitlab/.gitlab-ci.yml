@@ -280,6 +280,7 @@ run go tests:
 
 run go tests dax/test/dax:
   stage: test
+  image: golang:$GOVERSION
   tags:
     - aws
   rules:
