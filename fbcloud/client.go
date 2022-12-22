@@ -37,7 +37,6 @@ func (cq *Queryer) tokenRefresh() error {
 	}
 	cq.token = token
 	cq.lastRefresh = time.Now()
-	fmt.Println("refreshed auth token")
 	return nil
 }
 
@@ -53,7 +52,7 @@ func (cq *Queryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, e
 			return nil, errors.Wrap(err, "refreshing token")
 		}
 	}
-	url := fmt.Sprintf("%s/v2/databases/%s/query", cq.Host, db)
+	url := fmt.Sprintf("%s/v2/databases/%s/query/sql", cq.Host, db)
 
 	sqlReq := &tokenizedSQL{
 		Language:  "sql",
@@ -71,6 +70,7 @@ func (cq *Queryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, e
 	if err != nil {
 		return nil, errors.Wrap(err, "creating new post request")
 	}
+	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", cq.token)
 
 	var resp *http.Response
@@ -85,11 +85,11 @@ func (cq *Queryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, e
 	if resp.StatusCode/100 != 2 {
 		return nil, errors.Errorf("unexpected status: %s, full body: '%s'", resp.Status, fullbod)
 	}
-	var cloudResp cloudResponse
-	if err := json.Unmarshal(fullbod, &cloudResp); err != nil {
+
+	var sqlResponse featurebase.WireQueryResponse
+	if err := json.Unmarshal(fullbod, &sqlResponse); err != nil {
 		return nil, errors.Wrapf(err, "decoding cloud response, body:\n%s", fullbod)
 	}
-	sqlResponse := cloudResp.Results
 	return &sqlResponse, nil
 }
 

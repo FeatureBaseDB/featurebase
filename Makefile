@@ -247,8 +247,8 @@ docker-image-datagen: vendor
 	docker build --tag dax/datagen --file Dockerfile-datagen .
 
 ecr-push-featurebase: docker-login
-	docker tag dax/featurebase:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax:latest
-	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax:latest
+	docker tag dax/featurebase:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/featurebase:latest
+	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/featurebase:latest
 
 ecr-push-datagen: docker-login
 	docker tag dax/datagen:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/datagen:latest
