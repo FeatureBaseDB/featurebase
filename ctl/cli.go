@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/chzyer/readline"
 	"github.com/jedib0t/go-pretty/table"
@@ -23,6 +24,7 @@ import (
 )
 
 const (
+	defaultHost     string = "localhost"
 	promptBegin     string = "fbsql> "
 	promptMid       string = "    -> "
 	terminationChar string = ";"
@@ -71,7 +73,7 @@ func NewCLICommand(logdest logger.Logger) *CLICommand {
 		}
 	}
 	return &CLICommand{
-		Host:        "localhost",
+		Host:        defaultHost,
 		HistoryPath: historyPath,
 
 		OrganizationID: "",
@@ -118,7 +120,7 @@ func (cmd *CLICommand) setupClient() error {
 	case featurebaseTypeCloud:
 		fmt.Println("Detected cloud deployment")
 		cmd.queryer = &fbcloud.Queryer{
-			Host: cmd.Host,
+			Host: hostPort(cmd.Host, cmd.Port),
 
 			ClientID: cmd.ClientID,
 			Region:   cmd.Region,
@@ -174,6 +176,16 @@ func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
 				typ:    featurebaseTypeStandard,
 			},
 		)
+	} else if strings.HasPrefix(cmd.Host, "https") {
+		// https suggesting we might be connecting to a cloud host
+		trials = append(trials,
+			// cloud
+			trial{
+				port:   "",
+				health: "health",
+				typ:    featurebaseTypeCloud,
+			},
+		)
 	} else {
 		// Try default ports just in case.
 		trials = append(trials,
@@ -192,9 +204,12 @@ func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
 		)
 	}
 
+	client := http.Client{
+		Timeout: 100 * time.Millisecond,
+	}
 	for _, trial := range trials {
 		url := hostPort(cmd.Host, trial.port) + trial.health
-		if resp, err := http.Get(url); err != nil {
+		if resp, err := client.Get(url); err != nil {
 			continue
 		} else if resp.StatusCode/100 == 2 {
 			cmd.Port = trial.port
