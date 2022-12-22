@@ -427,7 +427,7 @@ func (c *Client) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, 
 
 func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
 	url := fmt.Sprintf("%s/register-node", c.address.WithScheme(defaultScheme))
-	c.logger.Debugf("RegisterNode url: %s", url)
+	c.logger.Debugf("RegisterNode: %s, url: %s", node.Address, url)
 
 	req := &mdshttp.RegisterNodeRequest{
 		Address:   node.Address,
