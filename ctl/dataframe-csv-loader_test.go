@@ -6,11 +6,11 @@ import (
 	"io"
 	"testing"
 
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/server"
-	"github.com/molecula/featurebase/v3/test"
-	"github.com/molecula/featurebase/v3/testhook"
+	pilosa "github.com/FeatureBaseDB/faturebase/v3"
+	"github.com/FeatureBaseDB/faturebase/v3/logger"
+	"github.com/FeatureBaseDB/faturebase/v3/server"
+	"github.com/FeatureBaseDB/faturebase/v3/test"
+	"github.com/FeatureBaseDB/faturebase/v3/testhook"
 )
 
 func TestDataframeCsvLoaderCommand(t *testing.T) {

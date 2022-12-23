@@ -41,9 +41,9 @@ Then `make docker` ran successfully.
 ### Build the FeatureBase docker image
 
 - Check out the
-  [dax](https://github.com/molecula/featurebase/tree/dax)
+  [dax](https://github.com/FeatureBaseDB/faturebase/tree/dax)
   branch of the
-  [featurebase](https://github.com/molecula/featurebase) repository.
+  [featurebase](https://github.com/FeatureBaseDB/faturebase) repository.
 - Run `make docker-image-featurebase` to build the docker image
 - You should now have an image in docker named `dax/featurebase` with the tag `latest`.
 
@@ -57,8 +57,8 @@ Then `make docker` ran successfully.
 ## Running the tests
 
 - Check out the
-  [dax](https://github.com/molecula/featurebase/tree/dax)
+  [dax](https://github.com/FeatureBaseDB/faturebase/tree/dax)
   branch of the
-  [featurebase](https://github.com/molecula/featurebase) repository.
+  [featurebase](https://github.com/FeatureBaseDB/faturebase) repository.
 - Change into the `dax` directory: `cd dax`
 - Run `make test-integration`.

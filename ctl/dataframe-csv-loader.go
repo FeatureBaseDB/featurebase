@@ -16,10 +16,10 @@ import (
 	"strings"
 
 	"github.com/apache/arrow/go/v10/arrow"
-	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/client"
-	"github.com/molecula/featurebase/v3/idk"
-	"github.com/molecula/featurebase/v3/logger"
+	pilosa "github.com/FeatureBaseDB/faturebase/v3"
+	"github.com/FeatureBaseDB/faturebase/v3/client"
+	"github.com/FeatureBaseDB/faturebase/v3/idk"
+	"github.com/FeatureBaseDB/faturebase/v3/logger"
 	"github.com/pkg/errors"
 )
 

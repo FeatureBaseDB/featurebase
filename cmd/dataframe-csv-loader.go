@@ -2,8 +2,8 @@
 package cmd
 
 import (
-	"github.com/molecula/featurebase/v3/ctl"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/FeatureBaseDB/faturebase/v3/ctl"
+	"github.com/FeatureBaseDB/faturebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
