@@ -2,8 +2,7 @@ package dax
 
 import (
 	"sort"
-
-	"golang.org/x/exp/constraints"
+	"strings"
 )
 
 // Worker is a generic identifier used to represent a service responsible for
@@ -78,10 +77,10 @@ func (w WorkerDiffs) Len() int           { return len(w) }
 func (w WorkerDiffs) Less(i, j int) bool { return w[i].WorkerID < w[j].WorkerID }
 func (w WorkerDiffs) Swap(i, j int)      { w[i], w[j] = w[j], w[i] }
 
-// Set is a set of orderable items.
-type Set[K constraints.Ordered] map[K]struct{}
+// Set is a set of stringy items.
+type Set[K ~string] map[K]struct{}
 
-func NewSet[K constraints.Ordered](stuff ...K) Set[K] {
+func NewSet[K ~string](stuff ...K) Set[K] {
 	s := make(map[K]struct{})
 	for _, thing := range stuff {
 		s[thing] = struct{}{}
@@ -108,6 +107,17 @@ func (s Set[K]) Add(k K) {
 // Remove removes k from the set.
 func (s Set[K]) Remove(k K) {
 	delete(s, k)
+}
+
+func (s Set[K]) RemovePrefix(prefix string) []K {
+	ret := make([]K, 0)
+	for k := range s {
+		if strings.HasPrefix(string(k), prefix) {
+			ret = append(ret, k)
+			delete(s, k)
+		}
+	}
+	return ret
 }
 
 // Slice returns a slice containing each member of the set in an undefined order.

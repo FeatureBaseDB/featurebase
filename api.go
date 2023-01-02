@@ -716,29 +716,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	}
 }
 
-func (api *API) getOrCreateShardVersion(ctx context.Context, indexName string, shard uint64) (int, error) {
-	tableName := dax.TableName(indexName)
-	shardNum := dax.ShardNum(shard)
-
-	// Here we assume that indexName is the string encoding of QualifiedTableID.
-	qtid, err := dax.QualifiedTableIDFromKey(indexName)
-	if err != nil {
-		return -1, errors.Wrap(err, "decoding qtid from key (indexName)")
-	}
-
-	version, found, err := api.holder.versionStore.ShardVersion(ctx, qtid, shardNum)
-	if err != nil {
-		return -1, errors.Wrap(err, "getting shard version")
-	} else if !found {
-		version = 0
-		api.server.logger.Printf("could not find version for shard: %s, %d, so creating 0", tableName, shardNum)
-		if err := api.holder.versionStore.AddShards(ctx, qtid, dax.NewVersionedShard(shardNum, version)); err != nil {
-			return -1, errors.Wrap(err, "adding shard 0")
-		}
-	}
-	return version, nil
-}
-
 // DeleteField removes the named field from the named index. If the index is not
 // found, an error is returned. If the field is not found, it is ignored and no
 // action is taken.
@@ -3324,9 +3301,9 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiDeleteDataframe:      {},
 }
 
-func shardInShards(i dax.ShardNum, s dax.VersionedShards) bool {
+func shardInShards(i dax.ShardNum, s dax.ShardNums) bool {
 	for _, o := range s {
-		if i == o.Num {
+		if i == o {
 			return true
 		}
 	}

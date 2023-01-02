@@ -33,8 +33,8 @@ var _ Role = &TranslateRole{}
 
 // ComputeRole is a role specific to compute nodes.
 type ComputeRole struct {
-	TableKey TableKey        `json:"table-key"`
-	Shards   VersionedShards `json:"shards"`
+	TableKey TableKey  `json:"table-key"`
+	Shards   ShardNums `json:"shards"`
 }
 
 // Type returns the type for ComputeRole. This is mainly to impolement the Role
@@ -45,9 +45,9 @@ func (cr *ComputeRole) Type() RoleType {
 
 // TranslateRole is a role specific to translate nodes.
 type TranslateRole struct {
-	TableKey   TableKey            `json:"table-key"`
-	Partitions VersionedPartitions `json:"partitions"`
-	Fields     VersionedFields     `json:"fields"`
+	TableKey   TableKey      `json:"table-key"`
+	Partitions PartitionNums `json:"partitions"`
+	Fields     []FieldName   `json:"fields"`
 }
 
 // Type returns the type for TransteRole. This is mainly to impolement the Role
