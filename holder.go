@@ -146,8 +146,6 @@ type Holder struct {
 	// snapshotter/writelogger; then MDS should only start directing queries to
 	// that computer once it has completed applying the snapshot.
 	directiveApplied bool
-
-	versionStore dax.VersionStore
 }
 
 // HolderOpts holds information about the holder which other things might want
@@ -343,8 +341,6 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		path: path,
 
 		indexes: make(map[string]*Index),
-
-		versionStore: dax.NewNopVersionStore(),
 	}
 
 	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
@@ -1017,14 +1013,6 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 	// Update options.
 	h.addIndex(index)
 
-	tkey := dax.TableKey(cim.Index)
-	qtid := tkey.QualifiedTableID()
-
-	// Initialize the table in holder.versionStore.
-	if err := h.versionStore.AddTable(context.Background(), qtid); err != nil {
-		h.Logger.Printf("could not add table to version store: %s", cim.Index)
-	}
-
 	if broadcast {
 		// Send the create index message to all nodes.
 		if err := h.broadcaster.SendSync(cim); err != nil {
@@ -1044,7 +1032,7 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 // createIndexWithPartitions is similar to createIndex, but it takes a list of
 // partitions for which this node is responsible. This ensures that the node
 // doesn't instantiate more partition TranslateStores than is necessary.
-func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePartitions dax.VersionedPartitions) (*Index, error) {
+func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePartitions dax.PartitionNums) (*Index, error) {
 	if cim.Index == "" {
 		return nil, errors.New("index name required")
 	}
@@ -1066,24 +1054,6 @@ func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePar
 
 	// Update options.
 	h.addIndex(index)
-
-	tkey := dax.TableKey(cim.Index)
-	qtid := tkey.QualifiedTableID()
-
-	// Initialize the table in holder.versionStore.
-	if err := h.versionStore.AddTable(context.Background(), qtid); err != nil {
-		h.Logger.Printf("could not add table to version store: %s", cim.Index)
-	}
-
-	// Initialize a list of partitions at version 0.
-	newPartitions := make(dax.VersionedPartitions, len(translatePartitions))
-	for i := range translatePartitions {
-		newPartitions[i] = dax.NewVersionedPartition(translatePartitions[i].Num, 0)
-	}
-
-	if err := h.versionStore.AddPartitions(context.Background(), qtid, newPartitions...); err != nil {
-		return nil, errors.Wrap(err, "adding partitions to version store")
-	}
 
 	// Since this is a new index, we need to kick off
 	// its translation sync.
@@ -1240,14 +1210,6 @@ func (h *Holder) deleteIndex(name string) error {
 
 	// Remove reference.
 	h.deleteIndexFromMap(name)
-
-	tkey := dax.TableKey(name)
-	qtid := tkey.QualifiedTableID()
-
-	// Remove the index from holder.versionStore.
-	if _, _, err := h.versionStore.RemoveTable(context.Background(), qtid); err != nil {
-		h.Logger.Printf("could not find table to remove from version store: %s", name)
-	}
 
 	// I'm not sure if calling Reset() here is necessary
 	// since closing the index stops its translation

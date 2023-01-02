@@ -74,7 +74,6 @@ type cluster struct { // nolint: maligned
 	partitionAssigner string
 
 	serverlessStorage *storage.ResourceManager
-	versionStore      dax.VersionStore
 
 	// isComputeNode is set to true if this node is running as a DAX compute
 	// node.
@@ -1013,9 +1012,9 @@ type TransactionMessage struct {
 	Action      string
 }
 
-func intInPartitions(i int, s dax.VersionedPartitions) bool {
+func intInPartitions(i int, s dax.PartitionNums) bool {
 	for _, a := range s {
-		if int(a.Num) == i {
+		if int(a) == i {
 			return true
 		}
 	}

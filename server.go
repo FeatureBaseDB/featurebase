@@ -16,7 +16,6 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 
-	"github.com/molecula/featurebase/v3/dax/inmem"
 	daxstorage "github.com/molecula/featurebase/v3/dax/storage"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/logger"
@@ -550,15 +549,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.Logger.Infof("cwd: %v", cwd)
 	s.holder.Logger.Infof("cmd line: %v", strings.Join(os.Args, " "))
 
-	// The compute nodes keep a local cache of the VersionStore which applies
-	// only to the data (shard, partitions, fields) managed by the compute node
-	// (as opposed to the VersionStore in MDS which keeps information about all
-	// data). It would be okay for this to be an in-memory implementation as
-	// long as the compute node isn't expected to survive a restart; in that
-	// case, it would be necessary to use an implementation which saves state
-	// somewhere, such as local disk.
-	versionStore := inmem.NewVersionStore()
-
 	s.cluster.Path = path
 	s.cluster.logger = s.logger
 	s.cluster.holder = s.holder
@@ -566,7 +556,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
 	s.cluster.serverlessStorage = s.serverlessStorage
-	s.cluster.versionStore = versionStore
 
 	// Append the NodeID tag to stats.
 	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
@@ -582,7 +571,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.broadcaster = s
 	s.holder.sharder = s.sharder
 	s.holder.serializer = s.serializer
-	s.holder.versionStore = versionStore
 
 	// Initial stats must be invoked after the executor obtains reference to the holder.
 	s.executor.InitStats()
