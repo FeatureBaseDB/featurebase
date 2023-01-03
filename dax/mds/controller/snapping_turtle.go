@@ -7,7 +7,7 @@ import (
 	"github.com/molecula/featurebase/v3/dax"
 )
 
-func (c *Controller) snappingTurtleRoutine(period time.Duration) {
+func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan struct{}) {
 	if period == 0 {
 		return // disable automatic snapshotting
 	}
@@ -19,6 +19,8 @@ func (c *Controller) snappingTurtleRoutine(period time.Duration) {
 			c.logger.Debugf("TURTLE: Stopping Snapping Turtle")
 			return
 		case <-ticker.C:
+			c.snapAll()
+		case <-control:
 			c.snapAll()
 		}
 	}

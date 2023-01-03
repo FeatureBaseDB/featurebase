@@ -108,16 +108,6 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{}
 		assert.Equal(t, exp, director.flush())
 
-		// Add the same non-keyed table again.
-		// TODO(jaffee) figure out what this should do
-		// err := con.CreateTable(ctx, tbl0)
-		// if assert.Error(t, err) {
-		// 	assert.True(t, errors.Is(err, dax.ErrTableIDExists))
-		// }
-
-		exp = []*dax.Directive{}
-		assert.Equal(t, exp, director.flush())
-
 		// Add a shard.
 		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(), 0))
 
@@ -816,13 +806,6 @@ func TestController(t *testing.T) {
 		if assert.Error(t, err) {
 			assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
 		}
-
-		// Add shards to a table which doesn't exist.
-		// TODO(jaffee) figure out what this should do
-		// err = con.AddShards(ctx, invalidQtid, dax.NewShardNums(1, 2)...)
-		// if assert.Error(t, err) {
-		// 	assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-		// }
 
 		// Register an invalid node.
 		nodeX := &dax.Node{
