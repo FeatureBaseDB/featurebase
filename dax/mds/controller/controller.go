@@ -45,6 +45,7 @@ type Controller struct {
 	registrationBatchTimeout time.Duration
 	nodeChan                 chan *dax.Node
 	snappingTurtleTimeout    time.Duration
+	snapControl              chan struct{}
 	stopping                 chan struct{}
 
 	logger logger.Logger
@@ -70,6 +71,7 @@ func New(cfg Config) *Controller {
 		registrationBatchTimeout: cfg.RegistrationBatchTimeout,
 		nodeChan:                 make(chan *dax.Node, 10),
 		snappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
+		snapControl:              make(chan struct{}),
 
 		stopping: make(chan struct{}),
 		logger:   logger.NopLogger,
@@ -107,7 +109,7 @@ func New(cfg Config) *Controller {
 // Run starts long running subroutines.
 func (c *Controller) Run() error {
 	go c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
-	go c.snappingTurtleRoutine(c.snappingTurtleTimeout)
+	go c.snappingTurtleRoutine(c.snappingTurtleTimeout, c.snapControl)
 
 	return nil
 }
@@ -1206,51 +1208,11 @@ func (c *Controller) InitializePoller(ctx context.Context) error {
 	return nil
 }
 
-// SnapshotTable snapshots a table.
-// TODO(jaffee): do we need to re-implement this w/o version store? Or can we just remove entirely?
+// SnapshotTable snapshots a table. It might also snapshot everything
+// else... no guarantees here, only used in tests as of this writing.
 func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) error {
+	c.snapControl <- struct{}{}
 	return nil
-	// shards, ok, err := c.versionStore.Shards(ctx, qtid)
-	// if err != nil {
-	// 	return errors.Wrap(err, "getting shards from version store")
-	// } else if !ok {
-	// 	return errors.New(errors.ErrUncoded, "got false back from versionStore.Shards")
-	// }
-
-	// for _, shard := range shards {
-	// 	if err := c.SnapshotShardData(ctx, qtid, shard.Num); err != nil {
-	// 		return errors.Wrapf(err, "snapshotting shard data: qtid: %s, shard: %d", qtid, shard.Num)
-	// 	}
-	// }
-
-	// partitions, ok, err := c.versionStore.Partitions(ctx, qtid)
-	// if err != nil {
-	// 	return errors.Wrap(err, "getting partitions from version store")
-	// } else if !ok {
-	// 	return errors.New(errors.ErrUncoded, "got false back from versionStore.Partitions")
-	// }
-
-	// for _, part := range partitions {
-	// 	if err := c.SnapshotTableKeys(ctx, qtid, part.Num); err != nil {
-	// 		return errors.Wrapf(err, "snapshotting table keys: qtid: %s, partition: %d", qtid, part.Num)
-	// 	}
-	// }
-
-	// fields, ok, err := c.versionStore.Fields(ctx, qtid)
-	// if err != nil {
-	// 	return errors.Wrap(err, "getting fields from version store")
-	// } else if !ok {
-	// 	return errors.New(errors.ErrUncoded, "got false back from versionStore.Fields")
-	// }
-
-	// for _, fld := range fields {
-	// 	if fld.Name != "_id" {
-	// 		if err := c.SnapshotFieldKeys(ctx, qtid, fld.Name); err != nil {
-	// 			return errors.Wrapf(err, "snapshotting field keys: qtid: %s, field: %s", qtid, fld.Name)
-	// 		}
-	// 	}
-	// }
-	// return nil
 }
 
 // SnapshotShardData forces the compute node responsible for the given shard to
@@ -1476,8 +1438,6 @@ func (c *Controller) CreateField(ctx context.Context, qtid dax.QualifiedTableID,
 	for _, w := range workers {
 		workerSet.Add(dax.Address(w.ID))
 	}
-
-	// TODO if there isn't already a worker for partition 0, do we need to add it?
 
 	// Get the list of workers responsible for shard data for this table.
 	if state, err := c.ComputeBalancer.CurrentState(ctx); err != nil {
