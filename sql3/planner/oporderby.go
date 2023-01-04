@@ -86,11 +86,7 @@ func (n *PlanOpOrderBy) String() string {
 func (n *PlanOpOrderBy) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", n)
-	sc := make([]string, 0)
-	for _, e := range n.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
+	result["_schema"] = n.Schema().Plan()
 
 	result["child"] = n.ChildOp.Plan()
 	ps := make([]interface{}, 0)
@@ -150,7 +146,7 @@ func (i *orderByIter) Next(ctx context.Context) (types.Row, error) {
 }
 
 func (i *orderByIter) computeOrderByRows(ctx context.Context) error {
-	cache := newInMemoryRowCache()
+	cache := make([]types.Row, 0)
 
 	for {
 		row, err := i.childIter.Next(ctx)
@@ -162,15 +158,12 @@ func (i *orderByIter) computeOrderByRows(ctx context.Context) error {
 			return err
 		}
 
-		if err := cache.Add(row); err != nil {
-			return err
-		}
+		cache = append(cache, row)
 	}
 
-	rows := cache.AllRows()
 	sorter := &OrderBySorter{
 		SortFields: i.s.orderByFields,
-		Rows:       rows,
+		Rows:       cache,
 		LastError:  nil,
 		Ctx:        ctx,
 	}
@@ -178,7 +171,7 @@ func (i *orderByIter) computeOrderByRows(ctx context.Context) error {
 	if sorter.LastError != nil {
 		return sorter.LastError
 	}
-	i.sortedRows = rows
+	i.sortedRows = cache
 	return nil
 }
 

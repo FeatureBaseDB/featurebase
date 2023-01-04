@@ -33,12 +33,7 @@ func NewPlanOpPQLMultiGroupBy(p *ExecutionPlanner, operators []*PlanOpPQLGroupBy
 func (p *PlanOpPQLMultiGroupBy) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
-
+	result["_schema"] = p.Schema().Plan()
 	ps := make([]interface{}, 0)
 	for _, e := range p.operators {
 		ps = append(ps, e.Plan())
@@ -135,9 +130,9 @@ type pqlMultiGroupByRowIter struct {
 	planner        *ExecutionPlanner
 	groupByColumns []types.PlanExpression
 	iterators      []types.RowIterator
-	groupCache     KeyedRowCache
+	groupCache     map[string]types.Row
 
-	groupKeys []uint64
+	groupKeys []string
 }
 
 var _ types.RowIterator = (*pqlMultiGroupByRowIter)(nil)
@@ -145,7 +140,7 @@ var _ types.RowIterator = (*pqlMultiGroupByRowIter)(nil)
 func (i *pqlMultiGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.groupCache == nil {
 		//consume all the rows from the child iterators
-		i.groupCache = newinMemoryKeyedRowCache()
+		i.groupCache = make(map[string]types.Row)
 		if err := i.computeMultiGroupBy(ctx); err != nil {
 			return nil, err
 		}
@@ -154,9 +149,9 @@ func (i *pqlMultiGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 	if len(i.groupKeys) > 0 {
 		key := i.groupKeys[0]
 
-		row, err := i.groupCache.Get(key)
-		if err != nil {
-			return nil, err
+		row, ok := i.groupCache[key]
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected absence of key")
 		}
 		// Move to next result element.
 		i.groupKeys = i.groupKeys[1:]
@@ -180,19 +175,16 @@ func (i *pqlMultiGroupByRowIter) computeMultiGroupBy(ctx context.Context) error 
 
 		for {
 			//build a key for the group by columns for this row
-			key, _, err := groupingKeyHash(ctx, i.groupByColumns, irow)
-			if err != nil {
-				return err
-			}
-
-			// get the group from the cache
-			cachedRow, err := i.groupCache.Get(key)
+			key, _, err := groupingKey(ctx, i.groupByColumns, irow)
 			if err != nil {
 				return err
 			}
 
 			aggIndex := iteratorIdx + len(i.groupByColumns)
-			if cachedRow != nil {
+
+			// get the group from the cache
+			cachedRow, ok := i.groupCache[key]
+			if ok {
 				// if the group exists then update the row
 				// NB: the aggregate for this iterator is at the end of irow
 				cachedRow[aggIndex] = irow[len(irow)-1]
@@ -207,7 +199,7 @@ func (i *pqlMultiGroupByRowIter) computeMultiGroupBy(ctx context.Context) error 
 				cachedRow[aggIndex] = irow[len(irow)-1]
 
 				// write the row to the cache
-				err = i.groupCache.Put(key, cachedRow)
+				i.groupCache[key] = cachedRow
 				if err != nil {
 					return err
 				}

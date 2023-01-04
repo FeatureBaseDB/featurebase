@@ -26,6 +26,10 @@ var optimizerFunctions = []OptimizerFunc{
 	// fix expression references for having
 	removeUnusedExtractColumnReferences,
 
+	// if we have a distinct operator over a single projection,
+	// where the projection is on a table scan, use a PQL Distinct scan operator
+	tryToReplaceDistinctWithPQLDistinct,
+
 	// fix expression references for having
 	fixHavingReferences,
 
@@ -199,6 +203,8 @@ func getRelationAliases(n types.PlanOperator, scope *OptimizerScope) (RelationAl
 			switch t := node.ChildOp.(type) {
 			case *PlanOpPQLTableScan:
 				inspectErr = aliases.addAlias(node, t)
+			case *PlanOpPQLDistinctScan:
+				inspectErr = aliases.addAlias(node, t)
 			case *PlanOpSubquery:
 				inspectErr = aliases.addAlias(node, t)
 			default:
@@ -207,6 +213,10 @@ func getRelationAliases(n types.PlanOperator, scope *OptimizerScope) (RelationAl
 			return false
 
 		case *PlanOpPQLTableScan:
+			inspectErr = aliases.addAlias(node, node)
+			return false
+
+		case *PlanOpPQLDistinctScan:
 			inspectErr = aliases.addAlias(node, node)
 			return false
 
@@ -238,7 +248,7 @@ func filterPushdownAboveTablesChildSelector(c ParentContext) bool {
 	switch c.Parent.(type) {
 	case *PlanOpFilter:
 		switch c.Operator.(type) {
-		case *PlanOpRelAlias, *PlanOpPQLTableScan:
+		case *PlanOpRelAlias, *PlanOpPQLTableScan, *PlanOpPQLDistinctScan:
 			return false
 		}
 	}
@@ -339,6 +349,8 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 	switch rel := tableNode.(type) {
 	case *PlanOpPQLTableScan:
 		table = rel
+	case *PlanOpPQLDistinctScan:
+		table = rel
 	default:
 		return tableNode, true, nil
 	}
@@ -391,6 +403,8 @@ func pushdownFiltersToAboveRelation(ctx context.Context, a *ExecutionPlanner, ta
 	switch rel := tableNode.(type) {
 	case *PlanOpPQLTableScan:
 		table = rel
+	case *PlanOpPQLDistinctScan:
+		table = rel
 	default:
 		return tableNode, true, nil
 	}
@@ -410,7 +424,7 @@ func pushdownFiltersToAboveRelation(ctx context.Context, a *ExecutionPlanner, ta
 	}
 
 	switch tableNode.(type) {
-	case *PlanOpRelAlias, *PlanOpPQLTableScan:
+	case *PlanOpRelAlias, *PlanOpPQLTableScan, *PlanOpPQLDistinctScan:
 		node := tableNode
 		if pushedDownFilterExpression != nil {
 			return NewPlanOpFilter(a, pushedDownFilterExpression, node), false, nil
@@ -442,7 +456,7 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 				return n, samePred, nil
 
 			// PlanOpPQLTableScan supports being filtered, PlanOpRelAlias is included here as a "transparent" op
-			case *PlanOpRelAlias, *PlanOpPQLTableScan:
+			case *PlanOpRelAlias, *PlanOpPQLTableScan, *PlanOpPQLDistinctScan:
 				n, samePred, err := pushdownFiltersToFilterableRelations(ctx, a, node, scope, filters, tableAliases)
 				if err != nil {
 					return nil, true, err
@@ -468,7 +482,7 @@ func pushdownFilters(ctx context.Context, a *ExecutionPlanner, n types.PlanOpera
 				}
 				return n, false, nil
 
-			case *PlanOpRelAlias, *PlanOpPQLTableScan:
+			case *PlanOpRelAlias, *PlanOpPQLTableScan, *PlanOpPQLDistinctScan:
 				_, same, err := pushdownFiltersToAboveRelation(ctx, a, node, scope, filters)
 				if err != nil {
 					return nil, true, err
@@ -624,6 +638,91 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 				return n, true, nil
 			default:
 				return n, true, nil
+			}
+		})
+	}
+	return n, true, nil
+}
+
+func tryToReplaceDistinctWithPQLDistinct(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
+	// bail if no distinct
+	hasDistinct := false
+	InspectPlan(n, func(node types.PlanOperator) bool {
+		switch node.(type) {
+		case *PlanOpDistinct:
+			hasDistinct = true
+			return false
+		}
+		return true
+	})
+	if !hasDistinct {
+		return n, true, nil
+	}
+
+	// bail if has a group by
+	hasGroupBy := false
+	InspectPlan(n, func(node types.PlanOperator) bool {
+		switch node.(type) {
+		case *PlanOpGroupBy:
+			hasGroupBy = true
+			return false
+		}
+		return true
+	})
+	if hasGroupBy {
+		return n, true, nil
+	}
+
+	//bail if there are any joins
+	joins, err := hasJoins(ctx, a, n, scope)
+	if err != nil {
+		return nil, false, err
+	}
+	if joins {
+		return n, true, nil
+	}
+
+	//go find the table scan operators
+	tables := getTableScanOperators(ctx, a, n, scope)
+
+	//only do this if we have one TableScanOperator
+	if len(tables) == 1 {
+		replacedWithDistinct := false
+		// replace the scan with the distinct scan
+		return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
+			switch thisNode := node.(type) {
+			case *PlanOpDistinct:
+				if replacedWithDistinct {
+					return thisNode.ChildOp, false, nil
+				}
+				return thisNode, true, nil
+
+			case *PlanOpPQLTableScan:
+				// bail if there is more than one output column
+				if len(thisNode.columns) != 1 {
+					return thisNode, true, nil
+				}
+
+				// make sure it's not the _id column
+				if strings.EqualFold(thisNode.columns[0], "_id") {
+					return thisNode, true, nil
+				}
+
+				// make sure it's not a set type
+				s := thisNode.Schema()
+				switch s[0].Type.(type) {
+				case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
+					return thisNode, true, nil
+				}
+
+				newOp, err := NewPlanOpPQLDistinctScan(a, thisNode.tableName, thisNode.columns[0])
+				if err != nil {
+					return nil, false, err
+				}
+				replacedWithDistinct = true
+				return newOp, false, nil
+			default:
+				return thisNode, true, nil
 			}
 		})
 	}
@@ -881,7 +980,7 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 				return thisNode, false, nil
 
 			// everything else that can be a child of projection
-			case *PlanOpRelAlias, *PlanOpFilter, *PlanOpPQLTableScan, *PlanOpNestedLoops:
+			case *PlanOpRelAlias, *PlanOpFilter, *PlanOpPQLTableScan, *PlanOpPQLDistinctScan, *PlanOpNestedLoops:
 				exprs, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, childOp.Schema(), thisNode.Projections...)
 				if err != nil {
 					return thisNode, true, err
@@ -997,28 +1096,6 @@ func fixHavingReferences(ctx context.Context, a *ExecutionPlanner, n types.PlanO
 			return node, true, nil
 		}
 	})
-}
-
-// hasTop inspects a plan op tree and returns true (or error) if there are Top
-// operators.
-func hasTop(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (bool, error) {
-	result := false
-	InspectPlan(n, func(node types.PlanOperator) bool {
-		switch node.(type) {
-		case *PlanOpTop:
-			result = true
-			return false
-		}
-		return true
-	})
-	return result, nil
-}
-
-// hasTopN inspects a plan op tree and returns true (or error) if there are TopN
-// operators.
-func hasTopN(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (bool, error) {
-	//TODO(pok) implement this
-	return false, nil
 }
 
 // inspects a plan op tree and returns false (or error) if there are read join operators

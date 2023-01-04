@@ -2908,13 +2908,13 @@ func (o *orchestrator) howToTranslate(ctx context.Context, idx *featurebase.Inde
 	// First get the index and field the row specifies (if any).
 	rowIdx = idx
 	if row.Index != "" && row.Index != idx.Name {
-		rowIdx, err = o.schemaIndexInfo(ctx, dax.StringTableKeyer(row.Index))
+		rowIdx, err = o.schemaIndexInfo(ctx, dax.TableKey(row.Index))
 		if err != nil {
 			return nil, nil, 0, errors.Wrapf(err, "got a row with unknown index: %s", row.Index)
 		}
 	}
 	if row.Field != "" {
-		rowField, err = o.schemaFieldInfo(ctx, dax.StringTableKeyer(row.Index), row.Field)
+		rowField, err = o.schemaFieldInfo(ctx, dax.TableKey(row.Index), row.Field)
 		if err != nil {
 			return nil, nil, 0, errors.Wrapf(err, "got a row with unknown index/field %s/%s", idx.Name, row.Field)
 		}
@@ -3009,7 +3009,7 @@ func (o *orchestrator) translateResult(ctx context.Context, qtbl *dax.QualifiedT
 			}
 			return other, nil
 		case byRowField:
-			keys, err := o.trans.TranslateFieldListIDs(ctx, rowIdx.Name, rowField.Name, result.Columns())
+			keys, err := o.trans.TranslateFieldListIDs(ctx, result.Index, rowField.Name, result.Columns())
 			if err != nil {
 				return nil, errors.Wrap(err, "translating Row to field keys")
 			}
@@ -3532,6 +3532,12 @@ func (o *orchestrator) schemaFieldInfo(ctx context.Context, tableKeyer dax.Table
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting table by name: %s", v)
 		}
+	case dax.TableKey:
+		qtid := v.QualifiedTableID()
+		tbl, err = o.schema.TableByID(ctx, qtid.ID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting table by ID from TableKey: %s", v)
+		}
 	default:
 		return nil, errors.Errorf("unsupport table keyer type in schemaFieldInfo: %T", tableKeyer)
 	}
@@ -3558,6 +3564,12 @@ func (o *orchestrator) schemaIndexInfo(ctx context.Context, tableKeyer dax.Table
 		tbl, err = o.schema.TableByID(ctx, v.ID)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting table by id: %s", v.ID)
+		}
+	case dax.TableKey:
+		qtid := v.QualifiedTableID()
+		tbl, err = o.schema.TableByID(ctx, qtid.ID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting table by ID from TableKey: %s", v)
 		}
 	case dax.StringTableKeyer:
 		tbl, err = o.schema.TableByName(ctx, dax.TableName(v))

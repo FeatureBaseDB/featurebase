@@ -129,6 +129,8 @@ func (s StringTableKeyer) Key() TableKey {
 // TableKey as the value for index.Name.
 type TableKey string
 
+func (t TableKey) Key() TableKey { return t }
+
 // QualifiedTableID returns the QualifiedTableID based on the key. If TableKey
 // can't be parsed into a valid (i.e. complete) QualifiedTableID, then blank
 // values are used where necessary.
