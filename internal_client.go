@@ -887,7 +887,6 @@ func (c *InternalClient) Import(ctx context.Context, qcx *Qcx, req *ImportReques
 func (c *InternalClient) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, options *ImportOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
 	defer span.Finish()
-
 	if req.ColumnKeys != nil {
 		req.Shard = ^uint64(0)
 	}
@@ -925,35 +924,7 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pnet.URI, index
 		return errors.Wrap(err, "marshal import request")
 	}
 
-	// Generate HTTP request.
-	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	if err != nil {
-		return errors.Wrap(err, "creating request")
-	}
-	httpReq.Header.Set("Content-Type", "application/x-protobuf")
-	httpReq.Header.Set("Accept", "application/x-protobuf")
-	httpReq.Header.Set("X-Pilosa-Row", "roaring")
-	httpReq.Header.Set("User-Agent", "pilosa/"+Version)
-	AddAuthToken(ctx, &httpReq.Header)
-
-	// Execute request against the host.
-	resp, err := c.executeRequest(httpReq.WithContext(ctx))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	dec := json.NewDecoder(resp.Body)
-	rbody := &ImportResponse{}
-	err = dec.Decode(rbody)
-	// Decode can return EOF when no error occurred. helpful!
-	if err != nil && err != io.EOF {
-		return errors.Wrap(err, "decoding response body")
-	}
-	if rbody.Err != "" {
-		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
-	}
-	return nil
+	return c.executeProtobufRequest(ctx, url, data)
 }
 
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
@@ -2457,4 +2428,59 @@ func (c *InternalClient) getDiskUsage(ctx context.Context, index string) (DiskUs
 	}
 
 	return sum, nil
+}
+
+func (c *InternalClient) executeProtobufRequest(ctx context.Context, url string, data []byte) error {
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	httpReq.Header.Set("Accept", "application/x-protobuf")
+	httpReq.Header.Set("X-Pilosa-Row", "roaring")
+	httpReq.Header.Set("User-Agent", "pilosa/"+Version)
+	AddAuthToken(ctx, &httpReq.Header)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(httpReq.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
+	rbody := &ImportResponse{}
+	err = dec.Decode(rbody)
+	// Decode can return EOF when no error occurred. helpful!
+	if err != nil && err != io.EOF {
+		return errors.Wrap(err, "decoding response body")
+	}
+	if rbody.Err != "" {
+		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
+	}
+	return nil
+}
+
+// ImportRoaringShard(ctx, node, string(tid), shard, request
+func (c *InternalClient) ImportRoaringShard(ctx context.Context, uri *pnet.URI, index string, shard uint64, remote bool, req *ImportRoaringShardRequest) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportRoaringShard")
+	defer span.Finish()
+
+	if index == "" {
+		return ErrIndexRequired
+	}
+	if uri == nil {
+		uri = c.defaultURI
+	}
+
+	vals := url.Values{}
+	vals.Set("remote", strconv.FormatBool(remote))
+	url := fmt.Sprintf("%s%s/index/%s/shard/%d/import-roaring?%s", uri, c.prefix(), index, shard, vals.Encode())
+
+	// Marshal data to protobuf.
+	data, err := c.serializer.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshal import roaring shard request")
+	}
+	return c.executeProtobufRequest(ctx, url, data)
 }

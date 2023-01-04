@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +21,6 @@ import (
 )
 
 func TestPlanner_Misc(t *testing.T) {
-
 	d, err := pql.ParseDecimal("12.345678")
 	if err != nil {
 		t.Fatal(err)
@@ -302,6 +303,7 @@ func TestPlanner_Show(t *testing.T) {
 		}
 	})
 }
+
 func TestPlanner_CoverCreateTable(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
@@ -348,7 +350,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			_, _, err := sql_test.MustQueryRows(t, server, sql)
 			if assert.Error(t, err) {
 				assert.Equal(t, fld.expErr, err.Error())
-				//sql3.SQLErrConflictingColumnConstraint.Message
+				// sql3.SQLErrConflictingColumnConstraint.Message
 			}
 		}
 	})
@@ -522,7 +524,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 
 			schema, err := api.Schema(ctx, false)
 			assert.NoError(t, err)
-			//spew.Dump(schema)
+			// spew.Dump(schema)
 
 			// Get the fields from the FeatureBase schema.
 			// fbFields is a map of fieldName to FieldInfo.
@@ -759,7 +761,6 @@ func TestPlanner_AlterTable(t *testing.T) {
 			t.Fatal(diff)
 		}
 	})
-
 }
 
 func TestPlanner_DropTable(t *testing.T) {
@@ -819,7 +820,8 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 			Set(1, b=100)
 			Set(2, a=20)
 			Set(2, b=200)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -898,7 +900,8 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 			Set(1, d=10.3)
 			Set(1, ts='2022-02-22T22:22:22Z')
 			Set(1, str='foo')
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1044,7 +1047,8 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 			Set(1, d=10.3)
 			Set(1, ts='2022-02-22T22:22:22Z')
 			Set(1, str='foo')
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1127,7 +1131,8 @@ func TestPlanner_Select(t *testing.T) {
 			Set(1, b=100)
 			Set(2, a=20)
 			Set(2, b=200)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1315,7 +1320,8 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 			Set(1, b=100)
 			Set(2, a=20)
 			Set(2, b=200)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1500,7 +1506,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkCSVBadMap", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 10 int) from x'1,10,20
 		2,11,21
 		3,12,22
@@ -1517,7 +1522,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkCSVFileDefault", func(t *testing.T) {
-
 		tmpfile, err := os.CreateTemp("", "BulkCSVFileDefault.*.csv")
 		if err != nil {
 			t.Fatal(err)
@@ -1540,7 +1544,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkCSVFileNoColumns", func(t *testing.T) {
-
 		tmpfile, err := os.CreateTemp("", "BulkCSVFileNoColumns.*.csv")
 		if err != nil {
 			t.Fatal(err)
@@ -1570,7 +1573,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkCSVFileRowsLimit", func(t *testing.T) {
-
 		tmpfile, err := os.CreateTemp("", "BulkCSVFileDefault.*.csv")
 		if err != nil {
 			t.Fatal(err)
@@ -1607,7 +1609,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
-
 	})
 
 	t.Run("BulkCSVBlobDefault", func(t *testing.T) {
@@ -1618,7 +1619,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonBlobDefault", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) 
 		from  x'{ "_id": 1, "a": 10, "b": 20  }
 		{ "_id": 2, "a": 10, "b": 20  }
@@ -1653,7 +1653,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonFileDefault", func(t *testing.T) {
-
 		tmpfile, err := os.CreateTemp("", "BulkNDJsonFileDefault.*.csv")
 		if err != nil {
 			t.Fatal(err)
@@ -1677,7 +1676,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonFileTransform", func(t *testing.T) {
-
 		tmpfile, err := os.CreateTemp("", "BulkNDJsonFileTransform.*.csv")
 		if err != nil {
 			t.Fatal(err)
@@ -1701,7 +1699,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonAllTypes", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
 		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
 	
@@ -1721,7 +1718,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonBadJsonPath", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
 		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
 	
@@ -1741,7 +1737,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonBadJson", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
 		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
 	
@@ -1761,7 +1756,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertDecimals", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table iris (
 			_id id,
 			sepallength decimal(2),
@@ -1811,7 +1805,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
 	})
 
 	t.Run("BulkInsertDupeColumnPlusNullsInJson", func(t *testing.T) {
@@ -1839,7 +1832,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertCSVStringIDSet", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test (
 			_id STRING,
 			id_col ID,
@@ -1898,7 +1890,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertAllowMissingValues", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-amv (
 			_id STRING,
 			id_col ID,
@@ -1956,7 +1947,6 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 	})
 	t.Run("BulkInsertNDJSONStringIDSet", func(t *testing.T) {
-
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-01 (
 			_id STRING,
 			id_col ID,
@@ -2073,7 +2063,8 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 			Set(1, b=100)
 			Set(2, a=20)
 			Set(2, b=200)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2153,7 +2144,8 @@ func TestPlanner_In(t *testing.T) {
 			Set(1, a=10)
 			Set(2, a=20)
 			Set(3, a=30)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2168,15 +2160,16 @@ func TestPlanner_In(t *testing.T) {
 
 			Set(3, parentid=2)
 			Set(3, x=300)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("Count", func(t *testing.T) {
 		t.Skip("Need to add join conditions to get this to pass")
 		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT %j._id, %j.a, %k._id, %k.parentid, %k.x FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c, c, c, c, c, c))
-		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c))
-		//results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a FROM %j where a = 20`, c)) //   SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid
+		// results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c))
+		// results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a FROM %j where a = 20`, c)) //   SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2284,7 +2277,8 @@ func TestPlanner_Distinct(t *testing.T) {
 			Set(1, a=10)
 			Set(2, a=20)
 			Set(3, a=30)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2299,7 +2293,8 @@ func TestPlanner_Distinct(t *testing.T) {
 
 			Set(3, parentid=2)
 			Set(3, x=300)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2396,7 +2391,8 @@ func TestPlanner_SelectTop(t *testing.T) {
 			Set(1, b=100)
 			Set(2, b=200)
 			Set(3, b=300)
-	`}); err != nil {
+	`,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2454,6 +2450,7 @@ func wireQueryFieldID(name string) *pilosa.WireQueryField {
 		BaseType: dax.BaseTypeID,
 	}
 }
+
 func wireQueryFieldBool(name string) *pilosa.WireQueryField {
 	return &pilosa.WireQueryField{
 		Name:     dax.FieldName(name),
@@ -2461,6 +2458,7 @@ func wireQueryFieldBool(name string) *pilosa.WireQueryField {
 		BaseType: dax.BaseTypeBool,
 	}
 }
+
 func wireQueryFieldString(name string) *pilosa.WireQueryField {
 	return &pilosa.WireQueryField{
 		Name:     dax.FieldName(name),
@@ -2468,6 +2466,7 @@ func wireQueryFieldString(name string) *pilosa.WireQueryField {
 		BaseType: dax.BaseTypeString,
 	}
 }
+
 func wireQueryFieldInt(name string) *pilosa.WireQueryField {
 	return &pilosa.WireQueryField{
 		Name:     dax.FieldName(name),
@@ -2475,6 +2474,7 @@ func wireQueryFieldInt(name string) *pilosa.WireQueryField {
 		BaseType: dax.BaseTypeInt,
 	}
 }
+
 func wireQueryFieldTimestamp(name string) *pilosa.WireQueryField {
 	return &pilosa.WireQueryField{
 		Name:     dax.FieldName(name),
@@ -2482,6 +2482,7 @@ func wireQueryFieldTimestamp(name string) *pilosa.WireQueryField {
 		BaseType: dax.BaseTypeTimestamp,
 	}
 }
+
 func wireQueryFieldDecimal(name string, scale int64) *pilosa.WireQueryField {
 	return &pilosa.WireQueryField{
 		Name:     dax.FieldName(name),
@@ -2490,5 +2491,104 @@ func wireQueryFieldDecimal(name string, scale int64) *pilosa.WireQueryField {
 		TypeInfo: map[string]interface{}{
 			"scale": scale,
 		},
+	}
+}
+
+// This test verifies that data sent to all nodes shows up in the results
+func TestPlanner_BulkInsert_FB1831(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table iris (_id id, sepallength decimal(2), sepalwidth decimal(2), petallength decimal(2), petalwidth decimal(2), species string cachetype ranked size 1000);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
+	map('id' id,
+	'sepalLength' DECIMAL(2),
+	'sepalWidth' DECIMAL(2),
+	'petalLength' DECIMAL(2),
+	'petalWidth' DECIMAL(2),
+	'species' STRING)
+	from
+	x'{"id": 1, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 2, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 3, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
+	with
+		format 'NDJSON'
+		input 'STREAM';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = sql_test.MustQueryRows(t, c.GetNode(1).Server, `bulk insert
+	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
+	map('id' id,
+	'sepalLength' DECIMAL(2),
+	'sepalWidth' DECIMAL(2),
+	'petalLength' DECIMAL(2),
+	'petalWidth' DECIMAL(2),
+	'species' STRING)
+	from
+	x'{"id": 4, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 5, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 6, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
+	with
+		format 'NDJSON'
+		input 'STREAM';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = sql_test.MustQueryRows(t, c.GetNode(2).Server, `bulk insert
+	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
+	map('id' id,
+	'sepalLength' DECIMAL(2),
+	'sepalWidth' DECIMAL(2),
+	'petalLength' DECIMAL(2),
+	'petalWidth' DECIMAL(2),
+	'species' STRING)
+	from
+	x'{"id": 7, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 8, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 9, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
+	with
+		format 'NDJSON'
+		input 'STREAM';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
+	map('id' id,
+	'sepalLength' DECIMAL(2),
+	'sepalWidth' DECIMAL(2),
+	'petalLength' DECIMAL(2),
+	'petalWidth' DECIMAL(2),
+	'species' STRING)
+	from
+	x'{"id": 1048577, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 2097153, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+	{"id": 3145729, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
+	with
+		format 'NDJSON'
+		input 'STREAM';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id from iris`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]int64, 0)
+	for i := range results {
+		got = append(got, results[i][0].(int64))
+	}
+	sort.Slice(got, func(i, j int) bool {
+		return got[i] < got[j]
+	})
+	expected := []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 1048577, 2097153, 3145729}
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatal("Expecting to be equal")
 	}
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/roaring"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type Importer interface {
@@ -32,12 +34,14 @@ var _ Importer = &onPremImporter{}
 // implemtation of the Importer interface does not use, and therefore they
 // intentionally no-op.
 type onPremImporter struct {
-	api *API
+	api    *API
+	client *InternalClient
 }
 
 func NewOnPremImporter(api *API) *onPremImporter {
 	return &onPremImporter{
-		api: api,
+		api:    api,
+		client: api.holder.executor.client,
 	}
 }
 
@@ -63,7 +67,25 @@ func (i *onPremImporter) ImportRoaringBitmap(ctx context.Context, tid dax.TableI
 }
 
 func (i *onPremImporter) ImportRoaringShard(ctx context.Context, tid dax.TableID, shard uint64, request *ImportRoaringShardRequest) error {
-	return i.api.ImportRoaringShard(ctx, string(tid), shard, request)
+	nodes, err := i.api.ShardNodes(ctx, string(tid), shard)
+	if err != nil {
+		return err
+	}
+	eg := errgroup.Group{}
+	for _, node := range nodes {
+		node := node
+		if node.ID == i.api.NodeID() { // local
+			eg.Go(func() error {
+				return i.api.ImportRoaringShard(ctx, string(tid), shard, request)
+			})
+		} else {
+			eg.Go(func() error { // forward on
+				return i.client.ImportRoaringShard(ctx, &node.URI, string(tid), shard, true, request)
+			})
+		}
+	}
+	err = eg.Wait()
+	return errors.Wrap(err, "importing")
 }
 
 func (i *onPremImporter) EncodeImportValues(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error) {
