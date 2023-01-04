@@ -552,7 +552,6 @@ func (b *Batch) Add(rec Row) error {
 				// empty string is not a valid value at this point (Pilosa refuses to translate it)
 				if val == "" { //
 					b.rowIDs[i] = append(rowIDs, nilSentinel)
-
 				} else if rowID, ok := b.getRowTranslation(field.Name, val); ok {
 					b.rowIDs[i] = append(rowIDs, rowID)
 				} else {
