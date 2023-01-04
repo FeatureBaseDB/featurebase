@@ -59,6 +59,7 @@ type Aggregable interface {
 	AggType() AggregateFunctionType
 	AggExpression() PlanExpression
 	AggAdditionalExpr() []PlanExpression
+	Type() parser.ExprDataType
 }
 
 // interface to something that can be identified by a name

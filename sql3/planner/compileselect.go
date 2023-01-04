@@ -46,11 +46,6 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 	}
 	var err error
 
-	// handle distinct
-	if stmt.Distinct.IsValid() {
-		query.AddWarning("DISTINCT not yet implemented")
-	}
-
 	// handle the where clause
 	where, err := p.compileExpr(stmt.WhereExpr)
 	if err != nil {
@@ -221,6 +216,11 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 			return nil, err
 		}
 		compiledOp = NewPlanOpTop(topExpr, compiledOp)
+	}
+
+	// handle distinct
+	if stmt.Distinct.IsValid() {
+		compiledOp = NewPlanOpDistinct(p, compiledOp)
 	}
 
 	// if it is a subquery, don't wrap in a PlanOpQuery

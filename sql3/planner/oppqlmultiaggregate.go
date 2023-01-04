@@ -27,12 +27,7 @@ func NewPlanOpPQLMultiAggregate(p *ExecutionPlanner, operators []*PlanOpPQLAggre
 func (p *PlanOpPQLMultiAggregate) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
-
+	result["_schema"] = p.Schema().Plan()
 	ps := make([]interface{}, 0)
 	for _, e := range p.operators {
 		ps = append(ps, e.Plan())
@@ -59,7 +54,7 @@ func (p *PlanOpPQLMultiAggregate) Schema() types.Schema {
 		s := &types.PlannerColumn{
 			ColumnName:   aggOp.aggregate.String(),
 			RelationName: "",
-			Type:         aggOp.aggregate.AggExpression().Type(),
+			Type:         aggOp.aggregate.Type(),
 		}
 		result[idx] = s
 	}

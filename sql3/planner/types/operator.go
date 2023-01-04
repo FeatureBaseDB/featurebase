@@ -67,12 +67,26 @@ type FilteredRelation interface {
 // Schema is the definition a set of columns from each operator
 type Schema []*PlannerColumn
 
+func (r Schema) Plan() []map[string]interface{} {
+	result := make([]map[string]interface{}, len(r))
+	for i, s := range r {
+		m := make(map[string]interface{})
+		m["name"] = s.ColumnName
+		m["alias"] = s.AliasName
+		m["relation"] = s.RelationName
+		m["type"] = s.Type.TypeDescription()
+		result[i] = m
+	}
+	return result
+}
+
 // Row is a tuple of values
 type Row []interface{}
 
 // Append appends all the values in r2 to this row and returns the result
 func (r Row) Append(r2 Row) Row {
 	row := make(Row, len(r)+len(r2))
+	// TODO(pok) use a copy here
 	for i := range r {
 		row[i] = r[i]
 	}

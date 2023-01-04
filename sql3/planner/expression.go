@@ -173,6 +173,7 @@ func (n *unaryOpPlanExpression) String() string {
 func (n *unaryOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["op"] = n.op
 	result["rhs"] = n.rhs.Plan()
@@ -668,6 +669,7 @@ func (n *binOpPlanExpression) String() string {
 func (n *binOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["op"] = n.op
 	result["lhs"] = n.lhs.Plan()
@@ -739,6 +741,7 @@ func (n *rangePlanExpression) String() string {
 func (n *rangePlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
@@ -954,6 +957,7 @@ func (n *casePlanExpression) String() string {
 func (n *casePlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	if n.baseExpr != nil {
 		result["baseExpr"] = n.baseExpr.Plan()
@@ -1039,6 +1043,7 @@ func (n *caseBlockPlanExpression) String() string {
 func (n *caseBlockPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["condition"] = n.condition.Plan()
 	result["body"] = n.body.Plan()
@@ -1108,6 +1113,7 @@ func (n *subqueryPlanExpression) String() string {
 func (n *subqueryPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["subquery"] = n.op.Plan()
 	return result
@@ -1216,6 +1222,7 @@ func (n *betweenOpPlanExpression) String() string {
 func (n *betweenOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
@@ -1434,6 +1441,7 @@ func (n *inOpPlanExpression) String() string {
 func (n *inOpPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
@@ -1527,6 +1535,7 @@ func (n *callPlanExpression) String() string {
 func (n *callPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["name"] = n.name
 	result["dataType"] = n.Type().TypeDescription()
 	ps := make([]interface{}, 0)
@@ -1583,6 +1592,7 @@ func (n *aliasPlanExpression) String() string {
 func (n *aliasPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["aliasName"] = n.aliasName
 	result["expr"] = n.expr.Plan()
@@ -1676,6 +1686,7 @@ func (n *qualifiedRefPlanExpression) String() string {
 func (n *qualifiedRefPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["tableName"] = n.tableName
 	result["columnName"] = n.columnName
 	result["columnIndex"] = n.columnIndex
@@ -1738,6 +1749,7 @@ func (n *variableRefPlanExpression) String() string {
 func (n *variableRefPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["name"] = n.name
 	result["dataType"] = n.dataType.TypeDescription()
 	return result
@@ -1773,6 +1785,7 @@ func (n *nullLiteralPlanExpression) String() string {
 func (n *nullLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	return result
 }
@@ -1811,6 +1824,7 @@ func (n *intLiteralPlanExpression) String() string {
 func (n *intLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
@@ -1851,6 +1865,7 @@ func (n *floatLiteralPlanExpression) String() string {
 func (n *floatLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
@@ -1890,6 +1905,7 @@ func (n *boolLiteralPlanExpression) String() string {
 func (n *boolLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
@@ -1929,6 +1945,7 @@ func (n *dateLiteralPlanExpression) String() string {
 func (n *dateLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
@@ -1968,6 +1985,7 @@ func (n *stringLiteralPlanExpression) String() string {
 func (n *stringLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["value"] = n.value
 	return result
@@ -2192,6 +2210,7 @@ func (n *castPlanExpression) String() string {
 func (n *castPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
 	result["lhs"] = n.lhs.Plan()
 	return result
@@ -2243,6 +2262,7 @@ func (n *exprListPlanExpression) String() string {
 func (n *exprListPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	ps := make([]interface{}, 0)
 	for _, e := range n.exprs {
 		ps = append(ps, e.Plan())
@@ -2333,6 +2353,7 @@ func (n *exprSetLiteralPlanExpression) String() string {
 func (n *exprSetLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	ps := make([]interface{}, 0)
 	for _, e := range n.members {
 		ps = append(ps, e.Plan())
@@ -2414,6 +2435,7 @@ func (n *exprTupleLiteralPlanExpression) String() string {
 func (n *exprTupleLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
 	ps := make([]interface{}, 0)
 	for _, e := range n.members {
 		ps = append(ps, e.Plan())

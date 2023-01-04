@@ -3,9 +3,9 @@
 package planner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"hash/maphash"
 
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -100,11 +100,7 @@ func (p *PlanOpGroupBy) WithUpdatedExpressions(exprs ...types.PlanExpression) (t
 func (p *PlanOpGroupBy) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
+	result["_schema"] = p.Schema().Plan()
 	result["child"] = p.ChildOp.Plan()
 	ps := make([]interface{}, 0)
 	for _, e := range p.Aggregates {
@@ -193,8 +189,8 @@ type keysAndAggregations struct {
 type groupByGroupingIter struct {
 	aggregates   []types.PlanExpression
 	groupByExprs []types.PlanExpression
-	aggregations ObjectCache
-	keys         []uint64
+	aggregations map[string]*keysAndAggregations
+	keys         []string
 	child        types.RowIterator
 }
 
@@ -208,16 +204,16 @@ func newGroupByGroupingIter(ctx context.Context, aggregates, groupByExprs []type
 
 func (i *groupByGroupingIter) Next(ctx context.Context) (types.Row, error) {
 	if i.aggregations == nil {
-		i.aggregations = NewMapObjectCache()
+		i.aggregations = make(map[string]*keysAndAggregations)
 		if err := i.compute(ctx); err != nil {
 			return nil, err
 		}
 	}
 
 	if len(i.keys) > 0 {
-		buffers, err := i.get(i.keys[0])
-		if err != nil {
-			return nil, err
+		buffers, ok := i.aggregations[i.keys[0]]
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected absence of key")
 		}
 
 		i.keys = i.keys[1:]
@@ -245,13 +241,13 @@ func (i *groupByGroupingIter) compute(ctx context.Context) error {
 			return err
 		}
 
-		key, keyValues, err := groupingKeyHash(ctx, i.groupByExprs, row)
+		key, keyValues, err := groupingKey(ctx, i.groupByExprs, row)
 		if err != nil {
 			return err
 		}
 
-		b, err := i.get(key)
-		if errors.Is(err, sql3.ErrCacheKeyNotFound) {
+		b, ok := i.aggregations[key]
+		if !ok {
 			b = &keysAndAggregations{}
 			b.buffers = make([]types.AggregationBuffer, len(i.aggregates))
 			for j, a := range i.aggregates {
@@ -261,9 +257,7 @@ func (i *groupByGroupingIter) compute(ctx context.Context) error {
 				}
 			}
 			b.groupByKeys = keyValues
-			if err := i.aggregations.PutObject(key, b); err != nil {
-				return err
-			}
+			i.aggregations[key] = b
 			i.keys = append(i.keys, key)
 		} else if err != nil {
 			return err
@@ -275,17 +269,6 @@ func (i *groupByGroupingIter) compute(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func (i *groupByGroupingIter) get(key uint64) (*keysAndAggregations, error) {
-	v, err := i.aggregations.GetObject(key)
-	if err != nil {
-		return nil, err
-	}
-	if v == nil {
-		return nil, nil
-	}
-	return v.(*keysAndAggregations), err
 }
 
 func newAggregationBuffer(expr types.PlanExpression) (types.AggregationBuffer, error) {
@@ -318,21 +301,16 @@ func evalBuffers(ctx context.Context, aggregationBuffers *keysAndAggregations) (
 	return row, nil
 }
 
-func groupingKeyHash(ctx context.Context, groupByExprs []types.PlanExpression, row types.Row) (uint64, types.Row, error) {
+func groupingKey(ctx context.Context, groupByExprs []types.PlanExpression, row types.Row) (string, types.Row, error) {
+	var buf bytes.Buffer
 	rowKeys := make([]interface{}, len(groupByExprs))
-	var hash maphash.Hash
-	hash.SetSeed(prototypeHash.Seed())
 	for i, expr := range groupByExprs {
 		v, err := expr.Evaluate(row)
 		if err != nil {
-			return 0, nil, err
+			return "", nil, err
 		}
-		_, err = hash.Write(([]byte)(fmt.Sprintf("%#v,", v)))
-		if err != nil {
-			return 0, nil, err
-		}
+		buf.WriteString(fmt.Sprintf("%#v", v))
 		rowKeys[i] = v
 	}
-	result := hash.Sum64()
-	return result, rowKeys, nil
+	return buf.String(), rowKeys, nil
 }

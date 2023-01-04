@@ -38,15 +38,10 @@ func NewPlanOpPQLGroupBy(p *ExecutionPlanner, tableName string, groupByExprs []t
 func (p *PlanOpPQLGroupBy) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
+	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
-
 	}
 	result["aggregate"] = p.aggregate.AggExpression().Plan()
 	ps := make([]interface{}, 0)

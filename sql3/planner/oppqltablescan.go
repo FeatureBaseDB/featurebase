@@ -38,12 +38,7 @@ func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []stri
 func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
-
+	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
 
 	if p.topExpr != nil {
@@ -52,7 +47,6 @@ func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
 	}
-
 	result["columns"] = p.columns
 	return result
 }

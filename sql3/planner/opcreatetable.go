@@ -41,11 +41,6 @@ func NewPlanOpCreateTable(p *ExecutionPlanner, tableName string, failIfExists bo
 func (p *PlanOpCreateTable) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	ps := make([]string, 0)
-	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = ps
 	result["name"] = p.tableName
 	result["failIfExists"] = p.failIfExists
 	return result

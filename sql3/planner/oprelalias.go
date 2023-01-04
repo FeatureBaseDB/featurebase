@@ -53,12 +53,7 @@ func (p *PlanOpRelAlias) WithChildren(children ...types.PlanOperator) (types.Pla
 func (p *PlanOpRelAlias) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
-
+	result["_schema"] = p.Schema().Plan()
 	result["alias"] = p.alias
 	result["child"] = p.ChildOp.Plan()
 	return result

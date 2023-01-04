@@ -60,12 +60,8 @@ func (p *PlanOpProjection) WithChildren(children ...types.PlanOperator) (types.P
 
 func (p *PlanOpProjection) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
-	result["__op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["__schema"] = sc
+	result["_op"] = fmt.Sprintf("%T", p)
+	result["_schema"] = p.Schema().Plan()
 
 	result["child"] = p.ChildOp.Plan()
 
@@ -73,7 +69,7 @@ func (p *PlanOpProjection) Plan() map[string]interface{} {
 	for _, e := range p.Projections {
 		ps = append(ps, e.Plan())
 	}
-	result["_projections"] = ps
+	result["projections"] = ps
 
 	return result
 }

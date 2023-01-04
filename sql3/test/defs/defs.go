@@ -17,6 +17,7 @@ var TableTests []TableTest = []TableTest{
 	selectKeyedTests,
 	selectHavingTests,
 	orderByTests,
+	distinctTests,
 
 	topTests,
 

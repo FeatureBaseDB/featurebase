@@ -39,26 +39,14 @@ func NewPlanOpInsert(p *ExecutionPlanner, tableName string, targetColumns []*qua
 func (p *PlanOpInsert) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
+	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
 	ps := make([]interface{}, 0)
 	for _, e := range p.targetColumns {
 		ps = append(ps, e.Plan())
 	}
 	result["targetColumns"] = ps
-	pps := make([]interface{}, 0)
-	for _, tuple := range p.insertValues {
-		ps := make([]interface{}, 0)
-		for _, e := range tuple {
-			ps = append(ps, e.Plan())
-		}
-		pps = append(pps, ps)
-	}
-	result["insertValues"] = pps
+	result["insertTupleCount"] = len(p.insertValues)
 	return result
 }
 

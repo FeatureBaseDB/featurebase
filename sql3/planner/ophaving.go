@@ -56,11 +56,7 @@ func (p *PlanOpHaving) Children() []types.PlanOperator {
 func (p *PlanOpHaving) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	ps := make([]string, 0)
-	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = ps
+	result["_schema"] = p.Schema().Plan()
 	result["predicate"] = p.Predicate.Plan()
 	result["child"] = p.ChildOp.Plan()
 	return result
