@@ -103,6 +103,11 @@ var systemTables = map[string]*systemTable{
 				ColumnName:   "is_primary",
 				Type:         parser.NewDataTypeBool(),
 			},
+			&types.PlannerColumn{
+				RelationName: fbClusterNodes,
+				ColumnName:   "space_used",
+				Type:         parser.NewDataTypeBool(),
+			},
 		},
 	},
 
@@ -323,6 +328,12 @@ func (i *fbClusterNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 		i.result = i.planner.systemAPI.ClusterNodes()
 	}
 
+	u := i.planner.systemAPI.DataDir()
+	spaceUsed, err := pilosa.GetDiskUsage(u)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(i.result) > 0 {
 		n := i.result[0]
 		row := []interface{}{
@@ -331,6 +342,7 @@ func (i *fbClusterNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 			n.URI,
 			n.GRPCURI,
 			n.IsPrimary,
+			spaceUsed.Usage,
 		}
 		// Move to next result element.
 		i.result = i.result[1:]
