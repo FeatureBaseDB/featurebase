@@ -5,6 +5,7 @@ package planner
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -15,12 +16,14 @@ import (
 // PlanOpFeatureBaseTables wraps a []*IndexInfo that is returned from
 // schemaAPI.Schema().
 type PlanOpFeatureBaseTables struct {
+	planner   *ExecutionPlanner
 	indexInfo []*pilosa.IndexInfo
 	warnings  []string
 }
 
-func NewPlanOpFeatureBaseTables(indexInfo []*pilosa.IndexInfo) *PlanOpFeatureBaseTables {
+func NewPlanOpFeatureBaseTables(planner *ExecutionPlanner, indexInfo []*pilosa.IndexInfo) *PlanOpFeatureBaseTables {
 	return &PlanOpFeatureBaseTables{
+		planner:   planner,
 		indexInfo: indexInfo,
 		warnings:  make([]string, 0),
 	}
@@ -84,6 +87,11 @@ func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
+			ColumnName:   "space_used",
+			Type:         parser.NewDataTypeInt(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_tables",
 			ColumnName:   "description",
 			Type:         parser.NewDataTypeString(),
 		},
@@ -96,15 +104,17 @@ func (p *PlanOpFeatureBaseTables) Children() []types.PlanOperator {
 
 func (p *PlanOpFeatureBaseTables) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
 	return &showTablesRowIter{
+		planner:   p.planner,
 		indexInfo: p.indexInfo,
 	}, nil
 }
 
 func (p *PlanOpFeatureBaseTables) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
-	return NewPlanOpFeatureBaseTables(p.indexInfo), nil
+	return NewPlanOpFeatureBaseTables(p.planner, p.indexInfo), nil
 }
 
 type showTablesRowIter struct {
+	planner   *ExecutionPlanner
 	indexInfo []*pilosa.IndexInfo
 	rowIndex  int
 }
@@ -113,16 +123,37 @@ var _ types.RowIterator = (*showTablesRowIter)(nil)
 
 func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.rowIndex < len(i.indexInfo) {
+
+		indexName := i.indexInfo[i.rowIndex].Name
+
+		var err error
+		var spaceUsed pilosa.DiskUsage
+		switch strings.ToLower(indexName) {
+		case "fb_cluster_info", "fb_cluster_nodes", "fb_performance_counters", "fb_exec_requests", "fb_table_ddl":
+			spaceUsed = pilosa.DiskUsage{
+				Usage: 0,
+			}
+		default:
+			u := i.planner.systemAPI.DataDir()
+			u = fmt.Sprintf("%s/indexes/%s", u, indexName)
+
+			spaceUsed, err = pilosa.GetDiskUsage(u)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		createdAt := time.Unix(0, i.indexInfo[i.rowIndex].CreatedAt)
 		updatedAt := time.Unix(0, i.indexInfo[i.rowIndex].UpdatedAt)
 		row := []interface{}{
-			i.indexInfo[i.rowIndex].Name,
-			i.indexInfo[i.rowIndex].Name,
+			indexName,
+			indexName,
 			i.indexInfo[i.rowIndex].Owner,
 			i.indexInfo[i.rowIndex].LastUpdateUser,
 			createdAt.Format(time.RFC3339),
 			updatedAt.Format(time.RFC3339),
 			i.indexInfo[i.rowIndex].Options.Keys,
+			spaceUsed.Usage,
 			i.indexInfo[i.rowIndex].Options.Description,
 		}
 		i.rowIndex += 1

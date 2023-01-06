@@ -3339,6 +3339,7 @@ type SystemAPI interface {
 	ClusterReplicaCount() int
 	ShardWidth() int
 	ClusterState() string
+	DataDir() string
 
 	ClusterNodes() []ClusterNode
 }
@@ -3405,6 +3406,10 @@ func (fsapi *FeatureBaseSystemAPI) ClusterState() string {
 		return "UNKNOWN"
 	}
 	return string(state)
+}
+
+func (fsapi *FeatureBaseSystemAPI) DataDir() string {
+	return fsapi.server.dataDir
 }
 
 func (fsapi *FeatureBaseSystemAPI) ClusterNodes() []ClusterNode {

@@ -70,7 +70,7 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 			dataType:    parser.NewDataTypeString(),
 		}}
 
-	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(pilosa.TablesToIndexInfos(tbls))), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(p, pilosa.TablesToIndexInfos(tbls))), p.sql), nil
 }
 
 func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {
