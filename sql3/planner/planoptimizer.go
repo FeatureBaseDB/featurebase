@@ -104,6 +104,12 @@ func (p *ExecutionPlanner) optimizePlan(ctx context.Context, plan types.PlanOper
 		"--------------------------------------------------------------------------------",
 	)
 
+	// check that result is a PlanOpQuery
+	_, ok := result.(*PlanOpQuery)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected root operator type '%T'", result)
+	}
+
 	return result, nil
 }
 

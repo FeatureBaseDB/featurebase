@@ -29,6 +29,7 @@ const (
 	ILLEGAL Token = iota
 	EOF
 	SPACE
+	UNTERMSTRING
 
 	literal_beg
 	IDENT    // IDENT
@@ -253,9 +254,10 @@ const (
 )
 
 var tokens = [...]string{
-	ILLEGAL: "ILLEGAL",
-	EOF:     "EOF",
-	SPACE:   "SPACE",
+	ILLEGAL:      "ILLEGAL",
+	EOF:          "EOF",
+	SPACE:        "SPACE",
+	UNTERMSTRING: "unterminated string literal",
 
 	IDENT:    "IDENT",
 	VARIABLE: "VARIABLE",

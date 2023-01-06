@@ -1783,7 +1783,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		'petalWidth' DECIMAL,
 		'species' STRING)
 		from
-		'{"id": 1, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+		x'{"id": 1, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
 		{"id": 2, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
 		{"id": 3, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
 		with
@@ -1802,7 +1802,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		'petalWidth' DECIMAL(2),
 		'species' STRING)
 		from
-		'{"id": 1, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
+		x'{"id": 1, "sepalLength": "5.1", "sepalWidth": "3.5", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
 		{"id": 2, "sepalLength": "4.9", "sepalWidth": "3.0", "petalLength": "1.4", "petalWidth": "0.2", "species": "setosa"}
 		{"id": 3, "sepalLength": "4.7", "sepalWidth": "3.2", "petalLength": "1.3", "petalWidth": "0.2", "species": "setosa"}'
 		with
@@ -1940,7 +1940,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			@5,
 			@6,
 			@7)
-			FROM '{"id_col": "3", "string_col": "TEST", "decimal_col": "1.12", "bool_col": false, "time_col": "2013-07-15T01:18:46Z", "stringset_col": "stringset1","ideset_col": 1}
+			FROM x'{"id_col": "3", "string_col": "TEST", "decimal_col": "1.12", "bool_col": false, "time_col": "2013-07-15T01:18:46Z", "stringset_col": "stringset1","ideset_col": 1}
 			{"id_col": "4", "string_col": "TEST2", "decimal_col": "1.12", "bool_col": false, "time_col": "2013-07-15T01:18:46Z", "stringset_col": ["stringset1","stringset3"],"ideset_col": [1,2]}
 			{"id_col": "5", "string_col": "TEST", "int_col": "321", "decimal_col": "12.1", "bool_col": 1, "time_col": "2014-07-15T01:18:46Z", "stringset_col": "stringset2","ideset_col": [1,3]}'
 			with

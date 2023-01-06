@@ -68,7 +68,7 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 		insertValues = append(insertValues, tupleValues)
 	}
 
-	return NewPlanOpInsert(p, tableName, targetColumns, insertValues), nil
+	return NewPlanOpQuery(p, NewPlanOpInsert(p, tableName, targetColumns, insertValues), p.sql), nil
 }
 
 // analyzeInsertStatement analyzes an INSERT statement and returns and error if

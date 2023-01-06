@@ -152,7 +152,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 		}
 	}
 
-	return NewPlanOpBulkInsert(p, tableName, options), nil
+	return NewPlanOpQuery(p, NewPlanOpBulkInsert(p, tableName, options), p.sql), nil
 }
 
 // analyzeBulkInsertStatement analyzes a BULK INSERT statement and returns an
