@@ -185,6 +185,8 @@ func (s *Scanner) scanString() (Pos, Token, string) {
 		ch, _ := s.read()
 		if ch == -1 {
 			return pos, ILLEGAL, `'` + s.buf.String()
+		} else if ch == '\n' {
+			return pos, UNTERMSTRING, `'` + s.buf.String()
 		} else if ch == '\'' {
 			if s.peek() == '\'' { // escaped quote
 				s.read()
