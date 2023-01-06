@@ -168,6 +168,9 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 		return nil, errors.Wrap(err, "setting up batch")
 	}
 
+	var qbatchTime fbbatch.QuantizedTime
+	qbatchTime.Set(time.Now().UTC())
+
 	// row is the single instance of batch.Row allocated. It is re-used
 	// throughout the for loop to minimize memory allocation.
 	var row fbbatch.Row
@@ -236,6 +239,22 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 						return nil, sql3.NewErrInternalf("converting negative value to uint64: %d", v)
 					}
 					row.Values[posVals[idx]] = uint64(v)
+				case []int64:
+					uint64s := make([]uint64, len(v))
+					for i := range v {
+						if v[i] < 0 {
+							return nil, sql3.NewErrInternalf("converting negative slice value to uint64: %d", v[i])
+						}
+						uint64s[i] = uint64(v[i])
+					}
+					row.Values[posVals[idx]] = uint64s
+				default:
+					row.Values[posVals[idx]] = eval
+				}
+
+			case pilosa.FieldTypeTime:
+				row.Time = qbatchTime
+				switch v := eval.(type) {
 				case []int64:
 					uint64s := make([]uint64, len(v))
 					for i := range v {
