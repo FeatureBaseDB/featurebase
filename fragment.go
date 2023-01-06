@@ -2089,7 +2089,7 @@ func (f *fragment) ImportRoaringClearAndSet(ctx context.Context, tx Tx, clear, s
 
 	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriter)
 	if err != nil {
-		errors.Wrap(err, "applying rewriter")
+		return fmt.Errorf("pilosa.ImportRoaringClearAndSet: %s", err)
 	}
 	if f.CacheType != CacheTypeNone {
 		// TODO this may be quite a bit slower than the way
@@ -2132,7 +2132,7 @@ func (f *fragment) ImportRoaringBSI(ctx context.Context, tx Tx, clear, set []byt
 	}
 
 	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriter)
-	return errors.Wrap(err, "applying rewriter")
+	return errors.Wrap(err, "pilosa.ImportRoaringBSI: ")
 }
 
 // ImportRoaringSingleValued treats "clear" as a single row and clears
@@ -2156,7 +2156,7 @@ func (f *fragment) ImportRoaringSingleValued(ctx context.Context, tx Tx, clear, 
 	}
 
 	err = tx.ApplyRewriter(f.index(), f.field(), f.view(), f.shard, 0, rewriter)
-	return errors.Wrap(err, "applying rewriter")
+	return errors.Wrap(err, "pilosa.ImportRoaringSingleValued: ")
 }
 
 func (f *fragment) doImportRoaring(ctx context.Context, tx Tx, data []byte, clear bool) (map[uint64]int, bool, error) {
@@ -2722,7 +2722,8 @@ func (f *fragment) intRowIterator(tx Tx, wrap bool, filters ...roaring.BitmapFil
 
 func (f *fragment) foreachRow(tx Tx, filters []roaring.BitmapFilter, fn func(rid uint64) error) error {
 	filter := roaring.NewBitmapRowFilter(fn, filters...)
-	return tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, filter)
+	err := tx.ApplyFilter(f.index(), f.field(), f.view(), f.shard, 0, filter)
+	return errors.Wrap(err, "pilosa.foreachRow: ")
 }
 
 func (it *intRowIterator) Seek(rowID uint64) {

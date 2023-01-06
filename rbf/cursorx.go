@@ -196,9 +196,9 @@ func intoContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []by
 
 // intoWritableContainer always uses the provided target for a copy of
 // the container's contents, so the container can be modified safely.
-func intoWritableContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []byte) (c *roaring.Container) {
+func intoWritableContainer(l leafCell, tx *Tx, replacing *roaring.Container, target []byte) (c *roaring.Container, err error) {
 	if len(l.Data) == 0 {
-		return nil
+		return nil, nil
 	}
 	orig := l.Data
 	target = target[:len(orig)]
@@ -209,7 +209,10 @@ func intoWritableContainer(l leafCell, tx *Tx, replacing *roaring.Container, tar
 	case ContainerTypeBitmapPtr:
 		pgno := toPgno(target)
 		target = target[:PageSize] // reslice back to full size
-		_, bm, _ := tx.leafCellBitmapInto(pgno, target)
+		_, bm, err := tx.leafCellBitmapInto(pgno, target)
+		if err != nil {
+			return nil, fmt.Errorf("intoContainer: %s", err)
+		}
 		c = roaring.RemakeContainerBitmapN(replacing, bm, int32(l.BitN))
 	case ContainerTypeBitmap:
 		c = roaring.RemakeContainerBitmapN(replacing, toArray64(target), int32(l.BitN))
@@ -221,7 +224,7 @@ func intoWritableContainer(l leafCell, tx *Tx, replacing *roaring.Container, tar
 	// expensive.
 	c.CheckN()
 	c.SetMapped(false)
-	return c
+	return c, nil
 }
 
 func toContainer(l leafCell, tx *Tx) (c *roaring.Container) {
