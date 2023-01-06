@@ -1667,7 +1667,10 @@ func (s *containerFilter) ApplyFilter() (err error) {
 	}
 	for err := s.cursor.Next(); err == nil; err = s.cursor.Next() {
 		elem := &s.cursor.stack.elems[s.cursor.stack.top]
-		leafPage, _, _ := s.cursor.tx.readPage(elem.pgno)
+		leafPage, _, err := s.cursor.tx.readPage(elem.pgno)
+		if err != nil {
+			return fmt.Errorf("reading from pgno %d applying filter: %s", elem.pgno, err)
+		}
 		readLeafCellInto(&cell, leafPage, elem.index)
 		key := roaring.FilterKey(cell.Key)
 		if key < minKey {
@@ -1729,7 +1732,10 @@ func (s *containerFilter) ApplyRewriter() (err error) {
 	}
 	for err := s.cursor.Next(); err == nil; err = s.cursor.Next() {
 		elem := &s.cursor.stack.elems[s.cursor.stack.top]
-		leafPage, _, _ := s.cursor.tx.readPage(elem.pgno)
+		leafPage, _, err := s.cursor.tx.readPage(elem.pgno)
+		if err != nil {
+			return fmt.Errorf("reading from pgno %d applying rewriter: %s", elem.pgno, err)
+		}
 		readLeafCellInto(&cell, leafPage, elem.index)
 		key = roaring.FilterKey(cell.Key)
 		if key < minKey {
@@ -1740,7 +1746,10 @@ func (s *containerFilter) ApplyRewriter() (err error) {
 			return res.Err
 		}
 		if res.YesKey <= key && res.NoKey <= key {
-			data := intoWritableContainer(cell, s.cursor.tx, &s.header, s.body[:])
+			data, err := intoWritableContainer(cell, s.cursor.tx, &s.header, s.body[:])
+			if err != nil {
+				return fmt.Errorf("applying rewriter: %s", err)
+			}
 			res = s.rewriter.RewriteData(key, data, writeback)
 			if res.Err != nil {
 				return res.Err
