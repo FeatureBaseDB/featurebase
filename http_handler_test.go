@@ -545,6 +545,64 @@ func TestGetViewAndDelete(t *testing.T) {
 	}
 }
 
+// TestHandlerSQL tests that the json coming back from a POST /sql request has
+// the expected json tags.
+func TestHandlerSQL(t *testing.T) {
+	cfg := server.NewConfig()
+	cfg.SQL.EndpointEnabled = true
+	c := test.MustRunCluster(t, 1, []server.CommandOption{
+		server.OptCommandConfig(cfg),
+	})
+	defer c.Close()
+
+	m := c.GetPrimary()
+
+	tests := []struct {
+		name    string
+		url     string
+		sql     string
+		expKeys []string
+	}{
+		{
+			name:    "sql",
+			url:     "/sql",
+			sql:     "show tables",
+			expKeys: []string{"schema", "data", "execution-time"},
+		},
+		{
+			name:    "sql-with-plan",
+			url:     "/sql?plan=1",
+			sql:     "show tables",
+			expKeys: []string{"schema", "data", "query-plan", "execution-time"},
+		},
+		{
+			name:    "invalid-sql",
+			url:     "/sql",
+			sql:     "invalid sql",
+			expKeys: []string{"error", "execution-time"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sqlURL := fmt.Sprintf("%s%s", m.URL(), tt.url)
+			resp := test.Do(t, "POST", sqlURL, tt.sql)
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("post sql, status: %d, body=%s", resp.StatusCode, resp.Body)
+			}
+
+			out := make(map[string]interface{})
+			assert.NoError(t, json.Unmarshal([]byte(resp.Body), &out))
+
+			keys := make([]string, 0, len(out))
+			for k := range out {
+				keys = append(keys, k)
+			}
+
+			assert.ElementsMatch(t, tt.expKeys, keys)
+		})
+	}
+}
+
 func TestTranslationHandlers(t *testing.T) {
 	// reusable data for the tests
 	nameBytes, err := json.Marshal([]string{"a", "b", "c"})

@@ -1439,9 +1439,9 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 		var value []byte
 		value, err = json.Marshal(execTime)
 		if err != nil {
-			w.Write([]byte(`,"exec_time": 0`))
+			w.Write([]byte(`,"execution-time": 0`))
 		} else {
-			w.Write([]byte(`,"exec_time":`))
+			w.Write([]byte(`,"execution-time":`))
 			w.Write(value)
 		}
 		w.Write([]byte("}"))
@@ -1489,7 +1489,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				planBytes = []byte(`"PROBLEM ENCODING QUERY PLAN"`)
 			}
-			w.Write([]byte(`,"queryPlan":`))
+			w.Write([]byte(`,"query-plan":`))
 			w.Write(planBytes)
 		}
 	}

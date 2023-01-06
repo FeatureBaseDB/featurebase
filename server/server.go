@@ -128,6 +128,7 @@ func OptCommandConfig(config *Config) CommandOption {
 			c.Config.TLS = config.TLS
 			c.Config.MDSAddress = config.MDSAddress
 			c.Config.WriteLogger = config.WriteLogger
+			c.Config.SQL.EndpointEnabled = config.SQL.EndpointEnabled
 			return nil
 		}
 		c.Config = config
