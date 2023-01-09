@@ -147,6 +147,21 @@ func (p *ExecutionPlanner) analyzeFunctionUpper(call *parser.Call, scope parser.
 	return call, nil
 }
 
+func (p *ExecutionPlanner) analyseFunctionSpace(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	//one argument
+	if len(call.Args) != 1 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+
+	if !typeIsInteger(call.Args[0].DataType()) {
+		return nil, sql3.NewErrIntExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
 // Convert string to Upper case
 func (n *callPlanExpression) EvaluateUpper(currentRow []interface{}) (interface{}, error) {
 	stringArgOne, err := evaluateStringArg(n.args[0], currentRow)
@@ -402,4 +417,19 @@ func (n *callPlanExpression) EvaluateSuffix(currentRow []interface{}) (interface
 	}
 
 	return stringArgOne[len(stringArgOne)-intArgTwo:], nil
+}
+
+func (n *callPlanExpression) EvaluateSpace(currentRow []interface{}) (interface{}, error) {
+	// Get the integer argument from the function call
+	intArg, err := evaluateIntArg(n.args[0], currentRow)
+	if err != nil {
+		return "", err
+	}
+
+	// Return a string containing a number of spaces equal to the integer value
+	spaces := ""
+	for i := 0; i < intArg; i++ {
+		spaces += " "
+	}
+	return spaces, nil
 }

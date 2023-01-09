@@ -466,5 +466,31 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			ExpErr: "string expression expected",
 		},
+		{
+			name: "SpaceZero",
+			SQLs: sqls(
+				"select space(0)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "SpaceFive",
+			SQLs: sqls(
+				"select space(5)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("     ")),
+			),
+			Compare: CompareExactOrdered,
+		},
 	},
 }
