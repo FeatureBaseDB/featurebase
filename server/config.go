@@ -238,6 +238,7 @@ type Config struct {
 
 	DataDog struct {
 		Enable           bool   `toml:"enable"`
+		EnableTracing    bool   `toml:"enable-tracing"`
 		Service          string `toml:"service"`
 		Env              string `toml:"env"`
 		Version          string `toml:"version"`
