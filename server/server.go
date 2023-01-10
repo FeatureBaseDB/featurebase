@@ -737,7 +737,7 @@ func (m *Command) setupLogger() error {
 	var f *logger.FileWriter
 	var err error
 	if m.Config.LogPath != "" {
-		f, err = logger.NewFileWriter(m.Config.LogPath)
+		f, err = logger.NewFileWriterMode(m.Config.LogPath, 0640)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
