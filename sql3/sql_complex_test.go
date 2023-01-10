@@ -171,6 +171,7 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldTimestamp("updated_at"),
 			wireQueryFieldBool("keys"),
+			wireQueryFieldInt("space_used"),
 			wireQueryFieldString("description"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
