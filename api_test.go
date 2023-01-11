@@ -24,14 +24,45 @@ import (
 	"github.com/golang-jwt/jwt"
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/shardwidth"
 	"github.com/molecula/featurebase/v3/test"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+	"github.com/stretchr/testify/require"
 
 	"golang.org/x/sync/errgroup"
 )
+
+// mustQueryContext gets a write query context for the API and the
+// specified index, or index-and-shards, or fails
+// the test. The query context will be released at the end of the test.
+func mustIndexQueryContext(tb testing.TB, api *pilosa.API, index string, shards ...uint64) qc.QueryContext {
+	tb.Helper()
+	// disregard a leading ^0, because that's idiomatic for "all shards"
+	if len(shards) > 0 && shards[0] == ^uint64(0) {
+		shards = shards[1:]
+	}
+	qcx, err := api.NewIndexQueryContext(context.Background(), index, shards...)
+	if err != nil {
+		tb.Fatalf("creating query context: %v", err)
+	}
+	tb.Cleanup(qcx.Release)
+	return qcx
+}
+
+// mustQueryContext gets a read-only query context for the API, or fails
+// the test. The query context will be released at the end of the test.
+func mustQueryContext(tb testing.TB, api *pilosa.API) qc.QueryContext {
+	tb.Helper()
+	qcx, err := api.NewQueryContext(context.Background())
+	if err != nil {
+		tb.Fatalf("creating query context: %v", err)
+	}
+	tb.Cleanup(qcx.Release)
+	return qcx
+}
 
 func TestAPI_Import(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
@@ -89,12 +120,12 @@ func TestAPI_Import(t *testing.T) {
 			ColumnKeys: colKeys,
 		}
 
-		qcx := m0.API.Txf().NewQcx()
+		qcx := mustIndexQueryContext(t, m0.API, req.Index)
 
 		if err := m0.API.Import(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(t, qcx.Commit())
 
 		pql := fmt.Sprintf("Row(%s=%d)", fieldNames[false], rowIDs[0])
 
@@ -154,13 +185,10 @@ func TestAPI_Import(t *testing.T) {
 							req.RowIDs = rowIDs
 						}
 						err := func() error {
-							qcx := m0.API.Txf().NewQcx()
-							defer qcx.Abort()
+							qcx := mustIndexQueryContext(t, m0.API, req.Index)
+							defer qcx.Release()
 							err := m0.API.Import(ctx, qcx, req.Clone())
-							e2 := qcx.Finish()
-							if e2 != nil {
-								t.Fatalf("unexpected error committing: %v", e2)
-							}
+							require.Nil(t, qcx.Commit())
 							return err
 						}()
 						if err != nil {
@@ -241,11 +269,11 @@ func TestAPI_ImportValue(t *testing.T) {
 			Shard:      0, // inaccurate but keys override it
 		}
 
-		qcx := coord.API.Txf().NewQcx()
+		qcx := mustIndexQueryContext(t, coord.API, req.Index)
 		if err := coord.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(t, qcx.Commit())
 
 		pql := fmt.Sprintf("Row(%s>0)", field)
 
@@ -291,41 +319,41 @@ func TestAPI_ImportValue(t *testing.T) {
 			Index: index,
 			Field: field,
 		}
-		qcx1 := coord.API.Txf().NewQcx()
-		defer qcx1.Abort()
+		qcx1 := mustIndexQueryContext(t, coord.API, req.Index)
+		defer qcx1.Release()
 
 		// Import with empty request, should succeed
 		if err := coord.API.ImportValue(ctx, qcx1, req); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(qcx1.Finish())
+		require.Nil(t, qcx1.Commit())
 
 		// Import without data but with columnkeys, verify that it errors
 		req.ColumnKeys = colKeys
-		qcx2 := coord.API.Txf().NewQcx()
-		defer qcx2.Abort()
+		qcx2 := mustIndexQueryContext(t, coord.API, req.Index)
+		defer qcx2.Release()
 		if err := coord.API.ImportValue(ctx, qcx2, req); err == nil {
 			t.Fatal("expected error but succeeded")
 		}
-		PanicOn(qcx2.Finish())
+		require.Nil(t, qcx2.Commit())
 
 		// Import with mismatch column and value lengths
 		req.Values = values
-		qcx3 := coord.API.Txf().NewQcx()
-		defer qcx3.Abort()
+		qcx3 := mustIndexQueryContext(t, coord.API, req.Index)
+		defer qcx3.Release()
 		if err := coord.API.ImportValue(ctx, qcx3, req); err == nil {
 			t.Fatal("expected error but succeeded")
 		}
-		PanicOn(qcx3.Finish())
+		require.Nil(t, qcx3.Commit())
 
 		// Import with data but no columns
 		req.ColumnKeys = make([]string, 0)
-		qcx4 := coord.API.Txf().NewQcx()
-		defer qcx4.Abort()
+		qcx4 := mustIndexQueryContext(t, coord.API, req.Index)
+		defer qcx4.Release()
 		if err := coord.API.ImportValue(ctx, qcx4, req); err == nil {
 			t.Fatal("expected error but succeeded")
 		}
-		PanicOn(qcx4.Finish())
+		require.Nil(t, qcx4.Commit())
 
 	})
 
@@ -357,11 +385,11 @@ func TestAPI_ImportValue(t *testing.T) {
 			ColumnIDs:   colIDs,
 			FloatValues: values,
 		}
-		qcx := m0.API.Txf().NewQcx()
+		qcx := mustIndexQueryContext(t, m0.API, req.Index)
 		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(t, qcx.Commit())
 		query := fmt.Sprintf("Row(%s>6)", field)
 		// Query node0.
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
@@ -418,11 +446,11 @@ func TestAPI_ImportValue(t *testing.T) {
 			TimestampValues: values,
 		}
 
-		qcx := m2.API.Txf().NewQcx()
+		qcx := mustIndexQueryContext(t, m2.API, req.Index)
 		if err := m2.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(t, qcx.Commit())
 
 		query := fmt.Sprintf("Row(%s>='1833-11-24T17:31:50Z')", field) // 6s after MinTimestamp
 
@@ -476,11 +504,11 @@ func TestAPI_ImportValue(t *testing.T) {
 			ColumnIDs:    colIDs,
 			StringValues: values,
 		}
-		qcx := m0.API.Txf().NewQcx()
+		qcx := mustIndexQueryContext(t, m0.API, req.Index)
 		if err := m0.API.ImportValue(ctx, qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(t, qcx.Commit())
 
 		pql := fmt.Sprintf(`Row(%s=="strval-110")`, field)
 
@@ -667,14 +695,14 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 		RowIDs:    []uint64{iraRowID},
 	}
 
-	qcx := m0api.Txf().NewQcx()
+	qcx := mustIndexQueryContext(t, m0api, index)
 	if err := m0api.Import(ctx, qcx, ir0.Clone()); err != nil {
 		t.Fatal(err)
 	}
 	if err := m0api.ImportValue(ctx, qcx, ivr0.Clone()); err != nil {
 		t.Fatal(err)
 	}
-	PanicOn(qcx.Finish())
+	require.Nil(t, qcx.Commit())
 
 	bitIsSet := func() bool {
 		query := fmt.Sprintf("Row(%v=%v)", iraField, iraRowID)
@@ -712,24 +740,24 @@ func TestAPI_ClearFlagForImportAndImportValues(t *testing.T) {
 	}
 
 	// clear the bit
-	qcx = m0api.Txf().NewQcx()
+	qcx = mustIndexQueryContext(t, m0api, index)
 	ir0.Clear = true
 	if err := m0api.Import(ctx, qcx, ir0); err != nil {
 		t.Fatal(err)
 	}
-	PanicOn(qcx.Finish())
+	require.Nil(t, qcx.Commit())
 
 	if bitIsSet() {
 		PanicOn("IRA bit should have been cleared")
 	}
 
 	// clear the BSI
-	qcx = m0api.Txf().NewQcx()
+	qcx = mustIndexQueryContext(t, m0api, index)
 	ivr0.Clear = true
 	if err := m0api.ImportValue(ctx, qcx, ivr0); err != nil {
 		t.Fatal(err)
 	}
-	PanicOn(qcx.Finish())
+	require.Nil(t, qcx.Commit())
 
 	bal = queryAcct(m0api, acctOwnerID, fieldAcct0, index)
 	if bal != 0 {
@@ -883,9 +911,9 @@ func TestAPI_MutexCheck(t *testing.T) {
 	defer c.Close()
 
 	m0 := c.GetNode(0)
-	nodesByID := make(map[string]*test.Command, 3)
-	qcxsByID := make(map[string]*pilosa.Qcx, 3)
-	for i := 0; i < 3; i++ {
+	nodesByID := make(map[string]*test.Command, len(c.Nodes))
+	qcxsByID := make(map[string]qc.QueryContext, len(c.Nodes))
+	for i := 0; i < len(c.Nodes); i++ {
 		node := c.GetNode(i)
 		id := node.API.NodeID()
 		nodesByID[id] = node
@@ -937,7 +965,7 @@ func TestAPI_MutexCheck(t *testing.T) {
 	for keyedField, fieldData := range indexData.fields {
 		t.Run(fmt.Sprintf("%s-%s", indexData.indexName, fieldData.fieldName), func(t *testing.T) {
 			for id, node := range nodesByID {
-				qcxsByID[id] = node.API.Txf().NewQcx()
+				qcxsByID[id] = mustIndexQueryContext(t, node.API, indexData.indexName)
 			}
 			for shard := uint64(0); shard < nShards; shard++ {
 				// restore row/col ID values which can get altered by imports
@@ -977,13 +1005,10 @@ func TestAPI_MutexCheck(t *testing.T) {
 					t.Fatalf("requesting field %s from node %s: %v", fieldData.fieldName, id, err)
 				}
 				pilosa.CorruptAMutex(t, field, qcxsByID[id])
-				err = qcxsByID[id].Finish()
-				if err != nil {
-					t.Fatalf("closing out transaction on node %s: %v", id, err)
-				}
+				require.Nil(t, qcxsByID[id].Commit())
 			}
-			qcx := m0.API.Txf().NewQcx()
-			defer qcx.Abort()
+			qcx := mustQueryContext(t, m0.API)
+			defer qcx.Release()
 
 			// first two shards of each group of 4 should have a collision in
 			// position 1
@@ -1076,9 +1101,6 @@ func TestAPI_MutexCheck(t *testing.T) {
 	indexData = indexes[true]
 	for keyedField, fieldData := range indexData.fields {
 		t.Run(fmt.Sprintf("%s-%s", indexData.indexName, fieldData.fieldName), func(t *testing.T) {
-			for id, node := range nodesByID {
-				qcxsByID[id] = node.API.Txf().NewQcx()
-			}
 			req := &pilosa.ImportRequest{
 				Index:          indexData.indexName,
 				IndexCreatedAt: indexData.createdAt,
@@ -1105,12 +1127,11 @@ func TestAPI_MutexCheck(t *testing.T) {
 			} else {
 				req.RowIDs = rowIDs
 			}
-			var id string
 			var node *test.Command
-			for id, node = range nodesByID {
+			for _, node = range nodesByID {
 				break
 			}
-			if err := node.API.Import(ctx, qcxsByID[id], req); err != nil {
+			if err := node.API.Import(ctx, nil, req); err != nil {
 				t.Fatalf("importing data: %v", err)
 			}
 			expected, err := node.API.FindIndexKeys(ctx, indexData.indexName, colKeys...)
@@ -1156,14 +1177,15 @@ func TestAPI_MutexCheck(t *testing.T) {
 				if err != nil {
 					t.Fatalf("requesting field %s from node %s: %v", fieldData.fieldName, id, err)
 				}
-				pilosa.CorruptAMutex(t, field, qcxsByID[id])
-				err = qcxsByID[id].Finish()
-				if err != nil {
-					t.Fatalf("closing out transaction on node %s: %v", id, err)
-				}
+				qcx := mustIndexQueryContext(t, node.API, indexData.indexName)
+				pilosa.CorruptAMutex(t, field, qcx)
+				require.Nil(t, qcx.Commit())
 			}
-			qcx := m0.API.Txf().NewQcx()
-			defer qcx.Abort()
+			qcx := mustQueryContext(t, m0.API)
+			if err != nil {
+				t.Fatalf("creating query context: %v", err)
+			}
+			defer qcx.Release()
 
 			results, err := m0.API.MutexCheck(ctx, qcx, indexData.indexName, fieldData.fieldName, true, 0)
 			if err != nil {
@@ -1352,21 +1374,6 @@ func TestAPI_CreateField(t *testing.T) {
 			t.Fatalf("conflict error: %v", err)
 		}
 		t.Fatalf("unexpected error: %T %v", err, err)
-	}
-}
-
-func TestAPI_RBFDebugInfo(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-
-	coord := c.GetPrimary()
-
-	if _, err := coord.API.CreateIndex(ctx, c.Idx(), pilosa.IndexOptions{}); err != nil {
-		t.Fatal(err)
-	} else if infos := coord.API.RBFDebugInfo(); infos == nil {
-		t.Fatal("expected info")
 	}
 }
 

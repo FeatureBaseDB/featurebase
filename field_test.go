@@ -26,8 +26,7 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		qcx := h.Txf().NewWritableQcx()
-		defer qcx.Abort()
+		qcx := h.MustIndexQueryContext(t, idx.Name())
 		// You're going to note the lack of any commits here. That's
 		// because, when you have a writable Qcx, *every individual
 		// sub-transaction commits immediately*. In theory, we ought
@@ -67,8 +66,7 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		qcx := h.Txf().NewWritableQcx()
-		defer qcx.Abort()
+		qcx := h.MustIndexQueryContext(t, idx.Name())
 
 		// Set value.
 		if changed, err := f.SetValue(qcx, 100, 21); err != nil {
@@ -102,8 +100,7 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		qcx := h.Txf().NewWritableQcx()
-		defer qcx.Abort()
+		qcx := h.MustIndexQueryContext(t, idx.Name())
 
 		// Set value.
 		if _, err := f.SetValue(qcx, 100, 21); err != pilosa.ErrBSIGroupNotFound {
@@ -118,8 +115,7 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		qcx := h.Txf().NewWritableQcx()
-		defer qcx.Abort()
+		qcx := h.MustIndexQueryContext(t, idx.Name())
 		// Set value.
 		if _, err := f.SetValue(qcx, 100, 15); !errors.Is(err, pilosa.ErrBSIGroupValueTooLow) {
 			t.Fatalf("unexpected error: %s", err)
@@ -134,8 +130,7 @@ func TestField_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		qcx := h.Txf().NewWritableQcx()
-		defer qcx.Abort()
+		qcx := h.MustIndexQueryContext(t, idx.Name())
 
 		// Set value.
 		if _, err := f.SetValue(qcx, 100, 31); !errors.Is(err, pilosa.ErrBSIGroupValueTooHigh) {
@@ -193,8 +188,7 @@ func TestField_AvailableShards(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	qcx := h.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx := h.MustIndexQueryContext(t, idx.Name())
 
 	// Set values on shards 0 & 2, and verify.
 	if _, err := f.SetBit(qcx, 0, 100, nil); err != nil {
@@ -233,8 +227,7 @@ func TestField_ClearValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		qcx := h.Txf().NewWritableQcx()
-		defer qcx.Abort()
+		qcx := h.MustIndexQueryContext(t, idx.Name())
 
 		// Set value on field.
 		if changed, err := f.SetValue(qcx, 100, 21); err != nil {

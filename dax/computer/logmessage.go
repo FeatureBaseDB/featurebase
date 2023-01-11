@@ -180,7 +180,6 @@ type ImportRoaringMessage struct {
 	Shard           uint64            `json:"shard"`
 	Clear           bool              `json:"clear"`
 	Action          string            `json:"action"` // [set, clear, overwrite]
-	Block           int               `json:"block"`
 	Views           map[string][]byte `json:"views"`
 	UpdateExistence bool              `json:"update-existence"`
 }

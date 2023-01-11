@@ -12,6 +12,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecutor_Apply(t *testing.T) {
@@ -39,16 +40,12 @@ func TestExecutor_Apply(t *testing.T) {
 	req.Field = fieldName
 	req.ColumnIDs = []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	req.Values = []int64{10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
-	qcx := api.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx := mustIndexQueryContext(t, api, req.Index, req.Shard)
 
 	if err := api.ImportValue(ctx, qcx, req); err != nil {
 		t.Fatal(err)
 	}
-
-	if err := qcx.Finish(); err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, qcx.Commit())
 
 	t.Run("dataframe ingest", func(t *testing.T) {
 		//		func (c *Client) ApplyDataframeChangeset(indexName string, cr *pilosa.ChangesetRequest, shard uint64) (map[string]interface{}, error) {

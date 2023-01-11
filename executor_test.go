@@ -35,6 +35,8 @@ import (
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -57,6 +59,54 @@ func TestExecutor(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	// Ensure a row query can be executed.
+	t.Run("QcxError", func(t *testing.T) {
+		n := c.GetNode(0)
+		a := n.API
+		h := c.GetHolder(0)
+		i, err := h.CreateIndex("i", "", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = i.CreateField("f", "", pilosa.OptFieldTypeInt(0, 1000))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		eg, ctx := errgroup.WithContext(ctx)
+		defer cancel()
+		eg.Go(func() error {
+			for i := 0; i < 1000; i++ {
+				_, err = a.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=1)"})
+				if err != nil {
+					return err
+				}
+				_, err = a.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: "Set(0, f=3)"})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		for i := 0; i < 1000; i++ {
+			res, err := a.Query(ctx, &pilosa.QueryRequest{Index: "i", Query: "Intersect(Row(f>2),Row(f<2))\nSet(1, f=2)"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var row *pilosa.Row
+			var ok bool
+			if row, ok = res.Results[0].(*pilosa.Row); !ok {
+				t.Fatalf("expected row, got %T", res.Results[0])
+			}
+			cols := row.Columns()
+			if len(cols) != 0 {
+				t.Fatalf("expected empty row, got %d", cols)
+			}
+		}
+		err = eg.Wait()
+		if err != nil {
+			t.Fatalf("background errored")
+		}
+	})
 	t.Run("ExecuteRow", func(t *testing.T) {
 		t.Run("RowIDColumnID", func(t *testing.T) {
 			writeQuery := `` +
@@ -1645,9 +1695,8 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Obtain transaction.
-		qcx := hldr.Txf().NewQcx()
-		defer qcx.Abort()
+		qcx := hldr.MustIndexQueryContext(t, c.Idx())
+		defer qcx.Release()
 
 		f := hldr.Field(c.Idx(), "f")
 		if value, exists, err := f.Value(qcx, 10); err != nil {
@@ -1716,9 +1765,8 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Obtain transaction.
-		qcx := hldr.Txf().NewQcx()
-		defer qcx.Abort()
+		qcx := hldr.MustIndexQueryContext(t, c.Idx())
+		defer qcx.Release()
 
 		f := hldr.Field(c.Idx(), "f")
 		if value, exists, err := f.Value(qcx, 10); err != nil {
@@ -4371,7 +4419,11 @@ func TestExecutor_Execute_All(t *testing.T) {
 		m0 := c.GetNode(0)
 		// the request gets altered by the Import operation now...
 		reqs := req.Clone().SortToShards()
-		qcx := m0.API.Txf().NewQcx()
+		shards := make([]uint64, 0, len(reqs))
+		for shardID := range reqs {
+			shards = append(shards, shardID)
+		}
+		qcx := mustIndexQueryContext(t, m0.API, req.Index, shards...)
 		for _, r := range reqs {
 			// we can ignore the key (which is the shard) because each req
 			// also got its internal key set.
@@ -4379,7 +4431,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(t, qcx.Commit())
 
 		i0, err := m0.API.Index(context.Background(), c.Idx())
 		PanicOn(err)
@@ -4452,11 +4504,12 @@ func TestExecutor_Execute_All(t *testing.T) {
 			req.ColumnKeys[i] = fmt.Sprintf("c%d", i)
 		}
 
-		qcx := c.GetNode(0).API.Txf().NewQcx()
+		// note, the shard specified in the import request is wrong.
+		qcx := mustIndexQueryContext(t, c.GetNode(0).API, req.Index)
 		if err := c.GetNode(0).API.Import(context.Background(), qcx, req); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(t, qcx.Commit())
 
 		tests := []struct {
 			qry     string
@@ -4850,11 +4903,11 @@ func benchmarkExistence(nn bool, b *testing.B) {
 	b.ResetTimer()
 	nodeAPI := c.GetNode(0).API
 	for i := 0; i < b.N; i++ {
-		qcx := nodeAPI.Txf().NewQcx()
+		qcx := mustIndexQueryContext(b, nodeAPI, req.Index, req.Shard)
 		if err := nodeAPI.Import(context.Background(), qcx, req); err != nil {
 			b.Fatal(err)
 		}
-		PanicOn(qcx.Finish())
+		require.Nil(b, qcx.Commit())
 	}
 }
 
@@ -5390,8 +5443,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 	m0 := c.GetNode(0)
-	qcx := m0.API.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx := mustIndexQueryContext(t, m0.API, c.Idx())
 
 	var v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 int64 = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 	var nv1, nv2, nv3, nv4 int64 = -1, -2, -3, -4
@@ -5446,6 +5498,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("importing: %v", err)
 	}
+	require.Nil(t, qcx.Commit())
 
 	tests := []struct {
 		query    string

@@ -19,10 +19,12 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/molecula/featurebase/v3/pql"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/testhook"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -33,115 +35,165 @@ var (
 	FragmentPath = flag.String("fragment", "testdata/sample_view/0", "fragment path")
 )
 
+// mustQueryContext requests a brand new query context against a fragment, which
+// if it is a write QueryContext, will be scoped to that specific fragment's
+// index and shard. This, and mustRead/mustWrite, are workarounds for the fact
+// that the whole point of QueryContext is to get us sustained access with shared
+// transactions, and fragment_internal_test is all about doing multiple sequential
+// operations that aren't sharing a backend transaction. Rather than muddle the
+// usual interface around this special case, we write helpers for the test code.
+func mustQueryContext(tb testing.TB, f *fragment, write bool) qc.QueryContext {
+	var qcx qc.QueryContext
+	var err error
+	if write {
+		qcx, err = f.holder.NewIndexQueryContext(context.Background(), f.index(), f.shard)
+	} else {
+		qcx, err = f.holder.NewQueryContext(context.Background())
+	}
+	if err != nil {
+		tb.Fatalf("creating query context (write %t): %v", write, err)
+	}
+	tb.Cleanup(qcx.Release)
+	return qcx
+}
+
+// mustRead yields a new QueryContext and QueryRead, or fails trying. This is
+// in test code because it's nonsensical outside of tests; in non-test
+// circumstances, you'd have a meaningful higher level operation to own the
+// QueryContext.
+func mustRead(tb testing.TB, f *fragment) (qc.QueryContext, qc.QueryRead) {
+	qcx := mustQueryContext(tb, f, false)
+	qr, err := f.qcxRead(qcx)
+	if err != nil {
+		tb.Fatalf("creating query read: %v", err)
+	}
+	return qcx, qr
+}
+
+// mustWrite yields a new QueryContext and QueryWrite, or fails trying. This is
+// in test code because it's nonsensical outside of tests; in non-test
+// circumstances, you'd have a meaningful higher level operation to own the
+// QueryContext.
+func mustWrite(tb testing.TB, f *fragment) (qc.QueryContext, qc.QueryWrite) {
+	qcx := mustQueryContext(tb, f, true)
+	qw, err := f.qcxWrite(qcx)
+	if err != nil {
+		tb.Fatalf("creating query write: %v", err)
+	}
+	return qcx, qw
+}
+
+// mustRow returns a row by ID. Panic on error. Only used for testing.
+func (f *fragment) mustRow(tb testing.TB, qr qc.QueryRead, rowID uint64) *Row {
+	row, err := f.row(qr, rowID)
+	if err != nil {
+		tb.Fatalf("reading row %d: %v", rowID, err)
+	}
+	return row
+}
+
 // Ensure a fragment can set a bit and retrieve it.
 func TestFragment_SetBit(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
+	f, qcx, qw := mustOpenFragment(t)
 	defer f.Clean(t)
 
 	// Set bits on the fragment.
-	if _, err := f.setBit(tx, 120, 1); err != nil {
+	if _, err := f.setBit(qw, 120, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setBit(tx, 120, 6); err != nil {
+	} else if _, err := f.setBit(qw, 120, 6); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setBit(tx, 121, 0); err != nil {
+	} else if _, err := f.setBit(qw, 121, 0); err != nil {
 		t.Fatal(err)
 	}
 	// should have two containers set in the fragment.
 
 	// Verify counts on rows.
-	if n := f.mustRow(tx, 120).Count(); n != 2 {
+	if n := f.mustRow(t, qw, 120).Count(); n != 2 {
 		t.Fatalf("unexpected count: %d", n)
-	} else if n := f.mustRow(tx, 121).Count(); n != 1 {
+	} else if n := f.mustRow(t, qw, 121).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
-	// commit the change, and verify it is still there
-	PanicOn(tx.Commit())
+	require.Nil(t, qcx.Commit())
 
 	// Close and reopen the fragment & verify the data.
-	err := f.Reopen()
+	err := f.Reopen(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	_, qr := mustRead(t, f)
 
-	if n := f.mustRow(tx, 120).Count(); n != 2 {
+	if n := f.mustRow(t, qr, 120).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
-	} else if n := f.mustRow(tx, 121).Count(); n != 1 {
+	} else if n := f.mustRow(t, qr, 121).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
 
 // Ensure a fragment can clear a set bit.
 func TestFragment_ClearBit(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
+	f, qcx, qw := mustOpenFragment(t)
 	defer f.Clean(t)
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.setBit(tx, 1000, 1); err != nil {
+	if _, err := f.setBit(qw, 1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setBit(tx, 1000, 2); err != nil {
+	} else if _, err := f.setBit(qw, 1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.clearBit(tx, 1000, 1); err != nil {
+	} else if _, err := f.clearBit(qw, 1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify count on row.
-	if n := f.mustRow(tx, 1000).Count(); n != 1 {
+	if n := f.mustRow(t, qw, 1000).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 	// The Reopen below implies this test is looking at storage consistency.
 	// In that spirit, we will check that the Tx Commit is visible afterwards.
-	PanicOn(tx.Commit())
+	require.Nil(t, qcx.Commit())
 
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	_, qr := mustRead(t, f)
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
+	if err := f.Reopen(t); err != nil {
 		t.Fatal(err)
-	} else if n := f.mustRow(tx, 1000).Count(); n != 1 {
+	} else if n := f.mustRow(t, qr, 1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
 
 // Ensure a fragment can clear a row.
 func TestFragment_ClearRow(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
+	f, qcx, qw := mustOpenFragment(t)
 	defer f.Clean(t)
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.setBit(tx, 1000, 1); err != nil {
+	if _, err := f.setBit(qw, 1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setBit(tx, 1000, 65536); err != nil {
+	} else if _, err := f.setBit(qw, 1000, 65536); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.unprotectedClearRow(tx, 1000); err != nil {
+	} else if _, err := f.unprotectedClearRow(qw, 1000); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify count on row.
-	if n := f.mustRow(tx, 1000).Count(); n != 0 {
+	if n := f.mustRow(t, qw, 1000).Count(); n != 0 {
 		t.Fatalf("unexpected count: %d", n)
 	}
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	require.Nil(t, qcx.Commit())
+	_, qr := mustRead(t, f)
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
+	if err := f.Reopen(t); err != nil {
 		t.Fatal(err)
-	} else if n := f.mustRow(tx, 1000).Count(); n != 0 {
+	} else if n := f.mustRow(t, qr, 1000).Count(); n != 0 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
 
 // Ensure a fragment can set a row.
 func TestFragment_SetRow(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
+	f, qcx, qw := mustOpenFragment(t)
 	defer f.Clean(t)
 
 	// Obtain transction.
@@ -149,86 +201,84 @@ func TestFragment_SetRow(t *testing.T) {
 	rowID := uint64(1000)
 
 	// Set bits on the fragment.
-	if _, err := f.setBit(tx, rowID, 1); err != nil {
+	if _, err := f.setBit(qw, rowID, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setBit(tx, rowID, 65536); err != nil {
+	} else if _, err := f.setBit(qw, rowID, 65536); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify data on row.
-	if cols := f.mustRow(tx, rowID).Columns(); !reflect.DeepEqual(cols, []uint64{1, 65536}) {
+	if cols := f.mustRow(t, qw, rowID).Columns(); !reflect.DeepEqual(cols, []uint64{1, 65536}) {
 		t.Fatalf("unexpected columns: %+v", cols)
 	}
 	// Verify count on row.
-	if n := f.mustRow(tx, rowID).Count(); n != 2 {
+	if n := f.mustRow(t, qw, rowID).Count(); n != 2 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Set row (overwrite existing data).
 	row := NewRow(1, 65537, 140000)
-	if changed, err := f.unprotectedSetRow(tx, row, rowID); err != nil {
+	if changed, err := f.unprotectedSetRow(qw, row, rowID); err != nil {
 		t.Fatal(err)
 	} else if !changed {
 		t.Fatalf("expected changed value: %v", changed)
 	}
 
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	require.Nil(t, qcx.Commit())
+	qcx, qw = mustWrite(t, f)
 
 	// Verify data on row.
-	if cols := f.mustRow(tx, rowID).Columns(); !reflect.DeepEqual(cols, []uint64{1, 65537, 140000}) {
+	if cols := f.mustRow(t, qw, rowID).Columns(); !reflect.DeepEqual(cols, []uint64{1, 65537, 140000}) {
 		t.Fatalf("unexpected columns after set row: %+v", cols)
 	}
 	// Verify count on row.
-	if n := f.mustRow(tx, rowID).Count(); n != 3 {
+	if n := f.mustRow(t, qw, rowID).Count(); n != 3 {
 		t.Fatalf("unexpected count after set row: %d", n)
 	}
 
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
+	require.Nil(t, qcx.Commit())
+
+	qcx, qr := mustRead(t, f)
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
+	if err := f.Reopen(t); err != nil {
 		t.Fatal(err)
-	} else if n := f.mustRow(tx, rowID).Count(); n != 3 {
+	} else if n := f.mustRow(t, qr, rowID).Count(); n != 3 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 
-	tx.Rollback()
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	qcx.Release()
+	qcx, qw = mustWrite(t, f)
 
 	// verify that setting something from a row which lacks a segment for
 	// this fragment's shard still clears this fragment correctly.
 	notOurs := NewRow(8*ShardWidth + 1024)
-	if changed, err := f.unprotectedSetRow(tx, notOurs, rowID); err != nil {
+	if changed, err := f.unprotectedSetRow(qw, notOurs, rowID); err != nil {
 		t.Fatal(err)
 	} else if !changed {
 		t.Fatalf("setRow didn't report a change")
 	}
-	if cols := f.mustRow(tx, rowID).Columns(); len(cols) != 0 {
+	if cols := f.mustRow(t, qw, rowID).Columns(); len(cols) != 0 {
 		t.Fatalf("expected setting a row with no entries to clear the cache")
 	}
-	PanicOn(tx.Commit())
+	require.Nil(t, qcx.Commit())
 }
 
 // Ensure a fragment can set & read a value.
 func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set value.
-		if changed, err := f.setValue(tx, 100, 16, 3829); err != nil {
+		if changed, err := f.setValue(qw, 100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.value(tx, 100, 16); err != nil {
+		if value, exists, err := f.value(qw, 100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 3829 {
 			t.Fatalf("unexpected value: %d", value)
@@ -237,21 +287,20 @@ func TestFragment_SetValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.setValue(tx, 100, 16, 3829); err != nil {
+		if changed, err := f.setValue(qw, 100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
 		}
 
 		// same after Commit
-		if err := tx.Commit(); err != nil {
+		if err := qcx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		_, qw = mustWrite(t, f)
 
 		// Read value.
-		if value, exists, err := f.value(tx, 100, 16); err != nil {
+		if value, exists, err := f.value(qw, 100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 3829 {
 			t.Fatalf("unexpected value: %d", value)
@@ -260,7 +309,7 @@ func TestFragment_SetValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.setValue(tx, 100, 16, 3829); err != nil {
+		if changed, err := f.setValue(qw, 100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -268,26 +317,25 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("Overwrite", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set value.
-		if changed, err := f.setValue(tx, 100, 16, 3829); err != nil {
+		if changed, err := f.setValue(qw, 100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Overwriting value should overwrite all bits.
-		if changed, err := f.setValue(tx, 100, 16, 2028); err != nil {
+		if changed, err := f.setValue(qw, 100, 16, 2028); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.value(tx, 100, 16); err != nil {
+		if value, exists, err := f.value(qw, 100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 2028 {
 			t.Fatalf("unexpected value: %d", value)
@@ -296,13 +344,12 @@ func TestFragment_SetValue(t *testing.T) {
 		}
 
 		// Read value after commit.
-		if err := tx.Commit(); err != nil {
+		if err := qcx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		_, qw = mustWrite(t, f)
 
-		if value, exists, err := f.value(tx, 100, 16); err != nil {
+		if value, exists, err := f.value(qw, 100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 2028 {
 			t.Fatalf("unexpected value: %d", value)
@@ -313,26 +360,25 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("Clear", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set value.
-		if changed, err := f.setValue(tx, 100, 16, 3829); err != nil {
+		if changed, err := f.setValue(qw, 100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Clear value should overwrite all bits, and set not-null to 0.
-		if changed, err := f.clearValue(tx, 100, 16, 2028); err != nil {
+		if changed, err := f.clearValue(qw, 100, 16, 2028); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.value(tx, 100, 16); err != nil {
+		if value, exists, err := f.value(qw, 100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {
 			t.Fatalf("unexpected value: %d", value)
@@ -341,13 +387,12 @@ func TestFragment_SetValue(t *testing.T) {
 		}
 
 		// Same after Commit
-		if err := tx.Commit(); err != nil {
+		if err := qcx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		_, qw = mustWrite(t, f)
 
-		if value, exists, err := f.value(tx, 100, 16); err != nil {
+		if value, exists, err := f.value(qw, 100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {
 			t.Fatalf("unexpected value: %d", value)
@@ -357,20 +402,18 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("NotExists", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
-		defer tx.Rollback()
 
 		// Set value.
-		if changed, err := f.setValue(tx, 100, 10, 20); err != nil {
+		if changed, err := f.setValue(qw, 100, 10, 20); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Non-existent value.
-		if value, exists, err := f.value(tx, 101, 11); err != nil {
+		if value, exists, err := f.value(qw, 101, 11); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {
 			t.Fatalf("unexpected value: %d", value)
@@ -381,14 +424,13 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("QuickCheck", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, qcx, _ := mustOpenFragment(t)
 		defer f.Clean(t)
-		tx.Rollback()
+		qcx.Release()
 
 		if err := quick.Check(func(bitDepth uint64, bitN uint64, values []uint64) bool {
-			tx = idx.holder.txf.NewTx(Txo{Write: true, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			qcx, qw := mustWrite(t, f)
+			defer qcx.Release()
 			// Limit bit depth & maximum values.
 			bitDepth = (bitDepth % 8) + 1
 			bitN = (bitN % 99) + 1
@@ -404,14 +446,14 @@ func TestFragment_SetValue(t *testing.T) {
 
 				m[columnID] = int64(value)
 
-				if _, err := f.setValue(tx, columnID, bitDepth, int64(value)); err != nil {
+				if _, err := f.setValue(qw, columnID, bitDepth, int64(value)); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// Ensure values are set.
 			for columnID, value := range m {
-				v, exists, err := f.value(tx, columnID, bitDepth)
+				v, exists, err := f.value(qw, columnID, bitDepth)
 				if err != nil {
 					t.Fatal(err)
 				} else if value != int64(v) {
@@ -422,15 +464,15 @@ func TestFragment_SetValue(t *testing.T) {
 			}
 
 			// Same after Commit
-			if err := tx.Commit(); err != nil {
+			if err := qcx.Commit(); err != nil {
 				t.Fatal(err)
 			}
-			tx = idx.holder.txf.NewTx(Txo{Write: false, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			qcx, qr := mustRead(t, f)
+			defer qcx.Release()
 
 			// Ensure values are set.
 			for columnID, value := range m {
-				v, exists, err := f.value(tx, columnID, bitDepth)
+				v, exists, err := f.value(qr, columnID, bitDepth)
 				if err != nil {
 					t.Fatal(err)
 				} else if value != int64(v) {
@@ -451,7 +493,7 @@ func TestFragment_SetValue(t *testing.T) {
 func TestFragment_Sum(t *testing.T) {
 	const bitDepth = 16
 
-	f, idx, tx := mustOpenFragment(t)
+	f, qcx, qw := mustOpenFragment(t)
 	defer f.Clean(t)
 
 	// Set values.
@@ -466,17 +508,16 @@ func TestFragment_Sum(t *testing.T) {
 		{4000, 300},
 	}
 	for _, v := range vals {
-		if _, err := f.setValue(tx, v.cid, bitDepth, v.val); err != nil {
+		if _, err := f.setValue(qw, v.cid, bitDepth, v.val); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	require.Nil(t, qcx.Commit())
+	qcx, qr := mustRead(t, f)
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if sum, n, err := f.sum(tx, nil, bitDepth); err != nil {
+		if sum, n, err := f.sum(qr, nil, bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 5 {
 			t.Fatalf("unexpected count: %d", n)
@@ -486,7 +527,7 @@ func TestFragment_Sum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if sum, n, err := f.sum(tx, NewRow(2000, 4000, 5000), bitDepth); err != nil {
+		if sum, n, err := f.sum(qr, NewRow(2000, 4000, 5000), bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 2 {
 			t.Fatalf("unexpected count: %d", n)
@@ -495,21 +536,19 @@ func TestFragment_Sum(t *testing.T) {
 		}
 	})
 
-	tx.Rollback()
-	tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	qcx.Release()
+	qcx, qw = mustWrite(t, f)
 
 	// verify that clearValue clears values
-	if _, err := f.clearValue(tx, 1000, bitDepth, 23); err != nil {
+	if _, err := f.clearValue(qw, 1000, bitDepth, 23); err != nil {
 		t.Fatal(err)
 	}
 
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	require.Nil(t, qcx.Commit())
+	_, qr = mustRead(t, f)
 
 	t.Run("ClearValue", func(t *testing.T) {
-		if sum, n, err := f.sum(tx, nil, bitDepth); err != nil {
+		if sum, n, err := f.sum(qr, nil, bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 4 {
 			t.Fatalf("unexpected count: %d", n)
@@ -523,31 +562,30 @@ func TestFragment_Sum(t *testing.T) {
 func TestFragment_MinMax(t *testing.T) {
 	const bitDepth = 16
 
-	f, idx, tx := mustOpenFragment(t)
+	f, qcx, qw := mustOpenFragment(t)
 	defer f.Clean(t)
 
 	// Set values.
-	if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
+	if _, err := f.setValue(qw, 1000, bitDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setValue(tx, 2000, bitDepth, 300); err != nil {
+	} else if _, err := f.setValue(qw, 2000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setValue(tx, 3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.setValue(qw, 3000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setValue(tx, 4000, bitDepth, 300); err != nil {
+	} else if _, err := f.setValue(qw, 4000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setValue(tx, 5000, bitDepth, 2818); err != nil {
+	} else if _, err := f.setValue(qw, 5000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setValue(tx, 6000, bitDepth, 2817); err != nil {
+	} else if _, err := f.setValue(qw, 6000, bitDepth, 2817); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setValue(tx, 7000, bitDepth, 0); err != nil {
+	} else if _, err := f.setValue(qw, 7000, bitDepth, 0); err != nil {
 		t.Fatal(err)
 	}
 
-	PanicOn(tx.Commit())
+	require.Nil(t, qcx.Commit())
 
 	// the new tx is shared by Min/Max below.
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	_, qr := mustRead(t, f)
 
 	t.Run("Min", func(t *testing.T) {
 		tests := []struct {
@@ -563,7 +601,7 @@ func TestFragment_MinMax(t *testing.T) {
 			{filter: NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
-			if min, cnt, err := f.min(tx, test.filter, bitDepth); err != nil {
+			if min, cnt, err := f.min(qr, test.filter, bitDepth); err != nil {
 				t.Fatal(err)
 			} else if min != test.exp {
 				t.Errorf("test %d expected min: %v, but got: %v", i, test.exp, min)
@@ -592,7 +630,7 @@ func TestFragment_MinMax(t *testing.T) {
 				columns = test.filter.Columns()
 			}
 
-			if max, cnt, err := f.max(tx, test.filter, bitDepth); err != nil {
+			if max, cnt, err := f.max(qr, test.filter, bitDepth); err != nil {
 				t.Fatal(err)
 			} else if max != test.exp || cnt != test.cnt {
 				t.Errorf("%d. max(%v, %v)=(%v, %v), expected (%v, %v)", i, columns, bitDepth, max, cnt, test.exp, test.cnt)
@@ -606,23 +644,22 @@ func TestFragment_Range(t *testing.T) {
 	const bitDepth = 16
 
 	t.Run("EQ", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set values.
-		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(qw, 1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(qw, 2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.setValue(qw, 3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 4000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(qw, 4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for equality.
-		if b, err := f.rangeOp(tx, pql.EQ, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(qw, pql.EQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -630,24 +667,23 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("EQOversizeRegression", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set values.
-		if _, err := f.setValue(tx, 1000, 1, 0); err != nil {
+		if _, err := f.setValue(qw, 1000, 1, 0); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2000, 1, 1); err != nil {
+		} else if _, err := f.setValue(qw, 2000, 1, 1); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for equality.
-		if b, err := f.rangeOp(tx, pql.EQ, 1, 3); err != nil {
+		if b, err := f.rangeOp(qw, pql.EQ, 1, 3); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
-		if b, err := f.rangeOp(tx, pql.EQ, 1, 4); err != nil {
+		if b, err := f.rangeOp(qw, pql.EQ, 1, 4); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -655,23 +691,22 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("NEQ", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set values.
-		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(qw, 1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(qw, 2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.setValue(qw, 3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 4000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(qw, 4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for inequality.
-		if b, err := f.rangeOp(tx, pql.NEQ, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(qw, pql.NEQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -679,48 +714,47 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("LT", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set values.
-		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(qw, 1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(qw, 2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.setValue(qw, 3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 4000, bitDepth, 301); err != nil {
+		} else if _, err := f.setValue(qw, 4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 5000, bitDepth, 1); err != nil {
+		} else if _, err := f.setValue(qw, 5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 6000, bitDepth, 0); err != nil {
+		} else if _, err := f.setValue(qw, 6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for values less than (ending with set column).
-		if b, err := f.rangeOp(tx, pql.LT, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(qw, pql.LT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values less than (ending with unset column).
-		if b, err := f.rangeOp(tx, pql.LT, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(qw, pql.LT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values less than or equal to (ending with set column).
-		if b, err := f.rangeOp(tx, pql.LTE, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(qw, pql.LTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values less than or equal to (ending with unset column).
-		if b, err := f.rangeOp(tx, pql.LTE, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(qw, pql.LTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -728,15 +762,14 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("LTRegression", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
-		if _, err := f.setValue(tx, 1, 1, 1); err != nil {
+		if _, err := f.setValue(qw, 1, 1, 1); err != nil {
 			t.Fatal(err)
 		}
 
-		if b, err := f.rangeOp(tx, pql.LT, 1, 2); err != nil {
+		if b, err := f.rangeOp(qw, pql.LT, 1, 2); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1}) {
 			t.Fatalf("unepxected coulmns: %+v", b.Columns())
@@ -744,17 +777,16 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("LTMaxRegression", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
-		if _, err := f.setValue(tx, 1, 2, 3); err != nil {
+		if _, err := f.setValue(qw, 1, 2, 3); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2, 2, 0); err != nil {
+		} else if _, err := f.setValue(qw, 2, 2, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		if b, err := f.rangeLTUnsigned(tx, NewRow(1, 2), 2, 3, false); err != nil {
+		if b, err := f.rangeLTUnsigned(qw, NewRow(1, 2), 2, 3, false); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2}) {
 			t.Fatalf("unepxected coulmns: %+v", b.Columns())
@@ -762,48 +794,47 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("GT", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set values.
-		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(qw, 1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(qw, 2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.setValue(qw, 3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 4000, bitDepth, 301); err != nil {
+		} else if _, err := f.setValue(qw, 4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 5000, bitDepth, 1); err != nil {
+		} else if _, err := f.setValue(qw, 5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 6000, bitDepth, 0); err != nil {
+		} else if _, err := f.setValue(qw, 6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for values greater than (ending with unset bit).
-		if b, err := f.rangeOp(tx, pql.GT, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(qw, pql.GT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than (ending with set bit).
-		if b, err := f.rangeOp(tx, pql.GT, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(qw, pql.GT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with unset bit).
-		if b, err := f.rangeOp(tx, pql.GTE, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(qw, pql.GTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with set bit).
-		if b, err := f.rangeOp(tx, pql.GTE, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(qw, pql.GTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -811,17 +842,16 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("GTMinRegression", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
-		if _, err := f.setValue(tx, 1, 2, 0); err != nil {
+		if _, err := f.setValue(qw, 1, 2, 0); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2, 2, 1); err != nil {
+		} else if _, err := f.setValue(qw, 2, 2, 1); err != nil {
 			t.Fatal(err)
 		}
 
-		if b, err := f.rangeGTUnsigned(tx, NewRow(1, 2), 2, 0, false); err != nil {
+		if b, err := f.rangeGTUnsigned(qw, NewRow(1, 2), 2, 0, false); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2}) {
 			t.Fatalf("unepxected coulmns: %+v", b.Columns())
@@ -829,17 +859,16 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("GTOversizeRegression", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
-		if _, err := f.setValue(tx, 1, 2, 0); err != nil {
+		if _, err := f.setValue(qw, 1, 2, 0); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2, 2, 1); err != nil {
+		} else if _, err := f.setValue(qw, 2, 2, 1); err != nil {
 			t.Fatal(err)
 		}
 
-		if b, err := f.rangeGTUnsigned(tx, NewRow(1, 2), 2, 4, false); err != nil {
+		if b, err := f.rangeGTUnsigned(qw, NewRow(1, 2), 2, 4, false); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{}) {
 			t.Fatalf("unepxected coulmns: %+v", b.Columns())
@@ -847,48 +876,47 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("BETWEEN", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		// Set values.
-		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(qw, 1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(qw, 2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.setValue(qw, 3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 4000, bitDepth, 301); err != nil {
+		} else if _, err := f.setValue(qw, 4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 5000, bitDepth, 1); err != nil {
+		} else if _, err := f.setValue(qw, 5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 6000, bitDepth, 0); err != nil {
+		} else if _, err := f.setValue(qw, 6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for values greater than (ending with unset column).
-		if b, err := f.rangeBetween(tx, bitDepth, 300, 2817); err != nil {
+		if b, err := f.rangeBetween(qw, bitDepth, 300, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than (ending with set column).
-		if b, err := f.rangeBetween(tx, bitDepth, 301, 2817); err != nil {
+		if b, err := f.rangeBetween(qw, bitDepth, 301, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with unset column).
-		if b, err := f.rangeBetween(tx, bitDepth, 301, 2816); err != nil {
+		if b, err := f.rangeBetween(qw, bitDepth, 301, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with set column).
-		if b, err := f.rangeBetween(tx, bitDepth, 300, 2816); err != nil {
+		if b, err := f.rangeBetween(qw, bitDepth, 300, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -896,17 +924,16 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("BetweenCommonBitsRegression", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
-		if _, err := f.setValue(tx, 1, 64, 0xf0); err != nil {
+		if _, err := f.setValue(qw, 1, 64, 0xf0); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setValue(tx, 2, 64, 0xf1); err != nil {
+		} else if _, err := f.setValue(qw, 2, 64, 0xf1); err != nil {
 			t.Fatal(err)
 		}
 
-		if b, err := f.rangeBetweenUnsigned(tx, NewRow(1, 2), 64, 0xf0, 0xf1); err != nil {
+		if b, err := f.rangeBetweenUnsigned(qw, NewRow(1, 2), 64, 0xf0, 0xf1); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1, 2}) {
 			t.Fatalf("unepxected coulmns: %+v", b.Columns())
@@ -916,12 +943,12 @@ func TestFragment_Range(t *testing.T) {
 
 // benchmarkSetValues is a helper function to explore, very roughly, the cost
 // of setting values.
-func benchmarkSetValues(b *testing.B, tx Tx, bitDepth uint64, f *fragment, cfunc func(uint64) uint64) {
+func benchmarkSetValues(b *testing.B, qw qc.QueryWrite, bitDepth uint64, f *fragment, cfunc func(uint64) uint64) {
 	column := uint64(0)
 	for i := 0; i < b.N; i++ {
 		// We're not checking the error because this is a benchmark.
 		// That does mean the result could be completely wrong...
-		_, _ = f.setValue(tx, column, bitDepth, int64(i))
+		_, _ = f.setValue(qw, column, bitDepth, int64(i))
 		column = cfunc(column)
 	}
 }
@@ -931,17 +958,15 @@ func BenchmarkFragment_SetValue(b *testing.B) {
 	depths := []uint64{4, 8, 16}
 	for _, bitDepth := range depths {
 		name := fmt.Sprintf("Depth%d", bitDepth)
-		f, idx, tx := mustOpenFragment(b, OptFieldTypeSet("none", 0))
-		_ = idx
+		f, _, qw := mustOpenFragment(b, OptFieldTypeSet("none", 0))
 
 		b.Run(name+"_Sparse", func(b *testing.B) {
-			benchmarkSetValues(b, tx, bitDepth, f, func(u uint64) uint64 { return (u + 70000) & (ShardWidth - 1) })
+			benchmarkSetValues(b, qw, bitDepth, f, func(u uint64) uint64 { return (u + 70000) & (ShardWidth - 1) })
 		})
 		f.Clean(b)
-		f, idx, tx = mustOpenFragment(b, OptFieldTypeSet("none", 0))
-		_ = idx
+		f, _, qw = mustOpenFragment(b, OptFieldTypeSet("none", 0))
 		b.Run(name+"_Dense", func(b *testing.B) {
-			benchmarkSetValues(b, tx, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
+			benchmarkSetValues(b, qw, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
 		})
 		f.Clean(b)
 	}
@@ -984,10 +1009,10 @@ func makeBenchmarkImportValueData(b *testing.B, bitDepth uint64, cfunc func(uint
 
 // benchmarkImportValues is a helper function to explore, very roughly, the cost
 // of setting values using the special setter used for imports.
-func benchmarkImportValues(b *testing.B, tx Tx, bitDepth uint64, f *fragment, cfunc func(uint64) uint64) {
+func benchmarkImportValues(b *testing.B, qw qc.QueryWrite, bitDepth uint64, f *fragment, cfunc func(uint64) uint64) {
 	batches := makeBenchmarkImportValueData(b, bitDepth, cfunc)
 	for _, req := range batches {
-		err := f.importValue(tx, req.ColumnIDs, req.Values, bitDepth, false)
+		err := f.importValue(qw, req.ColumnIDs, req.Values, bitDepth, false)
 		if err != nil {
 			b.Fatalf("error importing values: %s", err)
 		}
@@ -999,16 +1024,14 @@ func BenchmarkFragment_ImportValue(b *testing.B) {
 	depths := []uint64{4, 8, 16, 32}
 	for _, bitDepth := range depths {
 		name := fmt.Sprintf("Depth%d", bitDepth)
-		f, idx, tx := mustOpenFragment(b)
-		_ = idx
+		f, _, qw := mustOpenFragment(b)
 		b.Run(name+"_Sparse", func(b *testing.B) {
-			benchmarkImportValues(b, tx, bitDepth, f, func(u uint64) uint64 { return (u + 19) & (ShardWidth - 1) })
+			benchmarkImportValues(b, qw, bitDepth, f, func(u uint64) uint64 { return (u + 19) & (ShardWidth - 1) })
 		})
 		f.Clean(b)
-		f, idx, tx = mustOpenFragment(b)
-		_ = idx
+		f, _, qw = mustOpenFragment(b)
 		b.Run(name+"_Dense", func(b *testing.B) {
-			benchmarkImportValues(b, tx, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
+			benchmarkImportValues(b, qw, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
 		})
 		f.Clean(b)
 	}
@@ -1036,26 +1059,27 @@ func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 							updateRows[i] = uint64(rand.Int63n(int64(numRows))) // row id
 							updateCols[i] = uint64(rand.Int63n(ShardWidth))     // column id
 						}
-						f, idx, tx := mustOpenFragment(b)
-						_ = idx
-						defer f.Clean(b)
+						func() {
+							f, qcx, qw := mustOpenFragment(b)
+							defer f.Clean(b)
+							defer qcx.Release()
 
-						err := f.importRoaringT(tx, getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
-						if err != nil {
-							b.Fatalf("importing base data for benchmark: %v", err)
-						}
-						b.StartTimer()
-						for i := 0; i < numUpdates; i++ {
-							err := f.bulkImportStandard(tx,
-								updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
-								updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
-								&ImportOptions{},
-							)
+							err := f.importRoaring(context.Background(), qw, getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
 							if err != nil {
-								b.Fatalf("doing small bulk import: %v", err)
+								b.Fatalf("importing base data for benchmark: %v", err)
 							}
-						}
-						tx.Rollback() // don't exhaust the Tx space under b.N iterations.
+							b.StartTimer()
+							for i := 0; i < numUpdates; i++ {
+								err := f.bulkImportStandard(qw,
+									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+									&ImportOptions{},
+								)
+								if err != nil {
+									b.Fatalf("doing small bulk import: %v", err)
+								}
+							}
+						}()
 					}
 				})
 			}
@@ -1072,23 +1096,25 @@ func BenchmarkFragment_RepeatedSmallImportsRoaring(b *testing.B) {
 						b.StopTimer()
 						// build the update data set all at once - this will get applied
 						// to a fragment in numUpdates batches
-						f, idx, tx := mustOpenFragment(b)
-						_ = idx
-						defer f.Clean(b)
+						func() {
+							f, qcx, qw := mustOpenFragment(b)
+							defer f.Clean(b)
+							defer qcx.Release()
 
-						err := f.importRoaringT(tx, getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth), false)
-						if err != nil {
-							b.Fatalf("importing base data for benchmark: %v", err)
-						}
-						for i := 0; i < numUpdates; i++ {
-							data := getUpdataRoaring(numRows, bitsPerUpdate, int64(i))
-							b.StartTimer()
-							err := f.importRoaringT(tx, data, false)
-							b.StopTimer()
+							err := f.importRoaring(context.Background(), qw, getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth), false)
 							if err != nil {
-								b.Fatalf("doing small roaring import: %v", err)
+								b.Fatalf("importing base data for benchmark: %v", err)
 							}
-						}
+							for i := 0; i < numUpdates; i++ {
+								data := getUpdataRoaring(numRows, bitsPerUpdate, int64(i))
+								b.StartTimer()
+								err := f.importRoaring(context.Background(), qw, data, false)
+								b.StopTimer()
+								if err != nil {
+									b.Fatalf("doing small roaring import: %v", err)
+								}
+							}
+						}()
 					}
 				})
 			}
@@ -1120,25 +1146,28 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 			b.Run(fmt.Sprintf("Updates%dVals%d", numUpdates, valsPerUpdate), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					b.StopTimer()
-					f, _, tx := mustOpenFragment(b)
+					func() {
+						f, qcx, qw := mustOpenFragment(b)
+						defer qcx.Release()
 
-					err := f.importValue(tx, initialCols, initialVals, 21, false)
-					if err != nil {
-						b.Fatalf("initial value import: %v", err)
-					}
-					b.StartTimer()
-					for j := 0; j < numUpdates; j++ {
-						err := f.importValue(tx,
-							updateCols[valsPerUpdate*j:valsPerUpdate*(j+1)],
-							updateVals[valsPerUpdate*j:valsPerUpdate*(j+1)],
-							21,
-							false,
-						)
+						err := f.importValue(qw, initialCols, initialVals, 21, false)
 						if err != nil {
-							b.Fatalf("importing values: %v", err)
+							b.Fatalf("initial value import: %v", err)
 						}
-					}
-					tx.Rollback() // don't exhaust the Tx over the b.N iterations.
+						b.StartTimer()
+						for j := 0; j < numUpdates; j++ {
+							err := f.importValue(qw,
+								updateCols[valsPerUpdate*j:valsPerUpdate*(j+1)],
+								updateVals[valsPerUpdate*j:valsPerUpdate*(j+1)],
+								21,
+								false,
+							)
+							if err != nil {
+								b.Fatalf("importing values: %v", err)
+							}
+						}
+					}()
+
 				}
 			})
 		}
@@ -1147,18 +1176,17 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 
 // Ensure a fragment can return the top n results.
 func TestFragment_Top(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	defer f.Clean(t)
 
 	// Set bits on the rows 100, 101, & 102.
-	f.mustSetBits(tx, 100, 1, 3, 200)
-	f.mustSetBits(tx, 101, 1)
-	f.mustSetBits(tx, 102, 1, 2)
+	f.mustSetBits(t, qw, 100, 1, 3, 200)
+	f.mustSetBits(t, qw, 101, 1)
+	f.mustSetBits(t, qw, 102, 1, 2)
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.top(tx, topOptions{N: 2}); err != nil {
+	if pairs, err := f.top(qw, topOptions{N: 2}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -1171,22 +1199,21 @@ func TestFragment_Top(t *testing.T) {
 
 // Ensure a fragment can return top rows that intersect with an input row.
 func TestFragment_TopN_Intersect(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	defer f.Clean(t)
 
 	// Create an intersecting input row.
 	src := NewRow(1, 2, 3)
 
 	// Set bits on various rows.
-	f.mustSetBits(tx, 100, 1, 10, 11, 12)    // one intersection
-	f.mustSetBits(tx, 101, 1, 2, 3, 4)       // three intersections
-	f.mustSetBits(tx, 102, 1, 2, 4, 5, 6)    // two intersections
-	f.mustSetBits(tx, 103, 1000, 1001, 1002) // no intersection
+	f.mustSetBits(t, qw, 100, 1, 10, 11, 12)    // one intersection
+	f.mustSetBits(t, qw, 101, 1, 2, 3, 4)       // three intersections
+	f.mustSetBits(t, qw, 102, 1, 2, 4, 5, 6)    // two intersections
+	f.mustSetBits(t, qw, 103, 1000, 1001, 1002) // no intersection
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.top(tx, topOptions{N: 3, Src: src}); err != nil {
+	if pairs, err := f.top(qw, topOptions{N: 3, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 3},
@@ -1203,8 +1230,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		t.Skip("short mode")
 	}
 
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	defer f.Clean(t)
 
 	// Create an intersecting input row.
@@ -1225,14 +1251,14 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writing to bytes: %v", err)
 	}
-	err = f.importRoaringT(tx, b.Bytes(), false)
+	err = f.importRoaring(context.Background(), qw, b.Bytes(), false)
 	if err != nil {
 		t.Fatalf("importing data: %v", err)
 	}
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.top(tx, topOptions{N: 10, Src: src}); err != nil {
+	if pairs, err := f.top(qw, topOptions{N: 10, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 999, Count: 19},
@@ -1252,17 +1278,16 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 
 // Ensure a fragment can return top rows when specified by ID.
 func TestFragment_TopN_IDs(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	defer f.Clean(t)
 
 	// Set bits on various rows.
-	f.mustSetBits(tx, 100, 1, 2, 3)
-	f.mustSetBits(tx, 101, 4, 5, 6, 7)
-	f.mustSetBits(tx, 102, 8, 9, 10, 11, 12)
+	f.mustSetBits(t, qw, 100, 1, 2, 3)
+	f.mustSetBits(t, qw, 101, 4, 5, 6, 7)
+	f.mustSetBits(t, qw, 102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.top(tx, topOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.top(qw, topOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 4},
@@ -1274,17 +1299,16 @@ func TestFragment_TopN_IDs(t *testing.T) {
 
 // Ensure a fragment return none if CacheTypeNone is set
 func TestFragment_TopN_NopCache(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
 	defer f.Clean(t)
 
 	// Set bits on various rows.
-	f.mustSetBits(tx, 100, 1, 2, 3)
-	f.mustSetBits(tx, 101, 4, 5, 6, 7)
-	f.mustSetBits(tx, 102, 8, 9, 10, 11, 12)
+	f.mustSetBits(t, qw, 100, 1, 2, 3)
+	f.mustSetBits(t, qw, 101, 4, 5, 6, 7)
+	f.mustSetBits(t, qw, 102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.top(tx, topOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.top(qw, topOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
@@ -1293,49 +1317,18 @@ func TestFragment_TopN_NopCache(t *testing.T) {
 
 // Ensure the fragment cache limit works
 func TestFragment_TopN_CacheSize(t *testing.T) {
-	shard := uint64(0)
 	cacheSize := uint32(3)
 
-	// Create Index.
-	index := mustOpenIndex(t, IndexOptions{})
-
-	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", "", OptFieldTypeSet(CacheTypeRanked, cacheSize))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create view.
-	view, err := field.createViewIfNotExists(viewStandard)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create fragment.
-	frag, err := view.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Close the storage so we can re-open it without encountering a flock.
-	frag.Close()
-
-	f := frag
-	if err := f.Open(); err != nil {
-		PanicOn(err)
-	}
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, cacheSize))
 	defer f.Clean(t)
 
-	// Obtain transaction.
-	tx := index.holder.txf.NewTx(Txo{Write: writable, Index: index, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
-
 	// Set bits on various rows.
-	f.mustSetBits(tx, 100, 1, 2, 3)
-	f.mustSetBits(tx, 101, 4, 5, 6, 7)
-	f.mustSetBits(tx, 102, 8, 9, 10, 11, 12)
-	f.mustSetBits(tx, 103, 8, 9, 10, 11, 12, 13)
-	f.mustSetBits(tx, 104, 8, 9, 10, 11, 12, 13, 14)
-	f.mustSetBits(tx, 105, 10, 11)
+	f.mustSetBits(t, qw, 100, 1, 2, 3)
+	f.mustSetBits(t, qw, 101, 4, 5, 6, 7)
+	f.mustSetBits(t, qw, 102, 8, 9, 10, 11, 12)
+	f.mustSetBits(t, qw, 103, 8, 9, 10, 11, 12, 13)
+	f.mustSetBits(t, qw, 104, 8, 9, 10, 11, 12, 13, 14)
+	f.mustSetBits(t, qw, 105, 10, 11)
 
 	f.RecalculateCache()
 
@@ -1346,7 +1339,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 
 	// Retrieve top rows.
-	if pairs, err := f.top(tx, topOptions{N: 5}); err != nil {
+	if pairs, err := f.top(qw, topOptions{N: 5}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) > int(cacheSize) {
 		t.Fatalf("TopN count cannot exceed cache size: %d", cacheSize)
@@ -1359,13 +1352,12 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeLRU, 0))
-	_ = idx
+	f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeLRU, 0))
 	defer f.Clean(t)
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.setBit(tx, i, 0); err != nil {
+		if _, err := f.setBit(qw, i, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1377,10 +1369,10 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
 
-	PanicOn(tx.Commit())
+	require.Nil(t, qcx.Commit())
 
 	// Reopen the fragment.
-	if err := f.Reopen(); err != nil {
+	if err := f.Reopen(t); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1392,114 +1384,47 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can be copied to another fragment.
-func TestFragment_WriteTo_ReadFrom(t *testing.T) {
-	f0, _, tx := mustOpenFragment(t)
-	defer f0.Clean(t)
-
-	// Set and then clear bits on the fragment.
-	if _, err := f0.setBit(tx, 1000, 1); err != nil {
-		t.Fatal(err)
-	} else if _, err := f0.setBit(tx, 1000, 2); err != nil {
-		t.Fatal(err)
-	} else if _, err := f0.clearBit(tx, 1000, 1); err != nil {
-		t.Fatal(err)
-	}
-	err := tx.Commit()
-	if err != nil {
-		t.Fatalf("committing write: %v", err)
-	}
-
-	// Verify cache is populated.
-	if n := f0.cache.Len(); n != 1 {
-		t.Fatalf("unexpected cache size: %d", n)
-	}
-
-	// Write fragment to a buffer.
-	var buf bytes.Buffer
-	wn, err := f0.WriteTo(&buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Read into another fragment.
-	f1, idx, tx := mustOpenFragment(t)
-	tx.Rollback()
-
-	defer f1.Clean(t)
-
-	if rn, err := f1.ReadFrom(&buf); err != nil { // eventually calls fragment.fillFragmentFromArchive
-		t.Fatal(err)
-	} else if wn != rn {
-		t.Fatalf("read/write byte count mismatch: wn=%d, rn=%d", wn, rn)
-	}
-	// make a read-only Tx after ReadFrom has committed.
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f1, Shard: f1.shard})
-	defer tx.Rollback()
-
-	// Verify cache is in other fragment.
-	if n := f1.cache.Len(); n != 1 {
-		t.Fatalf("unexpected cache size: %d", n)
-	}
-
-	// Verify data in other fragment.
-	if a := f1.mustRow(tx, 1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
-		t.Fatalf("unexpected columns: %+v", a)
-	}
-
-	// Close and reopen the fragment & verify the data.
-	if err := f1.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if n := f1.cache.Len(); n != 1 {
-		t.Fatalf("unexpected cache size (reopen): %d", n)
-	} else if a := f1.mustRow(tx, 1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
-		t.Fatalf("unexpected columns (reopen): %+v", a)
-	}
-}
-
 func BenchmarkFragment_IntersectionCount(b *testing.B) {
-	f, idx, tx := mustOpenFragment(b)
+	f, qcx, qw := mustOpenFragment(b)
 	defer f.Clean(b)
 
 	// Generate some intersecting data.
 	for i := 0; i < 10000; i += 2 {
-		if _, err := f.setBit(tx, 1, uint64(i)); err != nil {
+		if _, err := f.setBit(qw, 1, uint64(i)); err != nil {
 			b.Fatal(err)
 		}
 	}
 	for i := 0; i < 10000; i += 3 {
-		if _, err := f.setBit(tx, 2, uint64(i)); err != nil {
+		if _, err := f.setBit(qw, 2, uint64(i)); err != nil {
 			b.Fatal(err)
 		}
 	}
 
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	require.Nil(b, qcx.Commit())
+	_, qr := mustRead(b, f)
 
 	// Start benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if n := f.mustRow(tx, 1).intersectionCount(f.mustRow(tx, 2)); n == 0 {
+		if n := f.mustRow(b, qw, 1).intersectionCount(f.mustRow(b, qr, 2)); n == 0 {
 			b.Fatalf("unexpected count: %d", n)
 		}
 	}
 }
 
 func TestFragment_Tanimoto(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	defer f.Clean(t)
 
 	src := NewRow(1, 2, 3)
 
 	// Set bits on the rows 100, 101, & 102.
-	f.mustSetBits(tx, 100, 1, 3, 2, 200)
-	f.mustSetBits(tx, 101, 1, 3)
-	f.mustSetBits(tx, 102, 1, 2, 10, 12)
+	f.mustSetBits(t, qw, 100, 1, 3, 2, 200)
+	f.mustSetBits(t, qw, 101, 1, 3)
+	f.mustSetBits(t, qw, 102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.top(tx, topOptions{TanimotoThreshold: 50, Src: src}); err != nil {
+	if pairs, err := f.top(qw, topOptions{TanimotoThreshold: 50, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -1511,19 +1436,18 @@ func TestFragment_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Zero_Tanimoto(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	defer f.Clean(t)
 
 	src := NewRow(1, 2, 3)
 
 	// Set bits on the rows 100, 101, & 102.
-	f.mustSetBits(tx, 100, 1, 3, 2, 200)
-	f.mustSetBits(tx, 101, 1, 3)
-	f.mustSetBits(tx, 102, 1, 2, 10, 12)
+	f.mustSetBits(t, qw, 100, 1, 3, 2, 200)
+	f.mustSetBits(t, qw, 101, 1, 3)
+	f.mustSetBits(t, qw, 102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.top(tx, topOptions{TanimotoThreshold: 0, Src: src}); err != nil {
+	if pairs, err := f.top(qw, topOptions{TanimotoThreshold: 0, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 3 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -1538,31 +1462,31 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 
 // Ensure a fragment can set mutually exclusive values.
 func TestFragment_SetMutex(t *testing.T) {
-	f, _, tx := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
+	f, _, qw := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
 	defer f.Clean(t)
 
 	var cols []uint64
 
 	// Set a value on column 100.
-	if _, err := f.setBit(tx, 1, 100); err != nil {
+	if _, err := f.setBit(qw, 1, 100); err != nil {
 		t.Fatal(err)
 	}
 	// Verify the value was set.
-	cols = f.mustRow(tx, 1).Columns()
+	cols = f.mustRow(t, qw, 1).Columns()
 	if !reflect.DeepEqual(cols, []uint64{100}) {
 		t.Fatalf("mutex unexpected columns: %v", cols)
 	}
 
 	// Set a different value on column 100.
-	if _, err := f.setBit(tx, 2, 100); err != nil {
+	if _, err := f.setBit(qw, 2, 100); err != nil {
 		t.Fatal(err)
 	}
 	// Verify that value (row 1) was replaced (by row 2).
-	cols = f.mustRow(tx, 1).Columns()
+	cols = f.mustRow(t, qw, 1).Columns()
 	if !reflect.DeepEqual(cols, []uint64{}) {
 		t.Fatalf("mutex unexpected columns: %v", cols)
 	}
-	cols = f.mustRow(tx, 2).Columns()
+	cols = f.mustRow(t, qw, 2).Columns()
 	if !reflect.DeepEqual(cols, []uint64{100}) {
 		t.Fatalf("mutex unexpected columns: %v", cols)
 	}
@@ -1652,33 +1576,32 @@ func TestFragment_ImportSet(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importset%d", i), func(t *testing.T) {
-			f, idx, tx := mustOpenFragment(t)
-			_ = idx
+			f, _, qw := mustOpenFragment(t)
 			defer f.Clean(t)
 
 			// Set import.
-			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			err := f.bulkImport(qw, test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
 			// Check for expected results.
 			for k, v := range test.setExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qw, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
 			}
 
 			// Clear import.
-			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			err = f.bulkImport(qw, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
 			if err != nil {
 				t.Fatalf("bulk clearing ids: %v", err)
 			}
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qw, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
@@ -1770,45 +1693,40 @@ func TestFragment_ImportSet_WithTxCommit(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importset%d", i), func(t *testing.T) {
-			f, idx, tx := mustOpenFragment(t)
-			_ = idx
+			f, qcx, qw := mustOpenFragment(t)
 			defer f.Clean(t)
 
 			// Set import.
-			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			err := f.bulkImport(qw, test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			PanicOn(tx.Commit())
-			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			require.Nil(t, qcx.Commit())
+			_, qr := mustRead(t, f)
 
 			// Check for expected results.
 			for k, v := range test.setExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qr, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
 			}
 
-			tx.Rollback()
-			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			qcx, qw = mustWrite(t, f)
 
 			// Clear import.
-			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			err = f.bulkImport(qw, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
 			if err != nil {
 				t.Fatalf("bulk clearing ids: %v", err)
 			}
 
-			PanicOn(tx.Commit())
-			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			require.Nil(t, qcx.Commit())
+			_, qr = mustRead(t, f)
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qr, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
@@ -1819,26 +1737,21 @@ func TestFragment_ImportSet_WithTxCommit(t *testing.T) {
 
 func TestFragment_ConcurrentImport(t *testing.T) {
 	t.Run("bulkImportStandard", func(t *testing.T) {
-		shard := uint64(0)
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, qcx, _ := mustOpenFragment(t)
+		// we want to make new ones, so there can't be an existing write
+		qcx.Release()
 		defer f.Clean(t)
-		// note: write Tx must be used on the same goroutine that created them.
-		// So we close out the "default" Tx created by mustOpenFragment, and
-		// have the goroutines below each make their own. One should get the
-		// write lock first, and thus they should get serialized.
-		tx.Rollback()
 
 		eg := errgroup.Group{}
 		eg.Go(func() error {
-			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: shard})
-			defer func() { PanicOn(tx.Commit()) }()
-			return f.bulkImportStandard(tx, []uint64{1, 2}, []uint64{1, 2}, &ImportOptions{})
+			qcx, qw := mustWrite(t, f)
+			defer func() { require.Nil(t, qcx.Commit()) }()
+			return f.bulkImportStandard(qw, []uint64{1, 2}, []uint64{1, 2}, &ImportOptions{})
 		})
 		eg.Go(func() error {
-			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: shard})
-			defer func() { PanicOn(tx.Commit()) }()
-			return f.bulkImportStandard(tx, []uint64{3, 4}, []uint64{3, 4}, &ImportOptions{})
+			qcx, qw := mustWrite(t, f)
+			defer func() { require.Nil(t, qcx.Commit()) }()
+			return f.bulkImportStandard(qw, []uint64{3, 4}, []uint64{3, 4}, &ImportOptions{})
 		})
 		err := eg.Wait()
 		if err != nil {
@@ -1931,32 +1844,32 @@ func TestFragment_ImportMutex(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importmutex%d", i), func(t *testing.T) {
-			f, _, tx := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
+			f, _, qw := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
 			defer f.Clean(t)
 
 			// Set import.
-			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			err := f.bulkImport(qw, test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
 			// Check for expected results.
 			for k, v := range test.setExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qw, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("row: %d, expected: %v, but got: %v", k, v, cols)
 				}
 			}
 
 			// Clear import.
-			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			err = f.bulkImport(qw, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
 			if err != nil {
 				t.Fatalf("bulk clearing ids: %v", err)
 			}
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qw, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("row: %d expected: %v, but got: %v", k, v, cols)
 				}
@@ -2050,44 +1963,42 @@ func TestFragment_ImportMutex_WithTxCommit(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importmutex%d", i), func(t *testing.T) {
-			f, idx, tx := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
+			f, qcx, qw := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
 			defer f.Clean(t)
 
 			// Set import.
-			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			err := f.bulkImport(qw, test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			PanicOn(tx.Commit())
-			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			require.Nil(t, qcx.Commit())
+			qcx, qr := mustRead(t, f)
 
 			// Check for expected results.
 			for k, v := range test.setExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qr, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("row: %d, expected: %v, but got: %v", k, v, cols)
 				}
 			}
+			qcx.Release()
 
-			tx.Rollback()
-			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			qcx, qw = mustWrite(t, f)
 
 			// Clear import.
-			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			err = f.bulkImport(qw, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
 			if err != nil {
 				t.Fatalf("bulk clearing ids: %v", err)
 			}
 
-			PanicOn(tx.Commit())
-			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			require.Nil(t, qcx.Commit())
+
+			_, qr = mustRead(t, f)
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qr, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("row: %d expected: %v, but got: %v", k, v, cols)
 				}
@@ -2181,32 +2092,32 @@ func TestFragment_ImportBool(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importmutex%d", i), func(t *testing.T) {
-			f, _, tx := mustOpenFragment(t, OptFieldTypeBool())
+			f, _, qw := mustOpenFragment(t, OptFieldTypeBool())
 			defer f.Clean(t)
 
 			// Set import.
-			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			err := f.bulkImport(qw, test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
 			// Check for expected results.
 			for k, v := range test.setExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qw, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
 			}
 
 			// Clear import.
-			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			err = f.bulkImport(qw, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qw, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
@@ -2300,44 +2211,41 @@ func TestFragment_ImportBool_WithTxCommit(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importmutex%d", i), func(t *testing.T) {
-			f, idx, tx := mustOpenFragment(t, OptFieldTypeBool())
+			f, qcx, qw := mustOpenFragment(t, OptFieldTypeBool())
 			defer f.Clean(t)
 
 			// Set import.
-			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			err := f.bulkImport(qw, test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			PanicOn(tx.Commit())
-			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			require.Nil(t, qcx.Commit())
+			qcx, qr := mustRead(t, f)
 
 			// Check for expected results.
 			for k, v := range test.setExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qr, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
 			}
 
-			tx.Rollback()
-			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			qcx.Release()
+			qcx, qw = mustWrite(t, f)
 
 			// Clear import.
-			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			err = f.bulkImport(qw, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
-			PanicOn(tx.Commit())
-			tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			require.Nil(t, qcx.Commit())
+			_, qr = mustRead(t, f)
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
-				cols := f.mustRow(tx, k).Columns()
+				cols := f.mustRow(t, qr, k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
 				}
@@ -2372,15 +2280,16 @@ func BenchmarkFragment_Import(b *testing.B) {
 		// since bulkImport modifies the input slices, we make new copies for each round
 		copy(rowsUse, rows)
 		copy(colsUse, cols)
-		f, idx, tx := mustOpenFragment(b)
-		_ = idx
-		b.StartTimer()
-		if err := f.bulkImport(tx, rowsUse, colsUse, options); err != nil {
-			b.Errorf("Error Building Sample: %s", err)
-		}
-		b.StopTimer()
-		tx.Rollback()
-		f.Clean(b)
+		func() {
+			f, qcx, qw := mustOpenFragment(b)
+			defer f.Clean(b)
+			defer qcx.Release()
+			b.StartTimer()
+			if err := f.bulkImport(qw, rowsUse, colsUse, options); err != nil {
+				b.Errorf("Error Building Sample: %s", err)
+			}
+			b.StopTimer()
+		}()
 	}
 }
 
@@ -2399,10 +2308,10 @@ func BenchmarkImportRoaring(b *testing.B) {
 			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
 				b.StopTimer()
 				for i := 0; i < b.N; i++ {
-					f, _, tx := mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
+					f, _, qw := mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
 					b.StartTimer()
 
-					err := f.importRoaringT(tx, data, false)
+					err := f.importRoaring(context.Background(), qw, data, false)
 					if err != nil {
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
@@ -2432,19 +2341,20 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 				b.Run(fmt.Sprintf("Rows%dConcurrency%dCache_%s", numRows, concurrency, cacheType), func(b *testing.B) {
 					b.StopTimer()
 					frags := make([]*fragment, concurrency)
-					txs := make([]Tx, concurrency)
+					qcxs := make([]qc.QueryContext, concurrency)
+					qws := make([]qc.QueryWrite, concurrency)
 					for i := 0; i < b.N; i++ {
 						for j := 0; j < concurrency; j++ {
-							frags[j], _, txs[j] = mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
+							frags[j], qcxs[j], qws[j] = mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
 						}
 						eg := errgroup.Group{}
 						b.StartTimer()
 						for j := 0; j < concurrency; j++ {
 							j := j
 							eg.Go(func() error {
-								defer txs[j].Rollback()
+								defer qcxs[j].Release()
 
-								err := frags[j].importRoaringT(txs[j], data[j], false)
+								err := frags[j].importRoaring(context.Background(), qws[j], data[j], false)
 								return err
 							})
 						}
@@ -2473,16 +2383,17 @@ func BenchmarkImportStandard(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					copy(rowIDs, rowIDsOrig)
 					copy(columnIDs, columnIDsOrig)
-					f, idx, tx := mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
-					_ = idx
-					b.StartTimer()
-					err := f.bulkImport(tx, rowIDs, columnIDs, &ImportOptions{})
-					if err != nil {
-						b.Errorf("import error: %v", err)
-					}
-					b.StopTimer()
-					tx.Rollback()
-					f.Clean(b)
+					func() {
+						f, qcx, qw := mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
+						defer f.Clean(b)
+						defer qcx.Release()
+						b.StartTimer()
+						err := f.bulkImport(qw, rowIDs, columnIDs, &ImportOptions{})
+						if err != nil {
+							b.Errorf("import error: %v", err)
+						}
+						b.StopTimer()
+					}()
 				}
 			})
 		}
@@ -2502,17 +2413,16 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 				b.Run(name, func(b *testing.B) {
 					b.StopTimer()
 					for i := 0; i < b.N; i++ {
-						f, idx, tx := mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
-						_ = idx
+						f, _, qw := mustOpenFragment(b, OptFieldTypeSet(cacheType, 0))
 
 						itr, err := roaring.NewRoaringIterator(data)
 						PanicOn(err)
-						_, _, err = tx.ImportRoaringBits(f.index(), f.field(), f.view(), f.shard, itr, false, false, 0)
+						_, _, err = qw.ImportRoaringBits(itr, false, 0)
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
 						b.StartTimer()
-						err = f.importRoaringT(tx, updata, false)
+						err = f.importRoaring(context.Background(), qw, updata, false)
 						if err != nil {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
@@ -2555,19 +2465,20 @@ func BenchmarkUpdatePathological(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		f, idx, tx := mustOpenFragment(b, OptFieldTypeSet(DefaultCacheType, 0))
-		_ = idx
+		func() {
+			f, qcx, qw := mustOpenFragment(b, OptFieldTypeSet(DefaultCacheType, 0))
+			defer qcx.Release()
 
-		err := f.importRoaringT(tx, exists, false)
-		if err != nil {
-			b.Fatalf("importing roaring: %v", err)
-		}
-		b.StartTimer()
-		err = f.importRoaringT(tx, inc, false)
-		if err != nil {
-			b.Fatalf("importing second: %v", err)
-		}
-
+			err := f.importRoaring(context.Background(), qw, exists, false)
+			if err != nil {
+				b.Fatalf("importing roaring: %v", err)
+			}
+			b.StartTimer()
+			err = f.importRoaring(context.Background(), qw, inc, false)
+			if err != nil {
+				b.Fatalf("importing second: %v", err)
+			}
+		}()
 	}
 
 }
@@ -2576,11 +2487,11 @@ var bigFrag string
 
 func initBigFrag(tb testing.TB) {
 	if bigFrag == "" {
-		f, _, tx := mustOpenFragment(tb, OptFieldTypeSet(DefaultCacheType, 0))
+		f, qcx, qw := mustOpenFragment(tb, OptFieldTypeSet(DefaultCacheType, 0))
 		for i := int64(0); i < 10; i++ {
 			// 10 million rows, 1 bit per column, random seeded by i
 			data := getZipfRowsSliceRoaring(10000000, i, 0, ShardWidth)
-			err := f.importRoaringT(tx, data, false)
+			err := f.importRoaring(context.Background(), qw, data, false)
 			if err != nil {
 				PanicOn(fmt.Sprintf("setting up fragment data: %v", err))
 			}
@@ -2590,7 +2501,7 @@ func initBigFrag(tb testing.TB) {
 			PanicOn(fmt.Sprintf("closing fragment: %v", err))
 		}
 		bigFrag = f.path()
-		PanicOn(tx.Commit())
+		require.Nil(tb, qcx.Commit())
 	}
 }
 
@@ -2616,27 +2527,20 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		origF.Close()
 		fi.Close()
 
-		h, idx, _, _, f := newTestFragment(b)
-
-		err = f.Open()
-		if err != nil {
-			b.Fatalf("opening fragment: %v", err)
-		}
-
-		// Obtain transaction.
-		tx := h.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
-
-		copy(rows, rowsOrig)
-		copy(cols, colsOrig)
-		b.StartTimer()
-		err = f.bulkImport(tx, rows, cols, opts)
-		b.StopTimer()
-		if err != nil {
-			b.Fatalf("bulkImport: %v", err)
-		}
-		PanicOn(tx.Commit())
-		f.Clean(b)
+		func() {
+			f, qcx, qw := mustOpenFragment(b)
+			defer qcx.Release()
+			copy(rows, rowsOrig)
+			copy(cols, colsOrig)
+			b.StartTimer()
+			err = f.bulkImport(qw, rows, cols, opts)
+			b.StopTimer()
+			if err != nil {
+				b.Fatalf("bulkImport: %v", err)
+			}
+			require.Nil(b, qcx.Commit())
+			f.Clean(b)
+		}()
 	}
 }
 
@@ -2659,73 +2563,64 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 		}
 		origF.Close()
 		fi.Close()
-
-		h, idx, _, _, f := newTestFragment(b)
-
-		defer f.Clean(b)
-
-		tx := h.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
-
-		err = f.Open()
-		if err != nil {
-			b.Fatalf("opening fragment: %v", err)
-		}
-		b.StartTimer()
-		err = f.importRoaringT(tx, updata, false)
-		b.StopTimer()
-		if err != nil {
-			b.Fatalf("bulkImport: %v", err)
-		}
+		func() {
+			f, qcx, qw := mustOpenFragment(b)
+			defer f.Clean(b)
+			defer qcx.Release()
+			b.StartTimer()
+			err = f.importRoaring(context.Background(), qw, updata, false)
+			b.StopTimer()
+			if err != nil {
+				b.Fatalf("bulkImport: %v", err)
+			}
+		}()
 	}
 }
 
 func TestGetZipfRowsSliceRoaring(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(DefaultCacheType, 0))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(DefaultCacheType, 0))
 
 	data := getZipfRowsSliceRoaring(10, 1, 0, ShardWidth)
-	err := f.importRoaringT(tx, data, false)
+	err := f.importRoaring(context.Background(), qw, data, false)
 	if err != nil {
 		t.Fatalf("importing roaring: %v", err)
 	}
-	rows, err := f.rows(context.Background(), tx, 0)
+	rows, err := f.rows(context.Background(), qw, 0)
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(rows, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatalf("unexpected rows: %v", rows)
 	}
 	for i := uint64(1); i < 10; i++ {
-		if f.mustRow(tx, i).Count() >= f.mustRow(tx, i-1).Count() {
+		if f.mustRow(t, qw, i).Count() >= f.mustRow(t, qw, i-1).Count() {
 			t.Fatalf("suspect distribution from getZipfRowsSliceRoaring")
 		}
 	}
 	f.Clean(t)
 }
 
-func prepareSampleRowData(b *testing.B, bits int, rows uint64, width uint64) (*fragment, *Index, Tx) {
-	f, idx, tx := mustOpenFragment(b, OptFieldTypeSet("none", 0))
+func prepareSampleRowData(b *testing.B, bits int, rows uint64, width uint64) (*fragment, qc.QueryContext, qc.QueryWrite) {
+	f, qcx, qw := mustOpenFragment(b, OptFieldTypeSet("none", 0))
 	for i := 0; i < bits; i++ {
 		data := getUniformRowsSliceRoaring(rows, int64(rows)+int64(i), 0, width)
-		err := f.importRoaringT(tx, data, false)
+		err := f.importRoaring(context.Background(), qw, data, false)
 		if err != nil {
 			b.Fatalf("creating sample data: %v", err)
 		}
 	}
-	return f, idx, tx
+	return f, qcx, qw
 }
 
 type txFrag struct {
 	rows, width uint64
-	tx          Tx
-	idx         *Index
+	qr          qc.QueryRead // may actually secretly be a querywrite
 	frag        *fragment
 }
 
 func benchmarkRowsOnTestcase(b *testing.B, ctx context.Context, txf txFrag) {
 	col := uint64(0)
 	for i := 0; i < b.N; i++ {
-		_, err := txf.frag.rows(ctx, txf.tx, 0, roaring.NewBitmapColumnFilter(col))
+		_, err := txf.frag.rows(ctx, txf.qr, 0, roaring.NewBitmapColumnFilter(col))
 		if err != nil {
 			b.Fatalf("retrieving rows for col %d: %v", col, err)
 		}
@@ -2745,21 +2640,21 @@ func benchmarkRowsMaybeWritable(b *testing.B, writable bool) {
 	}()
 	bg := context.Background()
 	for _, rows := range depths {
-		frag, idx, tx := prepareSampleRowData(b, 3, rows, ShardWidth)
+		var qr qc.QueryRead
+		f, qcx, qw := prepareSampleRowData(b, 3, rows, ShardWidth)
+		qr = qw
 		if !writable {
-			err := tx.Commit()
+			err := qcx.Commit()
 			if err != nil {
 				b.Fatalf("error committing sample data: %v", err)
 			}
-			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: frag, Shard: 0})
-			defer tx.Rollback()
+			_, qr = mustRead(b, f)
 		}
 		testCases = append(testCases, txFrag{
 			rows:  rows,
 			width: ShardWidth,
-			frag:  frag,
-			idx:   idx,
-			tx:    tx,
+			frag:  f,
+			qr:    qr,
 		})
 	}
 	for _, testCase := range testCases {
@@ -2902,16 +2797,13 @@ func (f *fragment) Clean(t testing.TB) {
 	}
 }
 
-// importRoaringT calls importRoaring with context.Background() for convenience
-func (f *fragment) importRoaringT(tx Tx, data []byte, clear bool) error {
-
-	return f.importRoaring(context.Background(), tx, data, clear)
-}
-
 func newTestHolder(tb testing.TB) *Holder {
 	path := tb.TempDir()
-	h := NewHolder(path, TestHolderConfig())
-	err := h.Open()
+	h, err := NewHolder(path, TestHolderConfig())
+	if err != nil {
+		tb.Fatalf("creating test holder: %v", err)
+	}
+	err = h.Open()
 	if err != nil {
 		tb.Fatalf("opening test holder: %v", err)
 	}
@@ -2958,48 +2850,52 @@ func newTestFragment(tb testing.TB, fieldOpts ...FieldOption) (*Holder, *Index, 
 }
 
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
-func mustOpenFragment(tb testing.TB, fieldOpts ...FieldOption) (*fragment, *Index, Tx) {
-	th, idx, fld, v, f := newTestFragment(tb, fieldOpts...)
+// It returns an initial QueryContext and QueryWrite attached to that fragment,
+// because it turns out we nearly always want to write to a fragment we're
+// creating for testing.
+func mustOpenFragment(tb testing.TB, fieldOpts ...FieldOption) (*fragment, qc.QueryContext, qc.QueryWrite) {
+	_, idx, fld, v, f := newTestFragment(tb, fieldOpts...)
 	fragDir := filepath.Join(idx.path, fld.name, "views", v.name, "fragments")
 	err := os.MkdirAll(fragDir, 0700)
 	if err != nil {
 		tb.Fatalf("creating fragment directory: %v", err)
 	}
 
-	tx := th.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: 0})
-	testhook.Cleanup(tb, func() {
-		tx.Rollback()
-
-		if err := th.txf.CloseIndex(idx); err != nil {
-			tb.Fatalf("closing index after test: %v", err)
-		}
-	})
-
 	f.CacheType = fld.options.CacheType
 
+	// Note this horrible crime: We create our QueryContext for this fragment
+	// *before* we open the fragment, because we need a QueryContext for the
+	// open. Even though in fact nothing ever happens -- we just made a new fragment
+	// so there can't be an existing cache, we hope.
+	qcx, qw := mustWrite(tb, f)
 	if err := f.Open(); err != nil {
 		tb.Fatalf("opening fragment: %v", err)
 	}
-	return f, idx, tx
+	return f, qcx, qw
 }
 
 // Reopen closes the fragment and reopens it as a new instance.
-func (f *fragment) Reopen() error {
+//
+// This... almost certainly doesn't really mean anything anymore.
+// In the days of Roaring, this meant flushing all our data structures and
+// re-reading from disk. Now, with RBF, we're not closing the underlying
+// database, or anything...
+func (f *fragment) Reopen(tb testing.TB) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
 	if err := f.Open(); err != nil {
-		return err
+		tb.Fatalf("opening fragment: %v", err)
 	}
 	return nil
 }
 
 // mustSetBits sets columns on a row. Panic on error.
 // This function does not accept a timestamp or quantum.
-func (f *fragment) mustSetBits(tx Tx, rowID uint64, columnIDs ...uint64) {
+func (f *fragment) mustSetBits(tb testing.TB, qw qc.QueryWrite, rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
-		if _, err := f.setBit(tx, rowID, columnID); err != nil {
-			PanicOn(err)
+		if _, err := f.setBit(qw, rowID, columnID); err != nil {
+			require.Nil(tb, err)
 		}
 	}
 }
@@ -3015,14 +2911,13 @@ func addToBitmap(bm *roaring.Bitmap, rowID uint64, columnIDs ...uint64) {
 // Test Various methods of retrieving RowIDs
 func TestFragment_RowsIteration(t *testing.T) {
 	t.Run("firstContainer", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 		defer f.Clean(t)
 
 		expectedAll := make([]uint64, 0)
 		expectedOdd := make([]uint64, 0)
 		for i := uint64(100); i < uint64(200); i++ {
-			if _, err := f.setBit(tx, i, i%2); err != nil {
+			if _, err := f.setBit(qw, i, i%2); err != nil {
 				t.Fatal(err)
 			}
 			expectedAll = append(expectedAll, i)
@@ -3031,14 +2926,14 @@ func TestFragment_RowsIteration(t *testing.T) {
 			}
 		}
 
-		ids, err := f.rows(context.Background(), tx, 0)
+		ids, err := f.rows(context.Background(), qw, 0)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expectedAll, ids) {
 			t.Fatalf("Do not match %v %v", expectedAll, ids)
 		}
 
-		ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(1))
+		ids, err = f.rows(context.Background(), qw, 0, roaring.NewBitmapColumnFilter(1))
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expectedOdd, ids) {
@@ -3047,32 +2942,30 @@ func TestFragment_RowsIteration(t *testing.T) {
 	})
 
 	t.Run("secondRow", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t)
 
 		defer f.Clean(t)
 
 		expected := []uint64{1, 2}
-		if _, err := f.setBit(tx, 1, 66000); err != nil {
+		if _, err := f.setBit(qw, 1, 66000); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setBit(tx, 2, 66000); err != nil {
+		} else if _, err := f.setBit(qw, 2, 66000); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.setBit(tx, 2, 166000); err != nil {
+		} else if _, err := f.setBit(qw, 2, 166000); err != nil {
 			t.Fatal(err)
 		}
-		PanicOn(tx.Commit())
+		require.Nil(t, qcx.Commit())
 
-		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		_, qr := mustRead(t, f)
 
-		ids, err := f.rows(context.Background(), tx, 0)
+		ids, err := f.rows(context.Background(), qr, 0)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expected, ids) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
 
-		ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(66000))
+		ids, err = f.rows(context.Background(), qr, 0, roaring.NewBitmapColumnFilter(66000))
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(expected, ids) {
@@ -3081,8 +2974,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 	})
 
 	t.Run("combinations", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t)
-		_ = idx
+		f, _, qw := mustOpenFragment(t)
 
 		defer f.Clean(t)
 
@@ -3090,17 +2982,17 @@ func TestFragment_RowsIteration(t *testing.T) {
 		for r := uint64(1); r < uint64(10000); r += 250 {
 			expectedRows = append(expectedRows, r)
 			for c := uint64(1); c < uint64(ShardWidth-1); c += (ShardWidth >> 5) {
-				if _, err := f.setBit(tx, r, c); err != nil {
+				if _, err := f.setBit(qw, r, c); err != nil {
 					t.Fatal(err)
 				}
 
-				ids, err := f.rows(context.Background(), tx, 0)
+				ids, err := f.rows(context.Background(), qw, 0)
 				if err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}
-				ids, err = f.rows(context.Background(), tx, 0, roaring.NewBitmapColumnFilter(c))
+				ids, err = f.rows(context.Background(), qw, 0, roaring.NewBitmapColumnFilter(c))
 				if err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(expectedRows, ids) {
@@ -3134,8 +3026,7 @@ func TestFragment_RoaringImport(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importroaring%d", i), func(t *testing.T) {
-			f, idx, tx := mustOpenFragment(t)
-			_ = idx
+			f, _, qw := mustOpenFragment(t)
 			defer f.Clean(t)
 
 			for num, input := range test {
@@ -3145,14 +3036,14 @@ func TestFragment_RoaringImport(t *testing.T) {
 				if err != nil {
 					t.Fatalf("writing to buffer: %v", err)
 				}
-				err = f.importRoaringT(tx, buf.Bytes(), false)
+				err = f.importRoaring(context.Background(), qw, buf.Bytes(), false)
 				if err != nil {
 					t.Fatalf("importing roaring: %v", err)
 				}
 
 				exp := calcExpected(test[:num+1]...)
 				for row, expCols := range exp {
-					cols := f.mustRow(tx, uint64(row)).Columns()
+					cols := f.mustRow(t, qw, uint64(row)).Columns()
 					t.Logf("\nrow: %d\n  exp:%v\n  got:%v", row, expCols, cols)
 					if !reflect.DeepEqual(cols, expCols) {
 						t.Fatalf("input%d, row %d\n  exp:%v\n  got:%v", num, row, expCols, cols)
@@ -3183,18 +3074,17 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("importroaring%d", i), func(t *testing.T) {
-			f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-			_ = idx
+			f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 			defer f.Clean(t)
 
 			options := &ImportOptions{}
-			err := f.bulkImport(tx, test.rowIDs, test.colIDs, options)
+			err := f.bulkImport(qw, test.rowIDs, test.colIDs, options)
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
 			expPairs := calcTop(test.rowIDs, test.colIDs)
-			pairs, err := f.top(tx, topOptions{})
+			pairs, err := f.top(qw, topOptions{})
 			if err != nil {
 				t.Fatalf("executing top after bulk import: %v", err)
 			}
@@ -3202,14 +3092,14 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 				t.Fatalf("post bulk import:\n  exp: %v\n  got: %v\n", expPairs, pairs)
 			}
 
-			err = f.bulkImport(tx, test.rowIDs2, test.colIDs2, options)
+			err = f.bulkImport(qw, test.rowIDs2, test.colIDs2, options)
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 			test.rowIDs = append(test.rowIDs, test.rowIDs2...)
 			test.colIDs = append(test.colIDs, test.colIDs2...)
 			expPairs = calcTop(test.rowIDs, test.colIDs)
-			pairs, err = f.top(tx, topOptions{})
+			pairs, err = f.top(qw, topOptions{})
 			if err != nil {
 				t.Fatalf("executing top after bulk import: %v", err)
 			}
@@ -3223,13 +3113,13 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 			if err != nil {
 				t.Fatalf("writing to buffer: %v", err)
 			}
-			err = f.importRoaringT(tx, buf.Bytes(), false)
+			err = f.importRoaring(context.Background(), qw, buf.Bytes(), false)
 			if err != nil {
 				t.Fatalf("importing roaring: %v", err)
 			}
 			rows, cols := toRowsCols(test.roaring)
 			expPairs = calcTop(append(test.rowIDs, rows...), append(test.colIDs, cols...))
-			pairs, err = f.top(tx, topOptions{})
+			pairs, err = f.top(qw, topOptions{})
 			if err != nil {
 				t.Fatalf("executing top after roaring import: %v", err)
 			}
@@ -3322,17 +3212,16 @@ func calcExpected(inputs ...[]uint64) [][]uint64 {
 
 func TestFragmentRowIterator(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-		_ = idx
+		f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 0, 0)
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 2, 0)
-		f.mustSetBits(tx, 3, 0)
+		f.mustSetBits(t, qw, 0, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 2, 0)
+		f.mustSetBits(t, qw, 3, 0)
 
-		iter, err := f.rowIterator(tx, false)
+		iter, err := f.rowIterator(qw, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3367,16 +3256,15 @@ func TestFragmentRowIterator(t *testing.T) {
 	})
 
 	t.Run("skipped rows", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-		_ = idx
+		f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 3, 0)
-		f.mustSetBits(tx, 5, 0)
-		f.mustSetBits(tx, 7, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 3, 0)
+		f.mustSetBits(t, qw, 5, 0)
+		f.mustSetBits(t, qw, 7, 0)
 
-		iter, err := f.rowIterator(tx, false)
+		iter, err := f.rowIterator(qw, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3411,16 +3299,15 @@ func TestFragmentRowIterator(t *testing.T) {
 	})
 
 	t.Run("basic wrapped", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-		_ = idx
+		f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 0, 0)
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 2, 0)
-		f.mustSetBits(tx, 3, 0)
+		f.mustSetBits(t, qw, 0, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 2, 0)
+		f.mustSetBits(t, qw, 3, 0)
 
-		iter, err := f.rowIterator(tx, true)
+		iter, err := f.rowIterator(qw, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3444,15 +3331,15 @@ func TestFragmentRowIterator(t *testing.T) {
 	})
 
 	t.Run("skipped rows wrapped", func(t *testing.T) {
-		f, _, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
+		f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 3, 0)
-		f.mustSetBits(tx, 5, 0)
-		f.mustSetBits(tx, 7, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 3, 0)
+		f.mustSetBits(t, qw, 5, 0)
+		f.mustSetBits(t, qw, 7, 0)
 
-		iter, err := f.rowIterator(tx, true)
+		iter, err := f.rowIterator(qw, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3479,21 +3366,19 @@ func TestFragmentRowIterator(t *testing.T) {
 // same, with commits
 func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 0, 0)
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 2, 0)
-		f.mustSetBits(tx, 3, 0)
+		f.mustSetBits(t, qw, 0, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 2, 0)
+		f.mustSetBits(t, qw, 3, 0)
 
-		PanicOn(tx.Commit())
-		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		require.Nil(t, qcx.Commit())
+		_, qr := mustRead(t, f)
 
-		iter, err := f.rowIterator(tx, false)
+		iter, err := f.rowIterator(qr, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3528,20 +3413,18 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 	})
 
 	t.Run("skipped rows", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 3, 0)
-		f.mustSetBits(tx, 5, 0)
-		f.mustSetBits(tx, 7, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 3, 0)
+		f.mustSetBits(t, qw, 5, 0)
+		f.mustSetBits(t, qw, 7, 0)
 
-		PanicOn(tx.Commit())
-		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		require.Nil(t, qcx.Commit())
+		_, qr := mustRead(t, f)
 
-		iter, err := f.rowIterator(tx, false)
+		iter, err := f.rowIterator(qr, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3576,20 +3459,18 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 	})
 
 	t.Run("basic wrapped", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 0, 0)
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 2, 0)
-		f.mustSetBits(tx, 3, 0)
+		f.mustSetBits(t, qw, 0, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 2, 0)
+		f.mustSetBits(t, qw, 3, 0)
 
-		PanicOn(tx.Commit())
-		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		require.Nil(t, qcx.Commit())
+		_, qr := mustRead(t, f)
 
-		iter, err := f.rowIterator(tx, true)
+		iter, err := f.rowIterator(qr, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3613,20 +3494,18 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 	})
 
 	t.Run("skipped rows wrapped", func(t *testing.T) {
-		f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
-		_ = idx
+		f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 		defer f.Clean(t)
 
-		f.mustSetBits(tx, 1, 0)
-		f.mustSetBits(tx, 3, 0)
-		f.mustSetBits(tx, 5, 0)
-		f.mustSetBits(tx, 7, 0)
+		f.mustSetBits(t, qw, 1, 0)
+		f.mustSetBits(t, qw, 3, 0)
+		f.mustSetBits(t, qw, 5, 0)
+		f.mustSetBits(t, qw, 7, 0)
 
-		PanicOn(tx.Commit())
-		tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-		defer tx.Rollback()
+		require.Nil(t, qcx.Commit())
+		_, qr := mustRead(t, f)
 
-		iter, err := f.rowIterator(tx, true)
+		iter, err := f.rowIterator(qr, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3653,6 +3532,8 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 }
 
 func TestFragmentPositionsForValue(t *testing.T) {
+	// We don't need the querycontext or querywrite because positionsForValue
+	// doesn't actually talk to the fragment in any way, it's just math.
 	f, _, _ := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
 	defer f.Clean(t)
 
@@ -3735,16 +3616,15 @@ func TestFragmentPositionsForValue(t *testing.T) {
 }
 
 func TestIntLTRegression(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
-	_ = idx
+	f, _, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
 	defer f.Clean(t)
 
-	_, err := f.setValue(tx, 1, 6, 33)
+	_, err := f.setValue(qw, 1, 6, 33)
 	if err != nil {
 		t.Fatalf("setting value: %v", err)
 	}
 
-	row, err := f.rangeOp(tx, pql.LT, 6, 33)
+	row, err := f.rangeOp(qw, pql.LT, 6, 33)
 	if err != nil {
 		t.Fatalf("doing range of: %v", err)
 	}
@@ -3765,8 +3645,7 @@ func sliceEq(x, y []uint64) bool {
 }
 
 func TestFragmentBSIUnsigned(t *testing.T) {
-	shard := uint64(0)
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
+	f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
 	defer f.Clean(t)
 
 	// Number of bits to test.
@@ -3774,14 +3653,14 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 
 	// Load all numbers into an effectively diagonal matrix.
 	for i := 0; i < 1<<k; i++ {
-		ok, err := f.setValue(tx, uint64(i), k, int64(i))
+		ok, err := f.setValue(qw, uint64(i), k, int64(i))
 		if err != nil {
 			t.Fatalf("failed to set col %d to %d: %v", uint64(i), int64(i), err)
 		} else if !ok {
 			t.Fatalf("no change when setting col %d to %d", uint64(i), int64(i))
 		}
 	}
-	PanicOn(tx.Commit()) // t.Run beolow on different goro and so need their own Tx anyway.
+	require.Nil(t, qcx.Commit()) // t.Run beolow on different goro and so need their own Tx anyway.
 
 	// Generate a list of columns.
 	cols := make([]uint64, 1<<k)
@@ -3794,12 +3673,10 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 	minCheck, maxCheck := -3, 1<<(k+1)
 
 	t.Run("<", func(t *testing.T) {
-
-		tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: shard})
-		defer tx.Rollback()
+		_, qr := mustRead(t, f)
 
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeLT(tx, k, int64(i), false)
+			row, err := f.rangeLT(qr, k, int64(i), false)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -3818,12 +3695,10 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 		}
 	})
 	t.Run("<=", func(t *testing.T) {
-
-		tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: shard})
-		defer tx.Rollback()
+		_, qr := mustRead(t, f)
 
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeLT(tx, k, int64(i), true)
+			row, err := f.rangeLT(qr, k, int64(i), true)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -3842,12 +3717,10 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 		}
 	})
 	t.Run(">", func(t *testing.T) {
-
-		tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: shard})
-		defer tx.Rollback()
+		_, qr := mustRead(t, f)
 
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeGT(tx, k, int64(i), false)
+			row, err := f.rangeGT(qr, k, int64(i), false)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -3866,11 +3739,10 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 		}
 	})
 	t.Run(">=", func(t *testing.T) {
-		tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: shard})
-		defer tx.Rollback()
+		_, qr := mustRead(t, f)
 
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeGT(tx, k, int64(i), true)
+			row, err := f.rangeGT(qr, k, int64(i), true)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -3889,13 +3761,11 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 		}
 	})
 	t.Run("Range", func(t *testing.T) {
-
-		tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: shard})
-		defer tx.Rollback()
+		_, qr := mustRead(t, f)
 
 		for i := minCheck; i < maxCheck; i++ {
 			for j := i; j < maxCheck; j++ {
-				row, err := f.rangeBetween(tx, k, int64(i), int64(j))
+				row, err := f.rangeBetween(qr, k, int64(i), int64(j))
 				if err != nil {
 					t.Fatalf("failed to query fragment: %v", err)
 				}
@@ -3925,12 +3795,10 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 		}
 	})
 	t.Run("==", func(t *testing.T) {
-
-		tx := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: shard})
-		defer tx.Rollback()
+		_, qr := mustRead(t, f)
 
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeEQ(tx, k, int64(i))
+			row, err := f.rangeEQ(qr, k, int64(i))
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -3948,8 +3816,7 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 
 // same, WithTxCommit version
 func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
-	_ = idx
+	f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
 	defer f.Clean(t)
 
 	// Number of bits to test.
@@ -3957,7 +3824,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 
 	// Load all numbers into an effectively diagonal matrix.
 	for i := 0; i < 1<<k; i++ {
-		ok, err := f.setValue(tx, uint64(i), k, int64(i))
+		ok, err := f.setValue(qw, uint64(i), k, int64(i))
 		if err != nil {
 			t.Fatalf("failed to set col %d to %d: %v", uint64(i), int64(i), err)
 		} else if !ok {
@@ -3965,9 +3832,8 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 		}
 	}
 
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	require.Nil(t, qcx.Commit())
+	_, qr := mustRead(t, f)
 
 	// Generate a list of columns.
 	cols := make([]uint64, 1<<k)
@@ -3981,7 +3847,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 
 	t.Run("<", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeLT(tx, k, int64(i), false)
+			row, err := f.rangeLT(qr, k, int64(i), false)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4001,7 +3867,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 	})
 	t.Run("<=", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeLT(tx, k, int64(i), true)
+			row, err := f.rangeLT(qr, k, int64(i), true)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4021,7 +3887,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 	})
 	t.Run(">", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeGT(tx, k, int64(i), false)
+			row, err := f.rangeGT(qr, k, int64(i), false)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4041,7 +3907,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 	})
 	t.Run(">=", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeGT(tx, k, int64(i), true)
+			row, err := f.rangeGT(qr, k, int64(i), true)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4062,7 +3928,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 	t.Run("Range", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
 			for j := i; j < maxCheck; j++ {
-				row, err := f.rangeBetween(tx, k, int64(i), int64(j))
+				row, err := f.rangeBetween(qr, k, int64(i), int64(j))
 				if err != nil {
 					t.Fatalf("failed to query fragment: %v", err)
 				}
@@ -4093,7 +3959,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 	})
 	t.Run("==", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeEQ(tx, k, int64(i))
+			row, err := f.rangeEQ(qr, k, int64(i))
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4110,8 +3976,7 @@ func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
 }
 
 func TestFragmentBSISigned(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
-	_ = idx
+	f, qcx, qw := mustOpenFragment(t, OptFieldTypeSet(CacheTypeNone, 0))
 	defer f.Clean(t)
 
 	// Number of bits to test.
@@ -4120,7 +3985,7 @@ func TestFragmentBSISigned(t *testing.T) {
 	// Load all numbers into an effectively diagonal matrix.
 	minVal, maxVal := 1-(1<<k), (1<<k)-1
 	for i := minVal; i <= maxVal; i++ {
-		ok, err := f.setValue(tx, uint64(i-minVal), k, int64(i))
+		ok, err := f.setValue(qw, uint64(i-minVal), k, int64(i))
 		if err != nil {
 			t.Fatalf("failed to set col %d to %d: %v", uint64(i-minVal), int64(i), err)
 		} else if !ok {
@@ -4128,9 +3993,8 @@ func TestFragmentBSISigned(t *testing.T) {
 		}
 	}
 
-	PanicOn(tx.Commit())
-	tx = idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx.Rollback()
+	require.Nil(t, qcx.Commit())
+	_, qr := mustRead(t, f)
 
 	// Generate a list of columns.
 	cols := make([]uint64, (maxVal-minVal)+1)
@@ -4144,7 +4008,7 @@ func TestFragmentBSISigned(t *testing.T) {
 
 	t.Run("<", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeLT(tx, k, int64(i), false)
+			row, err := f.rangeLT(qr, k, int64(i), false)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4164,7 +4028,7 @@ func TestFragmentBSISigned(t *testing.T) {
 	})
 	t.Run("<=", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeLT(tx, k, int64(i), true)
+			row, err := f.rangeLT(qr, k, int64(i), true)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4184,7 +4048,7 @@ func TestFragmentBSISigned(t *testing.T) {
 	})
 	t.Run(">", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeGT(tx, k, int64(i), false)
+			row, err := f.rangeGT(qr, k, int64(i), false)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4204,7 +4068,7 @@ func TestFragmentBSISigned(t *testing.T) {
 	})
 	t.Run(">=", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeGT(tx, k, int64(i), true)
+			row, err := f.rangeGT(qr, k, int64(i), true)
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4225,7 +4089,7 @@ func TestFragmentBSISigned(t *testing.T) {
 	t.Run("Range", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
 			for j := i; j < maxCheck; j++ {
-				row, err := f.rangeBetween(tx, k, int64(i), int64(j))
+				row, err := f.rangeBetween(qr, k, int64(i), int64(j))
 				if err != nil {
 					t.Fatalf("failed to query fragment: %v", err)
 				}
@@ -4256,7 +4120,7 @@ func TestFragmentBSISigned(t *testing.T) {
 	})
 	t.Run("==", func(t *testing.T) {
 		for i := minCheck; i < maxCheck; i++ {
-			row, err := f.rangeEQ(tx, k, int64(i))
+			row, err := f.rangeEQ(qr, k, int64(i))
 			if err != nil {
 				t.Fatalf("failed to query fragment: %v", err)
 			}
@@ -4273,19 +4137,19 @@ func TestFragmentBSISigned(t *testing.T) {
 }
 
 func TestImportValueConcurrent(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
+	f, qcx, _ := mustOpenFragment(t)
 	defer f.Clean(t)
-	// we will be making a new Tx each time, so we can rollback the default provided one.
-	tx.Rollback()
+	// we will be making a new QueryContext each time, so we can rollback the default provided one.
+	qcx.Release()
 
 	eg := &errgroup.Group{}
 	for i := 0; i < 4; i++ {
 		i := i
 		eg.Go(func() error {
-			tx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
-			defer tx.Rollback()
+			qcx, qw := mustWrite(t, f)
+			defer qcx.Release()
 			for j := uint64(0); j < 10; j++ {
-				err := f.importValue(tx, []uint64{j}, []int64{int64(rand.Int63n(1000))}, 10, i%2 == 0)
+				err := f.importValue(qw, []uint64{j}, []int64{int64(rand.Int63n(1000))}, 10, i%2 == 0)
 				if err != nil {
 					return err
 				}
@@ -4318,17 +4182,17 @@ func TestImportMultipleValues(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			f, _, tx := mustOpenFragment(t)
+			f, _, qw := mustOpenFragment(t)
 			defer f.Clean(t)
 
-			err := f.importValue(tx, test.cols, test.vals, test.depth, false)
+			err := f.importValue(qw, test.cols, test.vals, test.depth, false)
 			if err != nil {
 				t.Fatalf("importing values: %v", err)
 			}
 
 			for i := range test.checkCols {
 				cc, cv := test.checkCols[i], test.checkVals[i]
-				n, exists, err := f.value(tx, cc, test.depth)
+				n, exists, err := f.value(qw, cc, test.depth)
 				if err != nil {
 					t.Fatalf("getting value: %v", err)
 				}
@@ -4372,26 +4236,26 @@ func TestImportValueRowCache(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			f, _, tx := mustOpenFragment(t)
+			f, _, qw := mustOpenFragment(t)
 			defer f.Clean(t)
 
 			// First import (tc1)
-			if err := f.importValue(tx, test.tc1.cols, test.tc1.vals, test.tc1.depth, false); err != nil {
+			if err := f.importValue(qw, test.tc1.cols, test.tc1.vals, test.tc1.depth, false); err != nil {
 				t.Fatalf("importing values: %v", err)
 			}
 
-			if r, err := f.rangeOp(tx, pql.GT, test.tc1.depth, 0); err != nil {
+			if r, err := f.rangeOp(qw, pql.GT, test.tc1.depth, 0); err != nil {
 				t.Error("getting range of values")
 			} else if !reflect.DeepEqual(r.Columns(), test.tc1.checkCols) {
 				t.Errorf("wrong column values. expected: %v, but got: %v", test.tc1.checkCols, r.Columns())
 			}
 
 			// Second import (tc2)
-			if err := f.importValue(tx, test.tc2.cols, test.tc2.vals, test.tc2.depth, false); err != nil {
+			if err := f.importValue(qw, test.tc2.cols, test.tc2.vals, test.tc2.depth, false); err != nil {
 				t.Fatalf("importing values: %v", err)
 			}
 
-			if r, err := f.rangeOp(tx, pql.GT, test.tc2.depth, 0); err != nil {
+			if r, err := f.rangeOp(qw, pql.GT, test.tc2.depth, 0); err != nil {
 				t.Error("getting range of values")
 			} else if !reflect.DeepEqual(r.Columns(), test.tc2.checkCols) {
 				t.Errorf("wrong column values. expected: %v, but got: %v", test.tc2.checkCols, r.Columns())
@@ -4404,44 +4268,38 @@ func TestImportValueRowCache(t *testing.T) {
 // do we see races/corruption around concurrent read/write.
 // especially on writes to the row cache.
 func TestFragmentConcurrentReadWrite(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
+	f, qcx, _ := mustOpenFragment(t, OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	defer f.Clean(t)
-	tx.Rollback()
+	qcx.Release()
 
 	eg := &errgroup.Group{}
 	eg.Go(func() error {
-
-		ltx := idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f, Shard: f.shard})
+		qcx, qw := mustWrite(t, f)
 
 		for i := uint64(0); i < 1000; i++ {
-			_, err := f.setBit(ltx, i%4, i)
+			_, err := f.setBit(qw, i%4, i)
 			if err != nil {
 				return errors.Wrap(err, "setting bit")
 			}
 		}
-		PanicOn(ltx.Commit())
+		require.Nil(t, qcx.Commit())
 		return nil
 	})
 
-	// need read-only Tx so as not to block on the writer finishing above.
-	tx1 := idx.holder.txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f, Shard: f.shard})
-	defer tx1.Rollback()
+	_, qr := mustRead(t, f)
 
 	acc := uint64(0)
 	for i := uint64(0); i < 100; i++ {
-		r := f.mustRow(tx1, i%4)
+		r := f.mustRow(t, qr, i%4)
 		acc += r.Count()
 	}
 	if err := eg.Wait(); err != nil {
 		t.Errorf("error from setting a bit: %v", err)
 	}
-
-	t.Logf("%d", acc)
 }
 
 func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
-	f, idx, tx := mustOpenFragment(t)
-	_ = idx
+	f, _, qw := mustOpenFragment(t)
 	// byShardWidth is a map of the same roaring (fragment) data generated
 	// with different shard widths.
 	// TODO: a better approach may be to generate this in the test based
@@ -4456,50 +4314,49 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 		b = data
 	}
 
-	_ = idx
 	defer f.Clean(t)
 
-	err := f.importRoaringT(tx, b, false)
+	err := f.importRoaring(context.Background(), qw, b, false)
 	if err != nil {
 		t.Fatalf("importing roaring: %v", err)
 	}
 
 	//check the bit
-	res := f.mustRow(tx, 1).Columns()
-	if len(res) < 1 || f.mustRow(tx, 1).Columns()[0] != 1 {
+	res := f.mustRow(t, qw, 1).Columns()
+	if len(res) < 1 || f.mustRow(t, qw, 1).Columns()[0] != 1 {
 		t.Fatalf("expecting 1 got: %v", res)
 	}
 	//clear the bit
-	changed, _ := f.clearBit(tx, 1, 1)
+	changed, _ := f.clearBit(qw, 1, 1)
 	if !changed {
 		t.Fatalf("expected change got %v", changed)
 	}
 
 	//check missing
-	res = f.mustRow(tx, 1).Columns()
+	res = f.mustRow(t, qw, 1).Columns()
 	if len(res) != 0 {
 		t.Fatalf("expected nothing got %v", res)
 	}
 
 	// import again
-	err = f.importRoaringT(tx, b, false)
+	err = f.importRoaring(context.Background(), qw, b, false)
 	if err != nil {
 		t.Fatalf("importing roaring: %v", err)
 	}
 
 	//check
-	res = f.mustRow(tx, 1).Columns()
-	if len(res) < 1 || f.mustRow(tx, 1).Columns()[0] != 1 {
+	res = f.mustRow(t, qw, 1).Columns()
+	if len(res) < 1 || f.mustRow(t, qw, 1).Columns()[0] != 1 {
 		t.Fatalf("again expecting 1 got: %v", res)
 	}
 
-	changed, _ = f.clearBit(tx, 1, 1)
+	changed, _ = f.clearBit(qw, 1, 1)
 	if !changed {
 		t.Fatalf("again expected change got %v", changed) // again expected change got false
 	}
 
 	//check missing
-	res = f.mustRow(tx, 1).Columns()
+	res = f.mustRow(t, qw, 1).Columns()
 	if len(res) != 0 {
 		t.Fatalf("expected nothing got %v", res)
 	}
@@ -4692,7 +4549,7 @@ func TestImportMutexSampleData(t *testing.T) {
 		seen := make(map[uint64]struct{})
 		t.Run(data.name, func(t *testing.T) {
 			batchSize := 16384
-			f, _, tx := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
+			f, _, qw := mustOpenFragment(t, OptFieldTypeMutex(DefaultCacheType, DefaultCacheSize))
 			defer f.Clean(t)
 			// Set import.
 			var err error
@@ -4709,14 +4566,14 @@ func TestImportMutexSampleData(t *testing.T) {
 					if len(cols) < max {
 						max = len(cols)
 					}
-					err = f.bulkImport(tx, rows[j:max:max], cols[j:max:max], &ImportOptions{})
+					err = f.bulkImport(qw, rows[j:max:max], cols[j:max:max], &ImportOptions{})
 					if err != nil {
 						t.Fatalf("bulk importing ids [%d/3] [%d:%d]: %v", i+1, j, max, err)
 					}
 				}
 				count := uint64(0)
 				for k := uint32(0); k < data.rng.rows(); k++ {
-					c := f.mustRow(tx, uint64(k)).Count()
+					c := f.mustRow(t, qw, uint64(k)).Count()
 					count += c
 				}
 				if int(count) != len(seen) {
@@ -4742,9 +4599,9 @@ func BenchmarkImportMutexSampleData(b *testing.B) {
 	var data *mutexSampleData
 	var cache string
 	var batchSize int
-	var frag *fragment
-	var tx Tx
-	var idx *Index
+	var f *fragment
+	var qcx qc.QueryContext
+	var qw qc.QueryWrite
 	benchmarkOneFragmentImports := func(b *testing.B, idx int) {
 		cols, rows = data.scratchSpace(idx, cols, rows)
 		toDo := b.N << 16
@@ -4754,7 +4611,7 @@ func BenchmarkImportMutexSampleData(b *testing.B) {
 			if len(cols) < max {
 				max = len(cols)
 			}
-			err := frag.bulkImport(tx, rows[start:max:max], cols[start:max:max], &ImportOptions{})
+			err := f.bulkImport(qw, rows[start:max:max], cols[start:max:max], &ImportOptions{})
 			if err != nil {
 				b.Fatalf("bulk importing ids [%d:%d]: %v", start, max, err)
 			}
@@ -4770,19 +4627,19 @@ func BenchmarkImportMutexSampleData(b *testing.B) {
 		}
 	}
 	benchmarkFragmentImports := func(b *testing.B) {
-		frag, idx, tx = mustOpenFragment(b, OptFieldTypeMutex(cache, DefaultCacheSize))
-		defer frag.Clean(b)
+		f, qcx, qw = mustOpenFragment(b, OptFieldTypeMutex(cache, DefaultCacheSize))
+		defer f.Clean(b)
+		defer qcx.Release()
 		for i := range data.colIDs {
 			b.Run(fmt.Sprintf("write-%d", i), func(b *testing.B) {
 				benchmarkOneFragmentImports(b, i)
 			})
 			// Then commit that write and do another one as a new Tx.
-			err := tx.Commit()
+			err := qcx.Commit()
 			if err != nil {
 				b.Fatalf("error commiting write: %v", err)
 			}
-			tx = idx.holder.txf.NewTx(Txo{Write: writable, Index: idx, Fragment: frag, Shard: 0})
-			defer tx.Rollback()
+			qcx, qw = mustWrite(b, f)
 		}
 	}
 	for _, data = range sampleMutexData {
@@ -5058,7 +4915,7 @@ func TestSliceDifference(t *testing.T) {
 }
 
 func TestImportRoaringSingleValued(t *testing.T) {
-	f, _, tx := mustOpenFragment(t)
+	f, _, qw := mustOpenFragment(t)
 	defer f.Clean(t)
 
 	clear := roaring.NewBitmap(0, 1, ShardWidth-1)
@@ -5068,7 +4925,7 @@ func TestImportRoaringSingleValued(t *testing.T) {
 		{0, 1, ShardWidth - 1},
 	}...)
 
-	err := f.ImportRoaringSingleValued(context.Background(), tx, clear.Roaring(), set.Roaring())
+	err := f.ImportRoaringSingleValued(context.Background(), qw, clear.Roaring(), set.Roaring())
 	if err != nil {
 		t.Fatalf("importing: %v", err)
 	}
@@ -5078,7 +4935,7 @@ func TestImportRoaringSingleValued(t *testing.T) {
 		{},
 		{0, 1, ShardWidth - 1},
 	}...)
-	if err := f.ImportRoaringSingleValued(context.Background(), tx, clear.Roaring(), set.Roaring()); err != nil {
+	if err := f.ImportRoaringSingleValued(context.Background(), qw, clear.Roaring(), set.Roaring()); err != nil {
 		t.Fatalf("importing: %v", err)
 	}
 
@@ -5090,11 +4947,11 @@ func TestImportRoaringSingleValued(t *testing.T) {
 		{0, 1, ShardWidth - 1},
 	}...)
 
-	if err := f.ImportRoaringSingleValued(context.Background(), tx, clear.Roaring(), set.Roaring()); err != nil {
+	if err := f.ImportRoaringSingleValued(context.Background(), qw, clear.Roaring(), set.Roaring()); err != nil {
 		t.Fatalf("importing: %v", err)
 	}
 
-	result, err := tx.RoaringBitmap("i", "f", "v", 0)
+	result, err := qw.RoaringBitmap()
 	if err != nil {
 		t.Fatalf("getting bitmap: %v", err)
 	}

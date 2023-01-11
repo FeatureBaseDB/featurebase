@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/molecula/featurebase/v3/pql"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 )
@@ -33,7 +34,7 @@ Arrow(ConstRow(columns=[2,4,6]),header=["fval"])
 */
 
 // executeApply executes a Arrow() call.
-func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (arrow.Table, error) {
+func (e *executor) executeArrow(ctx context.Context, qcx qc.QueryContext, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (arrow.Table, error) {
 	if !e.dataframeEnabled {
 		return nil, errors.New("Dataframe support not enabled")
 	}
@@ -353,7 +354,7 @@ func filterColumns(filters []string, table arrow.Table) arrow.Table {
 	return array.NewTable(filterdSchema, cols, table.NumRows())
 }
 
-func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, pool memory.Allocator, columnFilter []string) (*basicTable, error) {
+func (e *executor) executeArrowShard(ctx context.Context, qcx qc.QueryContext, index string, c *pql.Call, shard uint64, pool memory.Allocator, columnFilter []string) (*basicTable, error) {
 	name := fmt.Sprintf("a. %v", shard)
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeArrowShard")
 	defer span.Finish()
@@ -468,7 +469,7 @@ func readTableArrow(filename string, mem memory.Allocator) (arrow.Table, error) 
 		return nil, err
 	}
 	defer rr.Close()
-	records := make([]arrow.Record, rr.NumRecords(), rr.NumRecords())
+	records := make([]arrow.Record, rr.NumRecords())
 	i := 0
 	for {
 		rec, err := rr.Read()

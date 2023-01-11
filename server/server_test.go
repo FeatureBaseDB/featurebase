@@ -43,6 +43,7 @@ func TestMain_Set_Quick(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
+		i := i // make local copy of i, loop variable capture
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			t.Parallel()
 
@@ -677,13 +678,13 @@ func TestMain_ImportTimestamp(t *testing.T) {
 	}
 
 	// Import data.
-	qcx := m.API.Txf().NewQcx()
+	ctx := context.Background()
+	qcx, err := m.API.NewIndexQueryContext(ctx, data.Index)
+	require.Nil(t, err)
 	if err := m.API.Import(context.Background(), qcx, &data); err != nil { /// first write i/0 here. 2nd write here.
 		t.Fatal(err)
 	}
-	if err := qcx.Finish(); err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, qcx.Commit())
 	// Ensure the correct views were created.
 	dir := fmt.Sprintf("%s/%s/%s/%s/%s/views", m.Config.DataDir, pilosa.IndexesDir, indexName, pilosa.FieldsDir, fieldName)
 	files, err := os.ReadDir(dir)
@@ -732,13 +733,13 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 	}
 
 	// Import data.
-	qcx := m.API.Txf().NewQcx()
+	ctx := context.Background()
+	qcx, err := m.API.NewIndexQueryContext(ctx, data.Index)
+	require.Nil(t, err)
 	if err := m.API.Import(context.Background(), qcx, &data); err != nil {
 		t.Fatal(err)
 	}
-	if err := qcx.Finish(); err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, qcx.Commit())
 
 	// Ensure the correct views were created.
 	dir := fmt.Sprintf("%s/%s/%s/%s/%s/views", m.Config.DataDir, pilosa.IndexesDir, indexName, pilosa.FieldsDir, fieldName)

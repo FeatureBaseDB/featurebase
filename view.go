@@ -13,7 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/pql"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -111,20 +113,11 @@ func (v *view) addKnownShard(shard uint64) {
 	vprint.PanicOn(err)
 }
 
-// removeKnownShard removes a known shard from v. See the notes on addKnownShard.
-func (v *view) removeKnownShard(shard uint64) {
-	if atomic.LoadUint32(&v.knownShardsCopied) == 1 {
-		v.knownShards = v.knownShards.Clone()
-		atomic.StoreUint32(&v.knownShardsCopied, 0)
-	}
-	_, _ = v.knownShards.Remove(shard)
-}
-
 // openWithShardSet opens the view. Importantly, it
 // only opens the fragments that have data. This saves
 // a ton of time. If you have no data and want a new
 // view, call view.openEmpty().
-func (v *view) openWithShardSet(ss *shardSet) error {
+func (v *view) openWithShardSet(ss keys.ViewContents) error {
 	if v.knownShards == nil {
 		v.knownShards = roaring.NewSliceBitmap()
 	}
@@ -134,19 +127,18 @@ func (v *view) openWithShardSet(ss *shardSet) error {
 		v.cacheType = CacheTypeNone
 	}
 
-	shards := ss.CloneMaybe()
-
 	var frags []*fragment
-	for shard := range shards {
-		frag := v.newFragment(shard)
+	for shard := range ss {
+		frag := v.newFragment(uint64(shard))
 		frags = append(frags, frag)
 		v.fragments[frag.shard] = frag
 	}
 
-	nGoro := runtime.NumCPU()
-	if v.idx.holder.txf.TxType() != "roaring" {
-		nGoro = nGoro / 4
-	}
+	// We used to only divide by 4 if we weren't using the
+	// roaring backend, but we no longer have it, so this is
+	// unconditional for now. If we add new backends, this may
+	// want reconsidering.
+	nGoro := runtime.NumCPU() / 4
 	if nGoro < 4 {
 		nGoro = 4
 	}
@@ -179,8 +171,8 @@ func (v *view) openWithShardSet(ss *shardSet) error {
 	// serial, not parallel, because no locking inside addKnownShard at the moment.
 	// TODO(jea): is this slow on a cluster? can we optimize it
 	// by running it on a goroutine in the background?
-	for shard := range shards {
-		v.addKnownShard(shard)
+	for shard := range ss {
+		v.addKnownShard(uint64(shard))
 	}
 
 	_ = testhook.Opened(v.holder.Auditor, v, nil)
@@ -401,38 +393,15 @@ func (v *view) newFragment(shard uint64) *fragment {
 	return frag
 }
 
-// deleteFragment removes the fragment from the view.
-func (v *view) deleteFragment(shard uint64) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	f := v.fragments[shard]
-	if f == nil {
-		return ErrFragmentNotFound
-	}
-
-	v.holder.Logger.Infof("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
-
-	idx := f.holder.Index(v.index)
-	f.Close()
-	if err := idx.holder.txf.DeleteFragmentFromStore(f.index(), f.field(), f.view(), f.shard, f); err != nil {
-		return errors.Wrap(err, "DeleteFragment")
-	}
-	delete(v.fragments, shard)
-	v.removeKnownShard(shard)
-
-	return nil
-}
-
 // row returns a row for a shard of the view.
-func (v *view) row(qcx *Qcx, rowID uint64) (*Row, error) {
+func (v *view) row(qcx qc.QueryContext, rowID uint64) (*Row, error) {
 	row := NewRow()
 	for _, frag := range v.allFragments() {
-		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: v.idx, Fragment: frag, Shard: frag.shard})
+		qr, err := frag.qcxRead(qcx)
 		if err != nil {
 			return nil, err
 		}
-		defer finisher(&err)
-		fr, err := frag.row(tx, rowID)
+		fr, err := frag.row(qr, rowID)
 		if err != nil {
 			return nil, err
 		} else if fr == nil {
@@ -446,7 +415,7 @@ func (v *view) row(qcx *Qcx, rowID uint64) (*Row, error) {
 
 // mutexCheck checks all available fragments for duplicate values. The return
 // is map[column]map[shard][]values for collisions only.
-func (v *view) mutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
+func (v *view) mutexCheck(ctx context.Context, qcx qc.QueryContext, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	// We don't need the context, we just want the context-awareness on the error groups.
 	// It would be nice if the inner functions could use this too...
 	eg, _ := errgroup.WithContext(ctx)
@@ -462,12 +431,14 @@ func (v *view) mutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int
 			defer func() {
 				<-throttle
 			}()
-			tx, finisher, err := qcx.GetTx(Txo{Index: v.idx, Shard: frag.shard})
+			qr, err := frag.qcxRead(qcx)
 			if err != nil {
 				return err
 			}
-			defer finisher(&err)
-			results[i], err = frag.mutexCheck(tx, details, limit)
+			if err != nil {
+				return err
+			}
+			results[i], err = frag.mutexCheck(qr, details, limit)
 			if err != nil {
 				return err
 			}
@@ -500,83 +471,86 @@ func (v *view) mutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int
 }
 
 // setBit sets a bit within the view.
-func (v *view) setBit(qcx *Qcx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) setBit(qcx qc.QueryContext, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
-	defer finisher(&err)
 	var frag *fragment
 	frag, err = v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
-
-	return frag.setBit(tx, rowID, columnID)
+	qw, err := frag.qcxWrite(qcx)
+	if err != nil {
+		return changed, err
+	}
+	return frag.setBit(qw, rowID, columnID)
 }
 
 // clearBit clears a bit within the view.
-func (v *view) clearBit(qcx *Qcx, rowID, columnID uint64) (changed bool, err error) {
+func (v *view) clearBit(qcx qc.QueryContext, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
-	defer finisher(&err)
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
-
-	return frag.clearBit(tx, rowID, columnID)
+	qw, err := frag.qcxWrite(qcx)
+	if err != nil {
+		return changed, err
+	}
+	return frag.clearBit(qw, rowID, columnID)
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(qcx *Qcx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
+func (v *view) value(qcx qc.QueryContext, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
-	tx, finisher, err := qcx.GetTx(Txo{Write: false, Index: v.idx, Shard: shard})
-	defer finisher(&err)
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return value, exists, err
 	}
+	qr, err := frag.qcxRead(qcx)
+	if err != nil {
+		return value, exists, err
+	}
 
-	return frag.value(tx, columnID, bitDepth)
+	return frag.value(qr, columnID, bitDepth)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(qcx *Qcx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
+func (v *view) setValue(qcx qc.QueryContext, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
-	defer finisher(&err)
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
-
-	return frag.setValue(tx, columnID, bitDepth, value)
+	qw, err := frag.qcxWrite(qcx)
+	if err != nil {
+		return changed, err
+	}
+	return frag.setValue(qw, columnID, bitDepth, value)
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(qcx *Qcx, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
+func (v *view) clearValue(qcx qc.QueryContext, columnID uint64, bitDepth uint64, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
-	defer finisher(&err)
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
-
-	return frag.clearValue(tx, columnID, bitDepth, value)
+	qw, err := frag.qcxWrite(qcx)
+	if err != nil {
+		return changed, err
+	}
+	return frag.clearValue(qw, columnID, bitDepth, value)
 }
 
 // rangeOp returns rows with a field value encoding matching the predicate.
-func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint64, predicate int64) (_ *Row, err0 error) {
+func (v *view) rangeOp(qcx qc.QueryContext, op pql.Token, bitDepth uint64, predicate int64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.allFragments() {
-
-		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: v.idx, Shard: frag.shard})
+		qr, err := frag.qcxRead(qcx)
 		if err != nil {
 			return nil, err
 		}
-		defer finisher(&err0)
-
-		other, err := frag.rangeOp(tx, op, bitDepth, predicate)
+		other, err := frag.rangeOp(qr, op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
@@ -585,18 +559,22 @@ func (v *view) rangeOp(qcx *Qcx, op pql.Token, bitDepth uint64, predicate int64)
 	return r, nil
 }
 
-func (v *view) bitDepth(shards []uint64) (uint64, error) {
+func (v *view) bitDepth(qcx qc.QueryContext, shards keys.Shards) (uint64, error) {
 	var maxBitDepth uint64
 
-	for _, shard := range shards {
+	for shard := range shards {
 		v.mu.RLock()
-		frag, ok := v.fragments[shard]
+		frag, ok := v.fragments[uint64(shard)]
 		v.mu.RUnlock()
 		if !ok || frag == nil {
 			continue
 		}
+		qr, err := frag.qcxRead(qcx)
+		if err != nil {
+			return 0, err
+		}
 
-		bd, err := frag.bitDepth()
+		bd, err := frag.bitDepth(qr)
 		if err != nil {
 			return 0, errors.Wrapf(err, "getting fragment(%d) bit depth", shard)
 		}

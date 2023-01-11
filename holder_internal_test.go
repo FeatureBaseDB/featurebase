@@ -2,8 +2,40 @@
 package pilosa
 
 import (
+	"context"
 	"testing"
+
+	qc "github.com/molecula/featurebase/v3/querycontext"
+	"github.com/stretchr/testify/require"
 )
+
+// MustIndexQueryContext gets a query context which can write to
+// the specified index (and possibly shards), or fails the test.
+// The qcx will be automatically cleaned up when the test completes.
+func (h *Holder) MustIndexQueryContext(tb testing.TB, index string, shards ...uint64) qc.QueryContext {
+	tb.Helper()
+	// disregard a leading ^0, because that's idiomatic for "all shards"
+	if len(shards) > 0 && shards[0] == ^uint64(0) {
+		shards = shards[1:]
+	}
+	qcx, err := h.NewIndexQueryContext(context.Background(), index, shards...)
+	if err != nil {
+		tb.Fatalf("creating query context: %v", err)
+	}
+	tb.Cleanup(qcx.Release)
+	return qcx
+}
+
+// MustQueryContext gets a read-only query context or fails the test.
+func (h *Holder) MustQueryContext(tb testing.TB) qc.QueryContext {
+	tb.Helper()
+	qcx, err := h.NewQueryContext(context.Background())
+	if err != nil {
+		tb.Fatalf("creating query context: %v", err)
+	}
+	tb.Cleanup(qcx.Release)
+	return qcx
+}
 
 func setupTest(t *testing.T, h *Holder, rowCol []rowCols, indexName string) (*Index, *Field) {
 	idx, err := h.CreateIndexIfNotExists(indexName, "", IndexOptions{TrackExistence: true})
@@ -16,8 +48,7 @@ func setupTest(t *testing.T, h *Holder, rowCol []rowCols, indexName string) (*In
 	}
 	existencefield := idx.existenceFld
 
-	qcx := h.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx := h.MustIndexQueryContext(t, indexName)
 
 	for _, r := range rowCol {
 		_, err = f.SetBit(qcx, r.row, r.col, nil)
@@ -31,9 +62,7 @@ func setupTest(t *testing.T, h *Holder, rowCol []rowCols, indexName string) (*In
 		}
 	}
 
-	if err = qcx.Finish(); err != nil {
-		t.Fatalf("failed to commit tx for index %v: %v", indexName, err)
-	}
+	require.Nil(t, qcx.Commit())
 
 	shardsFound := idx.AvailableShards(includeRemote).Slice()
 	if len(shardsFound) != 3 {
@@ -76,8 +105,7 @@ func TestHolder_ProcessDeleteInflight(t *testing.T) {
 	for _, test := range tests {
 		func() {
 			idx, f := test.idx, test.f
-			qcx := h.Txf().NewQcx()
-			defer qcx.Abort()
+			qcx := h.MustQueryContext(t)
 			for _, r := range rowCol {
 				row, err := f.Row(qcx, r.row)
 				if err != nil {

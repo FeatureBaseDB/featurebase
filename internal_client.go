@@ -18,6 +18,7 @@ import (
 	"time"
 
 	fbcontext "github.com/molecula/featurebase/v3/context"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/molecula/featurebase/v3/authn"
@@ -856,7 +857,7 @@ func (c *InternalClient) importHelper(ctx context.Context, req Message, process 
 //
 // If we get a non-nil qcx, and have an associated API, we'll use that API
 // directly for the local shard.
-func (c *InternalClient) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, options *ImportOptions) error {
+func (c *InternalClient) Import(ctx context.Context, qcx qc.QueryContext, req *ImportRequest, options *ImportOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
 	defer span.Finish()
 
@@ -884,7 +885,7 @@ func (c *InternalClient) Import(ctx context.Context, qcx *Qcx, req *ImportReques
 //
 // If we get a non-nil qcx, and have an associated API, we'll use that API
 // directly for the local shard.
-func (c *InternalClient) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, options *ImportOptions) error {
+func (c *InternalClient) ImportValue(ctx context.Context, qcx qc.QueryContext, req *ImportValueRequest, options *ImportOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
 	defer span.Finish()
 	if req.ColumnKeys != nil {
@@ -2173,6 +2174,32 @@ func (c *InternalClient) ShardReader(ctx context.Context, index string, shard ui
 		return nil, err
 	}
 	return resp.Body, nil
+}
+
+func (c *InternalClient) RestoreShard(ctx context.Context, index string, shard uint64, body io.Reader) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RestoreShard")
+	defer span.Finish()
+
+	url := fmt.Sprintf("%s%s/internal/restore/%s/%d", c.defaultURI, c.prefix(), index, shard)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return err
+	}
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	token, ok := authn.GetAccessToken(ctx)
+	if ok && token != "" {
+		req.Header.Set("Authorization", token)
+	}
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
+	// Execute request.
+	resp, err := c.executeRequest(req)
+	if resp != nil {
+		resp.Body.Close()
+	}
+	return err
 }
 
 // IDAllocDataReader returns a reader that provides a snapshot of ID allocation data.

@@ -18,6 +18,7 @@ import (
 
 	daxstorage "github.com/molecula/featurebase/v3/dax/storage"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
 	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
@@ -540,7 +541,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.holder = NewHolder(path, s.holderConfig)
+	s.holder, err = NewHolder(path, s.holderConfig)
+	if err != nil {
+		return nil, err
+	}
 	s.holder.Stats.SetLogger(s.logger)
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -914,14 +918,17 @@ func (s *Server) ViewsRemoval(ctx context.Context) {
 							timeSince := time.Since(viewTime)
 
 							if timeSince >= field.Options().TTL {
-								for _, shard := range field.AvailableShards(true).Slice() {
-									err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), view.name, shard, nil)
-									if err != nil {
-										s.logger.Errorf("view: %s, shard: %d, ttl delete fragment: %s", shard, viewName, err)
-									}
+								shardUints := field.AvailableShards(true).Slice()
+								shards := make([]keys.Shard, len(shardUints))
+								for i, v := range shardUints {
+									shards[i] = keys.Shard(v)
+								}
+								err := s.holder.txStore.DeleteFragments(keys.Index(index.Name()), keys.Field(field.Name()), []keys.View{keys.View(view.name)}, shards)
+								if err != nil {
+									s.logger.Errorf("view: %s ttl delete fragment: %s", viewName, err)
 								}
 
-								err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
+								err = s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), view.name)
 								if err != nil {
 									s.logger.Errorf("view: %s, ttl delete view: %s", viewName, err)
 								}
@@ -931,15 +938,17 @@ func (s *Server) ViewsRemoval(ctx context.Context) {
 					}
 				}
 				if field.Options().NoStandardView && field.view(viewStandard) != nil {
-					// delete view "standard" if NoStandardView is true and view "standard" exists
-					for _, shard := range field.AvailableShards(true).Slice() {
-						err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), viewStandard, shard, nil)
-						if err != nil {
-							s.logger.Errorf("delete view %s from shard %d: %s", viewStandard, shard, err)
-						}
+					shardUints := field.AvailableShards(true).Slice()
+					shards := make([]keys.Shard, len(shardUints))
+					for i, v := range shardUints {
+						shards[i] = keys.Shard(v)
+					}
+					err := s.holder.txStore.DeleteFragments(keys.Index(index.Name()), keys.Field(field.Name()), []keys.View{keys.View(viewStandard)}, shards)
+					if err != nil {
+						s.logger.Errorf("view: %s ttl delete fragment: %s", viewStandard, err)
 					}
 
-					err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), viewStandard)
+					err = s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), viewStandard)
 					if err != nil {
 						s.logger.Errorf("view: %s, delete view: %s", viewStandard, err)
 					}

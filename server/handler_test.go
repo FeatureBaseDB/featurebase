@@ -23,6 +23,7 @@ import (
 	pb "github.com/molecula/featurebase/v3/proto"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/test"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -175,31 +176,28 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	tx0 := holder.Txf().NewWritableQcx()
-	defer tx0.Abort()
+	qcx, err := hldr.NewIndexQueryContext(context.Background(), "i0")
+	require.Nil(t, err)
+	defer qcx.Release()
 	if f, err := i0.CreateFieldIfNotExists("f1", "", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx0, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(qcx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := i0.CreateFieldIfNotExists("f0", "", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx0.Finish(); err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, qcx.Commit())
 
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
-	tx1 := holder.Txf().NewWritableQcx()
-	defer tx1.Abort()
+	qcx, err = hldr.NewIndexQueryContext(context.Background(), "i1")
+	require.Nil(t, err)
 	if f, err := i1.CreateFieldIfNotExists("f0", "", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx1, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(qcx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx1.Finish(); err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, qcx.Commit())
 
 	t.Run("Schema", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -255,11 +253,11 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	// i2 is for SchemaDetails
 	i2 := hldr.MustCreateIndexIfNotExists("i2", pilosa.IndexOptions{})
-	tx2 := holder.Txf().NewWritableQcx()
-	defer tx2.Abort()
+	qcx, err = holder.NewIndexQueryContext(context.Background(), "i2")
+	require.Nil(t, err)
 	if f, err := i2.CreateFieldIfNotExists("f0", "", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(qcx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -269,7 +267,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	}
 
 	for n := 0; n < 4; n++ {
-		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+		if _, err := f.SetValue(qcx, uint64(n), int64(n)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -280,30 +278,27 @@ func TestHandler_Endpoints(t *testing.T) {
 	}
 
 	for n := 0; n < 5; n++ {
-		if _, err := f.SetValue(tx2, uint64(n), int64(n)); err != nil {
+		if _, err := f.SetValue(qcx, uint64(n), int64(n)); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	if f, err := i2.CreateFieldIfNotExists("f3", "", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), "0")); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(qcx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i2.CreateFieldIfNotExists("f4", "", pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 5000)); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(qcx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i2.CreateFieldIfNotExists("f5", "", pilosa.OptFieldTypeBool()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx2, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(qcx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-
-	if err := tx2.Finish(); err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, qcx.Commit())
 
 	t.Run("SchemaDetails", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -493,7 +488,6 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		msg := pilosa.ImportRoaringRequest{
 			Action: pilosa.RequestActionOverwrite,
-			Block:  0,
 			Views: map[string][]byte{
 				"bsig_int-field": roaringData,
 			},

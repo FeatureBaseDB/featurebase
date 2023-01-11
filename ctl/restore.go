@@ -2,6 +2,7 @@
 package ctl
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/authn"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/encoding/proto"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/pkg/errors"
@@ -350,34 +352,15 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 	for _, node := range nodes {
 		logger.Printf("shard %v %v", shard, indexName)
 
-		f, err := os.Open(filename)
+		data, err := os.ReadFile(filename)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-
-		url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
-		req, err := retryablehttp.NewRequest("POST", url, f)
-		if err != nil {
-			return err
-		}
-		req = req.WithContext(ctx)
-		req.Header.Set("Content-Type", "application/octet-stream")
-
-		token, ok := authn.GetAccessToken(ctx)
-		if ok && token != "" {
-			req.Header.Set("Authorization", token)
-		}
-
-		client := cmd.newClient()
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		} else if err := resp.Body.Close(); err != nil {
-			return err
-		} else if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
+		client := pilosa.NewInternalClientFromURI(&node.URI,
+			pilosa.GetHTTPClient(cmd.tlsConfig, pilosa.ClientResponseHeaderTimeoutOption(time.Second*3)),
+			pilosa.WithClientRetryPeriod(cmd.RetryPeriod),
+			pilosa.WithSerializer(proto.Serializer{}))
+		return client.RestoreShard(ctx, indexName, shard, bytes.NewBuffer(data))
 	}
 	return nil
 }

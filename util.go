@@ -27,9 +27,6 @@ const LeftShifted16MaxContainerKey = uint64(0xffffffffffff0000) // or math.MaxUi
 //////////////////////////////////
 // helper utility functions
 
-func highbits(v uint64) uint64 { return v >> 16 }
-func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
-
 // GetLoopProgress returns the estimated remaining time to iterate through some
 // items as well as the loop completion percentage with the following
 // parameters:

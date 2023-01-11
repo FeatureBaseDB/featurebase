@@ -2,7 +2,6 @@
 package pilosa
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -12,9 +11,10 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v3/pql"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/shardwidth"
-	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
+	"github.com/stretchr/testify/require"
 )
 
 // CorruptAMutex breaks a mutex in order to test the mutex-corruption stuff.
@@ -25,7 +25,7 @@ import (
 //
 // This always sets row 3 in column 0 of each shard it finds. Populate the
 // field with existing shards first.
-func CorruptAMutex(tb testing.TB, field *Field, qcx *Qcx) {
+func CorruptAMutex(tb testing.TB, field *Field, qcx qc.QueryContext) {
 	v := field.view(viewStandard)
 	if v == nil {
 		tb.Fatalf("creating view failed")
@@ -33,14 +33,13 @@ func CorruptAMutex(tb testing.TB, field *Field, qcx *Qcx) {
 	frags := v.allFragments()
 	for _, frag := range frags {
 		func() {
-			tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: field.idx, Shard: frag.shard})
-			defer finisher(&err)
+			qw, err := frag.qcxWrite(qcx)
 			if err != nil {
 				tb.Fatalf("getting tx: %v", err)
 			}
 			// set a bonus bit, bypassing the mutex handling
 			frag.mu.Lock()
-			_, err = frag.unprotectedSetBit(tx, 3, (frag.shard<<shardwidth.Exponent)+1)
+			_, err = frag.unprotectedSetBit(qw, 3, (frag.shard<<shardwidth.Exponent)+1)
 			frag.mu.Unlock()
 			if err != nil {
 				tb.Fatalf("setting bit: %v", err)
@@ -232,26 +231,25 @@ func TestField_DeleteView(t *testing.T) {
 // reopens it using its cached schema, and returns the corresponding
 // field data structure from the reopened index.
 func reopenTestField(t testing.TB, f *Field) (*Field, error) {
+	index := f.index
 	name := f.Name()
-	if err := f.idx.Close(); err != nil {
-		f.idx = nil
-		return nil, err
+	require.Nil(t, f.holder.Close())
+	require.Nil(t, f.holder.Open())
+	idx := f.holder.Index(index)
+	if idx == nil {
+		t.Fatalf("index %q disappeared during reopen", index)
 	}
-	schema, err := f.holder.Schemator.Schema(context.Background())
-	if err != nil {
-		return nil, err
+	f = idx.Field(name)
+	if f == nil {
+		t.Fatalf("field %q/%q disappeared during reopen", index, name)
 	}
-	if err := f.idx.OpenWithSchema(schema[f.idx.name]); err != nil {
-		f.idx = nil
-		return nil, err
-	}
-	return f.idx.Field(name), nil
+	return f, nil
 }
 
 // testFieldSetBit sets a bit and checks for an error, using a provided qcx and an
 // optional timestamp or series of timestamps. if multiple times are provided,
 // the underlying set bit operation is repeated for all of them.
-func testFieldSetBit(tb testing.TB, qcx *Qcx, f *Field, row, col uint64, ts ...time.Time) {
+func testFieldSetBit(tb testing.TB, qcx qc.QueryContext, f *Field, row, col uint64, ts ...time.Time) {
 	if len(ts) == 0 {
 		_, err := f.SetBit(qcx, row, col, nil)
 		if err != nil {
@@ -309,12 +307,9 @@ func TestField_SetTimeQuantum(t *testing.T) {
 }
 
 func TestField_RowTime(t *testing.T) {
-	_, _, f := newTestField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
+	h, idx, f := newTestField(t, OptFieldTypeTime(TimeQuantum("YMDH"), "0"))
 
-	// Obtain transaction.
-	qcx := f.holder.Txf().NewWritableQcx()
-	defer qcx.Abort()
-
+	qcx := h.MustIndexQueryContext(t, idx.name)
 	testFieldSetBit(t, qcx, f, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
 	testFieldSetBit(t, qcx, f, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
 	testFieldSetBit(t, qcx, f, 1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
@@ -323,14 +318,9 @@ func TestField_RowTime(t *testing.T) {
 
 	// Warning: Right now this is misleading, and doesn't really do anything. We
 	// already committed each change as we got there. SOME DAY we will fix this.
-	PanicOn(qcx.Finish())
+	require.Nil(t, qcx.Commit())
 
-	qcx = f.holder.Txf().NewQcx()
-	defer qcx.Abort()
-
-	// obtain 2nd transaction to read it back.
-	qcx = f.holder.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx = h.MustQueryContext(t)
 
 	if r, err := f.RowTime(qcx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
 		t.Fatal(err)
@@ -453,10 +443,7 @@ func TestField_ApplyOptions(t *testing.T) {
 // into consideration. This would cause an import of 1/8/1
 // to result in a value of 9 instead of 1.
 func TestBSIGroup_importValue(t *testing.T) {
-	_, _, f := newTestField(t, OptFieldTypeInt(-100, 200))
-
-	qcx := f.idx.holder.txf.NewQcx()
-	defer qcx.Abort()
+	h, idx, f := newTestField(t, OptFieldTypeInt(-100, 200))
 
 	options := &ImportOptions{}
 	for i, tt := range []struct {
@@ -484,24 +471,24 @@ func TestBSIGroup_importValue(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
+		qcx := h.MustIndexQueryContext(t, idx.name)
 		if err := f.importValue(qcx, tt.columnIDs, tt.values, 0, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
-		PanicOn(qcx.Finish())
-		qcx.Reset()
+		require.Nil(t, qcx.Commit())
+		qcx = h.MustIndexQueryContext(t, idx.name)
 		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
-		PanicOn(qcx.Finish())
-		qcx.Reset()
+		require.Nil(t, qcx.Commit())
 	} // loop
 }
 
 // benchmarkImportValues is a helper function to explore, very roughly, the cost
 // of setting values using the special setter used for imports.
-func benchmarkFieldImportValues(b *testing.B, qcx *Qcx, bitDepth uint64, f *Field, cfunc func(uint64) uint64) {
+func benchmarkFieldImportValues(b *testing.B, qcx qc.QueryContext, bitDepth uint64, f *Field, cfunc func(uint64) uint64) {
 	batches := makeBenchmarkImportValueData(b, bitDepth, cfunc)
 	for _, req := range batches {
 		// NOTE: We assume everything's in Shard 0 for now.
@@ -517,10 +504,10 @@ func BenchmarkField_ImportValue(b *testing.B) {
 	depths := []uint64{4, 8, 16, 32}
 
 	for _, bitDepth := range depths {
-		_, _, f := newTestField(b, OptFieldTypeInt(0, 1<<bitDepth))
+		h, idx, f := newTestField(b, OptFieldTypeInt(0, 1<<bitDepth))
 
-		qcx := f.idx.holder.txf.NewQcx()
-		defer qcx.Abort()
+		qcx := h.MustIndexQueryContext(b, idx.name)
+		defer qcx.Release()
 		name := fmt.Sprintf("Depth%d", bitDepth)
 		b.Run(name+"_Sparse", func(b *testing.B) {
 			benchmarkFieldImportValues(b, qcx, bitDepth, f, func(u uint64) uint64 { return (u + 19) & (ShardWidth - 1) })
@@ -532,10 +519,7 @@ func BenchmarkField_ImportValue(b *testing.B) {
 }
 
 func TestIntField_MinMaxForShard(t *testing.T) {
-	_, _, f := newTestField(t, OptFieldTypeInt(-100, 200))
-
-	qcx := f.idx.holder.txf.NewQcx()
-	defer qcx.Abort()
+	h, idx, f := newTestField(t, OptFieldTypeInt(-100, 200))
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
@@ -580,11 +564,13 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			qcx := h.MustIndexQueryContext(t, idx.name)
+
 			if err := f.importValue(qcx, test.columnIDs, test.values, 0, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
-			PanicOn(qcx.Finish())
-			qcx.Reset()
+			require.Nil(t, qcx.Commit())
+			qcx = h.MustQueryContext(t)
 
 			shard := uint64(0)
 			// Rollback below manually, because we are in a loop.
@@ -689,7 +675,7 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 }
 
 func TestDecimalField_MinMaxForShard(t *testing.T) {
-	_, _, f := newTestField(t, OptFieldTypeDecimal(3))
+	h, idx, f := newTestField(t, OptFieldTypeDecimal(3))
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
@@ -734,19 +720,18 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			qcx := f.idx.holder.txf.NewQcx()
+			qcx := h.MustIndexQueryContext(t, idx.name)
 
 			err := f.importFloatValue(qcx, test.columnIDs, test.values, 0, options)
 			if err != nil {
-				qcx.Abort()
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
-			qcx.Abort()
+			require.Nil(t, qcx.Commit())
 
 			shard := uint64(0)
 
-			qcx = f.idx.holder.txf.NewQcx()
-			defer qcx.Abort()
+			qcx = h.MustQueryContext(t)
+
 			maxvc, err := f.MaxForShard(qcx, shard, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
@@ -767,10 +752,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 }
 
 func TestBSIGroup_TxReopenDB(t *testing.T) {
-	_, _, f := newTestField(t, OptFieldTypeInt(-100, 200))
-
-	qcx := f.idx.holder.txf.NewQcx()
-	defer qcx.Abort()
+	h, idx, f := newTestField(t, OptFieldTypeInt(-100, 200))
 
 	options := &ImportOptions{}
 	for i, tt := range []struct {
@@ -798,19 +780,21 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
-		if err := f.importValue(qcx, tt.columnIDs, tt.values, 0, options); err != nil {
-			t.Fatalf("test %d, importing values: %s", i, err.Error())
-		}
-		PanicOn(qcx.Finish())
-		qcx.Reset()
-
-		if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
-			t.Fatalf("test %d, getting range: %s", i, err.Error())
-		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
-			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
-		}
-		PanicOn(qcx.Finish())
-		qcx.Reset()
+		func() {
+			qcx := h.MustIndexQueryContext(t, idx.name)
+			defer qcx.Release()
+			if err := f.importValue(qcx, tt.columnIDs, tt.values, 0, options); err != nil {
+				t.Fatalf("test %d, importing values: %s", i, err.Error())
+			}
+			require.Nil(t, qcx.Commit())
+			qcx = h.MustQueryContext(t)
+			defer qcx.Release()
+			if row, err := f.Range(qcx, f.name, pql.EQ, tt.checkVal); err != nil {
+				t.Fatalf("test %d, getting range: %s", i, err.Error())
+			} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
+				t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
+			}
+		}()
 	} // loop
 
 	// the test: can we re-open a BSI fragment under Tx store
@@ -822,15 +806,14 @@ func TestBSIGroup_TxReopenDB(t *testing.T) {
 
 // Ensure that an integer field has the same BitDepth after reopening.
 func TestField_SaveMeta(t *testing.T) {
-	_, _, f := newTestField(t, OptFieldTypeInt(-10, 1000))
+	h, idx, f := newTestField(t, OptFieldTypeInt(-10, 1000))
 
 	colID := uint64(1)
 	val := int64(88)
 	expBitDepth := uint64(7)
 
 	// Obtain transaction.
-	qcx := f.holder.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx := h.MustIndexQueryContext(t, idx.name)
 
 	if changed, err := f.SetValue(qcx, colID, val); err != nil {
 		t.Fatal(err)
@@ -850,9 +833,7 @@ func TestField_SaveMeta(t *testing.T) {
 		t.Fatalf("expected value to be: %d, got: %d", val, rslt)
 	}
 
-	if err := qcx.Finish(); err != nil {
-		t.Fatalf("error finishing qcx: %v", err)
-	}
+	require.Nil(t, qcx.Commit())
 
 	// Reload field and verify that it is persisted.
 	f, err := reopenTestField(t, f)
@@ -860,8 +841,7 @@ func TestField_SaveMeta(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	qcx = f.holder.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx = h.MustQueryContext(t)
 
 	if f.options.BitDepth != expBitDepth {
 		t.Fatalf("expected BitDepth after reopen to be: %d, got: %d", expBitDepth, f.options.BitDepth)

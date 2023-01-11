@@ -15,6 +15,7 @@ import (
 	"github.com/apache/arrow/go/v10/arrow/memory"
 	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/molecula/featurebase/v3/pql"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
@@ -117,7 +118,7 @@ func IvyReduce(reduceCode string, opCode string, opt *ExecOptions) (func(ctx con
 }
 
 // executeApply executes a Apply() call.
-func (e *executor) executeApply(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*dataframe.DataFrame, error) {
+func (e *executor) executeApply(ctx context.Context, qcx qc.QueryContext, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*dataframe.DataFrame, error) {
 	if !e.dataframeEnabled {
 		return nil, errors.New("Dataframe support not enabled")
 	}
@@ -189,7 +190,7 @@ func filterDataframe(resolver dataframe.Resolver, pool memory.Allocator, filter 
 	return indexResolver, nil
 }
 
-func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (value.Value, error) {
+func (e *executor) executeApplyShard(ctx context.Context, qcx qc.QueryContext, index string, c *pql.Call, shard uint64) (value.Value, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeApplyShard")
 	defer span.Finish()
 

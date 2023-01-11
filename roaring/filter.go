@@ -1297,6 +1297,27 @@ func getFirstRowAsContainers(citer ContainerIterator) []containerWithKey {
 	return citerContainers
 }
 
+type infiniteOnesIterator struct {
+	count uint64
+	c     *Container
+}
+
+func NewInfiniteOnesIterator() *infiniteOnesIterator {
+	return &infiniteOnesIterator{c: NewContainerRun([]Interval16{{Start: 0, Last: 65535}})}
+}
+
+func (i *infiniteOnesIterator) Next() bool {
+	i.count++
+	return true
+}
+
+func (i *infiniteOnesIterator) Value() (uint64, *Container) {
+	return i.count, i.c
+}
+
+func (i *infiniteOnesIterator) Close() {
+}
+
 // NewClearAndSetRewriter instantiates a ClearAndSetRewriter
 func NewClearAndSetRewriter(clear, set ContainerIterator) (*ClearAndSetRewriter, error) {
 	curSetKey, curSet := getNextFromIterator(set)

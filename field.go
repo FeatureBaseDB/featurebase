@@ -15,7 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/pql"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -719,17 +721,17 @@ func (f *Field) TTL() time.Duration {
 	return f.options.TTL
 }
 
-func (f *Field) bitDepth() (uint64, error) {
+func (f *Field) bitDepth(qcx qc.QueryContext) (uint64, error) {
 	var maxBitDepth uint64
 
-	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
+	view2shards := f.holder.dbContents[keys.Index(f.index)][keys.Field(f.name)]
 	for name, shardset := range view2shards {
-		view := f.view(name)
+		view := f.view(string(name))
 		if view == nil {
 			continue
 		}
 
-		bd, err := view.bitDepth(shardset.shards())
+		bd, err := view.bitDepth(qcx, shardset.Shards())
 		if err != nil {
 			return 0, errors.Wrapf(err, "getting view(%s) bit depth", name)
 		}
@@ -763,14 +765,14 @@ func (f *Field) cacheBitDepth(bd uint64) error {
 
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
-	view2shards := f.idx.fieldView2shard.getViewsForField(f.name)
-	if view2shards == nil {
+	viewShards := f.holder.dbContents[keys.Index(f.index)][keys.Field(f.name)]
+	if viewShards == nil {
 		// no data
 		return nil
 	}
 
-	for name, shardset := range view2shards {
-		view := f.newView(f.viewPath(name), name)
+	for name, shardset := range viewShards {
+		view := f.newView(f.viewPath(string(name)), string(name))
 		if err := view.openWithShardSet(shardset); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
@@ -1052,7 +1054,7 @@ func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error)
 
 // RowTime gets the row at the particular time with the granularity specified by
 // the quantum.
-func (f *Field) RowTime(qcx *Qcx, rowID uint64, time time.Time, quantum string) (*Row, error) {
+func (f *Field) RowTime(qcx qc.QueryContext, rowID uint64, time time.Time, quantum string) (*Row, error) {
 	if !TimeQuantum(quantum).Valid() {
 		return nil, ErrInvalidTimeQuantum
 	}
@@ -1203,7 +1205,7 @@ func (f *Field) deleteView(name string) error {
 // package, and the fact that it's only allowed on
 // `set`,`mutex`, and `bool` fields is odd. This may
 // be considered for deprecation in a future version.
-func (f *Field) Row(qcx *Qcx, rowID uint64) (*Row, error) {
+func (f *Field) Row(qcx qc.QueryContext, rowID uint64) (*Row, error) {
 	switch f.Type() {
 	case FieldTypeSet, FieldTypeMutex, FieldTypeBool:
 		view := f.view(viewStandard)
@@ -1218,7 +1220,7 @@ func (f *Field) Row(qcx *Qcx, rowID uint64) (*Row, error) {
 
 // mutexCheck performs a sanity-check on the available fragments for a
 // field. The return is map[column]map[shard][]values for collisions only.
-func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
+func (f *Field) MutexCheck(ctx context.Context, qcx qc.QueryContext, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	if f.Type() != FieldTypeMutex {
 		return nil, errors.New("mutex check only valid for mutex fields")
 	}
@@ -1240,7 +1242,7 @@ func (f *Field) MutexCheck(ctx context.Context, qcx *Qcx, details bool, limit in
 }
 
 // SetBit sets a bit on a view within the field.
-func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+func (f *Field) SetBit(qcx qc.QueryContext, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	viewName := viewStandard
 	if !f.options.NoStandardView {
 		// Retrieve view. Exit if it doesn't exist.
@@ -1280,7 +1282,7 @@ func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed boo
 }
 
 // ClearBit clears a bit within the field.
-func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error) {
+func (f *Field) ClearBit(qcx qc.QueryContext, rowID, colID uint64) (changed bool, err error) {
 	viewName := viewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
@@ -1325,29 +1327,31 @@ func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error
 	return changed, nil
 }
 
-// ClearBits clears all bits corresponding to the given record IDs in standard
-// or BSI views. It does not delete bits from time quantum views.
-func (f *Field) ClearBits(tx Tx, shard uint64, recordIDs ...uint64) error {
-	bsig := f.bsiGroup(f.name)
-	var v *view
-	if bsig != nil {
-		// looks like we're a BSI field?
-		v = f.view(viewBSIGroupPrefix + f.name)
-	} else {
-		v = f.view(viewStandard)
-	}
-	// it's fine if we never actually created the view, that means the
-	// bits are all clear!
-	if v == nil {
-		return nil
-	}
-	frag := v.Fragment(shard)
-	if frag == nil {
-		return nil
-	}
-	_, err := frag.ClearRecords(tx, recordIDs)
-	return err
-}
+// ClearBits is probably unused. Leaving it commented out for now but if things
+// still work without it it should go away.
+// // ClearBits clears all bits corresponding to the given record IDs in standard
+// // or BSI views. It does not delete bits from time quantum views.
+// func (f *Field) ClearBits(tx Tx, shard uint64, recordIDs ...uint64) error {
+// 	bsig := f.bsiGroup(f.name)
+// 	var v *view
+// 	if bsig != nil {
+// 		// looks like we're a BSI field?
+// 		v = f.view(viewBSIGroupPrefix + f.name)
+// 	} else {
+// 		v = f.view(viewStandard)
+// 	}
+// 	// it's fine if we never actually created the view, that means the
+// 	// bits are all clear!
+// 	if v == nil {
+// 		return nil
+// 	}
+// 	frag := v.Fragment(shard)
+// 	if frag == nil {
+// 		return nil
+// 	}
+// 	_, err := frag.ClearRecords(tx, recordIDs)
+// 	return err
+// }
 
 func groupCompare(a, b string, offset int) (lt, eq bool) {
 	if len(a) > offset {
@@ -1392,7 +1396,7 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 
 // StringValue reads an integer field value for a column, and converts
 // it to a string based on a foreign index string key.
-func (f *Field) StringValue(qcx *Qcx, columnID uint64) (value string, exists bool, err error) {
+func (f *Field) StringValue(qcx qc.QueryContext, columnID uint64) (value string, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return value, false, ErrBSIGroupNotFound
@@ -1406,7 +1410,7 @@ func (f *Field) StringValue(qcx *Qcx, columnID uint64) (value string, exists boo
 }
 
 // Value reads a field value for a column.
-func (f *Field) Value(qcx *Qcx, columnID uint64) (value int64, exists bool, err error) {
+func (f *Field) Value(qcx qc.QueryContext, columnID uint64) (value int64, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return 0, false, ErrBSIGroupNotFound
@@ -1428,7 +1432,7 @@ func (f *Field) Value(qcx *Qcx, columnID uint64) (value int64, exists bool, err 
 }
 
 // SetValue sets a field value for a column.
-func (f *Field) SetValue(qcx *Qcx, columnID uint64, value int64) (changed bool, err error) {
+func (f *Field) SetValue(qcx qc.QueryContext, columnID uint64, value int64) (changed bool, err error) {
 	// Fetch bsiGroup & validate min/max.
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1480,7 +1484,7 @@ func (f *Field) SetValue(qcx *Qcx, columnID uint64, value int64) (changed bool, 
 }
 
 // ClearValue removes a field value for a column.
-func (f *Field) ClearValue(qcx *Qcx, columnID uint64) (changed bool, err error) {
+func (f *Field) ClearValue(qcx qc.QueryContext, columnID uint64) (changed bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
@@ -1500,9 +1504,7 @@ func (f *Field) ClearValue(qcx *Qcx, columnID uint64) (changed bool, err error) 
 	return false, nil
 }
 
-func (f *Field) MaxForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: false, Index: f.idx, Shard: shard})
-	defer finisher(&err)
+func (f *Field) MaxForShard(qcx qc.QueryContext, shard uint64, filter *Row) (ValCount, error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return ValCount{}, ErrBSIGroupNotFound
@@ -1518,7 +1520,11 @@ func (f *Field) MaxForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, erro
 		return ValCount{}, nil
 	}
 
-	max, cnt, err := fragment.max(tx, filter, bsig.BitDepth)
+	qr, err := fragment.qcxRead(qcx)
+	if err != nil {
+		return ValCount{}, err
+	}
+	max, cnt, err := fragment.max(qr, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.max")
 	}
@@ -1530,9 +1536,7 @@ func (f *Field) MaxForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, erro
 // MinForShard returns the minimum value which appears in this shard
 // (this field must be an Int or Decimal field). It also returns the
 // number of times the minimum value appears.
-func (f *Field) MinForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, error) {
-	tx, finisher, err := qcx.GetTx(Txo{Write: false, Index: f.idx, Shard: shard})
-	defer finisher(&err)
+func (f *Field) MinForShard(qcx qc.QueryContext, shard uint64, filter *Row) (ValCount, error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return ValCount{}, ErrBSIGroupNotFound
@@ -1548,7 +1552,11 @@ func (f *Field) MinForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, erro
 		return ValCount{}, nil
 	}
 
-	min, cnt, err := fragment.min(tx, filter, bsig.BitDepth)
+	qr, err := fragment.qcxRead(qcx)
+	if err != nil {
+		return ValCount{}, err
+	}
+	min, cnt, err := fragment.min(qr, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.min")
 	}
@@ -1590,7 +1598,7 @@ func (f *Field) valCountize(val int64, cnt uint64, bsig *bsiGroup) (ValCount, er
 }
 
 // Range performs a conditional operation on Field.
-func (f *Field) Range(qcx *Qcx, name string, op pql.Token, predicate int64) (*Row, error) {
+func (f *Field) Range(qcx qc.QueryContext, name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
@@ -1614,7 +1622,7 @@ func (f *Field) Range(qcx *Qcx, name string, op pql.Token, predicate int64) (*Ro
 }
 
 // Import bulk imports data.
-func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64, shard uint64, options *ImportOptions) (err0 error) {
+func (f *Field) Import(qcx qc.QueryContext, rowIDs, columnIDs []uint64, timestamps []int64, shard uint64, options *ImportOptions) (err0 error) {
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
 	if len(timestamps) > 0 {
@@ -1636,12 +1644,6 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 				}
 			}
 		}
-		tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
-		if err != nil {
-			return errors.Wrap(err, "qcx.GetTx")
-		}
-		var err1 error
-		defer finisher(&err1)
 		view, err := f.createViewIfNotExists(viewStandard)
 		if err != nil {
 			return errors.Wrapf(err, "creating view %s", viewStandard)
@@ -1652,8 +1654,11 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 			return errors.Wrap(err, "creating fragment")
 		}
 
-		err1 = frag.bulkImport(tx, rowIDs, columnIDs, options)
-		return err1
+		qw, err := frag.qcxWrite(qcx)
+		if err != nil {
+			return err
+		}
+		return frag.bulkImport(qw, rowIDs, columnIDs, options)
 	}
 
 	fieldType := f.Type()
@@ -1717,12 +1722,10 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 			}
 		}
 	}
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: f.idx, Shard: shard})
-	if err != nil {
-		return errors.Wrap(err, "qcx.GetTx")
-	}
-	var err1 error
-	defer finisher(&err1)
+
+	// in the Qcx/Tx era, we grabbed a single top-level Tx, because we secretly
+	// knew that Tx were shard-based, and didn't care about views. Now we request
+	// a QueryWrite per frag.
 	for viewName, data := range views {
 		view, err := f.createViewIfNotExists(viewName)
 		if err != nil {
@@ -1734,9 +1737,13 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 			return errors.Wrap(err, "creating fragment")
 		}
 
-		err1 = frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options)
-		if err1 != nil {
-			return err1
+		qw, err := frag.qcxWrite(qcx)
+		if err != nil {
+			return err
+		}
+		err = frag.bulkImport(qw, data.RowIDs, data.ColumnIDs, options)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1745,7 +1752,7 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 // importFloatValue imports floating point values. In current usage, this
 // should only ever be called with data for a single shard; the API calls
 // around this are splitting it up per shard.
-func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64, shard uint64, options *ImportOptions) error {
+func (f *Field) importFloatValue(qcx qc.QueryContext, columnIDs []uint64, values []float64, shard uint64, options *ImportOptions) error {
 	// convert values to int64 values based on scale
 	ivalues := make([]int64, len(values))
 	bsig := f.bsiGroup(f.name)
@@ -1763,7 +1770,7 @@ func (f *Field) importFloatValue(qcx *Qcx, columnIDs []uint64, values []float64,
 // importTimestampValue imports timestamp values. In current usage, this
 // should only ever be called with data for a single shard; the API calls
 // around this are splitting it up per shard.
-func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time.Time, shard uint64, options *ImportOptions) error {
+func (f *Field) importTimestampValue(qcx qc.QueryContext, columnIDs []uint64, values []time.Time, shard uint64, options *ImportOptions) error {
 	ivalues := make([]int64, len(values))
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1779,7 +1786,7 @@ func (f *Field) importTimestampValue(qcx *Qcx, columnIDs []uint64, values []time
 // importValue bulk imports range-encoded value data. This function should
 // only be called with data for a single shard; the API calls that wrap
 // this handle splitting the data up per-shard.
-func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard uint64, options *ImportOptions) (err0 error) {
+func (f *Field) importValue(qcx qc.QueryContext, columnIDs []uint64, values []int64, shard uint64, options *ImportOptions) error {
 	// no data to import
 	if len(columnIDs) == 0 {
 		return nil
@@ -1870,19 +1877,15 @@ func (f *Field) importValue(qcx *Qcx, columnIDs []uint64, values []int64, shard 
 		}
 	}
 
-	// now we know which shard we discovered.
-	tx, finisher, err := qcx.GetTx(Txo{Write: writable, Index: f.idx, Shard: frag.shard})
+	// request a QueryWrite and write to it
+	qw, err := frag.qcxWrite(qcx)
 	if err != nil {
 		return err
 	}
-	// defer the finisher, so it will check the error returned and
-	// possibly rollback.
-	defer finisher(&err0)
-
-	return frag.importValue(tx, columnIDs, values, requiredDepth, options.Clear)
+	return frag.importValue(qw, columnIDs, values, requiredDepth, options.Clear)
 }
 
-func (f *Field) importRoaring(ctx context.Context, tx Tx, data []byte, shard uint64, viewName string, clear bool) error {
+func (f *Field) importRoaring(ctx context.Context, qcx qc.QueryContext, data []byte, shard uint64, viewName string, clear bool) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaring")
 	defer span.Finish()
 
@@ -1899,7 +1902,11 @@ func (f *Field) importRoaring(ctx context.Context, tx Tx, data []byte, shard uin
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-	if err := frag.importRoaring(ctx, tx, data, clear); err != nil {
+	qw, err := frag.qcxWrite(qcx)
+	if err != nil {
+		return err
+	}
+	if err := frag.importRoaring(ctx, qw, data, clear); err != nil {
 		return err
 	}
 
@@ -1910,7 +1917,7 @@ func (f *Field) GetIndex() *Index {
 	return f.idx
 }
 
-func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, shard uint64, viewName string, block int) error {
+func (f *Field) importRoaringOverwrite(ctx context.Context, qcx qc.QueryContext, data []byte, shard uint64, viewName string) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaringOverwrite")
 	defer span.Finish()
 
@@ -1927,7 +1934,11 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, 
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-	if err := frag.importRoaringOverwrite(ctx, tx, data, block); err != nil {
+	qw, err := frag.qcxWrite(qcx)
+	if err != nil {
+		return errors.Wrap(err, "creating writer")
+	}
+	if err := frag.importRoaringOverwrite(ctx, qw, data); err != nil {
 		return err
 	}
 
@@ -1935,8 +1946,12 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, 
 	// field.options.BitDepth and bsiGroup.BitDepth based on the imported data.
 	switch f.Options().Type {
 	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		qr, err := frag.qcxRead(qcx)
+		if err != nil {
+			return err
+		}
 		frag.mu.Lock()
-		maxRowID, _, err := frag.maxRow(tx, nil)
+		maxRowID, _, err := frag.maxRow(qr, nil)
 		frag.mu.Unlock()
 		if err != nil {
 			return err
@@ -2368,7 +2383,7 @@ func CheckEpochOutOfRange(epoch, min, max time.Time) error {
 	return nil
 }
 
-func (f *Field) SortShardRow(tx Tx, shard uint64, filter *Row, sort_desc bool) (*SortedRow, error) {
+func (f *Field) SortShardRow(qcx qc.QueryContext, shard uint64, filter *Row, sort_desc bool) (*SortedRow, error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return nil, errors.New("bsig is nil")
@@ -2384,5 +2399,9 @@ func (f *Field) SortShardRow(tx Tx, shard uint64, filter *Row, sort_desc bool) (
 		return nil, errors.New("fragment is nil")
 	}
 
-	return fragment.sortBsiData(tx, filter, bsig.BitDepth, sort_desc)
+	qr, err := fragment.qcxRead(qcx)
+	if err != nil {
+		return nil, err
+	}
+	return fragment.sortBsiData(qr, filter, bsig.BitDepth, sort_desc)
 }

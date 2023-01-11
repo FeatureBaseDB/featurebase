@@ -162,7 +162,10 @@ func TestHolder_HasData(t *testing.T) {
 		// Note that we are intentionally not using test.NewHolder,
 		// because we want to create a Holder object with an invalid path,
 		// rather than creating a valid holder with a temporary path.
-		h := pilosa.NewHolder("bad-path", pilosa.TestHolderConfig())
+		h, err := pilosa.NewHolder("bad-path", pilosa.TestHolderConfig())
+		if err != nil {
+			t.Fatalf("surprisingly, got an error from NewHolder with an invalid path which we didn't expect: %v", err)
+		}
 
 		if ok, err := h.HasData(); ok || err != nil {
 			t.Fatal("expected HasData to return false, no err, but", ok, err)

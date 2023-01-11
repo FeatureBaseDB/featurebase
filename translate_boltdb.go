@@ -512,7 +512,6 @@ func (r *BoltTranslateEntryReader) ReadEntry(entry *TranslateEntry) error {
 
 type boltWrapper struct {
 	tx *bolt.Tx
-	db *bolt.DB
 }
 
 func (w *boltWrapper) Commit() error {

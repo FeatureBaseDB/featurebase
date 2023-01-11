@@ -323,9 +323,6 @@ func (h *Handler) populateValidators() {
 	h.validators["GetStatus"] = queryValidationSpecRequired()
 	h.validators["GetVersion"] = queryValidationSpecRequired()
 	h.validators["PostClusterMessage"] = queryValidationSpecRequired()
-	h.validators["GetFragmentBlockData"] = queryValidationSpecRequired()
-	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "view", "shard")
-	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
 	h.validators["GetPartitionNodes"] = queryValidationSpecRequired("partition")
 	h.validators["GetNodes"] = queryValidationSpecRequired()
@@ -572,9 +569,6 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/internal/mem-usage", handler.chkAuthZ(handler.handleGetMemUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/internal/disk-usage", handler.chkAuthZ(handler.handleGetDiskUsage, authz.Read)).Methods("GET").Name("GetUsage")
 	router.HandleFunc("/internal/disk-usage/{index}", handler.chkAuthZ(handler.handleGetDiskUsage, authz.Read)).Methods("GET").Name("GetUsage")
-	router.HandleFunc("/internal/fragment/block/data", handler.chkAuthN(handler.handleGetFragmentBlockData)).Methods("GET").Name("GetFragmentBlockData")
-	router.HandleFunc("/internal/fragment/blocks", handler.chkAuthN(handler.handleGetFragmentBlocks)).Methods("GET").Name("GetFragmentBlocks")
-	router.HandleFunc("/internal/fragment/data", handler.chkAuthN(handler.handleGetFragmentData)).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.chkAuthN(handler.handleGetFragmentNodes)).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/partition/nodes", handler.chkAuthN(handler.handleGetPartitionNodes)).Methods("GET").Name("GetPartitionNodes")
 	router.HandleFunc("/internal/translate/keys", handler.chkAuthN(handler.handlePostTranslateKeys)).Methods("POST").Name("PostTranslateKeys")
@@ -2583,14 +2577,14 @@ func validateProtobufHeader(r *http.Request) (error string, code int) {
 
 // handleGetInternalDebugRBFJSON handles /internal/debug/rbf requests.
 func (h *Handler) handleGetInternalDebugRBFJSON(w http.ResponseWriter, r *http.Request) {
-	buf, err := json.MarshalIndent(h.api.RBFDebugInfo(), "", "  ")
+	w.Header().Set("Content-Type", "application/octet-stream")
+	var buf bytes.Buffer
+	err := h.api.holder.TxStore().DumpDot(&buf)
 	if err != nil {
-		http.Error(w, "marshal json: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "rendering DOT: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(buf)
+	w.Write(buf.Bytes())
 }
 
 // handleGetMetricsJSON handles /metrics.json requests, translating text metrics results to more consumable JSON.
@@ -2743,37 +2737,6 @@ func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
 		h.logger.Errorf("json write error: %s", err)
-	}
-}
-
-// handleGetFragmentBlockData handles GET /internal/fragment/block/data requests.
-func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "fragment blocks feature removed", http.StatusNotFound)
-}
-
-// handleGetFragmentBlocks handles GET /internal/fragment/blocks requests.
-func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "fragment blocks feature removed", http.StatusNotFound)
-}
-
-// handleGetFragmentData handles GET /internal/fragment/data requests.
-func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
-	// Read shard parameter.
-	q := r.URL.Query()
-	shard, err := strconv.ParseUint(q.Get("shard"), 10, 64)
-	if err != nil {
-		http.Error(w, "shard required", http.StatusBadRequest)
-		return
-	}
-	// Retrieve fragment data from holder.
-	f, err := h.api.FragmentData(r.Context(), q.Get("index"), q.Get("field"), q.Get("view"), shard)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	// Stream fragment to response body.
-	if _, err := f.WriteTo(w); err != nil {
-		h.logger.Errorf("error streaming fragment data: %s", err)
 	}
 }
 
@@ -3075,12 +3038,15 @@ func (h *Handler) handlePostImportAtomicRecord(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	qcx := h.api.Txf().NewQcx()
+	qcx, err := h.api.NewIndexQueryContext(r.Context(), req.Index, req.Shard)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer qcx.Release()
 	err = h.api.ImportAtomicRecord(r.Context(), qcx, req, opt)
 	if err == nil {
-		err = qcx.Finish()
-	} else {
-		qcx.Abort()
+		err = qcx.Commit()
 	}
 	if err != nil {
 		switch errors.Cause(err) {
@@ -3153,9 +3119,17 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		qcx := h.api.Txf().NewQcx()
-		defer qcx.Abort()
+		// mark that we don't really have a specific shard
+		if len(req.ColumnKeys) != 0 {
+			req.Shard = ^uint64(0)
+		}
+		// ^0 is special and doesn't count as a shard
+		qcx, err := h.api.NewIndexQueryContext(r.Context(), req.Index, req.Shard)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer qcx.Release()
 
 		if err := h.api.ImportValue(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
@@ -3169,9 +3143,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
-		err := qcx.Finish()
+		err = qcx.Commit()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("error in qcx.Finish(): '%v'", err.Error()), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error committing import: '%v'", err.Error()), http.StatusInternalServerError)
 			return
 		}
 	} else {
@@ -3183,8 +3157,17 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		qcx := h.api.Txf().NewQcx()
-		defer qcx.Abort()
+		// mark that we don't really have a specific shard
+		if len(req.ColumnKeys) != 0 {
+			req.Shard = ^uint64(0)
+		}
+		// ^0 is special and doesn't count as a shard
+		qcx, err := h.api.NewIndexQueryContext(r.Context(), req.Index, req.Shard)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer qcx.Release()
 
 		if err := h.api.Import(r.Context(), qcx, req, opts...); err != nil {
 			switch errors.Cause(err) {
@@ -3197,9 +3180,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		err := qcx.Finish()
+		err = qcx.Commit()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("error in qcx.Finish() on set,time,mutex: '%v'", err.Error()), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error committing import: '%v'", err.Error()), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -3231,8 +3214,12 @@ func (h *Handler) handleGetMutexCheck(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "limit must be numeric", http.StatusBadRequest)
 		}
 	}
-	qcx := h.api.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, err := h.api.NewQueryContext(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer qcx.Release()
 	out, err := h.api.MutexCheck(r.Context(), qcx, indexName, fieldName, details, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3268,8 +3255,12 @@ func (h *Handler) handleInternalGetMutexCheck(w http.ResponseWriter, r *http.Req
 			http.Error(w, "limit must be numeric", http.StatusBadRequest)
 		}
 	}
-	qcx := h.api.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, err := h.api.NewQueryContext(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer qcx.Release()
 	out, err := h.api.MutexCheckNode(r.Context(), qcx, indexName, fieldName, details, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3805,6 +3796,7 @@ func (h *Handler) handleRestoreIDAlloc(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePostRestore(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	indexName, ok := mux.Vars(r)["index"]
 	if !ok {
 		http.Error(w, "index name is required", http.StatusBadRequest)

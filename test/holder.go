@@ -2,12 +2,15 @@
 package test
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/pql"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/testhook"
 )
 
@@ -22,13 +25,15 @@ type Holder struct {
 func NewHolder(tb testing.TB) *Holder {
 	path, err := testhook.TempDir(tb, "pilosa-holder-")
 	if err != nil {
-		panic(err)
+		tb.Fatalf("requesting temp dir: %v", err)
 	}
 
 	cfg := pilosa.TestHolderConfig()
-	h := &Holder{Holder: pilosa.NewHolder(path, cfg), tb: tb}
-
-	return h
+	holder, err := pilosa.NewHolder(path, cfg)
+	if err != nil {
+		tb.Fatalf("creating holder for path %q: %v", path, err)
+	}
+	return &Holder{Holder: holder, tb: tb}
 }
 
 // MustOpenHolder creates and opens a holder at a temporary path. Panic on error.
@@ -71,6 +76,22 @@ func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOption
 	return &Index{Index: idx}
 }
 
+// Similar to the same method on commands, IndexWideQcx returns a Qcx that can write
+// to the entire index (shard-agnostic), plus a function that will commit it or
+// fail the test on error. It uses the holder's innate tb.
+func (h *Holder) IndexWideQcx(index string) (qc.QueryContext, func()) {
+	txs := h.TxStore()
+	qcx, err := txs.NewWriteQueryContext(context.Background(), txs.Scope().AddIndex(keys.Index(index)))
+	if err != nil {
+		h.tb.Fatalf("creating query context for test setup: %v", err)
+	}
+	return qcx, func() {
+		if err := qcx.Commit(); err != nil {
+			h.tb.Fatalf("committing write: %v", err)
+		}
+	}
+}
+
 // Row returns a Row for a given field.
 func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
@@ -78,16 +99,14 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	if err != nil {
 		panic(err)
 	}
-	qcx := h.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 
 	row, err := f.Row(qcx, rowID)
 	if err != nil {
 		h.tb.Fatalf("retrieving row: %v", err)
 	}
-	// clone it so that mmapped storage doesn't disappear from under it
-	// once the qcx goes away.
-	return row
+	return row.Clone()
 }
 
 // ReadRow returns a Row for a given field. If the field does not exist,
@@ -101,8 +120,8 @@ func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 	if f == nil {
 		h.tb.Fatalf("read row from field %q/%q: field not found", index, field)
 	}
-	qcx := h.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 
 	row, err := f.Row(qcx, rowID)
 	if err != nil {
@@ -120,8 +139,8 @@ func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum
 	if err != nil {
 		panic(err)
 	}
-	qcx := h.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 
 	row, err := f.RowTime(qcx, rowID, t, quantum)
 	if err != nil {
@@ -146,16 +165,12 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 		panic(err)
 	}
 
-	qcx := h.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 
 	_, err = f.SetBit(qcx, rowID, columnID, t)
 	if err != nil {
 		h.tb.Fatalf("setting bit: %v", err)
-	}
-	err = qcx.Finish()
-	if err != nil {
-		h.tb.Fatalf("finishing qcx: %v", err)
 	}
 }
 
@@ -167,16 +182,12 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 		panic(err)
 	}
 
-	qcx := h.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 
 	_, err = f.ClearBit(qcx, rowID, columnID)
 	if err != nil {
 		h.tb.Fatalf("clearing bit: %v", err)
-	}
-	err = qcx.Finish()
-	if err != nil {
-		h.tb.Fatalf("finishing qcx: %v", err)
 	}
 }
 
@@ -196,16 +207,11 @@ func (h *Holder) SetValue(index, field string, columnID uint64, value int64) *In
 		panic(err)
 	}
 
-	qcx := h.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 	_, err = f.SetValue(qcx, columnID, value)
 	if err != nil {
 		h.tb.Fatalf("setting value: %v", err)
-	}
-
-	err = qcx.Finish()
-	if err != nil {
-		h.tb.Fatalf("finishing qcx: %v", err)
 	}
 	return idx
 }
@@ -218,12 +224,11 @@ func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 		panic(err)
 	}
 
-	qcx := h.Txf().NewQcx()
-	defer qcx.Abort()
-
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 	val, exists, err := f.Value(qcx, columnID)
 	if err != nil {
-		panic(err)
+		h.tb.Fatalf("reading value: %v", err)
 	}
 	return val, exists
 }
@@ -237,8 +242,8 @@ func (h *Holder) Range(index, field string, op pql.Token, predicate int64) *pilo
 		panic(err)
 	}
 
-	qcx := h.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := h.IndexWideQcx(index)
+	defer done()
 
 	row, err := f.Range(qcx, field, op, predicate)
 	if err != nil {

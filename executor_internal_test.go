@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/molecula/featurebase/v3/pql"
+	"github.com/stretchr/testify/require"
 )
 
 // AssertEqual checks a given RowIdentifiers against expected values.
@@ -51,8 +52,7 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 		t.Fatalf("creating index: %v", err)
 	}
 
-	qcx := holder.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx := holder.MustIndexQueryContext(t, "i")
 
 	fb, errb := idx.CreateField("b", "", OptFieldTypeBool())
 	_, errbk := idx.CreateField("bk", "", OptFieldTypeBool(), OptFieldKeys())
@@ -569,8 +569,7 @@ func TestExecutor_DeleteRows(t *testing.T) {
 		t.Fatalf("creating field: %v", err)
 	}
 
-	qcx := holder.Txf().NewWritableQcx()
-	defer qcx.Abort()
+	qcx := holder.MustIndexQueryContext(t, "i")
 	if _, err = f.SetBit(qcx, 1, 1, nil); err != nil {
 		t.Fatalf("setting bit: %v", err)
 	}
@@ -580,14 +579,18 @@ func TestExecutor_DeleteRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read row: %v", err)
 	}
+	require.Nil(t, qcx.Commit())
 
 	ctx := context.Background()
-	changed, err := DeleteRows(ctx, row, idx, 0)
+	// make a new query context for the deletes. we use the same context
+	// for both, because deleteRows is supposed to handle this.
+	qcx = holder.MustIndexQueryContext(t, "i")
+	changed, err := holder.deleteRows(ctx, qcx, row, idx, 0)
 	if !changed || err != nil {
 		t.Fatalf("failed to delete row: %v", err)
 	}
 
-	changed, err = DeleteRows(ctx, row, idx, 0)
+	changed, err = holder.deleteRows(ctx, qcx, row, idx, 0)
 	if err != nil {
 		t.Fatalf("deleting rows: %v", err)
 	}

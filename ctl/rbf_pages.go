@@ -9,7 +9,6 @@ import (
 
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/rbf"
-	"github.com/molecula/featurebase/v3/txkey"
 )
 
 // RBFPagesCommand represents a command for printing a list of RBF page metadata.
@@ -100,21 +99,21 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 		case *rbf.LeafPageInfo:
 			fmt.Fprintf(cmd.stdout, "%-10s ", "leaf")
 			if cmd.WithTree {
-				fmt.Fprintf(cmd.stdout, "%-30q ", prefixToString(info.Tree))
+				fmt.Fprintf(cmd.stdout, "%-30q ", rbf.PrefixToString(info.Tree))
 			}
 			fmt.Fprintf(cmd.stdout, "flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 		case *rbf.BranchPageInfo:
 			fmt.Fprintf(cmd.stdout, "%-10s ", "branch")
 			if cmd.WithTree {
-				fmt.Fprintf(cmd.stdout, "%-30q ", prefixToString(info.Tree))
+				fmt.Fprintf(cmd.stdout, "%-30q ", rbf.PrefixToString(info.Tree))
 			}
 			fmt.Fprintf(cmd.stdout, "flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 		case *rbf.BitmapPageInfo:
 			fmt.Fprintf(cmd.stdout, "%-10s ", "bitmap")
 			if cmd.WithTree {
-				fmt.Fprintf(cmd.stdout, "%-30q ", prefixToString(info.Tree))
+				fmt.Fprintf(cmd.stdout, "%-30q ", rbf.PrefixToString(info.Tree))
 			}
 			fmt.Fprintf(cmd.stdout, "-\n")
 
@@ -131,13 +130,4 @@ func (cmd *RBFPagesCommand) Run(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func prefixToString(s string) (ret string) {
-	defer func() {
-		if err := recover(); err != nil {
-			ret = s
-		}
-	}()
-	return txkey.PrefixToString([]byte(s))
 }

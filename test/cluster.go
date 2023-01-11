@@ -16,8 +16,10 @@ import (
 	"github.com/molecula/featurebase/v3/api/client"
 	"github.com/molecula/featurebase/v3/disco"
 	"github.com/molecula/featurebase/v3/etcd"
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/proto"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	"github.com/molecula/featurebase/v3/server"
 	"github.com/molecula/featurebase/v3/storage"
 	"github.com/pkg/errors"
@@ -270,8 +272,8 @@ func (c *ShareableCluster) ImportBitsWithTimestamp(t testing.TB, index, field st
 					continue
 				}
 				func() {
-					qcx := com.API.Txf().NewQcx()
-					defer qcx.Abort()
+					qcx, done := com.IndexWideQcx(t, index)
+					defer done()
 					if len(timestamps) == 0 {
 						err := com.API.Import(context.Background(), qcx, &pilosa.ImportRequest{
 							Index:     index,
@@ -310,6 +312,23 @@ func (c *ShareableCluster) ImportBits(t testing.TB, index, field string, rowcols
 	c.ImportBitsWithTimestamp(t, index, field, rowcols, noTime)
 }
 
+// IndexWideQueryContext requests an index-wide, not shard-specific,
+// QueryContext for an index on the given node. It's a helper for some
+// of the test functions. It also yields a function to defer when
+// done which fails the test on error.
+func (c *Command) IndexWideQcx(tb testing.TB, index string) (qc.QueryContext, func()) {
+	txs := c.API.Holder().TxStore()
+	qcx, err := txs.NewWriteQueryContext(context.Background(), txs.Scope().AddIndex(keys.Index(index)))
+	if err != nil {
+		tb.Fatalf("creating query context for test setup: %v", err)
+	}
+	return qcx, func() {
+		if err := qcx.Commit(); err != nil {
+			tb.Fatalf("committing write: %v", err)
+		}
+	}
+}
+
 // ImportKeyKey imports data into an index where both the index and
 // the field are using string keys.
 func (c *ShareableCluster) ImportKeyKey(t testing.TB, index, field string, valAndRecKeys [][2]string) {
@@ -324,8 +343,8 @@ func (c *ShareableCluster) ImportKeyKey(t testing.TB, index, field string, valAn
 		importRequest.RowKeys[i] = vk[0]
 		importRequest.ColumnKeys[i] = vk[1]
 	}
-	qcx := c.GetPrimary().API.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := c.GetPrimary().IndexWideQcx(t, index)
+	defer done()
 	err := c.GetPrimary().API.Import(context.Background(), qcx, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
@@ -356,8 +375,8 @@ func (c *ShareableCluster) ImportTimeQuantumKey(t testing.TB, index, field strin
 		importRequest.Timestamps[i] = entry.Ts
 
 	}
-	qcx := c.GetPrimary().API.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := c.GetPrimary().IndexWideQcx(t, index)
+	defer done()
 	err := c.GetPrimary().API.Import(context.Background(), qcx, importRequest)
 	if err != nil {
 		t.Fatalf("importing keykey data: %v", err)
@@ -384,8 +403,8 @@ func (c *ShareableCluster) ImportIntKey(t testing.TB, index, field string, pairs
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	qcx := c.GetPrimary().API.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := c.GetPrimary().IndexWideQcx(t, index)
+	defer done()
 	if err := c.GetPrimary().API.ImportValue(context.Background(), qcx, importRequest); err != nil {
 		t.Fatalf("importing IntKey data: %v", err)
 	}
@@ -410,8 +429,8 @@ func (c *ShareableCluster) ImportIntID(t testing.TB, index, field string, pairs 
 		importRequest.Values[i] = pair.Val
 		importRequest.ColumnIDs[i] = pair.ID
 	}
-	qcx := c.GetPrimary().API.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := c.GetPrimary().IndexWideQcx(t, index)
+	defer done()
 	if err := c.GetPrimary().API.ImportValue(context.Background(), qcx, importRequest); err != nil {
 		t.Fatalf("importing IntID data: %v", err)
 	}
@@ -437,8 +456,8 @@ func (c *ShareableCluster) ImportIDKey(t testing.TB, index, field string, pairs 
 		importRequest.RowIDs[i] = pair.ID
 		importRequest.ColumnKeys[i] = pair.Key
 	}
-	qcx := c.GetPrimary().API.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, done := c.GetPrimary().IndexWideQcx(t, index)
+	defer done()
 	err := c.GetPrimary().API.Import(context.Background(), qcx, importRequest)
 	if err != nil {
 		t.Fatalf("importing IDKey data: %v", err)

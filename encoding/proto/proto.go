@@ -450,7 +450,6 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 		FieldCreatedAt:  m.FieldCreatedAt,
 		Clear:           m.Clear,
 		Action:          m.Action,
-		Block:           uint64(m.Block),
 		Views:           views,
 		UpdateExistence: m.UpdateExistence,
 	}
@@ -1191,7 +1190,6 @@ func (s Serializer) decodeImportRoaringRequest(pb *pb.ImportRoaringRequest, m *p
 	}
 	m.Clear = pb.Clear
 	m.Action = pb.Action
-	m.Block = int(pb.Block)
 	m.Views = views
 	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.FieldCreatedAt = pb.FieldCreatedAt

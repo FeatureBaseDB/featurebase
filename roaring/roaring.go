@@ -2265,33 +2265,6 @@ func (r *baseRoaringIterator) Current() (key uint64, cType byte, n int, length i
 	return r.currentKey, r.currentType, r.currentN, r.currentLen, r.currentPointer, r.lastErr
 }
 
-// SanityCheckMapping is a debugging function which checks whether containers
-// are *correctly* recorded as mapped or unmapped.
-func (b *Bitmap) SanityCheckMapping(from, to uintptr) (mappedIn int64, mappedOut int64, unmappedIn int64, errs int, err error) {
-	b.Containers.UpdateEvery(func(key uint64, c *Container, existed bool) (*Container, bool) {
-		dptr := uintptr(unsafe.Pointer(c.pointer))
-		if dptr >= from && dptr < to {
-			if c.Mapped() {
-				mappedIn++
-			} else {
-				err = fmt.Errorf("container key %d, addr %x, inside %x+%d",
-					key, dptr, from, to-from)
-				errs++
-				unmappedIn++
-			}
-		} else {
-			if c.Mapped() {
-				err = fmt.Errorf("container key %d, addr %x, outside %x+%d, but mapped",
-					key, dptr, from, to-from)
-				errs++
-				mappedOut++
-			}
-		}
-		return c, false
-	})
-	return mappedIn, mappedOut, unmappedIn, errs, err
-}
-
 // RemapRoaringStorage tries to update all containers to refer to
 // the roaring bitmap in the provided []byte. If any containers are
 // marked as mapped, but do not match the provided storage, they will

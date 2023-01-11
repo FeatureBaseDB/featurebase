@@ -736,8 +736,11 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 		return errToStatusError(err)
 	}
 
-	qcx := h.api.Holder().Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, err := h.api.NewQueryContext(context.TODO())
+	if err != nil {
+		return err
+	}
+	defer qcx.Release()
 
 	var fields []*pilosa.Field
 	for _, field := range index.Fields() {

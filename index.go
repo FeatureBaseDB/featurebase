@@ -14,6 +14,7 @@ import (
 
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/pql"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
@@ -57,9 +58,6 @@ type Index struct {
 	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
 
-	// track the subset of shards available to our views
-	fieldView2shard *FieldView2Shards
-
 	// indicate that we're closing and should wrap up and not allow new actions
 	closing chan struct{}
 }
@@ -95,10 +93,6 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		OpenTranslateStore: OpenInMemTranslateStore,
 	}
 	return idx, nil
-}
-
-func (i *Index) NewTx(txo Txo) Tx {
-	return i.holder.txf.NewTx(txo)
 }
 
 // CreatedAt is an timestamp for a specific version of an index.
@@ -168,7 +162,8 @@ func (i *Index) Open() error {
 }
 
 // OpenWithSchema opens the index and uses the provided schema to verify that
-// the index's fields are expected.
+// the index's fields are expected. The provided QueryContext is to be used
+// if any of this requires actual database reads.
 func (i *Index) OpenWithSchema(idx *disco.Index) error {
 	if idx == nil {
 		return ErrInvalidSchema
@@ -208,17 +203,6 @@ func (i *Index) open(idx *disco.Index) (err error) {
 	}
 
 	i.closing = make(chan struct{})
-	// fmt.Printf("new channel %p for index %p\n", i.closing, i)
-
-	// we don't want to open *all* the views for each shard, since
-	// most are empty when we are doing time quantums. It slows
-	// down startup dramatically. So we ask for the meta data
-	// of what fields/views/shards are present with data up front.
-	fieldView2shard, err := i.holder.txf.GetFieldView2ShardsMapForIndex(i)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("i.holder.txf.GetFieldView2ShardsMapForIndex('%v')", i.name))
-	}
-	i.fieldView2shard = fieldView2shard
 
 	// Add index to a map in holder. Used by openFields.
 	i.holder.addIndex(i)
@@ -228,15 +212,11 @@ func (i *Index) open(idx *disco.Index) (err error) {
 		return errors.Wrap(err, "opening fields")
 	}
 
-	// Set bit depths.
-	// This is called in Index.open() (as opposed to Field.Open()) because the
-	// Field.bitDepth() method uses a transaction which relies on the index and
-	// its entry for the field in the Index.field map. If we try to set a
-	// field's BitDepth in Field.Open(), which itself might be inside the
-	// Index.openField() loop, then the field has not yet been added to the
-	// Index.field map. I think it would be better if Field.bitDepth didn't rely
-	// on its index at all, but perhaps with transactions that not possible. I
-	// don't know.
+	// Set bit depths based on current contents of fields.
+	// We could in theory do this as part of opening each field,
+	// but what query context would they use for the actual
+	// database transactions? So we have our own top-level
+	// thing to do that.
 	if err := i.setFieldBitDepths(); err != nil {
 		return errors.Wrap(err, "setting field bitDepths")
 	}
@@ -414,7 +394,14 @@ func (i *Index) openExistenceField() error {
 }
 
 // setFieldBitDepths sets the BitDepth for all int and decimal fields in the index.
+// We do it here, rather than when each field is opened, so we can open a
+// single QueryContext to handle them all.
 func (i *Index) setFieldBitDepths() error {
+	qcx, err := i.holder.NewIndexQueryContext(context.TODO(), i.name)
+	if err != nil {
+		return err
+	}
+	defer qcx.Release()
 	for name, f := range i.fields {
 		switch f.Type() {
 		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
@@ -422,7 +409,7 @@ func (i *Index) setFieldBitDepths() error {
 		default:
 			continue
 		}
-		bd, err := f.bitDepth()
+		bd, err := f.bitDepth(qcx)
 		if err != nil {
 			return errors.Wrapf(err, "getting bit depth for field: %s", name)
 		}
@@ -450,11 +437,6 @@ func (i *Index) Close() error {
 	defer func() {
 		_ = testhook.Closed(i.holder.Auditor, i, nil)
 	}()
-
-	err := i.holder.txf.CloseIndex(i)
-	if err != nil {
-		return errors.Wrap(err, "closing index")
-	}
 
 	// Close partitioned translation stores.
 	for _, store := range i.translateStores {
@@ -512,11 +494,6 @@ func (i *Index) AvailableShards(localOnly bool) *roaring.Bitmap {
 
 	i.Stats.Gauge(MetricMaxShard, float64(b.Max()), 1.0)
 	return b
-}
-
-// Begin starts a transaction on a shard of the index.
-func (i *Index) BeginTx(writable bool, shard uint64) (Tx, error) {
-	return i.holder.txf.NewTx(Txo{Write: writable, Index: i, Shard: shard}), nil
 }
 
 // fieldPath returns the path to a field in the index.
@@ -956,15 +933,18 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "closing")
 	}
 
-	if err := i.holder.txf.DeleteFieldFromStore(i.name, name, i.fieldPath(name)); err != nil {
-		return errors.Wrap(err, "Txf.DeleteFieldFromStore")
+	fieldPath := i.fieldPath(name)
+	err := os.RemoveAll(fieldPath)
+	if err != nil {
+		return errors.Wrap(err, "deleting field directory")
+	}
+
+	if err := i.holder.txStore.DeleteField(keys.Index(i.name), keys.Field(name)); err != nil {
+		return errors.Wrap(err, "deleting field from store")
 	}
 
 	// Remove reference.
 	delete(i.fields, name)
-
-	// remove shard metadata for field
-	i.fieldView2shard.removeField(name)
 	return i.translationSyncer.Reset()
 }
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
 	"github.com/molecula/featurebase/v3/vprint"
 )
 
@@ -52,7 +51,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			rootRecords, err := readRootRecords(page)
 			vprint.PanicOn(err)
 			for k, rr := range rootRecords {
-				fmt.Printf("  [%02v] Name:'%v'  pgno:%v\n", k, prefixToString(rr.Name), rr.Pgno)
+				fmt.Printf("  [%02v] Name:'%v'  pgno:%v\n", k, PrefixToString(rr.Name), rr.Pgno)
 			}
 
 		case *LeafPageInfo:
@@ -61,7 +60,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 			}
 			fmt.Printf("Pgno:%-8d ", pgno)
 			fmt.Printf("%-10s ", "leaf")
-			fmt.Printf("%-54q ", prefixToString(info.Tree))
+			fmt.Printf("%-54q ", PrefixToString(info.Tree))
 			fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			page, _, err := tx.readPage(uint32(pgno))
@@ -76,7 +75,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 		case *BranchPageInfo:
 			fmt.Printf("Pgno:%-8d ", pgno)
 			fmt.Printf("%-10s ", "branch")
-			fmt.Printf("%-54q ", prefixToString(info.Tree))
+			fmt.Printf("%-54q ", PrefixToString(info.Tree))
 			fmt.Printf("flags=x%x,celln=%d\n", info.Flags, info.CellN)
 
 			page, _, err := tx.readPage(uint32(pgno))
@@ -90,7 +89,7 @@ func (tx *Tx) dumpAllPages(showLeaves bool) error {
 		case *BitmapPageInfo:
 			fmt.Printf("Pgno:%-8d ", pgno)
 			fmt.Printf("%-10s ", "bitmap")
-			fmt.Printf("%-54q ", prefixToString(info.Tree))
+			fmt.Printf("%-54q ", PrefixToString(info.Tree))
 			fmt.Printf("-\n")
 
 		case *FreePageInfo:
@@ -195,13 +194,19 @@ func printFreePage(page *FreePage) {
 	fmt.Printf("Type: free\n")
 }
 
-func prefixToString(s string) (ret string) {
-	defer func() {
-		if err := recover(); err != nil {
-			ret = s
-		}
-	}()
-	return txkey.PrefixToString([]byte(s))
+// PrefixToString converts a fragment key (used to denote
+// a root bitmap in an RBF file) into a description of it
+// suitable for printing. This behavior reflects the
+// historical practice of the short_txkey package, which
+// we no longer have. It's exported because the rbf_pages
+// command wants to use it to display things.
+func PrefixToString(s string) (ret string) {
+	var field, view string
+	n, err := fmt.Sscanf(s, "~%s;%s<", &field, &view)
+	if err != nil || n != 2 {
+		return s
+	}
+	return fmt.Sprintf("field:%s;view:%s", field, view)
 }
 
 ///////////////// happy linter
@@ -212,4 +217,3 @@ var _ = printLeafPage
 var _ = printBranchPage
 var _ = printBitmapPage
 var _ = printFreePage
-var _ = prefixToString

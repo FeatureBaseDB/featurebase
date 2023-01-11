@@ -17,38 +17,6 @@ func mustOpenView(tb testing.TB) *view {
 	return v
 }
 
-// Ensure view can open and retrieve a fragment.
-func TestView_DeleteFragment(t *testing.T) {
-	v := mustOpenView(t)
-
-	shard := uint64(9)
-
-	// Create fragment.
-	fragment, err := v.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		t.Fatal(err)
-	} else if fragment == nil {
-		t.Fatal("expected fragment")
-	}
-
-	err = v.deleteFragment(shard)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if v.Fragment(shard) != nil {
-		t.Fatal("fragment still exists in view")
-	}
-
-	// Recreate fragment with same shard, verify that the old fragment was not reused.
-	fragment2, err := v.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		t.Fatal(err)
-	} else if fragment == fragment2 {
-		t.Fatal("failed to create new fragment")
-	}
-}
-
 // Ensure that simultaneous attempts to grab a new fragment don't clash even
 // if the broadcast operation takes a bit of time.
 func TestView_CreateFragmentRace(t *testing.T) {

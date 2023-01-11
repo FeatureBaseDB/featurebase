@@ -113,7 +113,48 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 	}
 	require := require.New(t)
 	t.Run("DeleteRecords", func(t *testing.T) {
-
+		t.Run("DeleteRace", func(t *testing.T) {
+			setup(t, require, c)
+			defer tearDown(t, require, c)
+			for i := 0; i < 100; i++ {
+				// imagine that we start with bsi set to 3 in column 0.
+				// We then execute two operations:
+				// (1) we set bsi to 1 in column 0
+				// (2) we delete everything with bsi > 2
+				// No matter which order these happen in, we should see
+				// bsi set to 1 in column 0.
+				// If the set happens first, the delete doesn't touch it.
+				// If the set happens second, the delete deletes the previous
+				// value, then the set happens.
+				// Let's find out...
+				c.ImportIntID(t, indexName, "bsi", []test.IntID{
+					{ID: 0, Val: 3},
+				})
+				ch := make(chan error)
+				go func() {
+					// Make sure we close the channel even if we're failing out of the test.
+					defer close(ch)
+					// We don't actually care whether the delete succeeds or fails...
+					_ = c.Query(t, indexName, `Delete(Row(bsi>2))`)
+					// we don't try to handle an error from that, at this time.
+				}()
+				c.ImportIntID(t, indexName, "bsi", []test.IntID{
+					{ID: 0, Val: 1},
+				})
+				// wait for the async delete
+				<-ch
+				resp := c.Query(t, indexName, `Row(bsi<2)`)
+				// we expect to always find 0 in this row
+				row, ok := resp.Results[0].(*pilosa.Row)
+				if !ok {
+					t.Fatalf("expected row return")
+				}
+				cols := row.Columns()
+				if len(cols) < 1 || cols[0] != 0 {
+					t.Fatalf("expected columns including 0, got %d on try %d", cols, i)
+				}
+			}
+		})
 		t.Run("Delete", func(t *testing.T) {
 			setup(t, require, c)
 			defer tearDown(t, require, c)

@@ -24,6 +24,7 @@ import (
 	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"github.com/ricochet2200/go-disk-usage/du"
+	"github.com/stretchr/testify/require"
 )
 
 // Test distributed TopN Row count across 3 nodes.
@@ -484,15 +485,12 @@ func TestClient_Import(t *testing.T) {
 			// do a clear. also, do the clear with a Qcx.
 			func() {
 				// inner function so the deferred abort isn't delayed a lot
-				qcx := api.Txf().NewQcx()
-				defer qcx.Abort()
+				qcx := mustIndexQueryContext(t, api, req.Index, req.Shard)
 				if err := c.Import(context.Background(), qcx, req.Clone(), &pilosa.ImportOptions{Clear: true}); err != nil {
 					t.Fatalf("%s/%s: %v",
 						indexName, fieldName, err)
 				}
-				if err := qcx.Finish(); err != nil {
-					t.Fatalf("committing write: %v", err)
-				}
+				require.Nil(t, qcx.Commit())
 			}()
 			// Now do a query to see whether it worked...
 			if fieldName == "keyedf" {
@@ -1532,18 +1530,6 @@ func makeImportRoaringRequest(clear bool, viewData string) *pilosa.ImportRoaring
 	}
 }
 
-// verify that serverInfo has Backend
-func TestClient_ServerInfoHasBackend(t *testing.T) {
-	//srcs := []string{"roaring", "rbf", "lmdb"}
-	cluster := test.MustRunCluster(t, 1)
-	defer cluster.Close()
-	cmd := cluster.GetNode(0)
-	si := cmd.API.Info()
-	if si.StorageBackend == "" {
-		panic("should have gotten a StorageBackend back")
-	}
-	pilosa.MustBackendToTxtype(si.StorageBackend) // panics if invalid
-}
 func TestClient_ImportRoaringExists(t *testing.T) {
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()

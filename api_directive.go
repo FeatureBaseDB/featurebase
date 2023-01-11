@@ -552,7 +552,6 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 				req := &ImportRoaringRequest{
 					Clear:           msg.Clear,
 					Action:          msg.Action,
-					Block:           msg.Block,
 					Views:           msg.Views,
 					UpdateExistence: msg.UpdateExistence,
 					SuppressLog:     true,
@@ -574,17 +573,30 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 					Clear:      msg.Clear,
 				}
 
-				qcx := api.Txf().NewQcx()
-				defer qcx.Abort()
+				// subfunc so the qcx gets released after each message is handled.
+				err := func() error {
+					qcx, err := api.NewIndexQueryContext(ctx, req.Index, req.Shard)
+					if err != nil {
+						return errors.Wrapf(err, "creating query context")
+					}
+					defer qcx.Release()
 
-				opts := []ImportOption{
-					OptImportOptionsClear(msg.Clear),
-					OptImportOptionsIgnoreKeyCheck(msg.IgnoreKeyCheck),
-					OptImportOptionsPresorted(msg.Presorted),
-					OptImportOptionsSuppressLog(true),
-				}
-				if err := api.Import(ctx, qcx, req, opts...); err != nil {
-					return errors.Wrapf(err, "import, table: %s, field: %s, shard: %d", msg.Table, msg.Field, msg.Shard)
+					opts := []ImportOption{
+						OptImportOptionsClear(msg.Clear),
+						OptImportOptionsIgnoreKeyCheck(msg.IgnoreKeyCheck),
+						OptImportOptionsPresorted(msg.Presorted),
+						OptImportOptionsSuppressLog(true),
+					}
+					if err := api.Import(ctx, qcx, req, opts...); err != nil {
+						return errors.Wrapf(err, "import, table: %s, field: %s, shard: %d", msg.Table, msg.Field, msg.Shard)
+					}
+					if err := qcx.Commit(); err != nil {
+						return errors.Wrap(err, "committing write")
+					}
+					return nil
+				}()
+				if err != nil {
+					return err
 				}
 
 			case *computer.ImportValueMessage:
@@ -601,17 +613,30 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Shar
 					Clear:           msg.Clear,
 				}
 
-				qcx := api.Txf().NewQcx()
-				defer qcx.Abort()
+				// subfunc so the qcx gets released after each message is handled.
+				err = func() error {
+					qcx, err := api.NewIndexQueryContext(ctx, req.Index, req.Shard)
+					if err != nil {
+						return errors.Wrapf(err, "creating query context")
+					}
+					defer qcx.Release()
 
-				opts := []ImportOption{
-					OptImportOptionsClear(msg.Clear),
-					OptImportOptionsIgnoreKeyCheck(msg.IgnoreKeyCheck),
-					OptImportOptionsPresorted(msg.Presorted),
-					OptImportOptionsSuppressLog(true),
-				}
-				if err := api.ImportValue(ctx, qcx, req, opts...); err != nil {
-					return errors.Wrapf(err, "import value, table: %s, field: %s, shard: %d", msg.Table, msg.Field, msg.Shard)
+					opts := []ImportOption{
+						OptImportOptionsClear(msg.Clear),
+						OptImportOptionsIgnoreKeyCheck(msg.IgnoreKeyCheck),
+						OptImportOptionsPresorted(msg.Presorted),
+						OptImportOptionsSuppressLog(true),
+					}
+					if err := api.ImportValue(ctx, qcx, req, opts...); err != nil {
+						return errors.Wrapf(err, "import value, table: %s, field: %s, shard: %d", msg.Table, msg.Field, msg.Shard)
+					}
+					if err := qcx.Commit(); err != nil {
+						return errors.Wrap(err, "committing write")
+					}
+					return nil
+				}()
+				if err != nil {
+					return err
 				}
 			case *computer.ImportRoaringShardMessage:
 				req := &ImportRoaringShardRequest{

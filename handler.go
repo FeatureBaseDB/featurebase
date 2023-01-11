@@ -448,7 +448,6 @@ type ImportRoaringRequest struct {
 	FieldCreatedAt  int64
 	Clear           bool
 	Action          string // [set, clear, overwrite]
-	Block           int
 	Views           map[string][]byte
 	UpdateExistence bool
 	SuppressLog     bool

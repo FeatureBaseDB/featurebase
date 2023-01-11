@@ -11,12 +11,9 @@ import (
 
 	"github.com/benbjohnson/immutable"
 	"github.com/molecula/featurebase/v3/roaring"
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
 	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
-
-var _ = txkey.ToString
 
 // Tx represents an RBF transaction. Transactions provide guarantees such as
 // atomicity for all writes that occur as well as serializable isolation.
@@ -2245,21 +2242,6 @@ func (tx *Tx) walkPageInfo(infos []PageInfo, root uint32, name string) error {
 func (tx *Tx) PageData(pgno uint32) ([]byte, error) {
 	buf, _, err := tx.readPage(pgno)
 	return buf, err
-}
-
-func (tx *Tx) GetSortedFieldViewList() (fvs []txkey.FieldView, _ error) {
-	records, err := tx.RootRecords()
-	if err != nil {
-		return nil, err
-	}
-	it := records.Iterator()
-	for !it.Done() {
-		k, _, _ := it.Next()
-		root := k
-		fv := txkey.FieldViewFromPrefix([]byte(root))
-		fvs = append(fvs, fv)
-	}
-	return
 }
 
 func (tx *Tx) DebugInfo() *TxDebugInfo {

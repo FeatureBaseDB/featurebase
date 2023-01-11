@@ -6,25 +6,22 @@ import (
 	"testing"
 
 	pilosa "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/testhook"
 )
 
 // Index represents a test wrapper for pilosa.Index.
 type Index struct {
 	*pilosa.Index
+	holder *Holder
 }
 
 // newIndex returns a new instance of Index, and the parent holder.
 func newIndex(tb testing.TB) (*Holder, *Index) {
-	h := NewHolder(tb)
-	testhook.Cleanup(tb, func() {
-		h.Close()
-	})
+	h := MustOpenHolder(tb)
 	index, err := h.CreateIndex("i", "", pilosa.IndexOptions{})
 	if err != nil {
 		panic(err)
 	}
-	return h, &Index{Index: index}
+	return h, &Index{Index: index, holder: h}
 }
 
 // MustOpenIndex returns a new, opened index at a temporary path, or

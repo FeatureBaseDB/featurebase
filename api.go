@@ -4,7 +4,6 @@
 package pilosa
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -13,7 +12,6 @@ import (
 	"io"
 	"math"
 	"net/url"
-	"os"
 	"runtime"
 	"sort"
 	"strconv"
@@ -26,8 +24,9 @@ import (
 	"github.com/molecula/featurebase/v3/dax/computer"
 	"github.com/molecula/featurebase/v3/dax/storage"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/logger"
-	"github.com/molecula/featurebase/v3/rbf"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 
 	//"github.com/molecula/featurebase/v3/pg"
 	"github.com/molecula/featurebase/v3/pql"
@@ -71,6 +70,28 @@ func (api *API) Holder() *Holder {
 
 func (api *API) logger() logger.Logger {
 	return api.server.logger
+}
+
+// NewQueryContext requests a new read-only query context from the API's holder.
+func (api *API) NewQueryContext(ctx context.Context) (qc.QueryContext, error) {
+	return api.holder.NewQueryContext(ctx)
+}
+
+// NewWriteQueryContext requests a new write query context from the API's holder,
+// using the provided scope.
+func (api *API) NewWriteQueryContext(ctx context.Context, scope qc.QueryScope) (qc.QueryContext, error) {
+	return api.holder.NewWriteQueryContext(ctx, scope)
+}
+
+// NewIndexQueryContext requests a new write query context from the API's holder,
+// using the provided index. If shards are provided, it's restricted to those shards,
+// otherwise it's the whole index.
+func (api *API) NewIndexQueryContext(ctx context.Context, index string, shards ...uint64) (qc.QueryContext, error) {
+	// helpfully treat a shard of -1 as no shard
+	if len(shards) > 0 && shards[0] == ^uint64(0) {
+		shards = shards[1:]
+	}
+	return api.holder.NewIndexQueryContext(ctx, index, shards...)
 }
 
 // apiOption is a functional option type for pilosa.API
@@ -198,10 +219,6 @@ func (api *API) Close() error {
 	api.importWorkersWG.Wait()
 	api.tracker.Stop()
 	return nil
-}
-
-func (api *API) Txf() *TxFactory {
-	return api.holder.Txf()
 }
 
 // Query parses a PQL query out of the request and executes it.
@@ -474,7 +491,7 @@ func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
 
 type importJob struct {
 	ctx     context.Context
-	qcx     *Qcx
+	qcx     qc.QueryContext
 	req     *ImportRoaringRequest
 	shard   uint64
 	field   *Field
@@ -511,18 +528,11 @@ func importWorker(importWork chan importJob) {
 						doAction = RequestActionSet
 					}
 				}
-
 				if err := func() (err1 error) {
-					tx, finisher, err := j.qcx.GetTx(Txo{Write: writable, Index: j.field.idx, Shard: j.shard})
-					if err != nil {
-						return err
-					}
-					defer finisher(&err1)
-
 					var doClear bool
 					switch doAction {
 					case RequestActionOverwrite:
-						err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block)
+						err := j.field.importRoaringOverwrite(j.ctx, j.qcx, viewData, j.shard, viewName)
 						if err != nil {
 							return errors.Wrap(err, "importing roaring as overwrite")
 						}
@@ -546,17 +556,19 @@ func importWorker(importWork chan importJob) {
 									return errors.Wrap(err, "merging existence on roaring import")
 								}
 
-								err = ef.importRoaring(j.ctx, tx, existence, j.shard, "standard", false)
+								err = ef.importRoaring(j.ctx, j.qcx, existence, j.shard, "standard", false)
 								if err != nil {
 									return errors.Wrap(err, "updating existence on roaring import")
 								}
 							}
 						}
 
-						err := j.field.importRoaring(j.ctx, tx, data, j.shard, viewName, doClear)
+						err := j.field.importRoaring(j.ctx, j.qcx, data, j.shard, viewName, doClear)
 						if err != nil {
 							return errors.Wrap(err, "importing standard roaring")
 						}
+					default:
+						return fmt.Errorf("unexpected action type %q", doAction)
 					}
 					return nil
 				}(); err != nil {
@@ -574,7 +586,7 @@ func importWorker(importWork chan importJob) {
 }
 
 // combineForExistence unions all rows in the fragment to be imported into a single row to update the existence field. TODO: It would probably be more efficient to only unmarshal the input data once, and use the calculated existence Bitmap directly rather than returning it to bytes, but most of our ingest paths update existence separately, so it's more important that this just be obviously correct at the moment.
-func combineForExistence(inputRoaringData []byte) ([]byte, error) {
+func combineForExistence(inputRoaringData []byte) (a []byte, b error) {
 	rowSize := uint64(1 << shardVsContainerExponent)
 	rit, err := roaring.NewRoaringIterator(inputRoaringData)
 	if err != nil {
@@ -635,8 +647,11 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return newPreconditionFailedError(err)
 	}
 
-	qcx := api.Txf().NewQcx()
-	defer qcx.Abort()
+	qcx, err := api.NewIndexQueryContext(ctx, indexName, shard)
+	if err != nil {
+		return errors.Wrap(err, "creating query context")
+	}
+	defer qcx.Release()
 
 	// Create a snapshot of the cluster to use for node/partition calculations.
 	snap := api.cluster.NewSnapshot()
@@ -690,7 +705,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					Shard:           shard,
 					Clear:           req.Clear,
 					Action:          req.Action,
-					Block:           req.Block,
 					UpdateExistence: req.UpdateExistence,
 					Views:           req.Views,
 				}
@@ -711,8 +725,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					return errors.Wrap(err, "appending shard data") // TODO do we need to set err0 or something?
 				}
 			}
-
-			return qcx.Finish()
+			return qcx.Commit()
 		}
 	}
 }
@@ -823,8 +836,15 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Obtain transaction
-	tx := index.holder.txf.NewTx(Txo{Write: !writable, Index: index, Shard: shard})
-	defer tx.Rollback()
+	qcx, err := api.holder.NewQueryContext(ctx)
+	if err != nil {
+		return err
+	}
+	defer qcx.Release()
+	qr, err := f.qcxRead(qcx)
+	if err != nil {
+		return err
+	}
 
 	// Wrap writer with a CSV writer.
 	cw := csv.NewWriter(w)
@@ -860,7 +880,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		return cw.Write([]string{rowStr, colStr})
 	}
 
-	citer, _, err := tx.ContainerIterator(indexName, fieldName, viewStandard, shard, 0)
+	citer, _, err := qr.ContainerIterator(0)
 	if err != nil {
 		return err
 	}
@@ -884,7 +904,6 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	// Ensure data is flushed.
 	cw.Flush()
 	span.LogKV("n", n)
-	tx.Rollback()
 	return nil
 }
 
@@ -916,23 +935,6 @@ func (api *API) PartitionNodes(ctx context.Context, partitionID int) ([]*disco.N
 	snap := api.cluster.NewSnapshot()
 
 	return snap.PartitionNodes(partitionID), nil
-}
-
-// FragmentData returns all data in the specified fragment.
-func (api *API) FragmentData(ctx context.Context, indexName, fieldName, viewName string, shard uint64) (io.WriterTo, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentData")
-	defer span.Finish()
-
-	if err := api.validate(apiFragmentData); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, viewName, shard)
-	if f == nil {
-		return nil, ErrFragmentNotFound
-	}
-	return f, nil
 }
 
 type RedirectError struct {
@@ -1265,35 +1267,24 @@ func (api *API) IndexShardSnapshot(ctx context.Context, indexName string, shard 
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
-	// Start transaction.
-	tx := index.holder.txf.NewTx(Txo{Index: index, Shard: shard, Write: writeTx})
-
-	// Ensure transaction is an RBF transaction.
-	rtx, ok := tx.(*RBFTx)
+	// check whether txStore backend supports backup
+	br, ok := api.holder.txStore.(qc.TxBackupRestore)
 	if !ok {
-		tx.Rollback()
-		return nil, fmt.Errorf("snapshot not available for %q storage", tx.Type())
+		return nil, errors.New("backend does not support backup/restore operations")
 	}
 
-	r, err := rtx.SnapshotReader()
+	// Start transaction.
+	qcx, err := api.NewIndexQueryContext(ctx, indexName, shard)
 	if err != nil {
-		tx.Rollback()
 		return nil, err
 	}
-	return &txReadCloser{tx: tx, Reader: r}, nil
-}
-
-var _ io.ReadCloser = (*txReadCloser)(nil)
-
-// txReadCloser wraps a reader to close a tx on close.
-type txReadCloser struct {
-	io.Reader
-	tx Tx
-}
-
-func (r *txReadCloser) Close() error {
-	r.tx.Rollback()
-	return nil
+	// Backup either releases the QueryContext, or returns a ReadCloser which
+	// releases it on close. Note that we DO NOT release/close our
+	// QueryContext, because the entire point is to block any other writes
+	// to that shard from happening until the backup completes, because we
+	// don't want to allow any new writes to start and thus send data to the
+	// write log until we've snapshotted.
+	return br.Backup(qcx, keys.Index(indexName), keys.Shard(shard))
 }
 
 // ImportOptions holds the options for the API.Import
@@ -1351,7 +1342,7 @@ func OptImportOptionsSuppressLog(b bool) ImportOption {
 
 var ErrAborted = fmt.Errorf("error: update was aborted")
 
-func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRecord, opts ...ImportOption) error {
+func (api *API) ImportAtomicRecord(ctx context.Context, qcx qc.QueryContext, req *AtomicRecord, opts ...ImportOption) error {
 	simPowerLoss := false
 	lossAfter := -1
 	var opt ImportOptions
@@ -1368,14 +1359,6 @@ func (api *API) ImportAtomicRecord(ctx context.Context, qcx *Qcx, req *AtomicRec
 		lossAfter = opt.SimPowerLossAfter
 	}
 
-	idx, err := api.Index(ctx, req.Index)
-	if err != nil {
-		return errors.Wrap(err, "getting index")
-	}
-
-	// the whole point is to run this part of the import atomically.
-	// Begin that Tx now!
-	qcx.StartAtomicWriteTx(Txo{Write: writable, Index: idx, Shard: req.Shard})
 	tot := 0
 
 	options, err := setUpImportOptions(opts...)
@@ -1429,7 +1412,7 @@ func addClearToImportOptions(opts []ImportOption) []ImportOption {
 }
 
 // Import does the top-level importing.
-func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts ...ImportOption) (err error) {
+func (api *API) Import(ctx context.Context, qcx qc.QueryContext, req *ImportRequest, opts ...ImportOption) (err error) {
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
 	}
@@ -1506,7 +1489,7 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 }
 
 // ImportWithTx bulk imports data into a particular index,field,shard.
-func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, options *ImportOptions) error {
+func (api *API) ImportWithTx(ctx context.Context, qcx qc.QueryContext, req *ImportRequest, options *ImportOptions) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Import")
 	defer span.Finish()
 
@@ -1640,61 +1623,57 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 	}
 
 	// we really only need a Tx, but getting a Qcx so that there's only one path for getting a Tx
-	qcx := api.Txf().NewQcx()
-	qcx.write = true
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: index, Shard: shard})
+	qcx, err := api.NewIndexQueryContext(ctx, indexName, shard)
 	if err != nil {
-		return errors.Wrap(err, "getting Tx")
+		return err
 	}
-	defer qcx.Finish()
-	var err1 error
-	defer finisher(&err1)
+	defer qcx.Release()
 
 	if !req.Remote {
-		err1 = errors.New("forwarding unimplemented on this endpoint")
-		return err1
+		return errors.New("forwarding unimplemented on this endpoint")
 	}
 
 	for _, viewUpdate := range req.Views {
 		field := index.Field(viewUpdate.Field)
 		if field == nil {
-			err1 = errors.Errorf("no field named '%s' found.", viewUpdate.Field)
-			return err1
+			return errors.Errorf("no field named '%s' found.", viewUpdate.Field)
 		}
 
 		fieldType := field.Options().Type
-		if err1 = cleanupView(fieldType, &viewUpdate); err1 != nil {
-			return err1
+		if err := cleanupView(fieldType, &viewUpdate); err != nil {
+			return err
 		}
 
 		view, err := field.createViewIfNotExists(viewUpdate.View)
 		if err != nil {
-			err1 = errors.Wrap(err, "getting view")
-			return err1
+			return errors.Wrap(err, "getting view")
 		}
 
 		frag, err := view.CreateFragmentIfNotExists(shard)
 		if err != nil {
-			err1 = errors.Wrap(err, "getting fragment")
-			return err1
+			return errors.Wrap(err, "getting fragment")
+		}
+		qw, err := frag.qcxWrite(qcx)
+		if err != nil {
+			return err
 		}
 
 		switch fieldType {
 		case FieldTypeSet, FieldTypeTime:
 			if !viewUpdate.ClearRecords {
-				err1 = frag.ImportRoaringClearAndSet(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+				err = frag.ImportRoaringClearAndSet(ctx, qw, viewUpdate.Clear, viewUpdate.Set)
 			} else {
-				err1 = frag.ImportRoaringSingleValued(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+				err = frag.ImportRoaringSingleValued(ctx, qw, viewUpdate.Clear, viewUpdate.Set)
 			}
 		case FieldTypeInt, FieldTypeTimestamp, FieldTypeDecimal:
-			err1 = frag.ImportRoaringBSI(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+			err = frag.ImportRoaringBSI(ctx, qw, viewUpdate.Clear, viewUpdate.Set)
 		case FieldTypeMutex, FieldTypeBool:
-			err1 = frag.ImportRoaringSingleValued(ctx, tx, viewUpdate.Clear, viewUpdate.Set)
+			err = frag.ImportRoaringSingleValued(ctx, qw, viewUpdate.Clear, viewUpdate.Set)
 		default:
-			err1 = errors.Errorf("field type %s is not supported", fieldType)
+			err = errors.Errorf("field type %s is not supported", fieldType)
 		}
-		if err1 != nil {
-			return err1
+		if err != nil {
+			return err
 		}
 
 		// need to update field/bsiGroup bitDepth value if this is an int-like field.
@@ -1703,10 +1682,9 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		// that we have to do this is weird and since this state isn't
 		// in RBF might have transactional issues.
 		if len(field.bsiGroups) > 0 {
-			maxRowID, _, err := frag.maxRow(tx, nil)
+			maxRowID, _, err := frag.maxRow(qw, nil)
 			if err != nil {
-				err1 = errors.Wrapf(err, "getting fragment max row id")
-				return err1
+				return errors.Wrapf(err, "getting fragment max row id")
 			}
 			var bd uint64
 			if maxRowID+1 > bsiOffsetBit {
@@ -1741,18 +1719,16 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 
 		b, err := computer.MarshalLogMessage(msg, computer.EncodeTypeJSON)
 		if err != nil {
-			err1 = errors.Wrap(err, "marshalling log message")
-			return err1
+			return errors.Wrap(err, "marshalling log message")
 		}
 
 		resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
-		err1 = errors.Wrap(resource.Append(b), "appending shard data")
-		if err1 != nil {
-			return err1
+		err = errors.Wrap(resource.Append(b), "appending shard data")
+		if err != nil {
+			return err
 		}
 	}
-
-	return nil
+	return qcx.Commit()
 }
 
 func cleanupView(fieldType string, viewUpdate *RoaringUpdate) error {
@@ -1778,7 +1754,7 @@ func cleanupView(fieldType string, viewUpdate *RoaringUpdate) error {
 
 // ImportValue is a wrapper around the common code in ImportValueWithTx, which
 // currently just translates req.Clear into a clear ImportOption.
-func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueRequest, opts ...ImportOption) error {
+func (api *API) ImportValue(ctx context.Context, qcx qc.QueryContext, req *ImportValueRequest, opts ...ImportOption) error {
 	if req.Clear {
 		opts = addClearToImportOptions(opts)
 	}
@@ -1849,7 +1825,7 @@ func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueReque
 }
 
 // ImportValueWithTx bulk imports values into a particular field.
-func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValueRequest, options *ImportOptions) (err0 error) {
+func (api *API) ImportValueWithTx(ctx context.Context, qcx qc.QueryContext, req *ImportValueRequest, options *ImportOptions) (err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ImportValue")
 	defer span.Finish()
 
@@ -2029,7 +2005,7 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	return nil
 }
 
-func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) error {
+func importExistenceColumns(qcx qc.QueryContext, index *Index, columnIDs []uint64, shard uint64) error {
 	ef := index.existenceField()
 	if ef == nil {
 		return nil
@@ -2176,7 +2152,7 @@ func (api *API) Info() serverInfo {
 		CPUMHz:           mhz,
 		CPUType:          si.CPUModel(),
 		Memory:           mem,
-		StorageBackend:   api.holder.txf.TxType(),
+		StorageBackend:   api.holder.txStore.Backend(),
 		ReplicaN:         api.cluster.ReplicaN,
 		ShardHash:        api.cluster.Hasher.Name(),
 		KeyHash:          api.cluster.Hasher.Name(),
@@ -2578,91 +2554,61 @@ func (api *API) RestoreShard(ctx context.Context, indexName string, shard uint64
 	}
 
 	idx := api.holder.Index(indexName)
-	// need to get a dbShard
-	dbs, err := api.holder.Txf().dbPerShard.GetDBShard(indexName, shard, idx)
-	if err != nil {
-		return err
+	br, ok := api.holder.txStore.(qc.TxBackupRestore)
+	if !ok {
+		return errors.New("backend does not support backup/restore operations")
 	}
-	db := dbs.W
-	finalPath := db.Path() + "/data"
-	tempPath := finalPath + ".tmp"
-	o, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	qcx, err := api.NewIndexQueryContext(ctx, indexName, shard)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting query context")
 	}
-	defer o.Close()
-
-	bw := bufio.NewWriter(o)
-	if _, err = io.Copy(bw, rd); err != nil {
-		return err
-	} else if err := bw.Flush(); err != nil {
-		return err
-	} else if err := o.Sync(); err != nil {
-		return err
-	} else if err := o.Close(); err != nil {
-		return err
+	defer qcx.Release()
+	err = br.Restore(qcx, keys.Index(indexName), keys.Shard(shard), rd)
+	if err != nil {
+		return errors.Wrap(err, "underlying restore")
 	}
 
+	flvs, err := api.holder.txStore.ListFieldViews(keys.Index(indexName), keys.Shard(shard))
 	if err != nil {
-		_ = os.Remove(tempPath)
-		return err
+		return errors.Wrap(err, "finding field/view list")
 	}
-	err = db.CloseDB()
-	if err != nil {
-		return err
-	}
-	err = os.Rename(tempPath, finalPath)
-	if err != nil {
-		_ = os.Remove(tempPath)
-		return err
-	}
-	err = db.OpenDB()
-	if err != nil {
-		return err
-	}
-	tx, err := db.NewTx(false, idx.name, Txo{})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	// arguments idx,shard do not matter for rbf they
-	// are ignored
-	flvs, err := tx.GetSortedFieldViewList(idx, shard)
-	if err != nil {
-		return nil
-	}
-
-	for _, flv := range flvs {
-		fld := idx.field(flv.Field)
-		view := fld.view(flv.View)
-		if view == nil {
-			view, err = fld.createViewIfNotExists(flv.View)
+	for field, views := range flvs {
+		fld := idx.field(string(field))
+		for _, viewName := range views {
+			view := fld.view(string(viewName))
+			if view == nil {
+				view, err = fld.createViewIfNotExists(string(viewName))
+				if err != nil {
+					return err
+				}
+			}
+			frag, err := view.CreateFragmentIfNotExists(shard)
 			if err != nil {
 				return err
 			}
-		}
-		frag, err := view.CreateFragmentIfNotExists(shard)
-		if err != nil {
-			return err
-		}
-		err = frag.RebuildRankCache(ctx)
-		if err != nil {
-			return err
-		}
-		bd, err := view.bitDepth([]uint64{shard})
-		if err != nil {
-			return err
-		}
-		err = fld.cacheBitDepth(bd)
-		if err != nil {
-			return err
+			qr, err := frag.qcxRead(qcx)
+			if err != nil {
+				return err
+			}
+			err = frag.RebuildRankCache(ctx, qr)
+			if err != nil {
+				return err
+			}
+			bd, err := view.bitDepth(qcx, map[keys.Shard]struct{}{keys.Shard(shard): {}})
+			if err != nil {
+				return err
+			}
+			err = fld.cacheBitDepth(bd)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func (api *API) mutexCheckThisNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
+func (api *API) mutexCheckThisNode(ctx context.Context, qcx qc.QueryContext, indexName string, fieldName string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	index := api.holder.Index(indexName)
 	if index == nil {
 		return nil, newNotFoundError(ErrIndexNotFound, indexName)
@@ -2735,7 +2681,7 @@ func mergeKeyLists(dst []string, src []string) []string {
 
 // MutexCheckNode checks for collisions in a given mutex field. The response is
 // a map[shard]map[column]values, not translated.
-func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
+func (api *API) MutexCheckNode(ctx context.Context, qcx qc.QueryContext, indexName string, fieldName string, details bool, limit int) (map[uint64]map[uint64][]uint64, error) {
 	if err := api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -2754,7 +2700,7 @@ func (api *API) MutexCheckNode(ctx context.Context, qcx *Qcx, indexName string, 
 //	details false:
 //	[]uint64            // unkeyed index
 //	[]string            // keyed index
-func (api *API) MutexCheck(ctx context.Context, qcx *Qcx, indexName string, fieldName string, details bool, limit int) (result interface{}, err error) {
+func (api *API) MutexCheck(ctx context.Context, qcx qc.QueryContext, indexName string, fieldName string, details bool, limit int) (result interface{}, err error) {
 	if err = api.validate(apiMutexCheck); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -3045,21 +2991,6 @@ func (api *API) CompilePlan(ctx context.Context, q string) (planner_types.PlanOp
 	return api.server.CompileExecutionPlan(ctx, q)
 }
 
-func (api *API) RBFDebugInfo() map[string]*rbf.DebugInfo {
-	infos := make(map[string]*rbf.DebugInfo)
-
-	for key, dbShard := range api.holder.Txf().dbPerShard.Flatmap {
-		wrapper, ok := dbShard.W.(*RbfDBWrapper)
-		if !ok {
-			continue
-		}
-
-		skey := fmt.Sprintf("%s/%d", key.index, key.shard)
-		infos[skey] = wrapper.db.DebugInfo()
-	}
-	return infos
-}
-
 // Directive applies the provided Directive to the local computer.
 func (api *API) Directive(ctx context.Context, d *dax.Directive) error {
 	return api.ApplyDirective(ctx, d)
@@ -3203,8 +3134,8 @@ const (
 	apiDeleteIndex
 	apiDeleteView
 	apiExportCSV
-	apiFragmentBlockData
-	apiFragmentBlocks
+	// apiFragmentBlockData
+	// apiFragmentBlocks
 	apiFragmentData
 	apiTranslateData
 	apiFieldTranslateData
@@ -3247,8 +3178,6 @@ var methodsCommon = map[apiMethod]struct{}{
 
 var methodsDegraded = map[apiMethod]struct{}{
 	apiExportCSV:         {},
-	apiFragmentBlockData: {},
-	apiFragmentBlocks:    {},
 	apiField:             {},
 	apiIndex:             {},
 	apiQuery:             {},
@@ -3273,8 +3202,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiDeleteIndex:          {},
 	apiDeleteView:           {},
 	apiExportCSV:            {},
-	apiFragmentBlockData:    {},
-	apiFragmentBlocks:       {},
 	apiField:                {},
 	apiFieldTranslateData:   {},
 	apiImport:               {},

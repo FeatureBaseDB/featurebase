@@ -14,13 +14,15 @@ import (
 
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/disco"
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/logger"
+	qc "github.com/molecula/featurebase/v3/querycontext"
 	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/storage"
+	"github.com/molecula/featurebase/v3/task"
 	"github.com/molecula/featurebase/v3/testhook"
-	"github.com/molecula/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -127,7 +129,7 @@ type Holder struct {
 
 	Auditor testhook.Auditor
 
-	txf *TxFactory
+	txStore qc.TxStore
 
 	lookupDB *sql.DB
 
@@ -146,6 +148,35 @@ type Holder struct {
 	// snapshotter/writelogger; then MDS should only start directing queries to
 	// that computer once it has completed applying the snapshot.
 	directiveApplied bool
+
+	dbContents keys.DBContents // used during startup to determine which views to open, etc
+}
+
+func (h *Holder) NewQueryContext(ctx context.Context) (qc.QueryContext, error) {
+	return h.TxStore().NewQueryContext(ctx)
+}
+
+func (h *Holder) NewWriteQueryContext(ctx context.Context, scope qc.QueryScope) (qc.QueryContext, error) {
+	return h.TxStore().NewWriteQueryContext(ctx, scope)
+}
+
+// NewIndexQueryContext is a helper to create a scope for a given index, and
+// optional list of shards. If no shards are provided, the context is
+// index-wide.
+func (h *Holder) NewIndexQueryContext(ctx context.Context, index string, shards ...uint64) (qc.QueryContext, error) {
+	txs := h.TxStore()
+	var typeShifted []keys.Shard
+	// helpfully treat a shard of -1 as no shard
+	if len(shards) > 0 && shards[0] == ^uint64(0) {
+		shards = shards[1:]
+	}
+	if len(shards) > 0 {
+		typeShifted = make([]keys.Shard, len(shards))
+		for i, v := range shards {
+			typeShifted[i] = keys.Shard(v)
+		}
+	}
+	return txs.NewWriteQueryContext(ctx, txs.Scope().AddIndexShards(keys.Index(index), typeShifted...))
 }
 
 // HolderOpts holds information about the holder which other things might want
@@ -164,6 +195,16 @@ func (h *Holder) Directive() dax.Directive {
 		return dax.Directive{}
 	}
 	return *h.directive
+}
+
+// TxStore yields the backing TxStore used by this holder. If no TxStore is
+// set, it yields a NopTxStore which errors out on usage, rather than panicing.
+func (h *Holder) TxStore() qc.TxStore {
+	if h.txStore != nil {
+		return h.txStore
+	}
+	// if you somehow didn't pick a TxStore, we want to error peacefully rather than panicing
+	return qc.NopTxStore
 }
 
 func (h *Holder) SetDirective(d *dax.Directive) {
@@ -303,7 +344,7 @@ func TestHolderConfig() *HolderConfig {
 }
 
 // NewHolder returns a new instance of Holder for the given path.
-func NewHolder(path string, cfg *HolderConfig) *Holder {
+func NewHolder(path string, cfg *HolderConfig) (*Holder, error) {
 	if cfg == nil {
 		cfg = DefaultHolderConfig()
 	}
@@ -335,6 +376,7 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		Schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
 		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend},
+		txStore:              qc.NopTxStore,
 
 		Auditor: NewAuditor(),
 
@@ -343,12 +385,8 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		indexes: make(map[string]*Index),
 	}
 
-	txf, err := NewTxFactory(cfg.StorageConfig.Backend, h.IndexesPath(), h)
-	vprint.PanicOn(err)
-	h.txf = txf
-
 	_ = testhook.Created(h.Auditor, h, nil)
-	return h
+	return h, nil
 }
 
 // Path returns the path directory the holder was created with.
@@ -361,6 +399,228 @@ func (h *Holder) IndexesPath() string {
 	return filepath.Join(h.path, IndexesDir)
 }
 
+// transactExistRow atomically grabs a currently-unused row of the existence
+// field to store some bits in. These bits are used to denote records which
+// we are in the process of deleting. By "atomically" we mean that this
+// operation gets its own QueryContext, which it commits before returning.
+// You cannot use this while you already have a live QueryContext referring
+// to this shard.
+func (h *Holder) transactExistRow(ctx context.Context, qcx qc.QueryContext, idx *Index, shard uint64, frag *fragment, src *Row) (uint64, error) {
+	qw, err := frag.qcxWrite(qcx)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := frag.rows(ctx, qw, 1)
+	if err != nil {
+		return 0, err
+	}
+	// obtain a rowID which is higher than any currently present row ID.
+	rowID := uint64(1)
+	if len(rows) > 0 {
+		rowID = rows[len(rows)-1] + 1
+	}
+	_, err = frag.setRow(qw, src, rowID)
+	if err != nil {
+		return 0, err
+	}
+	return rowID, qcx.Flush(keys.Index(idx.name), keys.Shard(shard))
+}
+
+// deleteRows deletes the everything from the given index/shard matching a provided
+// Row.
+func (h *Holder) deleteRows(ctx context.Context, qcx qc.QueryContext, src *Row, idx *Index, shard uint64) (bool, error) {
+	return h.deleteRowsWithFlow(ctx, qcx, src, idx, shard, false)
+}
+
+// deleteRowsWithFlowWithKeys deletes the given columns from every field, for the given
+// index/shard. The "normalFlow" parameter tells whether we're trying to do a recovery
+// of an interrupted delete.
+func (h *Holder) deleteRowsWithFlowWithKeys(ctx context.Context, qcx qc.QueryContext, columns *roaring.Bitmap, idx *Index, shard uint64, normalFlow bool) (bool, error) {
+	var existenceFragment *fragment
+	var deletedRowID uint64
+	var commitor Commitor = &NopCommitor{}
+	var err error   // store columns in exits field ToBeDelete row commited
+	if normalFlow { // normalFlow is the standard path, "not normal" is recoverory
+		existenceFragment = h.fragment(idx.Name(), existenceFieldName, viewStandard, shard)
+		if existenceFragment == nil {
+			// no exists field
+			return false, errors.New("can't bulk delete without existence field")
+		}
+		src := NewRowFromBitmap(columns)
+		deletedRowID, err = h.transactExistRow(ctx, qcx, idx, shard, existenceFragment, src)
+		if err != nil {
+			return false, err
+		}
+	}
+	commitor, err = deleteKeyTranslation(ctx, idx, shard, columns)
+	if err != nil {
+		return false, err
+	}
+	changed := false
+	defer func() {
+		// if there is an error on the bit clearing rollback the keys
+		if err != nil {
+			changed = false
+			commitor.Rollback()
+			return
+		}
+		// if there is an error in the key commit, then rollback the delete
+		// write records before keys to remove possiblity of unmatch keys=records
+		err = qcx.Flush(keys.Index(idx.name), keys.Shard(shard))
+		if err != nil {
+			changed = false
+			commitor.Rollback()
+			return
+		}
+		if er := commitor.Commit(); er != nil {
+			err = er
+		}
+		if err != nil {
+			h.Logger.Errorf("problems committing delete in rbf %v shard %v", err, shard)
+		}
+	}()
+
+	for _, field := range idx.Fields() {
+		for _, view := range field.views() {
+			frag := view.Fragment(shard)
+			if frag == nil {
+				continue
+			}
+			qw, err := frag.qcxWrite(qcx)
+			if err != nil {
+				return false, err
+			}
+			c, err := frag.clearRecordsByBitmap(qw, columns)
+			if err != nil {
+				return false, err
+			}
+			changed = changed || c
+		}
+	}
+	if existenceFragment == nil {
+		return changed, nil
+	}
+	// a string keys have been deleted and the deleteRow was created
+	qw, err := existenceFragment.qcxWrite(qcx)
+	if err != nil {
+		return false, err
+	}
+	if normalFlow {
+		existenceFragment.clearRow(qw, deletedRowID)
+	} else {
+		// this is if we are recovering from failure and cleaning up
+		rows, err := existenceFragment.rows(ctx, qw, 1)
+		if err != nil {
+			return false, err
+		}
+		for _, rowId := range rows {
+			existenceFragment.clearRow(qw, rowId)
+		}
+	}
+	// Unlike other operations, Delete wants to ensure that its operations are flushed.
+	return changed, qcx.Flush(keys.Index(idx.name), keys.Shard(shard))
+}
+
+// deleteRowsWithOutKeys deletes the data for a given index/shard, matching the columns
+// in the given bitmap, but does not attempt to delete corresponding keys.
+func (h *Holder) deleteRowsWithOutKeysFlow(ctx context.Context, qcx qc.QueryContext, columns *roaring.Bitmap, idx *Index, shard uint64, normalFlow bool) (changed bool, err error) {
+	var existenceFragment *fragment
+	var deletedRowID uint64
+	var commitor Commitor = &NopCommitor{}
+	defer func() {
+		// if there is an error in the key commit, then rollback the delete
+		// write records before keys to remove possiblity of unmatch keys=records
+		err := qcx.Flush(keys.Index(idx.name), keys.Shard(shard))
+		if err != nil {
+			changed = false
+			commitor.Rollback()
+			return
+		}
+	}()
+	for _, field := range idx.Fields() {
+		for _, view := range field.views() {
+			frag := view.Fragment(shard)
+			if frag == nil {
+				continue
+			}
+			qw, err := frag.qcxWrite(qcx)
+			if err != nil {
+				return false, err
+			}
+			c, err := frag.clearRecordsByBitmap(qw, columns)
+			if err != nil {
+				return false, err
+			}
+			if c {
+				changed = true
+			}
+
+		}
+	}
+	if existenceFragment == nil { // a string keys have been deleted and the deleteRow was created
+		return changed, nil
+	}
+	qw, err := existenceFragment.qcxWrite(qcx)
+	if err != nil {
+		return false, err
+	}
+
+	if normalFlow {
+		existenceFragment.clearRow(qw, deletedRowID)
+		return changed, nil
+	}
+
+	// this is if we are recovering from failure and cleaning up
+	rows, err := existenceFragment.rows(ctx, qw, 1)
+	if err != nil {
+		return false, err
+	}
+	for _, rowId := range rows {
+		existenceFragment.clearRow(qw, rowId)
+	}
+	return changed, nil
+}
+
+// deleteRowsWithFlow deletes all the entries from the index for a given
+// index/shard. Note that we expect the source row to have only one
+// segment, which is the right one.
+func (h *Holder) deleteRowsWithFlow(ctx context.Context, qcx qc.QueryContext, src *Row, idx *Index, shard uint64, normalFlow bool) (change bool, err error) {
+	if len(src.Segments) == 0 { // nothing to remove
+		return false, nil
+	}
+	if src.Segments[0].shard != shard {
+		return false, fmt.Errorf("data mismatch: expected data to delete for shard %d, got shard %d", shard, src.Segments[0].shard)
+	}
+	columns := src.Segments[0].data // should only be one segment
+	if columns.Count() == 0 {
+		return false, nil
+	}
+	bits := src.Segments[0].data.Slice()
+	min := func(a, b int) int {
+		if a <= b {
+			return a
+		}
+		return b
+	}
+	// We may not be able to delete all of the keys at once, so we have to batch
+	// them.
+	limit := h.cfg.RBFConfig.MaxDelete
+	var anyChanges bool
+	for i := 0; i < len(bits); i += limit {
+		batch := roaring.NewBitmap(bits[i:min(i+limit, len(bits))]...)
+		if idx.Keys() {
+			change, err = h.deleteRowsWithFlowWithKeys(ctx, qcx, batch, idx, shard, normalFlow)
+		} else {
+			change, err = h.deleteRowsWithOutKeysFlow(ctx, qcx, batch, idx, shard, normalFlow)
+		}
+		anyChanges = anyChanges || change
+		if err != nil {
+			return anyChanges, err
+		}
+	}
+	return anyChanges, err
+}
+
 func (h *Holder) deletePerShard(index *Index, shard uint64) error {
 	inprocessRecords := NewRow()
 
@@ -369,11 +629,18 @@ func (h *Holder) deletePerShard(index *Index, shard uint64) error {
 		return nil
 	}
 
-	tx := h.Txf().NewTx(Txo{Write: !writable, Index: index, Shard: shard})
-	defer tx.Rollback()
+	qcx, err := h.NewIndexQueryContext(context.TODO(), index.name, shard)
+	if err != nil {
+		return err
+	}
+	defer qcx.Release()
+	qr, err := frag.qcxRead(qcx)
+	if err != nil {
+		return err
+	}
 
 	// filter rows based on having _exists>=1, which is used to flag delete in-flight
-	rows, err := frag.rows(context.Background(), tx, 1)
+	rows, err := frag.rows(context.Background(), qr, 1)
 	if err != nil {
 		return err
 	}
@@ -384,7 +651,7 @@ func (h *Holder) deletePerShard(index *Index, shard uint64) error {
 	}
 
 	for _, record := range rows {
-		row, err2 := frag.row(tx, record)
+		row, err2 := frag.row(qr, record)
 		if err2 != nil {
 			return fmt.Errorf("getting row IDs: %v", err2)
 		}
@@ -392,9 +659,7 @@ func (h *Holder) deletePerShard(index *Index, shard uint64) error {
 	}
 	h.Logger.Printf("retrying delete: index=%v shard=%v record count=%v", index.name, shard, inprocessRecords.Count())
 
-	tx.Rollback() // release the read tx in case a checksum is needed in DeleteRows
-
-	_, err = DeleteRows(context.Background(), inprocessRecords, index, shard)
+	_, err = h.deleteRows(context.Background(), qcx, inprocessRecords, index, shard)
 	if err != nil {
 		return fmt.Errorf("deleting rows: %v", err)
 	}
@@ -439,12 +704,27 @@ func (h *Holder) Open() error {
 	h.opening = true
 	defer func() { h.opening = false }()
 
-	if h.txf == nil {
-		txf, err := NewTxFactory(h.cfg.StorageConfig.Backend, h.IndexesPath(), h)
-		if err != nil {
-			return errors.Wrap(err, "Holder.Open NewTxFactory()")
-		}
-		h.txf = txf
+	// allow overwriting a NopTxStore, but not a real one
+	if h.txStore != nil && h.txStore != qc.NopTxStore {
+		return errors.New("holder already had previous TxStore on open")
+	}
+	var workerPool *task.Pool
+	// in production this can almost certainly never be nil. with test
+	// holders, it is often nil and there's no worker pool to worry about.
+	// since the worker pool is used only to notify the worker pool that
+	// we're blocked, that's probably harmless.
+	if h.executor != nil {
+		workerPool = h.executor.workers
+	}
+	txs, err := qc.NewRBFTxStore(h.IndexesPath(), h.cfg.RBFConfig, h.Logger, workerPool, nil)
+	if err != nil {
+		return err
+	}
+	h.txStore = txs
+
+	h.dbContents, err = h.txStore.Contents()
+	if err != nil {
+		return errors.Wrap(err, "obtaining existing fields/views from store")
 	}
 
 	// Reset closing in case Holder is being reopened.
@@ -506,7 +786,7 @@ func (h *Holder) Open() error {
 
 		err = index.OpenWithSchema(idx)
 		if err != nil {
-			_ = h.txf.Close()
+			_ = h.txStore.Close()
 			if err == ErrName {
 				h.Logger.Errorf("opening index: %s, err=%s", index.Name(), err)
 				continue
@@ -531,10 +811,6 @@ func (h *Holder) Open() error {
 	h.opened.Close()
 
 	_ = testhook.Opened(h.Auditor, h, nil)
-
-	if err := h.txf.Open(); err != nil {
-		return errors.Wrap(err, "Holder.Open h.txf.Open()")
-	}
 
 	if h.cfg.LookupDBDSN != "" {
 		h.Logger.Printf("connecting to lookup database")
@@ -624,10 +900,6 @@ func (h *Holder) Close() error {
 		return nil
 	}
 
-	if globalUseStatTx {
-		fmt.Printf("%v\n", globalCallStats.report())
-	}
-
 	h.Stats.Close()
 
 	// Notify goroutines of closing and wait for completion.
@@ -638,15 +910,16 @@ func (h *Holder) Close() error {
 			return errors.Wrap(err, "closing index")
 		}
 	}
-	if err := h.txf.Close(); err != nil {
-		return errors.Wrap(err, "holder.Txf.Close()")
+	if err := h.txStore.Close(); err != nil {
+		return errors.Wrap(err, "closing database backend")
 	}
+	// set txStore to something that errors harmlessly, since it's closed now.
+	h.txStore = qc.NopTxStore
 	if err := h.ida.Close(); err != nil {
 		return errors.Wrap(err, "closing ID allocator")
 	}
 
 	// Reset opened in case Holder needs to be reopened.
-	h.txf = nil
 	h.opened.mu.Lock()
 	h.opened.ch = make(chan struct{})
 	h.opened.mu.Unlock()
@@ -1047,7 +1320,6 @@ func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePar
 	index.trackExistence = cim.Meta.TrackExistence
 	index.createdAt = cim.CreatedAt
 	index.translatePartitions = translatePartitions
-
 	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
@@ -1190,8 +1462,8 @@ func (h *Holder) deleteIndex(name string) error {
 	}
 
 	// remove any backing store.
-	if err := h.txf.DeleteIndex(name); err != nil {
-		return errors.Wrap(err, "h.Txf.DeleteIndex")
+	if err := h.txStore.DeleteIndex(keys.Index(name)); err != nil {
+		return errors.Wrap(err, "deleting index")
 	}
 
 	// Delete index directory.
@@ -1743,18 +2015,6 @@ func (h *Holder) addIndex(idx *Index) {
 	h.imu.Lock()
 	h.indexes[idx.name] = idx
 	h.imu.Unlock()
-}
-
-func (h *Holder) Txf() *TxFactory {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.txf
-}
-
-// BeginTx starts a transaction on the holder. The index and shard
-// must be specified.
-func (h *Holder) BeginTx(writable bool, idx *Index, shard uint64) (Tx, error) {
-	return h.txf.NewTx(Txo{Write: writable, Index: idx, Shard: shard}), nil
 }
 
 func decodeCreateIndexMessage(ser Serializer, b []byte) (*CreateIndexMessage, error) {

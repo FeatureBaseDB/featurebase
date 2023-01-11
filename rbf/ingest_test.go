@@ -16,12 +16,15 @@ import (
 	"github.com/molecula/featurebase/v3/roaring"
 	"github.com/molecula/featurebase/v3/testhook"
 
-	txkey "github.com/molecula/featurebase/v3/short_txkey"
 	. "github.com/molecula/featurebase/v3/vprint" // nolint:staticcheck
 )
 
+// This is intended to be similar to the actual field/view keys we
+// generate over in querycontext for fragment keys, but it actually
+// doesn't matter, as long as it's some kind of a string that reflects
+// both field and view.
 func rbfName(index, field, view string, shard uint64) string {
-	return string(txkey.Prefix(index, field, view, shard))
+	return fmt.Sprintf("~%s;%s<", field, view)
 }
 
 var _ = rbfName // keep linter happy
