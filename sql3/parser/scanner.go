@@ -216,6 +216,11 @@ func (s *Scanner) scanBlob() (Pos, Token, string) {
 	for i := 0; ; i++ {
 		ch, _ := s.read()
 		if ch == '\'' {
+			if s.peek() == '\'' { // escaped quote
+				s.read()
+				s.buf.WriteRune('\'')
+				continue
+			}
 			return pos, BLOB, s.buf.String()
 		} else if ch == -1 {
 			return pos, ILLEGAL, string(start) + `'` + s.buf.String()
