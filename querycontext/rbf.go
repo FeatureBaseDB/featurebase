@@ -980,9 +980,14 @@ func (rq *rbfQueryContext) Flush(index keys.Index, shard keys.Shard) error {
 	return nil
 }
 
+var errAlreadyErrored = errors.New("query context previously encountered an error")
+
 func (rq *rbfQueryContext) Read(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) (QueryRead, error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
+	if rq.err != nil {
+		return nil, errAlreadyErrored
+	}
 	dbk, fk := rq.txStore.keys(index, field, view, shard)
 	queries, ok := rq.queries[dbk]
 	if !ok {
@@ -1014,6 +1019,9 @@ func (rq *rbfQueryContext) Write(index keys.Index, field keys.Field, view keys.V
 	}
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
+	if rq.err != nil {
+		return nil, errAlreadyErrored
+	}
 	queries, ok := rq.queries[dbk]
 	if !ok {
 		var err error
