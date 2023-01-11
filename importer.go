@@ -6,6 +6,8 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type Importer interface {
