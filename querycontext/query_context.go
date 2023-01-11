@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/roaring"
 )
 
@@ -28,10 +29,10 @@ import (
 // fail, and refuse to commit, if that context is canceled before you try
 // to commit.
 type QueryContext interface {
-	// NewRead requests a new QueryRead object for the indicated fragment.
-	NewRead(IndexName, FieldName, ViewName, ShardID) (QueryRead, error)
-	// NewWrite requests a new QueryWrite object for the indicated fragment.
-	NewWrite(IndexName, FieldName, ViewName, ShardID) (QueryWrite, error)
+	// Read requests a new QueryRead object for the indicated fragment.
+	Read(keys.Index, keys.Field, keys.View, keys.Shard) (QueryRead, error)
+	// Write requests a new QueryWrite object for the indicated fragment.
+	Write(keys.Index, keys.Field, keys.View, keys.Shard) (QueryWrite, error)
 	// Error sets a persistent error state and indicates that this QueryContext
 	// must not commit its writes.
 	Error(...interface{})
@@ -48,6 +49,11 @@ type QueryContext interface {
 	// It is an error to try to commit twice or use the QueryContext after a
 	// commit.
 	Commit() error
+	// Flush tries to flush everything related to the given index and shard.
+	// This is NOT portable across backends and is a temporary workaround
+	// needed by our delete flow. Flush() is basically like a commit followed
+	// immediately be reopening, without removing our locks.
+	Flush(keys.Index, keys.Shard) error
 }
 
 // QueryRead represents read access to a fragment. When functions in
@@ -161,12 +167,14 @@ type QueryWrite interface {
 	// If clear is true, the bits from rit are cleared, otherwise they are set in the
 	// specifed fragment.
 	ImportRoaringBits(rit roaring.RoaringIterator, clear bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error)
-}
 
-type IndexName string
-type FieldName string
-type ViewName string
-type ShardID uint64
+	// Flush is an Inadvisable Workaround for the problem that sometimes we want
+	// to do a thing that has the impact of committing writes so far without releasing
+	// our broader write lock. It may not work with all backends. If it does work, and
+	// doesn't return an error, writes so far to this QueryWrite's backend are flushed.
+	// This may also affect the backend used by other QueryWrites.
+	Flush() error
+}
 
 // QueryScope represents a possible set of things that can be written
 // to. A QueryScope can in principle represent arbitrary patterns with
@@ -190,7 +198,7 @@ type ShardID uint64
 type QueryScope interface {
 	// Allowed determines whether a specific fragment
 	// is covered by this QueryScope.
-	Allowed(IndexName, FieldName, ViewName, ShardID) bool
+	Allowed(keys.Index, keys.Field, keys.View, keys.Shard) bool
 
 	// Overlap reports whether there are any overlaps between this
 	// QueryScope object and another. An overlap exists wherever
@@ -199,10 +207,17 @@ type QueryScope interface {
 	Overlap(QueryScope) bool
 
 	AddAll() QueryScope
-	AddIndex(IndexName) QueryScope
-	AddField(IndexName, FieldName) QueryScope
-	AddIndexShards(IndexName, ...ShardID) QueryScope
-	AddFieldShards(IndexName, FieldName, ...ShardID) QueryScope
+
+	// AddIndex adds the whole index, across all shards.
+	AddIndex(keys.Index) QueryScope
+	// AddIndex adds the whole field, across all shards.
+	AddField(keys.Index, keys.Field) QueryScope
+	// AddIndexShards adds the index only for the given shards, but if
+	// there's no shards, it is equivalent to AddIndex.
+	AddIndexShards(keys.Index, ...keys.Shard) QueryScope
+	// AddFieldShards adds the field only for the given shards, but if
+	// there's no shards, it is equivalent to AddField.
+	AddFieldShards(keys.Index, keys.Field, ...keys.Shard) QueryScope
 
 	String() string
 }
@@ -212,7 +227,7 @@ type QueryScope interface {
 // within those indexes. An empty shard list indicates all shards,
 // an absent key indicates no shards. Shard lists are stored sorted.
 type indexShardQueryScope struct {
-	shards map[IndexName]shardList
+	shards map[keys.Index]shardList
 	all    bool
 }
 
@@ -239,22 +254,23 @@ func (i *indexShardQueryScope) AddAll() QueryScope {
 }
 
 // AddIndex adds the given index, with all shards writable.
-func (i *indexShardQueryScope) AddIndex(index IndexName) QueryScope {
+func (i *indexShardQueryScope) AddIndex(index keys.Index) QueryScope {
 	if i.shards == nil {
-		i.shards = map[IndexName]shardList{index: {all: true}}
+		i.shards = map[keys.Index]shardList{index: {all: true}}
 		return i
 	}
 	i.shards[index] = shardList{all: true}
 	return i
 }
 
-// AddIndexShards adds the given index for the given shards.
-func (i *indexShardQueryScope) AddIndexShards(index IndexName, shards ...ShardID) QueryScope {
+// AddIndexShards adds the given index for the given shards. If there's no shards,
+// it's equivalent to AddIndex.
+func (i *indexShardQueryScope) AddIndexShards(index keys.Index, shards ...keys.Shard) QueryScope {
 	if i.all {
 		return i
 	}
 	if i.shards == nil {
-		i.shards = map[IndexName]shardList{}
+		i.shards = map[keys.Index]shardList{}
 	}
 	existing := i.shards[index]
 	// We could at this point check whether anything previously existed, and
@@ -263,22 +279,26 @@ func (i *indexShardQueryScope) AddIndexShards(index IndexName, shards ...ShardID
 	if existing.all {
 		return i
 	}
-	for _, shard := range shards {
-		existing.Add(shard)
+	if len(shards) == 0 {
+		existing.all = true
+	} else {
+		for _, shard := range shards {
+			existing.Add(shard)
+		}
 	}
 	i.shards[index] = existing
 	return i
 }
 
-func (i *indexShardQueryScope) AddField(index IndexName, _ FieldName) QueryScope {
+func (i *indexShardQueryScope) AddField(index keys.Index, _ keys.Field) QueryScope {
 	return i.AddIndex(index)
 }
 
-func (i *indexShardQueryScope) AddFieldShards(index IndexName, field FieldName, shards ...ShardID) QueryScope {
+func (i *indexShardQueryScope) AddFieldShards(index keys.Index, field keys.Field, shards ...keys.Shard) QueryScope {
 	return i.AddIndexShards(index, shards...)
 }
 
-func (i *indexShardQueryScope) Allowed(index IndexName, _ FieldName, _ ViewName, shard ShardID) bool {
+func (i *indexShardQueryScope) Allowed(index keys.Index, _ keys.Field, _ keys.View, shard keys.Shard) bool {
 	shards, ok := i.shards[index]
 	if !ok {
 		return false
@@ -306,7 +326,7 @@ func (i *indexShardQueryScope) Overlap(qw QueryScope) bool {
 // reservations.
 type indexScope struct {
 	all shardList
-	any map[FieldName]shardList
+	any map[keys.Field]shardList
 }
 
 // Overlap determines whether two index scopes overlap. This
@@ -337,25 +357,25 @@ func (i *indexScope) Overlap(other *indexScope) bool {
 	return false
 }
 
-func (scope *indexScope) AddField(field FieldName) {
+func (scope *indexScope) AddField(field keys.Field) {
 	if scope.all.all {
 		// We already cover everything.
 		return
 	}
 	if scope.any == nil {
-		scope.any = map[FieldName]shardList{field: {all: true}}
+		scope.any = map[keys.Field]shardList{field: {all: true}}
 		return
 	}
 	scope.any[field] = shardList{all: true}
 }
 
-func (scope *indexScope) AddFieldShards(field FieldName, shards ...ShardID) {
+func (scope *indexScope) AddFieldShards(field keys.Field, shards ...keys.Shard) {
 	if scope.all.all {
 		// We already cover everything.
 		return
 	}
 	if scope.any == nil {
-		scope.any = map[FieldName]shardList{}
+		scope.any = map[keys.Field]shardList{}
 	}
 	existing, ok := scope.any[field]
 	if !ok {
@@ -364,8 +384,12 @@ func (scope *indexScope) AddFieldShards(field FieldName, shards ...ShardID) {
 	if existing.all {
 		return
 	}
-	for _, shard := range shards {
-		existing.Add(shard)
+	if len(shards) == 0 {
+		existing.all = true
+	} else {
+		for _, shard := range shards {
+			existing.Add(shard)
+		}
 	}
 	scope.any[field] = existing
 }
@@ -420,7 +444,7 @@ func (scope *indexScope) Complexity() string {
 type flexibleQueryScope struct {
 	all      bool
 	splitter *flexibleKeySplitter
-	indexes  map[IndexName]*indexScope
+	indexes  map[keys.Index]*indexScope
 }
 
 var _ QueryScope = &flexibleQueryScope{}
@@ -447,12 +471,12 @@ func (i *flexibleQueryScope) AddAll() QueryScope {
 }
 
 // AddIndex adds the given index, with all shards writable.
-func (i *flexibleQueryScope) AddIndex(index IndexName) QueryScope {
+func (i *flexibleQueryScope) AddIndex(index keys.Index) QueryScope {
 	if i.all {
 		return i
 	}
 	if i.indexes == nil {
-		i.indexes = map[IndexName]*indexScope{index: {all: shardList{all: true}}}
+		i.indexes = map[keys.Index]*indexScope{index: {all: shardList{all: true}}}
 		return i
 	}
 	i.indexes[index] = &indexScope{all: shardList{all: true}}
@@ -460,12 +484,12 @@ func (i *flexibleQueryScope) AddIndex(index IndexName) QueryScope {
 }
 
 // AddIndexShards adds the given index for the given shards.
-func (i *flexibleQueryScope) AddIndexShards(index IndexName, shards ...ShardID) QueryScope {
+func (i *flexibleQueryScope) AddIndexShards(index keys.Index, shards ...keys.Shard) QueryScope {
 	if i.all {
 		return i
 	}
 	if i.indexes == nil {
-		i.indexes = map[IndexName]*indexScope{}
+		i.indexes = map[keys.Index]*indexScope{}
 	}
 	// We could at this point check whether anything previously existed, and
 	// if not, just use a new {any: shards} shardlist, but we want to verify
@@ -478,15 +502,19 @@ func (i *flexibleQueryScope) AddIndexShards(index IndexName, shards ...ShardID) 
 	if scope.all.all {
 		return i
 	}
-	for _, shard := range shards {
-		scope.all.Add(shard)
+	if len(shards) == 0 {
+		scope.all.all = true
+	} else {
+		for _, shard := range shards {
+			scope.all.Add(shard)
+		}
 	}
 	return i
 }
 
 // AddField adds the given field, with all shards writable. If the field
 // is in an unsplit index, the entire index is covered.
-func (i *flexibleQueryScope) AddField(index IndexName, field FieldName) QueryScope {
+func (i *flexibleQueryScope) AddField(index keys.Index, field keys.Field) QueryScope {
 	if i.all {
 		return i
 	}
@@ -497,7 +525,7 @@ func (i *flexibleQueryScope) AddField(index IndexName, field FieldName) QuerySco
 		}
 	}
 	if i.indexes == nil {
-		i.indexes = make(map[IndexName]*indexScope)
+		i.indexes = make(map[keys.Index]*indexScope)
 	}
 	scope := i.indexes[index]
 	if scope == nil {
@@ -509,7 +537,7 @@ func (i *flexibleQueryScope) AddField(index IndexName, field FieldName) QuerySco
 }
 
 // AddFieldShards adds the given index for the given shards.
-func (i *flexibleQueryScope) AddFieldShards(index IndexName, field FieldName, shards ...ShardID) QueryScope {
+func (i *flexibleQueryScope) AddFieldShards(index keys.Index, field keys.Field, shards ...keys.Shard) QueryScope {
 	if i.all {
 		return i
 	}
@@ -520,7 +548,7 @@ func (i *flexibleQueryScope) AddFieldShards(index IndexName, field FieldName, sh
 		}
 	}
 	if i.indexes == nil {
-		i.indexes = make(map[IndexName]*indexScope)
+		i.indexes = make(map[keys.Index]*indexScope)
 	}
 	scope := i.indexes[index]
 	if scope == nil {
@@ -531,7 +559,7 @@ func (i *flexibleQueryScope) AddFieldShards(index IndexName, field FieldName, sh
 	return i
 }
 
-func (i *flexibleQueryScope) Allowed(index IndexName, field FieldName, _ ViewName, shard ShardID) bool {
+func (i *flexibleQueryScope) Allowed(index keys.Index, field keys.Field, _ keys.View, shard keys.Shard) bool {
 	if i.all {
 		return true
 	}
@@ -587,13 +615,13 @@ func (i *flexibleQueryScope) Overlap(qw QueryScope) (out bool) {
 // not a good fit.
 type shardList struct {
 	all bool
-	any []ShardID
+	any []keys.Shard
 }
 
 // findShard returns the positive index at which shard was found
 // in the shard list, or the negative index at which it would have
 // been (and thus the insertion point for an add).
-func (s *shardList) findShard(shard ShardID) int {
+func (s *shardList) findShard(shard keys.Shard) int {
 	l, h := 0, len(s.any)
 	for h > l {
 		m := (h + l) / 2
@@ -617,7 +645,7 @@ func (s *shardList) findShard(shard ShardID) int {
 
 // Allowed indicates whether the given shard is currently included
 // in the set.
-func (s *shardList) Allowed(shard ShardID) bool {
+func (s *shardList) Allowed(shard keys.Shard) bool {
 	if s.all {
 		return true
 	}
@@ -653,7 +681,7 @@ func (s *shardList) Overlap(other shardList) bool {
 
 // Add adds the given shard to the shardlist, maintaining
 // sorted order.
-func (s *shardList) Add(shard ShardID) {
+func (s *shardList) Add(shard keys.Shard) {
 	if s.all {
 		return
 	}
@@ -661,7 +689,7 @@ func (s *shardList) Add(shard ShardID) {
 	// new item is the largest, so sorted lists are O(n)
 	// instead of O(n log n).
 	if len(s.any) == 0 {
-		s.any = []ShardID{shard}
+		s.any = []keys.Shard{shard}
 		return
 	}
 	if s.any[len(s.any)-1] < shard {

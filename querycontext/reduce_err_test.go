@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/molecula/featurebase/v3/keys"
 	"github.com/molecula/featurebase/v3/roaring"
 )
 
@@ -69,7 +70,7 @@ func (t *testTxStoreWrapper) dbPath(dbk dbKey) (string, error) {
 	return p, t.oopsie(err)
 }
 
-func (t *testTxStoreWrapper) keys(index IndexName, field FieldName, view ViewName, shard ShardID) (dbKey, fragKey) {
+func (t *testTxStoreWrapper) keys(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) (dbKey, fragKey) {
 	t.tb.Helper()
 	return t.inner.keys(index, field, view, shard)
 }
@@ -103,15 +104,15 @@ func (t *testQueryContextWrapper) Errorf(msg string, args ...interface{}) {
 	t.inner.Errorf(msg, args...)
 }
 
-func (t *testQueryContextWrapper) NewRead(index IndexName, field FieldName, view ViewName, shard ShardID) (*testQueryReadWrapper, error) {
+func (t *testQueryContextWrapper) Read(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) (*testQueryReadWrapper, error) {
 	t.tb.Helper()
-	qr, err := t.inner.NewRead(index, field, view, shard)
+	qr, err := t.inner.Read(index, field, view, shard)
 	return newTestQueryReadWrapper(t.tb, qr), t.oopsie(err)
 }
 
-func (t *testQueryContextWrapper) NewWrite(index IndexName, field FieldName, view ViewName, shard ShardID) (*testQueryWriteWrapper, error) {
+func (t *testQueryContextWrapper) Write(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) (*testQueryWriteWrapper, error) {
 	t.tb.Helper()
-	qw, err := t.inner.NewWrite(index, field, view, shard)
+	qw, err := t.inner.Write(index, field, view, shard)
 	return newTestQueryWriteWrapper(t.tb, qw), t.oopsie(err)
 }
 

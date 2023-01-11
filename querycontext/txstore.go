@@ -4,8 +4,12 @@ package querycontext
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/molecula/featurebase/v3/keys"
 )
 
 // TxStore represents a transactional database backend, mapping
@@ -30,10 +34,60 @@ type TxStore interface {
 	// Close attempts to shut down. It can fail if there are still
 	// open transactions.
 	Close() error
+
+	// DeleteIndex deletes the specified index. This may imply closing and
+	// deleting files. The close requires this to block until outstanding
+	// reads against this index complete. Reads that refer to an index that's
+	// being deleted may get partial results.
+	DeleteIndex(keys.Index) error
+
+	// DeleteField deletes the specified field. As with DeleteIndex, behavior
+	// when there are outstdanding reads may result in some reads seeing partial
+	// data.
+	DeleteField(keys.Index, keys.Field) error
+
+	// DeleteFragments deletes the specified views from the specified shards.
+	// The implementation is encouraged to bundle write operations, for instance,
+	// deleting all the views from each shard at once.
+	DeleteFragments(keys.Index, keys.Field, []keys.View, []keys.Shard) error
+
+	// ListFieldViews requests a list of fields/view pairs represented in a
+	// given index/shard. It is only sensical when using indexShardKeySplitter.
+	ListFieldViews(keys.Index, keys.Shard) (map[keys.Field][]keys.View, error)
+
+	// Backend gives a textual identifier for the backend, such as "rbf".
+	// Currently we only support one, but we have an API for exposing the
+	// information and some day we may want another again.
+	Backend() string
+
+	// DumpDot dumps a representation of the TxStore's current state in
+	// graphviz dot format to the provided writer.
+	DumpDot(w io.Writer) error
+
+	// Contents provides a hierarchical map of the TxStore's contents,
+	// according to the logical hierarchy of the database rather than
+	// whatever internal structure the TxStore uses.
+	Contents() (keys.DBContents, error)
+}
+
+// TxBackupRestore represents a TxStore that supports converting hunks of its
+// database to and from raw byte streams. Not every TxStore is a TxBackupRestore.
+type TxBackupRestore interface {
+	// Backup provides an io.ReadCloser which contains the data in some format
+	// compatible with Restore. For RBF, that would be "just an RBF file."
+	// The backup reflects the state of the provided query context, and Backup
+	// either closes that QueryContext on error, or returns a readcloser which
+	// releases it on Close.
+	Backup(QueryContext, keys.Index, keys.Shard) (io.ReadCloser, error)
+	// Restore takes a reader containing data compatible with the backend,
+	// such as an RBF file, and replaces all the existing data for this index
+	// and shard. It does not release or close the QueryContext.
+	Restore(QueryContext, keys.Index, keys.Shard, io.Reader) error
 }
 
 // verify that rbfTxStore implements this interface
 var _ TxStore = &rbfTxStore{}
+var _ TxBackupRestore = &rbfTxStore{}
 
 // dbKey is an identifier which can distinguish backend databases.
 type dbKey string
@@ -60,7 +114,19 @@ type KeySplitter interface {
 	// backing database, and thus that they must share a backing
 	// database transaction. The fragKey result is used by operations
 	// within the database backend.
-	keys(IndexName, FieldName, ViewName, ShardID) (dbKey, fragKey)
+	keys(keys.Index, keys.Field, keys.View, keys.Shard) (dbKey, fragKey)
+
+	// dbKey provides just the dbKey half. exercise caution; it's
+	// up to you to be sure you're varying this the right ways.
+	dbKey(keys.Index, keys.Field, keys.View, keys.Shard) dbKey
+	// fragKey provides just the fragKey half. exercise caution; it's
+	// up to you to be sure you're varying this the right ways.
+	fragKey(keys.Index, keys.Field, keys.View, keys.Shard) fragKey
+
+	// This is used essentially once, in the path where we have an existing
+	// RBF file and want to know what it contains. We only support the case
+	// where it's field/view right now.
+	parseFragKey(fragKey) (keys.Index, keys.Field, keys.View, keys.Shard, error)
 
 	// dbPath yields a filesystem-friendly string that corresponds to dbKey.
 	// possibly it is identical to dbKey, but you might want a terse dbKey
@@ -80,10 +146,34 @@ var _ KeySplitter = &flexibleKeySplitter{}
 // (the default for RBF).
 type indexShardKeySplitter struct{}
 
-func (*indexShardKeySplitter) keys(index IndexName, field FieldName, view ViewName, shard ShardID) (dbKey, fragKey) {
-	d := dbKey(fmt.Sprintf("%s/%08x", index, shard))
-	t := fragKey(fmt.Sprintf("%s:%s", field, view))
-	return d, t
+// Compatibility note: The existing database format uses this as its proposed name for the directory for a database:
+// path := dbs.HolderPath + sep + dbs.Index + sep + backendsDir + sep + ty.DirectoryName() + sep + fmt.Sprintf("shard.%04v", dbs.Shard)
+// and the field/view keys used in the database are:
+// ~field;view<
+// we're using these for compatibility.
+
+func (i *indexShardKeySplitter) keys(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) (dbKey, fragKey) {
+	return i.dbKey(index, field, view, shard), i.fragKey(index, field, view, shard)
+}
+
+func (*indexShardKeySplitter) dbKey(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) dbKey {
+	return dbKey(fmt.Sprintf("%s/%08x", index, shard))
+}
+
+func (*indexShardKeySplitter) fragKey(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) fragKey {
+	return fragKey(fmt.Sprintf("~%s;%s<", field, view))
+}
+
+func (*indexShardKeySplitter) parseFragKey(fk fragKey) (keys.Index, keys.Field, keys.View, keys.Shard, error) {
+	l := len(fk)
+	if l < 3 || fk[0] != '~' || fk[l-1] != '<' {
+		return "", "", "", 0, fmt.Errorf("malformed frag key %q", fk)
+	}
+	semi := strings.IndexByte(string(fk), ';')
+	if semi == -1 {
+		return "", "", "", 0, fmt.Errorf("malformed frag key %q", fk)
+	}
+	return "", keys.Field(fk[1:semi]), keys.View(fk[semi+1 : l-1]), 0, nil
 }
 
 func (*indexShardKeySplitter) Scope() QueryScope {
@@ -95,19 +185,35 @@ func (*indexShardKeySplitter) dbPath(dbk dbKey) (string, error) {
 	if slash == -1 {
 		return "", fmt.Errorf("malformed dbKey %q", dbk)
 	}
-	paths := [4]string{"indexes", "", "shards", ""}
-	paths[1] = string(dbk)[:slash]
-	paths[3] = string(dbk)[slash+1:]
+	index := string(dbk)[:slash]
+	shardHex := string(dbk)[slash+1:]
+	shardNum, err := strconv.ParseInt(shardHex, 16, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid hex shard number in dbKey %q", dbk)
+	}
+	// the %04d here is a compatibility thing with old short_txkey and should
+	// probably be fixed.
+	paths := [5]string{index, "backends", "rbf", "shard." + fmt.Sprintf("%04d", shardNum)}
 	return filepath.Join(paths[:]...), nil
 }
 
 // fieldShardKeySplitter splits the database by field,shard pairs.
 type fieldShardKeySplitter struct{}
 
-func (*fieldShardKeySplitter) keys(index IndexName, field FieldName, view ViewName, shard ShardID) (dbKey, fragKey) {
-	d := dbKey(fmt.Sprintf("%s/%s/%08x", index, field, shard))
-	t := fragKey(view)
-	return d, t
+func (f *fieldShardKeySplitter) keys(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) (dbKey, fragKey) {
+	return f.dbKey(index, field, view, shard), f.fragKey(index, field, view, shard)
+}
+
+func (*fieldShardKeySplitter) dbKey(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) dbKey {
+	return dbKey(fmt.Sprintf("%s/%s/%08x", index, field, shard))
+}
+
+func (*fieldShardKeySplitter) fragKey(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) fragKey {
+	return fragKey(view)
+}
+
+func (*fieldShardKeySplitter) parseFragKey(fk fragKey) (keys.Index, keys.Field, keys.View, keys.Shard, error) {
+	return "", "", "", 0, errUnimplemented
 }
 
 func (*fieldShardKeySplitter) dbPath(dbk dbKey) (string, error) {
@@ -139,26 +245,46 @@ func (*fieldShardKeySplitter) Scope() QueryScope {
 // exists primarily to explore the API space. Do not alter the splitIndexes
 // map after initial creation, it will produce inconsistent results.
 type flexibleKeySplitter struct {
-	splitIndexes map[IndexName]struct{}
+	splitIndexes map[keys.Index]struct{}
 }
 
 // NewFlexibleKeySplitter creates a KeySplitter which uses index/shard
 // splits by default, but splits things into fields if they're in the
 // indexes provided. This design is experimental, and should be considered
 // pre-deprecated for production use for now.
-func NewFlexibleKeySplitter(indexes ...IndexName) *flexibleKeySplitter {
-	splitIndexes := make(map[IndexName]struct{}, len(indexes))
+func NewFlexibleKeySplitter(indexes ...keys.Index) *flexibleKeySplitter {
+	splitIndexes := make(map[keys.Index]struct{}, len(indexes))
 	for _, index := range indexes {
 		splitIndexes[index] = struct{}{}
 	}
 	return &flexibleKeySplitter{splitIndexes: splitIndexes}
 }
 
-func (f *flexibleKeySplitter) keys(index IndexName, field FieldName, view ViewName, shard ShardID) (dbKey, fragKey) {
+func (f *flexibleKeySplitter) keys(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) (dbKey, fragKey) {
 	if _, ok := f.splitIndexes[index]; ok {
 		return (&fieldShardKeySplitter{}).keys(index, field, view, shard)
 	}
 	return (&indexShardKeySplitter{}).keys(index, field, view, shard)
+}
+
+func (f *flexibleKeySplitter) dbKey(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) dbKey {
+	if _, ok := f.splitIndexes[index]; ok {
+		return (&fieldShardKeySplitter{}).dbKey(index, field, view, shard)
+	}
+	return (&indexShardKeySplitter{}).dbKey(index, field, view, shard)
+}
+
+func (f *flexibleKeySplitter) fragKey(index keys.Index, field keys.Field, view keys.View, shard keys.Shard) fragKey {
+	if _, ok := f.splitIndexes[index]; ok {
+		return (&fieldShardKeySplitter{}).fragKey(index, field, view, shard)
+	}
+	return (&indexShardKeySplitter{}).fragKey(index, field, view, shard)
+}
+
+// unimplemented because we don't want to figure out what the fragkey implies, and
+// in any event we only ever get called with the index style ones
+func (*flexibleKeySplitter) parseFragKey(fk fragKey) (keys.Index, keys.Field, keys.View, keys.Shard, error) {
+	return "", "", "", 0, errUnimplemented
 }
 
 func (f *flexibleKeySplitter) dbPath(dbk dbKey) (string, error) {
@@ -166,7 +292,7 @@ func (f *flexibleKeySplitter) dbPath(dbk dbKey) (string, error) {
 	if slash == -1 {
 		return "", fmt.Errorf("malformed dbKey %q", dbk)
 	}
-	if _, ok := f.splitIndexes[IndexName(dbk)[:slash]]; ok {
+	if _, ok := f.splitIndexes[keys.Index(dbk)[:slash]]; ok {
 		return (&fieldShardKeySplitter{}).dbPath(dbk)
 	}
 	return (&indexShardKeySplitter{}).dbPath(dbk)
@@ -174,4 +300,84 @@ func (f *flexibleKeySplitter) dbPath(dbk dbKey) (string, error) {
 
 func (f *flexibleKeySplitter) Scope() QueryScope {
 	return &flexibleQueryScope{splitter: f}
+}
+
+type unimplementedError struct{}
+
+func (unimplementedError) Error() string {
+	return "unimplemented"
+}
+
+var errUnimplemented unimplementedError
+
+type noValidStoreError struct{}
+
+func (noValidStoreError) Error() string {
+	return "no valid TxStore selected"
+}
+
+var errNoValidStore noValidStoreError
+
+var _ TxStore = &nopTxStore{}
+
+// nopTxStore is a TxStore that always fails and won't let you do anything.
+type nopTxStore struct {
+	indexShardKeySplitter
+}
+
+var NopTxStore = &nopTxStore{}
+
+// NewQueryContext yields a new query context which is read-only.
+func (*nopTxStore) NewQueryContext(context.Context) (QueryContext, error) {
+	return nil, errNoValidStore
+}
+
+// NewWriteQueryContext yields a new query context which can
+// write to the things in the given QueryScope
+func (*nopTxStore) NewWriteQueryContext(context.Context, QueryScope) (QueryContext, error) {
+	return nil, errNoValidStore
+}
+
+func (*nopTxStore) DumpDot(w io.Writer) error {
+	return errNoValidStore
+}
+
+func (*nopTxStore) Backend() string {
+	return "none"
+}
+
+// Close attempts to shut down. It can fail if there are still
+// open transactions.
+func (*nopTxStore) Close() error {
+	return nil
+}
+
+// DeleteIndex deletes the specified index. This may imply closing and
+// deleting files. The close requires this to block until outstanding
+// reads against this index complete. Reads that refer to an index that's
+// being deleted may get partial results.
+func (*nopTxStore) DeleteIndex(keys.Index) error {
+	return errNoValidStore
+}
+
+// DeleteField deletes the specified field. As with DeleteIndex, behavior
+// when there are outstdanding reads may result in some reads seeing partial
+// data.
+func (*nopTxStore) DeleteField(keys.Index, keys.Field) error {
+	return errNoValidStore
+}
+
+// DeleteFragments deletes the specified views from the specified shards.
+// The implementation is encouraged to bundle write operations, for instance,
+// deleting all the views from each shard at once.
+func (*nopTxStore) DeleteFragments(keys.Index, keys.Field, []keys.View, []keys.Shard) error {
+	return errNoValidStore
+}
+
+func (*nopTxStore) ListFieldViews(keys.Index, keys.Shard) (map[keys.Field][]keys.View, error) {
+	return nil, errNoValidStore
+}
+
+func (*nopTxStore) Contents() (keys.DBContents, error) {
+	return nil, errNoValidStore
 }

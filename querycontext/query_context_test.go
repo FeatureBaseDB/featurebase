@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/molecula/featurebase/v3/keys"
 	rbfcfg "github.com/molecula/featurebase/v3/rbf/cfg"
 	"golang.org/x/sync/errgroup"
 )
@@ -29,7 +30,7 @@ var rbfTestConfig = func() *rbfcfg.Config {
 // for instance if the test leaves a QueryContext open. Neat, huh!
 func testTxStore(tb testing.TB, path string, ks KeySplitter) *testTxStoreWrapper {
 	dir := filepath.Join(tb.TempDir(), path)
-	txs, err := NewRBFTxStore(dir, rbfTestConfig, ks)
+	txs, err := NewRBFTxStore(dir, rbfTestConfig, nil, nil, ks)
 	if err != nil {
 		tb.Fatalf("opening TxStore: %v", err)
 	}
@@ -45,7 +46,7 @@ func testTxStore(tb testing.TB, path string, ks KeySplitter) *testTxStoreWrapper
 func TestTxStoreClose(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "foo")
 	ctx := context.Background()
-	txs, err := NewRBFTxStore(dir, rbfTestConfig, nil)
+	txs, err := NewRBFTxStore(dir, rbfTestConfig, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("opening TxStore: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestTxStoreClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating initial query context: %v", err)
 	}
-	_, err = qcx.NewWrite("i", "f", "v", 0)
+	_, err = qcx.Write("i", "f", "v", 0)
 	if err == nil {
 		t.Fatalf("should get error requesting a write from a read qcx")
 	}
@@ -85,12 +86,12 @@ func TestTxStoreClose(t *testing.T) {
 func TestShardList(t *testing.T) {
 	rng := rand.New(rand.NewSource(3))
 	prev := &shardList{}
-	prevSeen := map[ShardID]struct{}{}
+	prevSeen := map[keys.Shard]struct{}{}
 	for i := 0; i < 20; i++ {
 		sl := &shardList{}
-		seen := make(map[ShardID]struct{})
+		seen := make(map[keys.Shard]struct{})
 		for j := 0; j < 20; j++ {
-			add := ShardID(rng.Intn(20))
+			add := keys.Shard(rng.Intn(20))
 			sl.Add(add)
 			seen[add] = struct{}{}
 		}
@@ -104,7 +105,7 @@ func TestShardList(t *testing.T) {
 			}
 		}
 		// verify that we neither allow things not included, nor disallow things included
-		for j := ShardID(0); j < 20; j++ {
+		for j := keys.Shard(0); j < 20; j++ {
 			_, ok1 := seen[j]
 			ok2 := sl.Allowed(j)
 			if ok1 != ok2 {
@@ -134,7 +135,7 @@ func TestTxStore(t *testing.T) {
 	ctx := context.Background()
 	txs := testTxStore(t, "foo", nil)
 	q, _ := txs.NewQueryContext(ctx)
-	_, _ = q.NewRead("i", "f", "v", 0)
+	_, _ = q.Read("i", "f", "v", 0)
 	txs.expect(1)
 	err := txs.Close()
 	if err == nil {
@@ -166,9 +167,9 @@ func TestTxStore(t *testing.T) {
 // writeReq represents a possible write request. some of them will
 // actually just read, and don't need to be within write scope.
 type writeReq struct {
-	index    IndexName
-	field    FieldName
-	shard    ShardID
+	index    keys.Index
+	field    keys.Field
+	shard    keys.Shard
 	justRead bool
 }
 
@@ -182,8 +183,8 @@ func satisfyWriteRequest(t *testing.T, txs *testTxStoreWrapper, requests []write
 	scope := txs.Scope()
 	prevIndex := requests[0].index
 	prevField := requests[0].field
-	shards := []ShardID{requests[0].shard}
-	add := func(index IndexName, field FieldName, shards ...ShardID) {
+	shards := []keys.Shard{requests[0].shard}
+	add := func(index keys.Index, field keys.Field, shards ...keys.Shard) {
 		if field == "" {
 			if len(shards) == 1 && shards[0] == 0 {
 				scope.AddIndex(index)
@@ -224,20 +225,20 @@ func satisfyWriteRequest(t *testing.T, txs *testTxStoreWrapper, requests []write
 	for _, i := range rand.Perm(len(requests)) {
 		req := requests[i]
 		if req.justRead {
-			qr, err := qcx.NewRead(req.index, req.field, "v", req.shard)
+			qr, err := qcx.Read(req.index, req.field, "v", req.shard)
 			if err != nil {
 				return err
 			}
 			_, _ = qr.Contains(1)
 			if !scope.Allowed(req.index, req.field, "v", req.shard) {
 				qcx.expect(1)
-				_, err := qcx.NewWrite(req.index, req.field, "v", req.shard)
+				_, err := qcx.Write(req.index, req.field, "v", req.shard)
 				if err == nil {
 					qcx.Error("write was allowed when it should have been out of scope")
 				}
 			}
 		} else {
-			qw, err := qcx.NewWrite(req.index, req.field, "v", req.shard)
+			qw, err := qcx.Write(req.index, req.field, "v", req.shard)
 			if err != nil {
 				return err
 			}
@@ -270,7 +271,7 @@ func delayWriteRequest(t *testing.T, txs *testTxStoreWrapper, writeList []writeR
 	}
 	for _, i := range rand.Perm(len(writeList)) {
 		write := writeList[i]
-		qw, err := qcx.NewWrite(write.index, write.field, "v", write.shard)
+		qw, err := qcx.Write(write.index, write.field, "v", write.shard)
 		if err != nil {
 			qcx.Release()
 			return nil, err
@@ -288,7 +289,7 @@ func testSomeWriteRequests(t *testing.T, writeRequests [][]writeReq) {
 	// try some of these with a splitIndexes splitter, some with an indexShard splitter,
 	// so they both get tested
 	if len(writeRequests)%3 == 1 {
-		splitter = &flexibleKeySplitter{splitIndexes: map[IndexName]struct{}{"a": {}}}
+		splitter = &flexibleKeySplitter{splitIndexes: map[keys.Index]struct{}{"a": {}}}
 	} else {
 		splitter = &indexShardKeySplitter{}
 	}
@@ -494,15 +495,15 @@ func buildRequestsFromBytes(data []byte) [][]writeReq {
 	total := 0
 	for len(data) >= 2 {
 		idx := data[0] % 5
-		index := IndexName(rune(idx) + 'a')
+		index := keys.Index(rune(idx) + 'a')
 		total += int(idx)
 		fld := (data[0] / 5) % 3
-		field := FieldName(rune(fld) + 'a')
+		field := keys.Field(rune(fld) + 'a')
 		// generate some index-only requests
 		if fld == 0 {
 			field = ""
 		}
-		shard := ShardID(data[1] % 8)
+		shard := keys.Shard(data[1] % 8)
 		total += int(shard)
 		// some requests are just reads. reads won't be added to our scope, so if there's
 		// no corresponding write, they'll be outside of scope, so we're verifying that we
@@ -537,4 +538,8 @@ func FuzzWriteRequests(f *testing.F) {
 		writeRequests := buildRequestsFromBytes(data)
 		testSomeWriteRequests(t, writeRequests)
 	})
+}
+
+func TestNopTxStore(t *testing.T) {
+	NopTxStore.Scope()
 }

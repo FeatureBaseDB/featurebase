@@ -11,7 +11,7 @@ func TestRbfWrite(t *testing.T) {
 	ctx := context.Background()
 	txs := testTxStore(t, "foo", nil)
 	q, _ := txs.NewWriteQueryContext(ctx, txs.Scope().AddIndex("i"))
-	wr, _ := q.NewWrite("i", "f", "v", 0)
+	wr, _ := q.Write("i", "f", "v", 0)
 	_, _ = wr.Add(23, 25)
 	_, _ = wr.Remove(25)
 	// putting nil and removing a missing container are no-ops
@@ -35,7 +35,7 @@ func TestRbfWrite(t *testing.T) {
 	// they're all one-line functions anyway.
 	_ = q.Commit()
 	q, _ = txs.NewQueryContext(ctx)
-	rd, _ := q.NewRead("i", "f", "v", 0)
+	rd, _ := q.Read("i", "f", "v", 0)
 	ok, _ := rd.Contains(23)
 	if !ok {
 		t.Fatalf("no 23")

@@ -5,12 +5,14 @@ import (
 	"context"
 	"os"
 	"testing"
+
+	"github.com/molecula/featurebase/v3/keys"
 )
 
 func TestDot(t *testing.T) {
 	// test this with two splitters, one of which is the default indexShardKeySplitter. the second one will overwrite
 	// the output from the first one.
-	for _, splitter := range []KeySplitter{&flexibleKeySplitter{splitIndexes: map[IndexName]struct{}{"i": {}}}, nil} {
+	for _, splitter := range []KeySplitter{&flexibleKeySplitter{splitIndexes: map[keys.Index]struct{}{"i": {}}}, nil} {
 		txs := testTxStore(t, "foo", splitter)
 		file, err := os.Create("test.dot")
 		if err != nil {
@@ -19,16 +21,16 @@ func TestDot(t *testing.T) {
 		defer file.Close()
 		q, _ := txs.NewWriteQueryContext(context.Background(), txs.Scope().AddIndex("i").AddIndexShards("k", 0))
 		defer q.Release()
-		q.NewWrite("i", "f", "v", 0)
-		q.NewWrite("i", "g", "v", 0)
-		q.NewWrite("i", "f", "v", 1)
+		q.Write("i", "f", "v", 0)
+		q.Write("i", "g", "v", 0)
+		q.Write("i", "f", "v", 1)
 		// read, but it's in a writable thing, so still creates rbfQueryWrite
-		q.NewRead("i", "f", "v", 2)
-		q.NewRead("j", "f", "v", 0)
+		q.Read("i", "f", "v", 2)
+		q.Read("j", "f", "v", 0)
 		q2, _ := txs.NewQueryContext(context.Background())
 		defer q2.Release()
-		q2.NewRead("i", "f", "v", 0)
-		q2.NewRead("i", "g", "v", 0)
+		q2.Read("i", "f", "v", 0)
+		q2.Read("i", "g", "v", 0)
 		var dg dotGraph
 		// we know what we actually have here...
 		inner := txs.inner
