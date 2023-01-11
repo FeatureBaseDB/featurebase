@@ -239,6 +239,7 @@ func (c *ShareableCluster) Len() int {
 	return len(c.Nodes)
 }
 
+// ImportBitsWithTimestamp imports the given bits with (optional) timestamps. RowCols are {row,col}.
 func (c *ShareableCluster) ImportBitsWithTimestamp(t testing.TB, index, field string, rowcols [][2]uint64, timestamps []int64) {
 	t.Helper()
 	byShard := make(map[uint64][][2]uint64)
@@ -307,6 +308,7 @@ func (c *ShareableCluster) ImportBitsWithTimestamp(t testing.TB, index, field st
 	}
 }
 
+// ImportBits imports the given bits. RowCols are {row,col}.
 func (c *ShareableCluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
 	var noTime []int64
 	c.ImportBitsWithTimestamp(t, index, field, rowcols, noTime)
