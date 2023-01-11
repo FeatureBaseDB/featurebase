@@ -239,7 +239,7 @@ func (e *executor) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q *pq
 	var qcx qc.QueryContext
 	var err error
 	if needWriteTxn {
-		qcx, err = e.Holder.NewIndexQueryContext(ctx, index)
+		qcx, err = e.Holder.NewIndexQueryContext(ctx, index, shards...)
 	} else {
 		qcx, err = e.Holder.NewQueryContext(ctx)
 	}
