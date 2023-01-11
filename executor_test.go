@@ -1785,7 +1785,6 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 	})
-
 }
 
 func TestExecutor_ExecuteTopK(t *testing.T) {
@@ -1830,8 +1829,7 @@ func TestExecutor_ExecuteTopK(t *testing.T) {
 
 	for _, tst := range tests {
 		t.Run(tst.fieldName, func(t *testing.T) {
-			pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10)
-			c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, tst.fieldName)
+			c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, tst.fieldName, pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10))
 			c.ImportBits(t, c.Idx(), tst.fieldName, tst.bits)
 			if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: tst.query}); err != nil {
 				t.Fatal(err)
