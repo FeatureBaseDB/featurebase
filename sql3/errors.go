@@ -115,7 +115,8 @@ const (
 	ErrAggregateNotAllowedInGroupBy errors.Code = "ErrIdPercentileNotAllowedInGroupBy"
 
 	// function evaluation
-	ErrValueOutOfRange errors.Code = "ErrValueOutOfRange"
+	ErrValueOutOfRange      errors.Code = "ErrValueOutOfRange"
+	ErrStringLengthMismatch errors.Code = "ErrStringLengthMismatch"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -703,5 +704,12 @@ func NewErrValueOutOfRange(line, col int, val interface{}) error {
 	return errors.New(
 		ErrValueOutOfRange,
 		fmt.Sprintf("[%d:%d] value '%v' out of range", line, col, val),
+	)
+}
+
+func NewErrStringLengthMismatch(line, col, len int, val interface{}) error {
+	return errors.New(
+		ErrStringLengthMismatch,
+		fmt.Sprintf("[%d:%d] value '%v' should be of the length %d", line, col, val, len),
 	)
 }

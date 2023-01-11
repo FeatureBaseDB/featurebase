@@ -1496,6 +1496,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateStringSplit(currentRow)
 	case "CHAR":
 		return n.EvaluateChar(currentRow)
+	case "ASCII":
+		return n.EvaluateAscii(currentRow)
 	case "SUBSTRING":
 		return n.EvaluateSubstring(currentRow)
 	case "LOWER":
