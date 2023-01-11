@@ -1787,6 +1787,46 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 	})
 }
 
+func TestExecutor_ClusterDeadlock(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	apis := make([]*pilosa.API, 3)
+	for i, n := range c.Nodes {
+		apis[i] = n.API
+	}
+	var bits [][2]uint64
+	for i := 0; i < 100; i++ {
+		// first column in each of 100 shards
+		bits = append(bits, [2]uint64{uint64(i) % 3, uint64(i) * ShardWidth})
+	}
+	// c.CreateField implicitly creates the index, which is fine for our purposes.
+	c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, "f")
+	c.ImportBits(t, c.Idx(), "f", bits)
+	// now, we want to randomly store one row into another... but we want to do it
+	// on all three nodes at once, simultaneously.
+	//
+	// The issue is that, with QueryContext, we try to hold a lock on the QueryContext
+	// for the whole life of an operation. So if every node starts an operation, locks
+	// everything, then holds that lock while forwarding parts to other nodes, that
+	// will deadlock.
+	for i := 0; i < 5; i++ {
+		i := i
+		var eg errgroup.Group
+		for j, api := range apis {
+			query := fmt.Sprintf("Store(Row(f=%d), f=%d)", i%3, j+3)
+			api := api
+			eg.Go(func() error {
+				_, err := api.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: query})
+				return err
+			})
+		}
+		err := eg.Wait()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+}
+
 func TestExecutor_ExecuteTopK(t *testing.T) {
 	baseBits := [][2]uint64{
 		{0, 0},
