@@ -19,6 +19,8 @@ var TableTests []TableTest = []TableTest{
 	orderByTests,
 	distinctTests,
 
+	subqueryTests,
+
 	topTests,
 
 	deleteTests,

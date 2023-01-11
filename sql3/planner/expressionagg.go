@@ -259,6 +259,24 @@ func (m *aggregateSum) Update(ctx context.Context, row types.Row) error {
 		}
 		dsum = pql.AddDecimal(dsum, val)
 		m.sum = dsum
+
+	case *parser.DataTypeInt:
+		val, ok := v.(int64)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+		var dsum int64
+		if m.sum != nil {
+			dsum, ok = m.sum.(int64)
+			if !ok {
+				return sql3.NewErrInternalf("unexpected type conversion '%T'", m.sum)
+			}
+		} else {
+			dsum = 0
+		}
+		dsum = dsum + val
+		m.sum = dsum
+
 	default:
 		return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
 	}
@@ -269,6 +287,13 @@ func (m *aggregateSum) Eval(ctx context.Context) (interface{}, error) {
 	switch m.expr.Type().(type) {
 	case *parser.DataTypeDecimal:
 		dsum, ok := m.sum.(pql.Decimal)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected type conversion '%T'", m.sum)
+		}
+		return dsum, nil
+
+	case *parser.DataTypeInt:
+		dsum, ok := m.sum.(int64)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected type conversion '%T'", m.sum)
 		}
