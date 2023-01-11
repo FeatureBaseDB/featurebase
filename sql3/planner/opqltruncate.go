@@ -6,10 +6,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/pql"
-	"github.com/molecula/featurebase/v3/sql3"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // TODO (pok) we should look at a drop and recreate, or an actual truncate PQL op

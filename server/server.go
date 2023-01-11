@@ -27,30 +27,30 @@ import (
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/authn"
-	"github.com/featurebasedb/featurebase/v3/authz"
-	"github.com/featurebasedb/featurebase/v3/boltdb"
-	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/computer"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/encoding/proto"
-	petcd "github.com/featurebasedb/featurebase/v3/etcd"
-	"github.com/featurebasedb/featurebase/v3/gcnotify"
-	"github.com/featurebasedb/featurebase/v3/gopsutil"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	pnet "github.com/featurebasedb/featurebase/v3/net"
-	"github.com/featurebasedb/featurebase/v3/prometheus"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner"
-	"github.com/featurebasedb/featurebase/v3/statik"
-	"github.com/featurebasedb/featurebase/v3/stats"
-	"github.com/featurebasedb/featurebase/v3/statsd"
-	"github.com/featurebasedb/featurebase/v3/systemlayer"
-	"github.com/featurebasedb/featurebase/v3/syswrap"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	"github.com/pelletier/go-toml"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
+        "github.com/featurebasedb/featurebase/v3/authn"
+        "github.com/featurebasedb/featurebase/v3/authz"
+        "github.com/featurebasedb/featurebase/v3/dax"
+        "github.com/featurebasedb/featurebase/v3/dax/computer"
+        "github.com/featurebasedb/featurebase/v3/dax/storage"
+        "github.com/featurebasedb/featurebase/v3/disco"
+        "github.com/featurebasedb/featurebase/v3/encoding/proto"
+        petcd "github.com/featurebasedb/featurebase/v3/etcd"
+        "github.com/featurebasedb/featurebase/v3/gcnotify"
+        "github.com/featurebasedb/featurebase/v3/gopsutil"
+        "github.com/featurebasedb/featurebase/v3/logger"
+        pnet "github.com/featurebasedb/featurebase/v3/net"
+        "github.com/featurebasedb/featurebase/v3/prometheus"
+        "github.com/featurebasedb/featurebase/v3/sql3"
+        "github.com/featurebasedb/featurebase/v3/sql3/planner"
+        "github.com/featurebasedb/featurebase/v3/statik"
+        "github.com/featurebasedb/featurebase/v3/stats"
+        "github.com/featurebasedb/featurebase/v3/statsd"
+        "github.com/featurebasedb/featurebase/v3/systemlayer"
+        "github.com/featurebasedb/featurebase/v3/syswrap"
+        "github.com/featurebasedb/featurebase/v3/testhook"
+        "github.com/pelletier/go-toml"
+        "github.com/pkg/errors"
+        "golang.org/x/sync/errgroup"
 )
 
 type loggerLogger interface {
@@ -737,7 +737,7 @@ func (m *Command) setupLogger() error {
 	var f *logger.FileWriter
 	var err error
 	if m.Config.LogPath != "" {
-		f, err = logger.NewFileWriter(m.Config.LogPath)
+		f, err = logger.NewFileWriter(m.Config.LogPath, 0640)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}

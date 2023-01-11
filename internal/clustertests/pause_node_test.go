@@ -16,7 +16,6 @@ import (
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
-	boltdb "github.com/featurebasedb/featurebase/v3/boltdb"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/net"

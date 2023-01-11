@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/molecula/featurebase/v3/bufferpool"
+	"github.com/featurebasedb/featurebase/v3/bufferpool"
 	"github.com/stretchr/testify/assert"
 )
 

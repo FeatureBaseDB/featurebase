@@ -1,6 +1,6 @@
 package defs
 
-import "github.com/molecula/featurebase/v3/pql"
+import "github.com/featurebasedb/featurebase/v3/pql"
 
 // distinct tests
 var distinctTests = TableTest{

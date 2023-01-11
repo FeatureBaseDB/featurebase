@@ -7,10 +7,10 @@ import (
 
 	"testing"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/snapshotter"
-	"github.com/molecula/featurebase/v3/dax/writelogger"
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
+	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/assert"
 )
 

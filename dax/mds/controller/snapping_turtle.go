@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan struct{}) {

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/molecula/featurebase/v3/dax"
-	"github.com/molecula/featurebase/v3/dax/computer"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
 )
 
 // TODO this needs to be genericized and moved

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/boltdb"
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	pb "github.com/featurebasedb/featurebase/v3/proto"

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/molecula/featurebase/v3/bufferpool"
+	"github.com/featurebasedb/featurebase/v3/bufferpool"
 )
 
 // ExtendibleHashTable is an extendible hash table implementation backed by a buffer
