@@ -18,6 +18,32 @@ var stringScalarFunctionsTests = TableTest{
 	),
 	SQLTests: []SQLTest{
 		{
+			name: "ReverseNull",
+			SQLs: sqls(
+				"select reverse(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "ReverseEmpty",
+			SQLs: sqls(
+				"select reverse('')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
 			name: "ReverseString",
 			SQLs: sqls(
 				"select reverse('this')",
@@ -44,6 +70,32 @@ var stringScalarFunctionsTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "SubstringNull",
+			SQLs: sqls(
+				"select substring(null, 1, 3)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "SubstringNullInt",
+			SQLs: sqls(
+				"select substring('some_string', null, 3)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
 			name: "SubstringPositiveIndex",
 			SQLs: sqls(
 				"select substring('testing', 1, 3)",
@@ -53,32 +105,6 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			ExpRows: rows(
 				row(string("est")),
-			),
-			Compare: CompareExactUnordered,
-		},
-		{
-			name: "StringSplitNoPos",
-			SQLs: sqls(
-				"select stringsplit('string,split', ',')",
-			),
-			ExpHdrs: hdrs(
-				hdr("", fldTypeString),
-			),
-			ExpRows: rows(
-				row(string("string")),
-			),
-			Compare: CompareExactUnordered,
-		},
-		{
-			name: "StringSplitPos",
-			SQLs: sqls(
-				"select stringsplit('string,split,now', stringsplit(',mid,', 'mid', 1), 2)",
-			),
-			ExpHdrs: hdrs(
-				hdr("", fldTypeString),
-			),
-			ExpRows: rows(
-				row(string("now")),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -123,6 +149,58 @@ var stringScalarFunctionsTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "StringSplitNull",
+			SQLs: sqls(
+				"select stringsplit(null, ',')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "StringSplitNoPos",
+			SQLs: sqls(
+				"select stringsplit('string,split', ',')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("string")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "StringSplitPos",
+			SQLs: sqls(
+				"select stringsplit('string,split,now', stringsplit(',mid,', 'mid', 1), 2)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("now")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "CharNull",
+			SQLs: sqls(
+				"select char(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
 			name: "CharInt",
 			SQLs: sqls(
 				"select char(82)",
@@ -141,6 +219,59 @@ var stringScalarFunctionsTests = TableTest{
 				"select char('R')",
 			),
 			ExpErr: "integer expression expected",
+		},
+		{
+			name: "ASCIINull",
+			SQLs: sqls(
+				"select ascii(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "ASCIILengthMisMatch",
+			SQLs: sqls(
+				"select ascii('longer')",
+			),
+			ExpErr: "[0:0] value 'longer' should be of the length 1",
+		},
+		{
+			name: "ASCIIString",
+			SQLs: sqls(
+				"select ascii('R')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(82)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "ASCIIInt",
+			SQLs: sqls(
+				"select ascii(32)",
+			),
+			ExpErr: "string expression expected",
+		},
+		{
+			name: "UpperNull",
+			SQLs: sqls(
+				"select upper(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
 		},
 		{
 			name: "ConvertingStringtoUpper",
@@ -170,6 +301,19 @@ var stringScalarFunctionsTests = TableTest{
 			ExpErr: "string expression expected",
 		},
 		{
+			name: "LowerNull",
+			SQLs: sqls(
+				"select lower(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "StringLower",
 			SQLs: sqls(
 				"select lower('AaBbCcDdEeFfGg-_0123')",
@@ -195,6 +339,32 @@ var stringScalarFunctionsTests = TableTest{
 				"select lower(1234)",
 			),
 			ExpErr: "string expression expected",
+		},
+		{
+			name: "ReplaceAllNullString",
+			SQLs: sqls(
+				"select replaceall(null,'data','feature')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "ReplaceAllNullArg",
+			SQLs: sqls(
+				"select replaceall('hello database',null,'feature')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			name: "ReplaceAllString",
@@ -250,6 +420,19 @@ var stringScalarFunctionsTests = TableTest{
 			ExpErr: "string expression expected",
 		},
 		{
+			name: "TrimNull",
+			SQLs: sqls(
+				"select trim(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "RemovingWhitespacefromStringusingTrim",
 			SQLs: sqls(
 				"select trim('  this  ')",
@@ -277,6 +460,19 @@ var stringScalarFunctionsTests = TableTest{
 			ExpErr: "string expression expected",
 		},
 		//Prefix()
+		{
+			name: "PrefixNull",
+			SQLs: sqls(
+				"SELECT PREFIX(NULL, 34)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
 		{
 			name: "IncorrectArgumentsforPrefix",
 			SQLs: sqls(
@@ -346,6 +542,19 @@ var stringScalarFunctionsTests = TableTest{
 		},
 		//Suffix()
 		{
+			name: "SuffixNull",
+			SQLs: sqls(
+				"SELECT SUFFIX(NULL, 23)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "IncorrectArgumentsforSuffix",
 			SQLs: sqls(
 				"SELECT SUFFIX('string')",
@@ -413,6 +622,19 @@ var stringScalarFunctionsTests = TableTest{
 			Compare: CompareExactOrdered,
 		},
 		{
+			name: "RTrimNull",
+			SQLs: sqls(
+				"select rtrim(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "RemovingTrailingspacefromStringusingRTrim",
 			SQLs: sqls(
 				"select rtrim('  this  ')",
@@ -438,6 +660,19 @@ var stringScalarFunctionsTests = TableTest{
 				"select rtrim(1)",
 			),
 			ExpErr: "string expression expected",
+		},
+		{
+			name: "LTrimNull",
+			SQLs: sqls(
+				"select ltrim(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
 		},
 		{
 			name: "RemovingLeadingspacefromStringusingLTrim",
