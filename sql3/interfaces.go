@@ -3,6 +3,7 @@ package sql3
 
 import (
 	"context"
+	"io"
 
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
@@ -10,6 +11,7 @@ import (
 
 type CompilePlanner interface {
 	CompilePlan(context.Context, parser.Statement) (types.PlanOperator, error)
+	RehydratePlanOp(context.Context, io.Reader) (types.PlanOperator, error)
 }
 
 // Ensure type implements interface.
@@ -23,5 +25,9 @@ func NewNopCompilePlanner() *NopCompilePlanner {
 }
 
 func (p *NopCompilePlanner) CompilePlan(ctx context.Context, stmt parser.Statement) (types.PlanOperator, error) {
+	return nil, nil
+}
+
+func (p *NopCompilePlanner) RehydratePlanOp(ctx context.Context, reader io.Reader) (types.PlanOperator, error) {
 	return nil, nil
 }

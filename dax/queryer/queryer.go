@@ -22,7 +22,6 @@ import (
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner"
 	plannertypes "github.com/molecula/featurebase/v3/sql3/planner/types"
-	"github.com/molecula/featurebase/v3/stats"
 	"github.com/molecula/featurebase/v3/systemlayer"
 	uuid "github.com/satori/go.uuid"
 )
@@ -89,7 +88,6 @@ func (q *Queryer) Orchestrator(qual dax.TableQualifier) *qualifiedOrchestrator {
 		topology: &MDSTopology{noder: q.noder},
 		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
 		client: q.fbClient,
-		stats:  stats.NopStatsClient,
 		logger: q.logger,
 	}
 

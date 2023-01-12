@@ -328,7 +328,3 @@ func (i *importer) EncodeImport(ctx context.Context, tid dax.TableID, fld *dax.F
 func (i *importer) DoImport(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, path string, data []byte) error {
 	return i.client.DoImport(string(tid), shard, path, data)
 }
-
-func (i *importer) StatsTiming(name string, value time.Duration, rate float64) {
-	i.client.Stats.Timing(name, value, rate)
-}

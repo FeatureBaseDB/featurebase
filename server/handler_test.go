@@ -1079,15 +1079,6 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Expvars", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("GET", "/debug/vars", nil)
-		h.ServeHTTP(w, r)
-		if w.Code != http.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		}
-	})
-
 	t.Run("Recalculate Caches", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculate-caches", nil))

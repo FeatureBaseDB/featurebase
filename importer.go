@@ -20,8 +20,6 @@ type Importer interface {
 	EncodeImportValues(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error)
 	EncodeImport(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, vals, ids []uint64, clear bool) (path string, data []byte, err error)
 	DoImport(ctx context.Context, tid dax.TableID, fld *dax.Field, shard uint64, path string, data []byte) error
-
-	StatsTiming(name string, value time.Duration, rate float64)
 }
 
 // Ensure type implements interface.

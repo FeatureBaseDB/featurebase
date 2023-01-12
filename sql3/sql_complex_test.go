@@ -36,6 +36,92 @@ func TestPlanner_Misc(t *testing.T) {
 	assert.True(t, d.EqualTo(pql.NewDecimal(12345678, 6)))
 }
 
+func TestPlanner_SystemTableFanout(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	server := c.GetNode(0).Server
+
+	t.Run("PerfCounters", func(t *testing.T) {
+		results, columns, err := sql_test.MustQueryRows(t, server, `select * from fb_performance_counters`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(results) != 15 {
+			t.Fatal(fmt.Errorf("unexpected result set length"))
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("nodeid"),
+			wireQueryFieldString("namespace"),
+			wireQueryFieldString("subsystem"),
+			wireQueryFieldString("counter_name"),
+			wireQueryFieldInt("value"),
+			wireQueryFieldInt("counter_type"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("SystemTablesExecRequests", func(t *testing.T) {
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_exec_requests`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(results) != 2 {
+			t.Fatal(fmt.Errorf("unexpected result set length"))
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("nodeid"),
+			wireQueryFieldString("request_id"),
+			wireQueryFieldString("user"),
+			wireQueryFieldTimestamp("start_time"),
+			wireQueryFieldTimestamp("end_time"),
+			wireQueryFieldString("status"),
+			wireQueryFieldString("wait_type"),
+			wireQueryFieldInt("wait_time"),
+			wireQueryFieldString("wait_resource"),
+			wireQueryFieldInt("cpu_time"),
+			wireQueryFieldInt("elapsed_time"),
+			wireQueryFieldInt("reads"),
+			wireQueryFieldInt("writes"),
+			wireQueryFieldInt("logical_reads"),
+			wireQueryFieldInt("row_count"),
+			wireQueryFieldString("sql"),
+			wireQueryFieldString("plan"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("SystemTablesExecRequestsAgg", func(t *testing.T) {
+		_, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select 
+		count(request_id) as request_count,
+		min(elapsed_time) as min_duration,
+		max(elapsed_time) as max_duration,
+		avg(elapsed_time) as avg_duration
+	from 
+		fb_exec_requests 
+	where 
+		status = 'complete';`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldInt("request_count"),
+			wireQueryFieldInt("min_duration"),
+			wireQueryFieldInt("max_duration"),
+			wireQueryFieldDecimal("avg_duration", 4),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+}
+
 func TestPlanner_Show(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
@@ -102,64 +188,12 @@ func TestPlanner_Show(t *testing.T) {
 		}
 	})
 
-	t.Run("SystemTablesExecRequests", func(t *testing.T) {
-		_, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_exec_requests`)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if diff := cmp.Diff([]*pilosa.WireQueryField{
-			wireQueryFieldString("request_id"),
-			wireQueryFieldString("user"),
-			wireQueryFieldTimestamp("start_time"),
-			wireQueryFieldTimestamp("end_time"),
-			wireQueryFieldString("status"),
-			wireQueryFieldString("wait_type"),
-			wireQueryFieldInt("wait_time"),
-			wireQueryFieldString("wait_resource"),
-			wireQueryFieldInt("cpu_time"),
-			wireQueryFieldInt("elapsed_time"),
-			wireQueryFieldInt("reads"),
-			wireQueryFieldInt("writes"),
-			wireQueryFieldInt("logical_reads"),
-			wireQueryFieldInt("row_count"),
-			wireQueryFieldString("sql"),
-			wireQueryFieldString("plan"),
-		}, columns); diff != "" {
-			t.Fatal(diff)
-		}
-	})
-
-	t.Run("SystemTablesExecRequestsAgg", func(t *testing.T) {
-		_, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select 
-		count(request_id) as request_count,
-		min(elapsed_time) as min_duration,
-		max(elapsed_time) as max_duration,
-		avg(elapsed_time) as avg_duration
-	from 
-		fb_exec_requests 
-	where 
-		status = 'complete';`)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if diff := cmp.Diff([]*pilosa.WireQueryField{
-			wireQueryFieldInt("request_count"),
-			wireQueryFieldInt("min_duration"),
-			wireQueryFieldInt("max_duration"),
-			wireQueryFieldDecimal("avg_duration", 4),
-		}, columns); diff != "" {
-			t.Fatal(diff)
-		}
-	})
-
 	t.Run("ShowTables", func(t *testing.T) {
 		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW TABLES`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(results) != 6 {
+		if len(results) != 7 {
 			t.Fatal(fmt.Errorf("unexpected result set length"))
 		}
 

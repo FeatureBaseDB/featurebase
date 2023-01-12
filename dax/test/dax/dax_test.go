@@ -112,7 +112,6 @@ func TestDAXIntegration(t *testing.T) {
 			"alterTable/alterTableBadTable", // looks like table does not exist is a different error in DAX
 			"top-tests/test-1",              // don't know why this is failing at all
 			"delete_tests",
-			"subquerytable", // subqueries seem to be a problem
 		}
 
 		doSkip := func(name string) bool {

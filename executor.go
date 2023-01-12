@@ -28,6 +28,7 @@ import (
 	"github.com/molecula/featurebase/v3/testhook"
 	"github.com/molecula/featurebase/v3/tracing"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -164,16 +165,16 @@ func (e *executor) Close() error {
 // PoolSize is exported to let the task pool update us
 func (e *executor) PoolSize(n int) {
 	if e.Holder != nil {
-		e.Holder.Stats.Gauge("worker_total", float64(n), 0)
+		GaugeWorkerTotal.Set(float64(n))
 	}
 }
 
 // InitStats initializes stats counters. Must be called after Holder set.
 func (e *executor) InitStats() {
 	if e.Holder != nil {
-		e.Holder.Stats.Count("job_total", 0, 0)
+		CounterJobTotal.Add(0)
 		l, _, _ := e.workers.Stats()
-		e.Holder.Stats.Gauge("worker_total", float64(l), 0)
+		GaugeWorkerTotal.Set(float64(l))
 	}
 }
 
@@ -683,11 +684,11 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 	} else if err := e.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
-	indexTag := "index:" + index
-	metricName := "query_" + strings.ToLower(c.Name) + "_total"
-	statFn := func() {
+
+	labels := prometheus.Labels{"index": index}
+	statFn := func(ctr *prometheus.CounterVec) {
 		if !opt.Remote {
-			e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
+			ctr.With(labels).Inc()
 		}
 	}
 
@@ -719,114 +720,122 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 
 	switch c.Name {
 	case "Sum":
-		statFn()
+		statFn(CounterQuerySumTotal)
 		res, err := e.executeSum(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeSum")
 	case "Min":
-		statFn()
+		statFn(CounterQueryMinTotal)
 		res, err := e.executeMin(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeMin")
 	case "Max":
-		statFn()
+		statFn(CounterQueryMaxTotal)
 		res, err := e.executeMax(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeMax")
 	case "MinRow":
-		statFn()
+		statFn(CounterQueryMinRowTotal)
 		res, err := e.executeMinRow(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeMinRow")
 	case "MaxRow":
-		statFn()
+		statFn(CounterQueryMaxRowTotal)
 		res, err := e.executeMaxRow(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeMaxRow")
 	case "Clear":
-		statFn()
+		statFn(CounterQueryClearTotal)
 		res, err := e.executeClearBit(ctx, qcx, index, c, opt)
 		return res, errors.Wrap(err, "executeClearBit")
 	case "ClearRow":
-		statFn()
+		statFn(CounterQueryClearRowTotal)
 		res, err := e.executeClearRow(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeClearRow")
 	case "Distinct":
-		statFn()
+		statFn(CounterQueryDistinctTotal)
 		res, err := e.executeDistinct(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeDistinct")
 	case "Store":
-		statFn()
+		statFn(CounterQueryStoreTotal)
 		res, err := e.executeSetRow(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeSetRow")
 	case "Count":
-		statFn()
+		statFn(CounterQueryCountTotal)
 		res, err := e.executeCount(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeCount")
 	case "Set":
-		statFn()
+		statFn(CounterQuerySetTotal)
 		res, err := e.executeSet(ctx, qcx, index, c, opt)
 		return res, errors.Wrap(err, "executeSet")
 	case "TopK":
-		statFn()
+		statFn(CounterQueryTopKTotal)
 		res, err := e.executeTopK(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeTopK")
 	case "TopN":
-		statFn()
+		statFn(CounterQueryTopNTotal)
 		res, err := e.executeTopN(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeTopN")
 	case "Rows":
-		statFn()
+		statFn(CounterQueryRowsTotal)
 		res, err := e.executeRows(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeRows")
 	case "ExternalLookup":
-		statFn()
+		statFn(CounterQueryExternalLookupTotal)
 		res, err := e.executeExternalLookup(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeExternalLookup")
 	case "Extract":
-		statFn()
+		statFn(CounterQueryExtractTotal)
 		res, err := e.executeExtract(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeExtract")
 	case "GroupBy":
-		statFn()
+		statFn(CounterQueryGroupByTotal)
 		res, err := e.executeGroupBy(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeGroupBy")
 	case "Options":
-		statFn()
+		statFn(CounterQueryOptionsTotal)
 		res, err := e.executeOptionsCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeOptionsCall")
 	case "IncludesColumn":
+		statFn(CounterQueryIncludesColumnTotal)
 		res, err := e.executeIncludesColumnCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeIncludesColumnCall")
 	case "FieldValue":
-		statFn()
+		statFn(CounterQueryFieldValueTotal)
 		res, err := e.executeFieldValueCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeFieldValueCall")
 	case "Precomputed":
+		statFn(CounterQueryPrecomputedTotal)
 		res, err := e.executePrecomputedCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executePrecomputedCall")
 	case "UnionRows":
+		statFn(CounterQueryUnionRowsTotal)
 		res, err := e.executeUnionRows(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeUnionRows")
 	case "ConstRow":
+		statFn(CounterQueryConstRowTotal)
 		res, err := e.executeConstRow(ctx, index, c)
 		return res, errors.Wrap(err, "executeConstRow")
 	case "Limit":
+		statFn(CounterQueryLimitTotal)
 		res, err := e.executeLimitCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeLimitCall")
 	case "Percentile":
+		statFn(CounterQueryPercentileTotal)
 		res, err := e.executePercentile(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executePercentile")
 	case "Delete":
-		statFn() // TODO(twg) need this?
+		statFn(CounterQueryDeleteTotal)
 		res, err := e.executeDeleteRecords(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeDelete")
 	case "Sort":
+		statFn(CounterQuerySortTotal)
 		res, err := e.executeSort(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeSort")
 	case "Apply":
+		statFn(CounterQueryApplyTotal)
 		res, err := e.executeApply(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeApply")
 	case "Arrow":
+		statFn(CounterQueryArrowTotal)
 		res, err := e.executeArrow(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeArrow")
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
-		statFn()
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeBitmapCall")
 	}
@@ -1505,13 +1514,42 @@ func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string
 	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()
 
-	indexTag := "index:" + index
-	metricName := "query_" + strings.ToLower(c.Name) + "_total"
-	if c.Name == "Row" && c.HasConditionArg() {
-		metricName = "query_row_bsi_total"
+	labels := prometheus.Labels{"index": index}
+	statFn := func(ctr *prometheus.CounterVec) {
+		if !opt.Remote {
+			ctr.With(labels).Inc()
+		}
 	}
+
 	if !opt.Remote {
-		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
+		switch c.Name {
+		case "Row":
+			if c.HasConditionArg() {
+				statFn(CounterQueryRowBSITotal)
+			} else {
+				statFn(CounterQueryRowTotal)
+			}
+		case "Range":
+			statFn(CounterQueryRangeTotal)
+		case "Difference":
+			statFn(CounterQueryBitmapTotal)
+		case "Intersect":
+			statFn(CounterQueryIntersectTotal)
+		case "Union":
+			statFn(CounterQueryUnionTotal)
+		case "InnerUnionRows":
+			statFn(CounterQueryInnerUnionRowsTotal)
+		case "Xor":
+			statFn(CounterQueryXorTotal)
+		case "Not":
+			statFn(CounterQueryNotTotal)
+		case "Shift":
+			statFn(CounterQueryShiftTotal)
+		case "All":
+			statFn(CounterQueryAllTotal)
+		default:
+			statFn(CounterQueryBitmapTotal)
+		}
 	}
 
 	// Execute calls in bulk on each remote node and merge.

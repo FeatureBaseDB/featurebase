@@ -302,11 +302,16 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 		// doing this check here because we don't have a 'system' flag that exists in the FB schema
 		st, ok := systemTables[strings.ToLower(tableName)]
 		if ok {
+			var op types.PlanOperator
+			op = NewPlanOpSystemTable(p, st)
+			if st.requiresFanout {
+				op = NewPlanOpFanout(p, op)
+			}
 			if sourceExpr.Alias != nil {
 				aliasName := parser.IdentName(sourceExpr.Alias)
-				return NewPlanOpRelAlias(aliasName, NewPlanOpSystemTable(p, st)), nil
+				return NewPlanOpRelAlias(aliasName, op), nil
 			}
-			return NewPlanOpSystemTable(p, st), nil
+			return op, nil
 
 		}
 		// get all the columns for this table - we will eliminate unused ones

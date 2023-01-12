@@ -39,12 +39,9 @@ import (
 	"github.com/molecula/featurebase/v3/gopsutil"
 	"github.com/molecula/featurebase/v3/logger"
 	pnet "github.com/molecula/featurebase/v3/net"
-	"github.com/molecula/featurebase/v3/prometheus"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/planner"
 	"github.com/molecula/featurebase/v3/statik"
-	"github.com/molecula/featurebase/v3/stats"
-	"github.com/molecula/featurebase/v3/statsd"
 	"github.com/molecula/featurebase/v3/systemlayer"
 	"github.com/molecula/featurebase/v3/syswrap"
 	"github.com/molecula/featurebase/v3/testhook"
@@ -474,11 +471,6 @@ func (m *Command) setupServer() error {
 		diagnosticsInterval = defaultDiagnosticsInterval
 	}
 
-	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host, m.Config.Namespace())
-	if err != nil {
-		return errors.Wrap(err, "new stats client")
-	}
-
 	if m.Config.Listener == nil {
 		m.ln, err = getListener(*uri, m.tlsConfig)
 		if err != nil {
@@ -581,7 +573,6 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerQueryLogger(m.queryLogger),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
-		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerGRPCURI(advertiseGRPCURI),
 		pilosa.OptServerClusterName(m.Config.Cluster.Name),
@@ -691,7 +682,6 @@ func (m *Command) setupServer() error {
 		OptGRPCServerListener(m.grpcLn),
 		OptGRPCServerTLSConfig(m.tlsConfig),
 		OptGRPCServerLogger(m.logger),
-		OptGRPCServerStats(statsClient),
 		OptGRPCServerAuth(m.auth),
 		OptGRPCServerPerm(&p),
 		OptGRPCServerQueryLogger(m.queryLogger),
@@ -825,24 +815,6 @@ func (m *Command) Close() error {
 		close(m.done)
 
 		return errors.Wrap(err, "closing everything")
-	}
-}
-
-// newStatsClient creates a stats client from the config
-func newStatsClient(name string, host string, namespace string) (stats.StatsClient, error) {
-	switch name {
-	case "expvar":
-		return stats.NewExpvarStatsClient(), nil
-	case "statsd":
-		return statsd.NewStatsClient(host, namespace)
-	case "prometheus":
-		return prometheus.NewPrometheusClient(
-			prometheus.OptClientNamespace(namespace),
-		)
-	case "nop", "none":
-		return stats.NopStatsClient, nil
-	default:
-		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, prometheus, none].", name)
 	}
 }
 

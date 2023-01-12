@@ -8,7 +8,7 @@ replace robpike.io/ivy => github.com/tgruben/ivy v0.0.0-20221107170120-634b546dc
 
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20220409005548-0153238b886a
-	github.com/DataDog/datadog-go v4.8.3+incompatible
+	github.com/DataDog/datadog-go v4.8.3+incompatible // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/alexbrainman/odbc v0.0.0-20211220213544-9c9a2e61c5e2
