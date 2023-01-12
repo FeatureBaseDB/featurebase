@@ -7,7 +7,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/mds"
-	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
 )
 
 func Handler(mds *mds.MDS) http.Handler {

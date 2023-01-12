@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )

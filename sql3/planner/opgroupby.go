@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )

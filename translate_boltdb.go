@@ -1,6 +1,6 @@
 // Copyright 2022 Molecula Corp. (DBA FeatureBase).
 // SPDX-License-Identifier: Apache-2.0
-package boltdb
+package pilosa
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"

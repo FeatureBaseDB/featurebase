@@ -21,7 +21,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/server"
-	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 
