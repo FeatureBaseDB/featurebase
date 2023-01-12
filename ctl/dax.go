@@ -18,6 +18,7 @@ func BuildDAXFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.BoolVar(&srv.Config.MDS.Run, "mds.run", srv.Config.MDS.Run, "Run the MDS service in process.")
 	flags.DurationVar(&srv.Config.MDS.Config.RegistrationBatchTimeout, "mds.config.registration-batch-timeout", srv.Config.MDS.Config.RegistrationBatchTimeout, "Timeout for node registration batches.")
 	flags.StringVar(&srv.Config.MDS.Config.DataDir, "mds.config.data-dir", srv.Config.MDS.Config.DataDir, "MDS directory to use in process.")
+	flags.DurationVar(&srv.Config.MDS.Config.SnappingTurtleTimeout, "mds.config.snapping-turtle-timeout", srv.Config.MDS.Config.SnappingTurtleTimeout, "Period for running automatic snapshotting routine.")
 
 	// WriteLogger
 	flags.BoolVar(&srv.Config.WriteLogger.Run, "writelogger.run", srv.Config.WriteLogger.Run, "Run the WriteLogger service in process.")

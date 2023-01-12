@@ -108,19 +108,8 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{}
 		assert.Equal(t, exp, director.flush())
 
-		// Add the same non-keyed table again.
-		err := con.CreateTable(ctx, tbl0)
-		if assert.Error(t, err) {
-			assert.True(t, errors.Is(err, dax.ErrTableIDExists))
-		}
-
-		exp = []*dax.Directive{}
-		assert.Equal(t, exp, director.flush())
-
 		// Add a shard.
-		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(),
-			dax.NewVersionedShard(0, 0),
-		))
+		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(), 0))
 
 		exp = []*dax.Directive{
 			{
@@ -132,9 +121,7 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-						},
+						Shards:   dax.NewShardNums(0),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -185,13 +172,7 @@ func TestController(t *testing.T) {
 		assert.Equal(t, exp, director.flush())
 
 		// Add more shards.
-		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(),
-			dax.NewVersionedShard(1, 0),
-			dax.NewVersionedShard(2, 0),
-			dax.NewVersionedShard(3, 0),
-			dax.NewVersionedShard(5, 0),
-			dax.NewVersionedShard(8, 0),
-		))
+		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(), dax.NewShardNums(1, 2, 3, 5, 8)...))
 
 		exp = []*dax.Directive{
 			{
@@ -203,10 +184,7 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-							dax.NewVersionedShard(3, 0),
-						},
+						Shards:   dax.NewShardNums(0, 3),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -221,10 +199,7 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(1, 0),
-							dax.NewVersionedShard(5, 0),
-						},
+						Shards:   dax.NewShardNums(1, 5),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -239,10 +214,7 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(2, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(2, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -257,12 +229,7 @@ func TestController(t *testing.T) {
 		assert.NoError(t, con.CreateTable(ctx, tbl1))
 
 		// Add more shards.
-		assert.NoError(t, con.AddShards(ctx, tbl1.QualifiedID(),
-			dax.NewVersionedShard(3, 0),
-			dax.NewVersionedShard(5, 0),
-			dax.NewVersionedShard(8, 0),
-			dax.NewVersionedShard(13, 0),
-		))
+		assert.NoError(t, con.AddShards(ctx, tbl1.QualifiedID(), dax.NewShardNums(3, 5, 8, 13)...))
 
 		exp = []*dax.Directive{
 			{
@@ -275,17 +242,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(13, 0),
-						},
+						Shards:   dax.NewShardNums(3, 13),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-							dax.NewVersionedShard(3, 0),
-						},
+						Shards:   dax.NewShardNums(0, 3),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -301,16 +262,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(5, 0),
-						},
+						Shards:   dax.NewShardNums(5),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(1, 0),
-							dax.NewVersionedShard(5, 0),
-						},
+						Shards:   dax.NewShardNums(1, 5),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -326,16 +282,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(8),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(2, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(2, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -358,18 +309,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(13, 0),
-						},
+						Shards:   dax.NewShardNums(3, 13),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-							dax.NewVersionedShard(1, 0),
-							dax.NewVersionedShard(3, 0),
-						},
+						Shards:   dax.NewShardNums(0, 1, 3),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -385,18 +329,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(5, 8),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(2, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(2, 5, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -419,23 +356,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-							dax.NewVersionedShard(13, 0),
-						},
+						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-							dax.NewVersionedShard(1, 0),
-							dax.NewVersionedShard(2, 0),
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(0, 1, 2, 3, 5, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -470,23 +395,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-							dax.NewVersionedShard(13, 0),
-						},
+						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-							dax.NewVersionedShard(1, 0),
-							dax.NewVersionedShard(2, 0),
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(0, 1, 2, 3, 5, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -496,10 +409,7 @@ func TestController(t *testing.T) {
 		assert.Equal(t, exp, director.flush())
 
 		// Remove shards.
-		assert.NoError(t, con.RemoveShards(ctx, tbl0.QualifiedID(),
-			dax.NewVersionedShard(2, 0),
-			dax.NewVersionedShard(5, 0),
-		))
+		assert.NoError(t, con.RemoveShards(ctx, tbl0.QualifiedID(), dax.NewShardNums(2, 5)...))
 
 		exp = []*dax.Directive{
 			{
@@ -512,21 +422,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-							dax.NewVersionedShard(13, 0),
-						},
+						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-							dax.NewVersionedShard(1, 0),
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(0, 1, 3, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -538,10 +438,7 @@ func TestController(t *testing.T) {
 		// Remove shards, one which does not exist.
 		// Currently that doesn't result in an error, it simply no-ops on trying
 		// to remove 99.
-		assert.NoError(t, con.RemoveShards(ctx, tbl0.QualifiedID(),
-			dax.NewVersionedShard(3, 0),
-			dax.NewVersionedShard(99, 0),
-		))
+		assert.NoError(t, con.RemoveShards(ctx, tbl0.QualifiedID(), dax.NewShardNums(3, 99)...))
 
 		exp = []*dax.Directive{
 			{
@@ -554,20 +451,11 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-							dax.NewVersionedShard(13, 0),
-						},
+						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
 						TableKey: tbl0.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(0, 0),
-							dax.NewVersionedShard(1, 0),
-							dax.NewVersionedShard(8, 0),
-						},
+						Shards:   dax.NewShardNums(0, 1, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -589,12 +477,7 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl1.Key(),
-						Shards: dax.VersionedShards{
-							dax.NewVersionedShard(3, 0),
-							dax.NewVersionedShard(5, 0),
-							dax.NewVersionedShard(8, 0),
-							dax.NewVersionedShard(13, 0),
-						},
+						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
@@ -604,7 +487,7 @@ func TestController(t *testing.T) {
 		assert.Equal(t, exp, director.flush())
 
 		// Remove a node which doesn't exist.
-		err = con.DeregisterNodes(ctx, "invalidNode")
+		err := con.DeregisterNodes(ctx, "invalidNode")
 		if assert.Error(t, err) {
 			assert.True(t, errors.Is(err, dax.ErrNodeDoesNotExist))
 		}
@@ -683,17 +566,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, 0),
-							dax.NewVersionedPartition(1, 0),
-							dax.NewVersionedPartition(2, 0),
-							dax.NewVersionedPartition(3, 0),
-							dax.NewVersionedPartition(4, 0),
-							dax.NewVersionedPartition(5, 0),
-							dax.NewVersionedPartition(6, 0),
-							dax.NewVersionedPartition(7, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(0, 1, 2, 3, 4, 5, 6, 7),
 					},
 				},
 				Version: 2,
@@ -720,13 +594,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, 0),
-							dax.NewVersionedPartition(1, 0),
-							dax.NewVersionedPartition(2, 0),
-							dax.NewVersionedPartition(3, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(0, 1, 2, 3),
 					},
 				},
 				Version: 3,
@@ -740,13 +609,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(4, 0),
-							dax.NewVersionedPartition(5, 0),
-							dax.NewVersionedPartition(6, 0),
-							dax.NewVersionedPartition(7, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(4, 5, 6, 7),
 					},
 				},
 				Version: 4,
@@ -772,12 +636,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, 0),
-							dax.NewVersionedPartition(1, 0),
-							dax.NewVersionedPartition(2, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(0, 1, 2),
 					},
 				},
 				Version: 5,
@@ -791,12 +651,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(4, 0),
-							dax.NewVersionedPartition(5, 0),
-							dax.NewVersionedPartition(6, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(4, 5, 6),
 					},
 				},
 				Version: 6,
@@ -810,11 +666,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(3, 0),
-							dax.NewVersionedPartition(7, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(3, 7),
 					},
 				},
 				Version: 7,
@@ -842,25 +695,12 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl1.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(1, 0),
-							dax.NewVersionedPartition(4, 0),
-							dax.NewVersionedPartition(7, 0),
-							dax.NewVersionedPartition(10, 0),
-							dax.NewVersionedPartition(13, 0),
-							dax.NewVersionedPartition(16, 0),
-							dax.NewVersionedPartition(19, 0),
-							dax.NewVersionedPartition(22, 0),
-						},
+						TableKey:   tbl1.Key(),
+						Partitions: dax.NewPartitionNums(1, 4, 7, 10, 13, 16, 19, 22),
 					},
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, 0),
-							dax.NewVersionedPartition(1, 0),
-							dax.NewVersionedPartition(2, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(0, 1, 2),
 					},
 				},
 				Version: 8,
@@ -875,25 +715,12 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl1.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(2, 0),
-							dax.NewVersionedPartition(5, 0),
-							dax.NewVersionedPartition(8, 0),
-							dax.NewVersionedPartition(11, 0),
-							dax.NewVersionedPartition(14, 0),
-							dax.NewVersionedPartition(17, 0),
-							dax.NewVersionedPartition(20, 0),
-							dax.NewVersionedPartition(23, 0),
-						},
+						TableKey:   tbl1.Key(),
+						Partitions: dax.NewPartitionNums(2, 5, 8, 11, 14, 17, 20, 23),
 					},
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(4, 0),
-							dax.NewVersionedPartition(5, 0),
-							dax.NewVersionedPartition(6, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(4, 5, 6),
 					},
 				},
 				Version: 9,
@@ -908,24 +735,12 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl1.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, 0),
-							dax.NewVersionedPartition(3, 0),
-							dax.NewVersionedPartition(6, 0),
-							dax.NewVersionedPartition(9, 0),
-							dax.NewVersionedPartition(12, 0),
-							dax.NewVersionedPartition(15, 0),
-							dax.NewVersionedPartition(18, 0),
-							dax.NewVersionedPartition(21, 0),
-						},
+						TableKey:   tbl1.Key(),
+						Partitions: dax.NewPartitionNums(0, 3, 6, 9, 12, 15, 18, 21),
 					},
 					{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(3, 0),
-							dax.NewVersionedPartition(7, 0),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(3, 7),
 					},
 				},
 				Version: 10,
@@ -947,17 +762,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl1.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(1, 0),
-							dax.NewVersionedPartition(4, 0),
-							dax.NewVersionedPartition(7, 0),
-							dax.NewVersionedPartition(10, 0),
-							dax.NewVersionedPartition(13, 0),
-							dax.NewVersionedPartition(16, 0),
-							dax.NewVersionedPartition(19, 0),
-							dax.NewVersionedPartition(22, 0),
-						},
+						TableKey:   tbl1.Key(),
+						Partitions: dax.NewPartitionNums(1, 4, 7, 10, 13, 16, 19, 22),
 					},
 				},
 				Version: 11,
@@ -971,17 +777,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl1.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(2, 0),
-							dax.NewVersionedPartition(5, 0),
-							dax.NewVersionedPartition(8, 0),
-							dax.NewVersionedPartition(11, 0),
-							dax.NewVersionedPartition(14, 0),
-							dax.NewVersionedPartition(17, 0),
-							dax.NewVersionedPartition(20, 0),
-							dax.NewVersionedPartition(23, 0),
-						},
+						TableKey:   tbl1.Key(),
+						Partitions: dax.NewPartitionNums(2, 5, 8, 11, 14, 17, 20, 23),
 					},
 				},
 				Version: 12,
@@ -995,17 +792,8 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey: tbl1.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, 0),
-							dax.NewVersionedPartition(3, 0),
-							dax.NewVersionedPartition(6, 0),
-							dax.NewVersionedPartition(9, 0),
-							dax.NewVersionedPartition(12, 0),
-							dax.NewVersionedPartition(15, 0),
-							dax.NewVersionedPartition(18, 0),
-							dax.NewVersionedPartition(21, 0),
-						},
+						TableKey:   tbl1.Key(),
+						Partitions: dax.NewPartitionNums(0, 3, 6, 9, 12, 15, 18, 21),
 					},
 				},
 				Version: 13,
@@ -1015,15 +803,6 @@ func TestController(t *testing.T) {
 
 		// Remove a table which doesn't exist.
 		err := con.DropTable(ctx, invalidQtid)
-		if assert.Error(t, err) {
-			assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-		}
-
-		// Add shards to a table which doesn't exist.
-		err = con.AddShards(ctx, invalidQtid,
-			dax.NewVersionedShard(1, 0),
-			dax.NewVersionedShard(2, 0),
-		)
 		if assert.Error(t, err) {
 			assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
 		}
@@ -1082,14 +861,7 @@ func TestController(t *testing.T) {
 		assert.NoError(t, con.CreateTable(ctx, tbl0))
 
 		// Add shards.
-		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(),
-			dax.NewVersionedShard(0, 0),
-			dax.NewVersionedShard(1, 0),
-			dax.NewVersionedShard(2, 0),
-			dax.NewVersionedShard(3, 0),
-			dax.NewVersionedShard(11, 0),
-			dax.NewVersionedShard(12, 0),
-		))
+		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(), 0, 1, 2, 3, 11, 12))
 
 		t.Run("ComputeRole", func(t *testing.T) {
 			tests := []struct {
@@ -1100,27 +872,21 @@ func TestController(t *testing.T) {
 				{
 					role: &dax.ComputeRole{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewVersionedShards(0, 1, 2, 3),
+						Shards:   dax.NewShardNums(0, 1, 2, 3),
 					},
 					exp: []dax.AssignedNode{
 						{
 							Address: node0.Address,
 							Role: &dax.ComputeRole{
 								TableKey: tbl0.Key(),
-								Shards: dax.VersionedShards{
-									dax.NewVersionedShard(0, 0),
-									dax.NewVersionedShard(2, 0),
-								},
+								Shards:   dax.NewShardNums(0, 2),
 							},
 						},
 						{
 							Address: node1.Address,
 							Role: &dax.ComputeRole{
 								TableKey: tbl0.Key(),
-								Shards: dax.VersionedShards{
-									dax.NewVersionedShard(1, 0),
-									dax.NewVersionedShard(3, 0),
-								},
+								Shards:   dax.NewShardNums(1, 3),
 							},
 						},
 					},
@@ -1128,16 +894,14 @@ func TestController(t *testing.T) {
 				{
 					role: &dax.ComputeRole{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewVersionedShards(1),
+						Shards:   dax.NewShardNums(1),
 					},
 					exp: []dax.AssignedNode{
 						{
 							Address: node1.Address,
 							Role: &dax.ComputeRole{
 								TableKey: tbl0.Key(),
-								Shards: dax.VersionedShards{
-									dax.NewVersionedShard(1, 0),
-								},
+								Shards:   dax.NewShardNums(1),
 							},
 						},
 					},
@@ -1146,7 +910,7 @@ func TestController(t *testing.T) {
 					// Add unassigned shards.
 					role: &dax.ComputeRole{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewVersionedShards(1, 888, 889),
+						Shards:   dax.NewShardNums(1, 888, 889),
 					},
 					isWrite: true,
 					exp: []dax.AssignedNode{
@@ -1154,19 +918,14 @@ func TestController(t *testing.T) {
 							Address: node0.Address,
 							Role: &dax.ComputeRole{
 								TableKey: tbl0.Key(),
-								Shards: dax.VersionedShards{
-									dax.NewVersionedShard(888, 0),
-								},
+								Shards:   dax.NewShardNums(888),
 							},
 						},
 						{
 							Address: node1.Address,
 							Role: &dax.ComputeRole{
 								TableKey: tbl0.Key(),
-								Shards: dax.VersionedShards{
-									dax.NewVersionedShard(1, 0),
-									dax.NewVersionedShard(889, 0),
-								},
+								Shards:   dax.NewShardNums(1, 889),
 							},
 						},
 					},
@@ -1175,17 +934,14 @@ func TestController(t *testing.T) {
 					// Ensure shards are not returned sorted as strings.
 					role: &dax.ComputeRole{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewVersionedShards(2, 11),
+						Shards:   dax.NewShardNums(2, 11),
 					},
 					exp: []dax.AssignedNode{
 						{
 							Address: node0.Address,
 							Role: &dax.ComputeRole{
 								TableKey: tbl0.Key(),
-								Shards: dax.VersionedShards{
-									dax.NewVersionedShard(2, 0),
-									dax.NewVersionedShard(11, 0),
-								},
+								Shards:   dax.NewShardNums(2, 11),
 							},
 						},
 					},
@@ -1209,75 +965,55 @@ func TestController(t *testing.T) {
 			}{
 				{
 					role: &dax.TranslateRole{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, -1),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(0),
 					},
 					isWrite: true,
 					exp: []dax.AssignedNode{
 						{
 							Address: node0.Address,
 							Role: &dax.TranslateRole{
-								TableKey: tbl0.Key(),
-								Partitions: dax.VersionedPartitions{
-									dax.NewVersionedPartition(0, 0),
-								},
+								TableKey:   tbl0.Key(),
+								Partitions: dax.NewPartitionNums(0),
 							},
 						},
 					},
 				},
 				{
 					role: &dax.TranslateRole{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(0, -1),
-							dax.NewVersionedPartition(1, -1),
-							dax.NewVersionedPartition(2, -1),
-							dax.NewVersionedPartition(3, -1),
-							dax.NewVersionedPartition(999, -1),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(0, 1, 2, 3, 999),
 					},
 					isWrite: false,
 					exp: []dax.AssignedNode{
 						{
 							Address: node0.Address,
 							Role: &dax.TranslateRole{
-								TableKey: tbl0.Key(),
-								Partitions: dax.VersionedPartitions{
-									dax.NewVersionedPartition(0, 0),
-									dax.NewVersionedPartition(2, 0),
-								},
+								TableKey:   tbl0.Key(),
+								Partitions: dax.NewPartitionNums(0, 2),
 							},
 						},
 						{
 							Address: node1.Address,
 							Role: &dax.TranslateRole{
-								TableKey: tbl0.Key(),
-								Partitions: dax.VersionedPartitions{
-									dax.NewVersionedPartition(1, 0),
-									dax.NewVersionedPartition(3, 0),
-								},
+								TableKey:   tbl0.Key(),
+								Partitions: dax.NewPartitionNums(1, 3),
 							},
 						},
 					},
 				},
 				{
 					role: &dax.TranslateRole{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(1, -1),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(1),
 					},
 					isWrite: false,
 					exp: []dax.AssignedNode{
 						{
 							Address: node1.Address,
 							Role: &dax.TranslateRole{
-								TableKey: tbl0.Key(),
-								Partitions: dax.VersionedPartitions{
-									dax.NewVersionedPartition(1, 0),
-								},
+								TableKey:   tbl0.Key(),
+								Partitions: dax.NewPartitionNums(1),
 							},
 						},
 					},
@@ -1285,22 +1021,16 @@ func TestController(t *testing.T) {
 				{
 					// Ensure partitions are not returned sorted as strings.
 					role: &dax.TranslateRole{
-						TableKey: tbl0.Key(),
-						Partitions: dax.VersionedPartitions{
-							dax.NewVersionedPartition(2, -1),
-							dax.NewVersionedPartition(10, -1),
-						},
+						TableKey:   tbl0.Key(),
+						Partitions: dax.NewPartitionNums(2, 10),
 					},
 					isWrite: false,
 					exp: []dax.AssignedNode{
 						{
 							Address: node0.Address,
 							Role: &dax.TranslateRole{
-								TableKey: tbl0.Key(),
-								Partitions: dax.VersionedPartitions{
-									dax.NewVersionedPartition(2, 0),
-									dax.NewVersionedPartition(10, 0),
-								},
+								TableKey:   tbl0.Key(),
+								Partitions: dax.NewPartitionNums(2, 10),
 							},
 						},
 					},

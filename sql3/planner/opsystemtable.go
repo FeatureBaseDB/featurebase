@@ -70,11 +70,6 @@ var systemTables = map[string]*systemTable{
 			},
 			&types.PlannerColumn{
 				RelationName: fbClusterInfo,
-				ColumnName:   "shard_width",
-				Type:         parser.NewDataTypeInt(),
-			},
-			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
 				ColumnName:   "replica_count",
 				Type:         parser.NewDataTypeInt(),
 			},
@@ -106,6 +101,11 @@ var systemTables = map[string]*systemTable{
 			&types.PlannerColumn{
 				RelationName: fbClusterNodes,
 				ColumnName:   "is_primary",
+				Type:         parser.NewDataTypeBool(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbClusterNodes,
+				ColumnName:   "space_used",
 				Type:         parser.NewDataTypeBool(),
 			},
 		},
@@ -237,11 +237,7 @@ func NewPlanOpSystemTable(p *ExecutionPlanner, table *systemTable) *PlanOpSystem
 func (p *PlanOpSystemTable) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	ps := make([]string, 0)
-	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = ps
+	result["_schema"] = p.Schema().Plan()
 	return result
 }
 
@@ -312,7 +308,6 @@ func (i *fbClusterInfoRowIter) Next(ctx context.Context) (types.Row, error) {
 			i.planner.systemAPI.Version(),
 			i.planner.systemAPI.ClusterState(),
 			i.planner.systemAPI.ClusterNodeCount(),
-			i.planner.systemAPI.ShardWidth(),
 			i.planner.systemAPI.ClusterReplicaCount(),
 		}
 		i.rowIndex += 1
@@ -333,6 +328,12 @@ func (i *fbClusterNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 		i.result = i.planner.systemAPI.ClusterNodes()
 	}
 
+	u := i.planner.systemAPI.DataDir()
+	spaceUsed, err := pilosa.GetDiskUsage(u)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(i.result) > 0 {
 		n := i.result[0]
 		row := []interface{}{
@@ -341,6 +342,7 @@ func (i *fbClusterNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 			n.URI,
 			n.GRPCURI,
 			n.IsPrimary,
+			spaceUsed.Usage,
 		}
 		// Move to next result element.
 		i.result = i.result[1:]
@@ -436,7 +438,11 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
 					}
 					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+						// if we still have the default, we need to print that out if we have a non-default size
+						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+						}
+						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
 					}
 
 				case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
@@ -444,7 +450,11 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
 					}
 					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+						// if we still have the default, we need to print that out if we have a non-default size
+						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+						}
+						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
 					}
 
 				case *parser.DataTypeIDSetQuantum, *parser.DataTypeStringSetQuantum:
@@ -452,7 +462,11 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
 					}
 					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						fmt.Fprintf(&buf, " cachesize %d", col.Options.CacheSize)
+						// if we still have the default, we need to print that out if we have a non-default size
+						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+						}
+						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
 					}
 					if !col.Options.TimeQuantum.IsEmpty() {
 						fmt.Fprintf(&buf, " timequantum '%s'", col.Options.TimeQuantum)

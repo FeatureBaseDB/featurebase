@@ -19,7 +19,6 @@ import (
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/boltdb"
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	pb "github.com/featurebasedb/featurebase/v3/proto"
@@ -1395,7 +1394,7 @@ func TestHandler_Endpoints(t *testing.T) {
 func TestCluster_TranslateStore(t *testing.T) {
 	cluster := test.MustRunUnsharedCluster(t, 1, []server.CommandOption{
 		server.OptCommandServerOptions(
-			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			pilosa.OptServerOpenTranslateStore(pilosa.OpenTranslateStore),
 		),
 	})
 	defer cluster.Close() // nolint: errcheck
@@ -1407,7 +1406,7 @@ func TestClusterTranslator(t *testing.T) {
 	cluster := test.MustRunUnsharedCluster(t, 3,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
-				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateStore(pilosa.OpenTranslateStore),
 			)},
 	)
 	defer cluster.Close()

@@ -85,6 +85,7 @@ func NewConfig() *Config {
 			Config: mds.Config{
 				RegistrationBatchTimeout: time.Second * 3,
 				StorageMethod:            defaultStorageMethod,
+				SnappingTurtleTimeout:    time.Second * 10,
 			},
 		},
 		Bind: ":" + defaultBindPort,

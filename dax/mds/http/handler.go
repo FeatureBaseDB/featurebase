@@ -7,7 +7,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/mds"
-	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
 )
 
 func Handler(mds *mds.MDS) http.Handler {
@@ -613,7 +612,7 @@ type ComputeNodesRequest struct {
 // provided are not included in this response. That might happen if there are
 // currently no active compute nodes.
 type ComputeNodesResponse struct {
-	ComputeNodes []controller.ComputeNode `json:"compute-nodes"`
+	ComputeNodes []dax.ComputeNode `json:"compute-nodes"`
 }
 
 // POST /translate-nodes
@@ -660,5 +659,5 @@ type TranslateNodesRequest struct {
 // that partitions provided are not included in this response. That might happen
 // if there are currently no active translate nodes.
 type TranslateNodesResponse struct {
-	TranslateNodes []controller.TranslateNode `json:"translate-nodes"`
+	TranslateNodes []dax.TranslateNode `json:"translate-nodes"`
 }

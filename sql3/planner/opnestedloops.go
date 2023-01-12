@@ -31,11 +31,7 @@ func NewPlanOpNestedLoops(top, bottom types.PlanOperator, condition types.PlanEx
 func (p *PlanOpNestedLoops) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	ps := make([]string, 0)
-	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = ps
+	result["_schema"] = p.Schema().Plan()
 	result["top"] = p.top.Plan()
 	result["bottom"] = p.bottom.Plan()
 	result["condition"] = p.cond.Plan()

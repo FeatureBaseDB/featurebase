@@ -25,6 +25,8 @@ import (
 	fbcontext "github.com/featurebasedb/featurebase/v3/context"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
+	"github.com/featurebasedb/featurebase/v3/dax/storage"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/rbf"
 
@@ -55,9 +57,7 @@ type API struct {
 
 	Serializer Serializer
 
-	writeLogReader     computer.WriteLogReader
-	writeLogWriter     computer.WriteLogWriter
-	snapshotReadWriter computer.SnapshotReadWriter
+	serverlessStorage *storage.ResourceManager
 
 	directiveWorkerPoolSize int
 
@@ -68,6 +68,10 @@ type API struct {
 
 func (api *API) Holder() *Holder {
 	return api.holder
+}
+
+func (api *API) logger() logger.Logger {
+	return api.server.logger
 }
 
 // apiOption is a functional option type for pilosa.API
@@ -83,30 +87,16 @@ func OptAPIServer(s *Server) apiOption {
 	}
 }
 
+func OptAPIServerlessStorage(mm *storage.ResourceManager) apiOption {
+	return func(a *API) error {
+		a.serverlessStorage = mm
+		return nil
+	}
+}
+
 func OptAPIImportWorkerPoolSize(size int) apiOption {
 	return func(a *API) error {
 		a.importWorkerPoolSize = size
-		return nil
-	}
-}
-
-func OptAPIWriteLogReader(wlr computer.WriteLogReader) apiOption {
-	return func(a *API) error {
-		a.writeLogReader = wlr
-		return nil
-	}
-}
-
-func OptAPIWriteLogWriter(wlw computer.WriteLogWriter) apiOption {
-	return func(a *API) error {
-		a.writeLogWriter = wlw
-		return nil
-	}
-}
-
-func OptAPISnapshotter(snap computer.SnapshotReadWriter) apiOption {
-	return func(a *API) error {
-		a.snapshotReadWriter = snap
 		return nil
 	}
 }
@@ -129,9 +119,6 @@ func OptAPIIsComputeNode(is bool) apiOption {
 func NewAPI(opts ...apiOption) (*API, error) {
 	api := &API{
 		importWorkerPoolSize: 2,
-		writeLogReader:       computer.NewNopWriteLogReader(),
-		writeLogWriter:       computer.NewNopWriteLogWriter(),
-		snapshotReadWriter:   computer.NewNopSnapshotReadWriter(),
 
 		directiveWorkerPoolSize: 2,
 	}
@@ -250,7 +237,7 @@ func (api *API) query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		EmbeddedData:  req.EmbeddedData, // precomputed values that needed to be passed with the request
 		MaxMemory:     req.MaxMemory,
 	}
-	resp, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
+	resp, err := api.server.executor.Execute(ctx, dax.StringTableKeyer(req.Index), q, req.Shards, execOpts)
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "executing")
 	}
@@ -709,49 +696,26 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					Views:           req.Views,
 				}
 
-				// Get the current version for shard.
-				version, err := api.getOrCreateShardVersion(ctx, indexName, shard)
-				if err != nil {
-					return errors.Wrap(err, "get or creating shard version")
-				}
-
 				tkey := dax.TableKey(indexName)
 				qtid := tkey.QualifiedTableID()
 				partitionNum := dax.PartitionNum(partition)
 				shardNum := dax.ShardNum(shard)
 
-				api.server.logger.Debugf("importroaring writing to writelogger: %+v, %[1]T len(msg.Views): %d, table: %s", api.writeLogWriter, len(msg.Views), msg.Table)
-				if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
-					return err
+				b, err := computer.MarshalLogMessage(msg, computer.EncodeTypeJSON)
+				if err != nil {
+					return errors.Wrap(err, "marshalling log message")
+				}
+
+				resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+				err = resource.Append(b)
+				if err != nil {
+					return errors.Wrap(err, "appending shard data") // TODO do we need to set err0 or something?
 				}
 			}
 
 			return qcx.Finish()
 		}
 	}
-}
-
-func (api *API) getOrCreateShardVersion(ctx context.Context, indexName string, shard uint64) (int, error) {
-	tableName := dax.TableName(indexName)
-	shardNum := dax.ShardNum(shard)
-
-	// Here we assume that indexName is the string encoding of QualifiedTableID.
-	qtid, err := dax.QualifiedTableIDFromKey(indexName)
-	if err != nil {
-		return -1, errors.Wrap(err, "decoding qtid from key (indexName)")
-	}
-
-	version, found, err := api.holder.versionStore.ShardVersion(ctx, qtid, shardNum)
-	if err != nil {
-		return -1, errors.Wrap(err, "getting shard version")
-	} else if !found {
-		version = 0
-		api.server.logger.Printf("could not find version for shard: %s, %d, so creating 0", tableName, shardNum)
-		if err := api.holder.versionStore.AddShards(ctx, qtid, dax.NewVersionedShard(shardNum, version)); err != nil {
-			return -1, errors.Wrap(err, "adding shard 0")
-		}
-	}
-	return version, nil
 }
 
 // DeleteField removes the named field from the named index. If the index is not
@@ -982,7 +946,7 @@ func (r RedirectError) Error() string {
 }
 
 // TranslateData returns all translation data in the specified partition.
-func (api *API) TranslateData(ctx context.Context, indexName string, partition int) (io.WriterTo, error) {
+func (api *API) TranslateData(ctx context.Context, indexName string, partition int) (TranslateStore, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.TranslateData")
 	defer span.Finish()
 
@@ -1037,7 +1001,7 @@ func (api *API) TranslateData(ctx context.Context, indexName string, partition i
 }
 
 // FieldTranslateData returns all translation data in the specified field.
-func (api *API) FieldTranslateData(ctx context.Context, indexName, fieldName string) (io.WriterTo, error) {
+func (api *API) FieldTranslateData(ctx context.Context, indexName, fieldName string) (TranslateStore, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.FieldTranslateData")
 	defer span.Finish()
 	if err := api.validate(apiFieldTranslateData); err != nil {
@@ -1286,8 +1250,13 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 	return errors.Wrap(err, "sending DeleteView message")
 }
 
-// IndexShardSnapshot returns a reader that contains the contents of an RBF snapshot for an index/shard.
-func (api *API) IndexShardSnapshot(ctx context.Context, indexName string, shard uint64) (io.ReadCloser, error) {
+// IndexShardSnapshot returns a reader that contains the contents of
+// an RBF snapshot for an index/shard. When snapshotting for
+// serverless, we need to be able to transactionally move the write
+// log to the new version, so we expose writeTx to allow the caller to
+// request a write transaction for the snapshot even though we'll just
+// be reading inside RBF.
+func (api *API) IndexShardSnapshot(ctx context.Context, indexName string, shard uint64, writeTx bool) (io.ReadCloser, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.IndexShardSnapshot")
 	defer span.Finish()
 
@@ -1298,7 +1267,7 @@ func (api *API) IndexShardSnapshot(ctx context.Context, indexName string, shard 
 	}
 
 	// Start transaction.
-	tx := index.holder.txf.NewTx(Txo{Index: index, Shard: shard})
+	tx := index.holder.txf.NewTx(Txo{Index: index, Shard: shard, Write: writeTx})
 
 	// Ensure transaction is an RBF transaction.
 	rtx, ok := tx.(*RBFTx)
@@ -1517,20 +1486,20 @@ func (api *API) Import(ctx context.Context, qcx *Qcx, req *ImportRequest, opts .
 	}
 
 	if api.isComputeNode && !options.suppressLog {
-		// Get the current version for shard.
-		version, err := api.getOrCreateShardVersion(ctx, req.Index, req.Shard)
-		if err != nil {
-			return errors.Wrap(err, "get or creating shard version")
-		}
-
 		tkey := dax.TableKey(req.Index)
 		qtid := tkey.QualifiedTableID()
 		partitionNum := dax.PartitionNum(partition)
 		shardNum := dax.ShardNum(req.Shard)
 
-		// Write the request to the write logger.
-		if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
-			return err
+		b, err := computer.MarshalLogMessage(msg, computer.EncodeTypeJSON)
+		if err != nil {
+			return errors.Wrap(err, "marshalling log message")
+		}
+
+		resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+		err = resource.Append(b)
+		if err != nil {
+			return errors.Wrap(err, "appending shard data") // TODO do we need to set err0 or something?
 		}
 	}
 
@@ -1765,21 +1734,21 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 				ClearRecords: view.ClearRecords,
 			}
 		}
-		// Get the current version for shard.
-		version, err := api.getOrCreateShardVersion(ctx, indexName, shard)
-		if err != nil {
-			err1 = errors.Wrap(err, "get or creating shard version")
-			return err1
-		}
+
 		tkey := dax.TableKey(indexName)
 		qtid := tkey.QualifiedTableID()
 		partitionNum := dax.PartitionNum(partition)
 		shardNum := dax.ShardNum(shard)
 
-		api.server.logger.Debugf("importroaringshard writing shard to writelogger: %+v, len(msg.Views): %d, table: %s", api.writeLogWriter, len(msg.Views), msg.Table)
+		b, err := computer.MarshalLogMessage(msg, computer.EncodeTypeJSON)
+		if err != nil {
+			err1 = errors.Wrap(err, "marshalling log message")
+			return err1
+		}
 
-		if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
-			err1 = errors.Wrap(err, "writing import-roaring-shard to writelogger")
+		resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+		err1 = errors.Wrap(resource.Append(b), "appending shard data")
+		if err1 != nil {
 			return err1
 		}
 	}
@@ -1860,20 +1829,21 @@ func (api *API) ImportValue(ctx context.Context, qcx *Qcx, req *ImportValueReque
 
 	if api.isComputeNode && !options.suppressLog {
 		// Get the current version for shard.
-		version, err := api.getOrCreateShardVersion(ctx, req.Index, req.Shard)
-		if err != nil {
-			return errors.Wrap(err, "get or creating shard version")
-		}
-
 		tkey := dax.TableKey(req.Index)
 		qtid := tkey.QualifiedTableID()
 		partitionNum := dax.PartitionNum(partition)
 		shardNum := dax.ShardNum(req.Shard)
-
-		// Write the request to the write logger.
-		if err := api.writeLogWriter.WriteShard(ctx, qtid, partitionNum, shardNum, version, msg); err != nil {
-			return errors.Wrap(err, "writing shard to write logger")
+		b, err := computer.MarshalLogMessage(msg, computer.EncodeTypeJSON)
+		if err != nil {
+			return errors.Wrap(err, "marshalling log message")
 		}
+
+		resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, shardNum)
+		err = resource.Append(b)
+		if err != nil {
+			return errors.Wrap(err, "appending shard data") // TODO do we need to set err0 or something?
+		}
+
 	}
 
 	return nil
@@ -3107,52 +3077,43 @@ func (api *API) DirectiveApplied(ctx context.Context) (bool, error) {
 // SnapshotShardData triggers the node to perform a shard snapshot based on the
 // provided SnapshotShardDataRequest.
 func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDataRequest) error {
-	qtid := req.TableKey.QualifiedTableID()
-
-	// Confirm that this node is currently responsible for table/shard/fromVersion.
-	var version int
-	if v, ok, err := api.holder.versionStore.ShardVersion(ctx, qtid, req.ShardNum); err != nil {
-		return err
-	} else if !ok {
-		return errors.Errorf("shard not managed by this node: %s, %d", req.TableKey, req.ShardNum)
-	} else if v != req.FromVersion {
-		return errors.Errorf("shard managed by this node is at version: %d, not: %d", v, req.FromVersion)
-	} else {
-		version = v
+	if !api.holder.DirectiveApplied() {
+		return errors.New("don't have directive yet, can't snapshot shard")
 	}
+	// TODO(jaffee) confirm this node is actually responsible for the given
+	// shard? Not sure we need to given that this request comes from
+	// MDS, but might be a belt&suspenders situation.
+
+	qtid := req.TableKey.QualifiedTableID()
 
 	partition := disco.ShardToShardPartition(string(req.TableKey), uint64(req.ShardNum), disco.DefaultPartitionN)
 	partitionNum := dax.PartitionNum(partition)
 
-	// Create the snapshot for the current version.
-	rc, err := api.IndexShardSnapshot(ctx, string(req.TableKey), uint64(req.ShardNum))
+	// Open a write Tx snapshotting current version.
+	rc, err := api.IndexShardSnapshot(ctx, string(req.TableKey), uint64(req.ShardNum), true)
 	if err != nil {
 		return errors.Wrap(err, "getting index/shard readcloser")
 	}
+	defer rc.Close()
 
-	// The following closes rc, the ReadCloser.
-	if err := api.snapshotReadWriter.WriteShardData(ctx, qtid, partitionNum, req.ShardNum, version, rc); err != nil {
-		return errors.Wrap(err, "snapshotting shard data")
+	resource := api.serverlessStorage.GetShardResource(qtid, partitionNum, req.ShardNum)
+	// Bump writelog version while write Tx is held.
+	if ok, err := resource.IncrementWLVersion(); err != nil {
+		return errors.Wrap(err, "incrementing write log version")
+	} else if !ok {
+		return nil
 	}
-
-	// Increment the version of the shard managed by this node.
-	if err := api.holder.versionStore.AddShards(ctx, qtid,
-		dax.NewVersionedShard(req.ShardNum, req.ToVersion),
-	); err != nil {
-		return errors.Wrap(err, "incrementing shard version locally")
-	}
-
-	// Update the cached directive on the holder.
-	api.holder.SetDirective(&req.Directive)
-	api.holder.SetDirectiveApplied(true)
-
-	// Finally, delete the log file for the previous version.
-	return api.writeLogWriter.DeleteShard(ctx, qtid, partitionNum, req.ShardNum, req.FromVersion)
+	// TODO(jaffee) look into downgrading Tx on RBF to read lock here now that WL version is incremented.
+	err = resource.Snapshot(rc)
+	return errors.Wrap(err, "snapshotting shard data")
 }
 
 // SnapshotTableKeys triggers the node to perform a table keys snapshot based on
 // the provided SnapshotTableKeysRequest.
 func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKeysRequest) error {
+	if !api.holder.DirectiveApplied() {
+		return errors.New("don't have directive yet, can't snapshot table keys")
+	}
 	// If the index is not keyed, no-op on snapshotting its keys.
 	if idx, err := api.Index(ctx, string(req.TableKey)); err != nil {
 		return newNotFoundError(ErrIndexNotFound, string(req.TableKey))
@@ -3162,83 +3123,60 @@ func (api *API) SnapshotTableKeys(ctx context.Context, req *dax.SnapshotTableKey
 
 	qtid := req.TableKey.QualifiedTableID()
 
-	// Confirm that this node is currently responsible for table/partition/fromVersion.
-	var version int
-	if v, ok, err := api.holder.versionStore.PartitionVersion(ctx, qtid, req.PartitionNum); err != nil {
-		return err
-	} else if !ok {
-		return errors.Errorf("partition not managed by this node: %s, %d", req.TableKey, req.PartitionNum)
-	} else if v != req.FromVersion {
-		return errors.Errorf("partition managed by this node is at version: %d, not: %d", v, req.FromVersion)
-	} else {
-		version = v
-	}
-
 	// Create the snapshot for the current version.
-	wrTo, err := api.TranslateData(ctx, string(req.TableKey), int(req.PartitionNum))
+	trans, err := api.TranslateData(ctx, string(req.TableKey), int(req.PartitionNum))
 	if err != nil {
-		return errors.Wrapf(err, "getting index/partition writeto: %s/%d", req.TableKey, req.PartitionNum)
+		return errors.Wrapf(err, "getting index/partition translate store: %s/%d", req.TableKey, req.PartitionNum)
 	}
-
-	if err := api.snapshotReadWriter.WriteTableKeys(ctx, qtid, req.PartitionNum, version, wrTo); err != nil {
-		return errors.Wrap(err, "snapshotting table keys")
+	// get a write tx to ensure no other writes while incrementing WL version.
+	wrTo, err := trans.Begin(true)
+	if err != nil {
+		return errors.Wrap(err, "beginning table translate write tx")
 	}
+	defer wrTo.Rollback()
 
-	// Increment the version of the partition managed by this node.
-	if err := api.holder.versionStore.AddPartitions(ctx, qtid,
-		dax.NewVersionedPartition(req.PartitionNum, req.ToVersion),
-	); err != nil {
-		return errors.Wrap(err, "incrementing partition version locally")
+	resource := api.serverlessStorage.GetTableKeyResource(qtid, req.PartitionNum)
+	if ok, err := resource.IncrementWLVersion(); err != nil {
+		return errors.Wrap(err, "incrementing write log version")
+	} else if !ok {
+		// no need to snapshot, no writes
+		return nil
 	}
-
-	// Update the cached directive on the holder.
-	api.holder.SetDirective(&req.Directive)
-	api.holder.SetDirectiveApplied(true)
-
-	// Finally, delete the log file for the previous version.
-	return api.writeLogWriter.DeleteTableKeys(ctx, qtid, req.PartitionNum, req.FromVersion)
+	// TODO(jaffee) downgrade write tx to read-only
+	err = resource.SnapshotTo(wrTo)
+	return errors.Wrap(err, "snapshotting table keys")
 }
 
 // SnapshotFieldKeys triggers the node to perform a field keys snapshot based on
 // the provided SnapshotFieldKeysRequest.
 func (api *API) SnapshotFieldKeys(ctx context.Context, req *dax.SnapshotFieldKeysRequest) error {
+	if !api.holder.DirectiveApplied() {
+		return errors.New("don't have directive yet, can't snapshot field keys")
+	}
 	qtid := req.TableKey.QualifiedTableID()
 
-	// Confirm that this node is currently responsible for table/field/fromVersion.
-	var version int
-	if v, ok, err := api.holder.versionStore.FieldVersion(ctx, qtid, req.Field); err != nil {
-		return err
-	} else if !ok {
-		return errors.Errorf("field not managed by this node: %s, %s", req.TableKey, req.Field)
-	} else if v != req.FromVersion {
-		return errors.Errorf("field managed by this node is at version: %d, not: %d", v, req.FromVersion)
-	} else {
-		version = v
-	}
-
 	// Create the snapshot for the current version.
-	wrTo, err := api.FieldTranslateData(ctx, string(req.TableKey), string(req.Field))
+	trans, err := api.FieldTranslateData(ctx, string(req.TableKey), string(req.Field))
 	if err != nil {
-		return errors.Wrap(err, "getting index/field writeto")
+		return errors.Wrap(err, "getting index/field translator")
 	}
-
-	if err := api.snapshotReadWriter.WriteFieldKeys(ctx, qtid, req.Field, version, wrTo); err != nil {
-		return errors.Wrap(err, "snapshotting field keys")
+	// get a write tx to ensure no other writes while incrementing WL version.
+	wrTo, err := trans.Begin(true)
+	if err != nil {
+		return errors.Wrap(err, "beginning field translate write tx")
 	}
+	defer wrTo.Rollback()
 
-	// Increment the version of the field managed by this node.
-	if err := api.holder.versionStore.AddFields(ctx, qtid,
-		dax.NewVersionedField(req.Field, req.ToVersion),
-	); err != nil {
-		return errors.Wrap(err, "incrementing field version locally")
+	resource := api.serverlessStorage.GetFieldKeyResource(qtid, req.Field)
+	if ok, err := resource.IncrementWLVersion(); err != nil {
+		return errors.Wrap(err, "incrementing writelog version")
+	} else if !ok {
+		// no need to snapshot, no writes
+		return nil
 	}
-
-	// Update the cached directive on the holder.
-	api.holder.SetDirective(&req.Directive)
-	api.holder.SetDirectiveApplied(true)
-
-	// Finally, delete the log file for the previous version.
-	return api.writeLogWriter.DeleteFieldKeys(ctx, qtid, req.Field, req.FromVersion)
+	// TODO(jaffee) downgrade to read tx
+	err = resource.SnapshotTo(wrTo)
+	return errors.Wrap(err, "snapshotTo in FieldKeys")
 }
 
 type serverInfo struct {
@@ -3365,9 +3303,9 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiDeleteDataframe:      {},
 }
 
-func shardInShards(i dax.ShardNum, s dax.VersionedShards) bool {
+func shardInShards(i dax.ShardNum, s dax.ShardNums) bool {
 	for _, o := range s {
-		if i == o.Num {
+		if i == o {
 			return true
 		}
 	}
@@ -3384,11 +3322,6 @@ type SchemaAPI interface {
 
 	DeleteTable(ctx context.Context, tname dax.TableName) error
 	DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error
-}
-
-type SchemaInfoAPI interface {
-	IndexInfo(ctx context.Context, indexName string) (*IndexInfo, error)
-	FieldInfo(ctx context.Context, indexName, fieldName string) (*FieldInfo, error)
 }
 
 type ClusterNode struct {
@@ -3408,6 +3341,7 @@ type SystemAPI interface {
 	ClusterReplicaCount() int
 	ShardWidth() int
 	ClusterState() string
+	DataDir() string
 
 	ClusterNodes() []ClusterNode
 }
@@ -3474,6 +3408,10 @@ func (fsapi *FeatureBaseSystemAPI) ClusterState() string {
 		return "UNKNOWN"
 	}
 	return string(state)
+}
+
+func (fsapi *FeatureBaseSystemAPI) DataDir() string {
+	return fsapi.server.dataDir
 }
 
 func (fsapi *FeatureBaseSystemAPI) ClusterNodes() []ClusterNode {

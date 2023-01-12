@@ -50,11 +50,45 @@ export const QueryContainer: FC<{}> = () => {
   });
 
   const handleHTTPQueryMessages = (response) => {
-    setIsSQL3(true)
-    streamingResults.headers = response.data.schema.fields;
-    streamingResults.rows = response.data.data;
-    setErrorResult(undefined);
-    setResults([streamingResults]);
+    // SQL is true
+    setIsSQL3(true);
+
+    // check status of result
+    if (response.status >= 400 && response.status < 500) {
+      // response had status 400-499
+      streamingResults.error = response.data.error;
+      setErrorResult(streamingResults);
+    } else if (response.data.error != undefined) {
+      // response contained an error, but returned outside 400 range
+      streamingResults.error = response.data.error;
+      setErrorResult(streamingResults);
+    } else {
+      // sets the history
+      let recentQueries = JSON.parse(
+        localStorage.getItem('recent-queries') || '[]'
+      );
+      const lastQuery = localStorage.getItem('last-query');
+      recentQueries.unshift(lastQuery);
+      recentQueries = uniqBy(recentQueries);
+
+      if (recentQueries.length > 10) {
+        localStorage.setItem(
+          'recent-queries',
+          JSON.stringify(recentQueries.slice(0, 9))
+        );
+      } else {
+        localStorage.setItem('recent-queries', JSON.stringify(recentQueries));
+      }
+
+      // stream results for display
+      streamingResults.roundtrip = moment.duration(moment().diff(startTime)).as('milliseconds');
+      streamingResults.headers = response.data.schema.fields;
+      streamingResults.duration = response.data["execution-time"];
+      streamingResults.rows = response.data.data;
+
+      setErrorResult(undefined);
+      setResults([streamingResults, ...results]);
+    }
     setLoading(false);
   }
 
@@ -75,6 +109,7 @@ export const QueryContainer: FC<{}> = () => {
       streamingResults.error = statusMessage;
       setErrorResult(streamingResults);
     } else {
+      // sets the history
       let recentQueries = JSON.parse(
         localStorage.getItem('recent-queries') || '[]'
       );
@@ -138,9 +173,10 @@ export const QueryContainer: FC<{}> = () => {
             if (e.response.status === 404) {
               setIsSQL3(false);
               querySQL(query, handleQueryMessages, handleQueryEnd);
+            } else if (e.response.status === 400) {
+              setIsSQL3(false)
+              handleHTTPQueryMessages(e.response);
             }
-
-
           });
       }
     }

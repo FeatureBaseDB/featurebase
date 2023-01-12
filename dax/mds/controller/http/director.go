@@ -100,7 +100,6 @@ func (d *Director) SendDirective(ctx context.Context, dir *dax.Directive) error 
 
 func (d *Director) SendSnapshotShardDataRequest(ctx context.Context, req *dax.SnapshotShardDataRequest) error {
 	url := fmt.Sprintf("%s/%s/shard-data", req.Address.WithScheme("http"), d.snapshotRequestPath)
-	d.logger.Printf("SEND HTTP snapshot shard data request to: %s\n", url)
 
 	// Encode the request.
 	postBody, err := json.Marshal(req)

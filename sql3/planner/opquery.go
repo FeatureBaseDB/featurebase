@@ -18,12 +18,6 @@ type PlanOpQuery struct {
 
 	ChildOp types.PlanOperator
 
-	// the list of aggregate terms
-	aggregates []types.PlanExpression
-
-	// all the identifiers that are referenced
-	referenceList []*qualifiedRefPlanExpression
-
 	sql      string
 	warnings []string
 }
@@ -75,12 +69,7 @@ func (p *PlanOpQuery) WithChildren(children ...types.PlanOperator) (types.PlanOp
 func (p *PlanOpQuery) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
-
+	result["_schema"] = p.Schema().Plan()
 	result["sql"] = p.sql
 	result["warnings"] = p.warnings
 	result["child"] = p.ChildOp.Plan()

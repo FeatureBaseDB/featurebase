@@ -4,10 +4,9 @@ package pilosa
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
+	"os"
 	"sync"
 
 	"github.com/featurebasedb/featurebase/v3/disco"
@@ -77,9 +76,7 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	// Returns a reader from the given ID offset.
 	EntryReader(ctx context.Context, offset uint64) (TranslateEntryReader, error)
 
-	// WriteTo ensures that the TranslateStore implements io.WriterTo.
-	// It should write the contents of the store to the writer.
-	WriteTo(io.Writer) (int64, error)
+	Begin(write bool) (TranslatorTx, error)
 
 	// ReadFrom ensures that the TranslateStore implements io.ReaderFrom.
 	// It should read from the reader and replace the data store with
@@ -89,68 +86,14 @@ type TranslateStore interface { // TODO: refactor this interface; readonly shoul
 	Delete(records *roaring.Bitmap) (Commitor, error)
 }
 
-// TranslatorSummary is returned, for example from the boltdb string key translators,
-// by calling ComputeTranslatorSummary(). Non-boltdb mocks, etc no-op that method.
-type TranslatorSummary struct {
-	Index string
-
-	// ParitionID is filled for column keys
-	PartitionID int
-
-	NodeID    string
-	StorePath string
-	IsPrimary bool
-	IsReplica bool
-
-	// PrimaryNodeIndex indexes into the cluster []node array to find the primary
-	PrimaryNodeIndex int
-
-	// Field is filled for row keys
-	Field string
-
-	// Checksum has a blake3 crypto hash of all the keys->ID and all the ID->key mappings
-	Checksum string
-
-	// KeyCount has the number of Key->ID mappings
-	KeyCount int
-
-	// IDCount has the number of ID->Key mappings
-	IDCount int
-
-	// false for RowIDs, true for string-Key column IDs.
-	IsColKey bool
-}
-
-func (s *TranslatorSummary) String() string {
-	return fmt.Sprintf(`
-TranslatorSummary{
-	Index      : %v
-	PartitionID: %v
-	NodeID     : %v
-	StorePath  : %v
-	IsPrimary  : %v
-	IsReplica  : %v
-	PrimaryNodeIndex: %v
-	Field   : %v
-	Checksum: %v
-	KeyCount: %v
-	IDCount : %v
-	IsColKey: %v
-}
-`,
-		s.Index,
-		s.PartitionID,
-		s.NodeID,
-		s.StorePath,
-		s.IsPrimary,
-		s.IsReplica,
-		s.PrimaryNodeIndex,
-		s.Field,
-		s.Checksum,
-		s.KeyCount,
-		s.IDCount,
-		s.IsColKey,
-	)
+// TranslatorTx reproduces a subset of the methods on the BoltDB Tx
+// object. Others may be needed in the future and we should just add
+// them here. The idea is not to scatter direct references to bolt
+// stuff throughout the whole codebase.
+type TranslatorTx interface {
+	WriteTo(io.Writer) (int64, error)
+	Rollback() error
+	// e.g. Commit() error
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
@@ -329,307 +272,44 @@ func NewIndexTranslateOffsetMap() *IndexTranslateOffsetMap {
 	}
 }
 
-// Ensure type implements interface.
-var _ TranslateStore = &InMemTranslateStore{}
-
-// InMemTranslateStore is an in-memory storage engine for mapping keys to int values.
-type InMemTranslateStore struct {
-	mu          sync.RWMutex
-	index       string
-	field       string
-	partitionID int
-	partitionN  int
-	readOnly    bool
-	keysByID    map[uint64]string
-	idsByKey    map[string]uint64
-	maxID       uint64
-
-	writeNotify chan struct{}
-}
-
-// NewInMemTranslateStore returns a new instance of InMemTranslateStore.
-func NewInMemTranslateStore(index, field string, partitionID, partitionN int) *InMemTranslateStore {
-	return &InMemTranslateStore{
-		index:       index,
-		field:       field,
-		partitionID: partitionID,
-		partitionN:  partitionN,
-		keysByID:    make(map[uint64]string),
-		idsByKey:    make(map[string]uint64),
-		writeNotify: make(chan struct{}),
-	}
-}
-
 var _ OpenTranslateStoreFunc = OpenInMemTranslateStore
 
-// OpenInMemTranslateStore returns a new instance of InMemTranslateStore.
-// Implements OpenTranslateStoreFunc.
+// OpenInMemTranslateStore returns a new instance of a BoltDB based
+// TranslateStore which removes all its files when it's closed, and
+// tries to operate off a RAM disk if one is configured and set in the
+// environment.  Implements OpenTranslateStoreFunc.
 func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partitionN int, fsyncEnabled bool) (TranslateStore, error) {
-	return NewInMemTranslateStore(index, field, partitionID, partitionN), nil
-}
-
-func (s *InMemTranslateStore) Close() error {
-	return nil
-}
-
-// PartitionID returns the partition id the store was initialized with.
-func (s *InMemTranslateStore) PartitionID() int {
-	return s.partitionID
-}
-
-// ReadOnly returns true if the store is in read-only mode.
-func (s *InMemTranslateStore) ReadOnly() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.readOnly
-}
-
-// SetReadOnly toggles the read-only mode of the store.
-func (s *InMemTranslateStore) SetReadOnly(v bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.readOnly = v
-}
-func (s *InMemTranslateStore) Delete(records *roaring.Bitmap) (Commitor, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, id := range records.Slice() {
-		key := s.keysByID[id]
-		delete(s.keysByID, id)
-		delete(s.idsByKey, key)
+	bt := NewBoltTranslateStore(index, field, partitionID, partitionN, false)
+	iname := index
+	if len(iname) > 10 {
+		iname = iname[:10]
 	}
-	return &NopCommitor{}, nil
-}
-
-// FindKeys looks up the ID for each key.
-// Keys are not created if they do not exist.
-// Missing keys are not considered errors, so the length of the result may be less than that of the input.
-func (s *InMemTranslateStore) FindKeys(keys ...string) (map[string]uint64, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	result := make(map[string]uint64, len(keys))
-	for _, key := range keys {
-		id, ok := s.idsByKey[key]
-		if !ok {
-			// The key does not exist.
-			continue
-		}
-
-		result[key] = id
+	fname := field
+	if len(fname) > 10 {
+		fname = fname[:10]
 	}
 
-	return result, nil
-}
-
-// CreateKeys maps all keys to IDs, creating the IDs if they do not exist.
-// If the translator is read-only, this will return an error.
-func (s *InMemTranslateStore) CreateKeys(keys ...string) (map[string]uint64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.readOnly {
-		return nil, ErrTranslateStoreReadOnly
-	}
-
-	result := make(map[string]uint64, len(keys))
-	for _, key := range keys {
-		id, ok := s.idsByKey[key]
-		if !ok {
-			// The key does not exist.
-			// Generate a new id and update db.
-			if s.field == "" {
-				id = GenerateNextPartitionedID(s.index, s.maxID, s.partitionID, s.partitionN)
-			} else {
-				id = s.maxID + 1
-			}
-			s.set(id, key)
-		}
-
-		result[key] = id
-	}
-
-	return result, nil
-}
-
-func (s *InMemTranslateStore) Match(filter func([]byte) bool) ([]uint64, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var matches []uint64
-	for key, id := range s.idsByKey {
-		if filter([]byte(key)) {
-			matches = append(matches, id)
-		}
-	}
-	sort.Slice(matches, func(i, j int) bool {
-		return matches[i] < matches[j]
-	})
-
-	return matches, nil
-}
-
-// TranslateID converts an integer ID to a string key.
-// Returns a blank string if ID does not exist.
-func (s *InMemTranslateStore) TranslateID(id uint64) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.translateID(id), nil
-}
-
-// TranslateIDs converts a list of integer IDs to a list of string keys.
-func (s *InMemTranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	keys := make([]string, len(ids))
-	for i := range ids {
-		keys[i] = s.translateID(ids[i])
-	}
-	return keys, nil
-}
-
-func (s *InMemTranslateStore) translateID(id uint64) string {
-	return s.keysByID[id]
-}
-
-// ForceSet writes the id/key pair to the db. Used by replication.
-func (s *InMemTranslateStore) ForceSet(id uint64, key string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.set(id, key)
-	return nil
-}
-
-// set assigns the id/key pair to the store.
-func (s *InMemTranslateStore) set(id uint64, key string) {
-	s.keysByID[id] = key
-	s.idsByKey[key] = id
-	if id > s.maxID {
-		s.maxID = id
-	}
-	s.notifyWrite()
-}
-
-// WriteNotify returns a channel that is closed when a new entry is written.
-func (s *InMemTranslateStore) WriteNotify() <-chan struct{} {
-	s.mu.RLock()
-	ch := s.writeNotify
-	s.mu.RUnlock()
-	return ch
-}
-
-// notifyWrite sends a write notification under write lock.
-func (s *InMemTranslateStore) notifyWrite() {
-	close(s.writeNotify)
-	s.writeNotify = make(chan struct{})
-}
-
-// EntryReader returns an error. Replication is not supported.
-func (s *InMemTranslateStore) EntryReader(ctx context.Context, offset uint64) (TranslateEntryReader, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return newInMemTranslateEntryReader(ctx, s, offset), nil
-}
-
-// WriteTo implements io.WriterTo. It's not efficient or careful, but we
-// don't expect to use InMemTranslateStore much, it's mostly there to
-// avoid disk load during testing.
-func (s *InMemTranslateStore) WriteTo(w io.Writer) (int64, error) {
-	bytes, err := json.Marshal(s.keysByID)
+	tf, err := os.CreateTemp(os.Getenv("RAMDISK"), fmt.Sprintf("bolt-i%s-f%s-%d-%d-", iname, fname, partitionID, partitionN))
 	if err != nil {
-		return 0, err
+		return nil, errors.Wrap(err, "making temp file for boltdb key translation")
 	}
-	n, err := w.Write(bytes)
-	return int64(n), err
-}
-
-// ReadFrom implements io.ReaderFrom. It's not efficient or careful, but we
-// don't expect to use InMemTranslateStore much, it's mostly there to
-// avoid disk load during testing.
-func (s *InMemTranslateStore) ReadFrom(r io.Reader) (count int64, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var bytes []byte
-	bytes, err = io.ReadAll(r)
-	count = int64(len(bytes))
+	bt.Path = tf.Name()
+	err = bt.Open()
 	if err != nil {
-		return count, err
+		return nil, errors.Wrap(err, "opening in mem boltdb")
 	}
-	var keysByID map[uint64]string
-	err = json.Unmarshal(bytes, &keysByID)
+	return &BoltInMemTranslateStore{bt}, err
+}
+
+type BoltInMemTranslateStore struct {
+	*BoltTranslateStore
+}
+
+func (b *BoltInMemTranslateStore) Close() error {
+	defer os.RemoveAll(b.BoltTranslateStore.Path)
+	err := b.BoltTranslateStore.Close()
 	if err != nil {
-		return count, err
+		return errors.Wrap(err, "closing in mem bolt translate store")
 	}
-	s.maxID = 0
-	s.keysByID = keysByID
-	s.idsByKey = make(map[string]uint64, len(s.keysByID))
-	for k, v := range s.keysByID {
-		s.idsByKey[v] = k
-		if k > s.maxID {
-			s.maxID = k
-		}
-	}
-	return count, nil
-}
-
-// MaxID returns the highest identifier in the store.
-func (s *InMemTranslateStore) MaxID() (uint64, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.maxID, nil
-}
-
-// inMemEntryReader represents a stream of translation entries for an inmem translation store.
-type inMemTranslateEntryReader struct {
-	ctx    context.Context
-	cancel func()
-
-	store  *InMemTranslateStore
-	offset uint64
-}
-
-func newInMemTranslateEntryReader(ctx context.Context, store *InMemTranslateStore, offset uint64) *inMemTranslateEntryReader {
-	r := &inMemTranslateEntryReader{
-		store:  store,
-		offset: offset,
-	}
-	r.ctx, r.cancel = context.WithCancel(ctx)
-	return r
-}
-
-// Close stops the reader.
-func (r *inMemTranslateEntryReader) Close() error {
-	r.cancel()
 	return nil
-}
-
-// ReadEntry reads the next available entry.
-func (r *inMemTranslateEntryReader) ReadEntry(entry *TranslateEntry) error {
-	for {
-		// Wait until our offset is less than the max id.
-		notify := r.store.WriteNotify()
-		if maxID, err := r.store.MaxID(); err != nil {
-			return err
-		} else if r.offset > maxID {
-			select {
-			case <-r.ctx.Done():
-				return io.EOF
-			case <-notify:
-				continue // restart loop
-			}
-		}
-
-		// Translate key for offset.
-		key, err := r.store.TranslateID(r.offset)
-		if err != nil {
-			return err
-		}
-
-		// Copy id/key pair to entry argument and increment offset for next read.
-		entry.Index, entry.Field = r.store.index, r.store.field
-		entry.ID, entry.Key = r.offset, key
-		r.offset++
-		return nil
-	}
 }

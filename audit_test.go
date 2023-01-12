@@ -7,7 +7,7 @@ import (
 	"os"
 	"reflect"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 )
 

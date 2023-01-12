@@ -56,11 +56,7 @@ func (p *PlanOpFilter) Children() []types.PlanOperator {
 func (p *PlanOpFilter) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	ps := make([]string, 0)
-	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = ps
+	result["_schema"] = p.Schema().Plan()
 	result["predicate"] = p.Predicate.Plan()
 	result["child"] = p.ChildOp.Plan()
 	return result
@@ -91,8 +87,7 @@ func (p *PlanOpFilter) WithUpdatedExpressions(exprs ...types.PlanExpression) (ty
 	if len(exprs) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
 	}
-	p.Predicate = exprs[0]
-	return p, nil
+	return NewPlanOpFilter(p.planner, exprs[0], p.ChildOp), nil
 }
 
 type filterIterator struct {

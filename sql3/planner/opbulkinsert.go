@@ -41,6 +41,8 @@ type bulkInsertOptions struct {
 	format string
 	// whether the source has a header row
 	hasHeaderRow bool
+	// whether we allow missing values for NDJSON jsonpath expressions
+	allowMissingValues bool
 	// input specifier (FILE is the only one right now)
 	input string
 
@@ -74,11 +76,7 @@ func NewPlanOpBulkInsert(p *ExecutionPlanner, tableName string, options *bulkIns
 func (p *PlanOpBulkInsert) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
+	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
 
 	options := make(map[string]interface{})
@@ -88,6 +86,7 @@ func (p *PlanOpBulkInsert) Plan() map[string]interface{} {
 	options["format"] = p.options.format
 	options["input"] = p.options.input
 	options["hasHeaderRow"] = p.options.hasHeaderRow
+	options["allowMissingValues"] = p.options.allowMissingValues
 
 	colMap := make([]interface{}, 0)
 	for _, m := range p.options.targetColumns {
@@ -279,10 +278,14 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 			result[idx] = intVal
 
 		case *parser.DataTypeIDSet:
-			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			intVal, err := strconv.ParseInt(evalValue, 10, 64)
+			if err != nil {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+			result[idx] = []int64{intVal}
 
 		case *parser.DataTypeStringSet:
-			return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			result[idx] = []string{evalValue}
 
 		case *parser.DataTypeTimestamp:
 			intVal, err := strconv.ParseInt(evalValue, 10, 64)
@@ -457,258 +460,280 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 		}
 	}
 
-	if i.reader.Scan() {
-		if err := i.reader.Err(); err != nil {
-			return nil, err
-		}
-
-		jsonValue := i.reader.Text()
-
-		// now we do the mapping to the output row
-		result := make([]interface{}, len(i.options.mapExpressions))
-
-		// parse the json
-		v := interface{}(nil)
-		err := json.Unmarshal([]byte(jsonValue), &v)
-
-		if err != nil {
-			return nil, sql3.NewErrParsingJSON(0, 0, jsonValue, err.Error())
-		}
-
-		// type check against the output type of the map operation
-
-		for idx, expr := range i.pathExpressions {
-
-			evalValue, err := expr(ctx, v)
-			if err != nil {
-				return nil, sql3.NewErrEvaluatingJSONPathExpr(0, 0, i.mapExpressionResults[idx], jsonValue, err.Error())
+	for {
+		if i.reader.Scan() {
+			if err := i.reader.Err(); err != nil {
+				return nil, err
 			}
 
-			// if nil (null) then return nil
-			if evalValue == nil {
-				result[idx] = nil
+			jsonValue := i.reader.Text()
+			jsonValue = strings.TrimSpace(jsonValue)
+			if len(jsonValue) == 0 {
 				continue
 			}
 
-			mapColumn := i.options.mapExpressions[idx]
-			switch mapColumn.colType.(type) {
-			case *parser.DataTypeID, *parser.DataTypeInt:
+			// now we do the mapping to the output row
+			result := make([]interface{}, len(i.options.mapExpressions))
 
-				switch v := evalValue.(type) {
-				case float64:
-					// if v is a whole number then make it an int
-					if v == float64(int64(v)) {
-						result[idx] = int64(v)
+			// parse the json
+			v := interface{}(nil)
+			err := json.Unmarshal([]byte(jsonValue), &v)
+
+			if err != nil {
+				return nil, sql3.NewErrParsingJSON(0, 0, jsonValue, err.Error())
+			}
+
+			// type check against the output type of the map operation
+
+			for idx, expr := range i.pathExpressions {
+
+				evalValue, err := expr(ctx, v)
+				if err != nil {
+					if i.options.allowMissingValues && (strings.HasPrefix(err.Error(), "unknown key") || strings.HasPrefix(err.Error(), "unknown parameter")) {
+						evalValue = nil
 					} else {
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						return nil, sql3.NewErrEvaluatingJSONPathExpr(0, 0, i.mapExpressionResults[idx], jsonValue, err.Error())
 					}
-
-				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case string:
-					intVal, err := strconv.ParseInt(v, 10, 64)
-					if err != nil {
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-					}
-					result[idx] = intVal
-
-				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				default:
-					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 				}
 
-			case *parser.DataTypeIDSet:
-				switch v := evalValue.(type) {
-				case float64:
-					// if v is a whole number then make it an int, and then turn that into an idset
-					if v == float64(int64(v)) {
-						result[idx] = []int64{int64(v)}
-					} else {
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-					}
+				// if nil (null) then return nil
+				if evalValue == nil {
+					result[idx] = nil
+					continue
+				}
 
-				case []interface{}:
-					setValue := make([]int64, 0)
-					for _, i := range v {
-						f, ok := i.(float64)
-						if !ok {
-							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-						}
-						if f == float64(int64(f)) {
-							setValue = append(setValue, int64(f))
+				mapColumn := i.options.mapExpressions[idx]
+				switch mapColumn.colType.(type) {
+				case *parser.DataTypeID, *parser.DataTypeInt:
+
+					switch v := evalValue.(type) {
+					case float64:
+						// if v is a whole number then make it an int
+						if v == float64(int64(v)) {
+							result[idx] = int64(v)
 						} else {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
-					}
-					result[idx] = setValue
 
-				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					case []interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
-				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				default:
-					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
-				}
-
-			case *parser.DataTypeStringSet:
-				switch v := evalValue.(type) {
-				case float64:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case []interface{}:
-					setValue := make([]string, 0)
-					for _, i := range v {
-						f, ok := i.(string)
-						if !ok {
+					case string:
+						intVal, err := strconv.ParseInt(v, 10, 64)
+						if err != nil {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
-						setValue = append(setValue, f)
-					}
-					result[idx] = setValue
+						result[idx] = intVal
 
-				case string:
-					result[idx] = []string{v}
-
-				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				default:
-					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
-				}
-
-			case *parser.DataTypeTimestamp:
-				switch v := evalValue.(type) {
-				case float64:
-					// if v is a whole number then make it an int
-					if v == float64(int64(v)) {
-						result[idx] = time.UnixMilli(int64(v)).UTC()
-					} else {
+					case bool:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-					}
 
-				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case string:
-					if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
-						result[idx] = tm
-					} else if tm, err := time.ParseInLocation(time.RFC3339, v, time.UTC); err == nil {
-						result[idx] = tm
-					} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
-						result[idx] = tm
-					} else {
+					case interface{}:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					default:
+						return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 					}
 
-				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+				case *parser.DataTypeIDSet:
+					switch v := evalValue.(type) {
+					case float64:
+						// if v is a whole number then make it an int, and then turn that into an idset
+						if v == float64(int64(v)) {
+							result[idx] = []int64{int64(v)}
+						} else {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						}
 
-				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					case []interface{}:
+						setValue := make([]int64, 0)
+						for _, i := range v {
+							switch v := i.(type) {
+							case float64:
+								if v == float64(int64(v)) {
+									setValue = append(setValue, int64(v))
+								} else {
+									return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+								}
+							case string:
+								intVal, err := strconv.ParseInt(v, 10, 64)
+								if err != nil {
+									return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+								}
+								setValue = append(setValue, int64(intVal))
 
-				default:
-					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
-				}
+							default:
+								return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+							}
+						}
+						result[idx] = setValue
 
-			case *parser.DataTypeString:
-				switch v := evalValue.(type) {
-				case float64:
-					// if a whole number make it an int
-					if v == float64(int64(v)) {
-						result[idx] = fmt.Sprintf("%d", int64(v))
-					} else {
-						result[idx] = fmt.Sprintf("%f", v)
-					}
+					case string:
+						intVal, err := strconv.ParseInt(v, 10, 64)
+						if err != nil {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						}
+						result[idx] = []int64{int64(intVal)}
 
-				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case string:
-					result[idx] = v
-
-				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				default:
-					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
-				}
-
-			case *parser.DataTypeBool:
-				switch v := evalValue.(type) {
-				case float64:
-					// if a whole number make it an int, and convert to a bool
-					if v == float64(int64(v)) {
-						result[idx] = v > 0
-					} else {
+					case bool:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-					}
 
-				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case string:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case bool:
-					result[idx] = v
-
-				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				default:
-					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
-				}
-
-			case *parser.DataTypeDecimal:
-				switch v := evalValue.(type) {
-				case float64:
-					result[idx] = pql.FromFloat64(v)
-
-				case []interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
-
-				case string:
-					// try to parse from a string
-					dv, err := pql.ParseDecimal(v)
-					if err != nil {
+					case interface{}:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					default:
+						return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
 					}
-					result[idx] = dv
 
-				case bool:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+				case *parser.DataTypeStringSet:
+					switch v := evalValue.(type) {
+					case float64:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
-				case interface{}:
-					return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+					case []interface{}:
+						setValue := make([]string, 0)
+						for _, i := range v {
+							f, ok := i.(string)
+							if !ok {
+								return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+							}
+							setValue = append(setValue, f)
+						}
+						result[idx] = setValue
+
+					case string:
+						result[idx] = []string{v}
+
+					case bool:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					default:
+						return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
+					}
+
+				case *parser.DataTypeTimestamp:
+					switch v := evalValue.(type) {
+					case float64:
+						// if v is a whole number then make it an int
+						if v == float64(int64(v)) {
+							result[idx] = time.UnixMilli(int64(v)).UTC()
+						} else {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						}
+
+					case []interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case string:
+						if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
+							result[idx] = tm
+						} else if tm, err := time.ParseInLocation(time.RFC3339, v, time.UTC); err == nil {
+							result[idx] = tm
+						} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
+							result[idx] = tm
+						} else {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						}
+
+					case bool:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					default:
+						return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
+					}
+
+				case *parser.DataTypeString:
+					switch v := evalValue.(type) {
+					case float64:
+						// if a whole number make it an int
+						if v == float64(int64(v)) {
+							result[idx] = fmt.Sprintf("%d", int64(v))
+						} else {
+							result[idx] = fmt.Sprintf("%f", v)
+						}
+
+					case []interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case string:
+						result[idx] = v
+
+					case bool:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					default:
+						return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
+					}
+
+				case *parser.DataTypeBool:
+					switch v := evalValue.(type) {
+					case float64:
+						// if a whole number make it an int, and convert to a bool
+						if v == float64(int64(v)) {
+							result[idx] = v > 0
+						} else {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						}
+
+					case []interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case string:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case bool:
+						result[idx] = v
+
+					case interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					default:
+						return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
+					}
+
+				case *parser.DataTypeDecimal:
+					switch v := evalValue.(type) {
+					case float64:
+						result[idx] = pql.FromFloat64(v)
+
+					case []interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case string:
+						// try to parse from a string
+						dv, err := pql.ParseDecimal(v)
+						if err != nil {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						}
+						result[idx] = dv
+
+					case bool:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					case interface{}:
+						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+
+					default:
+						return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
+					}
 
 				default:
-					return nil, sql3.NewErrInternalf("unhandled type '%T'", evalValue)
+					return nil, sql3.NewErrInternalf("unhandled type '%T'", mapColumn.colType)
 				}
-
-			default:
-				return nil, sql3.NewErrInternalf("unhandled type '%T'", mapColumn.colType)
 			}
+			return result, nil
 		}
-		return result, nil
+		return nil, types.ErrNoMoreRows
 	}
-	return nil, types.ErrNoMoreRows
 }
 
 func (i *bulkInsertSourceNDJsonRowIter) Close(ctx context.Context) {

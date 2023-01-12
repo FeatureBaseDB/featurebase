@@ -20,14 +20,10 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/golang-jwt/jwt"
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/authn"
 	batch "github.com/featurebasedb/featurebase/v3/batch"
-	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
-	"github.com/featurebasedb/featurebase/v3/idk/idktest"
 	"github.com/featurebasedb/featurebase/v3/idk/mds"
-	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -62,7 +58,7 @@ func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedT
 
 	mdsClient := mdsclient.New(dax.Address(address), logger.StderrLogger)
 	main.NewImporterFn = func() pilosa.Importer {
-		return mds.NewImporter(mdsClient, qtbl.TableQualifier, &qtbl.Table)
+		return mds.NewImporter(mdsClient, mdsClient, qtbl.TableQualifier, &qtbl.Table)
 	}
 }
 

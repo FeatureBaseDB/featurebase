@@ -78,7 +78,6 @@ func (*ResultColumn) node()             {}
 func (*RollbackStatement) node()        {}
 func (*SavepointStatement) node()       {}
 func (*SelectStatement) node()          {}
-func (*ShardWidthOption) node()         {}
 func (*StringLit) node()                {}
 func (*TableValuedFunction) node()      {}
 func (*TimeUnitConstraint) node()       {}
@@ -196,7 +195,7 @@ func StatementSource(stmt Statement) Source {
 	case *UpdateStatement:
 		return stmt.Table
 	case *DeleteStatement:
-		return stmt.Table
+		return stmt.Source
 	default:
 		return nil
 	}
@@ -771,7 +770,6 @@ type TableOption interface {
 }
 
 func (*KeyPartitionsOption) option() {}
-func (*ShardWidthOption) option()    {}
 func (*CommentOption) option()       {}
 
 type KeyPartitionsOption struct {
@@ -782,19 +780,6 @@ type KeyPartitionsOption struct {
 func (o *KeyPartitionsOption) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("KEYPARTITIONS (")
-	buf.WriteString(o.Expr.String())
-	buf.WriteString(")")
-	return buf.String()
-}
-
-type ShardWidthOption struct {
-	ShardWidth Pos  // position of SHARDWIDTH keyword
-	Expr       Expr // expression
-}
-
-func (o *ShardWidthOption) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("SHARDWIDTH (")
 	buf.WriteString(o.Expr.String())
 	buf.WriteString(")")
 	return buf.String()
@@ -2818,14 +2803,15 @@ type BulkInsertStatement struct {
 	TransformList   []Expr // source to column map
 	TransformRparen Pos    // position of column list right paren
 
-	From       Pos  // position of FROM keyword
-	DataSource Expr // data source
-	With       Pos  // position of WITH keyword
-	BatchSize  Expr
-	RowsLimit  Expr
-	Format     Expr
-	Input      Expr
-	HeaderRow  Expr // has header row (that needs to be skipped)
+	From               Pos  // position of FROM keyword
+	DataSource         Expr // data source
+	With               Pos  // position of WITH keyword
+	BatchSize          Expr
+	RowsLimit          Expr
+	Format             Expr
+	Input              Expr
+	HeaderRow          Expr // has header row (that needs to be skipped)
+	AllowMissingValues Expr // allows missing values
 }
 
 func (s *BulkInsertStatement) String() string {
@@ -3165,23 +3151,14 @@ func (s *UpdateStatement) String() string {
 }
 
 type DeleteStatement struct {
-	WithClause *WithClause         // clause containing CTEs
-	Delete     Pos                 // position of UPDATE keyword
-	From       Pos                 // position of FROM keyword
-	Table      *QualifiedTableName // table name
+	//	WithClause *WithClause    // clause containing CTEs
+	Delete    Pos                 // position of UPDATE keyword
+	From      Pos                 // position of FROM keyword
+	TableName *QualifiedTableName // the name of the table we are deleting from
+	Source    Source              // source for the delete
 
 	Where     Pos  // position of WHERE keyword
 	WhereExpr Expr // conditional expression
-
-	Order         Pos             // position of ORDER keyword
-	OrderBy       Pos             // position of BY keyword after ORDER
-	OrderingTerms []*OrderingTerm // terms of ORDER BY clause
-
-	Limit       Pos  // position of LIMIT keyword
-	LimitExpr   Expr // limit expression
-	Offset      Pos  // position of OFFSET keyword
-	OffsetComma Pos  // position of COMMA (instead of OFFSET)
-	OffsetExpr  Expr // offset expression
 }
 
 // Clone returns a deep copy of s.
@@ -3190,47 +3167,20 @@ func (s *DeleteStatement) Clone() *DeleteStatement {
 		return nil
 	}
 	other := *s
-	other.WithClause = s.WithClause.Clone()
-	other.Table = s.Table.Clone()
+	//other.WithClause = s.WithClause.Clone()
+	other.Source = CloneSource(s.Source)
 	other.WhereExpr = CloneExpr(s.WhereExpr)
-	other.OrderingTerms = cloneOrderingTerms(s.OrderingTerms)
-	other.LimitExpr = CloneExpr(s.LimitExpr)
-	other.OffsetExpr = CloneExpr(s.OffsetExpr)
 	return &other
 }
 
 // String returns the string representation of the clause.
 func (s *DeleteStatement) String() string {
 	var buf bytes.Buffer
-	if s.WithClause != nil {
-		buf.WriteString(s.WithClause.String())
-		buf.WriteString(" ")
-	}
 
-	fmt.Fprintf(&buf, "DELETE FROM %s", s.Table.String())
+	fmt.Fprintf(&buf, "DELETE FROM %s", s.TableName.String())
 	if s.WhereExpr != nil {
 		fmt.Fprintf(&buf, " WHERE %s", s.WhereExpr.String())
 	}
-
-	// Write ORDER BY.
-	if len(s.OrderingTerms) != 0 {
-		buf.WriteString(" ORDER BY ")
-		for i, term := range s.OrderingTerms {
-			if i != 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(term.String())
-		}
-	}
-
-	// Write LIMIT/OFFSET.
-	if s.LimitExpr != nil {
-		fmt.Fprintf(&buf, " LIMIT %s", s.LimitExpr.String())
-		if s.OffsetExpr != nil {
-			fmt.Fprintf(&buf, " OFFSET %s", s.OffsetExpr.String())
-		}
-	}
-
 	return buf.String()
 }
 

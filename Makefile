@@ -1,5 +1,6 @@
 .PHONY: build clean build-lattice cover cover-viz default docker docker-build docker-tag-push generate generate-protoc generate-pql generate-statik generate-stringer install install-protoc-gen-gofast install-protoc install-statik install-peg test docker-login
 
+SHELL := /bin/bash
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 VARIANT = Molecula
 GO=go
@@ -76,6 +77,16 @@ testvsub:
 			echo; echo "999 done testing subpkg $$pkg"; \
 		done
 
+# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/mnt/ramdisk
+ramdisk-linux:
+	mount -o size=2G -t tmpfs none /mnt/ramdisk
+
+# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/Volumes/RAMDisk
+ramdisk-osx:
+	diskutil erasevolume HFS+ 'RAMDisk' `hdiutil attach -nobrowse -nomount ram://4194304`
+
+detach-ramdisk-osx:
+	hdiutil detach /Volumes/RAMDisk
 
 testvsub-race:
 	@set -e; for pkg in $(GOPACKAGES); do \
@@ -228,15 +239,16 @@ build-for-quick:
 docker-image-featurebase-quick: build-for-quick
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
-	    --file Dockerfile-dax-quick ./.quick/
+	    --file Dockerfile-dax-quick \
+	    --tag dax/featurebase ./.quick/
 
 
 docker-image-datagen: vendor
 	docker build --tag dax/datagen --file Dockerfile-datagen .
 
 ecr-push-featurebase: docker-login
-	docker tag dax/featurebase:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax:latest
-	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax:latest
+	docker tag dax/featurebase:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/featurebase:latest
+	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/featurebase:latest
 
 ecr-push-datagen: docker-login
 	docker tag dax/datagen:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/datagen:latest

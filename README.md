@@ -31,7 +31,7 @@ molecula-consumer-csv \
     --files example.csv
 ```
 
-This will ingest the `example.csv` file into a FeatureBase table called `repository`. If the table does not exist, it will be automatically created. Learn more about ingesting into FeatureBase: [https://docs.featurebase.com/data-ingestion/enterprise/ingesters][Ingest]
+This will ingest the `example.csv` file into a FeatureBase table called `repository`. If the table does not exist, it will be automatically created. Learn more about [ingesting data into FeatureBase][Ingest]
 
 2. Query your data. 
 ```
@@ -44,13 +44,13 @@ Learn about supported [SQL][SQL], native [Pilosa Query Language (PQL)][PQL].
 ### Data Model
 
 Because FeatureBase is built on bitmaps, there is bit of a learning curve to grasp how your data is represented. 
-Data Model Guide: [https://docs.featurebase.com/data-modeling-guide/data-modeling][DataModel]
+[Learn about Data Modeling][DataModel].
 
 ### More Information
 
-Installation:[https://docs.featurebase.com/setting-up-featurebase/enterprise/installing-featurebase][Install]
+[Installation][Install]
 
-Configuration: [https://docs.featurebase.com/setting-up-featurebase/enterprise/featurebase-configuration][Config]
+[Configuration][Config]
 
 ## Community
 
@@ -74,12 +74,12 @@ A lot has changed since the days of Pilosa. This list highlights some new capabi
 FeatureBase is licensed under the [Apache License, Version 2.0][License]
 
 [Community]: http://www.featurebase.com/community?utm_campaign=Open%20Source&utm_source=GitHub
-[Config]: https://docs.featurebase.com/setting-up-featurebase/enterprise/featurebase-configuration?utm_campaign=Open%20Source&utm_source=GitHub
-[DataModel]: https://docs.featurebase.com/data-modeling-guide/data-modeling?utm_campaign=Open%20Source&utm_source=GitHub
+[Config]: https://docs.featurebase.com/community/community-setup/featurebase-configuration?utm_campaign=Open%20Source&utm_source=GitHub
+[DataModel]: https://docs.featurebase.com/concepts/data-modeling-overview?utm_campaign=Open%20Source&utm_source=GitHub
 [Discord]: https://discord.gg/FBn2vEp7Na
 [HomePage]: http://featurebase.com?utm_campaign=Open%20Source&utm_source=GitHub
-[Ingest]: https://docs.featurebase.com/data-ingestion/enterprise/ingesters?utm_campaign=Open%20Source&utm_source=GitHub
-[Install]: http://docs.featurebase.com/setting-up-featurebase/enterprise/installing-featurebase?utm_campaign=Open%20Source&utm_source=GitHub
+[Ingest]: https://docs.featurebase.com/community/community-data-ingestion/ingesters?utm_campaign=Open%20Source&utm_source=GitHub
+[Install]: https://docs.featurebase.com/community/community-setup/community-install-config?utm_campaign=Open%20Source&utm_source=GitHub
 [License]: http://www.apache.org/licenses/LICENSE-2.0
-[PQL]: http://docs.featurebase.com/data-querying/pql/introduction?utm_campaign=Open%20Source&utm_source=GitHub
-[SQL]: http://docs.featurebase.com/data-querying/sql?utm_campaign=Open%20Source&utm_source=GitHub
+[PQL]: https://docs.featurebase.com/pql-guide/pql-introduction?utm_campaign=Open%20Source&utm_source=GitHub
+[SQL]: https://docs.featurebase.com/sql-preview/sql-preview?utm_campaign=Open%20Source&utm_source=GitHub

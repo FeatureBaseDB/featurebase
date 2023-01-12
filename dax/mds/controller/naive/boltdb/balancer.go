@@ -289,6 +289,53 @@ func (w *workerJobService) DeleteJob(ctx context.Context, balancerName string, w
 	return tx.Commit()
 }
 
+func (w *workerJobService) DeleteJobs(ctx context.Context, balancerName, prefix string) (naive.InternalDiffs, error) {
+	tx, err := w.db.BeginTx(ctx, true)
+	if err != nil {
+		return nil, errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	bkt := tx.Bucket(bucketNaiveBalancer)
+	if bkt == nil {
+		return nil, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNaiveBalancer)
+	}
+
+	workers, err := w.getWorkers(ctx, tx, balancerName)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting workers")
+	}
+
+	idiffs := naive.NewInternalDiffs()
+	for _, worker := range workers {
+		// get worker
+		wrkr := bkt.Get(workerKey(balancerName, worker))
+		if wrkr == nil {
+			panic("didn't find worker that should... definitely exist")
+		}
+		jobset, err := decodeJobSet(wrkr)
+		if err != nil {
+			return nil, errors.Wrap(err, "decoding job set")
+		}
+
+		jobs := jobset.RemovePrefix(prefix)
+		for _, job := range jobs {
+			idiffs.Removed(worker, job)
+		}
+		val, err := encodeJobSet(jobset)
+		if err != nil {
+			return nil, errors.Wrap(err, "encoding job set")
+		}
+
+		if err := bkt.Put(workerKey(balancerName, worker), val); err != nil {
+			return nil, errors.Wrap(err, "putting worker")
+		}
+
+	}
+
+	return idiffs, tx.Commit()
+}
+
 func (w *workerJobService) ListJobs(ctx context.Context, balancerName string, worker dax.Worker) (dax.Jobs, error) {
 	tx, err := w.db.BeginTx(ctx, false)
 	if err != nil {
@@ -417,6 +464,42 @@ func (f *freeJobService) DeleteFreeJob(ctx context.Context, balancerName string,
 	}
 
 	jobset.Remove(job)
+	val, err := encodeJobSet(jobset)
+	if err != nil {
+		return errors.Wrap(err, "encoding job set")
+	}
+
+	if err := bkt.Put(freeJobKey(balancerName), val); err != nil {
+		return errors.Wrap(err, "putting free job")
+	}
+
+	return tx.Commit()
+}
+
+func (f *freeJobService) DeleteFreeJobs(ctx context.Context, balancerName, prefix string) error {
+	tx, err := f.db.BeginTx(ctx, true)
+	if err != nil {
+		return errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	bkt := tx.Bucket(bucketNaiveBalancer)
+	if bkt == nil {
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNaiveBalancer)
+	}
+
+	// get free jobs
+	fjs := bkt.Get(freeJobKey(balancerName))
+	if fjs == nil {
+		return nil
+	}
+
+	jobset, err := decodeJobSet(fjs)
+	if err != nil {
+		return errors.Wrap(err, "decoding job set")
+	}
+
+	jobset.RemovePrefix(prefix)
 	val, err := encodeJobSet(jobset)
 	if err != nil {
 		return errors.Wrap(err, "encoding job set")

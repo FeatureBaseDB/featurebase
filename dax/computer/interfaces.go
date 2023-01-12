@@ -18,8 +18,12 @@ type Registrar interface {
 // These are typically implemented by the WriteLogger client.
 type WriteLogService interface {
 	AppendMessage(bucket string, key string, version int, msg []byte) error
-	LogReader(bucket string, key string, version int) (io.Reader, io.Closer, error)
+	LogReader(bucket string, key string, version int) (io.ReadCloser, error)
+	LogReaderFrom(bucket string, key string, version int, offset int) (io.ReadCloser, error)
 	DeleteLog(bucket string, key string, version int) error
+	List(bucket, key string) ([]WriteLogInfo, error)
+	Lock(bucket, key string) error
+	Unlock(bucket, key string) error
 }
 
 // SnapshotService represents the SnapshotService methods which Computer uses.
@@ -28,71 +32,17 @@ type SnapshotService interface {
 	Read(bucket string, key string, version int) (io.ReadCloser, error)
 	Write(bucket string, key string, version int, rc io.ReadCloser) error
 	WriteTo(bucket string, key string, version int, wrTo io.WriterTo) error
+	List(bucket, key string) ([]SnapInfo, error)
 }
 
-// SnapshotReadWriter provides the interface for all snapshot read and writes in
-// FeatureBase.
-type SnapshotReadWriter interface {
-	WriteShardData(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int, rc io.ReadCloser) error
-	ReadShardData(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int) (io.ReadCloser, error)
-
-	WriteTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int, wrTo io.WriterTo) error
-	ReadTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int) (io.ReadCloser, error)
-
-	WriteFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName, version int, wrTo io.WriterTo) error
-	ReadFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName, version int) (io.ReadCloser, error)
+// SnapInfo holds metadata about a snapshot.
+type SnapInfo struct {
+	Version int
+	// Date    time.Time
 }
 
-// WriteLogWriter provides the interface for all data writes to FeatureBase. After
-// data has been written to the local FeatureBase node, the respective interface
-// method(s) will be called.
-type WriteLogWriter interface {
-	// CreateTableKeys sends a map of string key to uint64 ID for the table and
-	// partition provided.
-	CreateTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int, _ map[string]uint64) error
-
-	// DeleteTableKeys deletes all table keys for the table and partition
-	// provided.
-	DeleteTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int) error
-
-	// CreateFieldKeys sends a map of string key to uint64 ID for the table and
-	// field provided.
-	CreateFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName, version int, _ map[string]uint64) error
-
-	// DeleteTableKeys deletes all field keys for the table and field provided.
-	DeleteFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName, version int) error
-
-	// WriteShard sends shard data for the table and shard provided.
-	WriteShard(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int, msg LogMessage) error
-
-	// DeleteShard deletes all data for the table and shard provided.
-	DeleteShard(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int) error
-}
-
-// WriteLogReader provides the interface for all reads from the write log.
-type WriteLogReader interface {
-	ShardReader(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, shard dax.ShardNum, version int) ShardReader
-	TableKeyReader(ctx context.Context, qtid dax.QualifiedTableID, partition dax.PartitionNum, version int) TableKeyReader
-	FieldKeyReader(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName, version int) FieldKeyReader
-}
-
-type TableKeyReader interface {
-	Open() error
-	Read() (PartitionKeyMap, error)
-	Close() error
-}
-
-type FieldKeyReader interface {
-	Open() error
-	Read() (FieldKeyMap, error)
-	Close() error
-}
-
-type ShardReader interface {
-	Open() error
-	Read() (LogMessage, error)
-	Close() error
-}
+// WriteLogInfo holds metadata about a write log.
+type WriteLogInfo SnapInfo
 
 // LogMessage is implemented by a variety of types which can be serialized as
 // messages to the WriteLogger.

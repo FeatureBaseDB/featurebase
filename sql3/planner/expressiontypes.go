@@ -475,6 +475,15 @@ func typeIsString(testType parser.ExprDataType) bool {
 	}
 }
 
+func typeIsVoid(testType parser.ExprDataType) bool {
+	switch testType.(type) {
+	case *parser.DataTypeVoid:
+		return true
+	default:
+		return false
+	}
+}
+
 // returns true if the type is timestamp
 func typeIsTimestamp(testType parser.ExprDataType) bool {
 	switch testType.(type) {

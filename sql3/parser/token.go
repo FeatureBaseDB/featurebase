@@ -29,6 +29,7 @@ const (
 	ILLEGAL Token = iota
 	EOF
 	SPACE
+	UNTERMSTRING
 
 	literal_beg
 	IDENT    // IDENT
@@ -214,7 +215,6 @@ const (
 	SELECT
 	SELECT_COLUMN
 	SET
-	SHARDWIDTH
 	SIZE
 	SHOW
 	SPAN
@@ -254,9 +254,10 @@ const (
 )
 
 var tokens = [...]string{
-	ILLEGAL: "ILLEGAL",
-	EOF:     "EOF",
-	SPACE:   "SPACE",
+	ILLEGAL:      "ILLEGAL",
+	EOF:          "EOF",
+	SPACE:        "SPACE",
+	UNTERMSTRING: "unterminated string literal",
 
 	IDENT:    "IDENT",
 	VARIABLE: "VARIABLE",
@@ -438,7 +439,6 @@ var tokens = [...]string{
 	SELECT_COLUMN:     "SELECT_COLUMN",
 	SET:               "SET",
 	SIZE:              "SIZE",
-	SHARDWIDTH:        "SHARDWIDTH",
 	SHOW:              "SHOW",
 	SPAN:              "SPAN",
 	TABLE:             "TABLE",

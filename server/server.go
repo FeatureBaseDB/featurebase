@@ -27,30 +27,30 @@ import (
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/authn"
-	"github.com/featurebasedb/featurebase/v3/authz"
-	"github.com/featurebasedb/featurebase/v3/boltdb"
-	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/computer"
-	"github.com/featurebasedb/featurebase/v3/disco"
-	"github.com/featurebasedb/featurebase/v3/encoding/proto"
-	petcd "github.com/featurebasedb/featurebase/v3/etcd"
-	"github.com/featurebasedb/featurebase/v3/gcnotify"
-	"github.com/featurebasedb/featurebase/v3/gopsutil"
-	"github.com/featurebasedb/featurebase/v3/logger"
-	pnet "github.com/featurebasedb/featurebase/v3/net"
-	"github.com/featurebasedb/featurebase/v3/prometheus"
-	"github.com/featurebasedb/featurebase/v3/sql3"
-	"github.com/featurebasedb/featurebase/v3/sql3/planner"
-	"github.com/featurebasedb/featurebase/v3/statik"
-	"github.com/featurebasedb/featurebase/v3/stats"
-	"github.com/featurebasedb/featurebase/v3/statsd"
-	"github.com/featurebasedb/featurebase/v3/systemlayer"
-	"github.com/featurebasedb/featurebase/v3/syswrap"
-	"github.com/featurebasedb/featurebase/v3/testhook"
-	"github.com/pelletier/go-toml"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
+        "github.com/featurebasedb/featurebase/v3/authn"
+        "github.com/featurebasedb/featurebase/v3/authz"
+        "github.com/featurebasedb/featurebase/v3/dax"
+        "github.com/featurebasedb/featurebase/v3/dax/computer"
+        "github.com/featurebasedb/featurebase/v3/dax/storage"
+        "github.com/featurebasedb/featurebase/v3/disco"
+        "github.com/featurebasedb/featurebase/v3/encoding/proto"
+        petcd "github.com/featurebasedb/featurebase/v3/etcd"
+        "github.com/featurebasedb/featurebase/v3/gcnotify"
+        "github.com/featurebasedb/featurebase/v3/gopsutil"
+        "github.com/featurebasedb/featurebase/v3/logger"
+        pnet "github.com/featurebasedb/featurebase/v3/net"
+        "github.com/featurebasedb/featurebase/v3/prometheus"
+        "github.com/featurebasedb/featurebase/v3/sql3"
+        "github.com/featurebasedb/featurebase/v3/sql3/planner"
+        "github.com/featurebasedb/featurebase/v3/statik"
+        "github.com/featurebasedb/featurebase/v3/stats"
+        "github.com/featurebasedb/featurebase/v3/statsd"
+        "github.com/featurebasedb/featurebase/v3/systemlayer"
+        "github.com/featurebasedb/featurebase/v3/syswrap"
+        "github.com/featurebasedb/featurebase/v3/testhook"
+        "github.com/pelletier/go-toml"
+        "github.com/pkg/errors"
+        "golang.org/x/sync/errgroup"
 )
 
 type loggerLogger interface {
@@ -75,9 +75,10 @@ type Command struct {
 	logger         loggerLogger
 	queryLogger    loggerLogger
 
-	Registrar       computer.Registrar
-	writeLogService computer.WriteLogService
-	snapshotService computer.SnapshotService
+	Registrar         computer.Registrar
+	serverlessStorage *storage.ResourceManager
+	writeLogService   computer.WriteLogService
+	snapshotService   computer.SnapshotService
 
 	Handler      pilosa.HandlerI
 	httpHandler  http.Handler
@@ -127,6 +128,7 @@ func OptCommandConfig(config *Config) CommandOption {
 			c.Config.TLS = config.TLS
 			c.Config.MDSAddress = config.MDSAddress
 			c.Config.WriteLogger = config.WriteLogger
+			c.Config.SQL.EndpointEnabled = config.SQL.EndpointEnabled
 			return nil
 		}
 		c.Config = config
@@ -194,8 +196,10 @@ const (
 
 // we want to set resource limits *exactly once*, and then be able
 // to report on whether or not that succeeded.
-var setupResourceLimitsOnce sync.Once
-var setupResourceLimitsErr error
+var (
+	setupResourceLimitsOnce sync.Once
+	setupResourceLimitsErr  error
+)
 
 // doSetupResourceLimits is the function which actually does the
 // resource limit setup, possibly yielding an error. it's a Command
@@ -550,19 +554,8 @@ func (m *Command) setupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
-	// WriteLogger setup.
-	var wlw computer.WriteLogWriter = computer.NewNopWriteLogWriter()
-	var wlr computer.WriteLogReader = computer.NewNopWriteLogReader()
-	if m.writeLogService != nil {
-		wlrw := computer.NewWriteLogReadWriter(m.writeLogService)
-		wlr = wlrw
-		wlw = wlrw
-	}
-
-	// Snapshotter setup.
-	var snap computer.SnapshotReadWriter = computer.NewNopSnapshotReadWriter()
-	if m.snapshotService != nil {
-		snap = computer.NewSnapshotReadWriter(m.snapshotService)
+	if m.writeLogService != nil && m.snapshotService != nil {
+		m.serverlessStorage = storage.NewResourceManager(m.snapshotService, m.writeLogService, m.logger)
 	}
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
@@ -581,7 +574,7 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerMetricInterval(time.Duration(m.Config.Metric.PollInterval)),
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
-		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+		pilosa.OptServerOpenTranslateStore(pilosa.OpenTranslateStore),
 		pilosa.OptServerOpenTranslateReader(pilosa.GetOpenTranslateReaderWithLockerFunc(c, &sync.Mutex{})),
 		pilosa.OptServerOpenIDAllocator(pilosa.OpenIDAllocator),
 		pilosa.OptServerLogger(m.logger),
@@ -599,10 +592,9 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerQueryHistoryLength(m.Config.QueryHistoryLength),
 		pilosa.OptServerPartitionAssigner(m.Config.Cluster.PartitionToNodeAssignment),
 		pilosa.OptServerExecutionPlannerFn(executionPlannerFn),
-		pilosa.OptServerWriteLogReader(wlr),
-		pilosa.OptServerWriteLogWriter(wlw),
-		pilosa.OptServerSnapshotReadWriter(snap),
+		pilosa.OptServerServerlessStorage(m.serverlessStorage),
 		pilosa.OptServerIsDataframeEnabled(m.Config.Dataframe.Enable),
+		pilosa.OptServerDataframeUseParquet(m.Config.Dataframe.UseParquet),
 	}
 
 	if m.isComputeNode {
@@ -646,9 +638,7 @@ func (m *Command) setupServer() error {
 	m.API, err = pilosa.NewAPI(
 		pilosa.OptAPIServer(m.Server),
 		pilosa.OptAPIImportWorkerPoolSize(m.Config.ImportWorkerPoolSize),
-		pilosa.OptAPIWriteLogReader(wlr),
-		pilosa.OptAPIWriteLogWriter(wlw),
-		pilosa.OptAPISnapshotter(snap),
+		pilosa.OptAPIServerlessStorage(m.serverlessStorage),
 		pilosa.OptAPIDirectiveWorkerPoolSize(m.Config.DirectiveWorkerPoolSize),
 		pilosa.OptAPIIsComputeNode(m.isComputeNode),
 	)
@@ -747,7 +737,7 @@ func (m *Command) setupLogger() error {
 	var f *logger.FileWriter
 	var err error
 	if m.Config.LogPath != "" {
-		f, err = logger.NewFileWriter(m.Config.LogPath)
+		f, err = logger.NewFileWriterMode(m.Config.LogPath, 0640)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}

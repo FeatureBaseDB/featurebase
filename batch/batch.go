@@ -552,7 +552,6 @@ func (b *Batch) Add(rec Row) error {
 				// empty string is not a valid value at this point (Pilosa refuses to translate it)
 				if val == "" { //
 					b.rowIDs[i] = append(rowIDs, nilSentinel)
-
 				} else if rowID, ok := b.getRowTranslation(field.Name, val); ok {
 					b.rowIDs[i] = append(rowIDs, rowID)
 				} else {
@@ -742,23 +741,27 @@ var ErrBatchNowStale = errors.New("batch is stale and needs to be imported (howe
 func (b *Batch) Import() error {
 	ctx := context.Background()
 	start := time.Now()
-	trns, err := b.importer.StartTransaction(ctx, "", b.prevDuration*10, false, time.Hour)
-	if err != nil {
-		return errors.Wrap(err, "starting transaction")
+	if !b.useShardTransactionalEndpoint {
+		trns, err := b.importer.StartTransaction(ctx, "", b.prevDuration*10, false, time.Hour)
+		if err != nil {
+			return errors.Wrap(err, "starting transaction")
+		}
+		defer func() {
+			if trns != nil {
+				if trnsl, err := b.importer.FinishTransaction(ctx, trns.ID); err != nil {
+					b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
+				}
+			}
+		}()
 	}
 	defer func() {
-		if trns != nil {
-			if trnsl, err := b.importer.FinishTransaction(ctx, trns.ID); err != nil {
-				b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
-			}
-		}
 		b.importer.StatsTiming(MetricBatchImportDurationSeconds, time.Since(start), 1.0)
 	}()
 
 	size := len(b.ids)
 	transStart := time.Now()
 	// first we need to translate the toTranslate, then fill out the missing row IDs
-	err = b.doTranslation()
+	err := b.doTranslation()
 	if err != nil {
 		return errors.Wrap(err, "doing Translation")
 	}
@@ -1313,20 +1316,15 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 	shardWidth := b.shardWidth()
 	emptyClearRows := make(map[int]uint64)
 
-	// create _exists fragments if needed
-	// TODO(tlt): maybe make this a separate flag for backward compatibility?
-	// (because dax.Table doesn't have this).
-	//if b.index.Options.TrackExistence {
-	if true {
-		var curBM *roaring.Bitmap
-		curShard := ^uint64(0) // impossible sentinel value for shard.
-		for _, col := range b.ids {
-			if col/shardWidth != curShard {
-				curShard = col / shardWidth
-				curBM = frags.GetOrCreate(curShard, "_exists", "")
-			}
-			curBM.DirectAdd(col % shardWidth)
+	// create _exists fragments
+	var curBM *roaring.Bitmap
+	curShard := ^uint64(0) // impossible sentinel value for shard.
+	for _, col := range b.ids {
+		if col/shardWidth != curShard {
+			curShard = col / shardWidth
+			curBM = frags.GetOrCreate(curShard, "_exists", "")
 		}
+		curBM.DirectAdd(col % shardWidth)
 	}
 
 	for i, rowIDs := range b.rowIDs {
