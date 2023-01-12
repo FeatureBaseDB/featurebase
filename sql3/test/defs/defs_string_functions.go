@@ -727,5 +727,44 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			Compare: CompareExactOrdered,
 		},
+		{
+			name: "LenNull",
+			SQLs: sqls(
+				"select len(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "LenString",
+			SQLs: sqls(
+				"select len(' length  ')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(9)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "LenChar",
+			SQLs: sqls(
+				"select len(char(114))",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactOrdered,
+		},
 	},
 }
