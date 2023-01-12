@@ -120,8 +120,6 @@ type fragment struct {
 	// mutexVector is used for mutex field types. It's checked for an
 	// existing value (to clear) prior to setting a new value.
 	mutexVector vector
-
-	stats stats.StatsClient
 }
 
 // newFragment returns a new instance of fragment.
@@ -142,8 +140,6 @@ func newFragment(holder *Holder, idx *Index, fld *Field, vw *view, shard uint64)
 		CacheSize: DefaultCacheSize,
 
 		holder: holder,
-
-		stats: stats.NopStatsClient,
 	}
 	return f
 }
@@ -405,7 +401,7 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 		f.cache.Add(rowID, n)
 	}
 
-	f.stats.Count(MetricSetBit, 1, 1.0)
+	CounterSetBit.Inc()
 
 	return changed, nil
 }
@@ -454,7 +450,7 @@ func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed b
 		f.cache.Add(rowID, n)
 	}
 
-	f.stats.Count(MetricClearBit, 1, 1.0)
+	CounterClearBit.Inc()
 
 	return changed, nil
 }
@@ -510,7 +506,7 @@ func (f *fragment) unprotectedSetRow(tx Tx, row *Row, rowID uint64) (changed boo
 		}
 	}
 
-	f.stats.Count("setRow", 1, 1.0)
+	CounterSetRow.Inc()
 
 	return changed, nil
 }
@@ -1713,23 +1709,23 @@ func (p parallelSlices) Swap(i, j int) {
 // operations to the op log.
 func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64]struct{}) error {
 	if len(set) > 0 {
-		f.stats.Count(MetricImportingN, int64(len(set)), 1)
+		CounterImportingN.Add(float64(len(set)))
 
 		// TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
 		changedN, err := tx.Add(f.index(), f.field(), f.view(), f.shard, set...)
 		if err != nil {
 			return errors.Wrap(err, "adding positions")
 		}
-		f.stats.Count(MetricImportedN, int64(changedN), 1)
+		CounterImportedN.Add(float64(changedN))
 	}
 
 	if len(clear) > 0 {
-		f.stats.Count(MetricClearingN, int64(len(clear)), 1)
+		CounterClearingingN.Add(float64(len(clear)))
 		changedN, err := tx.Remove(f.index(), f.field(), f.view(), f.shard, clear...)
 		if err != nil {
 			return errors.Wrap(err, "clearing positions")
 		}
-		f.stats.Count(MetricClearedN, int64(changedN), 1)
+		CounterClearedN.Add(float64(changedN))
 	}
 	return f.updateCaching(tx, rowSet)
 }

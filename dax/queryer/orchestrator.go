@@ -74,7 +74,7 @@ type Translator interface {
 	// TODO(jaffee) the naming here is a cluster. TranslateIndexIDs takes a list, but TranslateFieldIDs takes a set, both have alternate methods that take the other thing. :facepalm:
 	TranslateIndexIDs(ctx context.Context, index string, ids []uint64) ([]string, error)
 	TranslateIndexIDSet(ctx context.Context, index string, ids map[uint64]struct{}) (map[uint64]string, error)
-	TranslateFieldIDs(ctx context.Context, index, field string, ids map[uint64]struct{}) (map[uint64]string, error)
+	TranslateFieldIDs(ctx context.Context, tableKeyer dax.TableKeyer, field string, ids map[uint64]struct{}) (map[uint64]string, error)
 	TranslateFieldListIDs(ctx context.Context, index, field string, ids []uint64) ([]string, error)
 }
 
@@ -87,7 +87,6 @@ type orchestrator struct {
 	// Client used for remote requests.
 	client *featurebase.InternalClient
 
-	stats  stats.StatsClient
 	logger logger.Logger
 }
 
@@ -433,11 +432,11 @@ func (o *orchestrator) executeCall(ctx context.Context, tableKeyer dax.TableKeye
 	} else if err := o.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
-	indexTag := "index:" + string(tableKeyer.Key())
-	metricName := "query_" + strings.ToLower(c.Name) + "_total"
-	statFn := func() {
+
+	labels := prometheus.Labels{"index": string(tableKeyer.Key())}
+	statFn := func(ctr *prometheus.CounterVec) {
 		if !opt.Remote {
-			o.stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
+			ctr.With(labels).Inc()
 		}
 	}
 
@@ -449,101 +448,106 @@ func (o *orchestrator) executeCall(ctx context.Context, tableKeyer dax.TableKeye
 
 	switch c.Name {
 	case "Sum":
-		statFn()
+		statFn(featurebase.CounterQuerySumTotal)
 		res, err := o.executeSum(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeSum")
 	case "Min":
-		statFn()
+		statFn(featurebase.CounterQueryMinTotal)
 		res, err := o.executeMin(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMin")
 	case "Max":
-		statFn()
+		statFn(featurebase.CounterQueryMaxTotal)
 		res, err := o.executeMax(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMax")
 	case "MinRow":
-		statFn()
+		statFn(featurebase.CounterQueryMinRowTotal)
 		res, err := o.executeMinRow(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMinRow")
 	case "MaxRow":
-		statFn()
+		statFn(featurebase.CounterQueryMaxRowTotal)
 		res, err := o.executeMaxRow(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeMaxRow")
 	// case "Clear":
-	// 	statFn()
+	// 	statFn(featurebase.CounterQueryClearTotal)
 	// 	res, err := o.executeClearBit(ctx, index, c, opt)
 	// 	return res, errors.Wrap(err, "executeClearBit")
 	// case "ClearRow":
-	// 	statFn()
+	// 	statFn(featurebase.CounterQueryClearRowTotal)
 	// 	res, err := o.executeClearRow(ctx, index, c, shards, opt)
 	// 	return res, errors.Wrap(err, "executeClearRow")
 	case "Distinct":
-		statFn()
+		statFn(featurebase.CounterQueryDistinctTotal)
 		res, err := o.executeDistinct(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeDistinct")
 	// case "Store":
-	// 	statFn()
+	// 	statFn(featurebase.CounterQueryStoreTotal)
 	// 	res, err := o.executeSetRow(ctx, index, c, shards, opt)
 	// 	return res, errors.Wrap(err, "executeSetRow")
 	case "Count":
-		statFn()
+		statFn(featurebase.CounterQueryCountTotal)
 		res, err := o.executeCount(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeCount")
 	// case "Set":
-	// 	statFn()
+	// 	statFn(featurebase.CounterQuerySetTotal)
 	// 	res, err := o.executeSet(ctx, index, c, opt)
 	// 	return res, errors.Wrap(err, "executeSet")
 	case "TopK":
-		statFn()
+		statFn(featurebase.CounterQueryTopKTotal)
 		res, err := o.executeTopK(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeTopK")
 	case "TopN":
-		statFn()
+		statFn(featurebase.CounterQueryTopNTotal)
 		res, err := o.executeTopN(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeTopN")
 	case "Rows":
-		statFn()
+		statFn(featurebase.CounterQueryRowsTotal)
 		res, err := o.executeRows(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeRows")
 	case "Extract":
-		statFn()
+		statFn(featurebase.CounterQueryExtractTotal)
 		res, err := o.executeExtract(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeExtract")
 	case "GroupBy":
-		statFn()
+		statFn(featurebase.CounterQueryGroupByTotal)
 		res, err := o.executeGroupBy(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeGroupBy")
 	case "Options":
-		statFn()
+		statFn(featurebase.CounterQueryOptionsTotal)
 		res, err := o.executeOptionsCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeOptionsCall")
 	case "IncludesColumn":
+		statFn(featurebase.CounterQueryIncludesColumnTotal)
 		res, err := o.executeIncludesColumnCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeIncludesColumnCall")
 	case "FieldValue":
-		statFn()
+		statFn(featurebase.CounterQueryFieldValueTotal)
 		res, err := o.executeFieldValueCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeFieldValueCall")
 	case "Precomputed":
+		statFn(featurebase.CounterQueryPrecomputedTotal)
 		res, err := o.executePrecomputedCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executePrecomputedCall")
 	case "UnionRows":
+		statFn(featurebase.CounterQueryUnionRowsTotal)
 		res, err := o.executeUnionRows(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeUnionRows")
 	case "ConstRow":
+		statFn(featurebase.CounterQueryConstRowTotal)
 		res, err := o.executeConstRow(ctx, tableKeyer, c)
 		return res, errors.Wrap(err, "executeConstRow")
 	case "Limit":
+		statFn(featurebase.CounterQueryLimitTotal)
 		res, err := o.executeLimitCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeLimitCall")
 	case "Percentile":
+		statFn(featurebase.CounterQueryPercentileTotal)
 		res, err := o.executePercentile(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executePercentile")
 	// case "Delete":
-	// 	statFn() //TODO(twg) need this?
+	// 	statFn(featurebase.CounterQueryDeleteTotal)
 	// 	res, err := o.executeDeleteRecords(ctx, index, c, shards, opt)
 	// 	return res, errors.Wrap(err, "executeDelete")
 	default: // o.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
-		statFn()
 		res, err := o.executeBitmapCall(ctx, tableKeyer, c, shards, opt)
 		return res, errors.Wrap(err, "executeBitmapCall")
 	}
@@ -1116,13 +1120,42 @@ func (o *orchestrator) executeBitmapCall(ctx context.Context, tableKeyer dax.Tab
 	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()
 
-	indexTag := "index:" + string(tableKeyer.Key())
-	metricName := "query_" + strings.ToLower(c.Name) + "_total"
-	if c.Name == "Row" && c.HasConditionArg() {
-		metricName = "query_row_bsi_total"
+	labels := prometheus.Labels{"index": string(tableKeyer.Key())}
+	statFn := func(ctr *prometheus.CounterVec) {
+		if !opt.Remote {
+			ctr.With(labels).Inc()
+		}
 	}
+
 	if !opt.Remote {
-		o.stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
+		switch c.Name {
+		case "Row":
+			if c.HasConditionArg() {
+				statFn(featurebase.CounterQueryRowBSITotal)
+			} else {
+				statFn(featurebase.CounterQueryRowTotal)
+			}
+		case "Range":
+			statFn(featurebase.CounterQueryRangeTotal)
+		case "Difference":
+			statFn(featurebase.CounterQueryBitmapTotal)
+		case "Intersect":
+			statFn(featurebase.CounterQueryIntersectTotal)
+		case "Union":
+			statFn(featurebase.CounterQueryUnionTotal)
+		case "InnerUnionRows":
+			statFn(featurebase.CounterQueryInnerUnionRowsTotal)
+		case "Xor":
+			statFn(featurebase.CounterQueryXorTotal)
+		case "Not":
+			statFn(featurebase.CounterQueryNotTotal)
+		case "Shift":
+			statFn(featurebase.CounterQueryShiftTotal)
+		case "All":
+			statFn(featurebase.CounterQueryAllTotal)
+		default:
+			statFn(featurebase.CounterQueryBitmapTotal)
+		}
 	}
 
 	// Merge returned results at coordinating node.
@@ -2985,9 +3018,7 @@ func (o *orchestrator) preTranslateMatrixSet(ctx context.Context, mat featurebas
 		}
 	}
 
-	index := string(tableKeyer.Key())
-
-	return o.trans.TranslateFieldIDs(ctx, index, field, ids)
+	return o.trans.TranslateFieldIDs(ctx, tableKeyer, field, ids)
 }
 
 func (o *orchestrator) translateResult(ctx context.Context, qtbl *dax.QualifiedTable, call *pql.Call, result interface{}, idSet map[uint64]string) (_ interface{}, err error) {
@@ -3164,7 +3195,7 @@ func (o *orchestrator) translateResult(ctx context.Context, qtbl *dax.QualifiedT
 
 		fieldTranslations := make(map[string]map[uint64]string)
 		for field, ids := range fieldIDs {
-			trans, err := o.trans.TranslateFieldIDs(ctx, idx.Name, field.Name, ids)
+			trans, err := o.trans.TranslateFieldIDs(ctx, qtbl, field.Name, ids)
 			if err != nil {
 				return nil, errors.Wrapf(err, "translating IDs in field '%q'", field.Name)
 			}

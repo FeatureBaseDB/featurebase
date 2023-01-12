@@ -368,5 +368,8 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 		return nil, errors.Wrap(err, "importing batch")
 	}
 
+	// update the counter for inserts
+	pilosa.PerfCounterSQLInsertsSec.Add(int64(batch.Len()))
+
 	return nil, types.ErrNoMoreRows
 }

@@ -51,7 +51,6 @@ type view struct {
 	fragments map[uint64]*fragment
 
 	broadcaster broadcaster
-	stats       stats.StatsClient
 
 	knownShards       *roaring.Bitmap
 	knownShardsCopied uint32
@@ -79,7 +78,6 @@ func newView(holder *Holder, path, index, field, name string, fieldOptions Field
 		fragments: make(map[uint64]*fragment),
 
 		broadcaster: NopBroadcaster,
-		stats:       stats.NopStatsClient,
 		knownShards: roaring.NewSliceBitmap(),
 
 		closing: make(chan struct{}),
@@ -393,7 +391,6 @@ func (v *view) newFragment(shard uint64) *fragment {
 	frag := newFragment(v.holder, v.idx, v.fld, v, shard)
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
-	frag.stats = v.stats
 	if v.fieldType == FieldTypeMutex {
 		frag.mutexVector = newRowsVector(frag)
 	} else if v.fieldType == FieldTypeBool {

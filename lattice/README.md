@@ -19,4 +19,4 @@ Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
 Lattice can be embedded within the Pilosa binary, so the UI is fully accessible directly from the server, reducing operational complexity.
 
-If additional build dependencies `yarn` (`brew install yarn` and `brew upgrade yarn` perhaps) and `statik` (`make install-statik`) are available on your system, running `make generate-statik` before `make install` should produce a Pilosa binary with Lattice embedded. For up to date instructions, check the Pilosa [README](https://github.com/molecula/pilosa#getting-started).
+If additional build dependencies `yarn` (`brew install yarn` and `brew upgrade yarn` perhaps) and `statik` (`make install-statik`) are available on your system, running `make generate-statik` before `make install` should produce a Pilosa binary with Lattice embedded. For up to date instructions, check the Featurebase [README](https://github.com/featurebasedb/featurebase#getting-started).

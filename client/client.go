@@ -52,7 +52,6 @@ type Client struct {
 	manualFragmentNode *fragmentNode
 	manualServerURI    *pnet.URI
 	tracer             opentracing.Tracer
-	Stats              stats.StatsClient
 	// An exponential backoff algorithm retries requests exponentially (if an HTTP request fails),
 	// increasing the waiting time between retries up to a maximum backoff time.
 	maxBackoff time.Duration
@@ -210,11 +209,6 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		c.tracer = NoopTracer{}
 	} else {
 		c.tracer = options.tracer
-	}
-	if options.stats == nil {
-		c.Stats = stats.NopStatsClient
-	} else {
-		c.Stats = options.stats
 	}
 
 	c.maxRetries = *options.retries
@@ -1359,7 +1353,6 @@ type ClientOptions struct {
 	manualServerAddress bool
 	tracer              opentracing.Tracer
 	retries             *int
-	stats               stats.StatsClient
 	nat                 map[pnet.URI]pnet.URI
 	pathPrefix          string
 }
@@ -1441,14 +1434,6 @@ func OptClientRetries(retries int) ClientOption {
 			return errors.New("retries must be non-negative")
 		}
 		options.retries = &retries
-		return nil
-	}
-}
-
-// OptClientStatsClient sets a stats client, such as Prometheus
-func OptClientStatsClient(stats stats.StatsClient) ClientOption {
-	return func(options *ClientOptions) error {
-		options.stats = stats
 		return nil
 	}
 }

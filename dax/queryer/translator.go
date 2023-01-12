@@ -229,15 +229,19 @@ func (m *mdsTranslator) TranslateIndexIDSet(ctx context.Context, table string, i
 	}
 	return ret, nil
 }
-func (m *mdsTranslator) TranslateFieldIDs(ctx context.Context, table, field string, ids map[uint64]struct{}) (map[uint64]string, error) {
+func (m *mdsTranslator) TranslateFieldIDs(ctx context.Context, tableKeyer dax.TableKeyer, field string, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, 0, len(ids))
 	for id := range ids {
 		idList = append(idList, id)
 	}
 
-	stringList, err := m.TranslateFieldListIDs(ctx, table, field, idList)
+	// TODO(tlt): convert TranslateFieldListIDs (and the other Translator
+	// interface methods) to TableKeyer.
+	index := string(tableKeyer.Key())
+
+	stringList, err := m.TranslateFieldListIDs(ctx, index, field, idList)
 	if err != nil {
-		return nil, errors.Wrapf(err, "translating field ids on field: %s, %s", table, field)
+		return nil, errors.Wrapf(err, "translating field ids on field: %s, %s", tableKeyer, field)
 	}
 
 	ret := make(map[uint64]string)

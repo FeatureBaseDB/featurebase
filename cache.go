@@ -41,9 +41,6 @@ type cache interface {
 	// Returns an ordered list of the top ranked bitmaps.
 	Top() []bitmapPair
 
-	// SetStats defines the stats client used in the cache.
-	SetStats(s stats.StatsClient)
-
 	// Clear removes everything from the cache. If possible it should leave allocated structures in place to be reused.
 	Clear()
 }
@@ -52,7 +49,6 @@ type cache interface {
 type lruCache struct {
 	cache  *lru.Cache
 	counts map[uint64]uint64
-	stats  stats.StatsClient
 	// maxEntries is saved to support Clear which recreates the cache.
 	maxEntries uint32
 }
@@ -62,7 +58,6 @@ func newLRUCache(maxEntries uint32) *lruCache {
 	c := &lruCache{
 		cache:      lru.New(int(maxEntries)),
 		counts:     make(map[uint64]uint64),
-		stats:      stats.NopStatsClient,
 		maxEntries: maxEntries,
 	}
 	c.cache.OnEvicted = c.onEvicted
@@ -120,11 +115,6 @@ func (c *lruCache) Top() []bitmapPair {
 	return a
 }
 
-// SetStats defines the stats client used in the cache.
-func (c *lruCache) SetStats(s stats.StatsClient) {
-	c.stats = s
-}
-
 func (c *lruCache) Clear() {
 	for k := range c.counts {
 		delete(c.counts, k)
@@ -158,8 +148,6 @@ type rankCache struct {
 
 	// thresholdValue is the value of the last item in the cache
 	thresholdValue uint64
-
-	stats stats.StatsClient
 }
 
 // NewRankCache returns a new instance of RankCache.
@@ -168,7 +156,6 @@ func NewRankCache(maxEntries uint32) *rankCache {
 		maxEntries:      maxEntries,
 		thresholdBuffer: int(thresholdFactor * float64(maxEntries)),
 		entries:         make(map[uint64]uint64),
-		stats:           stats.NopStatsClient,
 	}
 }
 
@@ -229,7 +216,7 @@ func (c *rankCache) BulkAdd(id uint64, n uint64) {
 	// as this can take up an upbounded amount of memory. This is especially
 	// true when restoring shards as all rows will be added.
 	if len(c.entries) > int(2*c.maxEntries) {
-		c.stats.Count(MetricRecalculateCache, 1, 1.0)
+		CounterRecalculateCache.Inc()
 		c.recalculate()
 	}
 }
@@ -274,7 +261,7 @@ func (c *rankCache) Invalidate() {
 func (c *rankCache) Recalculate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.stats.Count(MetricRecalculateCache, 1, 1.0)
+	CounterRecalculateCache.Inc()
 	c.recalculate()
 }
 
@@ -286,12 +273,12 @@ func (c *rankCache) invalidate() {
 		// This is somewhat necessary for now since recalculation is not cheap.
 		// The cache will remain flagged as dirty and will be recalculated if Top is called.
 		// This may cause unexpected memory growth, so record it in metrics for debugging purposes.
-		c.stats.Count(MetricInvalidateCacheSkipped, 1, 1.0)
+		CounterInvalidateCacheSkipped.Inc()
 		// Ensure that we're marked as dirty even if we weren't otherwise.
 		c.dirty = true
 		return
 	}
-	c.stats.Count(MetricInvalidateCache, 1, 1.0)
+	CounterInvalidateCache.Inc()
 	c.recalculate()
 }
 
@@ -317,7 +304,7 @@ func (c *rankCache) recalculate() {
 
 	// Store the count of the item at the threshold index.
 	length := len(c.rankings)
-	c.stats.Gauge(MetricRankCacheLength, float64(length), 1.0)
+	GaugeRankCacheLength.Set(float64(length))
 
 	var removeItems []bitmapPair // cached, ordered list
 	if length > int(c.maxEntries) {
@@ -333,7 +320,7 @@ func (c *rankCache) recalculate() {
 
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.thresholdBuffer {
-		c.stats.Count(MetricCacheThresholdReached, 1, 1.0)
+		CounterCacheThresholdReached.Inc()
 		for _, pair := range removeItems {
 			delete(c.entries, pair.ID)
 		}
@@ -343,11 +330,6 @@ func (c *rankCache) recalculate() {
 	c.dirty = false
 }
 
-// SetStats defines the stats client used in the cache.
-func (c *rankCache) SetStats(s stats.StatsClient) {
-	c.stats = s
-}
-
 // Top returns an ordered list of pairs.
 func (c *rankCache) Top() []bitmapPair {
 	c.mu.Lock()
@@ -355,7 +337,7 @@ func (c *rankCache) Top() []bitmapPair {
 
 	if c.dirty {
 		// The cache is dirty, so we need to recalculate it to get a consistent view.
-		c.stats.Count(MetricReadDirtyCache, 1, 1.0)
+		CounterReadDirtyCache.Inc()
 		c.recalculate()
 	}
 
@@ -606,25 +588,21 @@ func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 
 // nopCache represents a no-op Cache implementation.
-type nopCache struct {
-	stats stats.StatsClient
-}
+type nopCache struct{}
 
 // Ensure NopCache implements Cache.
-var globalNopCache cache = nopCache{
-	stats: stats.NopStatsClient,
-}
+var globalNopCache cache = nopCache{}
 
 func (c nopCache) Add(uint64, uint64)     {}
 func (c nopCache) BulkAdd(uint64, uint64) {}
 func (c nopCache) Get(uint64) uint64      { return 0 }
 func (c nopCache) IDs() []uint64          { return []uint64{} }
 
-func (c nopCache) Invalidate()                {}
-func (c nopCache) Len() int                   { return 0 }
-func (c nopCache) Recalculate()               {}
-func (c nopCache) SetStats(stats.StatsClient) {}
-func (c nopCache) Clear()                     {}
+func (c nopCache) Invalidate()  {}
+func (c nopCache) Len() int     { return 0 }
+func (c nopCache) Recalculate() {}
+
+func (c nopCache) Clear() {}
 
 func (c nopCache) Top() []bitmapPair {
 	return []bitmapPair{}

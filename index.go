@@ -20,6 +20,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -44,7 +45,6 @@ type Index struct {
 
 	broadcaster broadcaster
 	serializer  Serializer
-	Stats       stats.StatsClient
 
 	// Passed to field for foreign-index lookup.
 	holder *Holder
@@ -83,7 +83,6 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		fields: make(map[string]*Field),
 
 		broadcaster:    NopBroadcaster,
-		Stats:          stats.NopStatsClient,
 		holder:         holder,
 		trackExistence: true,
 
@@ -511,7 +510,7 @@ func (i *Index) AvailableShards(localOnly bool) *roaring.Bitmap {
 		b.UnionInPlace(f.AvailableShards(localOnly))
 	}
 
-	i.Stats.Gauge(MetricMaxShard, float64(b.Max()), 1.0)
+	GaugeIndexMaxShard.With(prometheus.Labels{"index": i.name}).Set(float64(b.Max()))
 	return b
 }
 
@@ -924,7 +923,6 @@ func (i *Index) newField(path, name string) (*Field, error) {
 		return nil, err
 	}
 	f.idx = i
-	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
 	f.serializer = i.serializer
 	f.OpenTranslateStore = i.OpenTranslateStore

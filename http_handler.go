@@ -9,7 +9,6 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
-	"expvar"
 	"fmt"
 	"io"
 	"math"
@@ -45,6 +44,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/storage"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
@@ -402,8 +402,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		dur := time.Since(t)
 
-		statsTags := make([]string, 0, 5)
-
+		isSlow := "false"
 		longQueryTime := h.api.LongQueryTime()
 		if longQueryTime > 0 && dur > longQueryTime {
 			queryRequest := r.Context().Value(contextKeyQueryRequest)
@@ -414,31 +413,27 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 			}
 
 			h.logger.Printf("HTTP query duration %v exceeds %v: %s %s %s", dur, longQueryTime, r.Method, r.URL.String(), queryString)
-			statsTags = append(statsTags, "slow:true")
-		} else {
-			statsTags = append(statsTags, "slow:false")
+			isSlow = "true"
 		}
 
+		where := ""
 		pathParts := strings.Split(r.URL.Path, "/")
 		if externalPrefixFlag[pathParts[1]] {
-			statsTags = append(statsTags, "where:external")
+			where = "external"
 		} else {
-			statsTags = append(statsTags, "where:internal")
+			where = "internal"
 		}
-
-		statsTags = append(statsTags, "useragent:"+r.UserAgent())
-
 		path, err := mux.CurrentRoute(r).GetPathTemplate()
-		if err == nil {
-			statsTags = append(statsTags, "path:"+path)
+		if err != nil {
+			path = ""
 		}
-
-		statsTags = append(statsTags, "method:"+r.Method)
-
-		stats := h.api.StatsWithTags(statsTags)
-		if stats != nil {
-			stats.Timing(MetricHTTPRequest, dur, 0.1)
-		}
+		SummaryHttpRequests.With(prometheus.Labels{
+			"method":    r.Method,
+			"path":      path,
+			"slow":      isSlow,
+			"useragent": r.UserAgent(),
+			"where":     where,
+		}).Observe(dur.Seconds())
 	})
 }
 
@@ -506,7 +501,6 @@ func newRouter(handler *Handler) http.Handler {
 	// TODO: figure out how to protect these if needed
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.PathPrefix("/debug/fgprof").Handler(fgprof.Handler()).Methods("GET")
-	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.Handle("/metrics", promhttp.Handler())
 
 	router.HandleFunc("/metrics.json", handler.chkAuthZ(handler.handleGetMetricsJSON, authz.Admin)).Methods("GET").Name("GetMetricsJSON")
@@ -552,6 +546,8 @@ func newRouter(handler *Handler) http.Handler {
 	if handler.sqlEnabled {
 		router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
 	}
+	// internal endpoint
+	router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQLPlanOperator, authz.Admin)).Headers("X-FeatureBase-Plan-Operator", "").Methods("POST").Name("PostSQLPlanOperator")
 
 	router.HandleFunc("/query-history", handler.chkAuthZ(handler.handleGetPastQueries, authz.Admin)).Methods("GET").Name("GetPastQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
@@ -1393,10 +1389,70 @@ func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, err er
 	}
 }
 
-// handlePostSQL handles /sql requests.
-func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
-	includePlan := false
+// handlePostSQLOperator handles an internal sql3 plan operator execution request
+// these requests come from other nodes in the cluster
+// handlePostSQLOperator will 'rehydrate' a plan operator and return data in the
+// featurebase wire format for effciency
+// we do not track these requests as user requests
+// TODO(pok) - thus is there anything we need here to align with how we do this for other nodes
+func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Request) {
 
+	writeError := func(err error) {
+		if err != nil {
+			w.Write(wireprotocol.WriteError(err))
+		}
+	}
+
+	// always finish with a done message
+	defer w.Write(wireprotocol.WriteDone())
+
+	ctx := r.Context()
+
+	rootOperator, err := h.api.RehydratePlanOperator(ctx, r.Body)
+	if err != nil {
+		writeError(err)
+		return
+	}
+
+	// get a query iterator.
+	iter, err := rootOperator.Iterator(ctx, nil)
+	if err != nil {
+		writeError(err)
+		return
+	}
+	// read schema & write to response.
+	columns := rootOperator.Schema()
+	b, err := wireprotocol.WriteSchema(columns)
+	if err != nil {
+		writeError(err)
+		return
+	}
+	w.Write(b)
+
+	var rowErr error
+	var currentRow types.Row
+	var nextErr error
+
+	for currentRow, nextErr = iter.Next(ctx); nextErr == nil; currentRow, nextErr = iter.Next(ctx) {
+		b, err := wireprotocol.WriteRow(currentRow, columns)
+		if err != nil {
+			rowErr = err
+			break
+		}
+		w.Write(b)
+	}
+	if nextErr != nil && nextErr != types.ErrNoMoreRows {
+		rowErr = nextErr
+	}
+	writeError(rowErr)
+}
+
+// handlePostSQL handles /sql requests
+// supports a ?plan=true|false parameter to send back the plan in the
+// query response
+func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
+
+	includePlan := false
 	includePlanValue := r.URL.Query().Get("plan")
 	if len(includePlanValue) > 0 {
 		var err error
@@ -1407,6 +1463,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// get the body
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		h.writeBadRequest(w, r, err)
@@ -1419,6 +1476,9 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	}
 	// put the requestId in the context
 	ctx := fbcontext.WithRequestID(r.Context(), requestID.String())
+
+	// update the counter for requests
+	PerfCounterSQLRequestSec.Add(1)
 
 	// Write response back to client.
 	w.Header().Set("Content-Type", "application/json")

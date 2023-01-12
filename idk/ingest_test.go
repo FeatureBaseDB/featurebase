@@ -525,7 +525,7 @@ func TestIngesterServesPrometheusEndpoint(t *testing.T) {
 	if err != nil {
 		t.Errorf("read error: %v", err)
 	}
-	if strings.Contains(string(contents), MetricIngesterRowsAdded) {
+	if !strings.Contains(string(contents), MetricIngesterRowsAdded) {
 		t.Errorf("metric name missing: %v", MetricIngesterRowsAdded)
 	}
 	close(records)

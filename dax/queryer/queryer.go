@@ -89,7 +89,6 @@ func (q *Queryer) Orchestrator(qual dax.TableQualifier) *qualifiedOrchestrator {
 		topology: &MDSTopology{noder: q.noder},
 		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
 		client: q.fbClient,
-		stats:  stats.NopStatsClient,
 		logger: q.logger,
 	}
 

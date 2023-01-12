@@ -84,7 +84,6 @@ type Field struct {
 	viewMap map[string]*view
 
 	broadcaster broadcaster
-	Stats       stats.StatsClient
 	serializer  Serializer
 
 	// Field options.
@@ -396,7 +395,6 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 		viewMap: make(map[string]*view),
 
 		broadcaster: NopBroadcaster,
-		Stats:       stats.NopStatsClient,
 		serializer:  NopSerializer,
 
 		options: applyDefaultOptions(&fo),
@@ -1165,7 +1163,6 @@ func (f *Field) newView(path, name string) *view {
 	view := newView(f.holder, path, f.index, f.name, name, f.options)
 	view.idx = f.idx
 	view.fld = f
-	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
 	return view
 }

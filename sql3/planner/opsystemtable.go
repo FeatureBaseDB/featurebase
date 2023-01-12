@@ -17,16 +17,18 @@ import (
 // exclude this file from SonarCloud dupe eval
 
 const (
-	fbClusterInfo  = "fb_cluster_info"
-	fbClusterNodes = "fb_cluster_nodes"
-	fbExecRequests = "fb_exec_requests"
+	fbClusterInfo         = "fb_cluster_info"
+	fbClusterNodes        = "fb_cluster_nodes"
+	fbExecRequests        = "fb_exec_requests"
+	fbPerformanceCounters = "fb_performance_counters"
 
 	fbTableDDL = "fb_table_ddl"
 )
 
 type systemTable struct {
-	name   string
-	schema types.Schema
+	name           string
+	schema         types.Schema
+	requiresFanout bool
 }
 
 var systemTables = map[string]*systemTable{
@@ -74,6 +76,7 @@ var systemTables = map[string]*systemTable{
 				Type:         parser.NewDataTypeInt(),
 			},
 		},
+		requiresFanout: false,
 	},
 	fbClusterNodes: {
 		name: fbClusterNodes,
@@ -109,11 +112,17 @@ var systemTables = map[string]*systemTable{
 				Type:         parser.NewDataTypeBool(),
 			},
 		},
+		requiresFanout: false,
 	},
 
 	fbExecRequests: {
 		name: fbExecRequests,
 		schema: types.Schema{
+			&types.PlannerColumn{
+				RelationName: fbPerformanceCounters,
+				ColumnName:   "nodeid",
+				Type:         parser.NewDataTypeString(),
+			},
 			&types.PlannerColumn{
 				RelationName: fbExecRequests,
 				ColumnName:   "request_id",
@@ -195,6 +204,7 @@ var systemTables = map[string]*systemTable{
 				Type:         parser.NewDataTypeString(),
 			},
 		},
+		requiresFanout: true,
 	},
 
 	fbTableDDL: {
@@ -216,6 +226,44 @@ var systemTables = map[string]*systemTable{
 				Type:         parser.NewDataTypeString(),
 			},
 		},
+		requiresFanout: false,
+	},
+
+	fbPerformanceCounters: {
+		name: fbPerformanceCounters,
+		schema: types.Schema{
+			&types.PlannerColumn{
+				RelationName: fbPerformanceCounters,
+				ColumnName:   "nodeid",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbPerformanceCounters,
+				ColumnName:   "namespace",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbPerformanceCounters,
+				ColumnName:   "subsystem",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbPerformanceCounters,
+				ColumnName:   "counter_name",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbPerformanceCounters,
+				ColumnName:   "value",
+				Type:         parser.NewDataTypeInt(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbPerformanceCounters,
+				ColumnName:   "counter_type",
+				Type:         parser.NewDataTypeInt(),
+			},
+		},
+		requiresFanout: true,
 	},
 }
 
@@ -277,6 +325,10 @@ func (p *PlanOpSystemTable) Iterator(ctx context.Context, row types.Row) (types.
 		}, nil
 	case fbTableDDL:
 		return &fbTableDDLRowIter{
+			planner: p.planner,
+		}, nil
+	case fbPerformanceCounters:
+		return &fbPerformanceCountersRowIter{
 			planner: p.planner,
 		}, nil
 	default:
@@ -367,9 +419,11 @@ func (i *fbExecRequestsRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 	}
 
+	nodeId := i.planner.systemAPI.NodeID()
 	if len(i.result) > 0 {
 		n := i.result[0]
 		row := []interface{}{
+			nodeId,
 			n.RequestID,
 			n.UserID,
 			n.StartTime,
@@ -526,6 +580,40 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 			n.id,
 			n.name,
 			n.ddl,
+		}
+		// Move to next result element.
+		i.result = i.result[1:]
+		return row, nil
+	}
+	return nil, types.ErrNoMoreRows
+}
+
+type fbPerformanceCountersRowIter struct {
+	planner *ExecutionPlanner
+	result  []pilosa.PerformanceCounter
+}
+
+var _ types.RowIterator = (*fbPerformanceCountersRowIter)(nil)
+
+func (i *fbPerformanceCountersRowIter) Next(ctx context.Context) (types.Row, error) {
+	if i.result == nil {
+		var err error
+		i.result, err = pilosa.PerfCounters.ListCounters()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	nodeId := i.planner.systemAPI.NodeID()
+	if len(i.result) > 0 {
+		n := i.result[0]
+		row := []interface{}{
+			nodeId,
+			n.NameSpace,
+			n.SubSystem,
+			n.CounterName,
+			n.Value,
+			n.CounterType,
 		}
 		// Move to next result element.
 		i.result = i.result[1:]

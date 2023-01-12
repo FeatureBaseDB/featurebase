@@ -248,8 +248,6 @@ func (m *importer) DoImport(ctx context.Context, tid dax.TableID, fld *dax.Field
 	return fbClient.DoImport(string(qtbl.Key()), shard, path, data)
 }
 
-func (m *importer) StatsTiming(name string, value time.Duration, rate float64) {}
-
 // getQtbl takes a table (TableKey) and sets the local m.qtbl value. When we
 // originally set up this type, it was only used by IDK, and the table was known
 // at the beginning of the process, so it could be set on this import. But

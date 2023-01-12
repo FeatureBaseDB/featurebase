@@ -55,7 +55,6 @@ const (
 )
 
 // TODO Jaeger
-// TODO Prometheus
 
 // Main holds all config for general ingest
 type Main struct {
@@ -132,7 +131,6 @@ type Main struct {
 	newNexter func(c int) (IDAllocator, error)
 	ra        RangeAllocator
 
-	stats         stats.StatsClient
 	metricsServer *http.Server
 
 	log logger.Logger
@@ -218,7 +216,7 @@ func NewMain() *Main {
 		Concurrency:      1,
 		CacheLength:      64,
 		PackBools:        "bools",
-		Namespace:        "ingester",
+		Namespace:        "ingester", // this is now ignored and hardcoded in metrics.go
 		IDAllocKeyPrefix: "ingest",
 
 		UseShardTransactionalEndpoint: os.Getenv("IDK_DEFAULT_SHARD_TRANSACTIONAL") != "",
@@ -227,8 +225,6 @@ func NewMain() *Main {
 		Stats: "localhost:9093",
 
 		SchemaManager: NopSchemaManager,
-
-		stats: stats.NopStatsClient,
 
 		log: logger.NewStandardLogger(os.Stderr),
 	}
@@ -457,7 +453,6 @@ initialFetch:
 				if v, ok := source.(Metadata); ok {
 					m.log.Printf("new schema - subject: %#v; version: %d; schema: %#v",
 						v.SchemaSubject(), v.SchemaVersion(), v.SchemaSchema())
-					// m.log.Printf("new schema: %#v", v.SchemaMetadata())
 				} else {
 					m.log.Printf("new schema: %#v", schema)
 				}
@@ -465,7 +460,7 @@ initialFetch:
 				if err != nil {
 					return errors.Wrap(err, "batchFromSchema")
 				}
-				m.stats.Count(MetricIngesterSchemaChanges, 1, 1)
+				CounterIngesterSchemaChanges.Inc()
 				csvSlice = make([]string, len(schema))
 				if m.csvWriter != nil {
 					for i := range schema {
@@ -571,7 +566,7 @@ initialFetch:
 		// skip bad rows only
 		if !rowHasError {
 			err = batch.Add(*row)
-			m.stats.Count(MetricIngesterRowsAdded, 1, 1)
+			CounterIngesterRowsAdded.Inc()
 		}
 
 		if err == pilosabatch.ErrBatchNowFull || err == pilosabatch.ErrBatchNowStale {
@@ -958,7 +953,7 @@ func (m *Main) commitRecord(ctx context.Context, rec Record, limitCounter *msgCo
 		return errors.Wrap(err, "committing")
 	}
 	limitCounter.Increment(numRecords)
-	m.stats.Count(MetricCommittedRecords, int64(numRecords), 1)
+	CounterCommittedRecords.Add(float64(numRecords))
 	return nil
 }
 
@@ -972,7 +967,7 @@ func (m *Main) NewLookupClient() (*PostgresClient, error) {
 func (m *Main) setupClient() (*tls.Config, error) {
 	var tlsConfig *tls.Config
 	var err error
-	var opts = []pilosaclient.ClientOption{pilosaclient.OptClientStatsClient(m.stats)}
+	var opts = []pilosaclient.ClientOption{}
 	if m.TLS.CertificatePath != "" {
 		tlsConfig, err = GetTLSConfig(&m.TLS, m.Log())
 		if err != nil {
@@ -1037,34 +1032,24 @@ func (m *Main) setupClient() (*tls.Config, error) {
 }
 
 func (m *Main) setupStats() error {
-	if m.Stats != "" {
-		opts := []prometheus.ClientOption{prometheus.OptClientNamespace(m.Namespace)}
-		m.stats, _ = prometheus.NewPrometheusClient(opts...) // ignore error that must be nil
-
-		mux := http.NewServeMux()
-		// reg := prom.NewRegistry() // TODO switch to this once pilosa PrometheusClient is fixed and doesn't use the global registry internally.
-		// also change prom.DefaultGatherer to be "reg" at that time
-		reg := prom.DefaultRegisterer
-		promHandler := promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(prom.DefaultGatherer, promhttp.HandlerOpts{}))
-		mux.Handle("/metrics", promHandler)
-
-		mux.Handle("/metrics.json", metricsJSONHandler{metricsURI: "http://" + m.Stats + "/metrics"})
-		m.metricsServer = &http.Server{Addr: m.Stats, Handler: mux}
-		ln, err := net.Listen("tcp", m.Stats)
-		if err != nil {
-			return errors.Wrapf(err, "listen for metrics on '%s'", m.Stats)
-		}
-
-		go func() {
-			m.log.Printf("Serving Prometheus metrics with namespace \"%s\" at %v/metrics\n", m.Namespace, m.Stats)
-			err = m.metricsServer.Serve(ln)
-			if err != http.ErrServerClosed {
-				m.log.Printf("serve metrics on '%s': %v", m.Stats, err)
-			}
-		}()
+	mux := http.NewServeMux()
+	promHandler := promhttp.InstrumentMetricHandler(prom.DefaultRegisterer, promhttp.HandlerFor(prom.DefaultGatherer, promhttp.HandlerOpts{}))
+	mux.Handle("/metrics", promHandler)
+	mux.Handle("/metrics.json", metricsJSONHandler{metricsURI: "http://" + m.Stats + "/metrics"})
+	m.metricsServer = &http.Server{Addr: m.Stats, Handler: mux}
+	ln, err := net.Listen("tcp", m.Stats)
+	if err != nil {
+		return errors.Wrapf(err, "listen for metrics on '%s'", m.Stats)
 	}
-	return nil
 
+	go func() {
+		m.log.Printf("Serving Prometheus metrics with namespace \"%s\" at %v/metrics\n", m.Namespace, m.Stats)
+		err = m.metricsServer.Serve(ln)
+		if err != http.ErrServerClosed {
+			m.log.Printf("serve metrics on '%s': %v", m.Stats, err)
+		}
+	}()
+	return nil
 }
 
 type metricsJSONHandler struct {
@@ -1218,7 +1203,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing bools")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:packed-bool"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "packed-bool"}).Inc()
 				continue
 			} else {
 				fieldName = directive
@@ -1267,7 +1252,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing set")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:set"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "set"}).Inc()
 			case pilosaclient.FieldTypeMutex:
 				if val == "" {
 					continue
@@ -1278,7 +1263,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing mutex")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:mutex"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "mutex"}).Inc()
 			case pilosaclient.FieldTypeBool:
 				_, err := client.Query(index.BatchQuery(
 					field.Clear(0, recordID),
@@ -1287,19 +1272,19 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing bool")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:bool"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "bool"}).Inc()
 			case pilosaclient.FieldTypeInt:
 				_, err := client.Query(field.Clear(0, recordID))
 				if err != nil {
 					return errors.Wrap(err, "clearing int")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:int"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "int"}).Inc()
 			case pilosaclient.FieldTypeDecimal:
 				_, err := client.Query(field.Clear(0, recordID))
 				if err != nil {
 					return errors.Wrap(err, "clearing decimal")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:decimal"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "decimal"}).Inc()
 			case pilosaclient.FieldTypeTime:
 				return errors.Errorf("deletion on time fields unimplemented")
 			default:
