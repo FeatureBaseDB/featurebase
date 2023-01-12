@@ -1058,8 +1058,8 @@ github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69
 github.com/syndtr/goleveldb v1.0.0/go.mod h1:ZVVdQEZoIme9iO1Ch2Jdy24qqXrMMOU6lpPAyBWyWuQ=
 github.com/tgruben/gomem v0.0.0-20221021111114-79fdc77dcf61 h1:3RJ3IN/m4w4B7PeYF8PPOdGLHqu045LIxtymF4lQO7g=
 github.com/tgruben/gomem v0.0.0-20221021111114-79fdc77dcf61/go.mod h1:avNE+ynGJYvQNY+/5Gk6aHxtlOtt2aO6V9ShcONBvvI=
-github.com/tgruben/ivy v0.0.0-20221107170120-634b546dcdac h1:xVEKycwTG+9q18T1zA+ESrkIMIMQMmlsGOFirh5VxT8=
-github.com/tgruben/ivy v0.0.0-20221107170120-634b546dcdac/go.mod h1:/COPfnSdd23BhmpDXFKsYPk1kK2sJpUr21TsZ1nsgcg=
+github.com/tgruben/ivy v0.0.0-20230111144143-b80a659caeaf h1:+bnHPov8gMIztSP1zxMbUXei8IiVNXbQre4+u9lpkQ0=
+github.com/tgruben/ivy v0.0.0-20230111144143-b80a659caeaf/go.mod h1:/COPfnSdd23BhmpDXFKsYPk1kK2sJpUr21TsZ1nsgcg=
 github.com/tidwall/btree v0.3.0/go.mod h1:huei1BkDWJ3/sLXmO+bsCNELL+Bp2Kks9OLyQFkzvA8=
 github.com/tidwall/btree v1.1.0/go.mod h1:TzIRzen6yHbibdSfK6t8QimqbUnoxUSrZfeW7Uob0q4=
 github.com/tidwall/buntdb v1.2.0/go.mod h1:XLza/dhlwzO6dc5o/KWor4kfZSt3BP8QV+77ZMKfI58=

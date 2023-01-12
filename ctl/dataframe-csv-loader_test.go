@@ -71,4 +71,31 @@ func TestDataframeCsvLoaderCommand(t *testing.T) {
 			t.Fatalf("DataframeCsvLoader Run doesn't work: %s", err)
 		}
 	})
+	t.Run("strings", func(t *testing.T) {
+		cmLog := logger.NewStandardLogger(io.Discard)
+		cm := NewDataframeCsvLoaderCommand(cmLog)
+		file, err := testhook.TempFile(t, "import_string.csv")
+		if err != nil {
+			t.Fatalf("creating tempfile: %v", err)
+		}
+		_, err = file.Write([]byte("id,val__S\nA,ab\nB,cd\nC,ef"))
+		if err != nil {
+			t.Fatalf("writing to tempfile: %v", err)
+		}
+		ctx := context.Background()
+		if err != nil {
+			t.Fatal(err)
+		}
+		index := "strings"
+		cmd.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
+
+		cm.Host = cmd.API.Node().URI.HostPort()
+		cm.Path = file.Name()
+		cm.Index = index
+
+		err = cm.Run(ctx)
+		if err != nil {
+			t.Fatalf("DataframeCsvLoader Run doesn't work: %s", err)
+		}
+	})
 }

@@ -51,19 +51,20 @@ func TestExecutor_Apply(t *testing.T) {
 	}
 
 	t.Run("dataframe ingest", func(t *testing.T) {
-		//		func (c *Client) ApplyDataframeChangeset(indexName string, cr *pilosa.ChangesetRequest, shard uint64) (map[string]interface{}, error) {
 		cr := &pilosa.ChangesetRequest{}
 		// for each row a list of columns
 		cr.Columns = []interface{}{
 			[]int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			[]int64{2, 4, 6, 8, 10, 12, 14, 16, 18, 20},
 			[]float64{1, 1.414, 1.732, 2, 2.236, 2.449, 2.646, 2.828, 3, 3.162},
+			[]string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"},
 		}
 		cr.ShardIds = []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 		cr.SimpleSchema = []pilosa.NameType{
 			{Name: "_ID", DataType: arrow.PrimitiveTypes.Int64},
 			{Name: "ival", DataType: arrow.PrimitiveTypes.Int64},
 			{Name: "fval", DataType: arrow.PrimitiveTypes.Float64},
+			{Name: "sval", DataType: arrow.BinaryTypes.String},
 		}
 		shard := uint64(0)
 		err := api.ApplyDataframeChangeset(ctx, indexName, cr, shard)
@@ -72,7 +73,7 @@ func TestExecutor_Apply(t *testing.T) {
 		}
 	})
 	t.Run("dataframe schema", func(t *testing.T) {
-		expectedJSON := `[{"Name":"_ID","Type":"int64"},{"Name":"ival","Type":"int64"},{"Name":"fval","Type":"float64"}]`
+		expectedJSON := `[{"Name":"_ID","Type":"int64"},{"Name":"ival","Type":"int64"},{"Name":"fval","Type":"float64"},{"Name":"sval","Type":"utf8"}]`
 		parts, err := api.GetDataframeSchema(ctx, indexName)
 		if err != nil {
 			t.Fatal(err)
@@ -138,7 +139,7 @@ func TestExecutor_Apply(t *testing.T) {
 		if res, err := api.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
 			t.Fatal(err)
 		} else {
-			expectedJSON := `{"Results":[{"_ID":[2,4,6],"fval":[1.414,2,2.449],"ival":[4,8,12]}],"Err":null,"Profile":null}`
+			expectedJSON := `{"Results":[{"_ID":[2,4,6],"fval":[1.414,2,2.449],"ival":[4,8,12],"sval":["B","D","F"]}],"Err":null,"Profile":null}`
 			w := new(bytes.Buffer)
 			if err := json.NewEncoder(w).Encode(res); err != nil {
 				t.Fatal(err)
@@ -155,6 +156,44 @@ func TestExecutor_Apply(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			expectedJSON := `{"Results":[{"_ID":[2,4,6],"fval":[1.414,2,2.449]}],"Err":null,"Profile":null}`
+			w := new(bytes.Buffer)
+			if err := json.NewEncoder(w).Encode(res); err != nil {
+				t.Fatal(err)
+			}
+			got := strings.Trim(w.String(), "\t \n")
+			if strings.Compare(got, expectedJSON) != 0 {
+				t.Fatalf("expected: %v got: %v", expectedJSON, got)
+			}
+		}
+	})
+	t.Run("dataframe ingest update", func(t *testing.T) {
+		cr := &pilosa.ChangesetRequest{}
+		// for each row a list of columns
+		cr.Columns = []interface{}{
+			[]int64{1},
+			[]int64{20},
+			[]float64{10},
+			[]string{"A2"},
+		}
+		cr.ShardIds = []int64{1}
+		cr.SimpleSchema = []pilosa.NameType{
+			{Name: "_ID", DataType: arrow.PrimitiveTypes.Int64},
+			{Name: "ival", DataType: arrow.PrimitiveTypes.Int64},
+			{Name: "fval", DataType: arrow.PrimitiveTypes.Float64},
+			{Name: "sval", DataType: arrow.BinaryTypes.String},
+		}
+		shard := uint64(0)
+		err := api.ApplyDataframeChangeset(ctx, indexName, cr, shard)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("dataframe arrow filter with header", func(t *testing.T) {
+		pql := `Arrow(ConstRow(columns=[1]),header=["ival","fval","sval"])`
+		if res, err := api.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
+			t.Fatal(err)
+		} else {
+			expectedJSON := `{"Results":[{"_ID":[1],"fval":[10],"ival":[20],"sval":["A2"]}],"Err":null,"Profile":null}`
 			w := new(bytes.Buffer)
 			if err := json.NewEncoder(w).Encode(res); err != nil {
 				t.Fatal(err)

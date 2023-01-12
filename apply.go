@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -260,14 +261,14 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 
 func NewShardFile(ctx context.Context, name string, mem memory.Allocator, e *executor) (*ShardFile, error) {
 	if !e.dataFrameExists(name) {
-		return &ShardFile{dest: name, executor: e}, nil
+		return &ShardFile{dest: name, executor: e, strings: make(map[key][]string)}, nil
 	}
 	// else read in existing
 	table, err := e.getDataTable(ctx, name, mem)
 	if err != nil {
 		return nil, err
 	}
-	return &ShardFile{table: table, schema: table.Schema(), dest: name, executor: e}, nil
+	return &ShardFile{table: table, schema: table.Schema(), dest: name, executor: e, strings: make(map[key][]string)}, nil
 }
 
 type NameType struct {
@@ -291,6 +292,8 @@ func cast(v interface{}) arrow.DataType {
 		return arrow.PrimitiveTypes.Float64
 	case float64:
 		return arrow.PrimitiveTypes.Float64
+	case *arrow.StringType:
+		return arrow.BinaryTypes.String
 	default:
 		vprint.VV("%T .... %v", v, v)
 	}
@@ -305,6 +308,11 @@ func (cr *ChangesetRequest) ArrowSchema() *arrow.Schema {
 	return arrow.NewSchema(fields, nil)
 }
 
+type key struct {
+	col   int
+	chunk int
+}
+
 type ShardFile struct {
 	table      arrow.Table
 	schema     *arrow.Schema
@@ -313,6 +321,7 @@ type ShardFile struct {
 	columns    []interface{}
 	dest       string
 	executor   *executor
+	strings    map[key][]string
 }
 
 func compareSchema(s1, s2 *arrow.Schema) bool {
@@ -365,6 +374,8 @@ func (sf *ShardFile) buildAppenders(maxid int64) {
 			sf.columns[i] = make([]int64, newSize)
 		case arrow.PrimitiveTypes.Float64:
 			sf.columns[i] = make([]float64, newSize)
+		case arrow.BinaryTypes.String:
+			sf.columns[i] = make([]string, newSize)
 		}
 	}
 	sf.added = newSize
@@ -381,6 +392,11 @@ func (sf *ShardFile) SetFloatValue(col int, row int64, val float64) {
 	v[row-sf.beforeRows] = val
 }
 
+func (sf *ShardFile) SetStringValue(col int, row int64, val string) {
+	v := sf.columns[col].([]string)
+	v[row-sf.beforeRows] = val
+}
+
 func (sf *ShardFile) Process(cs *ChangesetRequest) error {
 	err := sf.process(cs)
 	if err != nil {
@@ -394,9 +410,34 @@ func (sf *ShardFile) Process(cs *ChangesetRequest) error {
 	return os.Rename(rtemp+sf.executor.TableExtension(), sf.dest+sf.executor.TableExtension())
 }
 
+func (sf *ShardFile) LoadBlobs() error {
+	for col := 0; col < len(sf.schema.Fields()); col++ {
+		column := sf.table.Column(col)
+		switch column.DataType() {
+		case arrow.BinaryTypes.String:
+			for i, chunk := range column.Data().Chunks() {
+				stringData := chunk.(*array.String)
+				k := key{col: col, chunk: i}
+				for j := 0; j < stringData.Len(); j++ {
+					v := stringData.Value(j)
+					sf.strings[k] = append(sf.strings[k], v)
+
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (sf *ShardFile) ReplaceString(col, chunk, l int, s string) {
+	sf.strings[key{col: col, chunk: chunk}][l] = s
+}
+
 func (sf *ShardFile) process(cs *ChangesetRequest) error {
 	offset := 0
 	if sf.table != nil {
+		// need to load blobs prior
+		sf.LoadBlobs()
 		column := sf.table.Column(0)
 		resolver := dataframe.NewChunkResolver(column)
 		for i, rowid := range cs.ShardIds {
@@ -414,6 +455,10 @@ func (sf *ShardFile) process(cs *ChangesetRequest) error {
 				case arrow.PrimitiveTypes.Float64:
 					v := column.Data().Chunk(chunk).(*array.Float64).Float64Values()
 					v[l] = cs.Columns[col].([]float64)[i]
+				case arrow.BinaryTypes.String:
+					// TODO(twg) 2023/01/09 How to update existing?
+					new := cs.Columns[col].([]string)[i]
+					sf.ReplaceString(col, chunk, l, new)
 				default:
 					panic(fmt.Sprintf("Unknown Type %v", column.DataType()))
 				}
@@ -433,6 +478,8 @@ func (sf *ShardFile) process(cs *ChangesetRequest) error {
 					sf.SetIntValue(col, rowid, cs.Columns[col].([]int64)[i])
 				case arrow.PrimitiveTypes.Float64:
 					sf.SetFloatValue(col, rowid, cs.Columns[col].([]float64)[i])
+				case arrow.BinaryTypes.String:
+					sf.SetStringValue(col, rowid, cs.Columns[col].([]string)[i])
 				default:
 					panic(fmt.Sprintf("2 Unknown Type %v", sf.schema.Field(col).Type))
 				}
@@ -443,15 +490,65 @@ func (sf *ShardFile) process(cs *ChangesetRequest) error {
 	return nil
 }
 
+type twoSlices struct {
+	id_slice    []int
+	lists_slice [][]string
+}
+
+type SortByOther twoSlices
+
+func (sbo SortByOther) Len() int {
+	return len(sbo.id_slice)
+}
+
+func (sbo SortByOther) Swap(i, j int) {
+	sbo.id_slice[i], sbo.id_slice[j] = sbo.id_slice[j], sbo.id_slice[i]
+	sbo.lists_slice[i], sbo.lists_slice[j] = sbo.lists_slice[j], sbo.lists_slice[i]
+}
+
+func (sbo SortByOther) Less(i, j int) bool {
+	return sbo.id_slice[i] < sbo.id_slice[j]
+}
+
+func (sf *ShardFile) buildFromStrings(idx int, mem memory.Allocator) []arrow.Array {
+	ids := make([]int, 0)
+	lists := make([][]string, 0)
+	for k, v := range sf.strings {
+		if k.col == idx { // ugh not ordered :(
+			ids = append(ids, k.chunk)
+			lists = append(lists, v)
+		}
+	}
+	// sort ids/lists
+	parts := twoSlices{id_slice: ids, lists_slice: lists}
+	sort.Sort(SortByOther(parts))
+
+	builder := array.NewStringBuilder(mem)
+	chunks := make([]arrow.Array, 0)
+	for _, v := range parts.lists_slice {
+		builder.AppendValues(v, nil)
+		newChunk := builder.NewArray()
+		chunks = append(chunks, newChunk)
+	}
+	return chunks
+}
+
 func (sf *ShardFile) Save(name string) error {
 	parts := make([]arrow.Array, 0)
 	mem := memory.NewGoAllocator()
 	for col := 0; col < len(sf.schema.Fields()); col++ {
 		chunks := make([]arrow.Array, 0)
 		if sf.table != nil {
-			// we append if there was existing parquet file
+			// we append if there was existing file
 			column := sf.table.Column(col)
-			chunks = append(chunks, column.Data().Chunks()...)
+			// if primative type
+			switch column.DataType() {
+			case arrow.BinaryTypes.String:
+				chunks = sf.buildFromStrings(col, mem)
+			default:
+				chunks = append(chunks, column.Data().Chunks()...)
+			}
+			// else binary type
 		}
 		switch sf.schema.Field(col).Type {
 		case arrow.PrimitiveTypes.Int64:
@@ -472,6 +569,18 @@ func (sf *ShardFile) Save(name string) error {
 			if sf.added > 0 {
 				fbuild := array.NewFloat64Builder(mem)
 				fbuild.AppendValues(sf.columns[col].([]float64), nil) // TODO(twg) 2022/09/28 need to handle null
+				newChunk := fbuild.NewArray()
+				chunks = append(chunks, newChunk)
+			}
+			record, err := array.Concatenate(chunks, mem)
+			if err != nil {
+				return err
+			}
+			parts = append(parts, record)
+		case arrow.BinaryTypes.String:
+			if sf.added > 0 {
+				fbuild := array.NewStringBuilder(mem)
+				fbuild.AppendValues(sf.columns[col].([]string), nil) // TODO(twg) 2022/09/28 need to handle null
 				newChunk := fbuild.NewArray()
 				chunks = append(chunks, newChunk)
 			}

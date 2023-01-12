@@ -4,7 +4,7 @@ replace github.com/go-avro/avro => github.com/pilosa/avro v0.0.0-20200626214113-
 
 replace github.com/gomem/gomem => github.com/tgruben/gomem v0.0.0-20221021111114-79fdc77dcf61
 
-replace robpike.io/ivy => github.com/tgruben/ivy v0.0.0-20221107170120-634b546dcdac
+replace robpike.io/ivy => github.com/tgruben/ivy v0.0.0-20230111144143-b80a659caeaf
 
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20220409005548-0153238b886a
