@@ -23,11 +23,11 @@ type cognitoParameters struct {
 type cognitoAuthRequest struct {
 	AuthParameters cognitoParameters `json:"AuthParameters"`
 	AuthFlow       string            `json:"AuthFlow"`
-	AppClientId    string            `json:"ClientId"`
+	AppClientID    string            `json:"ClientId"`
 }
 
 type cognitoAuthResult struct {
-	IdToken string `json:"IdToken"`
+	IDToken string `json:"IdToken"`
 }
 
 type cognitoAuthResponse struct {
@@ -41,7 +41,7 @@ func authenticate(clientID, region, email, password string) (string, error) {
 			Password: password,
 		},
 		AuthFlow:    authFlow,
-		AppClientId: clientID,
+		AppClientID: clientID,
 	}
 
 	data, err := json.Marshal(authPayload)
@@ -75,5 +75,5 @@ func authenticate(clientID, region, email, password string) (string, error) {
 		return "", errors.Wrap(err, "decoding cognito auth response")
 	}
 
-	return auth.Result.IdToken, nil
+	return auth.Result.IDToken, nil
 }

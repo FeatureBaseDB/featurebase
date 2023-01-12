@@ -213,8 +213,6 @@ func (v *view) openEmpty() error {
 			return errors.Wrap(err, "creating fragments directory")
 		}
 
-		v.holder.Logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
-
 		return nil
 	}(); err != nil {
 		v.close()
@@ -222,7 +220,6 @@ func (v *view) openEmpty() error {
 	}
 
 	_ = testhook.Opened(v.holder.Auditor, v, nil)
-	v.holder.Logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
 	return nil
 }
 
@@ -533,7 +530,7 @@ func (v *view) clearBit(qcx *Qcx, rowID, columnID uint64) (changed bool, err err
 // value uses a column of bits to read a multi-bit value.
 func (v *view) value(qcx *Qcx, columnID uint64, bitDepth uint64) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
-	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: v.idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: false, Index: v.idx, Shard: shard})
 	defer finisher(&err)
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {

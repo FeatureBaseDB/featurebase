@@ -122,7 +122,7 @@ func (p *Parser) parseNonExplainStatement() (Statement, error) {
 	case UPDATE:
 		return p.parseUpdateStatement(nil)
 	case DELETE:
-		return p.parseDeleteStatement(nil)
+		return p.parseDeleteStatement()
 		//	case WITH:
 		//		return p.parseWithStatement()
 	case SHOW:
@@ -326,14 +326,14 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 	switch p.peek() {
 	case TABLE:
 		return p.parseCreateTableStatement(pos)
-		/*	case VIEW:
-				return p.parseCreateViewStatement(pos)
-			case INDEX, UNIQUE:
-				return p.parseCreateIndexStatement(pos)*/
+	case VIEW:
+		return p.parseCreateViewStatement(pos)
+		/*case INDEX, UNIQUE:
+		return p.parseCreateIndexStatement(pos)*/
 	case FUNCTION:
 		return p.parseCreateFunctionStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE")
+		return nil, p.errorExpected(pos, tok, "TABLE, VIEW or FUNCTION")
 	}
 }
 
@@ -344,14 +344,14 @@ func (p *Parser) parseDropStatement() (Statement, error) {
 	switch p.peek() {
 	case TABLE:
 		return p.parseDropTableStatement(pos)
-		/*	case VIEW:
-				return p.parseDropViewStatement(pos)
-			case INDEX:
-				return p.parseDropIndexStatement(pos)*/
+	case VIEW:
+		return p.parseDropViewStatement(pos)
+		/* case INDEX:
+		return p.parseDropIndexStatement(pos)*/
 	case FUNCTION:
 		return p.parseDropFunctionStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE")
+		return nil, p.errorExpected(pos, tok, "TABLE, VIEW or FUNCTION")
 	}
 }
 
@@ -441,15 +441,13 @@ func (p *Parser) parseTableOption() (_ TableOption, err error) {
 
 	var optionPos Pos
 
-	// Parse column constraints.
+	// Parse table options.
 	switch p.peek() {
 	case KEYPARTITIONS:
 		return p.parseKeyPartitionsOption(optionPos)
-	case COMMENT:
-		return p.parseCommentOption(optionPos)
 	default:
-		assert(p.peek() == SHARDWIDTH)
-		return p.parseShardWidthOption(optionPos)
+		assert(p.peek() == COMMENT)
+		return p.parseCommentOption(optionPos)
 	}
 }
 
@@ -474,21 +472,6 @@ func (p *Parser) parseKeyPartitionsOption(optionPos Pos) (_ *KeyPartitionsOption
 
 	var opt KeyPartitionsOption
 	opt.KeyPartitions, _, _ = p.scan()
-
-	if isLiteralToken(p.peek()) {
-		opt.Expr = p.mustParseLiteral()
-	} else {
-		return &opt, p.errorExpected(p.pos, p.tok, "literal")
-	}
-
-	return &opt, nil
-}
-
-func (p *Parser) parseShardWidthOption(optionPos Pos) (_ *ShardWidthOption, err error) {
-	assert(p.peek() == SHARDWIDTH)
-
-	var opt ShardWidthOption
-	opt.ShardWidth, _, _ = p.scan()
 
 	if isLiteralToken(p.peek()) {
 		opt.Expr = p.mustParseLiteral()
@@ -1045,7 +1028,7 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 	return &stmt, nil
 }
 
-/*func (p *Parser) parseCreateViewStatement(createPos Pos) (_ *CreateViewStatement, err error) {
+func (p *Parser) parseCreateViewStatement(createPos Pos) (_ *CreateViewStatement, err error) {
 	assert(p.peek() == VIEW)
 
 	var stmt CreateViewStatement
@@ -1100,9 +1083,9 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 		return &stmt, err
 	}
 	return &stmt, nil
-}*/
+}
 
-/*func (p *Parser) parseDropViewStatement(dropPos Pos) (_ *DropViewStatement, err error) {
+func (p *Parser) parseDropViewStatement(dropPos Pos) (_ *DropViewStatement, err error) {
 	assert(p.peek() == VIEW)
 
 	var stmt DropViewStatement
@@ -1123,7 +1106,7 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 	}
 
 	return &stmt, nil
-}*/
+}
 
 /*func (p *Parser) parseCreateIndexStatement(createPos Pos) (_ *CreateIndexStatement, err error) {
 	assert(p.peek() == INDEX || p.peek() == UNIQUE)
@@ -1540,7 +1523,7 @@ func (p *Parser) parseBulkInsertStatement() (_ *BulkInsertStatement, err error) 
 	}
 	stmt.With, _, _ = p.scan()
 	if !isBulkInsertOptionStartToken(p.peek(), p) {
-		return nil, p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT, INPUT or HEADER_ROW")
+		return nil, p.errorExpected(p.pos, p.tok, "BATCHSIZE, ROWSLIMIT, FORMAT, INPUT, ALLOW_MISSING_VALUES or HEADER_ROW")
 	}
 	for {
 		err := p.parseBulkInsertOption(&stmt)
@@ -1594,6 +1577,10 @@ func (p *Parser) parseBulkInsertOption(stmt *BulkInsertStatement) error {
 			} else {
 				return p.errorExpected(p.pos, p.tok, "literal")
 			}
+		case "ALLOW_MISSING_VALUES":
+			stmt.AllowMissingValues = ident
+			return nil
+
 		case "HEADER_ROW":
 			stmt.HeaderRow = ident
 			return nil
@@ -1896,11 +1883,11 @@ func (p *Parser) parseUpdateStatement(withClause *WithClause) (_ *UpdateStatemen
 	return &stmt, nil
 }
 
-func (p *Parser) parseDeleteStatement(withClause *WithClause) (_ *DeleteStatement, err error) {
+func (p *Parser) parseDeleteStatement( /*withClause *WithClause*/ ) (_ *DeleteStatement, err error) {
 	assert(p.peek() == DELETE)
 
 	var stmt DeleteStatement
-	stmt.WithClause = withClause
+	//stmt.WithClause = withClause
 
 	// Parse "DELETE FROM tbl"
 	stmt.Delete, _, _ = p.scan()
@@ -1913,41 +1900,19 @@ func (p *Parser) parseDeleteStatement(withClause *WithClause) (_ *DeleteStatemen
 	if err != nil {
 		return &stmt, err
 	}
-	stmt.Table, err = p.parseQualifiedTableName(ident)
+	tableName, err := p.parseQualifiedTableName(ident)
 	if err != nil {
 		return &stmt, err
 	}
+	stmt.Source = tableName
+	// keep the table name too
+	stmt.TableName = tableName.Clone()
 
-	// Parse WHERE clause.
+	// parse WHERE clause.
 	if p.peek() == WHERE {
 		stmt.Where, _, _ = p.scan()
 		if stmt.WhereExpr, err = p.ParseExpr(); err != nil {
 			return &stmt, err
-		}
-	}
-
-	// Parse ORDER BY clause. This differs from the SELECT parsing in that
-	// if an ORDER BY is specified then the LIMIT is required.
-	if p.peek() == ORDER {
-		if p.peek() == ORDER {
-			stmt.Order, _, _ = p.scan()
-			if p.peek() != BY {
-				return &stmt, p.errorExpected(p.pos, p.tok, "BY")
-			}
-			stmt.OrderBy, _, _ = p.scan()
-
-			for {
-				term, err := p.parseOrderingTerm()
-				if err != nil {
-					return &stmt, err
-				}
-				stmt.OrderingTerms = append(stmt.OrderingTerms, term)
-
-				if p.peek() != COMMA {
-					break
-				}
-				p.scan()
-			}
 		}
 	}
 
@@ -3436,7 +3401,7 @@ func (e Error) Error() string {
 // isTableOptionStartToken returns true if tok is the initial token of a table option.
 func isTableOptionStartToken(tok Token) bool {
 	switch tok {
-	case KEYPARTITIONS, SHARDWIDTH, COMMENT:
+	case KEYPARTITIONS, COMMENT:
 		return true
 	default:
 		return false
@@ -3453,7 +3418,7 @@ func isBulkInsertOptionStartToken(tok Token, p *Parser) bool {
 			return false
 		}
 		switch strings.ToUpper(ident.Name) {
-		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "INPUT", "HEADER_ROW":
+		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "INPUT", "HEADER_ROW", "ALLOW_MISSING_VALUES":
 			return true
 		}
 	}

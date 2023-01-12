@@ -93,7 +93,7 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newChkSumCommand(logdest))
 	rc.AddCommand(newBackupCommand(logdest))
 	rc.AddCommand(newRestoreCommand(logdest))
-	rc.AddCommand(newBackupTarCommand(logdest))
+	rc.AddCommand(newBackupTarCommand(stderr))
 	rc.AddCommand(newRestoreTarCommand(logdest))
 	rc.AddCommand(newConfigCommand(stderr))
 	rc.AddCommand(newExportCommand(logdest))
@@ -106,6 +106,7 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newKeygenCommand(logdest))
 	rc.AddCommand(newCLICommand(logdest))
 	rc.AddCommand(newDAXCommand(stderr))
+	rc.AddCommand(newDataframeCsvLoaderCommand(logdest))
 
 	rc.SetOutput(stderr)
 	return rc

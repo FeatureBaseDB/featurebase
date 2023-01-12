@@ -5,6 +5,10 @@ package cmd
 import (
 	"io"
 
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+
+
 	"github.com/featurebasedb/featurebase/v3/ctl"
 	"github.com/featurebasedb/featurebase/v3/server"
 	"github.com/featurebasedb/featurebase/v3/tracing"
@@ -12,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
+
 	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
@@ -113,8 +118,12 @@ on the configured port.`,
 				}
 				defer closer.Close()
 				tracing.GlobalTracer = opentracing.NewTracer(tracer, Server.Logger())
-			}
 
+			} else if Server.Config.DataDog.EnableTracing { // Give preference to legacy support of jaeger
+				t := opentracer.New(tracer.WithServiceName(Server.Config.DataDog.Service))
+				defer tracer.Stop()
+				tracing.GlobalTracer = opentracing.NewTracer(t, Server.Logger())
+			}
 			return errors.Wrap(Server.Wait(), "waiting on Server")
 		},
 	}

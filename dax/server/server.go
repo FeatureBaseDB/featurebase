@@ -163,8 +163,7 @@ func (m *Command) Close() error {
 		return nil
 	default:
 		eg := errgroup.Group{}
-		//eg.Go(m.Server.Close)
-
+		eg.Go(m.svcmgr.StopAll)
 		err := eg.Wait()
 		//_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
 		close(m.done)
@@ -284,6 +283,7 @@ func (m *Command) setupServices() error {
 			RegistrationBatchTimeout: m.Config.MDS.Config.RegistrationBatchTimeout,
 			StorageMethod:            m.Config.MDS.Config.StorageMethod,
 			DataDir:                  m.Config.MDS.Config.DataDir,
+			SnappingTurtleTimeout:    m.Config.MDS.Config.SnappingTurtleTimeout,
 			Logger:                   m.logger,
 			Director: controllerhttp.NewDirector(
 				controllerhttp.DirectorConfig{
@@ -309,7 +309,7 @@ func (m *Command) setupServices() error {
 
 		var mdsAddr dax.Address
 		if m.Config.Queryer.Config.MDSAddress != "" {
-			mdsAddr = dax.Address(m.Config.Queryer.Config.MDSAddress + "/" + dax.ServicePrefixMDS)
+			mdsAddr = dax.Address(m.Config.Queryer.Config.MDSAddress)
 		} else if m.svcmgr.MDS != nil {
 			mdsAddr = m.svcmgr.MDS.Address()
 		} else {

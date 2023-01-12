@@ -28,6 +28,11 @@ type Balancer interface {
 	// which are not assigned to any worker, that means the query
 	// would return incomplete data, so we want to error.
 	WorkersForJobPrefix(ctx context.Context, prefix string) ([]dax.WorkerInfo, error)
+
+	// RemoveJobs is for e.g. when dropping a table remove all jobs
+	// associated with that table without needing to look up in
+	// advance which shards or partitions are actually present.
+	RemoveJobs(ctx context.Context, prefix string) ([]dax.WorkerDiff, error)
 }
 
 // Ensure type implements interface.
@@ -66,4 +71,8 @@ func (b *NopBalancer) WorkersForJobs(ctx context.Context, jobs []dax.Job) ([]dax
 }
 func (b *NopBalancer) WorkersForJobPrefix(ctx context.Context, prefix string) ([]dax.WorkerInfo, error) {
 	return []dax.WorkerInfo{}, nil
+}
+
+func (b *NopBalancer) RemoveJobs(ctx context.Context, prefix string) ([]dax.WorkerDiff, error) {
+	return nil, nil
 }

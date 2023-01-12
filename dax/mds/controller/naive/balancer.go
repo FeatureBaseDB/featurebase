@@ -55,15 +55,18 @@ type WorkerJobService interface {
 
 	CreateJobs(ctx context.Context, balancerName string, worker dax.Worker, job ...dax.Job) error
 	DeleteJob(ctx context.Context, balancerName string, worker dax.Worker, job dax.Job) error
+	DeleteJobs(ctx context.Context, balancerName, prefix string) (InternalDiffs, error)
 	JobCounts(ctx context.Context, balancerName string, worker ...dax.Worker) (map[dax.Worker]int, error)
 	ListJobs(ctx context.Context, balancerName string, worker dax.Worker) (dax.Jobs, error)
 }
 
+// TODO: I don't think all these method names need "Free" in them.
 type FreeJobService interface {
 	CreateFreeJobs(ctx context.Context, balancerName string, job ...dax.Job) error
 	DeleteFreeJob(ctx context.Context, balancerName string, job dax.Job) error
 	ListFreeJobs(ctx context.Context, balancerName string) (dax.Jobs, error)
 	MergeFreeJobs(ctx context.Context, balancerName string, jobs dax.Jobs) error
+	DeleteFreeJobs(ctx context.Context, balancerName, prefix string) error
 }
 
 // New returns a new instance of Balancer.
@@ -90,15 +93,15 @@ func (b *Balancer) AddWorker(ctx context.Context, worker fmt.Stringer) ([]dax.Wo
 		return nil, errors.Wrap(err, "adding worker")
 	}
 
-	return diff.output(), nil
+	return diff.Output(), nil
 }
 
-func (b *Balancer) addWorker(ctx context.Context, worker dax.Worker) (internalDiffs, error) {
+func (b *Balancer) addWorker(ctx context.Context, worker dax.Worker) (InternalDiffs, error) {
 	// If this worker already exists, don't do anything.
 	if exists, err := b.current.WorkerExists(ctx, b.name, worker); err != nil {
 		return nil, errors.Wrap(err, "checking if worker exists")
 	} else if exists {
-		return internalDiffs{}, nil
+		return InternalDiffs{}, nil
 	}
 
 	if err := b.current.CreateWorker(ctx, b.name, worker); err != nil {
@@ -133,15 +136,15 @@ func (b *Balancer) RemoveWorker(ctx context.Context, worker fmt.Stringer) ([]dax
 		return nil, errors.Wrap(err, "removing worker")
 	}
 
-	return diff.output(), nil
+	return diff.Output(), nil
 }
 
-func (b *Balancer) removeWorker(ctx context.Context, worker dax.Worker) (internalDiffs, error) {
+func (b *Balancer) removeWorker(ctx context.Context, worker dax.Worker) (InternalDiffs, error) {
 	// If this worker doesn't exist, don't do anything else.
 	if exists, err := b.current.WorkerExists(ctx, b.name, worker); err != nil {
 		return nil, errors.Wrap(err, "checking if worker exists")
 	} else if !exists {
-		return internalDiffs{}, nil
+		return InternalDiffs{}, nil
 	}
 
 	jobs, err := b.current.ListJobs(ctx, b.name, worker)
@@ -162,9 +165,9 @@ func (b *Balancer) removeWorker(ctx context.Context, worker dax.Worker) (interna
 	// Even though this may not be useful to the caller (for example, in the
 	// case where the worker has died and no longer exists), return the diffs
 	// which represent the removal of jobs from the worker.
-	diff := newInternalDiffs()
+	diff := NewInternalDiffs()
 	for _, job := range jobs {
-		diff.removed(worker, job)
+		diff.Removed(worker, job)
 	}
 
 	return diff, nil
@@ -198,10 +201,10 @@ func (b *Balancer) AddJobs(ctx context.Context, jobs ...fmt.Stringer) ([]dax.Wor
 		return nil, errors.Wrap(err, "adding job")
 	}
 
-	return diff.output(), nil
+	return diff.Output(), nil
 }
 
-func (b *Balancer) addJobs(ctx context.Context, jobs ...dax.Job) (internalDiffs, error) {
+func (b *Balancer) addJobs(ctx context.Context, jobs ...dax.Job) (InternalDiffs, error) {
 	if cnt, err := b.current.WorkerCount(ctx, b.name); err != nil {
 		return nil, errors.Wrap(err, "getting worker count")
 	} else if cnt == 0 {
@@ -210,7 +213,7 @@ func (b *Balancer) addJobs(ctx context.Context, jobs ...dax.Job) (internalDiffs,
 		}
 		// TODO: we might want to inform the user that a job is in the free list
 		// because there are no workers.
-		return internalDiffs{}, nil
+		return InternalDiffs{}, nil
 	}
 
 	workerJobs, err := b.current.WorkersJobs(ctx, b.name)
@@ -229,7 +232,7 @@ func (b *Balancer) addJobs(ctx context.Context, jobs ...dax.Job) (internalDiffs,
 		jobCounts[v.ID] = len(v.Jobs)
 	}
 
-	diffs := newInternalDiffs()
+	diffs := NewInternalDiffs()
 
 	jobsToCreate := make(map[dax.Worker][]dax.Job)
 
@@ -263,7 +266,7 @@ func (b *Balancer) addJobs(ctx context.Context, jobs ...dax.Job) (internalDiffs,
 			return nil, errors.Wrap(err, "creating job")
 		}
 		for _, job := range jobs {
-			diffs.added(worker, job)
+			diffs.Added(worker, job)
 		}
 	}
 
@@ -282,10 +285,24 @@ func (b *Balancer) RemoveJob(ctx context.Context, job fmt.Stringer) ([]dax.Worke
 		return nil, errors.Wrapf(err, "removing job: %s", job)
 	}
 
-	return diff.output(), nil
+	return diff.Output(), nil
 }
 
-func (b *Balancer) removeJob(ctx context.Context, job dax.Job) (internalDiffs, error) {
+func (b *Balancer) RemoveJobs(ctx context.Context, prefix string) ([]dax.WorkerDiff, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	idiffs, err := b.current.DeleteJobs(ctx, b.name, prefix)
+	if err != nil {
+		return nil, errors.Wrap(err, "deleting worker jobs")
+	}
+	if err := b.freeJobs.DeleteFreeJobs(ctx, b.name, prefix); err != nil {
+		return nil, errors.Wrap(err, "deleting free jobs")
+	}
+	return idiffs.Output(), nil
+}
+
+func (b *Balancer) removeJob(ctx context.Context, job dax.Job) (InternalDiffs, error) {
 	if worker, ok, err := b.workerForJob(ctx, job); err != nil {
 		return nil, errors.Wrapf(err, "getting worker for job: %s", job)
 	} else if ok {
@@ -293,8 +310,8 @@ func (b *Balancer) removeJob(ctx context.Context, job dax.Job) (internalDiffs, e
 			return nil, errors.Wrapf(err, "deleting job: %s", job)
 		}
 
-		diffs := newInternalDiffs()
-		diffs.removed(worker, job)
+		diffs := NewInternalDiffs()
+		diffs.Removed(worker, job)
 
 		return diffs, nil
 	}
@@ -307,7 +324,7 @@ func (b *Balancer) removeJob(ctx context.Context, job dax.Job) (internalDiffs, e
 		return nil, errors.Wrapf(err, "deleting free job: %s", job)
 	}
 
-	return internalDiffs{}, nil
+	return InternalDiffs{}, nil
 }
 
 // Balance ensures that all jobs are being handled by a worker by assigning jobs
@@ -336,7 +353,7 @@ func (b *Balancer) Balance(ctx context.Context) ([]dax.WorkerDiff, error) {
 		return nil, errors.Wrap(err, "balancing jobs")
 	}
 
-	return diff.output(), nil
+	return diff.Output(), nil
 }
 
 // balance moves jobs among workers with the goal of having an equal number of
@@ -346,7 +363,7 @@ func (b *Balancer) Balance(ctx context.Context) ([]dax.WorkerDiff, error) {
 // the internalDiffs.merge() method, but we would need to modify that method to
 // be smarter about the order in which it applies the add/remove operations.
 // Until that's in place, we'll pass in a value here.
-func (b *Balancer) balance(ctx context.Context, diffs internalDiffs) (internalDiffs, error) {
+func (b *Balancer) balance(ctx context.Context, diffs InternalDiffs) (InternalDiffs, error) {
 	numWorkers, err := b.current.WorkerCount(ctx, b.name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting worker count: %s", b.name)
@@ -405,12 +422,12 @@ func (b *Balancer) balance(ctx context.Context, diffs internalDiffs) (internalDi
 			if rj, err := b.removeJob(ctx, sortedJobs[i]); err != nil {
 				return nil, errors.Wrapf(err, "removing job: %s", sortedJobs[i])
 			} else {
-				diffs.merge(rj)
+				diffs.Merge(rj)
 			}
 			if aj, err := b.addJobs(ctx, sortedJobs[i]); err != nil {
 				return nil, errors.Wrapf(err, "adding job: %s", sortedJobs[i])
 			} else {
-				diffs.merge(aj)
+				diffs.Merge(aj)
 			}
 		}
 	}
@@ -547,8 +564,8 @@ func (b *Balancer) WorkersForJobPrefix(ctx context.Context, prefix string) ([]da
 }
 
 // processFreeJobs assigns all jobs in the free list to a worker.
-func (b *Balancer) processFreeJobs(ctx context.Context) (internalDiffs, error) {
-	diffs := newInternalDiffs()
+func (b *Balancer) processFreeJobs(ctx context.Context) (InternalDiffs, error) {
+	diffs := NewInternalDiffs()
 	jobs, err := b.freeJobs.ListFreeJobs(ctx, b.name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "listing free jobs: %s", b.name)
@@ -557,7 +574,7 @@ func (b *Balancer) processFreeJobs(ctx context.Context) (internalDiffs, error) {
 		if aj, err := b.addJobs(ctx, job); err != nil {
 			return nil, errors.Wrapf(err, "adding job: %s", job)
 		} else {
-			diffs.merge(aj)
+			diffs.Merge(aj)
 		}
 		if err := b.freeJobs.DeleteFreeJob(ctx, b.name, job); err != nil {
 			return nil, errors.Wrapf(err, "deleting free job: %s", job)

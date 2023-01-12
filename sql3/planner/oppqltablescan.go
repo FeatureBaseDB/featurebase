@@ -38,12 +38,7 @@ func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []stri
 func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
-
+	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
 
 	if p.topExpr != nil {
@@ -52,7 +47,6 @@ func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
 	}
-
 	result["columns"] = p.columns
 	return result
 }
@@ -216,18 +210,26 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 				},
 			)
 		}
-		queryResponse, err := i.planner.executor.Execute(ctx, i.tableName, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
+
+		tbl, err := i.planner.schemaAPI.TableByName(ctx, dax.TableName(i.tableName))
+		if err != nil {
+			return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
+		}
+
+		queryResponse, err := i.planner.executor.Execute(ctx, tbl, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		tbl, ok := queryResponse.Results[0].(pilosa.ExtractedTable)
+
+		extbl, ok := queryResponse.Results[0].(pilosa.ExtractedTable)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected Extract() result type: %T", queryResponse.Results[0])
 		}
-		i.result = tbl.Columns
+
+		i.result = extbl.Columns
 
 		//set the source index
-		for idx, fld := range tbl.Fields {
+		for idx, fld := range extbl.Fields {
 			mappedColumn, ok := i.columnMap[fld.Name]
 			if !ok {
 				return nil, sql3.NewErrInternalf("mapped column not found for column named '%s'", fld.Name)

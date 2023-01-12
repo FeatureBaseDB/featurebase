@@ -82,6 +82,18 @@ func (s *ServiceManager) StartAll() error {
 	return nil
 }
 
+func (s *ServiceManager) StopAll() error {
+	for key := range s.computers {
+		if err := s.ComputerStop(key); err != nil {
+			s.Logger.Printf("stopping computer %s: %v", key, err)
+		}
+	}
+	if err := s.QueryerStop(); err != nil {
+		s.Logger.Printf("stopping queryer: %v", err)
+	}
+	return s.MDSStop()
+}
+
 // MDSStart starts the MDS service.
 func (s *ServiceManager) MDSStart() error {
 	if s.MDS == nil {

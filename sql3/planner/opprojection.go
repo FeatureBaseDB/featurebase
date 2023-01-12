@@ -60,12 +60,8 @@ func (p *PlanOpProjection) WithChildren(children ...types.PlanOperator) (types.P
 
 func (p *PlanOpProjection) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
-	result["__op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["__schema"] = sc
+	result["_op"] = fmt.Sprintf("%T", p)
+	result["_schema"] = p.Schema().Plan()
 
 	result["child"] = p.ChildOp.Plan()
 
@@ -73,7 +69,7 @@ func (p *PlanOpProjection) Plan() map[string]interface{} {
 	for _, e := range p.Projections {
 		ps = append(ps, e.Plan())
 	}
-	result["_projections"] = ps
+	result["projections"] = ps
 
 	return result
 }
@@ -107,22 +103,22 @@ func (p *PlanOpProjection) WithUpdatedExpressions(exprs ...types.PlanExpression)
 }
 
 func ExpressionToColumn(e types.PlanExpression) *types.PlannerColumn {
-	var name string
-	if n, ok := e.(types.IdentifiableByName); ok {
-		name = n.Name()
-	} else {
-		name = "" //e.String()
-	}
+	name := ""
+	relationName := ""
 
-	var table string
-	if t, ok := e.(types.IdentifiableByName); ok {
-		table = t.Name()
+	switch thisExpr := e.(type) {
+	case *qualifiedRefPlanExpression:
+		name = thisExpr.columnName
+		relationName = thisExpr.tableName
+
+	case *aliasPlanExpression:
+		name = thisExpr.aliasName
 	}
 
 	return &types.PlannerColumn{
 		ColumnName:   name,
+		RelationName: relationName,
 		Type:         e.Type(),
-		RelationName: table,
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/pkg/errors"
 )
@@ -41,11 +42,6 @@ func NewPlanOpCreateTable(p *ExecutionPlanner, tableName string, failIfExists bo
 func (p *PlanOpCreateTable) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	ps := make([]string, 0)
-	for _, e := range p.Schema() {
-		ps = append(ps, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = ps
 	result["name"] = p.tableName
 	result["failIfExists"] = p.failIfExists
 	return result
@@ -135,7 +131,7 @@ func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 	if err := i.planner.schemaAPI.CreateTable(ctx, tbl); err != nil {
 		if _, ok := errors.Cause(err).(pilosa.ConflictError); ok {
 			if i.failIfExists {
-				return nil, err
+				return nil, sql3.NewErrTableExists(0, 0, i.tableName)
 			}
 		} else {
 			return nil, err

@@ -39,26 +39,14 @@ func NewPlanOpInsert(p *ExecutionPlanner, tableName string, targetColumns []*qua
 func (p *PlanOpInsert) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
+	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
 	ps := make([]interface{}, 0)
 	for _, e := range p.targetColumns {
 		ps = append(ps, e.Plan())
 	}
 	result["targetColumns"] = ps
-	pps := make([]interface{}, 0)
-	for _, tuple := range p.insertValues {
-		ps := make([]interface{}, 0)
-		for _, e := range tuple {
-			ps = append(ps, e.Plan())
-		}
-		pps = append(pps, ps)
-	}
-	result["insertValues"] = pps
+	result["insertTupleCount"] = len(p.insertValues)
 	return result
 }
 
@@ -180,6 +168,9 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 		return nil, errors.Wrap(err, "setting up batch")
 	}
 
+	var qbatchTime fbbatch.QuantizedTime
+	qbatchTime.Set(time.Now().UTC())
+
 	// row is the single instance of batch.Row allocated. It is re-used
 	// throughout the for loop to minimize memory allocation.
 	var row fbbatch.Row
@@ -248,6 +239,22 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 						return nil, sql3.NewErrInternalf("converting negative value to uint64: %d", v)
 					}
 					row.Values[posVals[idx]] = uint64(v)
+				case []int64:
+					uint64s := make([]uint64, len(v))
+					for i := range v {
+						if v[i] < 0 {
+							return nil, sql3.NewErrInternalf("converting negative slice value to uint64: %d", v[i])
+						}
+						uint64s[i] = uint64(v[i])
+					}
+					row.Values[posVals[idx]] = uint64s
+				default:
+					row.Values[posVals[idx]] = eval
+				}
+
+			case pilosa.FieldTypeTime:
+				row.Time = qbatchTime
+				switch v := eval.(type) {
 				case []int64:
 					uint64s := make([]uint64, len(v))
 					for i := range v {

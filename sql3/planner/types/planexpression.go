@@ -51,7 +51,7 @@ type AggregationBuffer interface {
 	Update(ctx context.Context, row Row) error
 }
 
-// Interface to an expression that is a an aggregate
+// interface to an expression that is a an aggregate
 type Aggregable interface {
 	fmt.Stringer
 
@@ -59,9 +59,10 @@ type Aggregable interface {
 	AggType() AggregateFunctionType
 	AggExpression() PlanExpression
 	AggAdditionalExpr() []PlanExpression
+	Type() parser.ExprDataType
 }
 
-// Interface to something that can be identified by a name
+// interface to something that can be identified by a name
 type IdentifiableByName interface {
 	Name() string
 }

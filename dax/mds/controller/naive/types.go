@@ -20,13 +20,13 @@ func newJobSetDiffs() jobSetDiffs {
 	}
 }
 
-type internalDiffs map[dax.Worker]jobSetDiffs
+type InternalDiffs map[dax.Worker]jobSetDiffs
 
-func newInternalDiffs() internalDiffs {
-	return make(internalDiffs)
+func NewInternalDiffs() InternalDiffs {
+	return make(InternalDiffs)
 }
 
-func (d internalDiffs) added(worker dax.Worker, job dax.Job) {
+func (d InternalDiffs) Added(worker dax.Worker, job dax.Job) {
 	if _, ok := d[worker]; !ok {
 		d[worker] = newJobSetDiffs()
 	}
@@ -39,7 +39,7 @@ func (d internalDiffs) added(worker dax.Worker, job dax.Job) {
 	d[worker].added.Add(job)
 }
 
-func (d internalDiffs) removed(worker dax.Worker, job dax.Job) {
+func (d InternalDiffs) Removed(worker dax.Worker, job dax.Job) {
 	if _, ok := d[worker]; !ok {
 		d[worker] = newJobSetDiffs()
 	}
@@ -52,7 +52,7 @@ func (d internalDiffs) removed(worker dax.Worker, job dax.Job) {
 	d[worker].removed.Add(job)
 }
 
-func (d internalDiffs) merge(d2 internalDiffs) {
+func (d InternalDiffs) Merge(d2 InternalDiffs) {
 	for k, v := range d2 {
 		if _, ok := d[k]; !ok {
 			d[k] = newJobSetDiffs()
@@ -62,9 +62,9 @@ func (d internalDiffs) merge(d2 internalDiffs) {
 	}
 }
 
-// output converts internalDiff to []controller.WorkerDiff for external
+// Output converts internalDiff to []controller.WorkerDiff for external
 // consumption.
-func (d internalDiffs) output() []dax.WorkerDiff {
+func (d InternalDiffs) Output() []dax.WorkerDiff {
 	out := make([]dax.WorkerDiff, len(d))
 
 	i := 0

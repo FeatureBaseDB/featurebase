@@ -133,10 +133,13 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 	flags.StringSliceVar(&srv.Auth.ConfiguredIPs, pre("auth.configured-ips"), srv.Auth.ConfiguredIPs, "List of configured IPs allowed for ingest")
 
 	flags.BoolVar(&srv.DataDog.Enable, pre("datadog.enable"), false, "enable continuous profiling with DataDog cloud service, Note you must have DataDog agent installed")
+	flags.BoolVar(&srv.DataDog.EnableTracing, pre("datadog.enable-tracing"), false, "Enable continuous tracing with DataDog cloud service, this flag is mutually exclusive to tracing.* parameters")
+
 	flags.StringVar(&srv.DataDog.Service, pre("datadog.service"), "default-service", "The Datadog service name, for example my-web-app")
 	flags.StringVar(&srv.DataDog.Env, pre("datadog.env"), "default-env", "The Datadog environment name, for example, production")
 	flags.StringVar(&srv.DataDog.Version, pre("datadog.version"), "default-version", "The version of your application")
 	flags.StringVar(&srv.DataDog.Tags, pre("datadog.tags"), "molecula", "The tags to apply to an uploaded profile. Must be a list of in the format <KEY1>:<VALUE1>,<KEY2>:<VALUE2>")
+
 	flags.BoolVar(&srv.DataDog.CPUProfile, pre("datadog.cpu-profile"), true, "golang pprof cpu profile ")
 	flags.BoolVar(&srv.DataDog.HeapProfile, pre("datadog.heap-profile"), true, "golang pprof heap profile")
 	flags.BoolVar(&srv.DataDog.MutexProfile, pre("datadog.mutex-profile"), false, "golang pprof mutex profile")
@@ -144,6 +147,7 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 	flags.BoolVar(&srv.DataDog.BlockProfile, pre("datadog.block-profile"), false, "golang pprof goroutine ")
 
 	flags.BoolVar(&srv.Dataframe.Enable, pre("dataframe.enable"), false, "EXPERIMENTAL enable support for Apply and Arrow")
+	flags.BoolVar(&srv.Dataframe.UseParquet, pre("dataframe.use-parquet"), false, "EXPERIMENTAL use parquet for file format")
 
 	return flags
 }

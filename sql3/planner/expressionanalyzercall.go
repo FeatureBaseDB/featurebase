@@ -243,11 +243,32 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		return p.analyzeFunctionSubtable(call, scope)
 	case "REVERSE":
 		return p.analyseFunctionReverse(call, scope)
+	case "CHAR":
+		return p.analyseFunctionChar(call, scope)
+	case "ASCII":
+		return p.analyseFunctionAscii(call, scope)
 	case "UPPER":
 		return p.analyzeFunctionUpper(call, scope)
+	case "STRINGSPLIT":
+		return p.analyseFunctionStringSplit(call, scope)
 	case "SUBSTRING":
 		return p.analyseFunctionSubstring(call, scope)
-
+	case "LOWER":
+		return p.analyzeFunctionLower(call, scope)
+	case "REPLACEALL":
+		return p.analyseFunctionReplaceAll(call, scope)
+	case "TRIM":
+		return p.analyseFunctionTrim(call, scope)
+	case "RTRIM":
+		return p.analyseFunctionTrim(call, scope)
+	case "LTRIM":
+		return p.analyseFunctionTrim(call, scope)
+	case "SUFFIX":
+		return p.analyseFunctionPrefixSuffix(call, scope)
+	case "PREFIX":
+		return p.analyseFunctionPrefixSuffix(call, scope)
+	case "SPACE":
+		return p.analyseFunctionSpace(call, scope)
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

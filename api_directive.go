@@ -9,6 +9,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
+	"github.com/featurebasedb/featurebase/v3/dax/storage"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/pkg/errors"
 )
@@ -40,6 +41,9 @@ func (api *API) ApplyDirective(ctx context.Context, d *dax.Directive) error {
 		// Delete all tables.
 		if err := api.deleteAllIndexes(ctx); err != nil {
 			return errors.Wrap(err, "deleting all indexes")
+		}
+		if err := api.serverlessStorage.RemoveAll(); err != nil {
+			return errors.Wrap(err, "removing all managers")
 		}
 
 		// Set previousDirective to empty so the diff handles everything as new.
@@ -102,19 +106,19 @@ type directiveJobTableKeys struct {
 	directiveJobType
 	idx       *Index
 	tkey      dax.TableKey
-	partition dax.VersionedPartition
+	partition dax.PartitionNum
 }
 
 type directiveJobFieldKeys struct {
 	directiveJobType
 	tkey  dax.TableKey
-	field dax.VersionedField
+	field dax.FieldName
 }
 
 type directiveJobShards struct {
 	directiveJobType
 	tkey  dax.TableKey
-	shard dax.VersionedShard
+	shard dax.ShardNum
 }
 
 // directiveWorker is a worker in a worker pool which handles portions of a
@@ -348,42 +352,38 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 	}
 }
 
-func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey, partition dax.VersionedPartition) error {
+func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey, partition dax.PartitionNum) error {
 	qtid := tkey.QualifiedTableID()
 
-	// Load the previous snapshot. Version 0 doesn't have a snapshot
-	// file; it only has log entries.
-	if partition.Version > 0 {
-		// Load partition snapshot: version - 1
-		previousVersion := partition.Version - 1
-		rc, err := api.snapshotReadWriter.ReadTableKeys(ctx, qtid, partition.Num, previousVersion)
-		if err != nil {
-			return errors.Wrap(err, "reading table keys snapshot")
-		}
+	resource := api.serverlessStorage.GetTableKeyResource(qtid, partition)
+	if resource.IsLocked() {
+		api.logger().Warnf("skipping loadTableKeys (already held) %s %d", tkey, partition)
+		return nil
+	}
+
+	// load latest snapshot
+	if rc, err := resource.LoadLatestSnapshot(); err != nil {
+		return errors.Wrap(err, "loading table key snapshot")
+	} else if rc != nil {
 		defer rc.Close()
-
-		if err := api.TranslateIndexDB(ctx, string(tkey), int(partition.Num), rc); err != nil {
+		if err := api.TranslateIndexDB(ctx, string(tkey), int(partition), rc); err != nil {
 			return errors.Wrap(err, "restoring table keys")
-
 		}
 	}
 
-	if err := func() error {
-		store := idx.TranslateStore(int(partition.Num))
-
-		reader := api.writeLogReader.TableKeyReader(ctx, qtid, partition.Num, partition.Version)
-		if err := reader.Open(); err != nil {
-			// TODO: this log can be confusing because on a create
-			// table, there is no log file yet, so an error is expected.
-			// Instead of swallowing this error, we need to check the
-			// error code and handle it differently. This means the
-			// writelogger will need to return an error indicating that
-			// the log file does not exist, but that that is expected.
-			// log.Printf("could not open log file for table: %s, partition: %d: version: %d, err: %s", table, partition.Num, partition.Version, err)
+	// define write log loading in a function since we have to do it
+	// before and after locking
+	loadWriteLog := func() error {
+		writelog, err := resource.LoadWriteLog()
+		if err != nil {
+			return errors.Wrap(err, "getting write log reader for table keys")
+		}
+		if writelog == nil {
 			return nil
 		}
+		reader := storage.NewTableKeyReader(qtid, partition, writelog)
 		defer reader.Close()
-
+		store := idx.TranslateStore(int(partition))
 		for msg, err := reader.Read(); err != io.EOF; msg, err = reader.Read() {
 			if err != nil {
 				return errors.Wrap(err, "reading from log reader")
@@ -394,18 +394,21 @@ func (api *API) loadTableKeys(ctx context.Context, idx *Index, tkey dax.TableKey
 				}
 			}
 		}
-
 		return nil
-	}(); err != nil {
+	}
+	// 1st write log load
+	if err := loadWriteLog(); err != nil {
 		return err
 	}
 
-	// Set the table/partition/version in the holder.
-	if err := api.holder.versionStore.AddPartitions(ctx, qtid, partition); err != nil {
-		return errors.Wrap(err, "adding partition to sharder")
+	// acquire lock on this partition's keys
+	if err := resource.Lock(); err != nil {
+		return errors.Wrap(err, "locking table key partition")
 	}
 
-	return nil
+	// reload writelog in case of changes between last load and
+	// lock. The resource object takes care of only loading new data.
+	return loadWriteLog()
 }
 
 func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobType, fromD, toD *dax.Directive) {
@@ -423,46 +426,44 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 	}
 }
 
-func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.VersionedField) error {
+func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.FieldName) error {
 	qtid := tkey.QualifiedTableID()
 
-	// Load the previous snapshot. Version 0 doesn't have a snapshot
-	// file; it only has log entries.
-	if field.Version > 0 {
-		// Load field snapshot: version - 1
-		previousVersion := field.Version - 1
-		rc, err := api.snapshotReadWriter.ReadFieldKeys(ctx, qtid, field.Name, previousVersion)
-		if err != nil {
-			return errors.Wrap(err, "reading field keys snapshot")
-		}
-		defer rc.Close()
+	resource := api.serverlessStorage.GetFieldKeyResource(qtid, field)
+	if resource.IsLocked() {
+		api.logger().Warnf("skipping loadFieldKeys (already held) %s %s", tkey, field)
+		return nil
+	}
 
-		if err := api.TranslateFieldDB(ctx, string(tkey), string(field.Name), rc); err != nil {
+	// load latest snapshot
+	if rc, err := resource.LoadLatestSnapshot(); err != nil {
+		return errors.Wrap(err, "loading field key snapshot")
+	} else if rc != nil {
+		defer rc.Close()
+		if err := api.TranslateFieldDB(ctx, string(tkey), string(field), rc); err != nil {
 			return errors.Wrap(err, "restoring field keys")
 		}
 	}
 
-	if err := func() error {
+	// define write log loading in a function since we have to do it
+	// before and after locking
+	loadWriteLog := func() error {
+		writelog, err := resource.LoadWriteLog()
+		if err != nil {
+			return errors.Wrap(err, "getting write log reader for field keys")
+		}
+		if writelog == nil {
+			return nil
+		}
+		reader := storage.NewFieldKeyReader(qtid, field, writelog)
+		defer reader.Close()
 		// Get field in order to find the translate store.
-		fld := api.holder.Field(string(tkey), string(field.Name))
+		fld := api.holder.Field(string(tkey), string(field))
 		if fld == nil {
-			log.Printf("field not found in holder: %s", field.Name)
+			log.Printf("field not found in holder: %s", field)
 			return nil
 		}
 		store := fld.TranslateStore()
-
-		reader := api.writeLogReader.FieldKeyReader(ctx, qtid, field.Name, field.Version)
-		if err := reader.Open(); err != nil {
-			// TODO: this log can be confusing because on a create
-			// table, there is no log file yet, so an error is expected.
-			// Instead of swallowing this error, we need to check the
-			// error code and handle it differently. This means the
-			// writelogger will need to return an error indicating that
-			// the log file does not exist, but that that is expected.
-			// log.Printf("could not open log file for table: %s, field: %s: version: %d, err: %s", table, field.Name, field.Version, err)
-			return nil
-		}
-		defer reader.Close()
 
 		for msg, err := reader.Read(); err != io.EOF; msg, err = reader.Read() {
 			if err != nil {
@@ -474,18 +475,21 @@ func (api *API) loadFieldKeys(ctx context.Context, tkey dax.TableKey, field dax.
 				}
 			}
 		}
-
 		return nil
-	}(); err != nil {
+	}
+	// 1st write log load
+	if err := loadWriteLog(); err != nil {
 		return err
 	}
 
-	// Set the table/field/version in the holder.
-	if err := api.holder.versionStore.AddFields(ctx, qtid, field); err != nil {
-		return errors.Wrap(err, "adding field to sharder")
+	// acquire lock on this partition's keys
+	if err := resource.Lock(); err != nil {
+		return errors.Wrap(err, "locking field key partition")
 	}
 
-	return nil
+	// reload writelog in case of changes between last load and
+	// lock. The resource object takes care of only loading new data.
+	return loadWriteLog()
 }
 
 func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType, fromD, toD *dax.Directive) {
@@ -506,46 +510,43 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 	}
 }
 
-func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.VersionedShard) error {
+func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.ShardNum) error {
 	qtid := tkey.QualifiedTableID()
 
-	partition := disco.ShardToShardPartition(string(tkey), uint64(shard.Num), disco.DefaultPartitionN)
-	partitionNum := dax.PartitionNum(partition)
+	partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
 
-	// Load the previous snapshot. Version 0 doesn't have a snapshot
-	// file; it only has log entries.
-	if shard.Version > 0 {
-		// Load shard snapshot: version - 1
-		previousVersion := shard.Version - 1
-		rc, err := api.snapshotReadWriter.ReadShardData(ctx, qtid, partitionNum, shard.Num, previousVersion)
-		if err != nil {
-			return errors.Wrap(err, "reading shard data snapshot")
-		}
+	resource := api.serverlessStorage.GetShardResource(qtid, partition, shard)
+	if resource.IsLocked() {
+		api.logger().Warnf("skipping loadShard (already held) %s %d", tkey, shard)
+		return nil
+	}
 
-		if err := api.RestoreShard(ctx, string(tkey), uint64(shard.Num), rc); err != nil {
+	if rc, err := resource.LoadLatestSnapshot(); err != nil {
+		return errors.Wrap(err, "reading latest snapshot for shard")
+	} else if rc != nil {
+		defer rc.Close()
+		if err := api.RestoreShard(ctx, string(tkey), uint64(shard), rc); err != nil {
 			return errors.Wrap(err, "restoring shard data")
 		}
 	}
 
-	// WriteLog reader.
-	if err := func() error {
-		reader := api.writeLogReader.ShardReader(ctx, qtid, partitionNum, shard.Num, shard.Version)
-		if err := reader.Open(); err != nil {
-			// TODO: this log can be confusing because on a create
-			// table, there is no log file yet, so an error is expected.
-			// Instead of swallowing this error, we need to check the
-			// error code and handle it differently. This means the
-			// writelogger will need to return an error indicating that
-			// the log file does not exist, but that that is expected.
-			// log.Printf("could not open log file for table: %s, partition: %d: version: %d, shard: %d, err: %s", table, partition, shard.Version, shard.Num, err)
+	// define write log loading in a func because we do it twice.
+	loadWriteLog := func() error {
+		writelog, err := resource.LoadWriteLog()
+		if err != nil {
+			return errors.Wrap(err, "")
+		}
+		if writelog == nil {
 			return nil
 		}
-		defer reader.Close()
 
+		reader := storage.NewShardReader(qtid, partition, shard, writelog)
+		defer reader.Close()
 		for logMsg, err := reader.Read(); err != io.EOF; logMsg, err = reader.Read() {
 			if err != nil {
 				return errors.Wrap(err, "reading from log reader")
 			}
+
 			switch msg := logMsg.(type) {
 			case *computer.ImportRoaringMessage:
 				req := &ImportRoaringRequest{
@@ -632,18 +633,21 @@ func (api *API) loadShard(ctx context.Context, tkey dax.TableKey, shard dax.Vers
 				}
 			}
 		}
-
 		return nil
-	}(); err != nil {
+	}
+	// 1st write log load
+	if err := loadWriteLog(); err != nil {
 		return err
 	}
 
-	// Set the table/shard/version in the holder.
-	if err := api.holder.versionStore.AddShards(ctx, qtid, shard); err != nil {
-		return errors.Wrap(err, "adding shard to sharder")
+	// acquire lock on this partition's keys
+	if err := resource.Lock(); err != nil {
+		return errors.Wrap(err, "locking field key partition")
 	}
 
-	return nil
+	// reload writelog in case of changes between last load and
+	// lock. The resource object takes care of only loading new data.
+	return loadWriteLog()
 }
 
 //////////////////////////////////////////////////////////////
@@ -707,11 +711,11 @@ func thingsAdded[K comparable](from []K, to []K) []K {
 // partitionsComparer is used to compare the differences between two maps of
 // table:[]partition.
 type partitionsComparer struct {
-	from map[dax.TableKey]dax.VersionedPartitions
-	to   map[dax.TableKey]dax.VersionedPartitions
+	from map[dax.TableKey]dax.PartitionNums
+	to   map[dax.TableKey]dax.PartitionNums
 }
 
-func newPartitionsComparer(from map[dax.TableKey]dax.VersionedPartitions, to map[dax.TableKey]dax.VersionedPartitions) *partitionsComparer {
+func newPartitionsComparer(from map[dax.TableKey]dax.PartitionNums, to map[dax.TableKey]dax.PartitionNums) *partitionsComparer {
 	return &partitionsComparer{
 		from: from,
 		to:   to,
@@ -720,23 +724,23 @@ func newPartitionsComparer(from map[dax.TableKey]dax.VersionedPartitions, to map
 
 // added returns the partitions which are present in `to` but not in `from`. The
 // results remain in the format of a map of table:[]partition.
-func (p *partitionsComparer) added() map[dax.TableKey]dax.VersionedPartitions {
+func (p *partitionsComparer) added() map[dax.TableKey]dax.PartitionNums {
 	return partitionsAdded(p.from, p.to)
 }
 
 // removed returns the partitions which are present in `from` but not in `to`.
 // The results remain in the format of a map of table:[]partition.
-func (p *partitionsComparer) removed() map[dax.TableKey]dax.VersionedPartitions {
+func (p *partitionsComparer) removed() map[dax.TableKey]dax.PartitionNums {
 	return partitionsAdded(p.to, p.from)
 }
 
 // partitionsAdded returns the partitions which are present in `to` but not in `from`.
-func partitionsAdded(from map[dax.TableKey]dax.VersionedPartitions, to map[dax.TableKey]dax.VersionedPartitions) map[dax.TableKey]dax.VersionedPartitions {
+func partitionsAdded(from map[dax.TableKey]dax.PartitionNums, to map[dax.TableKey]dax.PartitionNums) map[dax.TableKey]dax.PartitionNums {
 	if from == nil {
 		return to
 	}
 
-	added := make(map[dax.TableKey]dax.VersionedPartitions)
+	added := make(map[dax.TableKey]dax.PartitionNums)
 	for tt, tps := range to {
 		fps, found := from[tt]
 		if !found {
@@ -744,7 +748,7 @@ func partitionsAdded(from map[dax.TableKey]dax.VersionedPartitions, to map[dax.T
 			continue
 		}
 
-		addedPartitions := dax.VersionedPartitions{}
+		addedPartitions := dax.PartitionNums{}
 		for i := range tps {
 			var found bool
 			for j := range fps {
@@ -768,11 +772,11 @@ func partitionsAdded(from map[dax.TableKey]dax.VersionedPartitions, to map[dax.T
 // fieldsComparer is used to compare the differences between two maps of
 // table:[]fieldVersion.
 type fieldsComparer struct {
-	from map[dax.TableKey]dax.VersionedFields
-	to   map[dax.TableKey]dax.VersionedFields
+	from map[dax.TableKey][]dax.FieldName
+	to   map[dax.TableKey][]dax.FieldName
 }
 
-func newFieldsComparer(from map[dax.TableKey]dax.VersionedFields, to map[dax.TableKey]dax.VersionedFields) *fieldsComparer {
+func newFieldsComparer(from map[dax.TableKey][]dax.FieldName, to map[dax.TableKey][]dax.FieldName) *fieldsComparer {
 	return &fieldsComparer{
 		from: from,
 		to:   to,
@@ -781,23 +785,23 @@ func newFieldsComparer(from map[dax.TableKey]dax.VersionedFields, to map[dax.Tab
 
 // added returns the fields which are present in `to` but not in `from`. The
 // results remain in the format of a map of table:[]field.
-func (f *fieldsComparer) added() map[dax.TableKey]dax.VersionedFields {
+func (f *fieldsComparer) added() map[dax.TableKey][]dax.FieldName {
 	return fieldsAdded(f.from, f.to)
 }
 
 // removed returns the fields which are present in `from` but not in `to`.
 // The results remain in the format of a map of table:[]field.
-func (f *fieldsComparer) removed() map[dax.TableKey]dax.VersionedFields {
+func (f *fieldsComparer) removed() map[dax.TableKey][]dax.FieldName {
 	return fieldsAdded(f.to, f.from)
 }
 
 // fieldsAdded returns the fields which are present in `to` but not in `from`.
-func fieldsAdded(from map[dax.TableKey]dax.VersionedFields, to map[dax.TableKey]dax.VersionedFields) map[dax.TableKey]dax.VersionedFields {
+func fieldsAdded(from map[dax.TableKey][]dax.FieldName, to map[dax.TableKey][]dax.FieldName) map[dax.TableKey][]dax.FieldName {
 	if from == nil {
 		return to
 	}
 
-	added := make(map[dax.TableKey]dax.VersionedFields)
+	added := make(map[dax.TableKey][]dax.FieldName)
 	for tt, tps := range to {
 		fps, found := from[tt]
 		if !found {
@@ -805,7 +809,7 @@ func fieldsAdded(from map[dax.TableKey]dax.VersionedFields, to map[dax.TableKey]
 			continue
 		}
 
-		addedFieldVersions := dax.VersionedFields{}
+		addedFieldVersions := []dax.FieldName{}
 		for i := range tps {
 			var found bool
 			for j := range fps {
@@ -829,11 +833,11 @@ func fieldsAdded(from map[dax.TableKey]dax.VersionedFields, to map[dax.TableKey]
 // shardsComparer is used to compare the differences between two maps of
 // table:[]shardV.
 type shardsComparer struct {
-	from map[dax.TableKey]dax.VersionedShards
-	to   map[dax.TableKey]dax.VersionedShards
+	from map[dax.TableKey]dax.ShardNums
+	to   map[dax.TableKey]dax.ShardNums
 }
 
-func newShardsComparer(from map[dax.TableKey]dax.VersionedShards, to map[dax.TableKey]dax.VersionedShards) *shardsComparer {
+func newShardsComparer(from map[dax.TableKey]dax.ShardNums, to map[dax.TableKey]dax.ShardNums) *shardsComparer {
 	return &shardsComparer{
 		from: from,
 		to:   to,
@@ -842,23 +846,23 @@ func newShardsComparer(from map[dax.TableKey]dax.VersionedShards, to map[dax.Tab
 
 // added returns the shards which are present in `to` but not in `from`. The
 // results remain in the format of a map of table:[]shard.
-func (s *shardsComparer) added() map[dax.TableKey]dax.VersionedShards {
+func (s *shardsComparer) added() map[dax.TableKey]dax.ShardNums {
 	return shardsAdded(s.from, s.to)
 }
 
 // removed returns the shards which are present in `from` but not in `to`. The
 // results remain in the format of a map of table:[]shard.
-func (s *shardsComparer) removed() map[dax.TableKey]dax.VersionedShards {
+func (s *shardsComparer) removed() map[dax.TableKey]dax.ShardNums {
 	return shardsAdded(s.to, s.from)
 }
 
 // shardsAdded returns the shards which are present in `to` but not in `from`.
-func shardsAdded(from map[dax.TableKey]dax.VersionedShards, to map[dax.TableKey]dax.VersionedShards) map[dax.TableKey]dax.VersionedShards {
+func shardsAdded(from map[dax.TableKey]dax.ShardNums, to map[dax.TableKey]dax.ShardNums) map[dax.TableKey]dax.ShardNums {
 	if from == nil {
 		return to
 	}
 
-	added := make(map[dax.TableKey]dax.VersionedShards)
+	added := make(map[dax.TableKey]dax.ShardNums)
 	for tt, tss := range to {
 		fss, found := from[tt]
 		if !found {
@@ -866,7 +870,7 @@ func shardsAdded(from map[dax.TableKey]dax.VersionedShards, to map[dax.TableKey]
 			continue
 		}
 
-		addedShards := dax.VersionedShards{}
+		addedShards := dax.ShardNums{}
 		for i := range tss {
 			var found bool
 			for j := range fss {
@@ -889,7 +893,7 @@ func shardsAdded(from map[dax.TableKey]dax.VersionedShards, to map[dax.TableKey]
 
 // createTableAndFields creates the FeatureBase Tables and Fields provided in
 // the dax.Directive format.
-func (api *API) createTableAndFields(tbl *dax.QualifiedTable, partitions dax.VersionedPartitions) error {
+func (api *API) createTableAndFields(tbl *dax.QualifiedTable, partitions dax.PartitionNums) error {
 	cim := &CreateIndexMessage{
 		Index:     string(tbl.Key()),
 		CreatedAt: 0,

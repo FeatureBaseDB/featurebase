@@ -165,9 +165,6 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 		if err := walkIdent(v, &n.Name); err != nil {
 			return node, err
 		}
-		// if err := walkIdentList(v, n.UpdateOfColumns); err != nil {
-		// 	return node, err
-		// }
 		for i := range n.Body {
 			if body, err := walk(v, n.Body[i]); err != nil {
 				return node, err
@@ -188,15 +185,6 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 				n.WithClause = nil
 			}
 		}
-		/*for i := range n.ValueLists {
-			if list, err := walk(v, n.ValueLists[i]); err != nil {
-				return node, err
-			} else if list != nil {
-				n.ValueLists[i] = list.(*ExprList)
-			} else {
-				n.ValueLists[i] = nil
-			}
-		}*/
 		for i := range n.Columns {
 			if col, err := walk(v, n.Columns[i]); err != nil {
 				return node, err
@@ -289,15 +277,6 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 				n.Select = nil
 			}
 		}*/
-		/*if n.UpsertClause != nil {
-			if clause, err := walk(v, n.UpsertClause); err != nil {
-				return node, err
-			} else if clause != nil {
-				n.UpsertClause = clause.(*UpsertClause)
-			} else {
-				n.UpsertClause = nil
-			}
-		}*/
 
 	case *UpdateStatement:
 		if n.WithClause != nil {
@@ -352,40 +331,25 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 		}
 
 	case *DeleteStatement:
-		if n.WithClause != nil {
-			if clause, err := walk(v, n.WithClause); err != nil {
-				return node, err
-			} else if clause != nil {
-				n.WithClause = clause.(*WithClause)
-			} else {
-				n.WithClause = nil
-			}
-		}
-		if n.Table != nil {
-			if tbl, err := walk(v, n.Table); err != nil {
+		// if n.WithClause != nil {
+		// 	if clause, err := walk(v, n.WithClause); err != nil {
+		// 		return node, err
+		// 	} else if clause != nil {
+		// 		n.WithClause = clause.(*WithClause)
+		// 	} else {
+		// 		n.WithClause = nil
+		// 	}
+		// }
+		if n.Source != nil {
+			if tbl, err := walk(v, n.Source); err != nil {
 				return node, err
 			} else if tbl != nil {
-				n.Table = tbl.(*QualifiedTableName)
+				n.Source = tbl.(*QualifiedTableName)
 			} else {
-				n.Table = nil
+				n.Source = nil
 			}
 		}
 		if err := walkExpr(v, &n.WhereExpr); err != nil {
-			return node, err
-		}
-		for i := range n.OrderingTerms {
-			if term, err := walk(v, n.OrderingTerms[i]); err != nil {
-				return node, err
-			} else if term != nil {
-				n.OrderingTerms[i] = term.(*OrderingTerm)
-			} else {
-				n.OrderingTerms[i] = nil
-			}
-		}
-		if err := walkExpr(v, &n.LimitExpr); err != nil {
-			return node, err
-		}
-		if err := walkExpr(v, &n.OffsetExpr); err != nil {
 			return node, err
 		}
 

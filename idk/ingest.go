@@ -98,7 +98,7 @@ type Main struct {
 	AllowTimestampOutOfRange bool          `help:"Allow ingest to continue when it encounters out of range timestamps in TimestampFields. (default false)"`
 	SkipBadRows              int           `help:"If you fail to process the first n rows without processing one successfully, fail."`
 
-	UseShardTransactionalEndpoint bool `flag:"use-shard-transactional-endpoint" help:"Use alternate import endpoint. Currently unstable/testing"`
+	UseShardTransactionalEndpoint bool `flag:"use-shard-transactional-endpoint" help:"Use alternate import endpoint that ingests data for all fields in a shard in a single atomic request. No negative performance impact and better consistency. Recommended."`
 
 	MDSAddress     string             `short:"" help:"MDS address."`
 	OrganizationID dax.OrganizationID `short:"" help:"auto-assigned organization ID"`
@@ -1027,7 +1027,7 @@ func (m *Main) setupClient() (*tls.Config, error) {
 		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qual, m.log)
 
 		m.NewImporterFn = func() pilosacore.Importer {
-			return mds.NewImporter(mdsClient, qtbl.Qualifier(), &qtbl.Table)
+			return mds.NewImporter(mdsClient, mdsClient, qtbl.Qualifier(), &qtbl.Table)
 		}
 	} else {
 		m.SchemaManager = m.client

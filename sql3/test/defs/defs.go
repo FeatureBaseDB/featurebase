@@ -15,9 +15,15 @@ var TableTests []TableTest = []TableTest{
 
 	selectTests,
 	selectKeyedTests,
+	selectHavingTests,
 	orderByTests,
+	distinctTests,
+
+	subqueryTests,
 
 	topTests,
+
+	deleteTests,
 
 	setLiteralTests,
 	setFunctionTests,

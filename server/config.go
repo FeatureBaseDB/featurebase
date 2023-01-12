@@ -238,6 +238,7 @@ type Config struct {
 
 	DataDog struct {
 		Enable           bool   `toml:"enable"`
+		EnableTracing    bool   `toml:"enable-tracing"`
 		Service          string `toml:"service"`
 		Env              string `toml:"env"`
 		Version          string `toml:"version"`
@@ -252,7 +253,8 @@ type Config struct {
 	Auth Auth
 
 	Dataframe struct {
-		Enable bool `toml:"enable"`
+		Enable     bool `toml:"enable"`
+		UseParquet bool `toml:"use-parquet"`
 	} `toml:"dataframe"`
 }
 

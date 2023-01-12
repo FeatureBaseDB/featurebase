@@ -21,7 +21,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/server"
-	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/pkg/errors"
 )
 
@@ -52,7 +51,8 @@ type BackupTarCommand struct { // nolint: maligned
 	client *pilosa.InternalClient
 
 	// Standard input/output
-	logDest logger.Logger
+	logwriter io.Writer
+	logDest   logger.Logger
 
 	TLS server.TLSConfig
 
@@ -65,9 +65,10 @@ func (cmd *BackupTarCommand) Logger() logger.Logger {
 }
 
 // NewBackupTarCommand returns a new instance of BackupCommand.
-func NewBackupTarCommand(logdest logger.Logger) *BackupTarCommand {
+func NewBackupTarCommand(logwriter io.Writer) *BackupTarCommand {
 	return &BackupTarCommand{
-		logDest:       logdest,
+		logwriter:     logwriter,
+		logDest:       logger.NewStandardLogger(logwriter),
 		RetryPeriod:   time.Minute,
 		HeaderTimeout: time.Second * 3,
 		Pprof:         "localhost:0",
@@ -76,18 +77,24 @@ func NewBackupTarCommand(logdest logger.Logger) *BackupTarCommand {
 
 // Run executes the main program execution.
 func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
-	logger := cmd.Logger()
-	close, err := startProfilingServer(cmd.Pprof, logger)
-	if err != nil {
-		return errors.Wrap(err, "starting profiling server")
-	}
-	defer close()
-
+	logdest := cmd.Logger()
 	// Validate arguments.
 	if cmd.OutputPath == "" {
 		return fmt.Errorf("%w: -o flag required", UsageError)
 	}
 	useStdout := cmd.OutputPath == "-"
+	if useStdout && cmd.logwriter == os.Stdout {
+		logdest = logger.NewStandardLogger(os.Stderr)
+	}
+
+	// This was the very first thing in the function, but since logging to stdout causes file corruption
+	// if the tarfile is also going to stdout, we need to check that before we can safely send anything
+	// to the logger.
+	close, err := startProfilingServer(cmd.Pprof, logdest)
+	if err != nil {
+		return errors.Wrap(err, "starting profiling server")
+	}
+	defer close()
 
 	if cmd.HeaderTimeoutStr != "" {
 		if dur, err := time.ParseDuration(cmd.HeaderTimeoutStr); err != nil {
@@ -137,6 +144,13 @@ func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
 	var w io.Writer
 	if useStdout {
 		w = os.Stdout
+		// if writing tarfile to stdout, the logs can't also go there or the file ends up corrupt
+		// redirect to stderr and log a message there to avoid this
+		// commented out for testing
+		//if dest := logger.Logger(); dest.Writer() == os.Stdout {
+		//	dest.SetOutput(os.Stderr)
+		//	logger.Printf("redirected logs to stderr to avoid file corruption")
+		//}
 	} else {
 		f, err := os.Create(cmd.OutputPath + ".tmp")
 		if err != nil {
@@ -171,7 +185,7 @@ func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
 
 	// Move data file to final location.
 	if !useStdout {
-		logger.Printf("writing backup: %s", cmd.OutputPath)
+		logdest.Printf("writing backup: %s", cmd.OutputPath)
 		if err := os.Rename(cmd.OutputPath+".tmp", cmd.OutputPath); err != nil {
 			return err
 		}
@@ -359,7 +373,7 @@ func (cmd *BackupTarCommand) backupTarShardDataframe(ctx context.Context, tw *ta
 	}
 
 	filename := filepath.Join("indexes", indexName, "dataframe", fmt.Sprintf("%04d", shard))
-	vprint.VV("wrting %v", filename)
+	logger.Printf("writing %v", filename)
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
 		return fmt.Errorf("copying shard data to memory: %w", err)

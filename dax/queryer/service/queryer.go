@@ -50,6 +50,8 @@ func (q *queryerService) HTTPHandler() http.Handler {
 }
 
 func (q *queryerService) SetMDS(addr dax.Address) error {
-	q.queryer.SetMDS(mdsclient.New(addr, q.logger))
+	mdscli := mdsclient.New(addr, q.logger)
+	q.queryer.SetNoder(mdscli)
+	q.queryer.SetSchemar(mdscli)
 	return nil
 }

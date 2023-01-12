@@ -29,6 +29,8 @@ type Config struct {
 	// have been registered.
 	RegistrationBatchTimeout time.Duration `toml:"registration-batch-timeout"`
 
+	SnappingTurtleTimeout time.Duration
+
 	// Poller
 	PollInterval time.Duration `toml:"poll-interval"`
 
@@ -107,6 +109,7 @@ func New(cfg Config) *MDS {
 		TranslateBalancer: naiveboltdb.NewBalancer("translate", controllerDB, logr),
 
 		RegistrationBatchTimeout: cfg.RegistrationBatchTimeout,
+		SnappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
 
 		StorageMethod: cfg.StorageMethod,
 		// just reusing this bolt for internal controller svcs
@@ -462,7 +465,7 @@ func (m *MDS) DeregisterNodes(ctx context.Context, addrs ...dax.Address) error {
 
 // ComputeNodes gets the compute nodes responsible for the table/shards
 // specified in the ComputeNodeRequest.
-func (m *MDS) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shardNums ...dax.ShardNum) ([]controller.ComputeNode, error) {
+func (m *MDS) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shardNums ...dax.ShardNum) ([]dax.ComputeNode, error) {
 	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
 		return nil, errors.Wrap(err, "sanitizing")
 	}
@@ -476,7 +479,7 @@ func (m *MDS) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
 
 // TranslateNodes gets the translate nodes responsible for the table/partitions
 // specified in the TranslateNodeRequest.
-func (m *MDS) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitionNums ...dax.PartitionNum) ([]controller.TranslateNode, error) {
+func (m *MDS) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitionNums ...dax.PartitionNum) ([]dax.TranslateNode, error) {
 	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
 		return nil, errors.Wrap(err, "sanitizing")
 	}

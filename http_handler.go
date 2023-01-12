@@ -1420,13 +1420,6 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 	// put the requestId in the context
 	ctx := fbcontext.WithRequestID(r.Context(), requestID.String())
 
-	sql := string(b)
-	rootOperator, err := h.api.CompilePlan(ctx, sql)
-	if err != nil {
-		h.writeBadRequest(w, r, err)
-		return
-	}
-
 	// Write response back to client.
 	w.Header().Set("Content-Type", "application/json")
 
@@ -1446,9 +1439,9 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 		var value []byte
 		value, err = json.Marshal(execTime)
 		if err != nil {
-			w.Write([]byte(`,"exec_time": 0`))
+			w.Write([]byte(`,"execution-time": 0`))
 		} else {
-			w.Write([]byte(`,"exec_time":`))
+			w.Write([]byte(`,"execution-time":`))
 			w.Write(value)
 		}
 		w.Write([]byte("}"))
@@ -1496,9 +1489,16 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				planBytes = []byte(`"PROBLEM ENCODING QUERY PLAN"`)
 			}
-			w.Write([]byte(`,"queryPlan":`))
+			w.Write([]byte(`,"query-plan":`))
 			w.Write(planBytes)
 		}
+	}
+
+	sql := string(b)
+	rootOperator, err := h.api.CompilePlan(ctx, sql)
+	if err != nil {
+		writeError(err, false)
+		return
 	}
 
 	// Get a query iterator.
@@ -2447,7 +2447,7 @@ func (h *Handler) handleGetIndexShardSnapshot(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	rc, err := h.api.IndexShardSnapshot(r.Context(), indexName, shard)
+	rc, err := h.api.IndexShardSnapshot(r.Context(), indexName, shard, false)
 	if err != nil {
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
@@ -2790,8 +2790,15 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		tx, err := p.Begin(false)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback()
+
 		// Stream translate data to response body.
-		if _, err := p.WriteTo(w); err != nil {
+		if _, err := tx.WriteTo(w); err != nil {
 			h.logger.Errorf("error streaming translation data: %s", err)
 		}
 		return
@@ -2816,8 +2823,14 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	tx, err := p.Begin(false)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
 	// Stream translate partition to response body.
-	if _, err := p.WriteTo(w); err != nil {
+	if _, err := tx.WriteTo(w); err != nil {
 		h.logger.Errorf("error streaming translation data: %s", err)
 	}
 }
@@ -3860,7 +3873,7 @@ func (h *Handler) handlePostDataframeRestore(w http.ResponseWriter, r *http.Requ
 		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 		return
 	}
-	filename := idx.GetDataFramePath(shard) + ".parquet"
+	filename := idx.GetDataFramePath(shard) + h.api.server.executor.TableExtension()
 	dest, err := os.Create(filename)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to create restore dataframe shard %v %v err:%v", indexName, shard, err), http.StatusBadRequest)
@@ -4184,7 +4197,7 @@ func (h *Handler) handleGetDataframe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 		return
 	}
-	filename := idx.GetDataFramePath(shard) + ".parquet"
+	filename := idx.GetDataFramePath(shard) + h.api.server.executor.TableExtension()
 	http.ServeFile(w, r, filename)
 }
 

@@ -78,11 +78,14 @@ dc-logs-%:
 dc-prereqs:
 	mkdir -p ../.quick
 
+dc-cli:
+	featurebase cli --host localhost --port 8080 --org-id=testorg --db-id=testdb
+
 # This is just an example. For it to work, you'll first need to:
 #   featurebase cli --host localhost --port 8080 --org-id=testorg --db-id=testdb
 #   create table keysidstbl2 (_id string, slice idset);
 dc-datagen:
-	docker-compose run datagen --end-at=500  --pilosa.batch-size=500 --featurebase.table-name=keysidstbl2
+	docker-compose run datagen --end-at=500 --pilosa.batch-size=500 --featurebase.table-name=keysidstbl2
 
 dc-exec-%:
 	docker-compose exec $* /bin/sh

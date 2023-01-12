@@ -80,6 +80,13 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 	}
 	options.hasHeaderRow = bliteral.Value
 
+	// ALLOW_MISSING_VALUES
+	bliteral, sok = stmt.AllowMissingValues.(*parser.BoolLit)
+	if !sok {
+		return nil, sql3.NewErrBoolLiteral(stmt.AllowMissingValues.Pos().Line, stmt.AllowMissingValues.Pos().Column)
+	}
+	options.allowMissingValues = bliteral.Value
+
 	// batchsize
 	literal, ok := stmt.BatchSize.(*parser.IntegerLit)
 	if !ok {
@@ -145,7 +152,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 		}
 	}
 
-	return NewPlanOpBulkInsert(p, tableName, options), nil
+	return NewPlanOpQuery(p, NewPlanOpBulkInsert(p, tableName, options), p.sql), nil
 }
 
 // analyzeBulkInsertStatement analyzes a BULK INSERT statement and returns an
@@ -263,14 +270,13 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 	}
 
 	// header row is true if specified, false if not
-	if stmt.HeaderRow != nil {
-		stmt.HeaderRow = &parser.BoolLit{
-			Value: true,
-		}
-	} else {
-		stmt.HeaderRow = &parser.BoolLit{
-			Value: false,
-		}
+	stmt.HeaderRow = &parser.BoolLit{
+		Value: stmt.HeaderRow != nil,
+	}
+
+	// allow missing values is true if specified, false if not
+	stmt.AllowMissingValues = &parser.BoolLit{
+		Value: stmt.AllowMissingValues != nil,
 	}
 
 	// analyze map expressions

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
@@ -38,15 +39,10 @@ func NewPlanOpPQLGroupBy(p *ExecutionPlanner, tableName string, groupByExprs []t
 func (p *PlanOpPQLGroupBy) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
-	sc := make([]string, 0)
-	for _, e := range p.Schema() {
-		sc = append(sc, fmt.Sprintf("'%s', '%s', '%s'", e.ColumnName, e.RelationName, e.Type.TypeDescription()))
-	}
-	result["_schema"] = sc
+	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
-
 	}
 	result["aggregate"] = p.aggregate.AggExpression().Plan()
 	ps := make([]interface{}, 0)
@@ -205,15 +201,22 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 			call.Args["filter"] = cond
 		}
 
-		queryResponse, err := i.planner.executor.Execute(ctx, i.tableName, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
+		tbl, err := i.planner.schemaAPI.TableByName(ctx, dax.TableName(i.tableName))
+		if err != nil {
+			return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
+		}
+
+		queryResponse, err := i.planner.executor.Execute(ctx, tbl, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		tbl, ok := queryResponse.Results[0].(*pilosa.GroupCounts)
+
+		gcs, ok := queryResponse.Results[0].(*pilosa.GroupCounts)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected Extract() result type: %T", queryResponse.Results[0])
 		}
-		i.result = tbl.Groups()
+
+		i.result = gcs.Groups()
 	}
 
 	if len(i.result) > 0 {

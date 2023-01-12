@@ -8,11 +8,17 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strconv"
 	"sync"
+	"syscall"
 
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
+
+// bucket = table + partition or table + field
+// key = "shard/num" or "keys"
 
 type Snapshotter struct {
 	mu sync.RWMutex
@@ -48,6 +54,29 @@ func (s *Snapshotter) Write(bucket string, key string, version int, rc io.ReadCl
 	}
 
 	return snapshotFile.Sync()
+}
+
+func (s *Snapshotter) List(bucket, key string) ([]computer.SnapInfo, error) {
+	dirpath := path.Join(s.dataDir, bucket, key)
+
+	entries, err := os.ReadDir(dirpath)
+	if err != nil {
+		if pe, ok := err.(*os.PathError); ok && pe.Err == syscall.ENOENT {
+			return nil, nil
+		}
+		return nil, errors.Wrap(err, "reading directory")
+	}
+	snaps := make([]computer.SnapInfo, len(entries))
+	for i, entry := range entries {
+		version, err := strconv.ParseInt(entry.Name(), 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "filename '%s' could not be parsed to version number", entry.Name())
+		}
+		snaps[i] = computer.SnapInfo{
+			Version: int(version),
+		}
+	}
+	return snaps, nil
 }
 
 func (s *Snapshotter) Read(bucket string, key string, version int) (io.ReadCloser, error) {

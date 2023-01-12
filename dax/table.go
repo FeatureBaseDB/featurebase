@@ -27,7 +27,7 @@ import (
 // Table - base Table struct; includes a TableID and a TableName
 // TableQualifier - combination of OrganizationID and DatabaseID
 // QualifiedTable - TableQualifier plus a Table
-// QualifiedTableID - TableQualifer plus a TableID
+// QualifiedTableID - TableQualifier plus a TableID
 // TableKey - a string representation of OrganizationID, DatabaseID, and
 // TableID, which is safe to use as a FeatureBase index name.
 //
@@ -44,7 +44,7 @@ import (
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-// TableKeyDelimiter is used to delimit the qualifer elements in the TableKey.
+// TableKeyDelimiter is used to delimit the qualifier elements in the TableKey.
 // While it might make more sense to use a pipe ("|") here, we instead use a
 // double underscore because underscore is one of the few characters allowed by
 // the FeatureBase index name restrictions, and we double it in a lame attempt
@@ -103,6 +103,23 @@ type OrganizationID string
 // value could be any string.
 type DatabaseID string
 
+// TableKeyer is an interface implemented by any type which can produce, and be
+// represented by, a TableKey. In the case of a QualifiedTable, its TableKey
+// might be something like `tbl__org__db__tableid`, while a general pilosa
+// implemenation might represent a table as a basic table name `foo`.
+type TableKeyer interface {
+	Key() TableKey
+}
+
+// StringTableKeyer is a helper type which can wrap a string, making it a
+// TableKeyer. This is useful for certain calls to Execute() which take a string
+// index name.
+type StringTableKeyer string
+
+func (s StringTableKeyer) Key() TableKey {
+	return TableKey(s)
+}
+
 // TableKey is a globally unique identifier for a table; it is effectively the
 // compound key: (org, database, table). This is (hopefully) the value that will
 // be used when interfacing with services which are unaware of table qualifiers.
@@ -111,6 +128,8 @@ type DatabaseID string
 // and unless we introduce table qualifiers into FeatureBase, we will use
 // TableKey as the value for index.Name.
 type TableKey string
+
+func (t TableKey) Key() TableKey { return t }
 
 // QualifiedTableID returns the QualifiedTableID based on the key. If TableKey
 // can't be parsed into a valid (i.e. complete) QualifiedTableID, then blank
@@ -164,7 +183,14 @@ type Table struct {
 	PartitionN int       `json:"partitionN"`
 
 	Description string `json:"description,omitempty"`
+	Owner       string `json:"owner,omitempty"`
 	CreatedAt   int64  `json:"createdAt,omitempty"`
+	UpdatedAt   int64  `json:"updatedAt,omitempty"`
+	UpdatedBy   string `json:"updatedBy,omitempty"`
+}
+
+func (t *Table) Key() TableKey {
+	return TableKey(t.ID)
 }
 
 // CreateID generates a unique identifier for Table. If Table has already been
@@ -198,7 +224,7 @@ func (t *Table) CreateID() (TableID, error) {
 }
 
 // NewTable returns a new instance of table with a pseudo-random ID which is
-// assumed to be unique within the scope of a TableQualifer.
+// assumed to be unique within the scope of a TableQualifier.
 func NewTable(name TableName) *Table {
 	return &Table{
 		Name:   name,
@@ -289,7 +315,7 @@ func (o Tables) Len() int           { return len(o) }
 func (o Tables) Less(i, j int) bool { return o[i].Name < o[j].Name }
 func (o Tables) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
 
-// TableQualifierKey is the unique TableQualifer values encoded as a string. The
+// TableQualifierKey is the unique TableQualifier values encoded as a string. The
 // current encoding is delimited as `prefix|OrganizationID|DatabaseID` (where
 // the pipe may be some other delimiter) by the TableQualifier.Key() method.
 type TableQualifierKey string
@@ -339,7 +365,7 @@ type TableQualifier struct {
 	DatabaseID     DatabaseID     `json:"db-id"`
 }
 
-// NewTableQualifier is a helper function used to create a TableQualifer from
+// NewTableQualifier is a helper function used to create a TableQualifier from
 // the provided arguments.
 func NewTableQualifier(orgID OrganizationID, dbID DatabaseID) TableQualifier {
 	return TableQualifier{
@@ -433,7 +459,7 @@ func (qtid QualifiedTableID) Key() TableKey {
 }
 
 // Equals returns true if `other` is the same as qtid. Note: the `Name` value is
-// ignored in this comparison; only `TableQaulifer` and `ID` are considered.
+// ignored in this comparison; only `TableQualifier` and `ID` are considered.
 func (qtid QualifiedTableID) Equals(other QualifiedTableID) bool {
 	if qtid.TableQualifier == other.TableQualifier && qtid.ID == other.ID {
 		return true
@@ -470,7 +496,7 @@ func (qt QualifiedTable) String() string {
 	return fmt.Sprintf("%s (%s)", qt.QualifiedID(), qt.Name)
 }
 
-// Qualifier returns the TableQualifer portion of the QualifiedTable.
+// Qualifier returns the TableQualifier portion of the QualifiedTable.
 func (qt *QualifiedTable) Qualifier() TableQualifier {
 	return qt.TableQualifier
 }

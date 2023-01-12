@@ -388,11 +388,13 @@ func (tx *RBFTx) ImportRoaringBits(index, field, view string, shard uint64, rit 
 }
 
 func (tx *RBFTx) ApplyFilter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapFilter) (err error) {
-	return tx.tx.ApplyFilter(rbfName(index, field, view, shard), ckey, filter)
+	err = tx.tx.ApplyFilter(rbfName(index, field, view, shard), ckey, filter)
+	return errors.Wrap(err, fmt.Sprintf("applying  filter for index %s, field %s, view %s, shard %d", index, field, view, shard))
 }
 
 func (tx *RBFTx) ApplyRewriter(index, field, view string, shard uint64, ckey uint64, filter roaring.BitmapRewriter) (err error) {
-	return tx.tx.ApplyRewriter(rbfName(index, field, view, shard), ckey, filter)
+	err = tx.tx.ApplyRewriter(rbfName(index, field, view, shard), ckey, filter)
+	return errors.Wrap(err, fmt.Sprintf("applying rewriter for index %s, field %s, view %s, shard %d", index, field, view, shard))
 }
 
 func (tx *RBFTx) GetSortedFieldViewList(idx *Index, shard uint64) (fvs []txkey.FieldView, err error) {

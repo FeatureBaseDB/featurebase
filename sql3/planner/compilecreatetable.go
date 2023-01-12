@@ -67,7 +67,11 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 
 		columns = append(columns, column)
 	}
-	return NewPlanOpQuery(p, NewPlanOpCreateTable(p, tableName, failIfExists, isKeyed, keyPartitions, description, columns), p.sql), nil
+	cop := NewPlanOpCreateTable(p, tableName, failIfExists, isKeyed, keyPartitions, description, columns)
+	if keyPartitions > 0 {
+		cop.AddWarning("The value of KEYPARTITIONS is currently ignored")
+	}
+	return NewPlanOpQuery(p, cop, p.sql), nil
 }
 
 // compiles a column def
@@ -166,12 +170,14 @@ func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createT
 			unit := c.Expr.(*parser.StringLit)
 			timeUnit = unit.Value
 
-			epochString := c.EpochExpr.(*parser.StringLit)
-			tm, err := time.ParseInLocation(time.RFC3339, epochString.Value, time.UTC)
-			if err != nil {
-				return nil, sql3.NewErrInvalidTimeEpoch(c.EpochExpr.Pos().Line, c.EpochExpr.Pos().Line, epochString.Value)
+			if c.EpochExpr != nil {
+				epochString := c.EpochExpr.(*parser.StringLit)
+				tm, err := time.ParseInLocation(time.RFC3339, epochString.Value, time.UTC)
+				if err != nil {
+					return nil, sql3.NewErrInvalidTimeEpoch(c.EpochExpr.Pos().Line, c.EpochExpr.Pos().Line, epochString.Value)
+				}
+				epoch = tm
 			}
-			epoch = tm
 
 		case *parser.TimeQuantumConstraint:
 			unit := c.Expr.(*parser.StringLit)
@@ -287,22 +293,6 @@ func (p *ExecutionPlanner) analyzeCreateTableStatement(stmt *parser.CreateTableS
 			}
 			if i < 1 || i > 10000 {
 				return sql3.NewErrInvalidKeyPartitionsValue(o.Expr.Pos().Line, o.Expr.Pos().Column, i)
-			}
-
-		case *parser.ShardWidthOption:
-			//check the type of the expression
-			literal, ok := o.Expr.(*parser.IntegerLit)
-			if !ok {
-				return sql3.NewErrIntegerLiteral(o.Expr.Pos().Line, o.Expr.Pos().Column)
-			}
-			//shardwidth needs to be a power of 2 and > 2^16
-			i, err := strconv.ParseInt(literal.Value, 10, 64)
-			if err != nil {
-				return err
-			}
-			isPwrOf2 := (i & (i - 1)) == 0
-			if (i == 0) || !isPwrOf2 || i < (1<<16) {
-				return sql3.NewErrInvalidShardWidthValue(o.Expr.Pos().Line, o.Expr.Pos().Column, i)
 			}
 
 		case *parser.CommentOption:

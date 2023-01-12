@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3"
 	_ "github.com/featurebasedb/featurebase/v3/test"
 )
 
