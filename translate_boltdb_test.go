@@ -15,6 +15,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/stretchr/testify/require"
 )
 
 //var vv = pilosa.VV

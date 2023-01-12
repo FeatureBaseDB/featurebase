@@ -11,12 +11,6 @@ import (
 	"testing"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
-	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
-	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/google/go-cmp/cmp"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -24,7 +18,7 @@ import (
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/stretchr/testify/assert"
-)
+	)
 
 func TestPlanner_Misc(t *testing.T) {
 	d, err := pql.ParseDecimal("12.345678")

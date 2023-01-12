@@ -12,7 +12,6 @@ import (
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/mock"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/google/go-cmp/cmp"
