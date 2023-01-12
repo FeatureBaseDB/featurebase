@@ -4206,6 +4206,7 @@ func (h *Handler) handleGetHealth(w http.ResponseWriter, r *http.Request) {
 func init() {
 	gob.Register(arrow.PrimitiveTypes.Int64)
 	gob.Register(arrow.PrimitiveTypes.Float64)
+	gob.Register(arrow.BinaryTypes.String)
 }
 
 // EXPERIMENTAL API MAY CHANGE
