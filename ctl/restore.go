@@ -360,7 +360,10 @@ func (cmd *RestoreCommand) restoreShard(ctx context.Context, filename string) er
 			pilosa.GetHTTPClient(cmd.tlsConfig, pilosa.ClientResponseHeaderTimeoutOption(time.Second*3)),
 			pilosa.WithClientRetryPeriod(cmd.RetryPeriod),
 			pilosa.WithSerializer(proto.Serializer{}))
-		return client.RestoreShard(ctx, indexName, shard, bytes.NewBuffer(data))
+		err = client.RestoreShard(ctx, indexName, shard, bytes.NewBuffer(data))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
