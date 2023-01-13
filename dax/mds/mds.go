@@ -20,7 +20,7 @@ import (
 )
 
 type Config struct {
-	// Controller
+	// TODO(jaffee) director on config is a bit weird? Shouldn't this be set up internally?
 	Director controller.Director `toml:"-"`
 	// RegistrationBatchTimeout is the time that the controller will
 	// wait after a node registers itself to see if any more nodes
@@ -36,6 +36,9 @@ type Config struct {
 	// Storage
 	StorageMethod string `toml:"-"`
 	DataDir       string `toml:"-"`
+
+	SnapshotterDir string `toml:"snapshotter-dir"`
+	WriteloggerDir string `toml:"writelogger-dir"`
 
 	// Logger
 	Logger logger.Logger `toml:"-"`
@@ -103,6 +106,8 @@ func New(cfg Config) *MDS {
 
 		RegistrationBatchTimeout: cfg.RegistrationBatchTimeout,
 		SnappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
+		SnapshotterDir:           cfg.SnapshotterDir,
+		WriteloggerDir:           cfg.WriteloggerDir,
 
 		StorageMethod: cfg.StorageMethod,
 		// just reusing this bolt for internal controller svcs

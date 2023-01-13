@@ -14,9 +14,9 @@ type Registrar interface {
 	CheckInNode(ctx context.Context, node *dax.Node) error
 }
 
-// WriteLogService represents the WriteLogService methods which Computer uses.
-// These are typically implemented by the WriteLogger client.
-type WriteLogService interface {
+// WritelogService represents the WritelogService methods which Computer uses.
+// These are typically implemented by the Writelogger client.
+type WritelogService interface {
 	AppendMessage(bucket string, key string, version int, msg []byte) error
 	LogReader(bucket string, key string, version int) (io.ReadCloser, error)
 	LogReaderFrom(bucket string, key string, version int, offset int) (io.ReadCloser, error)
@@ -45,5 +45,5 @@ type SnapInfo struct {
 type WriteLogInfo SnapInfo
 
 // LogMessage is implemented by a variety of types which can be serialized as
-// messages to the WriteLogger.
+// messages to the Writelogger.
 type LogMessage interface{}

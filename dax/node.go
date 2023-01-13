@@ -82,7 +82,7 @@ type Noder interface {
 // Ensure type implements interface.
 var _ Noder = &nopNoder{}
 
-// NopMDS is a no-op implementation of the MDS interface.
+// nopNoder is a no-op implementation of the Noder interface.
 type nopNoder struct{}
 
 func NewNopNoder() *nopNoder {

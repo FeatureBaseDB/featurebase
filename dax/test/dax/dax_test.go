@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
+	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -506,6 +509,68 @@ func TestDAXIntegration(t *testing.T) {
 				},
 			)
 		})
+	})
+
+	t.Run("Delete_Table", func(t *testing.T) {
+		mc := test.MustRunManagedCommand(t)
+		defer mc.Close()
+		svcmgr := mc.Manage()
+
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
+		testconfigs := basicTableTestConfig(qdbid, defs.Keyed)
+		for i := range testconfigs {
+			testconfigs[i].skipQuery = true
+		}
+		runTableTests(t,
+			svcmgr.Queryer.Address(),
+			testconfigs...,
+		)
+
+		fmt.Printf("%s\n", mc.Config.Computer.Config.DataDir)
+		err := filepath.WalkDir(mc.Config.Computer.Config.DataDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			name := strings.TrimPrefix(path, mc.Config.Computer.Config.DataDir)
+			numSlash := strings.Count(name, "/")
+			for i := 0; i < numSlash; i++ {
+				fmt.Print(" ")
+			}
+			fmt.Printf("%s\n", name)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walking dir: %v", err)
+		}
+
+		resp := runSQL(t, svcmgr.Queryer.Address(), testconfigs[0].qdbid, "drop table keyed")
+		fmt.Println("RESP: ", resp)
+
+		time.Sleep(time.Second * 5)
+
+		fmt.Printf("%s\n", mc.Config.Computer.Config.DataDir)
+		err = filepath.WalkDir(mc.Config.Computer.Config.DataDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			name := strings.TrimPrefix(path, mc.Config.Computer.Config.DataDir)
+			numSlash := strings.Count(name, "/")
+			for i := 0; i < numSlash; i++ {
+				fmt.Print(" ")
+			}
+			fmt.Printf("%s\n", name)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walking dir: %v", err)
+		}
 	})
 }
 

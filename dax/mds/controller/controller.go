@@ -10,6 +10,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
+	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
+	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"golang.org/x/sync/errgroup"
@@ -27,6 +29,9 @@ type Controller struct {
 
 	boltDB   *boltdb.DB
 	Balancer Balancer
+
+	Snapshotter *snapshotter.Snapshotter
+	Writelogger *writelogger.Writelogger
 
 	// Director is used to send directives to computer workers.
 	Director Director
@@ -74,6 +79,9 @@ func New(cfg Config) *Controller {
 	if cfg.Logger != nil {
 		c.logger = cfg.Logger
 	}
+
+	c.Snapshotter = snapshotter.New(cfg.SnapshotterDir, c.logger)
+	c.Writelogger = writelogger.New(cfg.WriteloggerDir, c.logger)
 
 	switch cfg.StorageMethod {
 	case "boltdb":
@@ -769,6 +777,14 @@ func (c *Controller) DropTable(ctx context.Context, qtid dax.QualifiedTableID) e
 		return errors.Wrapf(err, "dropping table from schemar: %s", qtid)
 	}
 
+	// Delete relavent table files from snapshotter and writelogger.
+	if err := c.Snapshotter.DeleteTable(qtid); err != nil {
+		return errors.Wrap(err, "deleting from snapshotter")
+	}
+	if err := c.Writelogger.DeleteTable(qtid); err != nil {
+		return errors.Wrap(err, "deleting from writelogger")
+	}
+
 	return tx.Commit()
 }
 
@@ -1114,7 +1130,7 @@ func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableI
 
 // SnapshotShardData forces the compute node responsible for the given shard to
 // snapshot that shard, then increment its shard version for logs written to the
-// WriteLogger.
+// Writelogger.
 func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTableID, shardNum dax.ShardNum) error {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {
@@ -1157,7 +1173,7 @@ func (c *Controller) snapshotShardData(tx dax.Transaction, qtid dax.QualifiedTab
 
 // SnapshotTableKeys forces the translate node responsible for the given
 // partition to snapshot the table keys for that partition, then increment its
-// version for logs written to the WriteLogger.
+// version for logs written to the Writelogger.
 func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partitionNum dax.PartitionNum) error {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {
@@ -1200,7 +1216,7 @@ func (c *Controller) snapshotTableKeys(tx dax.Transaction, qtid dax.QualifiedTab
 
 // SnapshotFieldKeys forces the translate node responsible for the given field
 // to snapshot the keys for that field, then increment its version for logs
-// written to the WriteLogger.
+// written to the Writelogger.
 func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName) error {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {

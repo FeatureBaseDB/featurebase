@@ -24,14 +24,12 @@ func TestResourceManager(t *testing.T) {
 		os.RemoveAll(wdd)
 	}()
 
-	sn := snapshotter.New(snapshotter.Config{
-		DataDir: sdd,
-	})
-	wl := writelogger.New(writelogger.Config{
-		DataDir: wdd,
-	})
+	log := logger.NewStandardLogger(os.Stderr)
 
-	mm := NewResourceManager(sn, wl, logger.NewStandardLogger(os.Stderr))
+	sn := snapshotter.New(sdd, log)
+	wl := writelogger.New(wdd, log)
+
+	mm := NewResourceManager(sn, wl, log)
 
 	qtid := dax.QualifiedTableID{
 		QualifiedDatabaseID: dax.NewQualifiedDatabaseID(

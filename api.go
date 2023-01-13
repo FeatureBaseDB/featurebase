@@ -338,6 +338,14 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	if err != nil {
 		return errors.Wrap(err, "deleting index")
 	}
+
+	// Remove from writelogger/snapshotter if serverless.
+	if api.isComputeNode {
+		if err := api.serverlessStorage.RemoveTable(dax.TableKey(indexName).QualifiedTableID()); err != nil {
+			return errors.Wrapf(err, "removing table from serverless storage: %s", indexName)
+		}
+	}
+
 	// Send the delete index message to all nodes.
 	err = api.server.SendSync(
 		&DeleteIndexMessage{

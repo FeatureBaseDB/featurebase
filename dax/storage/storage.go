@@ -18,7 +18,7 @@ import (
 // all of which use the same underlying snapshotter and writelogger.
 type ResourceManager struct {
 	Snapshotter computer.SnapshotService
-	WriteLogger computer.WriteLogService
+	Writelogger computer.WritelogService
 	Logger      logger.Logger
 
 	mu                sync.Mutex
@@ -27,10 +27,10 @@ type ResourceManager struct {
 	fieldKeyResources map[fieldKeyK]*Resource
 }
 
-func NewResourceManager(s computer.SnapshotService, w computer.WriteLogService, l logger.Logger) *ResourceManager {
+func NewResourceManager(s computer.SnapshotService, w computer.WritelogService, l logger.Logger) *ResourceManager {
 	return &ResourceManager{
 		Snapshotter: s,
-		WriteLogger: w,
+		Writelogger: w,
 		Logger:      l,
 
 		shardResources:    make(map[shardK]*Resource),
@@ -66,7 +66,7 @@ func (mm *ResourceManager) GetShardResource(qtid dax.QualifiedTableID, partition
 	}
 	mm.shardResources[key] = (&Resource{
 		snapshotter: mm.Snapshotter,
-		writeLogger: mm.WriteLogger,
+		writeLogger: mm.Writelogger,
 		bucket:      partitionBucket(qtid.Key(), partition),
 		key:         shardKey(shard),
 		log:         mm.Logger,
@@ -97,7 +97,7 @@ func (mm *ResourceManager) GetTableKeyResource(qtid dax.QualifiedTableID, partit
 	}
 	mm.tableKeyResources[key] = (&Resource{
 		snapshotter: mm.Snapshotter,
-		writeLogger: mm.WriteLogger,
+		writeLogger: mm.Writelogger,
 		bucket:      partitionBucket(qtid.Key(), partition),
 		key:         keysFileName,
 		log:         mm.Logger,
@@ -127,7 +127,7 @@ func (mm *ResourceManager) GetFieldKeyResource(qtid dax.QualifiedTableID, field 
 	}
 	mm.fieldKeyResources[key] = (&Resource{
 		snapshotter: mm.Snapshotter,
-		writeLogger: mm.WriteLogger,
+		writeLogger: mm.Writelogger,
 		bucket:      fieldBucket(qtid.Key(), field),
 		key:         keysFileName,
 		log:         mm.Logger,
@@ -149,7 +149,11 @@ func (mm *ResourceManager) RemoveFieldKeyResource(qtid dax.QualifiedTableID, fie
 }
 
 // RemoveAll unlocks and deletes all resources held within this
-// ResourceManager.
+// ResourceManager. To be clear, the underlying resources are *not*
+// deleted, they are simply no longer under this resource manager's
+// purview. If there's a problem removing any resource, we'll save the
+// error, but keep going... this is only called on shutdown, so we do
+// our best to unlock everything.
 func (mm *ResourceManager) RemoveAll() error {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
@@ -182,6 +186,40 @@ func (mm *ResourceManager) RemoveAll() error {
 	return nil
 }
 
+// RemoveTable, unlocks and removes all resources related to the given
+// table from this ResourceManager. The underlying files are not
+// deleted. (If the table is being dropped, deleting the files is
+// under the purview of metadata services). In this case (in contrast
+// to RemoveAll), we'll stop on any error and return it. Not sure it
+// actually matters in either of these cases.
+func (mm *ResourceManager) RemoveTable(qtid dax.QualifiedTableID) error {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	for k, resource := range mm.shardResources {
+		if k.qtid == qtid {
+			if err := resource.Unlock(); err != nil {
+				return errors.Wrap(err, "unlocking shard")
+			}
+		}
+	}
+	for k, resource := range mm.tableKeyResources {
+		if k.qtid == qtid {
+			if err := resource.Unlock(); err != nil {
+				return errors.Wrap(err, "unlocking shard")
+			}
+		}
+	}
+	for k, resource := range mm.fieldKeyResources {
+		if k.qtid == qtid {
+			if err := resource.Unlock(); err != nil {
+				return errors.Wrap(err, "deleting field key resource %s")
+			}
+		}
+	}
+	return nil
+}
+
 // Resource wraps the snapshotter and writelogger to maintain messy
 // state between calls. Resource is *not* threadsafe, care should be
 // taken that concurrent calls are not made to Resource methods. The
@@ -189,7 +227,7 @@ func (mm *ResourceManager) RemoveAll() error {
 // concurrently.
 type Resource struct {
 	snapshotter computer.SnapshotService
-	writeLogger computer.WriteLogService
+	writeLogger computer.WritelogService
 	bucket      string
 	key         string
 

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -28,10 +29,10 @@ type Snapshotter struct {
 	logger logger.Logger
 }
 
-func New(cfg Config) *Snapshotter {
+func New(dir string, log logger.Logger) *Snapshotter {
 	return &Snapshotter{
-		dataDir: cfg.DataDir,
-		logger:  logger.NopLogger,
+		dataDir: dir,
+		logger:  log,
 	}
 }
 
@@ -133,6 +134,15 @@ func (s *Snapshotter) snapshotFileByKey(key string) (*os.File, error) {
 	}
 
 	return f, nil
+}
+
+func (s *Snapshotter) DeleteTable(qtid dax.QualifiedTableID) error {
+	dir := path.Join(s.dataDir, string(qtid.Key()))
+	err := os.RemoveAll(dir)
+	if err != nil {
+		return errors.Wrapf(err, "dropping %s from snapshotter", dir)
+	}
+	return nil
 }
 
 // fullKey returns the full file key including the bucket and version.

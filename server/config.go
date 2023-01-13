@@ -58,13 +58,15 @@ type Config struct {
 	// particular index.
 	MDSAddress string `toml:"mds-address"`
 
-	// WriteLogger is the location at which this node should read/write change
-	// logs.
-	WriteLogger string `toml:"write-logger"`
+	// WriteloggerDir is the location at which this node should
+	// read/write change logs. Typically a network mounted filesystem
+	// for availability/durability.
+	WriteloggerDir string `toml:"writelogger-dir"`
 
-	// Snapshotter is the location at which this node should read/write
-	// snapshots.
-	Snapshotter string `toml:"snapshotter"`
+	// SnapshotterDir is the location at which this node should
+	// read/write snapshots. Typically a network mounted filesystem
+	// for availability/durability.
+	SnapshotterDir string `toml:"snapshotter-dir"`
 
 	// DataDir is the directory where Pilosa stores both indexed data and
 	// running state such as cluster topology information.

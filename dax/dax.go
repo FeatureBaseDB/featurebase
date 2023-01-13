@@ -7,5 +7,5 @@ const (
 	ServicePrefixMDS         = "mds"
 	ServicePrefixQueryer     = "queryer"
 	ServicePrefixSnapshotter = "snapshotter"
-	ServicePrefixWriteLogger = "writelogger"
+	ServicePrefixWritelogger = "writelogger"
 )

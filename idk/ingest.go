@@ -1024,7 +1024,7 @@ func (m *Main) setupClient() (*tls.Config, error) {
 		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qdbid, m.log)
 
 		m.NewImporterFn = func() pilosacore.Importer {
-			return mds.NewImporter(mdsClient, mdsClient, qtbl.Qualifier(), &qtbl.Table)
+			return mds.NewImporter(mdsClient, qtbl.Qualifier(), &qtbl.Table)
 		}
 	} else {
 		m.SchemaManager = m.client

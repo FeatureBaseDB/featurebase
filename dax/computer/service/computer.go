@@ -109,11 +109,7 @@ type CommandConfig struct {
 	// separate data directory for its holder.
 	Name string
 
-	WriteLoggerRun    bool
-	WriteLoggerConfig writelogger.Config
-	SnapshotterRun    bool
-	SnapshotterConfig snapshotter.Config
-	ComputerConfig    fbserver.Config
+	ComputerConfig fbserver.Config
 
 	Listener    net.Listener
 	RootDataDir string
@@ -123,27 +119,15 @@ type CommandConfig struct {
 }
 
 func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
-	// Set up WriteLogger.
-	// TODO(tlt): since WriteLogger is no longer a separate service (but
-	// rather just a directory path) its configuration could be moved under
-	// computer, and then get rid of WriteLogger.Run. This would become "if
-	// DataDir != ''". Let's do this after we get rid of the dax integration
-	// tests which start up separate writelogger and snapshotter containers.
-	var wlSvc *writelogger.WriteLogger
-	if cfg.WriteLoggerRun {
-		wlSvc = writelogger.New(writelogger.Config{
-			DataDir: cfg.WriteLoggerConfig.DataDir,
-			Logger:  cfg.Logger,
-		})
+	var wlSvc *writelogger.Writelogger
+	if cfg.ComputerConfig.WriteloggerDir != "" {
+		wlSvc = writelogger.New(cfg.ComputerConfig.WriteloggerDir, cfg.Logger)
 	}
 
 	// Set up Snapshotter.
 	var ssSvc *snapshotter.Snapshotter
-	if cfg.SnapshotterRun {
-		ssSvc = snapshotter.New(snapshotter.Config{
-			DataDir: cfg.SnapshotterConfig.DataDir,
-			Logger:  cfg.Logger,
-		})
+	if cfg.ComputerConfig.SnapshotterDir != "" {
+		ssSvc = snapshotter.New(cfg.ComputerConfig.SnapshotterDir, cfg.Logger)
 	}
 
 	// Set the FeatureBase.Config values based on the top-level Config
@@ -153,23 +137,11 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 	cfg.ComputerConfig.GRPCListener = &nopListener{}
 	cfg.ComputerConfig.DataDir = cfg.RootDataDir + "/" + cfg.Name
 
-	var writeLoggerImpl computer.WriteLogService
-	if cfg.ComputerConfig.WriteLogger != "" {
-		panic("running separate writelogger is currently unsupported")
-		// writeLoggerImpl = writeloggerclient.New(dax.Address(cfg.ComputerConfig.WriteLogger))
-	} else if wlSvc != nil {
-		writeLoggerImpl = wlSvc
-	} else {
+	if wlSvc == nil {
 		cfg.Logger.Warnf("No writelogger configured, dynamic scaling will not function properly.")
 	}
 
-	var snapshotterImpl computer.SnapshotService
-	if cfg.ComputerConfig.Snapshotter != "" {
-		panic("running separate snapshotter is currently unsupported")
-		// snapshotterImpl = snapshotterclient.New(dax.Address(cfg.ComputerConfig.Snapshotter))
-	} else if ssSvc != nil {
-		snapshotterImpl = ssSvc
-	} else {
+	if ssSvc == nil {
 		cfg.Logger.Warnf("No snapshotter configured.")
 	}
 
@@ -180,8 +152,8 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 			featurebase.OptServerLogger(cfg.Logger),
 		),
 		fbserver.OptCommandInjections(fbserver.Injections{
-			WriteLogger:   writeLoggerImpl,
-			Snapshotter:   snapshotterImpl,
+			Writelogger:   wlSvc,
+			Snapshotter:   ssSvc,
 			IsComputeNode: true,
 		}),
 	)
