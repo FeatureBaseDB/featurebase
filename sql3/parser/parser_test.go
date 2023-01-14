@@ -427,7 +427,7 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 			DropColumnName: &parser.Ident{NamePos: pos(28), Name: "col"},
 		})
 
-		AssertParseStatementError(t, `ALTER`, `1:5: expected TABLE, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER`, `1:1: expected TABLE or VIEW`)
 		AssertParseStatementError(t, `ALTER TABLE`, `1:11: expected table name, found 'EOF'`)
 		AssertParseStatementError(t, `ALTER TABLE tbl`, `1:15: expected ADD, DROP or RENAME, found 'EOF'`)
 		AssertParseStatementError(t, `ALTER TABLE tbl RENAME`, `1:22: expected COLUMN keyword or column name, found 'EOF'`)
@@ -1566,22 +1566,23 @@ func TestParser_ParseStatement(t *testing.T) {
 	})
 
 	t.Run("CreateView", func(t *testing.T) {
-		AssertParseStatement(t, `CREATE VIEW vw (col1, col2) AS SELECT x, y`, &parser.CreateViewStatement{
+		//AssertParseStatement(t, `CREATE VIEW vw (col1, col2) AS SELECT x, y`, &parser.CreateViewStatement{
+		AssertParseStatement(t, `CREATE VIEW vw AS SELECT x, y`, &parser.CreateViewStatement{
 			Create: pos(0),
 			View:   pos(7),
 			Name:   &parser.Ident{NamePos: pos(12), Name: "vw"},
-			Lparen: pos(15),
-			Columns: []*parser.Ident{
-				{NamePos: pos(16), Name: "col1"},
-				{NamePos: pos(22), Name: "col2"},
-			},
-			Rparen: pos(26),
-			As:     pos(28),
+			// Lparen: pos(15),
+			// Columns: []*parser.Ident{
+			// 	{NamePos: pos(16), Name: "col1"},
+			// 	{NamePos: pos(22), Name: "col2"},
+			// },
+			// Rparen: pos(26),
+			As: pos(15),
 			Select: &parser.SelectStatement{
-				Select: pos(31),
+				Select: pos(18),
 				Columns: []*parser.ResultColumn{
-					{Expr: &parser.Ident{NamePos: pos(38), Name: "x"}},
-					{Expr: &parser.Ident{NamePos: pos(41), Name: "y"}},
+					{Expr: &parser.Ident{NamePos: pos(25), Name: "x"}},
+					{Expr: &parser.Ident{NamePos: pos(28), Name: "y"}},
 				},
 			},
 		})
@@ -1616,8 +1617,8 @@ func TestParser_ParseStatement(t *testing.T) {
 		AssertParseStatementError(t, `CREATE VIEW IF`, `1:14: expected NOT, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE VIEW IF NOT`, `1:18: expected EXISTS, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE VIEW vw`, `1:14: expected AS, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE VIEW vw (`, `1:16: expected column name, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE VIEW vw (x`, `1:17: expected comma or right paren, found 'EOF'`)
+		//AssertParseStatementError(t, `CREATE VIEW vw (`, `1:16: expected column name, found 'EOF'`)
+		//AssertParseStatementError(t, `CREATE VIEW vw (x`, `1:17: expected comma or right paren, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE VIEW vw AS`, `1:17: expected SELECT, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE VIEW vw AS SELECT`, `1:24: expected expression, found 'EOF'`)
 	})

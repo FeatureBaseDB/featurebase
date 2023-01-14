@@ -79,6 +79,11 @@ const (
 	ErrTableColumnNotFound       errors.Code = "ErrTableColumnNotFound"
 	ErrInvalidKeyPartitionsValue errors.Code = "ErrInvalidKeyPartitionsValue"
 
+	ErrTableOrViewNotFound errors.Code = "ErrTableOrViewNotFound"
+
+	ErrViewExists   errors.Code = "ErrViewExists"
+	ErrViewNotFound errors.Code = "ErrViewNotFound"
+
 	ErrBadColumnConstraint         errors.Code = "ErrBadColumnConstraint"
 	ErrConflictingColumnConstraint errors.Code = "ErrConflictingColumnConstraint"
 
@@ -507,6 +512,13 @@ func NewErrTableNotFound(line, col int, tableName string) error {
 	)
 }
 
+func NewErrTableOrViewNotFound(line, col int, tableName string) error {
+	return errors.New(
+		ErrTableOrViewNotFound,
+		fmt.Sprintf("[%d:%d] table or view '%s' not found", line, col, tableName),
+	)
+}
+
 func NewErrTableExists(line, col int, tableName string) error {
 	return errors.New(
 		ErrTableExists,
@@ -532,6 +544,20 @@ func NewErrInvalidKeyPartitionsValue(line, col int, keypartitions int64) error {
 	return errors.New(
 		ErrInvalidKeyPartitionsValue,
 		fmt.Sprintf("[%d:%d] invalid value '%d' for key partitions (should be a number between 1-10000)", line, col, keypartitions),
+	)
+}
+
+func NewErrViewNotFound(line, col int, viewName string) error {
+	return errors.New(
+		ErrViewNotFound,
+		fmt.Sprintf("[%d:%d] view '%s' not found", line, col, viewName),
+	)
+}
+
+func NewErrViewExists(line, col int, viewName string) error {
+	return errors.New(
+		ErrViewExists,
+		fmt.Sprintf("[%d:%d] view '%s' already exists", line, col, viewName),
 	)
 }
 

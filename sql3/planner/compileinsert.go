@@ -24,7 +24,7 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
 		}
 		return nil, err
@@ -79,7 +79,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
 		}
 		return err

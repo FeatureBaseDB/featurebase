@@ -28,10 +28,10 @@ func newSystemTableDefintionsWrapper(api pilosa.SchemaAPI) *systemTableDefintion
 func (s *systemTableDefintionsWrapper) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	tbl, err := s.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			st, ok := systemTables[string(tname)]
 			if !ok {
-				return nil, pilosa.ErrIndexNotFound
+				return nil, dax.NewErrTableNameDoesNotExist(tname)
 			}
 
 			return indexInfoFromSystemTableB(st)

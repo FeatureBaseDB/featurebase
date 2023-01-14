@@ -25,7 +25,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
 		}
 		return nil, err
@@ -63,7 +63,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 	switch strings.ToUpper(options.input) {
 	case "FILE":
 		// file should exist
-		if _, err := os.Stat(options.sourceData); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(options.sourceData); goerrors.Is(err, os.ErrNotExist) {
 			return nil, sql3.NewErrReadingDatasource(stmt.DataSource.Pos().Line, stmt.DataSource.Pos().Column, options.sourceData, fmt.Sprintf("file '%s' does not exist", options.sourceData))
 		}
 	case "URL", "STREAM":
@@ -163,7 +163,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
 		}
 		return err

@@ -114,9 +114,9 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 		if err := walkIdent(v, &n.Name); err != nil {
 			return node, err
 		}
-		if err := walkIdentList(v, n.Columns); err != nil {
-			return node, err
-		}
+		// if err := walkIdentList(v, n.Columns); err != nil {
+		// 	return node, err
+		// }
 		if n.Select != nil {
 			if sel, err := walk(v, n.Select); err != nil {
 				return node, err
