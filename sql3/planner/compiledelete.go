@@ -54,7 +54,7 @@ func (p *ExecutionPlanner) compileDeleteStatement(stmt *parser.DeleteStatement) 
 
 func (p *ExecutionPlanner) analyzeDeleteStatement(stmt *parser.DeleteStatement) error {
 
-	err := p.analyzeSource(stmt.Source, stmt)
+	_, err := p.analyzeSource(stmt.Source, stmt)
 	if err != nil {
 		return err
 	}

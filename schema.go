@@ -28,6 +28,9 @@ func NewOnPremSchema(api *API) *onPremSchema {
 func (s *onPremSchema) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	idx, err := s.api.IndexInfo(context.Background(), string(tname))
 	if err != nil {
+		if err == ErrIndexNotFound {
+			return nil, dax.NewErrTableNameDoesNotExist(tname)
+		}
 		return nil, errors.Wrapf(err, "getting index info for table name: %s", tname)
 	}
 

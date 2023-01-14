@@ -8,10 +8,10 @@ import (
 
 	pilosa "github.com/molecula/featurebase/v3"
 	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
-	"github.com/pkg/errors"
 )
 
 func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (types.PlanOperator, error) {
@@ -84,7 +84,7 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsS
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
 		}
 		return nil, err
@@ -174,7 +174,7 @@ func (p *ExecutionPlanner) compileShowCreateTableStatement(stmt *parser.ShowCrea
 	tableName := parser.IdentName(stmt.TableName)
 	tname := dax.TableName(tableName)
 	if _, err := p.schemaAPI.TableByName(context.Background(), tname); err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
 		}
 		return nil, err

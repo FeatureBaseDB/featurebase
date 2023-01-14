@@ -395,14 +395,15 @@ func TestCreateFunctionStatement_String(t *testing.T) {
 func TestCreateViewStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateViewStatement{
 		Name: &parser.Ident{Name: "vw"},
-		Columns: []*parser.Ident{
-			{Name: "x"},
-			{Name: "y"},
-		},
+		// Columns: []*parser.Ident{
+		// 	{Name: "x"},
+		// 	{Name: "y"},
+		// },
 		Select: &parser.SelectStatement{
 			Columns: []*parser.ResultColumn{{Star: pos(0)}},
 		},
-	}, `CREATE VIEW vw (x, y) AS SELECT *`)
+		//}, `CREATE VIEW vw (x, y) AS SELECT *`)
+	}, `CREATE VIEW vw AS SELECT *`)
 
 	AssertStatementStringer(t, &parser.CreateViewStatement{
 		IfNotExists: pos(0),
@@ -411,6 +412,20 @@ func TestCreateViewStatement_String(t *testing.T) {
 			Columns: []*parser.ResultColumn{{Star: pos(0)}},
 		},
 	}, `CREATE VIEW IF NOT EXISTS vw AS SELECT *`)
+}
+
+func TestAlterViewStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.AlterViewStatement{
+		Name: &parser.Ident{Name: "vw"},
+		// Columns: []*parser.Ident{
+		// 	{Name: "x"},
+		// 	{Name: "y"},
+		// },
+		Select: &parser.SelectStatement{
+			Columns: []*parser.ResultColumn{{Star: pos(0)}},
+		},
+		//}, `CREATE VIEW vw (x, y) AS SELECT *`)
+	}, `ALTER VIEW vw AS SELECT *`)
 }
 
 func TestDeleteStatement_String(t *testing.T) {
@@ -487,15 +502,14 @@ func TestDropTriggerStatement_String(t *testing.T) {
 }
 
 func TestDropViewStatement_String(t *testing.T) {
-	t.Skip("DROP VIEW is currently disabled in the parser")
 	AssertStatementStringer(t, &parser.DropViewStatement{
 		Name: &parser.Ident{Name: "vw"},
-	}, `DROP VIEW "vw"`)
+	}, `DROP VIEW vw`)
 
 	AssertStatementStringer(t, &parser.DropViewStatement{
 		IfExists: pos(0),
 		Name:     &parser.Ident{Name: "vw"},
-	}, `DROP VIEW IF EXISTS "vw"`)
+	}, `DROP VIEW IF EXISTS vw`)
 }
 
 func TestExplainStatement_String(t *testing.T) {

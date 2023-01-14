@@ -9,15 +9,22 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	pilosa "github.com/molecula/featurebase/v3"
+	"github.com/molecula/featurebase/v3/dax"
+	"github.com/molecula/featurebase/v3/errors"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+func isTableNotFoundError(err error) bool {
+	// TODO (pok) take out the second part of this check once we return correct error types across network boundaries
+	return errors.Is(err, dax.ErrTableNameDoesNotExist) || strings.Contains(err.Error(), "does not exist")
+}
 
 // ExecutionPlanner compiles SQL text into a query plan
 type ExecutionPlanner struct {
@@ -66,10 +73,16 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 		rootOperator, err = p.compileShowCreateTableStatement(stmt)
 	case *parser.CreateTableStatement:
 		rootOperator, err = p.compileCreateTableStatement(stmt)
+	case *parser.CreateViewStatement:
+		rootOperator, err = p.compileCreateViewStatement(stmt)
 	case *parser.AlterTableStatement:
 		rootOperator, err = p.compileAlterTableStatement(stmt)
+	case *parser.AlterViewStatement:
+		rootOperator, err = p.compileAlterViewStatement(stmt)
 	case *parser.DropTableStatement:
 		rootOperator, err = p.compileDropTableStatement(stmt)
+	case *parser.DropViewStatement:
+		rootOperator, err = p.compileDropViewStatement(stmt)
 	case *parser.InsertStatement:
 		rootOperator, err = p.compileInsertStatement(stmt)
 	case *parser.BulkInsertStatement:
@@ -113,9 +126,15 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 		return nil
 	case *parser.CreateTableStatement:
 		return p.analyzeCreateTableStatement(stmt)
+	case *parser.CreateViewStatement:
+		return p.analyzeCreateViewStatement(stmt)
 	case *parser.AlterTableStatement:
 		return p.analyzeAlterTableStatement(stmt)
+	case *parser.AlterViewStatement:
+		return p.analyzeAlterViewStatement(stmt)
 	case *parser.DropTableStatement:
+		return nil
+	case *parser.DropViewStatement:
 		return nil
 	case *parser.InsertStatement:
 		return p.analyzeInsertStatement(stmt)

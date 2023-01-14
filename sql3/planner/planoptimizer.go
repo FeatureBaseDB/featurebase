@@ -18,6 +18,8 @@ import (
 //TODO(pok) you can't group by _id in PQL, so we need to not use a PQL group by operator here
 //TODO(pok) move constant folding to in here
 
+//TODO(pok) push down filters thru subqueries with aliases
+
 // a function prototype for all optimizer rules
 type OptimizerFunc func(context.Context, *ExecutionPlanner, types.PlanOperator, *OptimizerScope) (types.PlanOperator, bool, error)
 

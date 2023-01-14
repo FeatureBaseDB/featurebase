@@ -13,7 +13,6 @@ import (
 	"github.com/molecula/featurebase/v3/sql3"
 	"github.com/molecula/featurebase/v3/sql3/parser"
 	"github.com/molecula/featurebase/v3/sql3/planner/types"
-	"github.com/pkg/errors"
 )
 
 // PlanOpPQLTableScan plan operator handles a PQL table scan
@@ -146,7 +145,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		tname := dax.TableName(i.tableName)
 		table, err := i.planner.schemaAPI.TableByName(context.Background(), tname)
 		if err != nil {
-			if errors.Is(err, pilosa.ErrIndexNotFound) {
+			if isTableNotFoundError(err) {
 				return nil, sql3.NewErrInternalf("table not found '%s'", i.tableName)
 			}
 			return nil, err
