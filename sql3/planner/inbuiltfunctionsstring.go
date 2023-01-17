@@ -163,7 +163,7 @@ func (p *ExecutionPlanner) analyseFunctionTrim(call *parser.Call, scope parser.S
 	return call, nil
 }
 
-func (p *ExecutionPlanner) analyseFunctionPrefixSuffix(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyseFunctionPrefixSuffixReplicate(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 	if len(call.Args) != 2 {
 		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
 	}
@@ -611,4 +611,36 @@ func (n *callPlanExpression) EvaluateLen(currentRow []interface{}) (interface{},
 	}
 
 	return int64(len([]rune(stringArg))), nil
+}
+func (n *callPlanExpression) EvaluateReplicate(currentRow []interface{}) (interface{}, error) {
+	argEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	stringArg, ok := argEval.(string)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+	}
+
+	argEval, err = n.args[1].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	intArg, ok := argEval.(int64)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+	}
+
+	if intArg < 0 {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, intArg)
+	}
+
+	return strings.Repeat(stringArg, int(intArg)), nil
+
 }
