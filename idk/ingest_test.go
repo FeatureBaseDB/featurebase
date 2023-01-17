@@ -58,7 +58,7 @@ func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedT
 
 	mdsClient := mdsclient.New(dax.Address(address), logger.StderrLogger)
 	main.NewImporterFn = func() pilosa.Importer {
-		return mds.NewImporter(mdsClient, mdsClient, qtbl.TableQualifier, &qtbl.Table)
+		return mds.NewImporter(mdsClient, mdsClient, qtbl.QualifiedDatabaseID, &qtbl.Table)
 	}
 }
 
@@ -1756,6 +1756,24 @@ func TestBatchTargetMDS(t *testing.T) {
 	orgID := dax.OrganizationID("acme")
 	dbID := dax.DatabaseID("db1")
 
+	mdsClient := mdsclient.New(mdsAddress, logger.StderrLogger)
+
+	ctx := context.Background()
+
+	// Create the database.
+	qdb := &dax.QualifiedDatabase{
+		OrganizationID: orgID,
+		Database: dax.Database{
+			ID:   dbID,
+			Name: "dbname1",
+			Options: dax.DatabaseOptions{
+				WorkersMin: 1,
+				WorkersMax: 1,
+			},
+		},
+	}
+	mdsClient.CreateDatabase(ctx, qdb)
+
 	t.Run("FieldTypes", func(t *testing.T) {
 		tests := []struct {
 			fieldType    dax.BaseType
@@ -1859,14 +1877,11 @@ func TestBatchTargetMDS(t *testing.T) {
 				}
 
 				qtbl := dax.NewQualifiedTable(
-					dax.NewTableQualifier(orgID, dbID),
+					dax.NewQualifiedDatabaseID(orgID, dbID),
 					tbl,
 				)
 
-				ctx := context.Background()
-
 				// Create the table in MDS Schemar.
-				mdsClient := mdsclient.New(mdsAddress, logger.StderrLogger)
 				if err := mdsClient.CreateTable(ctx, qtbl); err != nil {
 					t.Fatalf("creating table: %v", err)
 				}

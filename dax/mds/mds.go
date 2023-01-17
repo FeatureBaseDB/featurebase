@@ -3,7 +3,6 @@ package mds
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -57,7 +56,6 @@ type MDS struct {
 	// we need to be sure to close the boltDBs that are created in mds.New()
 	// whenever mds.Close() is called. These are pointers to those DBs so we can
 	// close them.
-	schemarDB    *boltdb.DB
 	controllerDB *boltdb.DB
 
 	logger logger.Logger
@@ -88,25 +86,20 @@ func New(cfg Config) *MDS {
 		logr.Warnf("no DataDir given (like '/path/to/directory') using temp dir at '%s'", cfg.DataDir)
 	}
 
-	schemarDB, err := boltdb.NewSvcBolt(cfg.DataDir, "schemar", schemarboltdb.SchemarBuckets...)
+	buckets := append(schemarboltdb.SchemarBuckets, balancerboltdb.BalancerBuckets...)
+	controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "controller", buckets...)
 	if err != nil {
-		logr.Printf("Error creating schemar db: %v", err)
+		logr.Printf(errors.Wrap(err, "creating controller bolt").Error())
 		os.Exit(1)
 	}
 
-	schemar := schemarboltdb.NewSchemar(schemarDB, logr)
-
-	controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "balancer", naiveboltdb.NaiveBalancerBuckets...)
-	if err != nil {
-		logr.Printf(errors.Wrap(err, "creating balancer bolt").Error())
-		os.Exit(1)
-	}
+	schemar := schemarboltdb.NewSchemar(controllerDB, logr)
 
 	controllerCfg := controller.Config{
-		Director:          cfg.Director,
-		Schemar:           schemar,
-		ComputeBalancer:   naiveboltdb.NewBalancer("compute", controllerDB, logr),
-		TranslateBalancer: naiveboltdb.NewBalancer("translate", controllerDB, logr),
+		Director: cfg.Director,
+		Schemar:  schemar,
+
+		Balancer: balancerboltdb.NewBalancer(controllerDB, schemar, logr),
 
 		RegistrationBatchTimeout: cfg.RegistrationBatchTimeout,
 		SnappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
@@ -140,7 +133,6 @@ func New(cfg Config) *MDS {
 		poller:     poller,
 		schemar:    schemar,
 
-		schemarDB:    schemarDB,
 		controllerDB: controllerDB,
 
 		logger: logr,
@@ -169,9 +161,6 @@ func (m *MDS) Stop() error {
 	m.poller.Stop()
 	m.controller.Stop()
 
-	if m.schemarDB != nil {
-		m.schemarDB.Close()
-	}
 	if m.controllerDB != nil {
 		m.controllerDB.Close()
 	}
@@ -179,38 +168,17 @@ func (m *MDS) Stop() error {
 	return nil
 }
 
-// sanitizeQTID populates Table.ID (by looking up the table, by name, in
-// schemar) for a given table having only a Name value, but no ID.
-func (m *MDS) sanitizeQTID(ctx context.Context, qtid *dax.QualifiedTableID) error {
-	if qtid.ID == "" {
-		nqtid, err := m.schemar.TableID(ctx, qtid.TableQualifier, qtid.Name)
-		if err != nil {
-			return errors.Wrap(err, "getting table ID")
-		}
-		qtid.ID = nqtid.ID
-	}
-	return nil
+// CreateDatabase handles a create table request.
+func (m *MDS) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
+	return m.controller.CreateDatabase(ctx, qdb)
+}
+
+func (m *MDS) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
+	return m.controller.DatabaseByID(ctx, qdbid)
 }
 
 // CreateTable handles a create table request.
 func (m *MDS) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Create Table ID.
-	if _, err := qtbl.CreateID(); err != nil {
-		return errors.Wrap(err, "creating table ID")
-	}
-
-	// Create the table in schemar.
-	if err := m.schemar.CreateTable(ctx, qtbl); err != nil {
-		return errors.Wrapf(err, "creating table: %s", qtbl)
-	}
-
-	// TODO: if error here, we should probably roll-back the
-	// schemar.CreateTable() request.
-
-	// Add the table to the controller.
 	return m.controller.CreateTable(ctx, qtbl)
 }
 
@@ -218,216 +186,61 @@ func (m *MDS) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {
 // reason about consistency here? What if controller DropTable
 // succeeds, but schemar fails?
 func (m *MDS) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
-
-	if err := m.controller.DropTable(ctx, qtid); err != nil {
-		return errors.Wrapf(err, "dropping table: %s", qtid)
-	}
-
-	return m.schemar.DropTable(ctx, qtid)
-}
-
-type CreateFieldRequest struct {
-	Table dax.TableName
-	Field *dax.Field
+	return m.controller.DropTable(ctx, qtid)
 }
 
 // CreateField handles a create Field request.
 func (m *MDS) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld *dax.Field) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
-
-	// Create the field in schemar.
-	if err := m.schemar.CreateField(ctx, qtid, fld); err != nil {
-		return errors.Wrapf(err, "creating field: %s, %s", qtid, fld)
-	}
-
-	// Add the table to the controller.
 	return m.controller.CreateField(ctx, qtid, fld)
 }
 
 // DropField handles a drop Field request.
 func (m *MDS) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
-
-	// Drop the field from schemar.
-	if err := m.schemar.DropField(ctx, qtid, fldName); err != nil {
-		return errors.Wrapf(err, "dropping field: %s, %s", qtid, fldName)
-	}
-
-	// Drop the field from the controller.
 	return m.controller.DropField(ctx, qtid, fldName)
 }
 
-type DropFieldResponse struct{}
-
 // Table handles a table request.
 func (m *MDS) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return nil, errors.Wrap(err, "sanitizing")
-	}
-
-	return m.schemar.Table(ctx, qtid)
+	return m.controller.Table(ctx, qtid)
 }
 
 // Tables handles a tables request.
-func (m *MDS) Tables(ctx context.Context, qual dax.TableQualifier, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.schemar.Tables(ctx, qual, ids...)
+func (m *MDS) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
+	return m.controller.Tables(ctx, qdbid, ids...)
 }
 
 // TableID handles a table id (i.e. by name) request.
-func (m *MDS) TableID(ctx context.Context, qual dax.TableQualifier, name dax.TableName) (dax.QualifiedTableID, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.schemar.TableID(ctx, qual, name)
+func (m *MDS) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
+	return m.controller.TableID(ctx, qdbid, name)
 }
 
 // IngestPartition handles an ingest partition request.
 func (m *MDS) IngestPartition(ctx context.Context, qtid dax.QualifiedTableID, partnNum dax.PartitionNum) (dax.Address, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return "", errors.Wrap(err, "sanitizing")
-	}
-
-	// Verify that the table exists.
-	if _, err := m.schemar.Table(ctx, qtid); err != nil {
-		return "", err
-	}
-
-	partitions := dax.PartitionNums{partnNum}
-
-	nodes, err := m.controller.TranslateNodes(ctx, qtid, partitions, true)
-	if err != nil {
-		return "", err
-	}
-
-	if l := len(nodes); l == 0 {
-		return "", controller.NewErrNoAvailableNode()
-	} else if l > 1 {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("unexpected number of nodes: %d", l))
-	}
-
-	node := nodes[0]
-
-	// Verify that the node returned is actually responsible for the partition
-	// requested.
-	if node.Table != qtid.Key() {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("table returned (%s) does not match requested (%s)", node.Table, qtid))
-	} else if l := len(node.Partitions); l != 1 {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("unexpected number of partitions returned: %d", l))
-	} else if p := node.Partitions[0]; p != partnNum {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("partition returned (%d) does not match requested (%d)", p, partnNum))
-	}
-
-	return node.Address, nil
+	return m.controller.IngestPartition(ctx, qtid, partnNum)
 }
 
 // IngestShard handles an ingest shard request.
 func (m *MDS) IngestShard(ctx context.Context, qtid dax.QualifiedTableID, shrdNum dax.ShardNum) (dax.Address, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return "", errors.Wrap(err, "sanitizing")
-	}
-
-	// Verify that the table exists.
-	if _, err := m.schemar.Table(ctx, qtid); err != nil {
-		return "", err
-	}
-
-	shards := dax.ShardNums{shrdNum}
-
-	nodes, err := m.controller.ComputeNodes(ctx, qtid, shards, true)
-	if err != nil {
-		return "", err
-	}
-
-	if l := len(nodes); l == 0 {
-		return "", controller.NewErrNoAvailableNode()
-	} else if l > 1 {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("unexpected number of nodes: %d", l))
-	}
-
-	node := nodes[0]
-
-	// Verify that the node returned is actually responsible for the shard
-	// requested.
-	if node.Table != qtid.Key() {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("table returned (%s) does not match requested (%s)", node.Table, qtid))
-	} else if l := len(node.Shards); l != 1 {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("unexpected number of shards returned: %d", l))
-	} else if s := node.Shards[0]; s != shrdNum {
-		return "", controller.NewErrInternal(
-			fmt.Sprintf("shard returned (%d) does not match requested (%d)", s, shrdNum))
-	}
-
-	return node.Address, nil
+	return m.controller.IngestShard(ctx, qtid, shrdNum)
 }
 
 // SnapshotTable handles a snapshot table request.
 func (m *MDS) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) error {
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
-
 	return m.controller.SnapshotTable(ctx, qtid)
 }
 
 // SnapshotShardData handles a snapshot shard request.
 func (m *MDS) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTableID, shardNum dax.ShardNum) error {
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
-
 	return m.controller.SnapshotShardData(ctx, qtid, shardNum)
 }
 
 // SnapshotTableKeys handles a snapshot table/keys request.
 func (m *MDS) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partitionNum dax.PartitionNum) error {
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
-
 	return m.controller.SnapshotTableKeys(ctx, qtid, partitionNum)
 }
 
 // SnapshotFieldKeys handles a snapshot field/keys request.
 func (m *MDS) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
-
 	return m.controller.SnapshotFieldKeys(ctx, qtid, fldName)
 }
 
@@ -466,11 +279,7 @@ func (m *MDS) DeregisterNodes(ctx context.Context, addrs ...dax.Address) error {
 // ComputeNodes gets the compute nodes responsible for the table/shards
 // specified in the ComputeNodeRequest.
 func (m *MDS) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, shardNums ...dax.ShardNum) ([]dax.ComputeNode, error) {
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return nil, errors.Wrap(err, "sanitizing")
-	}
-
-	return m.controller.ComputeNodes(ctx, qtid, shardNums, false)
+	return m.controller.ComputeNodes(ctx, qtid, shardNums)
 }
 
 func (m *MDS) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
@@ -480,9 +289,5 @@ func (m *MDS) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
 // TranslateNodes gets the translate nodes responsible for the table/partitions
 // specified in the TranslateNodeRequest.
 func (m *MDS) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, partitionNums ...dax.PartitionNum) ([]dax.TranslateNode, error) {
-	if err := m.sanitizeQTID(ctx, &qtid); err != nil {
-		return nil, errors.Wrap(err, "sanitizing")
-	}
-
-	return m.controller.TranslateNodes(ctx, qtid, partitionNums, false)
+	return m.controller.TranslateNodes(ctx, qtid, partitionNums)
 }

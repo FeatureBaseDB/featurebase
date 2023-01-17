@@ -1,4 +1,4 @@
-package naive
+package balancer
 
 import (
 	"sort"
@@ -20,36 +20,36 @@ func newJobSetDiffs() jobSetDiffs {
 	}
 }
 
-type InternalDiffs map[dax.Worker]jobSetDiffs
+type InternalDiffs map[dax.Address]jobSetDiffs
 
 func NewInternalDiffs() InternalDiffs {
 	return make(InternalDiffs)
 }
 
-func (d InternalDiffs) Added(worker dax.Worker, job dax.Job) {
-	if _, ok := d[worker]; !ok {
-		d[worker] = newJobSetDiffs()
+func (d InternalDiffs) Added(address dax.Address, job dax.Job) {
+	if _, ok := d[address]; !ok {
+		d[address] = newJobSetDiffs()
 	}
 
 	// Before adding the job, make sure we haven't indicated that it has been
 	// removed prior to this. If it has, we need to invalidate that "remove"
 	// instruction.
-	d[worker].removed.Remove(job)
+	d[address].removed.Remove(job)
 
-	d[worker].added.Add(job)
+	d[address].added.Add(job)
 }
 
-func (d InternalDiffs) Removed(worker dax.Worker, job dax.Job) {
-	if _, ok := d[worker]; !ok {
-		d[worker] = newJobSetDiffs()
+func (d InternalDiffs) Removed(address dax.Address, job dax.Job) {
+	if _, ok := d[address]; !ok {
+		d[address] = newJobSetDiffs()
 	}
 
 	// Before removing the job, make sure we haven't indicated that it has been
 	// added prior to this. If it has, we need to invalidate that "add"
 	// instruction.
-	d[worker].added.Remove(job)
+	d[address].added.Remove(job)
 
-	d[worker].removed.Add(job)
+	d[address].removed.Add(job)
 }
 
 func (d InternalDiffs) Merge(d2 InternalDiffs) {
@@ -69,7 +69,7 @@ func (d InternalDiffs) Output() []dax.WorkerDiff {
 
 	i := 0
 	for k, v := range d {
-		out[i].WorkerID = k
+		out[i].Address = k
 		out[i].AddedJobs = v.added.Sorted()
 		out[i].RemovedJobs = v.removed.Sorted()
 		i++

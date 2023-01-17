@@ -26,7 +26,18 @@ func TestDAXIntegration(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	qual := dax.NewTableQualifier("acme", "db1")
+	qdbid := dax.NewQualifiedDatabaseID("acme", "db1")
+	qdb := &dax.QualifiedDatabase{
+		OrganizationID: qdbid.OrganizationID,
+		Database: dax.Database{
+			ID:   qdbid.DatabaseID,
+			Name: "dbname1",
+			Options: dax.DatabaseOptions{
+				WorkersMin: 1,
+				WorkersMax: 1,
+			},
+		},
+	}
 
 	t.Run("ServiceStart", func(t *testing.T) {
 		t.Run("AllServicesByDefault", func(t *testing.T) {
@@ -104,6 +115,14 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
 		// skips is a list of tests which are currently not passing in dax. We
 		// need to get these passing before alpha.
 		skips := []string{
@@ -160,7 +179,7 @@ func TestDAXIntegration(t *testing.T) {
 
 		runTableTests(t,
 			svcmgr.Queryer.Address(),
-			basicTableTestConfig(qual, tableTests...)...,
+			basicTableTestConfig(qdbid, tableTests...)...,
 		)
 	})
 
@@ -168,9 +187,19 @@ func TestDAXIntegration(t *testing.T) {
 		mc := test.MustRunManagedCommand(t)
 		defer mc.Close()
 
+		svcmgr := mc.Manage()
+
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
 		runTableTests(t,
 			mc.Manage().Queryer.Address(),
-			basicTableTestConfig(qual, defs.Keyed)...,
+			basicTableTestConfig(qdbid, defs.Keyed)...,
 		)
 	})
 
@@ -182,6 +211,14 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 2
+		qdb.Options.WorkersMax = 2
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
 		computers := svcmgr.Computers()
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 		computerKey1 := dax.ServiceKey(dax.ServicePrefixComputer + "1")
@@ -189,13 +226,10 @@ func TestDAXIntegration(t *testing.T) {
 		// Ingest and query some data.
 		runTableTests(t,
 			svcmgr.Queryer.Address(),
-			basicTableTestConfig(qual, defs.Keyed)...,
+			basicTableTestConfig(qdbid, defs.Keyed)...,
 		)
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
-
-		qtid, err := mdsClient.TableID(context.Background(), qual, dax.TableName(defs.Keyed.Name(0)))
+		qtid, err := mdsClient.TableID(context.Background(), qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
 		// ensure partitions are covered
@@ -238,13 +272,21 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
 		// Ingest and query some data.
 		t.Run("ingest and query some data", func(t *testing.T) {
 			runTableTests(t,
 				svcmgr.Queryer.Address(),
-				basicTableTestConfig(qual, defs.Keyed)...,
+				basicTableTestConfig(qdbid, defs.Keyed)...,
 			)
 		})
 
@@ -268,7 +310,7 @@ func TestDAXIntegration(t *testing.T) {
 			runTableTests(t,
 				svcmgr.Queryer.Address(),
 				tableTestConfig{
-					qual:       qual,
+					qdbid:      qdbid,
 					test:       defs.Keyed,
 					skipCreate: true,
 					skipInsert: true,
@@ -284,6 +326,14 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
 		// Ingest and query some data.
@@ -291,19 +341,16 @@ func TestDAXIntegration(t *testing.T) {
 			runTableTests(t,
 				svcmgr.Queryer.Address(),
 				tableTestConfig{
-					qual:      qual,
+					qdbid:     qdbid,
 					test:      defs.Keyed,
 					insertSet: 0,
 				},
 			)
 		})
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
-
 		// Snapshot table
 		ctx := context.Background()
-		qtid, err := mdsClient.TableID(ctx, qual, dax.TableName(defs.Keyed.Name(0)))
+		qtid, err := mdsClient.TableID(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
 		mdsClient.SnapshotTable(ctx, qtid)
@@ -313,7 +360,7 @@ func TestDAXIntegration(t *testing.T) {
 			runTableTests(t,
 				svcmgr.Queryer.Address(),
 				tableTestConfig{
-					qual:       qual,
+					qdbid:      qdbid,
 					test:       defs.Keyed,
 					skipCreate: true,
 					insertSet:  1,
@@ -341,7 +388,7 @@ func TestDAXIntegration(t *testing.T) {
 			runTableTests(t,
 				svcmgr.Queryer.Address(),
 				tableTestConfig{
-					qual:       qual,
+					qdbid:      qdbid,
 					test:       defs.Keyed,
 					skipCreate: true,
 					skipInsert: true,
@@ -357,6 +404,14 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
 		mdsKey := dax.ServiceKey(dax.ServicePrefixMDS)
@@ -365,13 +420,10 @@ func TestDAXIntegration(t *testing.T) {
 		// Ingest and query some data.
 		runTableTests(t,
 			svcmgr.Queryer.Address(),
-			basicTableTestConfig(qual, defs.Keyed)...,
+			basicTableTestConfig(qdbid, defs.Keyed)...,
 		)
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
-
-		qtid, err := mdsClient.TableID(context.Background(), qual, dax.TableName(defs.Keyed.Name(0)))
+		qtid, err := mdsClient.TableID(context.Background(), qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
 		// ensure partitions are covered
@@ -410,13 +462,21 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
 		// Ingest and query some data.
 		t.Run("ingest and query some data", func(t *testing.T) {
 			runTableTests(t,
 				svcmgr.Queryer.Address(),
-				basicTableTestConfig(qual, defs.Keyed)...,
+				basicTableTestConfig(qdbid, defs.Keyed)...,
 			)
 		})
 
@@ -439,7 +499,7 @@ func TestDAXIntegration(t *testing.T) {
 			runTableTests(t,
 				svcmgr.Queryer.Address(),
 				tableTestConfig{
-					qual:       qual,
+					qdbid:      qdbid,
 					test:       defs.Keyed,
 					skipCreate: true,
 					skipInsert: true,
@@ -452,7 +512,7 @@ func TestDAXIntegration(t *testing.T) {
 ///////////////////////////////////////////////////
 
 type tableTestConfig struct {
-	qual       dax.TableQualifier
+	qdbid      dax.QualifiedDatabaseID
 	test       defs.TableTest
 	skipCreate bool
 	skipInsert bool
@@ -461,20 +521,19 @@ type tableTestConfig struct {
 	querySet   int
 }
 
-func basicTableTestConfig(qual dax.TableQualifier, tests ...defs.TableTest) []tableTestConfig {
+func basicTableTestConfig(qdbid dax.QualifiedDatabaseID, tests ...defs.TableTest) []tableTestConfig {
 	ret := make([]tableTestConfig, len(tests))
 
 	for i := range tests {
 		ret[i] = tableTestConfig{
-			qual: qual,
-			test: tests[i],
+			qdbid: qdbid,
+			test:  tests[i],
 		}
 	}
 
 	return ret
 }
 
-// func runTableTests(t *testing.T, queryerAddr dax.Address, qual dax.TableQualifier, doCreate bool, tests ...defs.TableTest) {
 func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfig) {
 	emptyWireQueryResponse := &featurebase.WireQueryResponse{
 		Schema: featurebase.WireQuerySchema{
@@ -491,7 +550,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 			if !cfg.skipCreate {
 				// Create a table.
 				if cfg.test.HasTable() {
-					resp := runSQL(t, queryerAddr, cfg.qual, cfg.test.CreateTable())
+					resp := runSQL(t, queryerAddr, cfg.qdbid, cfg.test.CreateTable())
 					assertResponseEqual(t, emptyWireQueryResponse, resp)
 				}
 			}
@@ -499,7 +558,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 			if !cfg.skipInsert {
 				// Populate table with data.
 				if cfg.test.HasTable() && cfg.test.HasData() {
-					resp := runSQL(t, queryerAddr, cfg.qual, cfg.test.InsertInto(t, cfg.insertSet))
+					resp := runSQL(t, queryerAddr, cfg.qdbid, cfg.test.InsertInto(t, cfg.insertSet))
 					assertResponseEqual(t, emptyWireQueryResponse, resp)
 				}
 			}
@@ -525,7 +584,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 								expRows = sqltest.ExpRowsPlus1[cfg.querySet-1]
 							}
 
-							resp := runSQL(t, queryerAddr, cfg.qual, sql)
+							resp := runSQL(t, queryerAddr, cfg.qdbid, sql)
 							headers := resp.Schema.Fields
 							rows := resp.Data
 							var err error
@@ -602,7 +661,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 								expRows = pqltest.ExpRowsPlus1[cfg.querySet-1]
 							}
 
-							resp := runPQL(t, queryerAddr, cfg.qual, pqltest.Table, pql)
+							resp := runPQL(t, queryerAddr, cfg.qdbid, pqltest.Table, pql)
 							headers := resp.Schema.Fields
 							rows := resp.Data
 							var err error
@@ -680,23 +739,23 @@ func (c *wireResponseComparer) Equal() bool {
 	return assert.Equal(c.tb, c.exp, c.got)
 }
 
-func runSQL(tb testing.TB, queryerAddr dax.Address, qual dax.TableQualifier, sql string) *featurebase.WireQueryResponse {
+func runSQL(tb testing.TB, queryerAddr dax.Address, qdbid dax.QualifiedDatabaseID, sql string) *featurebase.WireQueryResponse {
 	tb.Helper()
 
 	client := queryerclient.New(queryerAddr, logger.StderrLogger)
 
-	resp, err := client.QuerySQL(context.Background(), qual, sql)
+	resp, err := client.QuerySQL(context.Background(), qdbid, sql)
 	assert.NoError(tb, err)
 
 	return resp
 }
 
-func runPQL(tb testing.TB, queryerAddr dax.Address, qual dax.TableQualifier, table string, pql string) *featurebase.WireQueryResponse {
+func runPQL(tb testing.TB, queryerAddr dax.Address, qdbid dax.QualifiedDatabaseID, table string, pql string) *featurebase.WireQueryResponse {
 	tb.Helper()
 
 	client := queryerclient.New(queryerAddr, logger.StderrLogger)
 
-	resp, err := client.QueryPQL(context.Background(), qual, dax.TableName(table), pql)
+	resp, err := client.QueryPQL(context.Background(), qdbid, dax.TableName(table), pql)
 	assert.NoError(tb, err)
 
 	return resp

@@ -12,31 +12,31 @@ import (
 var _ pilosa.SchemaAPI = (*qualifiedSchemaAPI)(nil)
 
 // qualifiedSchemaAPI is a wrapper around schemaAPI. It is initialized with a
-// TableQualifier, and it uses this qualifer to convert between, for example,
-// FeatureBase index name (a string) and TableKey. It requires a Schemar to do
-// that lookup/conversion.
+// QualifiedDatabaseID, and it uses this qualifer to convert between, for
+// example, FeatureBase index name (a string) and TableKey. It requires a
+// Schemar to do that lookup/conversion.
 type qualifiedSchemaAPI struct {
-	qual    dax.TableQualifier
+	qdbid   dax.QualifiedDatabaseID
 	schemar dax.Schemar
 }
 
-func newQualifiedSchemaAPI(qual dax.TableQualifier, schema dax.Schemar) *qualifiedSchemaAPI {
+func newQualifiedSchemaAPI(qdbid dax.QualifiedDatabaseID, schema dax.Schemar) *qualifiedSchemaAPI {
 	return &qualifiedSchemaAPI{
-		qual:    qual,
+		qdbid:   qdbid,
 		schemar: schema,
 	}
 }
 
 func (s *qualifiedSchemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
-	qtbl, err := s.schemar.TableByName(ctx, s.qual, tname)
+	qtbl, err := s.schemar.TableByName(ctx, s.qdbid, tname)
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting table id: (%s) %s", s.qual, tname)
+		return nil, errors.Wrapf(err, "getting table id: (%s) %s", s.qdbid, tname)
 	}
 	return &qtbl.Table, nil
 }
 
 func (s *qualifiedSchemaAPI) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
-	qtid := dax.NewQualifiedTableID(s.qual, tid)
+	qtid := dax.NewQualifiedTableID(s.qdbid, tid)
 
 	qtbl, err := s.schemar.TableByID(ctx, qtid)
 	if err != nil {
@@ -47,7 +47,7 @@ func (s *qualifiedSchemaAPI) TableByID(ctx context.Context, tid dax.TableID) (*d
 }
 
 func (s *qualifiedSchemaAPI) Tables(ctx context.Context) ([]*dax.Table, error) {
-	qtbls, err := s.schemar.Tables(ctx, s.qual)
+	qtbls, err := s.schemar.Tables(ctx, s.qdbid)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting tables")
 	}
@@ -61,32 +61,32 @@ func (s *qualifiedSchemaAPI) Tables(ctx context.Context) ([]*dax.Table, error) {
 }
 
 func (s *qualifiedSchemaAPI) CreateTable(ctx context.Context, tbl *dax.Table) error {
-	qtbl := dax.NewQualifiedTable(s.qual, tbl)
+	qtbl := dax.NewQualifiedTable(s.qdbid, tbl)
 	return s.schemar.CreateTable(ctx, qtbl)
 }
 
 func (s *qualifiedSchemaAPI) CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error {
-	qtbl, err := s.schemar.TableByName(ctx, s.qual, tname)
+	qtbl, err := s.schemar.TableByName(ctx, s.qdbid, tname)
 	if err != nil {
-		return errors.Wrapf(err, "getting table by name: (%s) %s", s.qual, tname)
+		return errors.Wrapf(err, "getting table by name: (%s) %s", s.qdbid, tname)
 	}
 
 	return s.schemar.CreateField(ctx, qtbl.QualifiedID(), fld)
 }
 
 func (s *qualifiedSchemaAPI) DeleteTable(ctx context.Context, tname dax.TableName) error {
-	qtbl, err := s.schemar.TableByName(ctx, s.qual, tname)
+	qtbl, err := s.schemar.TableByName(ctx, s.qdbid, tname)
 	if err != nil {
-		return errors.Wrapf(err, "getting table by name: (%s) %s", s.qual, tname)
+		return errors.Wrapf(err, "getting table by name: (%s) %s", s.qdbid, tname)
 	}
 
 	return s.schemar.DropTable(ctx, qtbl.QualifiedID())
 }
 
 func (s *qualifiedSchemaAPI) DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error {
-	qtid, err := s.schemar.TableByName(ctx, s.qual, tname)
+	qtid, err := s.schemar.TableByName(ctx, s.qdbid, tname)
 	if err != nil {
-		return errors.Wrapf(err, "getting table by name: (%s) %s", s.qual, tname)
+		return errors.Wrapf(err, "getting table by name: (%s) %s", s.qdbid, tname)
 	}
 
 	return s.schemar.DropField(ctx, qtid.Key().QualifiedTableID(), fname)

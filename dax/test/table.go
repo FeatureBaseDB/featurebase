@@ -11,7 +11,7 @@ import (
 // general configuration. This function creates a Table with a random TableID.
 // If you need to specify the TableID yourself, use the TestQualifiedTableWithID
 // function.
-func TestQualifiedTable(t *testing.T, qual dax.TableQualifier, name dax.TableName, partitionN int, keyed bool) *dax.QualifiedTable {
+func TestQualifiedTable(t *testing.T, qdbid dax.QualifiedDatabaseID, name dax.TableName, partitionN int, keyed bool) *dax.QualifiedTable {
 	t.Helper()
 
 	var pkFieldType dax.BaseType
@@ -22,7 +22,6 @@ func TestQualifiedTable(t *testing.T, qual dax.TableQualifier, name dax.TableNam
 	}
 
 	tbl := dax.NewTable(name)
-	tbl.CreateID()
 	tbl.PartitionN = partitionN
 	tbl.Fields = []*dax.Field{
 		{
@@ -32,14 +31,33 @@ func TestQualifiedTable(t *testing.T, qual dax.TableQualifier, name dax.TableNam
 	}
 
 	return dax.NewQualifiedTable(
-		qual,
+		qdbid,
 		tbl,
 	)
 }
 
+// TestQualifiedDatabaseWithID is a test helper function for creating a database
+// based on a general configuration, and having the specified DatabaseID.
+func TestQualifiedDatabaseWithID(t *testing.T, orgID dax.OrganizationID, id dax.DatabaseID, name dax.DatabaseName, opts dax.DatabaseOptions) *dax.QualifiedDatabase {
+	t.Helper()
+
+	db := dax.Database{
+		ID:      dax.DatabaseID(id),
+		Name:    name,
+		Options: opts,
+	}
+
+	qdb := &dax.QualifiedDatabase{
+		OrganizationID: orgID,
+		Database:       db,
+	}
+
+	return qdb
+}
+
 // TestQualifiedTableWithID is a test helper function for creating a table based
 // on a general configuration, and having the specified TableID.
-func TestQualifiedTableWithID(t *testing.T, qual dax.TableQualifier, id string, name dax.TableName, partitionN int, keyed bool) *dax.QualifiedTable {
+func TestQualifiedTableWithID(t *testing.T, qdbid dax.QualifiedDatabaseID, id string, name dax.TableName, partitionN int, keyed bool) *dax.QualifiedTable {
 	t.Helper()
 
 	var pkFieldType dax.BaseType
@@ -63,7 +81,7 @@ func TestQualifiedTableWithID(t *testing.T, qual dax.TableQualifier, id string, 
 	}
 
 	return dax.NewQualifiedTable(
-		qual,
+		qdbid,
 		tbl,
 	)
 }

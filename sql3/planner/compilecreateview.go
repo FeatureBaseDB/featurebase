@@ -3,8 +3,8 @@
 package planner
 
 import (
-	"github.com/molecula/featurebase/v3/sql3/parser"
-	"github.com/molecula/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 // compileCreateViewStatement compiles a parser.CreateViewStatement AST into a PlanOperator

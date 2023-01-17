@@ -1,7 +1,6 @@
 package boltdb
 
 import (
-	"context"
 	"encoding/binary"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -32,14 +31,13 @@ func NewDirectiveVersion(db *DB) *DirectiveVersion {
 	}
 }
 
-func (d *DirectiveVersion) Increment(ctx context.Context, delta uint64) (uint64, error) {
-	tx, err := d.db.BeginTx(ctx, true)
-	if err != nil {
-		return 0, errors.Wrap(err, "getting transaction")
+func (d *DirectiveVersion) Increment(tx dax.Transaction, delta uint64) (uint64, error) {
+	txx, ok := tx.(*Tx)
+	if !ok {
+		return 0, dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
-	bkt := tx.Bucket(bucketDirective)
+	bkt := txx.Bucket(bucketDirective)
 	if bkt == nil {
 		return 0, errors.Errorf(ErrFmtBucketNotFound, bucketDirective)
 	}
@@ -56,10 +54,6 @@ func (d *DirectiveVersion) Increment(ctx context.Context, delta uint64) (uint64,
 
 	if err := bkt.Put(keyDirectiveVersion, vsn); err != nil {
 		return 0, errors.Wrap(err, "putting next directive version")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return 0, err
 	}
 
 	return nextVersion, nil

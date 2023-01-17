@@ -21,16 +21,16 @@ type importer struct {
 	noder   dax.Noder
 	schemar dax.Schemar
 
-	mu   sync.Mutex
-	qual dax.TableQualifier
-	tbl  *dax.Table
+	mu    sync.Mutex
+	qdbid dax.QualifiedDatabaseID
+	tbl   *dax.Table
 }
 
-func NewImporter(noder dax.Noder, schemar dax.Schemar, qual dax.TableQualifier, tbl *dax.Table) *importer {
+func NewImporter(noder dax.Noder, schemar dax.Schemar, qdbid dax.QualifiedDatabaseID, tbl *dax.Table) *importer {
 	return &importer{
 		noder:   noder,
 		schemar: schemar,
-		qual:    qual,
+		qdbid:   qdbid,
 		tbl:     tbl,
 	}
 }
@@ -261,10 +261,10 @@ func (m *importer) getQtbl(ctx context.Context, tid dax.TableID) (*dax.Qualified
 	defer m.mu.Unlock()
 
 	if m.tbl != nil {
-		return dax.NewQualifiedTable(m.qual, m.tbl), nil
+		return dax.NewQualifiedTable(m.qdbid, m.tbl), nil
 	}
 
-	qtid := dax.NewQualifiedTableID(m.qual, tid)
+	qtid := dax.NewQualifiedTableID(m.qdbid, tid)
 
 	qtbl, err := m.schemar.TableByID(ctx, qtid)
 	if err != nil {

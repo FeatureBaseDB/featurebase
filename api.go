@@ -3354,6 +3354,9 @@ type QueryAPI interface {
 	Query(ctx context.Context, req *QueryRequest) (QueryResponse, error)
 }
 
+// Ensure type implements interface.
+var _ SystemAPI = (*FeatureBaseSystemAPI)(nil)
+
 // FeatureBaseSystemAPI is a wrapper around pilosa.API. It implements the
 // SystemAPI interface
 type FeatureBaseSystemAPI struct {
@@ -3430,5 +3433,56 @@ func (fsapi *FeatureBaseSystemAPI) ClusterNodes() []ClusterNode {
 		result = append(result, scn)
 	}
 
+	return result
+}
+
+// Ensure type implements interface.
+var _ SystemAPI = (*NopSystemAPI)(nil)
+
+// NopSystemAPI is a no-op implementation of the SystemAPI.
+type NopSystemAPI struct{}
+
+func (napi *NopSystemAPI) ClusterName() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) Version() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) PlatformDescription() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) PlatformVersion() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) ClusterNodeCount() int {
+	return 0
+}
+
+func (napi *NopSystemAPI) ClusterReplicaCount() int {
+	return 0
+}
+
+func (napi *NopSystemAPI) ShardWidth() int {
+	return 0
+}
+
+func (napi *NopSystemAPI) ClusterState() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) DataDir() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) NodeID() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) ClusterNodes() []ClusterNode {
+	result := make([]ClusterNode, 0)
 	return result
 }

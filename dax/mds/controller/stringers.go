@@ -20,6 +20,10 @@ func (p pUnit) String() string {
 	return fmt.Sprintf("%s|part_%d", p.t, p.p)
 }
 
+func (p pUnit) Job() dax.Job {
+	return dax.Job(fmt.Sprintf("%s|part_%d", p.t, p.p))
+}
+
 func (p pUnit) table() dax.TableKey {
 	return p.t
 }
@@ -70,6 +74,10 @@ type sUnit struct {
 
 func (s sUnit) String() string {
 	return fmt.Sprintf("%s|shard_%s", s.t, s.s)
+}
+
+func (s sUnit) Job() dax.Job {
+	return dax.Job(fmt.Sprintf("%s|shard_%s", s.t, s.s))
 }
 
 func (s sUnit) table() dax.TableKey {
