@@ -1005,10 +1005,10 @@ func (m *Main) setupClient() (*tls.Config, error) {
 		// MDS doesn't auto-create a table based on IDK ingest; the table must
 		// already exist.
 		mdsClient := mdsclient.New(dax.Address(m.MDSAddress), m.log)
-		qual := dax.NewTableQualifier(m.OrganizationID, m.DatabaseID)
-		qtid, err := mdsClient.TableID(ctx, qual, m.TableName)
+		qdbid := dax.NewQualifiedDatabaseID(m.OrganizationID, m.DatabaseID)
+		qtid, err := mdsClient.TableID(ctx, qdbid, m.TableName)
 		if err != nil {
-			return nil, errors.Wrapf(err, "getting table id: qual: %s, table name: %s", qual, m.TableName)
+			return nil, errors.Wrapf(err, "getting table id: qual: %s, table name: %s", qdbid, m.TableName)
 		}
 		qtbl, err := mdsClient.Table(ctx, qtid)
 		if err != nil {
@@ -1017,7 +1017,7 @@ func (m *Main) setupClient() (*tls.Config, error) {
 
 		m.Qtbl = qtbl
 		m.Index = string(qtbl.Key())
-		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qual, m.log)
+		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qdbid, m.log)
 
 		m.NewImporterFn = func() pilosacore.Importer {
 			return mds.NewImporter(mdsClient, mdsClient, qtbl.Qualifier(), &qtbl.Table)

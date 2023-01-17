@@ -125,6 +125,7 @@ func (db *DB) Close() (err error) {
 // BeginTx starts a transaction and returns a wrapper Tx type. This type
 // provides a reference to the database and a fixed timestamp at the start of
 // the transaction. The timestamp allows us to mock time during tests as well.
+// The wrapper also contains the context.
 func (db *DB) BeginTx(ctx context.Context, writable bool) (*Tx, error) {
 	tx, err := db.db.Begin(writable)
 	if err != nil {
@@ -134,6 +135,7 @@ func (db *DB) BeginTx(ctx context.Context, writable bool) (*Tx, error) {
 	// Return wrapper Tx that includes the transaction start time.
 	return &Tx{
 		Tx:  tx,
+		ctx: ctx,
 		db:  db,
 		now: db.Now().UTC().Truncate(time.Second),
 	}, nil
@@ -142,8 +144,13 @@ func (db *DB) BeginTx(ctx context.Context, writable bool) (*Tx, error) {
 // Tx wraps the SQL Tx object to provide a timestamp at the start of the transaction.
 type Tx struct {
 	*bolt.Tx
+	ctx context.Context
 	db  *DB
 	now time.Time
+}
+
+func (tx *Tx) Context() context.Context {
+	return tx.ctx
 }
 
 func (db *DB) Path() string {

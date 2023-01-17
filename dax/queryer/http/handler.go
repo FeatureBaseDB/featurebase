@@ -49,15 +49,15 @@ func (s *server) postQuery(w http.ResponseWriter, r *http.Request) {
 
 	var resp interface{}
 	var err error
-	qual := dax.NewTableQualifier(req.OrganizationID, req.DatabaseID)
+	qdbid := dax.NewQualifiedDatabaseID(req.OrganizationID, req.DatabaseID)
 	if req.SQL != "" {
-		resp, err = s.queryer.QuerySQL(ctx, qual, req.SQL)
+		resp, err = s.queryer.QuerySQL(ctx, qdbid, req.SQL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 	} else {
-		resp, err = s.queryer.QueryPQL(ctx, qual, req.Table, req.PQL)
+		resp, err = s.queryer.QueryPQL(ctx, qdbid, req.Table, req.PQL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -83,8 +83,8 @@ func (s *server) postSQL(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	qual := dax.NewTableQualifier(req.OrganizationID, req.DatabaseID)
-	resp, err := s.queryer.QuerySQL(ctx, qual, req.SQL)
+	qdbid := dax.NewQualifiedDatabaseID(req.OrganizationID, req.DatabaseID)
+	resp, err := s.queryer.QuerySQL(ctx, qdbid, req.SQL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

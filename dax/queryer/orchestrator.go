@@ -1840,6 +1840,7 @@ func (o *orchestrator) executeExtract(ctx context.Context, tableKeyer dax.TableK
 		}
 		fields[i] = fieldName
 	}
+	// TODO(tlt): is `fields` used?
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
@@ -3511,13 +3512,13 @@ func callArgString(call *pql.Call, key string) string {
 
 type qualifiedOrchestrator struct {
 	*orchestrator
-	qual dax.TableQualifier
+	qdbid dax.QualifiedDatabaseID
 }
 
-func newQualifiedOrchestrator(orch *orchestrator, qual dax.TableQualifier) *qualifiedOrchestrator {
+func newQualifiedOrchestrator(orch *orchestrator, qdbid dax.QualifiedDatabaseID) *qualifiedOrchestrator {
 	return &qualifiedOrchestrator{
 		orchestrator: orch,
-		qual:         qual,
+		qdbid:        qdbid,
 	}
 }
 
@@ -3528,7 +3529,7 @@ func (o *qualifiedOrchestrator) Execute(ctx context.Context, tableKeyer dax.Tabl
 
 	switch keyer := tableKeyer.(type) {
 	case *dax.Table:
-		qtbl = dax.NewQualifiedTable(o.qual, keyer)
+		qtbl = dax.NewQualifiedTable(o.qdbid, keyer)
 	case *dax.QualifiedTable:
 		qtbl = keyer
 	default:

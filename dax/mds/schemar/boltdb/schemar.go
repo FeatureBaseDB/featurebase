@@ -4,7 +4,6 @@ package boltdb
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -44,9 +43,224 @@ func NewSchemar(db *boltdb.DB, logger logger.Logger) *Schemar {
 	}
 }
 
+// CreateDatabase creates the database provided. If a database with the same
+// name already exists then an error is returned. For now, we are not going to
+// store the tables in the schemar Database struct.
+func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase) error {
+	// Ensure the database id is not blank.
+	if qdb.ID == "" {
+		return schemar.NewErrDatabaseIDInvalid(qdb.ID)
+	}
+
+	// Ensure the database name is not blank.
+	if qdb.Name == "" {
+		return schemar.NewErrDatabaseNameInvalid(qdb.Name)
+	}
+
+	// Set the CreateAt value for the database.
+	// TODO(tlt): We may want to consider erroring here if the value is != 0.
+	if qdb.CreatedAt == 0 {
+		now := timestamp()
+		qdb.CreatedAt = now
+	}
+
+	//////////// end validation
+
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
+	}
+
+	// Ensure a database with that ID doesn't already exist.
+	if db, _ := s.databaseByID(txx, qdb.OrganizationID, qdb.ID); db != nil {
+		return dax.NewErrDatabaseIDExists(qdb.QualifiedID())
+	}
+
+	if err := s.putDatabase(txx, qdb); err != nil {
+		return errors.Wrap(err, "putting database")
+	}
+
+	// In addition to storing the database in databaseKey, we want to store a
+	// reverse-lookup (i.e. index) on database name to the databaseKey.
+	if err := s.putDatabaseName(txx, qdb); err != nil {
+		return errors.Wrap(err, "putting database name")
+	}
+
+	return nil
+}
+
+func (s *Schemar) DatabaseByID(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction()
+	}
+
+	return s.databaseByID(txx, qdbid.OrganizationID, qdbid.DatabaseID)
+}
+
+func (s *Schemar) databaseByID(tx *boltdb.Tx, orgID dax.OrganizationID, id dax.DatabaseID) (*dax.QualifiedDatabase, error) {
+	bkt := tx.Bucket(bucketSchemar)
+	if bkt == nil {
+		return nil, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
+	}
+
+	b := bkt.Get(databaseKey(orgID, id))
+	if b == nil {
+		return nil, dax.NewErrDatabaseIDDoesNotExist(dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: id})
+	}
+
+	database := &dax.QualifiedDatabase{}
+	if err := json.Unmarshal(b, database); err != nil {
+		return nil, errors.Wrap(err, "unmarshalling database json")
+	}
+
+	return database, nil
+}
+
+func (s *Schemar) putDatabase(tx *boltdb.Tx, qdb *dax.QualifiedDatabase) error {
+	bkt := tx.Bucket(bucketSchemar)
+	if bkt == nil {
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
+	}
+
+	val, err := json.Marshal(qdb)
+	if err != nil {
+		return errors.Wrap(err, "marshalling database to json")
+	}
+
+	return bkt.Put(databaseKey(qdb.OrganizationID, qdb.ID), val)
+}
+
+func (s *Schemar) putDatabaseName(tx *boltdb.Tx, qdb *dax.QualifiedDatabase) error {
+	bkt := tx.Bucket(bucketSchemar)
+	if bkt == nil {
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
+	}
+
+	return bkt.Put(databaseNameKey(qdb.OrganizationID, qdb.Name), databaseKey(qdb.OrganizationID, qdb.ID))
+}
+
+// DropDatabase drops the given database. If the named/IDed database does not
+// exist then an error is returned.
+func (s *Schemar) DropDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) error {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
+	}
+
+	// Ensure the database exists.
+	qdb, err := s.databaseByID(txx, qdbid.OrganizationID, qdbid.DatabaseID)
+	if err != nil {
+		return errors.Wrap(err, "getting database by id")
+	}
+
+	bkt := txx.Bucket(bucketSchemar)
+	if bkt == nil {
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
+	}
+
+	// Delete the database by ID.
+	if err := bkt.Delete(databaseKey(qdb.OrganizationID, qdb.ID)); err != nil {
+		return errors.Wrap(err, "deleting database by id")
+	}
+
+	// Delete the reverse-lookup database by Name.
+	if err := bkt.Delete(databaseNameKey(qdb.OrganizationID, qdb.Name)); err != nil {
+		return errors.Wrap(err, "deleting database by name")
+	}
+
+	return nil
+}
+
+// SetDatabaseOptions overwrites the existing database options with those
+// provided for the given database.
+func (s *Schemar) SetDatabaseOptions(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, opts dax.DatabaseOptions) error {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
+	}
+
+	// Get the database.
+	qdb, err := s.databaseByID(txx, qdbid.OrganizationID, qdbid.DatabaseID)
+	if err != nil {
+		return errors.Wrapf(err, "getting database: %s", qdbid)
+	}
+
+	// Set the new options.
+	qdb.Options = opts
+
+	// Put the database.
+	if err := s.putDatabase(txx, qdb); err != nil {
+		return errors.Wrap(err, "putting database")
+	}
+
+	return nil
+}
+
+func (s *Schemar) Databases(tx dax.Transaction, orgID dax.OrganizationID, ids ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction()
+	}
+
+	return s.getDatabases(txx, orgID, ids...)
+}
+
+func (s *Schemar) getDatabases(tx *boltdb.Tx, orgID dax.OrganizationID, ids ...dax.DatabaseID) (dax.QualifiedDatabases, error) {
+	c := tx.Bucket(bucketSchemar).Cursor()
+
+	// Deserialize rows into Database objects.
+	databases := make(dax.QualifiedDatabases, 0)
+
+	var filterByID bool
+	if len(ids) > 0 {
+		filterByID = true
+	}
+
+	prefix := []byte(fmt.Sprintf(prefixFmtDatabases, orgID))
+	if orgID == "" {
+		prefix = []byte(prefixDatabases)
+	}
+
+	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
+		if v == nil {
+			s.logger.Printf("nil value for key: %s", k)
+			continue
+		}
+
+		dbID, err := keyDatabaseID(k)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting database from key")
+		}
+
+		// Only include databases provided in the ids filter.
+		if filterByID && !containsDatabaseID(ids, dbID) {
+			continue
+		}
+
+		database := &dax.QualifiedDatabase{}
+		if err := json.Unmarshal(v, database); err != nil {
+			return nil, errors.Wrap(err, "unmarshalling database json")
+		}
+
+		databases = append(databases, database)
+	}
+
+	return databases, nil
+}
+
+func containsDatabaseID(s []dax.DatabaseID, e dax.DatabaseID) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
 // CreateTable creates the table provided. If a table with the same name already
 // exists then an error is returned.
-func (s *Schemar) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {
+func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) error {
 	// Ensure the table id is not blank.
 	if qtbl.ID == "" {
 		return schemar.NewErrTableIDInvalid(qtbl.ID)
@@ -76,33 +290,37 @@ func (s *Schemar) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) err
 
 	//////////// end validation
 
-	tx, err := s.db.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "getting transaction")
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
+
+	// Ensure the database, defined in the table's QualifiedDatabaseID, exists.
+	if _, err := s.databaseByID(txx, qtbl.OrganizationID, qtbl.DatabaseID); err != nil {
+		return errors.Wrap(err, "validating database")
+	}
 
 	// Ensure a table with that ID doesn't already exist.
-	if t, _ := s.tableByID(tx, qtbl.TableQualifier, qtbl.ID); t != nil {
+	if t, _ := s.tableByID(txx, qtbl.QualifiedDatabaseID, qtbl.ID); t != nil {
 		return dax.NewErrTableIDExists(qtbl.QualifiedID())
 	}
 
-	if err := s.putTable(tx, qtbl); err != nil {
+	if err := s.putTable(txx, qtbl); err != nil {
 		return errors.Wrap(err, "putting table")
 	}
 
 	// In addition to storing the table in tableKey, we want to store a reverse-lookup
 	// (i.e. index) on table name to the tableKey.
-	if err := s.putTableName(tx, qtbl); err != nil {
+	if err := s.putTableName(txx, qtbl); err != nil {
 		return errors.Wrap(err, "putting table name")
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // CreateField creates the field provided in the given table. If a field with
 // the same name already exists then an error is returned.
-func (s *Schemar) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld *dax.Field) error {
+func (s *Schemar) CreateField(tx dax.Transaction, qtid dax.QualifiedTableID, fld *dax.Field) error {
 	// Ensure the field name is not blank.
 	if fld.Name == "" {
 		return schemar.NewErrFieldNameInvalid(fld.Name)
@@ -110,14 +328,13 @@ func (s *Schemar) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fl
 
 	//////////// end validation
 
-	tx, err := s.db.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "getting transaction")
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
 	// Get the table.
-	qtbl, err := s.tableByQTID(tx, qtid)
+	qtbl, err := s.tableByQTID(txx, qtid)
 	if err != nil {
 		return errors.Wrap(err, "getting table by id")
 	}
@@ -130,23 +347,22 @@ func (s *Schemar) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fl
 	qtbl.Fields = append(qtbl.Fields, fld)
 
 	// Write table back to database.
-	if err := s.putTable(tx, qtbl); err != nil {
+	if err := s.putTable(txx, qtbl); err != nil {
 		return errors.Wrap(err, "putting table")
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // DropField removes the field from the table.
-func (s *Schemar) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
-	tx, err := s.db.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "getting transaction")
+func (s *Schemar) DropField(tx dax.Transaction, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
 	// Get the table.
-	qtbl, err := s.tableByQTID(tx, qtid)
+	qtbl, err := s.tableByQTID(txx, qtid)
 	if err != nil {
 		return errors.Wrap(err, "getting table by id")
 	}
@@ -159,11 +375,11 @@ func (s *Schemar) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldN
 	_ = qtbl.RemoveField(fldName)
 
 	// Write table back to database.
-	if err := s.putTable(tx, qtbl); err != nil {
+	if err := s.putTable(txx, qtbl); err != nil {
 		return errors.Wrap(err, "putting table")
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 func (s *Schemar) putTable(tx *boltdb.Tx, qtbl *dax.QualifiedTable) error {
@@ -191,43 +407,43 @@ func (s *Schemar) putTableName(tx *boltdb.Tx, qtbl *dax.QualifiedTable) error {
 
 // Table returns the TableInfo for the given table. An error is returned if the
 // table does not exist.
-func (s *Schemar) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
-	tx, err := s.db.BeginTx(ctx, false)
-	if err != nil {
-		return nil, errors.Wrap(err, "beginning tx")
+func (s *Schemar) Table(tx dax.Transaction, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
-	return s.tableByQTID(tx, qtid)
+	return s.tableByQTID(txx, qtid)
 }
 
-// tableByQTID gets the full qualified table by the QualifiedTableID whether it has Name or ID set.
+// tableByQTID gets the full qualified table by the QualifiedTableID whether it
+// has Name or ID set.
 func (s *Schemar) tableByQTID(tx *boltdb.Tx, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
 	if qtid.ID == "" {
-		return s.tableByName(tx, qtid.TableQualifier, qtid.Name)
+		return s.tableByName(tx, qtid.QualifiedDatabaseID, qtid.Name)
 	}
 
-	return s.tableByID(tx, qtid.TableQualifier, qtid.ID)
+	return s.tableByID(tx, qtid.QualifiedDatabaseID, qtid.ID)
 }
 
-func (s *Schemar) tableByName(tx *boltdb.Tx, qual dax.TableQualifier, name dax.TableName) (*dax.QualifiedTable, error) {
-	qtid, err := s.tableIDByName(tx, qual, name)
+func (s *Schemar) tableByName(tx *boltdb.Tx, qdbid dax.QualifiedDatabaseID, name dax.TableName) (*dax.QualifiedTable, error) {
+	qtid, err := s.tableIDByName(tx, qdbid, name)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting table ID")
 	}
 
-	return s.tableByID(tx, qtid.TableQualifier, qtid.ID) // TODO remove?
+	return s.tableByID(tx, qtid.QualifiedDatabaseID, qtid.ID) // TODO remove?
 }
 
-func (s *Schemar) tableByID(tx *boltdb.Tx, qual dax.TableQualifier, id dax.TableID) (*dax.QualifiedTable, error) {
+func (s *Schemar) tableByID(tx *boltdb.Tx, qdbid dax.QualifiedDatabaseID, id dax.TableID) (*dax.QualifiedTable, error) {
 	bkt := tx.Bucket(bucketSchemar)
 	if bkt == nil {
 		return nil, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
 	}
 
-	b := bkt.Get(tableKey(qual.OrganizationID, qual.DatabaseID, id))
+	b := bkt.Get(tableKey(qdbid.OrganizationID, qdbid.DatabaseID, id))
 	if b == nil {
-		return nil, dax.NewErrTableIDDoesNotExist(dax.QualifiedTableID{TableQualifier: qual, ID: id})
+		return nil, dax.NewErrTableIDDoesNotExist(dax.QualifiedTableID{QualifiedDatabaseID: qdbid, ID: id})
 	}
 
 	table := &dax.QualifiedTable{}
@@ -238,13 +454,13 @@ func (s *Schemar) tableByID(tx *boltdb.Tx, qual dax.TableQualifier, id dax.Table
 	return table, nil
 }
 
-func (s *Schemar) tableIDByName(tx *boltdb.Tx, qual dax.TableQualifier, name dax.TableName) (dax.QualifiedTableID, error) {
+func (s *Schemar) tableIDByName(tx *boltdb.Tx, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
 	bkt := tx.Bucket(bucketSchemar)
 	if bkt == nil {
 		return dax.QualifiedTableID{}, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
 	}
 
-	b := bkt.Get(tableNameKey(qual.OrganizationID, qual.DatabaseID, name))
+	b := bkt.Get(tableNameKey(qdbid.OrganizationID, qdbid.DatabaseID, name))
 	if b == nil {
 		return dax.QualifiedTableID{}, dax.NewErrTableNameDoesNotExist(name)
 	}
@@ -254,17 +470,16 @@ func (s *Schemar) tableIDByName(tx *boltdb.Tx, qual dax.TableQualifier, name dax
 
 // Tables returns a list of Table for all existing tables. If one or more table
 // IDs is provided, then only those will be included in the output.
-func (s *Schemar) Tables(ctx context.Context, qual dax.TableQualifier, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
-	tx, err := s.db.BeginTx(ctx, false)
-	if err != nil {
-		return nil, errors.Wrap(err, "beginning tx")
+func (s *Schemar) Tables(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
-	return s.getTables(ctx, tx, qual, ids...)
+	return s.getTables(txx, qdbid, ids...)
 }
 
-func (s *Schemar) getTables(ctx context.Context, tx *boltdb.Tx, qual dax.TableQualifier, ids ...dax.TableID) (dax.QualifiedTables, error) {
+func (s *Schemar) getTables(tx *boltdb.Tx, qdbid dax.QualifiedDatabaseID, ids ...dax.TableID) (dax.QualifiedTables, error) {
 	c := tx.Bucket(bucketSchemar).Cursor()
 
 	// Deserialize rows into Table objects.
@@ -275,11 +490,11 @@ func (s *Schemar) getTables(ctx context.Context, tx *boltdb.Tx, qual dax.TableQu
 		filterByID = true
 	}
 
-	prefix := []byte(fmt.Sprintf(prefixFmtTables, qual.OrganizationID, qual.DatabaseID))
-	if qual.OrganizationID == "" && qual.DatabaseID == "" {
+	prefix := []byte(fmt.Sprintf(prefixFmtTables, qdbid.OrganizationID, qdbid.DatabaseID))
+	if qdbid.OrganizationID == "" && qdbid.DatabaseID == "" {
 		prefix = []byte(prefixTables)
-	} else if qual.DatabaseID == "" {
-		prefix = []byte(fmt.Sprintf(prefixFmtTablesOrg, qual.OrganizationID))
+	} else if qdbid.DatabaseID == "" {
+		prefix = []byte(fmt.Sprintf(prefixFmtTablesOrg, qdbid.OrganizationID))
 	}
 
 	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
@@ -320,20 +535,19 @@ func containsTableID(s []dax.TableID, e dax.TableID) bool {
 
 // DropTable drops the given table. If the named/IDed table does not exist
 // then an error is returned.
-func (s *Schemar) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error {
-	tx, err := s.db.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "getting transaction")
+func (s *Schemar) DropTable(tx dax.Transaction, qtid dax.QualifiedTableID) error {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
 	// Ensure the table exists.
-	qtbl, err := s.tableByQTID(tx, qtid)
+	qtbl, err := s.tableByQTID(txx, qtid)
 	if err != nil {
 		return errors.Wrap(err, "getting table by id")
 	}
 
-	bkt := tx.Bucket(bucketSchemar)
+	bkt := txx.Bucket(bucketSchemar)
 	if bkt == nil {
 		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
 	}
@@ -348,15 +562,51 @@ func (s *Schemar) DropTable(ctx context.Context, qtid dax.QualifiedTableID) erro
 		return errors.Wrap(err, "deleting table by name")
 	}
 
-	return tx.Commit()
+	return nil
+}
+
+func (s *Schemar) TableID(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return dax.QualifiedTableID{}, dax.NewErrInvalidTransaction()
+	}
+
+	return s.tableIDByName(txx, qdbid, name)
 }
 
 const (
 	prefixTables        = "tables/"
-	prefixFmtTablesOrg  = prefixTables + "%s/"
-	prefixFmtTables     = prefixFmtTablesOrg + "%s/"
-	prefixFmtTableNames = "tablenames/%s/%s/"
+	prefixFmtTablesOrg  = prefixTables + "%s/"       // org-id
+	prefixFmtTables     = prefixFmtTablesOrg + "%s/" // db-id
+	prefixFmtTableNames = "tablenames/%s/%s/"        // org-id, db-id
+
+	prefixDatabases        = "databases/"
+	prefixFmtDatabases     = prefixDatabases + "%s/"   // org-id
+	prefixFmtDatabase      = prefixFmtDatabases + "%s" // db-id
+	prefixFmtDatabaseNames = "databasenames/%s/"       // org-id
 )
+
+// databaseKey returns a key based on a qualified database ID.
+func databaseKey(orgID dax.OrganizationID, dbID dax.DatabaseID) []byte {
+	key := fmt.Sprintf(prefixFmtDatabase, orgID, dbID)
+	return []byte(key)
+}
+
+// databaseNameKey returns a key based on a qualified database name.
+func databaseNameKey(orgID dax.OrganizationID, name dax.DatabaseName) []byte {
+	key := fmt.Sprintf(prefixFmtDatabaseNames+"%s", orgID, name)
+	return []byte(key)
+}
+
+// keyDatabaseID gets the DatabaseID out of the key.
+func keyDatabaseID(key []byte) (dax.DatabaseID, error) {
+	parts := strings.Split(string(key), "/")
+	if len(parts) != 3 {
+		return "", errors.New(errors.ErrUncoded, "database key format expected: `databases/orgID/dbID`")
+	}
+
+	return dax.DatabaseID(parts[2]), nil
+}
 
 // tableKey returns a key based on a qualified table ID.
 func tableKey(orgID dax.OrganizationID, dbID dax.DatabaseID, tblID dax.TableID) []byte {
@@ -388,22 +638,12 @@ func keyQualifiedTableID(key []byte) (dax.QualifiedTableID, error) {
 	}
 
 	return dax.NewQualifiedTableID(
-		dax.NewTableQualifier(
+		dax.NewQualifiedDatabaseID(
 			dax.OrganizationID(parts[1]),
 			dax.DatabaseID(parts[2]),
 		),
 		dax.TableID(parts[3]),
 	), nil
-}
-
-func (s *Schemar) TableID(ctx context.Context, qual dax.TableQualifier, name dax.TableName) (dax.QualifiedTableID, error) {
-	tx, err := s.db.BeginTx(ctx, false)
-	if err != nil {
-		return dax.QualifiedTableID{}, err
-	}
-	defer tx.Rollback()
-
-	return s.tableIDByName(tx, qual, name)
 }
 
 func timestamp() int64 {

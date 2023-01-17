@@ -11,10 +11,10 @@ import (
 type NewBalancerFn func(string, logger.Logger) Balancer
 
 type Config struct {
-	Director          Director
-	Schemar           schemar.Schemar
-	ComputeBalancer   Balancer
-	TranslateBalancer Balancer
+	Director Director
+	Schemar  schemar.Schemar
+
+	Balancer Balancer
 
 	StorageMethod string
 	BoltDB        *boltdb.DB

@@ -8,12 +8,29 @@ import (
 )
 
 const (
+	ErrCodeDatabaseIDInvalid   errors.Code = "DatabaseIDInvalid"
+	ErrCodeDatabaseNameInvalid errors.Code = "DatabaseNameInvalid"
+
 	ErrCodeTableIDInvalid    errors.Code = "TableIDInvalid"
 	ErrCodeTableNameInvalid  errors.Code = "TableNameInvalid"
 	ErrCodeInvalidPrimaryKey errors.Code = "InvalidPrimaryKey"
 
 	ErrCodeFieldNameInvalid errors.Code = "FieldNameInvalid"
 )
+
+func NewErrDatabaseIDInvalid(databaseID dax.DatabaseID) error {
+	return errors.New(
+		ErrCodeDatabaseIDInvalid,
+		fmt.Sprintf("database ID '%s' is invalid", databaseID),
+	)
+}
+
+func NewErrDatabaseNameInvalid(databaseName dax.DatabaseName) error {
+	return errors.New(
+		ErrCodeDatabaseNameInvalid,
+		fmt.Sprintf("database name '%s' is invalid", databaseName),
+	)
+}
 
 func NewErrTableIDInvalid(tableID dax.TableID) error {
 	return errors.New(

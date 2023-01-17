@@ -148,6 +148,13 @@ func (a addr) hostPortPath() string {
 	return ret
 }
 
+// Addresses is a sortable slice of Address.
+type Addresses []Address
+
+func (a Addresses) Len() int           { return len(a) }
+func (a Addresses) Less(i, j int) bool { return a[i] < a[j] }
+func (a Addresses) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
 // AddressManager is an interface for any service which needs to maintain a list
 // of addresses, and receive add/remove address requests from other services.
 type AddressManager interface {

@@ -20,10 +20,10 @@ func TestAPI_Directive(t *testing.T) {
 	api := c.GetPrimary().API
 	ctx := context.Background()
 
-	qual := dax.NewTableQualifier("acme", "db1")
-	tbl1 := daxtest.TestQualifiedTableWithID(t, qual, "1", "tbl1", 12, false)
-	tbl2 := daxtest.TestQualifiedTableWithID(t, qual, "2", "tbl2", 12, false)
-	tbl3 := daxtest.TestQualifiedTableWithID(t, qual, "3", "tbl3", 12, false)
+	qdbid := dax.NewQualifiedDatabaseID("acme", "db1")
+	tbl1 := daxtest.TestQualifiedTableWithID(t, qdbid, "1", "tbl1", 12, false)
+	tbl2 := daxtest.TestQualifiedTableWithID(t, qdbid, "2", "tbl2", 12, false)
+	tbl3 := daxtest.TestQualifiedTableWithID(t, qdbid, "3", "tbl3", 12, false)
 
 	t.Run("Schema", func(t *testing.T) {
 

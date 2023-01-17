@@ -135,11 +135,17 @@ func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
 			}
 		default:
 			u := i.planner.systemAPI.DataDir()
-			u = fmt.Sprintf("%s/indexes/%s", u, indexName)
 
-			spaceUsed, err = pilosa.GetDiskUsage(u)
-			if err != nil {
-				return nil, err
+			// TODO(tlt): GetDiskUsage needs to be behind an interface because
+			// this doesn't work in serverless. For now I'm just going to skip
+			// it based on the emtpy DataDir, but let's do this the right way.
+			if u != "" {
+				u = fmt.Sprintf("%s/indexes/%s", u, indexName)
+
+				spaceUsed, err = pilosa.GetDiskUsage(u)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 

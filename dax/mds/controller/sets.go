@@ -85,11 +85,11 @@ func (s TableSet) SortedSlice() dax.TableKeys {
 	return ps
 }
 
-func (s TableSet) QualifiedSortedSlice() map[dax.TableQualifier]dax.TableIDs {
-	m := make(map[dax.TableQualifier]dax.TableIDs)
+func (s TableSet) QualifiedSortedSlice() map[dax.QualifiedDatabaseID]dax.TableIDs {
+	m := make(map[dax.QualifiedDatabaseID]dax.TableIDs)
 	for p := range s {
 		qtid := p.QualifiedTableID()
-		m[qtid.TableQualifier] = append(m[qtid.TableQualifier], qtid.ID)
+		m[qtid.QualifiedDatabaseID] = append(m[qtid.QualifiedDatabaseID], qtid.ID)
 	}
 
 	// Sort the slices in the map.

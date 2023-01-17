@@ -34,10 +34,10 @@ func TestResourceManager(t *testing.T) {
 	mm := NewResourceManager(sn, wl, logger.NewStandardLogger(os.Stderr))
 
 	qtid := dax.QualifiedTableID{
-		TableQualifier: dax.TableQualifier{
-			OrganizationID: dax.OrganizationID("org1"),
-			DatabaseID:     dax.DatabaseID("db1"),
-		},
+		QualifiedDatabaseID: dax.NewQualifiedDatabaseID(
+			dax.OrganizationID("org1"),
+			dax.DatabaseID("db1"),
+		),
 		ID:   dax.TableID("blah"),
 		Name: "blah",
 	}

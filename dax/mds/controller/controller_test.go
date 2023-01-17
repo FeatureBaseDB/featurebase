@@ -9,7 +9,8 @@ import (
 
 	"github.com/molecula/featurebase/v3/dax"
 	"github.com/molecula/featurebase/v3/dax/mds/controller"
-	"github.com/molecula/featurebase/v3/dax/mds/controller/naive/boltdb"
+	balancerdb "github.com/molecula/featurebase/v3/dax/mds/controller/balancer/boltdb"
+	schemardb "github.com/molecula/featurebase/v3/dax/mds/schemar/boltdb"
 	daxtest "github.com/molecula/featurebase/v3/dax/test"
 	testbolt "github.com/molecula/featurebase/v3/dax/test/boltdb"
 	"github.com/molecula/featurebase/v3/errors"
@@ -19,16 +20,25 @@ import (
 
 func TestController(t *testing.T) {
 	ctx := context.Background()
-	qual := dax.NewTableQualifier("acme", "db1")
+	qdbid := dax.NewQualifiedDatabaseID("acme", "db1")
 
 	t.Run("RegisterNode", func(t *testing.T) {
 		director := newTestDirector()
-
 		schemar, cleanup := daxtest.NewSchemar(t)
 		defer cleanup()
+
+		db := testbolt.MustOpenDB(t)
+		db.InitializeBuckets(balancerdb.BalancerBuckets...)
+		db.InitializeBuckets(schemardb.SchemarBuckets...)
+		defer func() {
+			testbolt.MustCloseDB(t, db)
+			testbolt.CleanupDB(t, db.Path())
+		}()
+
 		cfg := controller.Config{
 			Director: director,
 			Schemar:  schemar,
+			BoltDB:   db,
 		}
 		con := controller.New(cfg)
 
@@ -61,19 +71,19 @@ func TestController(t *testing.T) {
 		defer cleanup()
 
 		db := testbolt.MustOpenDB(t)
-		db.InitializeBuckets(boltdb.NaiveBalancerBuckets...)
+		db.InitializeBuckets(balancerdb.BalancerBuckets...)
+		db.InitializeBuckets(schemardb.SchemarBuckets...)
 		defer func() {
 			testbolt.MustCloseDB(t, db)
 			testbolt.CleanupDB(t, db.Path())
 		}()
 
 		cfg := controller.Config{
-			Director:          director,
-			Schemar:           schemar,
-			BoltDB:            db,
-			StorageMethod:     "boltdb",
-			ComputeBalancer:   boltdb.NewBalancer("compute", db, logger.StderrLogger),
-			TranslateBalancer: boltdb.NewBalancer("translate", db, logger.StderrLogger),
+			Director:      director,
+			Schemar:       schemar,
+			BoltDB:        db,
+			StorageMethod: "boltdb",
+			Balancer:      balancerdb.NewBalancer(db, schemar, logger.StderrLogger),
 		}
 		con := controller.New(cfg)
 
@@ -100,16 +110,28 @@ func TestController(t *testing.T) {
 		}
 		assert.Equal(t, exp, director.flush())
 
+		// Add a qualified database.
+		dbOptions := dax.DatabaseOptions{
+			WorkersMin: 1,
+			WorkersMax: 1,
+		}
+		qdb1 := daxtest.TestQualifiedDatabaseWithID(t, qdbid.OrganizationID, qdbid.DatabaseID, "dbname1", dbOptions)
+		assert.NoError(t, con.CreateDatabase(ctx, qdb1))
+
+		// tbls keeps the sorted list of tables used in tests
+		var tbls dax.QualifiedTables
+
 		// Add a non-keyed table.
-		tbl0 := daxtest.TestQualifiedTableWithID(t, qual, "2", "foo", 0, false)
-		assert.NoError(t, schemar.CreateTable(ctx, tbl0))
+		tbl0 := daxtest.TestQualifiedTable(t, qdbid, "foo", 0, false)
 		assert.NoError(t, con.CreateTable(ctx, tbl0))
+
+		tbls = append(tbls, tbl0)
 
 		exp = []*dax.Directive{}
 		assert.Equal(t, exp, director.flush())
 
 		// Add a shard.
-		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(), 0))
+		addShards(t, ctx, con, tbl0.QualifiedID(), 0)
 
 		exp = []*dax.Directive{
 			{
@@ -129,6 +151,13 @@ func TestController(t *testing.T) {
 			},
 		}
 		assert.Equal(t, exp, director.flush())
+
+		// Set WorkersMin to 3 so we can used the added nodes that follow.
+		{
+			dbOptions.WorkersMin = 3
+			dbOptions.WorkersMax = 3
+			assert.NoError(t, con.SetDatabaseOptions(ctx, qdb1.QualifiedID(), dbOptions))
+		}
 
 		// Register two more nodes.
 		node1 := &dax.Node{
@@ -172,11 +201,11 @@ func TestController(t *testing.T) {
 		assert.Equal(t, exp, director.flush())
 
 		// Add more shards.
-		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(), dax.NewShardNums(1, 2, 3, 5, 8)...))
+		addShards(t, ctx, con, tbl0.QualifiedID(), dax.NewShardNums(1, 2, 3, 5, 8)...)
 
 		exp = []*dax.Directive{
 			{
-				Address: node0.Address,
+				Address: node1.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
@@ -184,14 +213,14 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewShardNums(0, 3),
+						Shards:   dax.NewShardNums(1),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
 				Version:        5,
 			},
 			{
-				Address: node1.Address,
+				Address: node2.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
@@ -199,98 +228,150 @@ func TestController(t *testing.T) {
 				ComputeRoles: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewShardNums(1, 5),
+						Shards:   dax.NewShardNums(2),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
 				Version:        6,
 			},
 			{
-				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
-				Tables: []*dax.QualifiedTable{
-					tbl0,
-				},
-				ComputeRoles: []dax.ComputeRole{
-					{
-						TableKey: tbl0.Key(),
-						Shards:   dax.NewShardNums(2, 8),
-					},
-				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        7,
-			},
-		}
-		assert.Equal(t, exp, director.flush())
-
-		// Add another non-keyed table.
-		tbl1 := daxtest.TestQualifiedTableWithID(t, qual, "1", "bar", 0, false)
-		assert.NoError(t, schemar.CreateTable(ctx, tbl1))
-		assert.NoError(t, con.CreateTable(ctx, tbl1))
-
-		// Add more shards.
-		assert.NoError(t, con.AddShards(ctx, tbl1.QualifiedID(), dax.NewShardNums(3, 5, 8, 13)...))
-
-		exp = []*dax.Directive{
-			{
 				Address: node0.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
 					tbl0,
 				},
 				ComputeRoles: []dax.ComputeRole{
-					{
-						TableKey: tbl1.Key(),
-						Shards:   dax.NewShardNums(3, 13),
-					},
 					{
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(0, 3),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        8,
+				Version:        7,
 			},
 			{
 				Address: node1.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
 					tbl0,
 				},
 				ComputeRoles: []dax.ComputeRole{
-					{
-						TableKey: tbl1.Key(),
-						Shards:   dax.NewShardNums(5),
-					},
 					{
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(1, 5),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        9,
+				Version:        8,
 			},
 			{
 				Address: node2.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
 					tbl0,
 				},
 				ComputeRoles: []dax.ComputeRole{
-					{
-						TableKey: tbl1.Key(),
-						Shards:   dax.NewShardNums(8),
-					},
 					{
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(2, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
+				Version:        9,
+			},
+		}
+		assert.Equal(t, exp, director.flush())
+
+		// Add another non-keyed table.
+		tbl1 := daxtest.TestQualifiedTable(t, qdbid, "bar", 0, false)
+		assert.NoError(t, con.CreateTable(ctx, tbl1))
+
+		tbls = append(tbls, tbl1)
+		sort.Sort(tbls)
+
+		// Add more shards.
+		addShards(t, ctx, con, tbl1.QualifiedID(), dax.NewShardNums(3, 5, 8, 13)...)
+
+		exp = []*dax.Directive{
+			{
+				Address: node0.Address,
+				Method:  dax.DirectiveMethodDiff,
+				Tables: []*dax.QualifiedTable{
+					tbls[0],
+					tbls[1],
+				},
+				ComputeRoles: []dax.ComputeRole{
+					{
+						TableKey: tbls[0].Key(),
+						Shards:   dax.NewShardNums(3),
+					},
+					{
+						TableKey: tbls[1].Key(),
+						Shards:   dax.NewShardNums(0, 3),
+					},
+				},
+				TranslateRoles: []dax.TranslateRole{},
 				Version:        10,
+			},
+			{
+				Address: node1.Address,
+				Method:  dax.DirectiveMethodDiff,
+				Tables: []*dax.QualifiedTable{
+					tbls[0],
+					tbls[1],
+				},
+				ComputeRoles: []dax.ComputeRole{
+					{
+						TableKey: tbls[0].Key(),
+						Shards:   dax.NewShardNums(5),
+					},
+					{
+						TableKey: tbls[1].Key(),
+						Shards:   dax.NewShardNums(1, 5),
+					},
+				},
+				TranslateRoles: []dax.TranslateRole{},
+				Version:        11,
+			},
+			{
+				Address: node2.Address,
+				Method:  dax.DirectiveMethodDiff,
+				Tables: []*dax.QualifiedTable{
+					tbls[0],
+					tbls[1],
+				},
+				ComputeRoles: []dax.ComputeRole{
+					{
+						TableKey: tbls[0].Key(),
+						Shards:   dax.NewShardNums(8),
+					},
+					{
+						TableKey: tbls[1].Key(),
+						Shards:   dax.NewShardNums(2, 8),
+					},
+				},
+				TranslateRoles: []dax.TranslateRole{},
+				Version:        12,
+			},
+			{
+				Address: node0.Address,
+				Method:  dax.DirectiveMethodDiff,
+				Tables: []*dax.QualifiedTable{
+					tbls[0],
+					tbls[1],
+				},
+				ComputeRoles: []dax.ComputeRole{
+					{
+						TableKey: tbls[0].Key(),
+						Shards:   dax.NewShardNums(3, 13),
+					},
+					{
+						TableKey: tbls[1].Key(),
+						Shards:   dax.NewShardNums(0, 3),
+					},
+				},
+				TranslateRoles: []dax.TranslateRole{},
+				Version:        13,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -303,41 +384,41 @@ func TestController(t *testing.T) {
 				Address: node0.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{
 					{
-						TableKey: tbl1.Key(),
+						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(3, 13),
 					},
 					{
-						TableKey: tbl0.Key(),
+						TableKey: tbls[1].Key(),
 						Shards:   dax.NewShardNums(0, 1, 3),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        11,
+				Version:        14,
 			},
 			{
 				Address: node2.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{
 					{
-						TableKey: tbl1.Key(),
+						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(5, 8),
 					},
 					{
-						TableKey: tbl0.Key(),
+						TableKey: tbls[1].Key(),
 						Shards:   dax.NewShardNums(2, 5, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        12,
+				Version:        15,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -350,21 +431,21 @@ func TestController(t *testing.T) {
 				Address: node2.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{
 					{
-						TableKey: tbl1.Key(),
+						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
-						TableKey: tbl0.Key(),
+						TableKey: tbls[1].Key(),
 						Shards:   dax.NewShardNums(0, 1, 2, 3, 5, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        13,
+				Version:        16,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -374,6 +455,14 @@ func TestController(t *testing.T) {
 
 		exp = []*dax.Directive{}
 		assert.Equal(t, exp, director.flush())
+
+		// Set WorkersMin to 1 so we can add a single node and have it be used
+		// (currently just adding 1 node won't satisfy the minimum of 3).
+		{
+			dbOptions.WorkersMin = 1
+			dbOptions.WorkersMax = 1
+			assert.NoError(t, con.SetDatabaseOptions(ctx, qdb1.QualifiedID(), dbOptions))
+		}
 
 		// Add a new node and ensure that the free shards get assigned to it.
 		node3 := &dax.Node{
@@ -389,21 +478,21 @@ func TestController(t *testing.T) {
 				Address: node3.Address,
 				Method:  dax.DirectiveMethodReset,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{
 					{
-						TableKey: tbl1.Key(),
+						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
-						TableKey: tbl0.Key(),
+						TableKey: tbls[1].Key(),
 						Shards:   dax.NewShardNums(0, 1, 2, 3, 5, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        14,
+				Version:        17,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -416,21 +505,21 @@ func TestController(t *testing.T) {
 				Address: node3.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{
 					{
-						TableKey: tbl1.Key(),
+						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
-						TableKey: tbl0.Key(),
+						TableKey: tbls[1].Key(),
 						Shards:   dax.NewShardNums(0, 1, 3, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        15,
+				Version:        18,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -445,21 +534,21 @@ func TestController(t *testing.T) {
 				Address: node3.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{
 					{
-						TableKey: tbl1.Key(),
+						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 					{
-						TableKey: tbl0.Key(),
+						TableKey: tbls[1].Key(),
 						Shards:   dax.NewShardNums(0, 1, 8),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        16,
+				Version:        19,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -472,31 +561,27 @@ func TestController(t *testing.T) {
 				Address: node3.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
+					tbls[0],
 				},
 				ComputeRoles: []dax.ComputeRole{
 					{
-						TableKey: tbl1.Key(),
+						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(3, 5, 8, 13),
 					},
 				},
 				TranslateRoles: []dax.TranslateRole{},
-				Version:        17,
+				Version:        20,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
 
 		// Remove a node which doesn't exist.
-		err := con.DeregisterNodes(ctx, "invalidNode")
-		if assert.Error(t, err) {
-			assert.True(t, errors.Is(err, dax.ErrNodeDoesNotExist))
-		}
-
+		assert.NoError(t, con.DeregisterNodes(ctx, "invalidNode"))
 	})
 
 	t.Run("TranslateNodes", func(t *testing.T) {
 		invalidQtid := dax.NewQualifiedTableID(
-			dax.NewTableQualifier("", ""),
+			dax.NewQualifiedDatabaseID("", ""),
 			dax.TableID("invalidID"),
 		)
 
@@ -505,19 +590,19 @@ func TestController(t *testing.T) {
 		defer cleanup()
 
 		db := testbolt.MustOpenDB(t)
-		db.InitializeBuckets(boltdb.NaiveBalancerBuckets...)
+		db.InitializeBuckets(balancerdb.BalancerBuckets...)
+		db.InitializeBuckets(schemardb.SchemarBuckets...)
 		defer func() {
 			testbolt.MustCloseDB(t, db)
 			testbolt.CleanupDB(t, db.Path())
 		}()
 
 		cfg := controller.Config{
-			Director:          director,
-			Schemar:           schemar,
-			BoltDB:            db,
-			StorageMethod:     "boltdb",
-			ComputeBalancer:   boltdb.NewBalancer("compute", db, logger.StderrLogger),
-			TranslateBalancer: boltdb.NewBalancer("translate", db, logger.StderrLogger),
+			Director:      director,
+			Schemar:       schemar,
+			BoltDB:        db,
+			StorageMethod: "boltdb",
+			Balancer:      balancerdb.NewBalancer(db, schemar, logger.StderrLogger),
 		}
 		con := controller.New(cfg)
 
@@ -550,10 +635,22 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{}
 		assert.Equal(t, exp, director.flush())
 
+		// Add a qualified database.
+		dbOptions := dax.DatabaseOptions{
+			WorkersMin: 1,
+			WorkersMax: 1,
+		}
+		qdb1 := daxtest.TestQualifiedDatabaseWithID(t, qdbid.OrganizationID, qdbid.DatabaseID, "dbname1", dbOptions)
+		assert.NoError(t, con.CreateDatabase(ctx, qdb1))
+
+		// tbls keeps the sorted list of tables used in tests
+		var tbls dax.QualifiedTables
+
 		// Add a keyed table.
-		tbl0 := daxtest.TestQualifiedTableWithID(t, qual, "2", "foo", 8, true)
-		assert.NoError(t, schemar.CreateTable(ctx, tbl0))
+		tbl0 := daxtest.TestQualifiedTable(t, qdbid, "foo", 8, true)
 		assert.NoError(t, con.CreateTable(ctx, tbl0))
+
+		tbls = append(tbls, tbl0)
 
 		// Check directives.
 		exp = []*dax.Directive{
@@ -575,6 +672,13 @@ func TestController(t *testing.T) {
 		}
 		assert.Equal(t, exp, director.flush())
 
+		// Set WorkersMin to 3 so we can used the two added nodes that follow.
+		{
+			dbOptions.WorkersMin = 3
+			dbOptions.WorkersMax = 3
+			assert.NoError(t, con.SetDatabaseOptions(ctx, qdb1.QualifiedID(), dbOptions))
+		}
+
 		// Register two more nodes.
 		node1 := &dax.Node{
 			Address: "10.0.0.1:81",
@@ -586,34 +690,12 @@ func TestController(t *testing.T) {
 
 		exp = []*dax.Directive{
 			{
-				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
-				Tables: []*dax.QualifiedTable{
-					tbl0,
-				},
-				ComputeRoles: []dax.ComputeRole{},
-				TranslateRoles: []dax.TranslateRole{
-					{
-						TableKey:   tbl0.Key(),
-						Partitions: dax.NewPartitionNums(0, 1, 2, 3),
-					},
-				},
-				Version: 3,
-			},
-			{
-				Address: node1.Address,
-				Method:  dax.DirectiveMethodReset,
-				Tables: []*dax.QualifiedTable{
-					tbl0,
-				},
-				ComputeRoles: []dax.ComputeRole{},
-				TranslateRoles: []dax.TranslateRole{
-					{
-						TableKey:   tbl0.Key(),
-						Partitions: dax.NewPartitionNums(4, 5, 6, 7),
-					},
-				},
-				Version: 4,
+				Address:        node1.Address,
+				Method:         dax.DirectiveMethodReset,
+				Tables:         []*dax.QualifiedTable{},
+				ComputeRoles:   []dax.ComputeRole{},
+				TranslateRoles: []dax.TranslateRole{},
+				Version:        3,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -640,7 +722,7 @@ func TestController(t *testing.T) {
 						Partitions: dax.NewPartitionNums(0, 1, 2),
 					},
 				},
-				Version: 5,
+				Version: 4,
 			},
 			{
 				Address: node1.Address,
@@ -652,10 +734,10 @@ func TestController(t *testing.T) {
 				TranslateRoles: []dax.TranslateRole{
 					{
 						TableKey:   tbl0.Key(),
-						Partitions: dax.NewPartitionNums(4, 5, 6),
+						Partitions: dax.NewPartitionNums(3, 5, 7),
 					},
 				},
-				Version: 6,
+				Version: 5,
 			},
 			{
 				Address: node2.Address,
@@ -667,10 +749,10 @@ func TestController(t *testing.T) {
 				TranslateRoles: []dax.TranslateRole{
 					{
 						TableKey:   tbl0.Key(),
-						Partitions: dax.NewPartitionNums(3, 7),
+						Partitions: dax.NewPartitionNums(4, 6),
 					},
 				},
-				Version: 7,
+				Version: 6,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -679,9 +761,11 @@ func TestController(t *testing.T) {
 		// Make PartitionN double digit to ensure that partition ints aren't
 		// sorted as strings. Also, it should be large enough to spill over
 		// onto node0.
-		tbl1 := daxtest.TestQualifiedTableWithID(t, qual, "1", "bar", 24, true)
-		assert.NoError(t, schemar.CreateTable(ctx, tbl1))
+		tbl1 := daxtest.TestQualifiedTable(t, qdbid, "bar", 24, true)
 		assert.NoError(t, con.CreateTable(ctx, tbl1))
+
+		tbls = append(tbls, tbl1)
+		sort.Sort(tbls)
 
 		// Check directives.
 		exp = []*dax.Directive{
@@ -689,61 +773,61 @@ func TestController(t *testing.T) {
 				Address: node0.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey:   tbl1.Key(),
+						TableKey:   tbls[0].Key(),
 						Partitions: dax.NewPartitionNums(1, 4, 7, 10, 13, 16, 19, 22),
 					},
 					{
-						TableKey:   tbl0.Key(),
+						TableKey:   tbls[1].Key(),
 						Partitions: dax.NewPartitionNums(0, 1, 2),
 					},
 				},
-				Version: 8,
+				Version: 7,
 			},
 			{
 				Address: node1.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey:   tbl1.Key(),
+						TableKey:   tbls[0].Key(),
 						Partitions: dax.NewPartitionNums(2, 5, 8, 11, 14, 17, 20, 23),
 					},
 					{
-						TableKey:   tbl0.Key(),
-						Partitions: dax.NewPartitionNums(4, 5, 6),
+						TableKey:   tbls[1].Key(),
+						Partitions: dax.NewPartitionNums(3, 5, 7),
 					},
 				},
-				Version: 9,
+				Version: 8,
 			},
 			{
 				Address: node2.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
-					tbl0,
+					tbls[0],
+					tbls[1],
 				},
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey:   tbl1.Key(),
+						TableKey:   tbls[0].Key(),
 						Partitions: dax.NewPartitionNums(0, 3, 6, 9, 12, 15, 18, 21),
 					},
 					{
-						TableKey:   tbl0.Key(),
-						Partitions: dax.NewPartitionNums(3, 7),
+						TableKey:   tbls[1].Key(),
+						Partitions: dax.NewPartitionNums(4, 6),
 					},
 				},
-				Version: 10,
+				Version: 9,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -757,46 +841,46 @@ func TestController(t *testing.T) {
 				Address: node0.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
+					tbls[0],
 				},
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey:   tbl1.Key(),
+						TableKey:   tbls[0].Key(),
 						Partitions: dax.NewPartitionNums(1, 4, 7, 10, 13, 16, 19, 22),
 					},
 				},
-				Version: 11,
+				Version: 10,
 			},
 			{
 				Address: node1.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
+					tbls[0],
 				},
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey:   tbl1.Key(),
+						TableKey:   tbls[0].Key(),
 						Partitions: dax.NewPartitionNums(2, 5, 8, 11, 14, 17, 20, 23),
 					},
 				},
-				Version: 12,
+				Version: 11,
 			},
 			{
 				Address: node2.Address,
 				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbl1,
+					tbls[0],
 				},
 				ComputeRoles: []dax.ComputeRole{},
 				TranslateRoles: []dax.TranslateRole{
 					{
-						TableKey:   tbl1.Key(),
+						TableKey:   tbls[0].Key(),
 						Partitions: dax.NewPartitionNums(0, 3, 6, 9, 12, 15, 18, 21),
 					},
 				},
-				Version: 13,
+				Version: 12,
 			},
 		}
 		assert.Equal(t, exp, director.flush())
@@ -822,18 +906,18 @@ func TestController(t *testing.T) {
 		defer cleanup()
 
 		db := testbolt.MustOpenDB(t)
-		db.InitializeBuckets(boltdb.NaiveBalancerBuckets...)
+		db.InitializeBuckets(balancerdb.BalancerBuckets...)
+		db.InitializeBuckets(schemardb.SchemarBuckets...)
 		defer func() {
 			testbolt.MustCloseDB(t, db)
 			testbolt.CleanupDB(t, db.Path())
 		}()
 
 		cfg := controller.Config{
-			Schemar:           schemar,
-			BoltDB:            db,
-			StorageMethod:     "boltdb",
-			ComputeBalancer:   boltdb.NewBalancer("compute", db, logger.StderrLogger),
-			TranslateBalancer: boltdb.NewBalancer("translate", db, logger.StderrLogger),
+			Schemar:       schemar,
+			BoltDB:        db,
+			StorageMethod: "boltdb",
+			Balancer:      balancerdb.NewBalancer(db, schemar, logger.StderrLogger),
 		}
 		con := controller.New(cfg)
 
@@ -855,39 +939,42 @@ func TestController(t *testing.T) {
 		}
 		assert.NoError(t, con.RegisterNodes(ctx, node1))
 
+		// Add a qualified database.
+		dbOptions := dax.DatabaseOptions{
+			WorkersMin: 2,
+			WorkersMax: 2,
+		}
+		qdb1 := daxtest.TestQualifiedDatabaseWithID(t, qdbid.OrganizationID, qdbid.DatabaseID, "dbname1", dbOptions)
+		assert.NoError(t, con.CreateDatabase(ctx, qdb1))
+
 		// Add a keyed table.
-		tbl0 := daxtest.TestQualifiedTable(t, qual, "foo", 12, true)
-		assert.NoError(t, schemar.CreateTable(ctx, tbl0))
+		tbl0 := daxtest.TestQualifiedTable(t, qdbid, "foo", 12, true)
 		assert.NoError(t, con.CreateTable(ctx, tbl0))
 
 		// Add shards.
-		assert.NoError(t, con.AddShards(ctx, tbl0.QualifiedID(), 0, 1, 2, 3, 11, 12))
+		addShards(t, ctx, con, tbl0.QualifiedID(), 0, 1, 2, 3, 11, 12)
 
-		t.Run("ComputeRole", func(t *testing.T) {
+		t.Run("ComputeNodes", func(t *testing.T) {
 			tests := []struct {
-				role    dax.Role
+				role    *dax.ComputeRole
 				isWrite bool
-				exp     []dax.AssignedNode
+				exp     []dax.ComputeNode
 			}{
 				{
 					role: &dax.ComputeRole{
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(0, 1, 2, 3),
 					},
-					exp: []dax.AssignedNode{
+					exp: []dax.ComputeNode{
 						{
 							Address: node0.Address,
-							Role: &dax.ComputeRole{
-								TableKey: tbl0.Key(),
-								Shards:   dax.NewShardNums(0, 2),
-							},
+							Table:   tbl0.Key(),
+							Shards:  dax.NewShardNums(0, 2),
 						},
 						{
 							Address: node1.Address,
-							Role: &dax.ComputeRole{
-								TableKey: tbl0.Key(),
-								Shards:   dax.NewShardNums(1, 3),
-							},
+							Table:   tbl0.Key(),
+							Shards:  dax.NewShardNums(1, 3),
 						},
 					},
 				},
@@ -896,13 +983,11 @@ func TestController(t *testing.T) {
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(1),
 					},
-					exp: []dax.AssignedNode{
+					exp: []dax.ComputeNode{
 						{
 							Address: node1.Address,
-							Role: &dax.ComputeRole{
-								TableKey: tbl0.Key(),
-								Shards:   dax.NewShardNums(1),
-							},
+							Table:   tbl0.Key(),
+							Shards:  dax.NewShardNums(1),
 						},
 					},
 				},
@@ -913,20 +998,16 @@ func TestController(t *testing.T) {
 						Shards:   dax.NewShardNums(1, 888, 889),
 					},
 					isWrite: true,
-					exp: []dax.AssignedNode{
+					exp: []dax.ComputeNode{
 						{
 							Address: node0.Address,
-							Role: &dax.ComputeRole{
-								TableKey: tbl0.Key(),
-								Shards:   dax.NewShardNums(888),
-							},
+							Table:   tbl0.Key(),
+							Shards:  dax.NewShardNums(888),
 						},
 						{
 							Address: node1.Address,
-							Role: &dax.ComputeRole{
-								TableKey: tbl0.Key(),
-								Shards:   dax.NewShardNums(1, 889),
-							},
+							Table:   tbl0.Key(),
+							Shards:  dax.NewShardNums(1, 889),
 						},
 					},
 				},
@@ -936,31 +1017,32 @@ func TestController(t *testing.T) {
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(2, 11),
 					},
-					exp: []dax.AssignedNode{
+					exp: []dax.ComputeNode{
 						{
 							Address: node0.Address,
-							Role: &dax.ComputeRole{
-								TableKey: tbl0.Key(),
-								Shards:   dax.NewShardNums(2, 11),
-							},
+							Table:   tbl0.Key(),
+							Shards:  dax.NewShardNums(2, 11),
 						},
 					},
 				},
 			}
 			for i, test := range tests {
 				t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
-					nodes, err := con.Nodes(ctx, test.role, test.isWrite)
+					if test.isWrite {
+						addShards(t, ctx, con, test.role.TableKey.QualifiedTableID(), test.role.Shards...)
+					}
+					nodes, err := con.ComputeNodes(ctx, test.role.TableKey.QualifiedTableID(), test.role.Shards)
 					assert.NoError(t, err)
 					assert.Equal(t, test.exp, nodes)
 				})
 			}
 		})
 
-		t.Run("TranslateRole", func(t *testing.T) {
+		t.Run("TranslateNodes", func(t *testing.T) {
 			tests := []struct {
-				role       dax.Role
+				role       *dax.TranslateRole
 				isWrite    bool
-				exp        []dax.AssignedNode
+				exp        []dax.TranslateNode
 				expErrCode errors.Code
 			}{
 				{
@@ -969,13 +1051,11 @@ func TestController(t *testing.T) {
 						Partitions: dax.NewPartitionNums(0),
 					},
 					isWrite: true,
-					exp: []dax.AssignedNode{
+					exp: []dax.TranslateNode{
 						{
-							Address: node0.Address,
-							Role: &dax.TranslateRole{
-								TableKey:   tbl0.Key(),
-								Partitions: dax.NewPartitionNums(0),
-							},
+							Address:    node0.Address,
+							Table:      tbl0.Key(),
+							Partitions: dax.NewPartitionNums(0),
 						},
 					},
 				},
@@ -985,22 +1065,19 @@ func TestController(t *testing.T) {
 						Partitions: dax.NewPartitionNums(0, 1, 2, 3, 999),
 					},
 					isWrite: false,
-					exp: []dax.AssignedNode{
+					exp: []dax.TranslateNode{
 						{
-							Address: node0.Address,
-							Role: &dax.TranslateRole{
-								TableKey:   tbl0.Key(),
-								Partitions: dax.NewPartitionNums(0, 2),
-							},
+							Address:    node0.Address,
+							Table:      tbl0.Key(),
+							Partitions: dax.NewPartitionNums(0, 2),
 						},
 						{
-							Address: node1.Address,
-							Role: &dax.TranslateRole{
-								TableKey:   tbl0.Key(),
-								Partitions: dax.NewPartitionNums(1, 3),
-							},
+							Address:    node1.Address,
+							Table:      tbl0.Key(),
+							Partitions: dax.NewPartitionNums(1, 3),
 						},
 					},
+					expErrCode: controller.ErrCodeUnassignedJobs,
 				},
 				{
 					role: &dax.TranslateRole{
@@ -1008,13 +1085,11 @@ func TestController(t *testing.T) {
 						Partitions: dax.NewPartitionNums(1),
 					},
 					isWrite: false,
-					exp: []dax.AssignedNode{
+					exp: []dax.TranslateNode{
 						{
-							Address: node1.Address,
-							Role: &dax.TranslateRole{
-								TableKey:   tbl0.Key(),
-								Partitions: dax.NewPartitionNums(1),
-							},
+							Address:    node1.Address,
+							Table:      tbl0.Key(),
+							Partitions: dax.NewPartitionNums(1),
 						},
 					},
 				},
@@ -1025,20 +1100,21 @@ func TestController(t *testing.T) {
 						Partitions: dax.NewPartitionNums(2, 10),
 					},
 					isWrite: false,
-					exp: []dax.AssignedNode{
+					exp: []dax.TranslateNode{
 						{
-							Address: node0.Address,
-							Role: &dax.TranslateRole{
-								TableKey:   tbl0.Key(),
-								Partitions: dax.NewPartitionNums(2, 10),
-							},
+							Address:    node0.Address,
+							Table:      tbl0.Key(),
+							Partitions: dax.NewPartitionNums(2, 10),
 						},
 					},
 				},
 			}
 			for i, test := range tests {
 				t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
-					nodes, err := con.Nodes(ctx, test.role, test.isWrite)
+					if test.isWrite {
+						addPartitions(t, ctx, con, test.role.TableKey.QualifiedTableID(), test.role.Partitions...)
+					}
+					nodes, err := con.TranslateNodes(ctx, test.role.TableKey.QualifiedTableID(), test.role.Partitions)
 
 					if test.expErrCode != "" {
 						assert.True(t, errors.Is(err, test.expErrCode))
@@ -1100,4 +1176,22 @@ func (d *testDirector) flush() []*dax.Directive {
 	sort.Sort(dax.Directives(out))
 
 	return out
+}
+
+func addShards(t *testing.T, ctx context.Context, con *controller.Controller, qtid dax.QualifiedTableID, shards ...dax.ShardNum) {
+	t.Helper()
+	for _, shard := range shards {
+		if _, err := con.IngestShard(ctx, qtid, shard); err != nil {
+			assert.NoError(t, err)
+		}
+	}
+}
+
+func addPartitions(t *testing.T, ctx context.Context, con *controller.Controller, qtid dax.QualifiedTableID, partitions ...dax.PartitionNum) {
+	t.Helper()
+	for _, parition := range partitions {
+		if _, err := con.IngestPartition(ctx, qtid, parition); err != nil {
+			assert.NoError(t, err)
+		}
+	}
 }

@@ -1,7 +1,5 @@
 package dax
 
-import "context"
-
 // Directive contains the instructions, sent from MDS, which a compute node is
 // to follow. A Directive is typically JSON-encoded and POSTed to a compute
 // node's `/directive` endpoint.
@@ -22,7 +20,7 @@ type Directive struct {
 }
 
 type DirectiveVersion interface {
-	Increment(ctx context.Context, delta uint64) (uint64, error)
+	Increment(tx Transaction, delta uint64) (uint64, error)
 }
 
 // DirectiveMethod is used to tell the compute node how it should handle the
@@ -177,5 +175,5 @@ func (d *Directive) IsEmpty() bool {
 type Directives []*Directive
 
 func (d Directives) Len() int           { return len(d) }
-func (d Directives) Less(i, j int) bool { return d[i].Address.String() < d[j].Address.String() }
+func (d Directives) Less(i, j int) bool { return d[i].Version < d[j].Version }
 func (d Directives) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }

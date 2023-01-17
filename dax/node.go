@@ -3,6 +3,7 @@ package dax
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/molecula/featurebase/v3/errors"
 )
@@ -15,7 +16,23 @@ type Node struct {
 	RoleTypes []RoleType `json:"role-types"`
 }
 
-// AssignedNode is used in API responses.
+// Nodes is a slice of *Node. It's useful for printing the nodes as a list of
+// node.Addresses via its String() method.
+type Nodes []*Node
+
+// String prints the slice of node addresses in Nodes.
+func (n Nodes) String() string {
+	out := make([]string, 0, len(n))
+	for i := range n {
+		out = append(out, string(n[i].Address))
+	}
+	return "[" + strings.Join(out, ",") + "]"
+}
+
+// AssignedNode represents a Worker which has been assigned a role. Note that
+// the worker which it represents might be responsible for multiple roles, but
+// AssignedNode only ever represents one of those roles at a time. This is
+// because it is always the response of a RoleType-specific request.
 type AssignedNode struct {
 	Address Address `json:"address"`
 	Role    Role    `json:"role"`
@@ -23,10 +40,10 @@ type AssignedNode struct {
 
 // NodeService represents a service for managing Nodes.
 type NodeService interface {
-	CreateNode(context.Context, Address, *Node) error
-	ReadNode(context.Context, Address) (*Node, error)
-	DeleteNode(context.Context, Address) error
-	Nodes(context.Context) ([]*Node, error)
+	CreateNode(Transaction, Address, *Node) error
+	ReadNode(Transaction, Address) (*Node, error)
+	DeleteNode(Transaction, Address) error
+	Nodes(Transaction) ([]*Node, error)
 }
 
 // ComputeNode represents a compute node and the table/shards for which it is
