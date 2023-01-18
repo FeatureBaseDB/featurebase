@@ -1245,7 +1245,7 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 			}
 
 			ferr := b.importer.ImportRoaringBitmap(ctx, b.tbl.ID, fld, shard, viewMap, false)
-			b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
+			b.log.Debugf("imp-roar    field: %s, shard:%d, views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
 			return errors.Wrapf(ferr, "importing data for %s", field)
 		})
 	}
@@ -1703,7 +1703,7 @@ func (b *Batch) importValueData() error {
 					start := time.Now()
 					fld := featurebase.FieldInfoToField(field)
 					err := b.importer.DoImport(ctx, b.tbl.ID, fld, shard, path, data)
-					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
+					b.log.Debugf("imp-vals    field: %s, shard: %d, data: %d %v", field.Name, shard, len(data), time.Since(start))
 					return errors.Wrapf(err, "importing values for field = %s", field.Name)
 				})
 				startIdx = i

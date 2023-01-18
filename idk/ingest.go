@@ -183,9 +183,13 @@ type ConfluentCommand struct {
 	KafkaSslEndpointIdentificationAlgorithm string `help:"The endpoint identification algorithm used by clients to validate server host name (ssl.endpoint.identification.algorithm) "`
 	KafkaEnableSslCertificateVerification   bool   `help:"(enable.ssl.certificate.verification)"`
 	KafkaSocketTimeoutMs                    int    `help:"(socket.timeout.ms)"`
+	KafkaSocketKeepaliveEnable              string `help:"The (socket.keepalive.enable) kafka consumer configuration"`
 
-	KafkaClientId string `help:"(client.id)"`
-	KafkaDebug    string `help:"Kafka debug string (debug)"`
+	KafkaClientId        string `help:"(client.id)"`
+	KafkaDebug           string `help:"The (debug) kafka consumer configuration. A comma-separated list of debug contexts to enable. Detailed Consumer: consumer,cgrp,topic,fetch. Set to 'all' for most verbose option."`
+	KafkaMaxPollInterval string `help:"The (max.poll.interval.ms) kafka consumer configuration. The max time the consumer can go without polling the broker. Consumer exits after this timeout."`
+	KafkaSessionTimeout  string `help:"The (session.timeout.ms) kafka consumer configuration. The max time the consumer can go without sending a heartbeat to the broker"`
+	KafkaGroupInstanceId string `help:"The (group.instance.id) kafka consumer configuration."`
 
 	KafkaSaslUsername  string `help:"SASL authentication username (sasl.username)"`
 	KafkaSaslPassword  string `help:"SASL authentication password (sasl.password)"`
@@ -311,7 +315,7 @@ func (m *Main) runIngester(c int, l *msgCounter) error {
 		err = source.Close()
 		if err != nil {
 			if m.log != nil {
-				m.log.Printf("error on close %v", err)
+				m.log.Errorf("Closing source: %v", err)
 			}
 		}
 	}()
