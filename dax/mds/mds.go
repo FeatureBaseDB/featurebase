@@ -46,6 +46,7 @@ type Config struct {
 
 // Ensure type implements interface.
 var _ computer.Registrar = (*MDS)(nil)
+var _ dax.Schemar = (*MDS)(nil)
 
 // MDS provides public MDS methods for an MDS service.
 type MDS struct {
@@ -178,8 +179,20 @@ func (m *MDS) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) er
 	return m.controller.CreateDatabase(ctx, qdb)
 }
 
+func (m *MDS) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
+	return m.controller.DropDatabase(ctx, qdbid)
+}
+
+func (m *MDS) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
+	return m.controller.DatabaseByName(ctx, orgID, dbname)
+}
+
 func (m *MDS) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
 	return m.controller.DatabaseByID(ctx, qdbid)
+}
+
+func (m *MDS) Databases(ctx context.Context, orgID dax.OrganizationID, ids ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
+	return m.controller.Databases(ctx, orgID, ids...)
 }
 
 // CreateTable handles a create table request.
@@ -204,9 +217,9 @@ func (m *MDS) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldName 
 	return m.controller.DropField(ctx, qtid, fldName)
 }
 
-// Table handles a table request.
-func (m *MDS) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
-	return m.controller.Table(ctx, qtid)
+// TableByID handles a table request.
+func (m *MDS) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
+	return m.controller.TableByID(ctx, qtid)
 }
 
 // Tables handles a tables request.
@@ -214,9 +227,9 @@ func (m *MDS) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, ids ...
 	return m.controller.Tables(ctx, qdbid, ids...)
 }
 
-// TableID handles a table id (i.e. by name) request.
-func (m *MDS) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
-	return m.controller.TableID(ctx, qdbid, name)
+// TableByName handles a table id (i.e. by name) request.
+func (m *MDS) TableByName(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (*dax.QualifiedTable, error) {
+	return m.controller.TableByName(ctx, qdbid, name)
 }
 
 // IngestPartition handles an ingest partition request.

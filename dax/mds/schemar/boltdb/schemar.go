@@ -117,6 +117,38 @@ func (s *Schemar) databaseByID(tx *boltdb.Tx, orgID dax.OrganizationID, id dax.D
 	return database, nil
 }
 
+func (s *Schemar) DatabaseByName(tx dax.Transaction, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
+	txx, ok := tx.(*boltdb.Tx)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction()
+	}
+
+	return s.databaseByName(txx, orgID, dbname)
+}
+
+func (s *Schemar) databaseByName(tx *boltdb.Tx, orgID dax.OrganizationID, name dax.DatabaseName) (*dax.QualifiedDatabase, error) {
+	qdbid, err := s.databaseIDByName(tx, orgID, name)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting database ID")
+	}
+
+	return s.databaseByID(tx, orgID, qdbid.DatabaseID)
+}
+
+func (s *Schemar) databaseIDByName(tx *boltdb.Tx, orgID dax.OrganizationID, name dax.DatabaseName) (dax.QualifiedDatabaseID, error) {
+	bkt := tx.Bucket(bucketSchemar)
+	if bkt == nil {
+		return dax.QualifiedDatabaseID{}, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketSchemar)
+	}
+
+	b := bkt.Get(databaseNameKey(orgID, name))
+	if b == nil {
+		return dax.QualifiedDatabaseID{}, dax.NewErrDatabaseNameDoesNotExist(name)
+	}
+
+	return keyQualifiedDatabaseID(b)
+}
+
 func (s *Schemar) putDatabase(tx *boltdb.Tx, qdb *dax.QualifiedDatabase) error {
 	bkt := tx.Bucket(bucketSchemar)
 	if bkt == nil {
@@ -643,6 +675,19 @@ func keyQualifiedTableID(key []byte) (dax.QualifiedTableID, error) {
 			dax.DatabaseID(parts[2]),
 		),
 		dax.TableID(parts[3]),
+	), nil
+}
+
+// keyQualifedDatabaseID gets the QualifiedDatabaseID out of the key.
+func keyQualifiedDatabaseID(key []byte) (dax.QualifiedDatabaseID, error) {
+	parts := strings.Split(string(key), "/")
+	if len(parts) != 3 {
+		return dax.QualifiedDatabaseID{}, errors.New(errors.ErrUncoded, "table key format expected: `databases/orgID/dbID`")
+	}
+
+	return dax.NewQualifiedDatabaseID(
+		dax.OrganizationID(parts[1]),
+		dax.DatabaseID(parts[2]),
 	), nil
 }
 

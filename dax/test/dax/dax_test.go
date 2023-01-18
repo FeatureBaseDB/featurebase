@@ -2,7 +2,6 @@ package dax_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -18,6 +17,7 @@ import (
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
 	"github.com/stretchr/testify/assert"
@@ -29,12 +29,15 @@ func TestDAXIntegration(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	qdbid := dax.NewQualifiedDatabaseID("acme", "db1")
+	orgID := dax.OrganizationID("acme")
+	dbID := dax.DatabaseID("db1")
+	qdbid := dax.NewQualifiedDatabaseID(orgID, dbID)
+	dbname := dax.DatabaseName("dbname1")
 	qdb := &dax.QualifiedDatabase{
 		OrganizationID: qdbid.OrganizationID,
 		Database: dax.Database{
 			ID:   qdbid.DatabaseID,
-			Name: "dbname1",
+			Name: dbname,
 			Options: dax.DatabaseOptions{
 				WorkersMin: 1,
 				WorkersMax: 1,
@@ -511,6 +514,72 @@ func TestDAXIntegration(t *testing.T) {
 		})
 	})
 
+	t.Run("Delete_Database", func(t *testing.T) {
+		mc := test.MustRunManagedCommand(t)
+		defer mc.Close()
+		svcmgr := mc.Manage()
+
+		ctx := context.Background()
+
+		// Set up MDS client.
+		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+
+		// Create two tables with data. Query the data to ensure it exists.
+		runTableTests(t,
+			svcmgr.Queryer.Address(),
+			basicTableTestConfig(qdbid, defs.Keyed, defs.Unkeyed)...,
+		)
+
+		// Make sure the database and tables exist.
+		db, err := mdsClient.DatabaseByName(ctx, orgID, dbname)
+		assert.NoError(t, err)
+		assert.NotNil(t, db)
+
+		tbl1, err := mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
+		assert.NoError(t, err)
+		assert.NotNil(t, tbl1)
+
+		tbl2, err := mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Unkeyed.Name(0)))
+		assert.NoError(t, err)
+		assert.NotNil(t, tbl2)
+
+		// Drop the database
+		assert.NoError(t, mdsClient.DropDatabase(ctx, qdbid))
+
+		// Make sure the database and tables no longer exist.
+		db, err = mdsClient.DatabaseByName(ctx, orgID, dbname)
+		if assert.Error(t, err) {
+			assert.Contains(t, err.Error(), "database name 'dbname1' does not exist")
+			// TODO(tlt): replace the previous line with the following once we
+			// have threaded error codes through the http calls.
+			// assert.True(t, errors.Is(err, dax.ErrDatabaseNameDoesNotExist))
+		}
+		assert.Nil(t, db)
+
+		tbl1, err = mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
+		if assert.Error(t, err) {
+			assert.Contains(t, err.Error(), "table name 'keyed' does not exist")
+			// TODO(tlt): replace the previous line with the following once we
+			// have threaded error codes through the http calls.
+			// assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
+		}
+		assert.Nil(t, tbl1)
+
+		tbl2, err = mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Unkeyed.Name(0)))
+		if assert.Error(t, err) {
+			assert.Contains(t, err.Error(), "table name 'unkeyed' does not exist")
+			// TODO(tlt): replace the previous line with the following once we
+			// have threaded error codes through the http calls.
+			// assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
+		}
+		assert.Nil(t, tbl2)
+	})
+
 	t.Run("Delete_Table", func(t *testing.T) {
 		mc := test.MustRunManagedCommand(t)
 		defer mc.Close()
@@ -654,7 +723,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 							rows := resp.Data
 							var err error
 							if resp.Error != "" {
-								err = errors.New(resp.Error)
+								err = errors.Errorf(resp.Error)
 							}
 
 							// Check expected error instead of results.
@@ -731,7 +800,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 							rows := resp.Data
 							var err error
 							if resp.Error != "" {
-								err = errors.New(resp.Error)
+								err = errors.Errorf(resp.Error)
 							}
 
 							// Check expected error instead of results.

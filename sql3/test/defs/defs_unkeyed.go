@@ -2,6 +2,8 @@ package defs
 
 import "github.com/featurebasedb/featurebase/v3/pql"
 
+var Unkeyed TableTest = unkeyed
+
 var unkeyed = TableTest{
 	name: "unkeyed",
 	Table: tbl(

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	mdshttp "github.com/featurebasedb/featurebase/v3/dax/mds/http"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -18,6 +19,10 @@ import (
 const (
 	defaultScheme = "http"
 )
+
+// Ensure type implements interface.
+var _ computer.Registrar = (*Client)(nil)
+var _ dax.Schemar = (*Client)(nil)
 
 // Client is an HTTP client that operates on the MDS endpoints exposed by the
 // main MDS service.
@@ -46,6 +51,159 @@ func (c *Client) Health() bool {
 	}
 
 	return true
+}
+
+func (c *Client) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
+	url := fmt.Sprintf("%s/create-database", c.address.WithScheme(defaultScheme))
+
+	// Encode the request.
+	postBody, err := json.Marshal(qdb)
+	if err != nil {
+		return errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return errors.Wrap(err, "posting create database request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	return nil
+}
+
+func (c *Client) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
+	url := fmt.Sprintf("%s/drop-database", c.address.WithScheme(defaultScheme))
+
+	// Encode the request.
+	postBody, err := json.Marshal(qdbid)
+	if err != nil {
+		return errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return errors.Wrap(err, "posting drop database request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	return nil
+}
+
+func (c *Client) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
+	url := fmt.Sprintf("%s/database-by-id", c.address.WithScheme(defaultScheme))
+
+	// Encode the request.
+	postBody, err := json.Marshal(qdbid)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	c.logger.Debugf("POST database-by-id request: url: %s", url)
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "posting database-by-id request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	var qdb *dax.QualifiedDatabase
+	if err := json.NewDecoder(resp.Body).Decode(&qdb); err != nil {
+		return nil, errors.Wrap(err, "reading response body")
+	}
+
+	return qdb, nil
+}
+
+func (c *Client) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, name dax.DatabaseName) (*dax.QualifiedDatabase, error) {
+	url := fmt.Sprintf("%s/database-by-name", c.address.WithScheme(defaultScheme))
+
+	req := &mdshttp.DatabaseByNameRequest{
+		OrganizationID: orgID,
+		Name:           name,
+	}
+
+	// Encode the request.
+	postBody, err := json.Marshal(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	c.logger.Debugf("POST database-by-name request: url: %s", url)
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "posting database-by-name request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	var qdb *dax.QualifiedDatabase
+	if err := json.NewDecoder(resp.Body).Decode(&qdb); err != nil {
+		return nil, errors.Wrap(err, "reading response body")
+	}
+
+	return qdb, nil
+}
+
+func (c *Client) Databases(ctx context.Context, orgID dax.OrganizationID, ids ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
+	url := fmt.Sprintf("%s/databases", c.address.WithScheme(defaultScheme))
+
+	req := &mdshttp.DatabasesRequest{
+		OrganizationID: orgID,
+		DatabaseIDs:    ids,
+	}
+
+	// Encode the request.
+	postBody, err := json.Marshal(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	c.logger.Debugf("POST databases request: url: %s", url)
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "posting databases request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	var qdbs []*dax.QualifiedDatabase
+	if err := json.NewDecoder(resp.Body).Decode(&qdbs); err != nil {
+		return nil, errors.Wrap(err, "reading response body")
+	}
+
+	return qdbs, nil
 }
 
 // TODO(tlt): collapse Table into this
@@ -164,62 +322,6 @@ func (c *Client) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, ids 
 	}
 
 	return qtables, nil
-}
-
-func (c *Client) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
-	url := fmt.Sprintf("%s/create-database", c.address.WithScheme(defaultScheme))
-
-	// Encode the request.
-	postBody, err := json.Marshal(qdb)
-	if err != nil {
-		return errors.Wrap(err, "marshalling post request")
-	}
-	responseBody := bytes.NewBuffer(postBody)
-
-	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
-	if err != nil {
-		return errors.Wrap(err, "posting create database request")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
-	}
-
-	return nil
-}
-
-func (c *Client) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
-	url := fmt.Sprintf("%s/database-by-id", c.address.WithScheme(defaultScheme))
-
-	// Encode the request.
-	postBody, err := json.Marshal(qdbid)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshalling post request")
-	}
-	responseBody := bytes.NewBuffer(postBody)
-
-	// Post the request.
-	c.logger.Debugf("POST database request: url: %s", url)
-	resp, err := http.Post(url, "application/json", responseBody)
-	if err != nil {
-		return nil, errors.Wrap(err, "posting table request")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
-	}
-
-	var qdb *dax.QualifiedDatabase
-	if err := json.NewDecoder(resp.Body).Decode(&qdb); err != nil {
-		return nil, errors.Wrap(err, "reading response body")
-	}
-
-	return qdb, nil
 }
 
 func (c *Client) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {

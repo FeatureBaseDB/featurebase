@@ -14,16 +14,16 @@ type Schemar interface {
 	//////////////////////////////////////////////////////////////////////////
 
 	CreateDatabase(context.Context, *QualifiedDatabase) error
-	// DropDatabase(context.Context, QualifiedDatabaseID) error
+	DropDatabase(context.Context, QualifiedDatabaseID) error
 
-	// DatabaseByName(ctx context.Context, orgID OrganizationID, dbname DatabaseName) (*QualifiedDatabase, error)
+	DatabaseByName(ctx context.Context, orgID OrganizationID, dbname DatabaseName) (*QualifiedDatabase, error)
 	DatabaseByID(ctx context.Context, qdbid QualifiedDatabaseID) (*QualifiedDatabase, error)
 
-	// // Databases returns a list of databases. If the OrganizationID is empty,
-	// // all databases will be returned. If greater than zero database IDs are
-	// // passed in the second argument, only databases matching those IDs will be
-	// // returned.
-	// Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error)
+	// Databases returns a list of databases. If the list of DatabaseIDs is
+	// empty, all databases will be returned. If greater than zero DatabaseIDs
+	// are passed in the second argument, only databases matching those IDs will
+	// be returned.
+	Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error)
 
 	// SetDatabaseOptions(context.Context, QualifiedDatabaseID, DatabaseOptions) error
 
@@ -67,7 +67,16 @@ func NewNopSchemar() *NopSchemar {
 func (s *NopSchemar) CreateDatabase(context.Context, *QualifiedDatabase) error {
 	return nil
 }
+func (s *NopSchemar) DropDatabase(context.Context, QualifiedDatabaseID) error {
+	return nil
+}
+func (s *NopSchemar) DatabaseByName(ctx context.Context, orgID OrganizationID, dbname DatabaseName) (*QualifiedDatabase, error) {
+	return nil, nil
+}
 func (s *NopSchemar) DatabaseByID(ctx context.Context, qdbid QualifiedDatabaseID) (*QualifiedDatabase, error) {
+	return nil, nil
+}
+func (s *NopSchemar) Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error) {
 	return nil, nil
 }
 func (s *NopSchemar) TableByName(context.Context, QualifiedDatabaseID, TableName) (*QualifiedTable, error) {

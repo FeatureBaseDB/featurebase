@@ -8,14 +8,15 @@ import (
 type Schemar interface {
 	CreateDatabase(dax.Transaction, *dax.QualifiedDatabase) error
 	DropDatabase(dax.Transaction, dax.QualifiedDatabaseID) error
+	DatabaseByName(tx dax.Transaction, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error)
 	DatabaseByID(dax.Transaction, dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error)
 
 	SetDatabaseOptions(dax.Transaction, dax.QualifiedDatabaseID, dax.DatabaseOptions) error
 
-	// Databases returns a list of databases. If the OrganizationID is empty,
-	// all databases will be returned. If greater than zero database IDs are
-	// passed in the second argument, only databases matching those IDs will be
-	// returned.
+	// Databases returns a list of databases. If the list of DatabaseIDs is
+	// empty, all databases will be returned. If greater than zero DatabaseIDs
+	// are passed in the second argument, only databases matching those IDs will
+	// be returned.
 	Databases(dax.Transaction, dax.OrganizationID, ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error)
 
 	CreateTable(dax.Transaction, *dax.QualifiedTable) error
@@ -54,6 +55,10 @@ func (s *NopSchemar) CreateDatabase(tx dax.Transaction, qtbl *dax.QualifiedDatab
 
 func (s *NopSchemar) DropDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) error {
 	return nil
+}
+
+func (s *NopSchemar) DatabaseByName(dax.Transaction, dax.OrganizationID, dax.DatabaseName) (*dax.QualifiedDatabase, error) {
+	return nil, nil
 }
 
 func (s *NopSchemar) DatabaseByID(dax.Transaction, dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
