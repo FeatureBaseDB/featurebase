@@ -1,9 +1,7 @@
-package ctl
+package cli
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,9 +14,7 @@ import (
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/jedib0t/go-pretty/text"
 	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/dax"
-	queryerhttp "github.com/molecula/featurebase/v3/dax/queryer/http"
-	"github.com/molecula/featurebase/v3/fbcloud"
+	"github.com/molecula/featurebase/v3/cli/fbcloud"
 	"github.com/molecula/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
@@ -30,6 +26,12 @@ const (
 	terminationChar string = ";"
 	exitCommand     string = "exit"
 	nullValue       string = "NULL"
+)
+
+var (
+	Stdin  io.ReadCloser = os.Stdin
+	Stdout io.Writer     = os.Stdout
+	Stderr io.Writer     = os.Stderr
 )
 
 var (
@@ -55,35 +57,52 @@ type CLICommand struct {
 	OrganizationID string `json:"org-id"`
 	DatabaseID     string `json:"db-id"`
 
-	queryer FBQueryer
+	Queryer Queryer `json:"-"`
+
+	Stdin  io.ReadCloser `json:"-"`
+	Stdout io.Writer     `json:"-"`
+	Stderr io.Writer     `json:"-"`
 }
 
 func NewCLICommand(logdest logger.Logger) *CLICommand {
+	return &CLICommand{
+		Host:        defaultHost,
+		HistoryPath: "",
+
+		OrganizationID: "",
+		DatabaseID:     "",
+
+		Stdin:  Stdin,
+		Stdout: Stdout,
+		Stderr: Stderr,
+	}
+}
+
+func (cmd *CLICommand) setupHistory() {
+	// If HistoryPath has already been configured (i.e. with a command flag),
+	// don't bother setting up the default in the home directory.
+	if cmd.HistoryPath != "" {
+		return
+	}
+
 	historyPath := ""
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Printf("Error getting home directory, command history persistence will be disabled: %v\n", err)
+	if home, err := os.UserHomeDir(); err != nil {
+		cmd.Printf("Error getting home directory, command history persistence will be disabled: %v\n", err)
 	} else {
 		historyDir := filepath.Join(home, ".featurebase")
-		err := os.MkdirAll(historyDir, 0750)
+		err := os.MkdirAll(historyDir, 0o750)
 		if err != nil {
-			fmt.Printf("Creating directory for history: %v\n", err)
+			cmd.Printf("Creating directory for history: %v\n", err)
 		} else {
 			historyPath = filepath.Join(historyDir, "cli_history")
 		}
 	}
-	return &CLICommand{
-		Host:        defaultHost,
-		HistoryPath: historyPath,
-
-		OrganizationID: "",
-		DatabaseID:     "",
-	}
+	cmd.HistoryPath = historyPath
 }
 
 // printQualifiers displays the currently set OrganizationID and DatabaseID.
 func (cmd *CLICommand) printQualifiers() {
-	fmt.Printf(" Host: %s\n  Org: %s\n   DB: %s\n",
+	cmd.Printf(" Host: %s\n  Org: %s\n   DB: %s\n",
 		hostPort(cmd.Host, cmd.Port),
 		cmd.OrganizationID,
 		cmd.DatabaseID,
@@ -91,6 +110,12 @@ func (cmd *CLICommand) printQualifiers() {
 }
 
 func (cmd *CLICommand) setupClient() error {
+	// If the Queryer has already been set (in tests for example), don't bother
+	// trying to detect it.
+	if cmd.Queryer != nil {
+		return nil
+	}
+
 	if strings.TrimSpace(cmd.Host) == "" {
 		return errors.Errorf("no host provided")
 	}
@@ -106,20 +131,20 @@ func (cmd *CLICommand) setupClient() error {
 
 	switch typ {
 	case featurebaseTypeStandard:
-		fmt.Println("Detected standard deployment")
-		cmd.queryer = &standardQueryer{
+		cmd.Printf("Detected standard deployment\n")
+		cmd.Queryer = &standardQueryer{
 			Host: cmd.Host,
 			Port: cmd.Port,
 		}
 	case featurebaseTypeDAX:
-		fmt.Println("Detected dax deployment")
-		cmd.queryer = &daxQueryer{
+		cmd.Printf("Detected dax deployment\n")
+		cmd.Queryer = &daxQueryer{
 			Host: cmd.Host,
 			Port: cmd.Port,
 		}
 	case featurebaseTypeCloud:
-		fmt.Println("Detected cloud deployment")
-		cmd.queryer = &fbcloud.Queryer{
+		cmd.Printf("Detected cloud deployment\n")
+		cmd.Queryer = &fbcloud.Queryer{
 			Host: hostPort(cmd.Host, cmd.Port),
 
 			ClientID: cmd.ClientID,
@@ -222,9 +247,9 @@ func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
 
 func (cmd *CLICommand) Run(ctx context.Context) error {
 	// Print the splash message.
-	fmt.Print(splash)
-	err := cmd.setupClient()
-	if err != nil {
+	cmd.Printf(splash)
+	cmd.setupHistory()
+	if err := cmd.setupClient(); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
 	cmd.printQualifiers()
@@ -234,6 +259,10 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 		HistoryFile:            cmd.HistoryPath,
 		HistoryLimit:           100000,
 		DisableAutoSaveHistory: true,
+
+		Stdin:  cmd.Stdin,
+		Stdout: cmd.Stdout,
+		Stderr: cmd.Stderr,
 	})
 	if err != nil {
 		return errors.Wrap(err, "getting readline")
@@ -254,7 +283,7 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 		} else {
 			rl.SetPrompt(promptBegin)
 			// Add some white space before each new prompt.
-			fmt.Println()
+			cmd.Printf("\n")
 		}
 
 		// Read user provided input.
@@ -262,6 +291,27 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "reading line")
 		}
+
+		// We append a line feed at the end of each line because at this point
+		// we have effectively stripped any intentional line feeds (since we are
+		// reading a line at a time), and we don't want to do that. An example
+		// of an intentional line feed is in a BULK INSERT CSV STREAM like this
+		// example:
+		//
+		// bulk replace
+		// 	 into foo (_id, age)
+		// 	 map (0 id, 1 int)
+		// from
+		// 	 x'3,33
+		// 	 4,44
+		// 	 5,55'
+		// with
+		// 	 format 'CSV'
+		// 	 input 'STREAM';
+		//
+		// We want to preserve the line feeds that are contained in the x''
+		// block; those are intentional as they demarc records within the csv.
+		line += "\n"
 
 		if !inMidCommand {
 			// Handle the exit command.
@@ -284,7 +334,7 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 
 		for i, part := range parts {
 			partIsFinal := i == len(parts)-1
-			partIsBlank := part == ""
+			partIsBlank := strings.TrimSpace(part) == ""
 
 			if partIsBlank && partIsFinal {
 				continue
@@ -315,7 +365,7 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 
 		err = rl.SaveHistory(strings.Join(cmd.commands, "; ") + ";")
 		if err != nil {
-			fmt.Printf("Couldn't save history: %v\n", err)
+			cmd.Printf("Couldn't save history: %v\n", err)
 		}
 
 		if err := cmd.executeCommands(ctx); err != nil {
@@ -330,12 +380,8 @@ func appendCommand(orig string, part string) string {
 	if orig == "" {
 		return part
 	} else {
-		return orig + " " + part
+		return orig + part
 	}
-}
-
-type FBQueryer interface {
-	Query(org, db, sql string) (*featurebase.WireQueryResponse, error)
 }
 
 func (cmd *CLICommand) executeCommands(ctx context.Context) error {
@@ -352,18 +398,24 @@ func (cmd *CLICommand) executeCommands(ctx context.Context) error {
 			continue
 		}
 
-		sqlResponse, err := cmd.queryer.Query(cmd.OrganizationID, cmd.DatabaseID, sql)
+		sqlResponse, err := cmd.Queryer.Query(cmd.OrganizationID, cmd.DatabaseID, sql)
 		if err != nil {
-			fmt.Printf("making query: %v\n", err)
+			cmd.Printf("making query: %v\n", err)
 			continue
 		}
-		err = writeOut(sqlResponse, os.Stdout)
+		err = writeOut(sqlResponse, cmd.Stdout, cmd.Stderr)
 		if err != nil {
 			return errors.Wrap(err, "writing out response")
 		}
 	}
 
 	return nil
+}
+
+// Printf is a helper method which sends the given payload to stdout.
+func (cmd *CLICommand) Printf(format string, a ...any) {
+	out := fmt.Sprintf(format, a...)
+	cmd.Stdout.Write([]byte(out))
 }
 
 // handleIfNonSQLCommand will handle special case command like "SET ..." and
@@ -431,19 +483,19 @@ func writeWarnings(r *featurebase.WireQueryResponse, w io.Writer) error {
 	return nil
 }
 
-func writeOut(r *featurebase.WireQueryResponse, w io.Writer) error {
+func writeOut(r *featurebase.WireQueryResponse, wOut io.Writer, wErr io.Writer) error {
 	if r == nil {
 		return errors.New("attempt to write out nil response")
 	}
 	if r.Error != "" {
-		if _, err := w.Write([]byte("Error: " + r.Error + "\n")); err != nil {
+		if _, err := wErr.Write([]byte("Error: " + r.Error + "\n")); err != nil {
 			return errors.Wrapf(err, "writing error: %s", r.Error)
 		}
-		return writeWarnings(r, w)
+		return writeWarnings(r, wOut)
 	}
 
 	t := table.NewWriter()
-	t.SetOutputMirror(w)
+	t.SetOutputMirror(wOut)
 
 	// Don't uppercase the header values.
 	t.Style().Format.Header = text.FormatDefault
@@ -461,7 +513,7 @@ func writeOut(r *featurebase.WireQueryResponse, w io.Writer) error {
 	}
 	t.Render()
 
-	err := writeWarnings(r, w)
+	err := writeWarnings(r, wOut)
 	if err != nil {
 		return err
 	}
@@ -474,7 +526,7 @@ func writeOut(r *featurebase.WireQueryResponse, w io.Writer) error {
 		lifeAffirmingMessage = " (Sorry! That took longer than expected 😭)"
 	}
 
-	if _, err := w.Write([]byte(fmt.Sprintf("\nExecution time: %dμs%s\n", r.ExecutionTime, lifeAffirmingMessage))); err != nil {
+	if _, err := wOut.Write([]byte(fmt.Sprintf("\nExecution time: %dμs%s\n", r.ExecutionTime, lifeAffirmingMessage))); err != nil {
 		return errors.Wrapf(err, "writing execution time: %s", r.Error)
 	}
 
@@ -487,82 +539,4 @@ func schemaToRow(schema featurebase.WireQuerySchema) []interface{} {
 		ret[i] = field.Name
 	}
 	return ret
-}
-
-// Ensure type implements interface.
-var _ FBQueryer = (*standardQueryer)(nil)
-
-// standardQueryer supports a standard featurebase deployment hitting the /sql
-// endpoint with a payload containing only the sql statement.
-type standardQueryer struct {
-	Host string
-	Port string
-}
-
-func (qryr *standardQueryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
-	buf := bytes.Buffer{}
-	url := fmt.Sprintf("%s/sql", hostPort(qryr.Host, qryr.Port))
-
-	buf.Write([]byte(sql))
-
-	resp, err := http.Post(url, "application/json", &buf)
-	if err != nil {
-		return nil, errors.Wrapf(err, "posting query")
-	}
-
-	fullbod, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "reading response")
-	}
-	sqlResponse := &featurebase.WireQueryResponse{}
-	// TODO(tlt): switch this back once all responses are typed
-	// if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
-	if err := sqlResponse.UnmarshalJSONTyped(fullbod, true); err != nil {
-		return nil, errors.Wrapf(err, "unmarshaling query response, body:\n'%s'\n", fullbod)
-	}
-
-	return sqlResponse, nil
-}
-
-// Ensure type implements interface.
-var _ FBQueryer = (*daxQueryer)(nil)
-
-// daxQueryer is similar to the standardQueryer except that it hits a different
-// endpoint, and its payload is a json object which includes, in addition to the
-// sql statement, things like org and db.
-type daxQueryer struct {
-	Host string
-	Port string
-}
-
-func (qryr *daxQueryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
-	buf := bytes.Buffer{}
-	url := fmt.Sprintf("%s/queryer/sql", hostPort(qryr.Host, qryr.Port))
-
-	sqlReq := &queryerhttp.SQLRequest{
-		OrganizationID: dax.OrganizationID(org),
-		DatabaseID:     dax.DatabaseID(db),
-		SQL:            sql,
-	}
-	if err := json.NewEncoder(&buf).Encode(sqlReq); err != nil {
-		return nil, errors.Wrapf(err, "encoding sql request: %s", sql)
-	}
-
-	resp, err := http.Post(url, "application/json", &buf)
-	if err != nil {
-		return nil, errors.Wrapf(err, "posting query")
-	}
-
-	fullbod, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "reading response")
-	}
-	sqlResponse := &featurebase.WireQueryResponse{}
-	// TODO(tlt): switch this back once all responses are typed
-	// if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
-	if err := sqlResponse.UnmarshalJSONTyped(fullbod, true); err != nil {
-		return nil, errors.Wrapf(err, "unmarshaling query response, body:\n'%s'\n", fullbod)
-	}
-
-	return sqlResponse, nil
 }
