@@ -33,14 +33,15 @@ import (
 // achieve concurrency, create multiple Sources.
 type Source struct {
 	idk.ConfluentCommand
-	Topics  []string
-	Group   string
-	Log     logger.Logger
-	Timeout time.Duration
-	SkipOld bool
-	Verbose bool
-	schema  Schema
-	TLS     idk.TLSConfig
+	Topics               []string
+	Group                string
+	Log                  logger.Logger
+	Timeout              time.Duration
+	SkipOld              bool
+	Verbose              bool
+	schema               Schema
+	TLS                  idk.TLSConfig
+	consumerCloseTimeout int
 
 	spoolBase     uint64
 	spool         []confluent.TopicPartition
@@ -262,7 +263,9 @@ func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.To
 	return s.client.CommitOffsets(recs)
 }
 
-// Open initializes the kafka source.
+// Open initializes the kafka source. (i.e. creating and configuring a consumer)
+// The configuration options for the confluentinc/confluent-kafka-go/kafka
+// libarary are: https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
 func (s *Source) Open() error {
 	cfg, err := common.SetupConfluent(&s.ConfluentCommand)
 	if err != nil {
@@ -444,10 +447,26 @@ func (c *Source) generator() {
 func (s *Source) Close() error {
 	if s.client != nil {
 		if s.opened { // only close opened sources
+			var err error
+			closedReturned := make(chan error, 1)
+			// send quit message to polling routine & wait for it to exit
 			s.quit <- struct{}{}
 			s.wg.Wait()
-			err := s.client.Close()
-			s.opened = false
+			s.Log.Debugf("Trying to close consumer %s...", s.client.String())
+			go func() {
+				closedReturned <- s.client.Close()
+			}()
+			start := time.Now()
+			select {
+			case err = <-closedReturned:
+				if err == nil {
+					s.Log.Debugf("Successfully closed consumer %s!", s.client.String())
+					s.opened = false
+				}
+			case <-time.After(time.Duration(s.consumerCloseTimeout * 1000 * 1000 * 1000)):
+				err = fmt.Errorf("Unable to properly close consumer %s after %f seconds", s.client.String(), time.Since(start).Seconds())
+			}
+
 			return errors.Wrap(err, "closing kafka consumer")
 		}
 	}

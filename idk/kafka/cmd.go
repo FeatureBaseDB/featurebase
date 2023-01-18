@@ -13,7 +13,8 @@ type Main struct {
 	Group                string        `help:"Kafka group."`
 	Topics               []string      `help:"Kafka topics to read from."`
 	Timeout              time.Duration `help:"Time to wait for more records from Kafka before flushing a batch. 0 to disable."`
-	SkipOld              bool          `short:"" help:"Skip to the most recent Kafka message rather than starting at the beginning."`
+	SkipOld              bool          `short:"" help:"False sets kafka consumer configuration auto.offset.reset to earliest, True sets it to latest."`
+	ConsumerCloseTimeout int           `help:"The amount of time in seconds to wait for the consumer to close properly."`
 }
 
 func NewMain() (*Main, error) {
@@ -22,13 +23,16 @@ func NewMain() (*Main, error) {
 		ConfluentCommand: idk.ConfluentCommand{
 			KafkaBootstrapServers: []string{"localhost:9092"},
 		},
-		Group:   "defaultgroup",
-		Topics:  []string{"defaulttopic"},
-		Timeout: time.Second,
+		Group:                "defaultgroup",
+		Topics:               []string{"defaulttopic"},
+		Timeout:              time.Second,
+		ConsumerCloseTimeout: 30,
 	}
+
 	m.SchemaRegistryURL = "http://" + defaultRegistryHost
-	m.OffsetMode = true
 	m.Main.Namespace = "ingester_kafka"
+	//m.Main.OffsetMode = m.OffsetMode
+	m.OffsetMode = true
 	m.NewSource = func() (idk.Source, error) {
 		source := NewSource()
 		source.KafkaBootstrapServers = m.KafkaBootstrapServers
@@ -43,6 +47,12 @@ func NewMain() (*Main, error) {
 		source.SchemaRegistryUsername = m.SchemaRegistryUsername
 		source.SchemaRegistryPassword = m.SchemaRegistryPassword
 		source.Verbose = m.Verbose
+		source.KafkaMaxPollInterval = m.KafkaMaxPollInterval
+		source.KafkaSessionTimeout = m.KafkaSessionTimeout
+		source.KafkaGroupInstanceId = m.KafkaGroupInstanceId
+		source.KafkaDebug = m.KafkaDebug
+		source.KafkaSocketKeepaliveEnable = m.KafkaSocketKeepaliveEnable
+		source.consumerCloseTimeout = m.ConsumerCloseTimeout
 
 		if err := source.Open(); err != nil {
 			return nil, errors.Wrap(err, "opening source")
