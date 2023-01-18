@@ -7,29 +7,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cli *ctl.CLICommand
+var cliCmd *cli.CLICommand
 
 // newCLICommand runs the FeatureBase CLI subcommand for ingesting bulk data.
 func newCLICommand(logdest logger.Logger) *cobra.Command {
-	cli = ctl.NewCLICommand(logdest)
-	cliCmd := &cobra.Command{
+	cliCmd = cli.NewCLICommand(logdest)
+	cobraCmd := &cobra.Command{
 		Use:   "cli",
 		Short: "Query FB with SQL3 from the command line",
 		Long:  ``,
-		RunE:  usageErrorWrapper(cli),
+		RunE:  usageErrorWrapper(cliCmd),
 	}
 
-	flags := cliCmd.Flags()
-	flags.StringVarP(&cli.Host, "host", "", cli.Host, "hostname of FeatureBase.")
-	flags.StringVarP(&cli.Port, "port", "", cli.Port, "port of FeatureBase.")
-	flags.StringVar(&cli.HistoryPath, "history-path", cli.HistoryPath, "path for history files.")
-	flags.StringVar(&cli.OrganizationID, "org-id", cli.OrganizationID, "OrganizationID.")
-	flags.StringVar(&cli.DatabaseID, "db-id", cli.DatabaseID, "DatabaseID.")
+	flags := cobraCmd.Flags()
+	flags.StringVarP(&cliCmd.Host, "host", "", cliCmd.Host, "hostname of FeatureBase.")
+	flags.StringVarP(&cliCmd.Port, "port", "", cliCmd.Port, "port of FeatureBase.")
+	flags.StringVar(&cliCmd.HistoryPath, "history-path", cliCmd.HistoryPath, "path for history files.")
+	flags.StringVar(&cliCmd.OrganizationID, "org-id", cliCmd.OrganizationID, "OrganizationID.")
+	flags.StringVar(&cliCmd.DatabaseID, "db-id", cliCmd.DatabaseID, "DatabaseID.")
 
-	flags.StringVar(&cli.ClientID, "client-id", cli.ClientID, "Cognito Client ID for FeatureBase Cloud access.")
-	flags.StringVar(&cli.Region, "region", cli.Region, "Cloud region for FeatureBase Cloud access (e.g. us-east-2).")
-	flags.StringVar(&cli.Email, "email", cli.Email, "Email address for FeatureBase Cloud access.")
-	flags.StringVar(&cli.Password, "password", cli.Password, "Password for FeatureBase Cloud access.")
+	flags.StringVar(&cliCmd.ClientID, "client-id", cliCmd.ClientID, "Cognito Client ID for FeatureBase Cloud access.")
+	flags.StringVar(&cliCmd.Region, "region", cliCmd.Region, "Cloud region for FeatureBase Cloud access (e.g. us-east-2).")
+	flags.StringVar(&cliCmd.Email, "email", cliCmd.Email, "Email address for FeatureBase Cloud access.")
+	flags.StringVar(&cliCmd.Password, "password", cliCmd.Password, "Password for FeatureBase Cloud access.")
 
-	return cliCmd
+	return cobraCmd
 }
