@@ -603,6 +603,18 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
+	// Do version check in. This is in a goroutine so that we don't block server startup if the server endpoint is down/having issues.
+	go func() {
+		s.logger.Printf("Beginning featurebase version check-in")
+		vc := VersionChecker{URL: "https://analytics.featurebase.com/v2/featurebase/version"}
+		resp, err := vc.CheckIn()
+		if err != nil {
+			s.logger.Errorf("doing version checkin. Error was %s", err)
+			return
+		}
+		s.logger.Printf("Version check-in complete. Latest version is %s", resp.Information.Version)
+	}()
+
 	// Start DisCo.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
