@@ -3893,13 +3893,14 @@ func (c *JoinClause) SourceFromAlias(alias string) Source {
 }
 
 type JoinOperator struct {
-	Comma   Pos // position of comma
-	Natural Pos // position of NATURAL keyword
-	Left    Pos // position of LEFT keyword
-	Outer   Pos // position of OUTER keyword
-	Inner   Pos // position of INNER keyword
-	Cross   Pos // position of CROSS keyword
-	Join    Pos // position of JOIN keyword
+	Comma Pos // position of comma
+	Left  Pos // position of LEFT keyword
+	Right Pos // position of RIGHT keyword
+	Full  Pos // position of FULL keyword
+	Outer Pos // position of OUTER keyword
+	Inner Pos // position of INNER keyword
+	//	Cross   Pos // position of CROSS keyword // TODO(pok) - add cross back when we do it
+	Join Pos // position of JOIN keyword
 }
 
 // Clone returns a deep copy of op.
@@ -3918,9 +3919,6 @@ func (op *JoinOperator) String() string {
 	}
 
 	var buf bytes.Buffer
-	if op.Natural.IsValid() {
-		buf.WriteString(" NATURAL")
-	}
 	if op.Left.IsValid() {
 		buf.WriteString(" LEFT")
 		if op.Outer.IsValid() {
@@ -3928,8 +3926,8 @@ func (op *JoinOperator) String() string {
 		}
 	} else if op.Inner.IsValid() {
 		buf.WriteString(" INNER")
-	} else if op.Cross.IsValid() {
-		buf.WriteString(" CROSS")
+		// } else if op.Cross.IsValid() {
+		// 	buf.WriteString(" CROSS")
 	}
 	buf.WriteString(" JOIN ")
 

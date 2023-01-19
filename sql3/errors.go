@@ -10,6 +10,7 @@ import (
 
 const (
 	ErrInternal         errors.Code = "ErrInternal"
+	ErrUnsupported      errors.Code = "ErrUnsupported"
 	ErrCacheKeyNotFound errors.Code = "ErrCacheKeyNotFound"
 
 	ErrDuplicateColumn   errors.Code = "ErrDuplicateColumn"
@@ -169,6 +170,17 @@ func NewErrInternalf(format string, a ...interface{}) error {
 	return errors.New(
 		ErrInternal,
 		errorMessage,
+	)
+}
+
+func NewErrUnsupported(line, col int, is bool, thing string) error {
+	msg := fmt.Sprintf("[%d:%d] %s are not supported", line, col, thing)
+	if is {
+		msg = fmt.Sprintf("[%d:%d] %s is not supported", line, col, thing)
+	}
+	return errors.New(
+		ErrUnknownIdentifier,
+		msg,
 	)
 }
 

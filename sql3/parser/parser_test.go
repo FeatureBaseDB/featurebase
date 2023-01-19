@@ -1879,22 +1879,6 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 			},
 		})
-		AssertParseStatement(t, `SELECT * FROM foo NATURAL JOIN bar`, &parser.SelectStatement{
-			Select: pos(0),
-			Columns: []*parser.ResultColumn{
-				{Star: pos(7)},
-			},
-			From: pos(9),
-			Source: &parser.JoinClause{
-				X: &parser.QualifiedTableName{
-					Name: &parser.Ident{NamePos: pos(14), Name: "foo"},
-				},
-				Operator: &parser.JoinOperator{Natural: pos(18), Join: pos(26)},
-				Y: &parser.QualifiedTableName{
-					Name: &parser.Ident{NamePos: pos(31), Name: "bar"},
-				},
-			},
-		})
 		AssertParseStatement(t, `SELECT * FROM foo INNER JOIN bar ON true`, &parser.SelectStatement{
 			Select: pos(0),
 			Columns: []*parser.ResultColumn{
@@ -1986,22 +1970,22 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 			},
 		})
-		AssertParseStatement(t, `SELECT * FROM foo CROSS JOIN bar`, &parser.SelectStatement{
-			Select: pos(0),
-			Columns: []*parser.ResultColumn{
-				{Star: pos(7)},
-			},
-			From: pos(9),
-			Source: &parser.JoinClause{
-				X: &parser.QualifiedTableName{
-					Name: &parser.Ident{NamePos: pos(14), Name: "foo"},
-				},
-				Operator: &parser.JoinOperator{Cross: pos(18), Join: pos(24)},
-				Y: &parser.QualifiedTableName{
-					Name: &parser.Ident{NamePos: pos(29), Name: "bar"},
-				},
-			},
-		})
+		// AssertParseStatement(t, `SELECT * FROM foo CROSS JOIN bar`, &parser.SelectStatement{
+		// 	Select: pos(0),
+		// 	Columns: []*parser.ResultColumn{
+		// 		{Star: pos(7)},
+		// 	},
+		// 	From: pos(9),
+		// 	Source: &parser.JoinClause{
+		// 		X: &parser.QualifiedTableName{
+		// 			Name: &parser.Ident{NamePos: pos(14), Name: "foo"},
+		// 		},
+		// 		Operator: &parser.JoinOperator{Cross: pos(18), Join: pos(24)},
+		// 		Y: &parser.QualifiedTableName{
+		// 			Name: &parser.Ident{NamePos: pos(29), Name: "bar"},
+		// 		},
+		// 	},
+		// })
 
 		/*AssertParseStatement(t, `WITH cte (foo, bar) AS (SELECT baz), xxx AS (SELECT yyy) SELECT bat`, &parser.SelectStatement{
 			WithClause: &parser.WithClause{
@@ -2234,10 +2218,12 @@ func TestParser_ParseStatement(t *testing.T) {
 		AssertParseStatementError(t, `SELECT foo FROM foo INDEXED BY`, `1:30: expected index name, found 'EOF'`)*/
 		/*AssertParseStatementError(t, `SELECT foo FROM foo NOT`, `1:23: expected INDEXED, found 'EOF'`)*/
 		AssertParseStatementError(t, `SELECT * FROM foo INNER`, `1:23: expected JOIN, found 'EOF'`)
-		AssertParseStatementError(t, `SELECT * FROM foo CROSS`, `1:23: expected JOIN, found 'EOF'`)
-		AssertParseStatementError(t, `SELECT * FROM foo NATURAL`, `1:25: expected JOIN, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * FROM foo LEFT`, `1:22: expected JOIN, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * FROM foo LEFT OUTER`, `1:28: expected JOIN, found 'EOF'`)
+		AssertParseStatementError(t, `SELECT * FROM foo RIGHT`, `1:23: expected JOIN, found 'EOF'`)
+		AssertParseStatementError(t, `SELECT * FROM foo RIGHT OUTER`, `1:29: expected JOIN, found 'EOF'`)
+		AssertParseStatementError(t, `SELECT * FROM foo FULL`, `1:22: expected JOIN, found 'EOF'`)
+		AssertParseStatementError(t, `SELECT * FROM foo FULL OUTER`, `1:28: expected JOIN, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * FROM foo,`, `1:18: expected table name or left paren, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * FROM foo JOIN bar ON`, `1:29: expected expression, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * FROM foo JOIN bar USING`, `1:32: expected left paren, found 'EOF'`)
