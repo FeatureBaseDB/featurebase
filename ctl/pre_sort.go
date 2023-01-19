@@ -2,6 +2,7 @@ package ctl
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -10,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/molecula/featurebase/v3/logger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
@@ -32,19 +33,17 @@ type PreSortCommand struct {
 	// Standard input/output
 	logDest logger.Logger
 
-	outputEncoders map[int]*json.Encoder
-	outputFiles    map[int]*os.File
+	outputFiles map[int]*os.File
 }
 
 // NewPreSortCommand returns a new instance of PreSortCommand.
 func NewPreSortCommand(logdest logger.Logger) *PreSortCommand {
 	return &PreSortCommand{
-		logDest:        logdest,
-		Type:           "ndjson",
-		OutputDir:      "presorted_files",
-		PartitionN:     256,
-		outputFiles:    make(map[int]*os.File),
-		outputEncoders: make(map[int]*json.Encoder),
+		logDest:     logdest,
+		Type:        "ndjson",
+		OutputDir:   "presorted_files",
+		PartitionN:  256,
+		outputFiles: make(map[int]*os.File),
 	}
 }
 
@@ -52,9 +51,6 @@ func NewPreSortCommand(logdest logger.Logger) *PreSortCommand {
 func (cmd *PreSortCommand) Run(ctx context.Context) error {
 	if cmd.File == "" {
 		return errors.New("must set a file or directory to read from")
-	}
-	if cmd.Type != "ndjson" {
-		return errors.New("only 'ndjson' is supported for file type currently")
 	}
 	if len(cmd.PrimaryKeyFields) == 0 {
 		return errors.New("must define primary-key-fields")
@@ -73,7 +69,11 @@ func (cmd *PreSortCommand) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "wakling %s", cmd.File)
 	}
-	fmt.Println(filelist)
+	if len(filelist) > 3 {
+		cmd.logDest.Printf("%d files: %v...", len(filelist), filelist[:3])
+	} else {
+		cmd.logDest.Printf("Files: %v", filelist)
+	}
 
 	if err := os.MkdirAll(cmd.OutputDir, 0755); err != nil {
 		return errors.Wrapf(err, "creating output directory: '%s'", cmd.OutputDir)
@@ -86,13 +86,36 @@ func (cmd *PreSortCommand) Run(ctx context.Context) error {
 			return errors.Wrapf(err, "couldn't open output file %s", name)
 		}
 		cmd.outputFiles[i] = f
-		cmd.outputEncoders[i] = json.NewEncoder(f)
 	}
 	defer func() {
 		for _, f := range cmd.outputFiles {
 			_ = f.Close()
 		}
 	}()
+
+	switch cmd.Type {
+	case "ndjson":
+		if err := cmd.RunNDJSON(filelist); err != nil {
+			return errors.Wrap(err, "running ndjson")
+		}
+	case "csv":
+		if err := cmd.RunCSV(filelist); err != nil {
+			return errors.Wrap(err, "running csv")
+		}
+	default:
+		return errors.Errorf("unsupported type %s, try ndjson or csv", cmd.Type)
+	}
+
+	return nil
+}
+
+func (cmd *PreSortCommand) RunNDJSON(filelist []string) error {
+	outputEncoders := make(map[int]*json.Encoder)
+	for i, f := range cmd.outputFiles {
+		outputEncoders[i] = json.NewEncoder(f)
+		outputEncoders[i].SetIndent("", "")
+		outputEncoders[i].SetEscapeHTML(false)
+	}
 
 	for _, fname := range filelist {
 		f, err := os.Open(fname)
@@ -106,7 +129,7 @@ func (cmd *PreSortCommand) Run(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			err = cmd.outputEncoders[partition].Encode(rec)
+			err = outputEncoders[partition].Encode(rec)
 			if err != nil {
 				return errors.Wrapf(err, "writing record to partition %d", partition)
 			}
@@ -115,7 +138,6 @@ func (cmd *PreSortCommand) Run(ctx context.Context) error {
 			return errors.Wrapf(err, "error attempting to decode json from %s", fname)
 		}
 	}
-
 	return nil
 }
 
@@ -128,6 +150,66 @@ func (cmd *PreSortCommand) ndjsonPartition(rec map[string]interface{}) (int, err
 		if !ok {
 			return 0, errors.Errorf("couldn't find primary key part '%s' in record: %+v", name, rec)
 		}
+		h.Write([]byte(toString(val)))
+		if i < len(cmd.PrimaryKeyFields)-1 {
+			h.Write([]byte{'|'})
+		}
+	}
+	return int(h.Sum64() % uint64(cmd.PartitionN)), nil
+}
+
+func (cmd *PreSortCommand) RunCSV(filelist []string) error {
+	outputWriters := make(map[int]*csv.Writer)
+	for i, f := range cmd.outputFiles {
+		outputWriters[i] = csv.NewWriter(f)
+	}
+
+	for _, fname := range filelist {
+		f, err := os.Open(fname)
+		if err != nil {
+			cmd.logDest.Warnf("Could not open %s, skipping", fname)
+		}
+		reader := csv.NewReader(f)
+		reader.ReuseRecord = true
+		rec, err := reader.Read()
+		if err != nil {
+			return errors.Wrap(err, "")
+		}
+		header := make(map[string]int)
+		for i, key := range rec {
+			header[key] = i
+		}
+		for rec, err = reader.Read(); err == nil; rec, err = reader.Read() {
+			partition, err := cmd.csvPartition(header, rec)
+			if err != nil {
+				return err
+			}
+			err = outputWriters[partition].Write(rec)
+			if err != nil {
+				return errors.Wrapf(err, "writing record to partition %d", partition)
+			}
+		}
+		if err != io.EOF && err != nil {
+			return errors.Wrapf(err, "error attempting to decode json from %s", fname)
+		}
+	}
+
+	for _, w := range outputWriters {
+		w.Flush()
+	}
+	return nil
+}
+
+func (cmd *PreSortCommand) csvPartition(header map[string]int, rec []string) (int, error) {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(cmd.Table))
+
+	for i, name := range cmd.PrimaryKeyFields {
+		pos, ok := header[name]
+		if !ok {
+			return 0, errors.Errorf("couldn't find primary key part '%s' in header: %+v", name, header)
+		}
+		val := rec[pos]
 		h.Write([]byte(toString(val)))
 		if i < len(cmd.PrimaryKeyFields)-1 {
 			h.Write([]byte{'|'})
