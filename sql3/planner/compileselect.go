@@ -268,6 +268,17 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 	case *parser.JoinClause:
 		scope.AddWarning("🦖 here there be dragons! JOINS are experimental.")
 
+		// what sort of join is it?
+		jType := joinTypeInner
+		if sourceExpr.Operator.Left.IsValid() {
+			jType = joinTypeLeft
+		} else if sourceExpr.Operator.Right.IsValid() {
+			return nil, sql3.NewErrUnsupported(sourceExpr.Operator.Right.Line, sourceExpr.Operator.Right.Column, false, "RIGHT join types")
+		} else if sourceExpr.Operator.Full.IsValid() {
+			return nil, sql3.NewErrUnsupported(sourceExpr.Operator.Full.Line, sourceExpr.Operator.Full.Column, false, "FULL join types")
+		}
+
+		// handle the join condition
 		var joinCondition types.PlanExpression
 		if sourceExpr.Constraint == nil {
 			scope.AddWarning("⚠️  cartesian products are never a good idea - are you missing a join constraint?")
@@ -285,6 +296,7 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 			}
 		}
 
+		// compile top and bottom child ops
 		topOp, err := p.compileSource(scope, sourceExpr.X)
 		if err != nil {
 			return nil, err
@@ -293,7 +305,7 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 		if err != nil {
 			return nil, err
 		}
-		return NewPlanOpNestedLoops(topOp, bottomOp, joinCondition), nil
+		return NewPlanOpNestedLoops(topOp, bottomOp, jType, joinCondition), nil
 
 	case *parser.QualifiedTableName:
 
