@@ -2,7 +2,7 @@ package ctl_test
 
 import (
 	"context"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,28 +31,28 @@ func TestPreSort(t *testing.T) {
 		t.Fatalf("running ndjson: %v", err)
 	}
 
-	infos, err := ioutil.ReadDir(filepath.Join(td, "ndjson_out"))
+	entries, err := os.ReadDir(filepath.Join(td, "ndjson_out"))
 	if err != nil {
 		t.Fatalf("reading dir: %v", err)
 	}
 	totalSize := 0
 	numWithData := 0
 	totalSizeRead := 0
-	if len(infos) != 5 {
-		t.Errorf("expected 5 output files, but got: %d", len(infos))
+	if len(entries) != 5 {
+		t.Errorf("expected 5 output files, but got: %d", len(entries))
 	}
-	for _, info := range infos {
-		stuff, err := ioutil.ReadFile(filepath.Join(com.OutputDir, info.Name()))
+	for _, entry := range entries {
+		stuff, err := os.ReadFile(filepath.Join(com.OutputDir, entry.Name()))
 		if err != nil {
 			t.Fatalf("reading: %v", err)
 		}
 		totalSizeRead += len(stuff)
 		t.Logf("%s\n", stuff)
-		if info.Size() > 0 {
-			totalSize += int(info.Size())
+		if size(t, entry) > 0 {
+			totalSize += int(size(t, entry))
 			numWithData++
 		}
-		t.Log(info.Name(), info.Size())
+		t.Log(entry.Name(), size(t, entry))
 	}
 	if totalSize < len(sampleNDJSON) || totalSize > len(sampleNDJSON) {
 		t.Errorf("unexpected total data size orig: %d, got: %d", len(sampleNDJSON), totalSize)
@@ -71,34 +71,42 @@ func TestPreSort(t *testing.T) {
 		t.Fatalf("running ndjson: %v", err)
 	}
 
-	infos, err = ioutil.ReadDir(filepath.Join(td, com.OutputDir))
+	entries, err = os.ReadDir(filepath.Join(td, com.OutputDir))
 	if err != nil {
 		t.Fatalf("reading dir: %v", err)
 	}
 	totalSize = 0
 	numWithData = 0
 	totalSizeRead = 0
-	if len(infos) != 5 {
-		t.Errorf("expected 5 output files, but got: %d", len(infos))
+	if len(entries) != 5 {
+		t.Errorf("expected 5 output files, but got: %d", len(entries))
 	}
-	for _, info := range infos {
-		stuff, err := ioutil.ReadFile(filepath.Join(com.OutputDir, info.Name()))
+	for _, entry := range entries {
+		stuff, err := os.ReadFile(filepath.Join(com.OutputDir, entry.Name()))
 		if err != nil {
 			t.Fatalf("reading: %v", err)
 		}
 		totalSizeRead += len(stuff)
 		t.Logf("%s\n", stuff)
-		if info.Size() > 0 {
-			totalSize += int(info.Size())
+		if size(t, entry) > 0 {
+			totalSize += int(size(t, entry))
 			numWithData++
 		}
-		t.Log(info.Name(), info.Size())
+		t.Log(entry.Name(), size(t, entry))
 	}
 	// -14 is removing the header
 	if totalSize < len(sampleCSV)-14 || totalSize > len(sampleCSV)-14 {
 		t.Errorf("unexpected total data size orig: %d, got: %d", len(sampleCSV), totalSize)
 	}
 
+}
+
+func size(t *testing.T, e fs.DirEntry) int64 {
+	info, err := e.Info()
+	if err != nil {
+		t.Fatalf(": %v", err)
+	}
+	return info.Size()
 }
 
 func testFile(t *testing.T, name, dir, contents string) {
