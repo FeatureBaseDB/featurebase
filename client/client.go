@@ -29,7 +29,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pb"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"

@@ -18,7 +18,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"

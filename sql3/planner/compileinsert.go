@@ -11,7 +11,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	"github.com/pkg/errors"
 )
 
 // compileInsertStatement compiles an INSERT statement into a PlanOperator.

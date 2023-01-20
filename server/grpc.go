@@ -22,7 +22,6 @@ import (
 	pb "github.com/featurebasedb/featurebase/v3/proto"
 	vdsm_pb "github.com/featurebasedb/featurebase/v3/proto/vdsm"
 	"github.com/featurebasedb/featurebase/v3/sql"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"

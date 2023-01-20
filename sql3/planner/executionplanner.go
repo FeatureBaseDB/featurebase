@@ -12,10 +12,13 @@ import (
 	"strings"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	"golang.org/x/sync/errgroup"
 )
 
 func isTableNotFoundError(err error) bool {

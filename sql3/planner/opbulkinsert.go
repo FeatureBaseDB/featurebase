@@ -17,6 +17,7 @@ import (
 
 	"github.com/PaesslerAG/gval"
 	"github.com/PaesslerAG/jsonpath"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"

@@ -13,7 +13,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/lru"
 	pb "github.com/featurebasedb/featurebase/v3/proto"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/pkg/errors"
 )
 

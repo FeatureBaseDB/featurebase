@@ -17,7 +17,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"

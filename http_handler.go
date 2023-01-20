@@ -46,6 +46,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/featurebasedb/featurebase/v3/wireprotocol"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prom2json"
 	uuid "github.com/satori/go.uuid"

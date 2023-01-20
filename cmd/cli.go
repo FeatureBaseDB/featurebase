@@ -2,7 +2,7 @@
 package cmd
 
 import (
-	"github.com/featurebasedb/featurebase/v3/ctl"
+	"github.com/featurebasedb/featurebase/v3/cli"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )

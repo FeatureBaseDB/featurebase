@@ -18,7 +18,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/storage"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/featurebasedb/featurebase/v3/vprint"

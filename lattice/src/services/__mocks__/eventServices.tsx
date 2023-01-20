@@ -10,3 +10,4 @@ const pilosa = {
 };
 
 module.exports.pilosa = pilosa;
+export {};

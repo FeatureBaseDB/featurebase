@@ -22,7 +22,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner"
 	plannertypes "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/systemlayer"
 	uuid "github.com/satori/go.uuid"
 )

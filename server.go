@@ -27,7 +27,6 @@ import (
         "github.com/featurebasedb/featurebase/v3/sql3"
         "github.com/featurebasedb/featurebase/v3/sql3/parser"
         planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-        "github.com/featurebasedb/featurebase/v3/stats"
         "github.com/featurebasedb/featurebase/v3/storage"
         "github.com/pkg/errors"
         "golang.org/x/sync/errgroup"
