@@ -4517,7 +4517,7 @@ func intersectionCountArrayArray(a, b *Container) (n int32) {
 	na, nb := len(ca), len(cb)
 	if na > nb {
 		ca, cb = cb, ca
-		na, nb = nb, na // nolint: staticcheck, ineffassign
+		na, nb = nb, na //nolint: staticcheck, ineffassign
 	}
 	j := 0
 	for _, va := range ca {
@@ -4619,7 +4619,7 @@ func intersectionCallbackArrayArray(a, b *Container, fn func(uint16)) {
 	na, nb := len(ca), len(cb)
 	if na > nb {
 		ca, cb = cb, ca
-		na, nb = nb, na // nolint: staticcheck, ineffassign
+		na, nb = nb, na //nolint: staticcheck, ineffassign
 	}
 	if (na << 2) < nb {
 		for _, va := range ca {

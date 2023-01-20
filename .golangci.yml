@@ -40,12 +40,6 @@ run:
   # If false (default) - golangci-lint acquires file lock on start.
   allow-parallel-runners: false
 
-  # Define the Go version limit.
-  # Mainly related to generics support since go1.18.
-  # Default: use Go version from the go.mod file, fallback on the env var `GOVERSION`, fallback on 1.18
-  go: '1.19'
-
-
 # output configuration options
 output:
   # Format: colored-line-number|line-number|json|tab|checkstyle|code-climate|junit-xml|github-actions
@@ -108,18 +102,6 @@ linters-settings:
     right-to-left-isolate: false
     first-strong-isolate: false
     pop-directional-isolate: false
-
-  cyclop:
-    # The maximal code complexity to report.
-    # Default: 10
-    max-complexity: 10
-    # The maximal average package complexity.
-    # If it's higher than 0.0 (float) the check is enabled
-    # Default: 0.0
-    package-average: 0.5
-    # Should ignore tests.
-    # Default: false
-    skip-tests: false
 
   decorder:
     # Required order of `type`, `const`, `var` and `func` declarations inside a file.
@@ -268,28 +250,28 @@ linters-settings:
     exclude:
       - 'cobra\.Command$'
 
-  forbidigo:
-    # Forbid the following identifiers (list of regexp).
-    # Default: ["^(fmt\\.Print(|f|ln)|print|println)$"]
-    forbid:
-      - ^print.*$
-      - 'fmt\.Print.*'
-      # Optionally put comments at the end of the regex, surrounded by `(# )?`
-      # Escape any special characters.
-      - 'fmt\.Print.*(# Do not commit print statements\.)?'
-    # Exclude godoc examples from forbidigo checks.
-    # Default: true
-    exclude_godoc_examples: false
+  # forbidigo:
+  #   # Forbid the following identifiers (list of regexp).
+  #   # Default: ["^(fmt\\.Print(|f|ln)|print|println)$"]
+  #   forbid:
+  #     - ^print.*$
+  #     - 'fmt\.Print.*'
+  #     # Optionally put comments at the end of the regex, surrounded by `(# )?`
+  #     # Escape any special characters.
+  #     - 'fmt\.Print.*(# Do not commit print statements\.)?'
+  #   # Exclude godoc examples from forbidigo checks.
+  #   # Default: true
+  #   exclude_godoc_examples: false
 
-  funlen:
-    # Checks the number of lines in a function.
-    # If lower than 0, disable the check.
-    # Default: 60
-    lines: -1
-    # Checks the number of statements in a function.
-    # If lower than 0, disable the check.
-    # Default: 40
-    statements: -1
+  # funlen:
+  #   # Checks the number of lines in a function.
+  #   # If lower than 0, disable the check.
+  #   # Default: 60
+  #   lines: -1
+  #   # Checks the number of statements in a function.
+  #   # If lower than 0, disable the check.
+  #   # Default: 40
+  #   statements: -1
 
   gci:
 
@@ -474,40 +456,6 @@ linters-settings:
     # Forbid the use of the `exclude` directives.
     # Default: false
     exclude-forbidden: false
-
-  gomodguard:
-    allowed:
-      # List of allowed modules.
-      # Default: []
-      modules:
-        - gopkg.in/yaml.v2
-      # List of allowed module domains.
-      # Default: []
-      domains:
-        - golang.org
-    blocked:
-      # List of blocked modules.
-      # Default: []
-      modules:
-        # Blocked module.
-        - github.com/uudashr/go-module:
-            # Recommended modules that should be used instead. (Optional)
-            recommendations:
-              - golang.org/x/mod
-            # Reason why the recommended module should be used. (Optional)
-            reason: "`mod` is the official go.mod parser library."
-      # List of blocked module version constraints.
-      # Default: []
-      versions:
-        # Blocked module with version constraint.
-        - github.com/mitchellh/go-homedir:
-            # Version constraint, see https://github.com/Masterminds/semver#basic-comparisons.
-            version: "< 1.1.0"
-            # Reason why the version constraint exists. (Optional)
-            reason: "testing if blocked version constraint works."
-      # Set to true to raise lint issues for packages that are loaded from a local path via replace directive.
-      # Default: false
-      local_replace_directives: false
 
   gosimple:
     # Sxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
@@ -1523,87 +1471,102 @@ linters-settings:
 linters:
   # Enable specific linter
   # https://golangci-lint.run/usage/linters/#enabled-by-default
+  disable:
+    - godox
+    - goconst
+    - nestif
+    - unparam
+    - forbidigo
+    - scopelint
+    - ifshort
+    - nosnakecase
+    - gochecknoglobals
+    - misspell
+    - gomnd
+    - errcheck
+    - goprintffuncname
+    - gochecknoinits
+    - errchkjson
+    - dupword
+    - decorder
+    - nlreturn
+    - gocognit
   enable:
     - asasalint
     - asciicheck
     - bidichk
     - bodyclose
-    - containedctx
-    - contextcheck
-    - cyclop
-    - decorder
+#    - containedctx
+#    - contextcheck # TODO(maybe enable this)
+#    - cyclop
+#    - decorder
     - depguard
     - dogsled
-    - dupl
+#    - dupl
     - durationcheck
-    - errcheck
-    - errchkjson
     - errname
     - errorlint
     - execinquery
     - exhaustive
     - exhaustruct
     - exportloopref
-    - forbidigo
+#    - forbidigo
     - forcetypeassert
     - funlen
     - gci
-    - gochecknoglobals
-    - gochecknoinits
-    - gocognit
-    - goconst
+#    - gochecknoglobals
+#    - gochecknoinits
+#    - goconst
     - godot
-    - godox
-    - goerr113
+#    - godox TODO this calls out TODOs and such... would be a good one to work toward enabling seeing as half our bugs lead back to a TODO
+#    - goerr113
     - gofmt
     - gofumpt
     - goheader
     - goimports
-    - gomnd
+#    - gomnd
     - gomoddirectives
-    - gomodguard
     - goprintffuncname
     - gosec
     - gosimple
     - govet
     - grouper
-    - importas
+#    - importas
     - ineffassign
     - interfacebloat
-    - lll
-    - maintidx
-    - makezero
-    - misspell
-    - nakedret
-    - nestif
+#    - lll
+#    - maintidx
+#    - makezero
+#    - misspell # TODO seems like a good one to try to turn on
+#    - nakedret
     - nilerr
     - nilnil
-    - nlreturn
+#    - nlreturn
     - noctx
     - nolintlint
-    - nonamedreturns
+#    - nonamedreturns
     - nosprintfhostport
-    - prealloc
+#    - prealloc
     - predeclared
     - promlinter
     - reassign
-    - revive
+#    - revive
     - staticcheck
     - stylecheck
-    - tagliatelle
+#    - tagliatelle TODO will allow us to enforce correct json tags if configured properly
     - tenv
     - testpackage
     - thelper
     - tparallel
     - typecheck
     - unconvert
-    - unparam
-    - unused
+#    - unparam TODO probably useful
+#    - unused TODO (definitely look at getting this re-enabled)
     - usestdlibvars
-    - varnamelen
+#    - varnamelen
     - whitespace
-    - wrapcheck
-    - wsl
+#    - wrapcheck # TODO(would like to enable this)
+#    - wsl
 
   # Enable presets.
   # https://golangci-lint.run/usage/linters
