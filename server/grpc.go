@@ -22,7 +22,6 @@ import (
 	pb "github.com/featurebasedb/featurebase/v3/proto"
 	vdsm_pb "github.com/featurebasedb/featurebase/v3/proto/vdsm"
 	"github.com/featurebasedb/featurebase/v3/sql"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -41,21 +40,15 @@ type GRPCHandler struct {
 	perms             *authz.GroupPermissions
 	logger            logger.Logger
 	queryLogger       logger.Logger
-	stats             stats.StatsClient
 	inspectDeprecated sync.Once
 }
 
 func NewGRPCHandler(api *pilosa.API) *GRPCHandler {
-	return &GRPCHandler{api: api, logger: logger.NopLogger, stats: stats.NopStatsClient}
+	return &GRPCHandler{api: api, logger: logger.NopLogger}
 }
 
 func (h *GRPCHandler) WithLogger(logger logger.Logger) *GRPCHandler {
 	h.logger = logger
-	return h
-}
-
-func (h *GRPCHandler) WithStats(stats stats.StatsClient) *GRPCHandler {
-	h.stats = stats
 	return h
 }
 
@@ -140,7 +133,7 @@ func errToStatusError(err error) error {
 }
 
 func (h *GRPCHandler) execSQL(ctx context.Context, queryStr string) (pb.ToRowser, error) {
-	h.stats.Count(pilosa.MetricSqlQueries, 1, 1)
+	pilosa.CounterSQLQueries.Inc()
 	return execSQL(ctx, h.api, h.logger, queryStr)
 }
 
@@ -340,9 +333,9 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 		return errToStatusError(err)
 	}
 	durFormat := time.Since(t)
-	h.stats.Timing(pilosa.MetricGRPCStreamQueryDurationSeconds, durQuery, 0.1)
-	h.stats.Timing(pilosa.MetricGRPCStreamFormatDurationSeconds, durFormat, 0.1)
-	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
+	pilosa.SummaryGRPCStreamQueryDurationSeconds.Observe(durQuery.Seconds())
+	pilosa.SummaryGRPCStreamFormatDurationSeconds.Observe(durFormat.Seconds())
+	pilosa.CounterPQLQueries.Inc()
 
 	return errToStatusError(nil)
 }
@@ -406,9 +399,9 @@ func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest
 		return nil, errors.Wrap(err, "sending header")
 	}
 
-	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
-	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
-	h.stats.Count(pilosa.MetricPqlQueries, 1, 1)
+	pilosa.SummaryGRPCUnaryQueryDurationSeconds.Observe(durQuery.Seconds())
+	pilosa.SummaryGRPCUnaryFormatDurationSeconds.Observe(durFormat.Seconds())
+	pilosa.CounterPQLQueries.Inc()
 
 	return table, errToStatusError(nil)
 }
@@ -510,20 +503,14 @@ type VDSMGRPCHandler struct {
 	grpcHandler *GRPCHandler
 	api         *pilosa.API
 	logger      logger.Logger
-	stats       stats.StatsClient
 }
 
 func NewVDSMGRPCHandler(grpcHandler *GRPCHandler, api *pilosa.API) *VDSMGRPCHandler {
-	return &VDSMGRPCHandler{grpcHandler: grpcHandler, api: api, logger: logger.NopLogger, stats: stats.NopStatsClient}
+	return &VDSMGRPCHandler{grpcHandler: grpcHandler, api: api, logger: logger.NopLogger}
 }
 
 func (h *VDSMGRPCHandler) WithLogger(logger logger.Logger) *VDSMGRPCHandler {
 	h.logger = logger
-	return h
-}
-
-func (h *VDSMGRPCHandler) WithStats(stats stats.StatsClient) *VDSMGRPCHandler {
-	h.stats = stats
 	return h
 }
 
@@ -1481,7 +1468,6 @@ type grpcServer struct {
 
 	logger      logger.Logger
 	queryLogger logger.Logger
-	stats       stats.StatsClient
 }
 
 type grpcServerOption func(s *grpcServer) error
@@ -1510,13 +1496,6 @@ func OptGRPCServerTLSConfig(tlsConfig *tls.Config) grpcServerOption {
 func OptGRPCServerLogger(logger logger.Logger) grpcServerOption {
 	return func(s *grpcServer) error {
 		s.logger = logger
-		return nil
-	}
-}
-
-func OptGRPCServerStats(stats stats.StatsClient) grpcServerOption {
-	return func(s *grpcServer) error {
-		s.stats = stats
 		return nil
 	}
 }
@@ -1640,7 +1619,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 
 	// create grpc server
 	server.grpcServer = grpc.NewServer(gopts...)
-	grpcHandler := NewGRPCHandler(server.api).WithLogger(server.logger).WithStats(server.stats).WithQueryLogger(server.queryLogger)
+	grpcHandler := NewGRPCHandler(server.api).WithLogger(server.logger).WithQueryLogger(server.queryLogger)
 
 	// add server permissions if we've got 'em
 	if server.perms != nil {
@@ -1648,7 +1627,7 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 	}
 
 	pb.RegisterPilosaServer(server.grpcServer, grpcHandler)
-	vdsm_pb.RegisterMoleculaServer(server.grpcServer, NewVDSMGRPCHandler(grpcHandler, server.api).WithLogger(server.logger).WithStats(server.stats))
+	vdsm_pb.RegisterMoleculaServer(server.grpcServer, NewVDSMGRPCHandler(grpcHandler, server.api).WithLogger(server.logger))
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(server.grpcServer)

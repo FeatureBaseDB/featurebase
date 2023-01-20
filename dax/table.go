@@ -22,14 +22,17 @@ import (
 //
 // OrganizationID - carried over from ControlPlane; currently uuid
 // DatabaseID - carried over from ControlPlane; currently uuid
+// Database - base Database struct
+// DatabaseKey - a string representation of OrganizationID and DatabaseID
 // TableID - internally stored as a uint64; presented as a hex string.
 // TableName - human-friendly string table name
 // Table - base Table struct; includes a TableID and a TableName
-// TableQualifier - combination of OrganizationID and DatabaseID
-// QualifiedTable - TableQualifier plus a Table
-// QualifiedTableID - TableQualifier plus a TableID
+// QualifiedDatabase - OrganizationID plus a Database
+// QualifiedDatabaseID - combination of OrganizationID and DatabaseID
+// QualifiedTable - QualifiedDatabaseID plus a Table
+// QualifiedTableID - QualifiedDatabaseID plus a TableID
 // TableKey - a string representation of OrganizationID, DatabaseID, and
-// TableID, which is safe to use as a FeatureBase index name.
+//            TableID, which is safe to use as a FeatureBase index name.
 //
 // Example:
 // OrganizationID - "29-ae44-41"
@@ -37,7 +40,7 @@ import (
 // TableID - 123456789 (hex string: "499602d2")
 // TableName - foo
 // Table - {ID:"499602d2", Name: "foo", Fields: ... }
-// TableQualifier - {Org: "29-ae44-41", DB: "75-d1a2-4f"}
+// QualifierDatabaseID - {Org: "29-ae44-41", DB: "75-d1a2-4f"}
 // QualifiedTable - {Org: "29-ae44-41", DB: "75-d1a2-4f", Table: *tbl}
 // QualifiedTableID - {Org: "29-ae44-41", DB: "75-d1a2-4f", TableID: "499602d2"}
 // TableKey - "tbl__29-ae44-41__75-d1a2-4f__499602d2"
@@ -51,6 +54,13 @@ import (
 // to distinquish it from FeatureBase index names which contain a single
 // underscore.
 const TableKeyDelimiter = "__"
+
+// PrefixDatabase is used as a prefix to DatabaseKey strings because FeatureBase
+// indexes must start with an alpha (a-z) character. Because the string
+// representation of a uuid (i.e. the OrganizationID value) can start with a
+// numeric value, we can't have OrganizationId (or any of the other ID values
+// which make up the DatabaseKey) be at the beginning of the DatabaseKey.
+const PrefixDatabase = "db"
 
 // PrefixTable is used as a prefix to TableKey strings because FeatureBase
 // indexes must start with an alpha (a-z) character. Because the string
@@ -103,6 +113,124 @@ type OrganizationID string
 // value could be any string.
 type DatabaseID string
 
+// DatabaseKey is a globally unique identifier for a database; it is effectively the
+// compound key: (org, database). This is (hopefully) the value that will
+// be used when interfacing with services which are unaware of qualifiers.
+type DatabaseKey string
+
+// QualifiedDatabaseID returns the QualifiedDatabaseID based on the key. If
+// DatabaseKey can't be parsed into a valid (i.e. complete) QualifiedDatabaseID,
+// then blank values are used where necessary.
+func (dk DatabaseKey) QualifiedDatabaseID() QualifiedDatabaseID {
+	qdbid, err := QualifiedDatabaseIDFromKey(string(dk))
+	if err != nil {
+		return NewQualifiedDatabaseID("", DatabaseID(dk))
+	}
+	return qdbid
+}
+
+// DatabaseName is a human-friendly string.
+type DatabaseName string
+
+// Database represents a database and its configuration.
+type Database struct {
+	ID      DatabaseID      `json:"id"`
+	Name    DatabaseName    `json:"name"`
+	Options DatabaseOptions `json:"options"`
+	// Tables  []*Table        `json:"tables"`
+
+	Description string `json:"description,omitempty"`
+	Owner       string `json:"owner,omitempty"`
+	CreatedAt   int64  `json:"createdAt,omitempty"`
+	UpdatedAt   int64  `json:"updatedAt,omitempty"`
+	UpdatedBy   string `json:"updatedBy,omitempty"`
+}
+
+// DatabaseOptions are used to configure a database.
+type DatabaseOptions struct {
+	WorkersMin int `json:"workers-min"`
+	WorkersMax int `json:"workers-max"`
+}
+
+// QualifiedDatabase is a Database along with its OrganizationID.
+type QualifiedDatabase struct {
+	OrganizationID OrganizationID `json:"org-id"`
+	Database
+}
+
+type QualifiedDatabases []*QualifiedDatabase
+
+// Key returns the string-encoded (delimited by DatabaseKeyDelimiter) globally
+// unique DatabaseKey.
+func (qdb QualifiedDatabase) Key() DatabaseKey {
+	return qdb.QualifiedID().Key()
+}
+
+// String returns a human-friendly version of the QualifiedDatabase. It is only
+// used for display purposes; it is not used as any kind of key.
+func (qdb QualifiedDatabase) String() string {
+	return fmt.Sprintf("%s (%s)", qdb.QualifiedID(), qdb.Name)
+}
+
+// QualifiedID returns the QualifiedDatabaseID for the database.
+func (qdb *QualifiedDatabase) QualifiedID() QualifiedDatabaseID {
+	return QualifiedDatabaseID{
+		OrganizationID: qdb.OrganizationID,
+		DatabaseID:     qdb.ID,
+	}
+}
+
+// QualifiedDatabaseID is a DatabaseID along with its OrganizationID.
+type QualifiedDatabaseID struct {
+	OrganizationID OrganizationID `json:"org-id"`
+	DatabaseID     DatabaseID     `json:"db-id"`
+}
+
+// NewQualifiedDatabaseID is a helper function used to create a
+// QualifiedDatabaseID from the provided arguments.
+func NewQualifiedDatabaseID(orgID OrganizationID, dbID DatabaseID) QualifiedDatabaseID {
+	return QualifiedDatabaseID{
+		OrganizationID: orgID,
+		DatabaseID:     dbID,
+	}
+}
+
+// String returns a human-friendly version of the QualifiedDatabaseID. It is only
+// used for display purposes; it is not used as any kind of key. For that, see
+// the QualifiedDatabaseID.Key() method and the DatabaseKey type.
+func (qdbid QualifiedDatabaseID) String() string {
+	return fmt.Sprintf("[%s:%s]", qdbid.OrganizationID, qdbid.DatabaseID)
+}
+
+// Key returns the string-encoded (delimited by TableKeyDelimiter) globally
+// unique DatabaseKey. The key has a prefix because FeatureBase index name
+// restrictions require the name to start with a non-numeric value, and since a
+// uuid can contain a number as its first character, we have to prefix it with
+// something.
+func (qdbid QualifiedDatabaseID) Key() DatabaseKey {
+	if qdbid.DatabaseID == "" {
+		panic("QualifiedDatabaseID.Key called without an ID set")
+	}
+	return DatabaseKey(fmt.Sprintf("%s%s%s%s%s",
+		PrefixDatabase,
+		TableKeyDelimiter,
+		qdbid.OrganizationID,
+		TableKeyDelimiter,
+		qdbid.DatabaseID))
+}
+
+// QualifiedDatabaseIDs is a list of QualifiedDatabaseID.
+type QualifiedDatabaseIDs []QualifiedDatabaseID
+
+func (s QualifiedDatabaseIDs) Len() int { return len(s) }
+func (s QualifiedDatabaseIDs) Less(i, j int) bool {
+	if s[i].OrganizationID != s[j].OrganizationID {
+		return s[i].OrganizationID < s[j].OrganizationID
+	}
+	return s[i].DatabaseID < s[j].DatabaseID
+}
+func (s QualifiedDatabaseIDs) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
 // TableKeyer is an interface implemented by any type which can produce, and be
 // represented by, a TableKey. In the case of a QualifiedTable, its TableKey
 // might be something like `tbl__org__db__tableid`, while a general pilosa
@@ -129,7 +257,7 @@ func (s StringTableKeyer) Key() TableKey {
 // TableKey as the value for index.Name.
 type TableKey string
 
-func (t TableKey) Key() TableKey { return t }
+func (tk TableKey) Key() TableKey { return tk }
 
 // QualifiedTableID returns the QualifiedTableID based on the key. If TableKey
 // can't be parsed into a valid (i.e. complete) QualifiedTableID, then blank
@@ -138,7 +266,7 @@ func (tk TableKey) QualifiedTableID() QualifiedTableID {
 	qtid, err := QualifiedTableIDFromKey(string(tk))
 	if err != nil {
 		return NewQualifiedTableID(
-			NewTableQualifier("", ""),
+			NewQualifiedDatabaseID("", ""),
 			TableID(tk),
 		)
 	}
@@ -153,7 +281,7 @@ func (s TableKeys) Less(i, j int) bool { return s[i] < s[j] }
 func (s TableKeys) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 // TableID is a table identifier. It is unique within the scope of a
-// TableQualifier. Coupled with a TableQualifier, it makes up a
+// QualifiedDatabaseID. Coupled with a QualifiedDatabaseID, it makes up a
 // QualifiedTableID and, when encoded as a string, a TableKey.
 type TableID string
 
@@ -165,7 +293,7 @@ func (s TableIDs) Less(i, j int) bool { return s[i] < s[j] }
 func (s TableIDs) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 // TableName is a human-friendly string. While it is not used as a primary key,
-// uniqueness is generally enforced within the scope of a TableQualifier.
+// uniqueness is generally enforced within the scope of a QualifiedDatabaseID.
 type TableName string
 
 // TableNames is a sortable slice of TableName.
@@ -224,7 +352,7 @@ func (t *Table) CreateID() (TableID, error) {
 }
 
 // NewTable returns a new instance of table with a pseudo-random ID which is
-// assumed to be unique within the scope of a TableQualifier.
+// assumed to be unique within the scope of a QualifiedDatabaseID.
 func NewTable(name TableName) *Table {
 	return &Table{
 		Name:   name,
@@ -315,84 +443,6 @@ func (o Tables) Len() int           { return len(o) }
 func (o Tables) Less(i, j int) bool { return o[i].Name < o[j].Name }
 func (o Tables) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
 
-// TableQualifierKey is the unique TableQualifier values encoded as a string. The
-// current encoding is delimited as `prefix|OrganizationID|DatabaseID` (where
-// the pipe may be some other delimiter) by the TableQualifier.Key() method.
-type TableQualifierKey string
-
-// Qualifier returns the Qualifier based on the values encoded into the
-// TableQualifierKey string.
-func (tqk TableQualifierKey) Qualifier() TableQualifier {
-	parts := strings.Split(string(tqk), TableKeyDelimiter)
-
-	if len(parts) < 3 {
-		return NewTableQualifier("", "")
-	}
-
-	return NewTableQualifier(
-		OrganizationID(parts[1]),
-		DatabaseID(parts[2]),
-	)
-}
-
-// OrganizationID returns the OrganizationID value that has been encoded into
-// the TableQualifierKey string.
-func (tqk TableQualifierKey) OrganizationID() OrganizationID {
-	parts := strings.Split(string(tqk), TableKeyDelimiter)
-
-	if len(parts) < 2 {
-		return ""
-	}
-
-	return OrganizationID(parts[1])
-}
-
-// DatabaseID returns the DatabaseID value that has been encoded into the
-// TableQualifierKey string.
-func (tqk TableQualifierKey) DatabaseID() DatabaseID {
-	parts := strings.Split(string(tqk), TableKeyDelimiter)
-
-	if len(parts) < 3 {
-		return ""
-	}
-
-	return DatabaseID(parts[2])
-}
-
-// TableQualifier contains all the elements required to fully qualify a table.
-type TableQualifier struct {
-	OrganizationID OrganizationID `json:"org-id"`
-	DatabaseID     DatabaseID     `json:"db-id"`
-}
-
-// NewTableQualifier is a helper function used to create a TableQualifier from
-// the provided arguments.
-func NewTableQualifier(orgID OrganizationID, dbID DatabaseID) TableQualifier {
-	return TableQualifier{
-		OrganizationID: orgID,
-		DatabaseID:     dbID,
-	}
-}
-
-// String returns a human-friendly version of the TableQualifier. It is only
-// used for display purposes; it is not used as any kind of key. For that, see
-// the TableQualifier.Key() method and the TableQualifierKey type.
-func (tq TableQualifier) String() string {
-	return fmt.Sprintf("[%s:%s]", tq.OrganizationID, tq.DatabaseID)
-}
-
-// Key returns the string-encoded (delimited by TableKeyDelimiter)
-// TableQualifierKey.
-func (tq TableQualifier) Key() TableQualifierKey {
-	return TableQualifierKey(fmt.Sprintf("%s%s%s%s%s",
-		PrefixTable,
-		TableKeyDelimiter,
-		tq.OrganizationID,
-		TableKeyDelimiter,
-		tq.DatabaseID,
-	))
-}
-
 ////////////////////////////////////////////////
 
 // QualifiedTableID is a globally unique table identifier. It is a
@@ -400,17 +450,17 @@ func (tq TableQualifier) Key() TableQualifierKey {
 // portion). Most things will take a Name or an ID and do the right
 // thing™.
 type QualifiedTableID struct {
-	TableQualifier
+	QualifiedDatabaseID
 	ID   TableID   `json:"id"`
 	Name TableName `json:"name"`
 }
 
 // NewQualifiedTableID is a helper function used to create a QualifiedTableID
 // from the provided arguments.
-func NewQualifiedTableID(q TableQualifier, id TableID) QualifiedTableID {
+func NewQualifiedTableID(qdbid QualifiedDatabaseID, tid TableID) QualifiedTableID {
 	return QualifiedTableID{
-		TableQualifier: q,
-		ID:             id,
+		QualifiedDatabaseID: qdbid,
+		ID:                  tid,
 	}
 }
 
@@ -422,7 +472,7 @@ func QualifiedTableIDFromKey(key string) (QualifiedTableID, error) {
 	case 4:
 		// prefix|orgID|dbID|tblID
 		return NewQualifiedTableID(
-			NewTableQualifier(
+			NewQualifiedDatabaseID(
 				OrganizationID(parts[1]),
 				DatabaseID(parts[2]),
 			),
@@ -433,14 +483,31 @@ func QualifiedTableIDFromKey(key string) (QualifiedTableID, error) {
 	}
 }
 
-// String returns a human-friendly version of the TableQualifierID. It is only
-// used for display purposes; it is not used as any kind of key. For that, see
-// the TableQualifierID.Key() method.
+// QualifiedDatabaseIDFromKey decodes a string key into a QualifiedDatabaseID.
+// The key is assumed to have been encoded using the QualifiedDatabaseID.Key()
+// method.
+func QualifiedDatabaseIDFromKey(key string) (QualifiedDatabaseID, error) {
+	parts := strings.Split(key, TableKeyDelimiter)
+	switch len(parts) {
+	case 3:
+		// prefix|orgID|dbID
+		return NewQualifiedDatabaseID(
+			OrganizationID(parts[1]),
+			DatabaseID(parts[2]),
+		), nil
+	default:
+		return QualifiedDatabaseID{}, errors.Errorf("invalid key: %s", key)
+	}
+}
+
+// String returns a human-friendly version of the QualifiedDatabaseID. It is
+// only used for display purposes; it is not used as any kind of key. For that,
+// see the QualifiedDatabaseID.Key() method.
 func (qtid QualifiedTableID) String() string {
 	if qtid.ID == "" {
-		return fmt.Sprintf("%s%s", qtid.TableQualifier, qtid.Name)
+		return fmt.Sprintf("%s%s", qtid.QualifiedDatabaseID, qtid.Name)
 	}
-	return fmt.Sprintf("%s%s", qtid.TableQualifier, qtid.ID)
+	return fmt.Sprintf("%s%s", qtid.QualifiedDatabaseID, qtid.ID)
 }
 
 // Key returns the string-encoded (delimited by TableKeyDelimiter) globally
@@ -452,35 +519,49 @@ func (qtid QualifiedTableID) Key() TableKey {
 	if qtid.ID == "" {
 		panic("QualifiedTableID.Key called without an ID set")
 	}
-	return TableKey(fmt.Sprintf("%s%s%s",
-		qtid.TableQualifier.Key(),
+	return TableKey(fmt.Sprintf("%s%s%s%s%s%s%s",
+		PrefixTable,
+		TableKeyDelimiter,
+		qtid.OrganizationID,
+		TableKeyDelimiter,
+		qtid.DatabaseID,
 		TableKeyDelimiter,
 		qtid.ID))
 }
 
 // Equals returns true if `other` is the same as qtid. Note: the `Name` value is
-// ignored in this comparison; only `TableQualifier` and `ID` are considered.
+// ignored in this comparison; only `QualifiedDatabaseID` and `ID` are
+// considered.
 func (qtid QualifiedTableID) Equals(other QualifiedTableID) bool {
-	if qtid.TableQualifier == other.TableQualifier && qtid.ID == other.ID {
+	if qtid.QualifiedDatabaseID == other.QualifiedDatabaseID && qtid.ID == other.ID {
 		return true
 	}
 	return false
 }
 
+// Qualifier returns the QualifiedDatabaseID (qdbid) portion of the
+// QualifiedTableID (qtid).
+func (qtid QualifiedTableID) Qualifier() QualifiedDatabaseID {
+	return QualifiedDatabaseID{
+		OrganizationID: qtid.OrganizationID,
+		DatabaseID:     qtid.DatabaseID,
+	}
+}
+
 ////////////////////////////////////////////////
 
-// QualifiedTable wraps Table and includes a TableQualifier.
+// QualifiedTable wraps Table and includes a QualifiedDatabaseID.
 type QualifiedTable struct {
+	QualifiedDatabaseID
 	Table
-	TableQualifier
 }
 
 // NewQualifiedTable returns the tbl as a QualifiedTable with the provided
-// TableQualifier.
-func NewQualifiedTable(qual TableQualifier, tbl *Table) *QualifiedTable {
+// QualifiedDatabaseID.
+func NewQualifiedTable(qdbid QualifiedDatabaseID, tbl *Table) *QualifiedTable {
 	return &QualifiedTable{
-		Table:          *tbl,
-		TableQualifier: qual,
+		QualifiedDatabaseID: qdbid,
+		Table:               *tbl,
 	}
 }
 
@@ -496,17 +577,17 @@ func (qt QualifiedTable) String() string {
 	return fmt.Sprintf("%s (%s)", qt.QualifiedID(), qt.Name)
 }
 
-// Qualifier returns the TableQualifier portion of the QualifiedTable.
-func (qt *QualifiedTable) Qualifier() TableQualifier {
-	return qt.TableQualifier
+// Qualifier returns the QualifiedDatabaseID portion of the QualifiedTable.
+func (qt *QualifiedTable) Qualifier() QualifiedDatabaseID {
+	return qt.QualifiedDatabaseID
 }
 
 // QualifiedID returns the QualifiedTableID for the table.
 func (qt *QualifiedTable) QualifiedID() QualifiedTableID {
 	return QualifiedTableID{
-		TableQualifier: qt.TableQualifier,
-		ID:             qt.ID,
-		Name:           qt.Name,
+		QualifiedDatabaseID: qt.QualifiedDatabaseID,
+		ID:                  qt.ID,
+		Name:                qt.Name,
 	}
 }
 

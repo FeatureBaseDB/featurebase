@@ -36,6 +36,7 @@ func (*CreateIndexStatement) node()     {}
 func (*CreateTableStatement) node()     {}
 func (*CreateFunctionStatement) node()  {}
 func (*CreateViewStatement) node()      {}
+func (*AlterViewStatement) node()       {}
 func (*DateLit) node()                  {}
 func (*DefaultConstraint) node()        {}
 func (*DeleteStatement) node()          {}
@@ -111,6 +112,7 @@ func (*CreateIndexStatement) stmt()     {}
 func (*CreateTableStatement) stmt()     {}
 func (*CreateFunctionStatement) stmt()  {}
 func (*CreateViewStatement) stmt()      {}
+func (*AlterViewStatement) stmt()       {}
 func (*DeleteStatement) stmt()          {}
 func (*DropIndexStatement) stmt()       {}
 func (*DropTableStatement) stmt()       {}
@@ -2487,17 +2489,18 @@ func (s *DropTableStatement) String() string {
 }
 
 type CreateViewStatement struct {
-	Create      Pos              // position of CREATE keyword
-	View        Pos              // position of VIEW keyword
-	If          Pos              // position of IF keyword
-	IfNot       Pos              // position of NOT keyword after IF
-	IfNotExists Pos              // position of EXISTS keyword after IF NOT
-	Name        *Ident           // view name
-	Lparen      Pos              // position of column list left paren
-	Columns     []*Ident         // column list
-	Rparen      Pos              // position of column list right paren
-	As          Pos              // position of AS keyword
-	Select      *SelectStatement // source statement
+	Create      Pos    // position of CREATE keyword
+	View        Pos    // position of VIEW keyword
+	If          Pos    // position of IF keyword
+	IfNot       Pos    // position of NOT keyword after IF
+	IfNotExists Pos    // position of EXISTS keyword after IF NOT
+	Name        *Ident // view name
+	// TODO(pok) - we'll do this later - see note in parseCompileView()
+	// Lparen      Pos              // position of column list left paren
+	// Columns     []*Ident         // column list
+	// Rparen      Pos              // position of column list right paren
+	As     Pos              // position of AS keyword
+	Select *SelectStatement // source statement
 }
 
 // Clone returns a deep copy of s.
@@ -2507,7 +2510,7 @@ func (s *CreateViewStatement) Clone() *CreateViewStatement {
 	}
 	other := *s
 	other.Name = s.Name.Clone()
-	other.Columns = cloneIdents(s.Columns)
+	// other.Columns = cloneIdents(s.Columns)
 	other.Select = s.Select.Clone()
 	return &other
 }
@@ -2521,19 +2524,64 @@ func (s *CreateViewStatement) String() string {
 	}
 	fmt.Fprintf(&buf, " %s", s.Name.String())
 
-	if len(s.Columns) > 0 {
-		buf.WriteString(" (")
-		for i, col := range s.Columns {
-			if i != 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(col.String())
-		}
-		buf.WriteString(")")
-	}
+	// if len(s.Columns) > 0 {
+	// 	buf.WriteString(" (")
+	// 	for i, col := range s.Columns {
+	// 		if i != 0 {
+	// 			buf.WriteString(", ")
+	// 		}
+	// 		buf.WriteString(col.String())
+	// 	}
+	// 	buf.WriteString(")")
+	// }
 
 	fmt.Fprintf(&buf, " AS %s", s.Select.String())
 
+	return buf.String()
+}
+
+type AlterViewStatement struct {
+	Alter Pos    // position of CREATE keyword
+	View  Pos    // position of VIEW keyword
+	Name  *Ident // view name
+
+	// TODO(pok) - we'll do this later - see note in parseCompileView()
+	// Lparen  Pos              // position of column list left paren
+	// Columns []*Ident         // column list
+	// Rparen  Pos              // position of column list right paren
+	As     Pos              // position of AS keyword
+	Select *SelectStatement // source statement
+}
+
+// Clone returns a deep copy of s.
+func (s *AlterViewStatement) Clone() *AlterViewStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Name = s.Name.Clone()
+	// other.Columns = cloneIdents(s.Columns)
+	other.Select = s.Select.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *AlterViewStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("ALTER VIEW")
+	fmt.Fprintf(&buf, " %s", s.Name.String())
+
+	// if len(s.Columns) > 0 {
+	// 	buf.WriteString(" (")
+	// 	for i, col := range s.Columns {
+	// 		if i != 0 {
+	// 			buf.WriteString(", ")
+	// 		}
+	// 		buf.WriteString(col.String())
+	// 	}
+	// 	buf.WriteString(")")
+	// }
+	fmt.Fprintf(&buf, " AS %s", s.Select.String())
 	return buf.String()
 }
 
@@ -3845,13 +3893,14 @@ func (c *JoinClause) SourceFromAlias(alias string) Source {
 }
 
 type JoinOperator struct {
-	Comma   Pos // position of comma
-	Natural Pos // position of NATURAL keyword
-	Left    Pos // position of LEFT keyword
-	Outer   Pos // position of OUTER keyword
-	Inner   Pos // position of INNER keyword
-	Cross   Pos // position of CROSS keyword
-	Join    Pos // position of JOIN keyword
+	Comma Pos // position of comma
+	Left  Pos // position of LEFT keyword
+	Right Pos // position of RIGHT keyword
+	Full  Pos // position of FULL keyword
+	Outer Pos // position of OUTER keyword
+	Inner Pos // position of INNER keyword
+	//	Cross   Pos // position of CROSS keyword // TODO(pok) - add cross back when we do it
+	Join Pos // position of JOIN keyword
 }
 
 // Clone returns a deep copy of op.
@@ -3870,9 +3919,6 @@ func (op *JoinOperator) String() string {
 	}
 
 	var buf bytes.Buffer
-	if op.Natural.IsValid() {
-		buf.WriteString(" NATURAL")
-	}
 	if op.Left.IsValid() {
 		buf.WriteString(" LEFT")
 		if op.Outer.IsValid() {
@@ -3880,8 +3926,8 @@ func (op *JoinOperator) String() string {
 		}
 	} else if op.Inner.IsValid() {
 		buf.WriteString(" INNER")
-	} else if op.Cross.IsValid() {
-		buf.WriteString(" CROSS")
+		// } else if op.Cross.IsValid() {
+		// 	buf.WriteString(" CROSS")
 	}
 	buf.WriteString(" JOIN ")
 

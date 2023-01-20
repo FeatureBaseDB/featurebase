@@ -727,5 +727,98 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			Compare: CompareExactOrdered,
 		},
+		{
+			name: "LenNull",
+			SQLs: sqls(
+				"select len(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "LenString",
+			SQLs: sqls(
+				"select len(' length  ')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(9)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "LenChar",
+			SQLs: sqls(
+				"select len(char(114))",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "ReplicateString",
+			SQLs: sqls(
+				"select replicate('this',2)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("thisthis")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "ReplicateNull",
+			SQLs: sqls(
+				"select replicate(null,null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "ReplicateincorrectArguments",
+			SQLs: sqls(
+				"select replicate('this',)",
+			),
+			ExpErr: "[1:25] 'replicate': count of formal parameters (2) does not match count of actual parameters (1)",
+		},
+		{
+			name: "ReplicateincorrectTypeofArguments",
+			SQLs: sqls(
+				"select replicate(1,2)",
+			),
+			ExpErr: "[1:18] string expression expected",
+		},
+		{
+			name: "ReplicateincorrectTypeofArguments",
+			SQLs: sqls(
+				"select replicate('this','this')",
+			),
+			ExpErr: "[1:25] integer expression expected",
+		},
+		{
+			name: "ReplicateOutofRange",
+			SQLs: sqls(
+				"select replicate('this',-1)",
+			),
+			ExpErr: "[0:0] value '-1' out of range",
+		},
 	},
 }

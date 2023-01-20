@@ -313,17 +313,17 @@ func TestTable(t *testing.T) {
 		t.Run("New", func(t *testing.T) {
 			tbl := dax.NewTable(tableName)
 			tbl.CreateID()
-			qual := dax.TableQualifier{
+			qdbid := dax.QualifiedDatabaseID{
 				OrganizationID: orgID,
 				DatabaseID:     dbID,
 			}
-			qtbl := dax.NewQualifiedTable(qual, tbl)
+			qtbl := dax.NewQualifiedTable(qdbid, tbl)
 			assert.NotEmpty(t, qtbl.ID)
 			assert.Equal(t, tbl.ID, qtbl.ID)
 
 			tq := qtbl.Qualifier()
-			assert.Equal(t, qual.OrganizationID, tq.OrganizationID)
-			assert.Equal(t, qual.DatabaseID, tq.DatabaseID)
+			assert.Equal(t, qdbid.OrganizationID, tq.OrganizationID)
+			assert.Equal(t, qdbid.DatabaseID, tq.DatabaseID)
 
 			wrappedTable := qtbl.Table
 			assert.Equal(t, tbl.Name, wrappedTable.Name)
@@ -345,11 +345,11 @@ func TestTable(t *testing.T) {
 		t.Run("ToJSON", func(t *testing.T) {
 			tbl := dax.NewTable(tableName)
 			tbl.CreateID()
-			qual := dax.TableQualifier{
+			qdbid := dax.QualifiedDatabaseID{
 				OrganizationID: orgID,
 				DatabaseID:     dbID,
 			}
-			qtbl := dax.NewQualifiedTable(qual, tbl)
+			qtbl := dax.NewQualifiedTable(qdbid, tbl)
 			id := qtbl.ID
 
 			b, err := json.Marshal(qtbl)

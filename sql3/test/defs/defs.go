@@ -20,6 +20,7 @@ var TableTests []TableTest = []TableTest{
 	distinctTests,
 
 	subqueryTests,
+	viewTests,
 
 	topTests,
 

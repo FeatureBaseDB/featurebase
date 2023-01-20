@@ -18,14 +18,14 @@ import (
 // schemaManager
 type schemaManager struct {
 	client *mdsclient.Client
-	qual   dax.TableQualifier
+	qdbid  dax.QualifiedDatabaseID
 	logger logger.Logger
 }
 
-func NewSchemaManager(mdsAddress dax.Address, qual dax.TableQualifier, logger logger.Logger) *schemaManager {
+func NewSchemaManager(mdsAddress dax.Address, qdbid dax.QualifiedDatabaseID, logger logger.Logger) *schemaManager {
 	return &schemaManager{
 		client: mdsclient.New(mdsAddress, logger),
-		qual:   qual,
+		qdbid:  qdbid,
 		logger: logger,
 	}
 }
@@ -41,7 +41,7 @@ func (s *schemaManager) Schema() (*featurebase_client.Schema, error) {
 	// method returns.
 	schema := featurebase_client.NewSchema()
 
-	tables, err := s.client.Tables(context.Background(), s.qual)
+	tables, err := s.client.Tables(context.Background(), s.qdbid)
 	if err != nil {
 		return nil, err
 	}

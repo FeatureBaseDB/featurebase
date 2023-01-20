@@ -54,8 +54,8 @@ func (c *Client) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (*dax
 }
 
 // TODO(tlt): collapse TableID into this
-func (c *Client) TableByName(ctx context.Context, qual dax.TableQualifier, tname dax.TableName) (*dax.QualifiedTable, error) {
-	qtid, err := c.TableID(ctx, qual, tname)
+func (c *Client) TableByName(ctx context.Context, qdbid dax.QualifiedDatabaseID, tname dax.TableName) (*dax.QualifiedTable, error) {
+	qtid, err := c.TableID(ctx, qdbid, tname)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting table id")
 	}
@@ -93,14 +93,14 @@ func (c *Client) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.Qua
 	return qtable, nil
 }
 
-func (c *Client) TableID(ctx context.Context, qual dax.TableQualifier, name dax.TableName) (dax.QualifiedTableID, error) {
+func (c *Client) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
 	url := fmt.Sprintf("%s/table-id", c.address.WithScheme(defaultScheme))
 
 	dflt := dax.QualifiedTableID{}
 
 	req := dax.QualifiedTableID{
-		TableQualifier: qual,
-		Name:           name,
+		QualifiedDatabaseID: qdbid,
+		Name:                name,
 	}
 
 	// Encode the request.
@@ -130,12 +130,12 @@ func (c *Client) TableID(ctx context.Context, qual dax.TableQualifier, name dax.
 	return qtid, nil
 }
 
-func (c *Client) Tables(ctx context.Context, qual dax.TableQualifier, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
+func (c *Client) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
 	url := fmt.Sprintf("%s/tables", c.address.WithScheme(defaultScheme))
 
 	req := mdshttp.TablesRequest{
-		OrganizationID: qual.OrganizationID,
-		DatabaseID:     qual.DatabaseID,
+		OrganizationID: qdbid.OrganizationID,
+		DatabaseID:     qdbid.DatabaseID,
 		TableIDs:       ids,
 	}
 
@@ -164,6 +164,62 @@ func (c *Client) Tables(ctx context.Context, qual dax.TableQualifier, ids ...dax
 	}
 
 	return qtables, nil
+}
+
+func (c *Client) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
+	url := fmt.Sprintf("%s/create-database", c.address.WithScheme(defaultScheme))
+
+	// Encode the request.
+	postBody, err := json.Marshal(qdb)
+	if err != nil {
+		return errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return errors.Wrap(err, "posting create database request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	return nil
+}
+
+func (c *Client) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
+	url := fmt.Sprintf("%s/database-by-id", c.address.WithScheme(defaultScheme))
+
+	// Encode the request.
+	postBody, err := json.Marshal(qdbid)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	c.logger.Debugf("POST database request: url: %s", url)
+	resp, err := http.Post(url, "application/json", responseBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "posting table request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	var qdb *dax.QualifiedDatabase
+	if err := json.NewDecoder(resp.Body).Decode(&qdb); err != nil {
+		return nil, errors.Wrap(err, "reading response body")
+	}
+
+	return qdb, nil
 }
 
 func (c *Client) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {

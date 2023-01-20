@@ -80,8 +80,11 @@ func (r Schema) Plan() []map[string]interface{} {
 	return result
 }
 
-// Row is a tuple of values
+// Row is a tuple (of values)
 type Row []interface{}
+
+// Rows is a table of rows
+type Rows []Row
 
 // Append appends all the values in r2 to this row and returns the result
 func (r Row) Append(r2 Row) Row {

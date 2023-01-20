@@ -139,6 +139,7 @@ const (
 	FOR
 	FOREIGN
 	FROM
+	FULL
 	FUNCTION
 	GLOB
 	GROUP
@@ -170,7 +171,6 @@ const (
 	MATCH
 	MAX
 	MIN
-	NATURAL
 	NO
 	NOT
 	NOTBETWEEN
@@ -208,6 +208,7 @@ const (
 	RESTRICT
 	RETURNS
 	RETURN
+	RIGHT
 	ROLLBACK
 	ROW
 	ROWS
@@ -362,6 +363,7 @@ var tokens = [...]string{
 	FOR:               "FOR",
 	FOREIGN:           "FOREIGN",
 	FROM:              "FROM",
+	FULL:              "FULL",
 	FUNCTION:          "FUNCTION",
 	GLOB:              "GLOB",
 	GROUP:             "GROUP",
@@ -394,7 +396,6 @@ var tokens = [...]string{
 	MAX:               "MAX",
 	MIN:               "MIN",
 	NO:                "NO",
-	NATURAL:           "NATURAL",
 	NOT:               "NOT",
 	NOTBETWEEN:        "NOTBETWEEN",
 	NOTEXISTS:         "NOTEXISTS",
@@ -431,6 +432,7 @@ var tokens = [...]string{
 	RESTRICT:          "RESTRICT",
 	RETURNS:           "RETURNS",
 	RETURN:            "RETURN",
+	RIGHT:             "RIGHT",
 	ROLLBACK:          "ROLLBACK",
 	ROW:               "ROW",
 	ROWS:              "ROWS",

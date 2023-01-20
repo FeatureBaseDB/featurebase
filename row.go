@@ -362,7 +362,7 @@ func (r *Row) Difference(others ...*Row) *Row {
 // be incorrect.
 //
 // Why unsupported? For a full description, see:
-// https://github.com/molecula/pilosa/issues/403.
+// https://github.com/featurebasedb/pilosa/issues/403.
 // In short, the current implementation will shift a bit
 // at the edge of a shard out of the shard and into a
 // container which is assumed to be an invalid container
@@ -612,7 +612,7 @@ func (s *RowSegment) Xor(other *RowSegment) *RowSegment {
 // Shift returns s shifted by 1 bit.
 func (s *RowSegment) Shift() (*RowSegment, error) {
 	// TODO: deal with overflow
-	// See issue: https://github.com/molecula/pilosa/issues/403
+	// See issue: https://github.com/featurebasedb/pilosa/issues/403
 	data, err := s.data.Shift(1)
 	if err != nil {
 		return nil, errors.Wrap(err, "shifting roaring data")

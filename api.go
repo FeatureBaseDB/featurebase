@@ -29,12 +29,12 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/prometheus/client_golang/prometheus"
 
 	//"github.com/featurebasedb/featurebase/v3/pg"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -278,7 +278,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "creating index")
 	}
 
-	api.holder.Stats.Count(MetricCreateIndex, 1, 1.0)
+	CounterCreateIndex.Inc()
 	return index, nil
 }
 
@@ -319,7 +319,7 @@ func (api *API) DeleteDataframe(ctx context.Context, indexName string) error {
 		api.server.logger.Errorf("problem sending DeleteIndex message: %s", err)
 		return errors.Wrap(err, "sending DeleteIndex message")
 	}
-	api.holder.Stats.Count(MetricDeleteDataframe, 1, 1.0)
+	CounterDeleteDataframe.Inc()
 	return nil
 }
 
@@ -354,7 +354,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 			return errors.Wrap(err, "deleting id allocation for index")
 		}
 	}
-	api.holder.Stats.Count(MetricDeleteIndex, 1, 1.0)
+	CounterDeleteIndex.Inc()
 	return nil
 }
 
@@ -406,7 +406,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		return nil, errors.Wrap(err, "sending CreateField message")
 	}
 
-	api.holder.Stats.CountWithCustomTags(MetricCreateField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	CounterCreateField.With(prometheus.Labels{"index": indexName})
 	return field, nil
 }
 
@@ -750,7 +750,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 		api.server.logger.Errorf("problem sending DeleteField message: %s", err)
 		return errors.Wrap(err, "sending DeleteField message")
 	}
-	api.holder.Stats.CountWithCustomTags(MetricDeleteField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	CounterDeleteField.With(prometheus.Labels{"index": indexName})
 	return nil
 }
 
@@ -782,7 +782,7 @@ func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName str
 		api.server.logger.Errorf("problem sending DeleteAvailableShard message: %s", err)
 		return errors.Wrap(err, "sending DeleteAvailableShard message")
 	}
-	api.holder.Stats.CountWithCustomTags(MetricDeleteAvailableShard, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	CounterDeleteAvailableShard.With(prometheus.Labels{"index": indexName}).Inc()
 	return nil
 }
 
@@ -2096,15 +2096,6 @@ func (api *API) AvailableShards(ctx context.Context, indexName string) (*roaring
 	return index.AvailableShards(false), nil
 }
 
-// StatsWithTags returns an instance of whatever implementation of StatsClient
-// pilosa is using with the given tags.
-func (api *API) StatsWithTags(tags []string) stats.StatsClient {
-	if api.holder == nil || api.cluster == nil {
-		return nil
-	}
-	return api.holder.Stats.WithTags(tags...)
-}
-
 // LongQueryTime returns the configured threshold for logging/statting
 // long running queries.
 func (api *API) LongQueryTime() time.Duration {
@@ -2391,19 +2382,19 @@ func (api *API) StartTransaction(ctx context.Context, id string, timeout time.Du
 	switch err {
 	case nil:
 		if exclusive {
-			api.holder.Stats.Count(MetricExclusiveTransactionRequest, 1, 1.0)
+			CounterExclusiveTransactionRequest.Inc()
 		} else {
-			api.holder.Stats.Count(MetricTransactionStart, 1, 1.0)
+			CounterTransactionStart.Inc()
 		}
 	case ErrTransactionExclusive:
 		if exclusive {
-			api.holder.Stats.Count(MetricExclusiveTransactionBlocked, 1, 1.0)
+			CounterExclusiveTransactionBlocked.Inc()
 		} else {
-			api.holder.Stats.Count(MetricTransactionBlocked, 1, 1.0)
+			CounterTransactionBlocked.Inc()
 		}
 	}
 	if exclusive && t != nil && t.Active {
-		api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
+		CounterExclusiveTransactionActive.Inc()
 	}
 	return t, err
 }
@@ -2415,9 +2406,9 @@ func (api *API) FinishTransaction(ctx context.Context, id string, remote bool) (
 	t, err := api.server.FinishTransaction(ctx, id, remote)
 	if err == nil {
 		if t.Exclusive {
-			api.holder.Stats.Count(MetricExclusiveTransactionEnd, 1, 1.0)
+			CounterExclusiveTransactionEnd.Inc()
 		} else {
-			api.holder.Stats.Count(MetricTransactionEnd, 1, 1.0)
+			CounterTransactionEnd.Inc()
 		}
 	}
 	return t, err
@@ -2437,7 +2428,7 @@ func (api *API) GetTransaction(ctx context.Context, id string, remote bool) (*Tr
 	t, err := api.server.GetTransaction(ctx, id, remote)
 	if err == nil {
 		if t.Exclusive && t.Active {
-			api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
+			CounterExclusiveTransactionActive.Inc()
 		}
 	}
 	return t, err
@@ -3046,6 +3037,10 @@ func (api *API) CompilePlan(ctx context.Context, q string) (planner_types.PlanOp
 	return api.server.CompileExecutionPlan(ctx, q)
 }
 
+func (api *API) RehydratePlanOperator(ctx context.Context, reader io.Reader) (planner_types.PlanOperator, error) {
+	return api.server.RehydratePlanOperator(ctx, reader)
+}
+
 func (api *API) RBFDebugInfo() map[string]*rbf.DebugInfo {
 	infos := make(map[string]*rbf.DebugInfo)
 
@@ -3343,6 +3338,7 @@ type SystemAPI interface {
 	ClusterState() string
 	DataDir() string
 
+	NodeID() string
 	ClusterNodes() []ClusterNode
 }
 
@@ -3357,6 +3353,9 @@ type CreateFieldObj struct {
 type QueryAPI interface {
 	Query(ctx context.Context, req *QueryRequest) (QueryResponse, error)
 }
+
+// Ensure type implements interface.
+var _ SystemAPI = (*FeatureBaseSystemAPI)(nil)
 
 // FeatureBaseSystemAPI is a wrapper around pilosa.API. It implements the
 // SystemAPI interface
@@ -3414,6 +3413,10 @@ func (fsapi *FeatureBaseSystemAPI) DataDir() string {
 	return fsapi.server.dataDir
 }
 
+func (fsapi *FeatureBaseSystemAPI) NodeID() string {
+	return fsapi.cluster.Node.ID
+}
+
 func (fsapi *FeatureBaseSystemAPI) ClusterNodes() []ClusterNode {
 	result := make([]ClusterNode, 0)
 
@@ -3430,5 +3433,56 @@ func (fsapi *FeatureBaseSystemAPI) ClusterNodes() []ClusterNode {
 		result = append(result, scn)
 	}
 
+	return result
+}
+
+// Ensure type implements interface.
+var _ SystemAPI = (*NopSystemAPI)(nil)
+
+// NopSystemAPI is a no-op implementation of the SystemAPI.
+type NopSystemAPI struct{}
+
+func (napi *NopSystemAPI) ClusterName() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) Version() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) PlatformDescription() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) PlatformVersion() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) ClusterNodeCount() int {
+	return 0
+}
+
+func (napi *NopSystemAPI) ClusterReplicaCount() int {
+	return 0
+}
+
+func (napi *NopSystemAPI) ShardWidth() int {
+	return 0
+}
+
+func (napi *NopSystemAPI) ClusterState() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) DataDir() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) NodeID() string {
+	return ""
+}
+
+func (napi *NopSystemAPI) ClusterNodes() []ClusterNode {
+	result := make([]ClusterNode, 0)
 	return result
 }

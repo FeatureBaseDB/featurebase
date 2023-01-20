@@ -22,7 +22,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner"
 	plannertypes "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/systemlayer"
 	uuid "github.com/satori/go.uuid"
 )
@@ -32,7 +31,7 @@ import (
 // of "Queryer" nodes, which handle incoming query requests.
 type Queryer struct {
 	mu            sync.RWMutex
-	orchestrators map[dax.TableQualifier]*qualifiedOrchestrator
+	orchestrators map[dax.QualifiedDatabaseID]*qualifiedOrchestrator
 
 	fbClient *featurebase.InternalClient
 
@@ -47,7 +46,7 @@ func New(cfg Config) *Queryer {
 	q := &Queryer{
 		noder:         dax.NewNopNoder(),
 		schemar:       dax.NewNopSchemar(),
-		orchestrators: make(map[dax.TableQualifier]*qualifiedOrchestrator),
+		orchestrators: make(map[dax.QualifiedDatabaseID]*qualifiedOrchestrator),
 		logger:        logger.NopLogger,
 	}
 
@@ -59,13 +58,13 @@ func New(cfg Config) *Queryer {
 }
 
 // Orchestrator gets (or creates) an instance of qualifiedOrchestrator based on
-// the provided dax.TableQualifier.
-func (q *Queryer) Orchestrator(qual dax.TableQualifier) *qualifiedOrchestrator {
+// the provided dax.QualifiedDatabaseID.
+func (q *Queryer) Orchestrator(qdbid dax.QualifiedDatabaseID) *qualifiedOrchestrator {
 	// Try to get orchestrator under a read lock first.
 	if orch := func() *qualifiedOrchestrator {
 		q.mu.RLock()
 		defer q.mu.RUnlock()
-		if orch, ok := q.orchestrators[qual]; ok {
+		if orch, ok := q.orchestrators[qdbid]; ok {
 			return orch
 		}
 		return nil
@@ -77,11 +76,11 @@ func (q *Queryer) Orchestrator(qual dax.TableQualifier) *qualifiedOrchestrator {
 	// lock and try a read/write.
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if orch, ok := q.orchestrators[qual]; ok {
+	if orch, ok := q.orchestrators[qdbid]; ok {
 		return orch
 	}
 
-	sapi := newQualifiedSchemaAPI(qual, q.schemar)
+	sapi := newQualifiedSchemaAPI(qdbid, q.schemar)
 
 	orch := &orchestrator{
 		schema:   sapi,
@@ -89,12 +88,11 @@ func (q *Queryer) Orchestrator(qual dax.TableQualifier) *qualifiedOrchestrator {
 		topology: &MDSTopology{noder: q.noder},
 		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
 		client: q.fbClient,
-		stats:  stats.NopStatsClient,
 		logger: q.logger,
 	}
 
-	qorch := newQualifiedOrchestrator(orch, qual)
-	q.orchestrators[qual] = qorch
+	qorch := newQualifiedOrchestrator(orch, qdbid)
+	q.orchestrators[qdbid] = qorch
 
 	return qorch
 }
@@ -133,12 +131,9 @@ func (q *Queryer) Start() error {
 	return nil
 }
 
-func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.WireQueryResponse, error) {
+func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, sql string) (*featurebase.WireQueryResponse, error) {
 	start := time.Now()
 
-	if len(sql) > 0 && sql[0] == '[' {
-		return q.parseAndQueryPQL(ctx, qual, sql)
-	}
 	ret := &featurebase.WireQueryResponse{}
 
 	applyExecutionTime := func() {
@@ -148,6 +143,19 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	applyError := func(e error) {
 		ret.Error = e.Error()
 		applyExecutionTime()
+	}
+
+	// If PQL, run that instead.
+	if len(sql) > 0 && sql[0] == '[' {
+		if pqlResp, err := q.parseAndQueryPQL(ctx, qdbid, sql); err != nil {
+			applyError(errors.Wrap(err, "querying pql"))
+			return ret, nil
+		} else {
+			ret = pqlResp
+		}
+		applyExecutionTime()
+
+		return ret, nil
 	}
 
 	// Create a requestID and add it to the context.
@@ -166,19 +174,17 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	}
 
 	// SchemaAPI
-	sapi := newQualifiedSchemaAPI(qual, q.schemar)
+	sapi := newQualifiedSchemaAPI(qdbid, q.schemar)
 
 	// Importer
-	imp := idkmds.NewImporter(q.noder, q.schemar, qual, nil)
+	imp := idkmds.NewImporter(q.noder, q.schemar, qdbid, nil)
 
-	// TODO(tlt): this obviously doesn't work; we don't have an API here. We
-	// need a dax-compatible implementation of the SystemAPI (or at least a
-	// no-op implementation).
-	sysapi := &featurebase.FeatureBaseSystemAPI{API: nil}
+	// TODO(tlt): We need a dax-compatible implementation of the SystemAPI.
+	sysapi := &featurebase.NopSystemAPI{}
 
 	systemLayer := systemlayer.NewSystemLayer()
 
-	pl := planner.NewExecutionPlanner(q.Orchestrator(qual), sapi, sysapi, systemLayer, imp, q.logger, sql)
+	pl := planner.NewExecutionPlanner(q.Orchestrator(qdbid), sapi, sysapi, systemLayer, imp, q.logger, sql)
 
 	planOp, err := pl.CompilePlan(ctx, st)
 	if err != nil {
@@ -230,7 +236,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql str
 	return ret, nil
 }
 
-func (q *Queryer) parseAndQueryPQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.WireQueryResponse, error) {
+func (q *Queryer) parseAndQueryPQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, sql string) (*featurebase.WireQueryResponse, error) {
 	var i int
 	for i = 1; sql[i] != ']'; i++ {
 		if i == len(sql)-1 {
@@ -241,7 +247,7 @@ func (q *Queryer) parseAndQueryPQL(ctx context.Context, qual dax.TableQualifier,
 	query := sql[i+1:]
 	fmt.Println("got table/query", table, query)
 
-	return q.QueryPQL(ctx, qual, dax.TableName(table), query)
+	return q.queryPQL(ctx, qdbid, dax.TableName(table), query)
 }
 
 // convertIndex tries to covert any "index" specified in the call.Args map to a
@@ -251,9 +257,9 @@ func (q *Queryer) parseAndQueryPQL(ctx context.Context, qual dax.TableQualifier,
 // modify Call.CallIndex() to be TableKeyer aware. I didn't do that along with
 // these changes because I'm not sure if we want to introduce dax types into the
 // pql package.
-func (q *Queryer) convertIndex(ctx context.Context, qual dax.TableQualifier, call *featurebase_pql.Call) {
+func (q *Queryer) convertIndex(ctx context.Context, qdbid dax.QualifiedDatabaseID, call *featurebase_pql.Call) {
 	if index := call.CallIndex(); index != "" {
-		qtbl, err := q.schemar.TableByName(ctx, qual, dax.TableName(index))
+		qtbl, err := q.schemar.TableByName(ctx, qdbid, dax.TableName(index))
 		if err != nil {
 			return
 		}
@@ -262,11 +268,37 @@ func (q *Queryer) convertIndex(ctx context.Context, qual dax.TableQualifier, cal
 
 	// Apply to children.
 	for _, child := range call.Children {
-		q.convertIndex(ctx, qual, child)
+		q.convertIndex(ctx, qdbid, child)
 	}
 }
 
-func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
+func (q *Queryer) QueryPQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
+	start := time.Now()
+
+	ret := &featurebase.WireQueryResponse{}
+
+	applyExecutionTime := func() {
+		ret.ExecutionTime = time.Since(start).Microseconds()
+	}
+
+	applyError := func(e error) {
+		ret.Error = e.Error()
+		applyExecutionTime()
+	}
+
+	if pqlResp, err := q.queryPQL(ctx, qdbid, table, pql); err != nil {
+		applyError(errors.Wrap(err, "querying pql"))
+		return ret, nil
+	} else {
+		ret = pqlResp
+	}
+
+	applyExecutionTime()
+
+	return ret, nil
+}
+
+func (q *Queryer) queryPQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
 	// Parse the pql into a pql.Query containing []pql.Call.
 	qry, err := featurebase_pql.NewParser(strings.NewReader(pql)).Parse()
 	if err != nil {
@@ -277,14 +309,14 @@ func (q *Queryer) QueryPQL(ctx context.Context, qual dax.TableQualifier, table d
 	}
 
 	// Replace any "index" arguments within the PQL with a TableKey.
-	q.convertIndex(ctx, qual, qry.Calls[0])
+	q.convertIndex(ctx, qdbid, qry.Calls[0])
 
-	qtbl, err := q.schemar.TableByName(ctx, qual, dax.TableName(table))
+	qtbl, err := q.schemar.TableByName(ctx, qdbid, dax.TableName(table))
 	if err != nil {
 		return nil, errors.Wrap(err, "converting index to qualified table")
 	}
 
-	results, err := q.Orchestrator(qual).Execute(ctx, qtbl, qry, nil, &featurebase.ExecOptions{})
+	results, err := q.Orchestrator(qdbid).Execute(ctx, qtbl, qry, nil, &featurebase.ExecOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "orchestrator.Execute")
 	}

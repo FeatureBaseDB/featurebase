@@ -17,6 +17,7 @@ import (
 
 	"github.com/PaesslerAG/gval"
 	"github.com/PaesslerAG/jsonpath"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
@@ -367,6 +368,8 @@ func (i *bulkInsertCSVRowIter) Next(ctx context.Context) (types.Row, error) {
 				return nil, err
 			}
 			i.currentBatch = nil
+			// update the counter for bulk insert batches
+			pilosa.PerfCounterSQLBulkInsertBatchesSec.Add(1)
 		}
 		if i.options.rowsLimit > 0 && i.linesRead >= i.options.rowsLimit {
 			break
@@ -378,6 +381,8 @@ func (i *bulkInsertCSVRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, err
 		}
 		i.currentBatch = nil
+		// update the counter for bulk insert batches
+		pilosa.PerfCounterSQLBulkInsertBatchesSec.Add(1)
 	}
 	return nil, types.ErrNoMoreRows
 }
@@ -777,6 +782,8 @@ func (i *bulkInsertNDJsonRowIter) Next(ctx context.Context) (types.Row, error) {
 				return nil, err
 			}
 			i.currentBatch = nil
+			// update the counter for bulk insert batches
+			pilosa.PerfCounterSQLBulkInsertBatchesSec.Add(1)
 		}
 		if i.options.rowsLimit > 0 && i.linesRead >= i.options.rowsLimit {
 			break
@@ -788,6 +795,8 @@ func (i *bulkInsertNDJsonRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, err
 		}
 		i.currentBatch = nil
+		// update the counter for bulk insert batches
+		pilosa.PerfCounterSQLBulkInsertBatchesSec.Add(1)
 	}
 	return nil, types.ErrNoMoreRows
 }
@@ -928,5 +937,9 @@ func processBatch(ctx context.Context, planner *ExecutionPlanner, tableName stri
 	if err != nil && err != types.ErrNoMoreRows {
 		return err
 	}
+
+	// update the counter for bulk inserts
+	pilosa.PerfCounterSQLBulkInsertsSec.Add(int64(len(insertValues)))
+
 	return nil
 }

@@ -268,6 +268,17 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 	case *parser.JoinClause:
 		scope.AddWarning("🦖 here there be dragons! JOINS are experimental.")
 
+		// what sort of join is it?
+		jType := joinTypeInner
+		if sourceExpr.Operator.Left.IsValid() {
+			jType = joinTypeLeft
+		} else if sourceExpr.Operator.Right.IsValid() {
+			return nil, sql3.NewErrUnsupported(sourceExpr.Operator.Right.Line, sourceExpr.Operator.Right.Column, false, "RIGHT join types")
+		} else if sourceExpr.Operator.Full.IsValid() {
+			return nil, sql3.NewErrUnsupported(sourceExpr.Operator.Full.Line, sourceExpr.Operator.Full.Column, false, "FULL join types")
+		}
+
+		// handle the join condition
 		var joinCondition types.PlanExpression
 		if sourceExpr.Constraint == nil {
 			scope.AddWarning("⚠️  cartesian products are never a good idea - are you missing a join constraint?")
@@ -285,6 +296,7 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 			}
 		}
 
+		// compile top and bottom child ops
 		topOp, err := p.compileSource(scope, sourceExpr.X)
 		if err != nil {
 			return nil, err
@@ -293,7 +305,7 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 		if err != nil {
 			return nil, err
 		}
-		return NewPlanOpNestedLoops(topOp, bottomOp, joinCondition), nil
+		return NewPlanOpNestedLoops(topOp, bottomOp, jType, joinCondition), nil
 
 	case *parser.QualifiedTableName:
 
@@ -302,11 +314,16 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 		// doing this check here because we don't have a 'system' flag that exists in the FB schema
 		st, ok := systemTables[strings.ToLower(tableName)]
 		if ok {
+			var op types.PlanOperator
+			op = NewPlanOpSystemTable(p, st)
+			if st.requiresFanout {
+				op = NewPlanOpFanout(p, op)
+			}
 			if sourceExpr.Alias != nil {
 				aliasName := parser.IdentName(sourceExpr.Alias)
-				return NewPlanOpRelAlias(aliasName, NewPlanOpSystemTable(p, st)), nil
+				return NewPlanOpRelAlias(aliasName, op), nil
 			}
-			return NewPlanOpSystemTable(p, st), nil
+			return op, nil
 
 		}
 		// get all the columns for this table - we will eliminate unused ones
@@ -361,57 +378,97 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 	}
 }
 
-func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Statement) error {
+func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Statement) (parser.Source, error) {
 	if source == nil {
-		return nil
+		return nil, nil
 	}
 	switch source := source.(type) {
 	case *parser.JoinClause:
-		err := p.analyzeSource(source.X, scope)
+		x, err := p.analyzeSource(source.X, scope)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		err = p.analyzeSource(source.Y, scope)
+		y, err := p.analyzeSource(source.Y, scope)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if source.Constraint != nil {
 			switch join := source.Constraint.(type) {
 			case *parser.OnConstraint:
 				ex, err := p.analyzeExpression(join.X, scope)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				join.X = ex
 			default:
-				return sql3.NewErrInternalf("unexpected constraint type '%T'", join)
+				return nil, sql3.NewErrInternalf("unexpected constraint type '%T'", join)
 			}
 		}
-		return nil
+		source.X = x
+		source.Y = y
+		return source, nil
 
 	case *parser.ParenSource:
-		err := p.analyzeSource(source.X, scope)
+		x, err := p.analyzeSource(source.X, scope)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return nil
+		source.X = x
+		return source, nil
 
 	case *parser.QualifiedTableName:
+
+		objectName := parser.IdentName(source.Name)
+
+		// check views first
+		view, err := p.getViewByName(objectName)
+		if err != nil {
+			return nil, err
+		}
+
+		// if view is not null, it exists
+		if view != nil {
+			// parse the select statement
+			ast, err := parser.NewParser(strings.NewReader(view.statement)).ParseStatement()
+			if err != nil {
+				return nil, err
+			}
+			sel, ok := ast.(*parser.SelectStatement)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected ast type")
+			}
+			// analyze the select statement
+			expr, err := p.analyzeSelectStatement(sel)
+			if err != nil {
+				return nil, err
+			}
+			selExpr, ok := expr.(*parser.SelectStatement)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected analyzed type")
+			}
+
+			// rewrite as a paren source with the select
+			paren := &parser.ParenSource{
+				X:     selExpr,
+				Alias: source.Alias,
+			}
+			return paren, nil
+		}
+
 		// check table exists
-		tableName := parser.IdentName(source.Name)
-		tname := dax.TableName(tableName)
+		tname := dax.TableName(objectName)
 		tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 		if err != nil {
-			if errors.Is(err, pilosa.ErrIndexNotFound) {
-				return sql3.NewErrTableNotFound(source.Name.NamePos.Line, source.Name.NamePos.Column, tableName)
+			if isTableNotFoundError(err) {
+				return nil, sql3.NewErrTableOrViewNotFound(source.Name.NamePos.Line, source.Name.NamePos.Column, objectName)
 			}
-			return err
+			return nil, err
 		}
 
 		// populate the output columns from the source
 		for i, fld := range tbl.Fields {
 			soc := &parser.SourceOutputColumn{
-				TableName:   tableName,
+				TableName:   objectName,
 				ColumnName:  string(fld.Name),
 				ColumnIndex: i,
 				Datatype:    fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
@@ -419,7 +476,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 			source.OutputColumns = append(source.OutputColumns, soc)
 		}
 
-		return nil
+		return source, nil
 
 	case *parser.TableValuedFunction:
 		// check it actually is a table valued function - we only support one right now; subtable()
@@ -427,12 +484,12 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		case "SUBTABLE":
 			_, err := p.analyzeCallExpression(source.Call, scope)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			tvfResultType, ok := source.Call.ResultDataType.(*parser.DataTypeSubtable)
 			if !ok {
-				return sql3.NewErrInternalf("unexepected tvf return type")
+				return nil, sql3.NewErrInternalf("unexepected tvf return type")
 			}
 
 			// populate the output columns from the source
@@ -447,29 +504,34 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 			}
 
 		default:
-			return sql3.NewErrInternalf("table valued function expected")
+			return nil, sql3.NewErrInternalf("table valued function expected")
 		}
 
-		return nil
+		return source, nil
 
 	case *parser.SelectStatement:
-		_, err := p.analyzeSelectStatement(source)
+		expr, err := p.analyzeSelectStatement(source)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return nil
+		selExpr, ok := expr.(*parser.SelectStatement)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected analyzed type")
+		}
+		return selExpr, nil
 
 	default:
-		return sql3.NewErrInternalf("unexpected source type: %T", source)
+		return nil, sql3.NewErrInternalf("unexpected source type: %T", source)
 	}
 }
 
 func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) (parser.Expr, error) {
 	// analyze source first - needed for name resolution
-	err := p.analyzeSource(stmt.Source, stmt)
+	source, err := p.analyzeSource(stmt.Source, stmt)
 	if err != nil {
 		return nil, err
 	}
+	stmt.Source = source
 
 	if err := p.analyzeSelectStatementWildcards(stmt); err != nil {
 		return nil, err
@@ -612,7 +674,17 @@ func (p *ExecutionPlanner) columnsFromSource(source parser.Source) ([]*parser.Re
 		return result, nil
 
 	case *parser.SelectStatement:
-		return nil, sql3.NewErrInternal("sub-selects are not currently supported")
+		for _, oc := range src.PossibleOutputColumns() {
+			result = append(result, &parser.ResultColumn{
+				Expr: &parser.QualifiedRef{
+					Table:       &parser.Ident{Name: oc.TableName},
+					Column:      &parser.Ident{Name: oc.ColumnName},
+					ColumnIndex: oc.ColumnIndex,
+				},
+			})
+		}
+		return result, nil
+
 	default:
 		return nil, sql3.NewErrInternalf("unexpected source type: %T", source)
 	}

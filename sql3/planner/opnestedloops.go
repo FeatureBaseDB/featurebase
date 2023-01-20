@@ -16,14 +16,16 @@ type PlanOpNestedLoops struct {
 	top      types.PlanOperator
 	bottom   types.PlanOperator
 	cond     types.PlanExpression
+	jType    joinType
 	warnings []string
 }
 
-func NewPlanOpNestedLoops(top, bottom types.PlanOperator, condition types.PlanExpression) *PlanOpNestedLoops {
+func NewPlanOpNestedLoops(top, bottom types.PlanOperator, jType joinType, condition types.PlanExpression) *PlanOpNestedLoops {
 	return &PlanOpNestedLoops{
 		top:      top,
 		bottom:   bottom,
 		cond:     condition,
+		jType:    jType,
 		warnings: make([]string, 0),
 	}
 }
@@ -71,14 +73,14 @@ func (p *PlanOpNestedLoops) Iterator(ctx context.Context, row types.Row) (types.
 	}
 
 	rowWidth := len(row) + len(p.top.Schema()) + len(p.bottom.Schema())
-	return newNestedLoopsIter(ctx, joinTypeInner, topIter, p.bottom, row, p.cond, rowWidth, row), nil
+	return newNestedLoopsIter(ctx, p.jType, topIter, p.bottom, row, p.cond, rowWidth, row), nil
 }
 
 func (p *PlanOpNestedLoops) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
 	if len(children) != 2 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return NewPlanOpNestedLoops(children[0], children[1], p.cond), nil
+	return NewPlanOpNestedLoops(children[0], children[1], p.jType, p.cond), nil
 }
 
 func (p *PlanOpNestedLoops) Expressions() []types.PlanExpression {
@@ -101,9 +103,10 @@ func (p *PlanOpNestedLoops) WithUpdatedExpressions(exprs ...types.PlanExpression
 type joinType byte
 
 const (
-	joinTypeInner joinType = iota
-	joinTypeLeft
-	joinTypeRight
+	joinTypeInner joinType = iota // records that have matching values in both tables
+	joinTypeLeft                  // all records from the left table, and the matched records from the right table
+	joinTypeRight                 // all records from the right table, and the matched records from the left table
+	joinTypeFull                  // all records when there is a match in either left or right table
 )
 
 type nestedLoopsIter struct {
@@ -178,7 +181,7 @@ func (i *nestedLoopsIter) loadBottom(ctx context.Context) (row types.Row, err er
 	return rightRow, nil
 }
 
-func (i *nestedLoopsIter) buildRow(primary, secondary types.Row) types.Row {
+func (i *nestedLoopsIter) buildRow(primary, secondary types.Row) (types.Row, error) {
 	row := make(types.Row, i.rowSize)
 
 	primary = primary[len(i.originalRow):]
@@ -186,19 +189,23 @@ func (i *nestedLoopsIter) buildRow(primary, secondary types.Row) types.Row {
 	var first, second types.Row
 	var secondOffset int
 	switch i.typ {
-	case joinTypeRight:
-		first = secondary
-		second = primary
-		secondOffset = len(row) - len(second)
-	default:
+	case joinTypeLeft:
 		first = primary
 		second = secondary
 		secondOffset = len(first)
+
+	case joinTypeInner:
+		first = primary
+		second = secondary
+		secondOffset = len(first)
+
+	default:
+		return nil, sql3.NewErrInternalf("unsupported join type %d", i.typ)
 	}
 
 	copy(row, first)
 	copy(row[secondOffset:], second)
-	return row
+	return row, nil
 }
 
 func conditionIsTrue(ctx context.Context, row types.Row, cond types.PlanExpression) (bool, error) {
@@ -222,16 +229,38 @@ func (i *nestedLoopsIter) Next(ctx context.Context) (types.Row, error) {
 		secondary, err := i.loadBottom(ctx)
 		if err != nil {
 			if err == types.ErrNoMoreRows {
-				if !i.foundMatch && (i.typ == joinTypeLeft || i.typ == joinTypeRight) {
-					row := i.buildRow(primary, nil)
-					return row, nil
+				// no more rows from secondary
+				switch i.typ {
+				case joinTypeInner:
+					continue
+
+				case joinTypeLeft:
+					if !i.foundMatch {
+						row, err := i.buildRow(primary, nil)
+						if err != nil {
+							return nil, err
+						}
+						return row, nil
+					}
+					continue
+
+				case joinTypeRight:
+					return nil, sql3.NewErrInternalf("unhandled join type %v", i.typ)
+
+				case joinTypeFull:
+					return nil, sql3.NewErrInternalf("unhandled join type %v", i.typ)
+
+				default:
+					return nil, sql3.NewErrInternalf("unhandled join type %v", i.typ)
 				}
-				continue
 			}
 			return nil, err
 		}
 
-		row := i.buildRow(primary, secondary)
+		row, err := i.buildRow(primary, secondary)
+		if err != nil {
+			return nil, err
+		}
 		matches, err := conditionIsTrue(ctx, row, i.cond)
 		if err != nil {
 			return nil, err

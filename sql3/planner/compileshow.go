@@ -84,7 +84,7 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsS
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
 		}
 		return nil, err
@@ -174,7 +174,7 @@ func (p *ExecutionPlanner) compileShowCreateTableStatement(stmt *parser.ShowCrea
 	tableName := parser.IdentName(stmt.TableName)
 	tname := dax.TableName(tableName)
 	if _, err := p.schemaAPI.TableByName(context.Background(), tname); err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
 		}
 		return nil, err

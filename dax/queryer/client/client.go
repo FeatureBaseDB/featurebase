@@ -49,12 +49,12 @@ func (c *Client) Health() bool {
 	return true
 }
 
-func (c *Client) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql string) (*featurebase.WireQueryResponse, error) {
+func (c *Client) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, sql string) (*featurebase.WireQueryResponse, error) {
 	url := fmt.Sprintf("%s/sql", c.address.WithScheme(defaultScheme))
 
 	req := &queryerhttp.SQLRequest{
-		OrganizationID: qual.OrganizationID,
-		DatabaseID:     qual.DatabaseID,
+		OrganizationID: qdbid.OrganizationID,
+		DatabaseID:     qdbid.DatabaseID,
 		SQL:            sql,
 	}
 
@@ -85,12 +85,13 @@ func (c *Client) QuerySQL(ctx context.Context, qual dax.TableQualifier, sql stri
 
 	return wireResp, nil
 }
-func (c *Client) QueryPQL(ctx context.Context, qual dax.TableQualifier, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
+
+func (c *Client) QueryPQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
 	url := fmt.Sprintf("%s/query", c.address.WithScheme(defaultScheme))
 
 	req := &queryerhttp.QueryRequest{
-		OrganizationID: qual.OrganizationID,
-		DatabaseID:     qual.DatabaseID,
+		OrganizationID: qdbid.OrganizationID,
+		DatabaseID:     qdbid.DatabaseID,
 		Table:          table,
 		PQL:            pql,
 	}

@@ -17,6 +17,7 @@ var joinTestsUsers = TableTest{
 			srcRow(int64(1), string("b"), int64(18)),
 			srcRow(int64(2), string("c"), int64(28)),
 			srcRow(int64(3), string("d"), int64(34)),
+			srcRow(int64(4), string("e"), int64(36)),
 		),
 	),
 	SQLTests: nil,
@@ -44,7 +45,7 @@ var joinTestsOrders = TableTest{
 }
 
 var joinTests = TableTest{
-	name: "innerjointest",
+	name: "joinTests",
 	SQLTests: []SQLTest{
 		{
 			name: "innerjoin-aggregate-groupby",
@@ -101,6 +102,40 @@ var joinTests = TableTest{
 				row(int64(2)),
 			),
 			Compare: CompareExactOrdered,
+		},
+		{
+			name: "leftjoin",
+			SQLs: sqls(
+				"select u._id , o.userid from users u left join orders o on o.userid = u._id;",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("userid", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(0), int64(0)),
+				row(int64(1), int64(1)),
+				row(int64(1), int64(1)),
+				row(int64(2), int64(2)),
+				row(int64(2), int64(2)),
+				row(int64(3), int64(3)),
+				row(int64(4), nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "fulljoin",
+			SQLs: sqls(
+				"select u._id , o.userid from users u full join orders o on o.userid = u._id;",
+			),
+			ExpErr: "FULL join types are not supported",
+		},
+		{
+			name: "outerjoin",
+			SQLs: sqls(
+				"select u._id , o.userid from users u right join orders o on o.userid = u._id;",
+			),
+			ExpErr: "RIGHT join types are not supported",
 		},
 	},
 	PQLTests: []PQLTest{

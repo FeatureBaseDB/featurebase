@@ -28,8 +28,8 @@ type Role interface {
 }
 
 // Ensure type implements interface.
-var _ Role = &ComputeRole{}
-var _ Role = &TranslateRole{}
+var _ Role = (*ComputeRole)(nil)
+var _ Role = (*TranslateRole)(nil)
 
 // ComputeRole is a role specific to compute nodes.
 type ComputeRole struct {
@@ -37,7 +37,7 @@ type ComputeRole struct {
 	Shards   ShardNums `json:"shards"`
 }
 
-// Type returns the type for ComputeRole. This is mainly to impolement the Role
+// Type returns the type for ComputeRole. This is mainly to implement the Role
 // interface.
 func (cr *ComputeRole) Type() RoleType {
 	return RoleTypeCompute
@@ -50,7 +50,7 @@ type TranslateRole struct {
 	Fields     []FieldName   `json:"fields"`
 }
 
-// Type returns the type for TransteRole. This is mainly to impolement the Role
+// Type returns the type for TranslateRole. This is mainly to implement the Role
 // interface.
 func (cr *TranslateRole) Type() RoleType {
 	return RoleTypeTranslate

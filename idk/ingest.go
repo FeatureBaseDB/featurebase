@@ -34,9 +34,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/idk/mds"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/pql"
-	"github.com/featurebasedb/featurebase/v3/prometheus"
 	proto "github.com/featurebasedb/featurebase/v3/proto"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -55,7 +53,6 @@ const (
 )
 
 // TODO Jaeger
-// TODO Prometheus
 
 // Main holds all config for general ingest
 type Main struct {
@@ -132,7 +129,6 @@ type Main struct {
 	newNexter func(c int) (IDAllocator, error)
 	ra        RangeAllocator
 
-	stats         stats.StatsClient
 	metricsServer *http.Server
 
 	log logger.Logger
@@ -185,9 +181,13 @@ type ConfluentCommand struct {
 	KafkaSslEndpointIdentificationAlgorithm string `help:"The endpoint identification algorithm used by clients to validate server host name (ssl.endpoint.identification.algorithm) "`
 	KafkaEnableSslCertificateVerification   bool   `help:"(enable.ssl.certificate.verification)"`
 	KafkaSocketTimeoutMs                    int    `help:"(socket.timeout.ms)"`
+	KafkaSocketKeepaliveEnable              string `help:"The (socket.keepalive.enable) kafka consumer configuration"`
 
-	KafkaClientId string `help:"(client.id)"`
-	KafkaDebug    string `help:"Kafka debug string (debug)"`
+	KafkaClientId        string `help:"(client.id)"`
+	KafkaDebug           string `help:"The (debug) kafka consumer configuration. A comma-separated list of debug contexts to enable. Detailed Consumer: consumer,cgrp,topic,fetch. Set to 'all' for most verbose option."`
+	KafkaMaxPollInterval string `help:"The (max.poll.interval.ms) kafka consumer configuration. The max time the consumer can go without polling the broker. Consumer exits after this timeout."`
+	KafkaSessionTimeout  string `help:"The (session.timeout.ms) kafka consumer configuration. The max time the consumer can go without sending a heartbeat to the broker"`
+	KafkaGroupInstanceId string `help:"The (group.instance.id) kafka consumer configuration."`
 
 	KafkaSaslUsername  string `help:"SASL authentication username (sasl.username)"`
 	KafkaSaslPassword  string `help:"SASL authentication password (sasl.password)"`
@@ -218,7 +218,7 @@ func NewMain() *Main {
 		Concurrency:      1,
 		CacheLength:      64,
 		PackBools:        "bools",
-		Namespace:        "ingester",
+		Namespace:        "ingester", // this is now ignored and hardcoded in metrics.go
 		IDAllocKeyPrefix: "ingest",
 
 		UseShardTransactionalEndpoint: os.Getenv("IDK_DEFAULT_SHARD_TRANSACTIONAL") != "",
@@ -227,8 +227,6 @@ func NewMain() *Main {
 		Stats: "localhost:9093",
 
 		SchemaManager: NopSchemaManager,
-
-		stats: stats.NopStatsClient,
 
 		log: logger.NewStandardLogger(os.Stderr),
 	}
@@ -315,7 +313,7 @@ func (m *Main) runIngester(c int, l *msgCounter) error {
 		err = source.Close()
 		if err != nil {
 			if m.log != nil {
-				m.log.Printf("error on close %v", err)
+				m.log.Errorf("Closing source: %v", err)
 			}
 		}
 	}()
@@ -457,7 +455,6 @@ initialFetch:
 				if v, ok := source.(Metadata); ok {
 					m.log.Printf("new schema - subject: %#v; version: %d; schema: %#v",
 						v.SchemaSubject(), v.SchemaVersion(), v.SchemaSchema())
-					// m.log.Printf("new schema: %#v", v.SchemaMetadata())
 				} else {
 					m.log.Printf("new schema: %#v", schema)
 				}
@@ -465,7 +462,7 @@ initialFetch:
 				if err != nil {
 					return errors.Wrap(err, "batchFromSchema")
 				}
-				m.stats.Count(MetricIngesterSchemaChanges, 1, 1)
+				CounterIngesterSchemaChanges.Inc()
 				csvSlice = make([]string, len(schema))
 				if m.csvWriter != nil {
 					for i := range schema {
@@ -571,7 +568,7 @@ initialFetch:
 		// skip bad rows only
 		if !rowHasError {
 			err = batch.Add(*row)
-			m.stats.Count(MetricIngesterRowsAdded, 1, 1)
+			CounterIngesterRowsAdded.Inc()
 		}
 
 		if err == pilosabatch.ErrBatchNowFull || err == pilosabatch.ErrBatchNowStale {
@@ -958,7 +955,7 @@ func (m *Main) commitRecord(ctx context.Context, rec Record, limitCounter *msgCo
 		return errors.Wrap(err, "committing")
 	}
 	limitCounter.Increment(numRecords)
-	m.stats.Count(MetricCommittedRecords, int64(numRecords), 1)
+	CounterCommittedRecords.Add(float64(numRecords))
 	return nil
 }
 
@@ -972,7 +969,7 @@ func (m *Main) NewLookupClient() (*PostgresClient, error) {
 func (m *Main) setupClient() (*tls.Config, error) {
 	var tlsConfig *tls.Config
 	var err error
-	var opts = []pilosaclient.ClientOption{pilosaclient.OptClientStatsClient(m.stats)}
+	var opts = []pilosaclient.ClientOption{}
 	if m.TLS.CertificatePath != "" {
 		tlsConfig, err = GetTLSConfig(&m.TLS, m.Log())
 		if err != nil {
@@ -1012,10 +1009,10 @@ func (m *Main) setupClient() (*tls.Config, error) {
 		// MDS doesn't auto-create a table based on IDK ingest; the table must
 		// already exist.
 		mdsClient := mdsclient.New(dax.Address(m.MDSAddress), m.log)
-		qual := dax.NewTableQualifier(m.OrganizationID, m.DatabaseID)
-		qtid, err := mdsClient.TableID(ctx, qual, m.TableName)
+		qdbid := dax.NewQualifiedDatabaseID(m.OrganizationID, m.DatabaseID)
+		qtid, err := mdsClient.TableID(ctx, qdbid, m.TableName)
 		if err != nil {
-			return nil, errors.Wrapf(err, "getting table id: qual: %s, table name: %s", qual, m.TableName)
+			return nil, errors.Wrapf(err, "getting table id: qual: %s, table name: %s", qdbid, m.TableName)
 		}
 		qtbl, err := mdsClient.Table(ctx, qtid)
 		if err != nil {
@@ -1024,7 +1021,7 @@ func (m *Main) setupClient() (*tls.Config, error) {
 
 		m.Qtbl = qtbl
 		m.Index = string(qtbl.Key())
-		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qual, m.log)
+		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qdbid, m.log)
 
 		m.NewImporterFn = func() pilosacore.Importer {
 			return mds.NewImporter(mdsClient, mdsClient, qtbl.Qualifier(), &qtbl.Table)
@@ -1037,34 +1034,24 @@ func (m *Main) setupClient() (*tls.Config, error) {
 }
 
 func (m *Main) setupStats() error {
-	if m.Stats != "" {
-		opts := []prometheus.ClientOption{prometheus.OptClientNamespace(m.Namespace)}
-		m.stats, _ = prometheus.NewPrometheusClient(opts...) // ignore error that must be nil
-
-		mux := http.NewServeMux()
-		// reg := prom.NewRegistry() // TODO switch to this once pilosa PrometheusClient is fixed and doesn't use the global registry internally.
-		// also change prom.DefaultGatherer to be "reg" at that time
-		reg := prom.DefaultRegisterer
-		promHandler := promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(prom.DefaultGatherer, promhttp.HandlerOpts{}))
-		mux.Handle("/metrics", promHandler)
-
-		mux.Handle("/metrics.json", metricsJSONHandler{metricsURI: "http://" + m.Stats + "/metrics"})
-		m.metricsServer = &http.Server{Addr: m.Stats, Handler: mux}
-		ln, err := net.Listen("tcp", m.Stats)
-		if err != nil {
-			return errors.Wrapf(err, "listen for metrics on '%s'", m.Stats)
-		}
-
-		go func() {
-			m.log.Printf("Serving Prometheus metrics with namespace \"%s\" at %v/metrics\n", m.Namespace, m.Stats)
-			err = m.metricsServer.Serve(ln)
-			if err != http.ErrServerClosed {
-				m.log.Printf("serve metrics on '%s': %v", m.Stats, err)
-			}
-		}()
+	mux := http.NewServeMux()
+	promHandler := promhttp.InstrumentMetricHandler(prom.DefaultRegisterer, promhttp.HandlerFor(prom.DefaultGatherer, promhttp.HandlerOpts{}))
+	mux.Handle("/metrics", promHandler)
+	mux.Handle("/metrics.json", metricsJSONHandler{metricsURI: "http://" + m.Stats + "/metrics"})
+	m.metricsServer = &http.Server{Addr: m.Stats, Handler: mux}
+	ln, err := net.Listen("tcp", m.Stats)
+	if err != nil {
+		return errors.Wrapf(err, "listen for metrics on '%s'", m.Stats)
 	}
-	return nil
 
+	go func() {
+		m.log.Printf("Serving Prometheus metrics with namespace \"%s\" at %v/metrics\n", m.Namespace, m.Stats)
+		err = m.metricsServer.Serve(ln)
+		if err != http.ErrServerClosed {
+			m.log.Printf("serve metrics on '%s': %v", m.Stats, err)
+		}
+	}()
+	return nil
 }
 
 type metricsJSONHandler struct {
@@ -1218,7 +1205,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing bools")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:packed-bool"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "packed-bool"}).Inc()
 				continue
 			} else {
 				fieldName = directive
@@ -1267,7 +1254,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing set")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:set"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "set"}).Inc()
 			case pilosaclient.FieldTypeMutex:
 				if val == "" {
 					continue
@@ -1278,7 +1265,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing mutex")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:mutex"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "mutex"}).Inc()
 			case pilosaclient.FieldTypeBool:
 				_, err := client.Query(index.BatchQuery(
 					field.Clear(0, recordID),
@@ -1287,19 +1274,19 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 				if err != nil {
 					return errors.Wrap(err, "clearing bool")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:bool"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "bool"}).Inc()
 			case pilosaclient.FieldTypeInt:
 				_, err := client.Query(field.Clear(0, recordID))
 				if err != nil {
 					return errors.Wrap(err, "clearing int")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:int"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "int"}).Inc()
 			case pilosaclient.FieldTypeDecimal:
 				_, err := client.Query(field.Clear(0, recordID))
 				if err != nil {
 					return errors.Wrap(err, "clearing decimal")
 				}
-				m.stats.CountWithCustomTags(MetricDeleterRowsAdded, 1, 1, []string{"type:decimal"})
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "decimal"}).Inc()
 			case pilosaclient.FieldTypeTime:
 				return errors.Errorf("deletion on time fields unimplemented")
 			default:

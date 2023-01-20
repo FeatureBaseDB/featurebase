@@ -196,7 +196,13 @@ func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createT
 	case dax.BaseTypeBool:
 		column.fos = append(column.fos, pilosa.OptFieldTypeBool())
 	case dax.BaseTypeDecimal:
-		// Get the scale value.
+
+		// if we don't have a scale, it's an error
+		if col.Type.Scale == nil {
+			return nil, sql3.NewErrDecimalScaleExpected(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column)
+		}
+
+		// get the scale value
 		scale, err = strconv.ParseInt(col.Type.Scale.Value, 10, 64)
 		if err != nil {
 			return nil, err

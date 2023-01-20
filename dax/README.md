@@ -10,7 +10,7 @@ the Controller, as well as FeatureBase and IDK-based ingesters.
 The DAX test currently requires docker images for: `featurebase`  and `datagen`.
 
 If at any point you run into problems with go mod failing to reference a private
-repo, make sure that you have `gitlab.com/molecula` in your `GOPRIVATE`
+repo, make sure that you have `gitlab.com/featurebasedb` in your `GOPRIVATE`
 environment variable.
 
 Note that during the docker image build step, `go mod vendor` is run, which
@@ -24,7 +24,7 @@ These may no longer be relevant.
 
 I needed to but this in my `~/.profile` file:
 
-```export GOPRIVATE=github.com/molecula,gitlab.com/molecula```
+```export GOPRIVATE=github.com/featurebasedb,gitlab.com/featurebasedb```
 
 And this in my `~/.gitconfig`
 
@@ -41,9 +41,9 @@ Then `make docker` ran successfully.
 ### Build the FeatureBase docker image
 
 - Check out the
-  [dax](https://github.com/molecula/featurebase/tree/dax)
+  [dax](https://github.com/featurebasedb/featurebase/tree/dax)
   branch of the
-  [featurebase](https://github.com/molecula/featurebase) repository.
+  [featurebase](https://github.com/featurebasedb/featurebase) repository.
 - Run `make docker-image-featurebase` to build the docker image
 - You should now have an image in docker named `dax/featurebase` with the tag `latest`.
 
@@ -57,8 +57,8 @@ Then `make docker` ran successfully.
 ## Running the tests
 
 - Check out the
-  [dax](https://github.com/molecula/featurebase/tree/dax)
+  [dax](https://github.com/featurebasedb/featurebase/tree/dax)
   branch of the
-  [featurebase](https://github.com/molecula/featurebase) repository.
+  [featurebase](https://github.com/featurebasedb/featurebase) repository.
 - Change into the `dax` directory: `cd dax`
 - Run `make test-integration`.

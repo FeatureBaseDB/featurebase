@@ -96,6 +96,6 @@ func NewErrInvalidRequest(msg string) error {
 func NewErrUnassignedJobs(jobs []dax.Job) error {
 	return errors.New(
 		ErrCodeUnassignedJobs,
-		fmt.Sprintf("found %d unassigned jobs", len(jobs)),
+		fmt.Sprintf("found %d unassigned jobs: %+v", len(jobs), jobs),
 	)
 }

@@ -755,7 +755,7 @@ func (b *Batch) Import() error {
 		}()
 	}
 	defer func() {
-		b.importer.StatsTiming(MetricBatchImportDurationSeconds, time.Since(start), 1.0)
+		featurebase.SummaryBatchImportDurationSeconds.Observe(time.Since(start).Seconds())
 	}()
 
 	size := len(b.ids)
@@ -828,7 +828,7 @@ func (b *Batch) Flush() error {
 		if err != nil {
 			b.log.Errorf("error finishing transaction: %v. trns: %+v", err, trnsl)
 		}
-		b.importer.StatsTiming(MetricBatchFlushDurationSeconds, time.Since(start), 1.0)
+		featurebase.SummaryBatchFlushDurationSeconds.Observe(time.Since(start).Seconds())
 	}()
 
 	importStart := time.Now()
@@ -1188,7 +1188,7 @@ func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
 		}
 	}
 
-	b.importer.StatsTiming(MetricBatchShardImportBuildRequestsSeconds, time.Since(start), 1.0)
+	featurebase.SummaryBatchShardImportBuildRequestsSeconds.Observe(time.Since(start).Seconds())
 	start = time.Now()
 	eg := egpool.Group{PoolSize: 20}
 	for shard, request := range requests {
@@ -1200,7 +1200,7 @@ func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
 	}
 	err := eg.Wait()
 	dur := time.Since(start)
-	b.importer.StatsTiming(MetricBatchShardImportDurationSeconds, dur, 1.0)
+	featurebase.SummaryBatchImportDurationSeconds.Observe(dur.Seconds())
 	b.log.Printf("import shard took: %v\n", dur)
 	return errors.Wrap(err, "doing shard-transactional imports")
 }
@@ -1245,7 +1245,7 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 			}
 
 			ferr := b.importer.ImportRoaringBitmap(ctx, b.tbl.ID, fld, shard, viewMap, false)
-			b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
+			b.log.Debugf("imp-roar    field: %s, shard:%d, views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
 			return errors.Wrapf(ferr, "importing data for %s", field)
 		})
 	}
@@ -1703,7 +1703,7 @@ func (b *Batch) importValueData() error {
 					start := time.Now()
 					fld := featurebase.FieldInfoToField(field)
 					err := b.importer.DoImport(ctx, b.tbl.ID, fld, shard, path, data)
-					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
+					b.log.Debugf("imp-vals    field: %s, shard: %d, data: %d %v", field.Name, shard, len(data), time.Since(start))
 					return errors.Wrapf(err, "importing values for field = %s", field.Name)
 				})
 				startIdx = i

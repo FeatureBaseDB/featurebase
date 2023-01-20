@@ -31,6 +31,7 @@ var (
 func init() {
 	gob.Register(arrow.PrimitiveTypes.Int64)
 	gob.Register(arrow.PrimitiveTypes.Float64)
+	gob.Register(arrow.BinaryTypes.String)
 }
 
 // TODO(rdp): add refresh token to this as well
@@ -154,7 +155,7 @@ func (cmd *DataframeCsvLoaderCommand) Run(ctx context.Context) (err error) {
 	}
 	fields := make([]arrow.Field, 0)
 	fields = append(fields, arrow.Field{Name: "_ID", Type: arrow.PrimitiveTypes.Int64})
-	fileScanner := bufio.NewScanner(readFile)
+	fileScanner := bufio.NewScanner(readFile) // TODO(twg) 2023/01/11 need to convert to the go CSV reader for more robust string support
 	fileScanner.Split(bufio.ScanLines)
 	// need for really long csv lines
 	var buf []byte
@@ -176,6 +177,8 @@ func (cmd *DataframeCsvLoaderCommand) Run(ctx context.Context) (err error) {
 				fields = append(fields, arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Int64})
 			} else if strings.HasSuffix(col, "__F") {
 				fields = append(fields, arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Float64})
+			} else if strings.HasSuffix(col, "__S") {
+				fields = append(fields, arrow.Field{Name: name, Type: arrow.BinaryTypes.String})
 			} else {
 				return errors.New("invalid format for type")
 			}
@@ -268,6 +271,8 @@ func (cmd *DataframeCsvLoaderCommand) Run(ctx context.Context) (err error) {
 						continue
 					}
 					shardFile.SetFloatValue(i, shardRow, val)
+				case arrow.BinaryTypes.String:
+					shardFile.SetStringValue(i, shardRow, rec)
 				default:
 					return errors.New("unhandled arrow type type")
 				}
@@ -314,6 +319,11 @@ func (s *ShardDiff) SetFloatValue(col int, row int64, val float64) {
 	s.columns[col] = append(slice, val)
 }
 
+func (s *ShardDiff) SetStringValue(col int, row int64, val string) {
+	slice := s.columns[col].([]string)
+	s.columns[col] = append(slice, val)
+}
+
 func (s *ShardDiff) SetNulll(col int, row uint64) {
 	s.null[pair{col: col, row: row}] = struct{}{}
 }
@@ -329,6 +339,8 @@ func (s *ShardDiff) Setup(schema *arrow.Schema) {
 			s.columns = append(s.columns, make([]int64, 0))
 		case arrow.PrimitiveTypes.Float64:
 			s.columns = append(s.columns, make([]float64, 0))
+		case arrow.BinaryTypes.String:
+			s.columns = append(s.columns, make([]string, 0))
 		}
 	}
 }

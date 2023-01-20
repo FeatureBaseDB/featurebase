@@ -5,6 +5,7 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -26,7 +27,6 @@ import (
         "github.com/featurebasedb/featurebase/v3/sql3"
         "github.com/featurebasedb/featurebase/v3/sql3/parser"
         planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-        "github.com/featurebasedb/featurebase/v3/stats"
         "github.com/featurebasedb/featurebase/v3/storage"
         "github.com/pkg/errors"
         "golang.org/x/sync/errgroup"
@@ -242,15 +242,6 @@ func OptServerExecutorPoolSize(size int) ServerOption {
 func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	return func(s *Server) error {
 		s.logger.Infof("DEPRECATED: OptServerPrimaryTranslateStore")
-		return nil
-	}
-}
-
-// OptServerStatsClient is a functional option on Server
-// used to specify the stats client.
-func OptServerStatsClient(sc stats.StatsClient) ServerOption {
-	return func(s *Server) error {
-		s.holderConfig.StatsClient = sc
 		return nil
 	}
 }
@@ -542,7 +533,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 	s.holder = NewHolder(path, s.holderConfig)
-	s.holder.Stats.SetLogger(s.logger)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -557,9 +547,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.noder = s.noder
 	s.cluster.sharder = s.sharder
 	s.cluster.serverlessStorage = s.serverlessStorage
-
-	// Append the NodeID tag to stats.
-	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
 
 	s.executor.Holder = s.holder
 	s.holder.executor = s.executor
@@ -617,6 +604,18 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
+	// Do version check in. This is in a goroutine so that we don't block server startup if the server endpoint is down/having issues.
+	go func() {
+		s.logger.Printf("Beginning featurebase version check-in")
+		vc := VersionChecker{URL: "https://analytics.featurebase.com/v2/featurebase/version"}
+		resp, err := vc.CheckIn()
+		if err != nil {
+			s.logger.Errorf("doing version checkin. Error was %s", err)
+			return
+		}
+		s.logger.Printf("Version check-in complete. Latest version is %s", resp.Information.Version)
+	}()
+
 	// Start DisCo.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -658,7 +657,6 @@ func (s *Server) Open() error {
 	s.syncer.Node = node
 	s.syncer.Cluster = s.cluster
 	s.syncer.Closing = s.closing
-	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
 
 	// Start background process listening for translation
 	// sync resets.
@@ -1250,26 +1248,26 @@ func (s *Server) monitorRuntime() {
 			return
 		case <-s.gcNotifier.AfterGC():
 			// GC just ran.
-			s.holder.Stats.Count(MetricGarbageCollection, 1, 1.0)
+			CounterGarbageCollection.Inc()
 		case <-ticker.C:
 		}
 
 		// Record the number of go routines.
-		s.holder.Stats.Gauge(MetricGoroutines, float64(runtime.NumGoroutine()), 1.0)
+		GaugeGoroutines.Set(float64(runtime.NumGoroutine()))
 
 		openFiles, err := countOpenFiles()
 		// Open File handles.
 		if err == nil {
-			s.holder.Stats.Gauge(MetricOpenFiles, float64(openFiles), 1.0)
+			GaugeOpenFiles.Set(float64(openFiles))
 		}
 
 		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
-		s.holder.Stats.Gauge(MetricHeapAlloc, float64(m.HeapAlloc), 1.0)
-		s.holder.Stats.Gauge(MetricHeapInuse, float64(m.HeapInuse), 1.0)
-		s.holder.Stats.Gauge(MetricStackInuse, float64(m.StackInuse), 1.0)
-		s.holder.Stats.Gauge(MetricMallocs, float64(m.Mallocs), 1.0)
-		s.holder.Stats.Gauge(MetricFrees, float64(m.Frees), 1.0)
+		GaugeHeapAlloc.Set(float64(m.HeapAlloc))
+		GaugeHeapInUse.Set(float64(m.HeapInuse))
+		GaugeStackInUse.Set(float64(m.StackInuse))
+		GaugeMallocs.Set(float64(m.Mallocs))
+		GaugeFrees.Set(float64(m.Frees))
 	}
 }
 
@@ -1411,6 +1409,10 @@ func (s *Server) CompileExecutionPlan(ctx context.Context, q string) (planner_ty
 		return nil, err
 	}
 	return s.executionPlannerFn(s.executor, s.executor.client.api, q).CompilePlan(ctx, st)
+}
+
+func (s *Server) RehydratePlanOperator(ctx context.Context, reader io.Reader) (planner_types.PlanOperator, error) {
+	return s.executionPlannerFn(s.executor, s.executor.client.api, "").RehydratePlanOp(ctx, reader)
 }
 
 // countOpenFiles on operating systems that support lsof.

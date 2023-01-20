@@ -163,7 +163,7 @@ func (p *ExecutionPlanner) analyseFunctionTrim(call *parser.Call, scope parser.S
 	return call, nil
 }
 
-func (p *ExecutionPlanner) analyseFunctionPrefixSuffix(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyseFunctionPrefixSuffixReplicate(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 	if len(call.Args) != 2 {
 		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
 	}
@@ -192,6 +192,18 @@ func (p *ExecutionPlanner) analyseFunctionSpace(call *parser.Call, scope parser.
 	}
 
 	call.ResultDataType = parser.NewDataTypeString()
+	return call, nil
+}
+
+func (p *ExecutionPlanner) analyseFunctionLen(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) != 1 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+
+	if !typeIsString(call.Args[0].DataType()) && !typeIsVoid(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+	call.ResultDataType = parser.NewDataTypeInt()
 	return call, nil
 }
 
@@ -263,6 +275,10 @@ func (n *callPlanExpression) EvaluateChar(currentRow []interface{}) (interface{}
 	intArg, ok := argEval.(int64)
 	if !ok {
 		return 0, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+	}
+	// ascii range is [0-255]
+	if intArg < 0 || intArg > 255 {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, intArg)
 	}
 
 	// Return the character that corresponds to the integer value
@@ -579,4 +595,52 @@ func (n *callPlanExpression) EvaluateSpace(currentRow []interface{}) (interface{
 		spaces += " "
 	}
 	return spaces, nil
+}
+
+func (n *callPlanExpression) EvaluateLen(currentRow []interface{}) (interface{}, error) {
+	argEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	stringArg, ok := argEval.(string)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+	}
+
+	return int64(len([]rune(stringArg))), nil
+}
+func (n *callPlanExpression) EvaluateReplicate(currentRow []interface{}) (interface{}, error) {
+	argEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	stringArg, ok := argEval.(string)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+	}
+
+	argEval, err = n.args[1].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	intArg, ok := argEval.(int64)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+	}
+
+	if intArg < 0 {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, intArg)
+	}
+
+	return strings.Repeat(stringArg, int(intArg)), nil
+
 }

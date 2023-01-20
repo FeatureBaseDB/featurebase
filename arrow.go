@@ -194,6 +194,8 @@ func (st *basicTable) Get(column, row int) interface{} {
 	case *arrow.Float64Type:
 		v := chunk.(*array.Float64).Float64Values()
 		return v[i]
+	case *arrow.StringType:
+		return chunk.(*array.String).Value(i)
 	}
 	return 0
 }
@@ -223,8 +225,10 @@ func builderFrom(mem memory.Allocator, dt arrow.DataType, size int64) array.Buil
 		bldr = array.NewFloat32Builder(mem)
 	case *arrow.Float64Type:
 		bldr = array.NewFloat64Builder(mem)
+	case *arrow.StringType:
+		bldr = array.NewStringBuilder(mem)
 	default:
-		panic(fmt.Errorf("npy2root: invalid Arrow type %v", dt))
+		panic(fmt.Errorf("builderFrom: invalid Arrow type %v", dt))
 	}
 	bldr.Reserve(int(size))
 	return bldr
@@ -254,8 +258,10 @@ func appendData(bldr array.Builder, v interface{}) {
 		bldr.Append(v.(float32))
 	case *array.Float64Builder:
 		bldr.Append(v.(float64))
+	case *array.StringBuilder:
+		bldr.Append(v.(string))
 	default:
-		panic(fmt.Errorf("npy2root: invalid Arrow builder type %T", bldr))
+		panic(fmt.Errorf("appendData: invalid Arrow builder type %T", bldr))
 	}
 }
 

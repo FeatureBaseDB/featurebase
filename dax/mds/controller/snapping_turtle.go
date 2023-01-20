@@ -30,7 +30,29 @@ func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan st
 func (c *Controller) snapAll() {
 	c.logger.Debugf("TURTLE: snapAll")
 	ctx := context.Background()
-	computeNodes, err := c.ComputeBalancer.CurrentState(ctx)
+
+	tx, err := c.boltDB.BeginTx(ctx, false)
+	if err != nil {
+		c.logger.Printf("Error getting transaction for snapping turtle: %v", err)
+		return
+	}
+	defer tx.Rollback()
+
+	qdbs, err := c.Schemar.Databases(tx, "")
+	if err != nil {
+		c.logger.Printf("couldn't get databases: %v", err)
+	}
+
+	for _, qdb := range qdbs {
+		c.snapAllForDatabase(tx, qdb.QualifiedID())
+	}
+
+	c.logger.Debugf("TURTLE: snapAll complete")
+}
+
+func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) {
+	c.logger.Debugf("TURTLE: snapAllForDatabase: %s", qdbid)
+	computeNodes, err := c.Balancer.CurrentState(tx, dax.RoleTypeCompute, qdbid)
 	if err != nil {
 		c.logger.Printf("Error getting compute balancer state for snapping turtle: %v", err)
 	}
@@ -52,15 +74,17 @@ func (c *Controller) snapAll() {
 			if err != nil {
 				c.logger.Printf("couldn't decode a shard out of the job: '%s', err: %v", workerInfo.Jobs[i], err)
 			}
-			c.SnapshotShardData(ctx, j.t.QualifiedTableID(), j.shardNum())
+			if err := c.snapshotShardData(tx, j.t.QualifiedTableID(), j.shardNum()); err != nil {
+				c.logger.Printf("Couldn't snapshot table: %s, shard: %d, error: %v", j.t, j.shardNum(), err)
+			}
 		}
 		i++
 	}
 
 	// Get all tables across all orgs/dbs so we can snapshot all keyed
-	// fields and look up whether a table is keyed to snapshot it's
+	// fields and look up whether a table is keyed to snapshot its
 	// partitions.
-	tables, err := c.Schemar.Tables(ctx, dax.TableQualifier{})
+	tables, err := c.Schemar.Tables(tx, dax.QualifiedDatabaseID{})
 	if err != nil {
 		c.logger.Printf("Couldn't get schema for snapshotting keys: %v", err)
 		return
@@ -71,8 +95,7 @@ func (c *Controller) snapAll() {
 		tableMap[table.Key()] = table
 		for _, f := range table.Fields {
 			if f.StringKeys() && !f.IsPrimaryKey() {
-				err := c.SnapshotFieldKeys(ctx, table.QualifiedID(), f.Name)
-				if err != nil {
+				if err := c.snapshotFieldKeys(tx, table.QualifiedID(), f.Name); err != nil {
 					c.logger.Printf("Couldn't snapshot table: %s, field: %s, error: %v", table, f.Name, err)
 				}
 			}
@@ -83,7 +106,7 @@ func (c *Controller) snapAll() {
 	// for any partition that goes with a keyed table. Doing the same
 	// weird nested loop thing to avoid doing all jobs on one node
 	// back to back.
-	translateNodes, err := c.TranslateBalancer.CurrentState(ctx)
+	translateNodes, err := c.Balancer.CurrentState(tx, dax.RoleTypeTranslate, qdbid)
 	if err != nil {
 		c.logger.Printf("Error getting translate balancer state for snapping turtle: %v", err)
 	}
@@ -101,12 +124,14 @@ func (c *Controller) snapAll() {
 			if err != nil {
 				table := tableMap[j.table()]
 				if table.StringKeys() {
-					c.SnapshotTableKeys(ctx, table.QualifiedID(), j.partitionNum())
+					if err := c.snapshotTableKeys(tx, table.QualifiedID(), j.partitionNum()); err != nil {
+						c.logger.Printf("Couldn't snapshot table: %s, partition: %d, error: %v", table, j.partitionNum(), err)
+					}
 				}
 				c.logger.Printf("couldn't decode a partition out of the job: '%s', err: %v", workerInfo.Jobs[i], err)
 			}
 		}
 		i++
 	}
-	c.logger.Debugf("TURTLE: snapAll complete")
+	c.logger.Debugf("TURTLE: snapAllForDatabase complete: %s", qdbid)
 }

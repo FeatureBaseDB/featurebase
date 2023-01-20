@@ -5,44 +5,39 @@ import (
 	"strings"
 )
 
-// Worker is a generic identifier used to represent a service responsible for
-// doing certain jobs. In the case of dax, this is typically the Address of a
-// compute or translate node. Services such as the Balancer use Workers (as
-// opposed to specifically using Address) in order to remain generic, and to
-// keep the business logic between services slightly less coupled.
-type Worker string
-
-// Workers is a sortable slice of Worker.
-type Workers []Worker
-
-func (w Workers) Len() int           { return len(w) }
-func (w Workers) Less(i, j int) bool { return w[i] < w[j] }
-func (w Workers) Swap(i, j int)      { w[i], w[j] = w[j], w[i] }
-
 // Job is a generic identifier used to represent a specific role assigned to a
 // worker.
 type Job string
 
+// Job allows a Job to implement the Jobber interface.
+func (j Job) Job() Job {
+	return j
+}
+
 // Jobs is a slice of Job.
 type Jobs []Job
 
+type Jobber interface {
+	Job() Job
+}
+
 // WorkerInfo represents a Worker and the Jobs to which it has been assigned.
 type WorkerInfo struct {
-	ID   Worker
-	Jobs []Job
+	Address Address
+	Jobs    []Job
 }
 
 // WorkerInfos is a sortable slice of WorkerInfo.
 type WorkerInfos []WorkerInfo
 
 func (w WorkerInfos) Len() int           { return len(w) }
-func (w WorkerInfos) Less(i, j int) bool { return w[i].ID < w[j].ID }
+func (w WorkerInfos) Less(i, j int) bool { return w[i].Address < w[j].Address }
 func (w WorkerInfos) Swap(i, j int)      { w[i], w[j] = w[j], w[i] }
 
 // WorkerDiff represents the changes made to a Worker following the latest
 // event.
 type WorkerDiff struct {
-	WorkerID    Worker
+	Address     Address
 	AddedJobs   []Job
 	RemovedJobs []Job
 }
@@ -51,7 +46,7 @@ type WorkerDiff struct {
 // ID. Any job that is added and then removed or removed and then
 // added cancels out and won't be present after add is called.
 func (w *WorkerDiff) Add(w2 WorkerDiff) {
-	if w.WorkerID != w2.WorkerID {
+	if w.Address != w2.Address {
 		panic("can't add worker diffs from different workers")
 	}
 	a1 := NewSet(w.AddedJobs...)
@@ -74,7 +69,7 @@ func (w *WorkerDiff) Add(w2 WorkerDiff) {
 type WorkerDiffs []WorkerDiff
 
 func (w WorkerDiffs) Len() int           { return len(w) }
-func (w WorkerDiffs) Less(i, j int) bool { return w[i].WorkerID < w[j].WorkerID }
+func (w WorkerDiffs) Less(i, j int) bool { return w[i].Address < w[j].Address }
 func (w WorkerDiffs) Swap(i, j int)      { w[i], w[j] = w[j], w[i] }
 
 // Set is a set of stringy items.
@@ -109,7 +104,8 @@ func (s Set[K]) Remove(k K) {
 	delete(s, k)
 }
 
-func (s Set[K]) RemovePrefix(prefix string) []K {
+// RemoveByPrefix removes all items from Set that have the given prefix.
+func (s Set[K]) RemoveByPrefix(prefix string) []K {
 	ret := make([]K, 0)
 	for k := range s {
 		if strings.HasPrefix(string(k), prefix) {

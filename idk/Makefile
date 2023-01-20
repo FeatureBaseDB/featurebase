@@ -231,7 +231,7 @@ TPKG ?= ./...
 test-run: testenv vendor
 	$(DOCKER_COMPOSE) build idk-test
 	$(DOCKER_COMPOSE) run -T idk-test bash -c "set -o pipefail; go test -v -mod=vendor -tags=odbc,dynamic $(TPKG) -covermode=atomic -coverpkg=$(TPKG) -coverprofile=/testdata/$(PROJECT)_base_coverage.out"
-	$(DOCKER_COMPOSE) run -T idk-test /go/src/github.com/molecula/featurebase/idk/reingest_test.sh
+	$(DOCKER_COMPOSE) run -T idk-test /go/src/github.com/featurebasedb/featurebase/idk/reingest_test.sh
 
 
 test-run-race: testenv vendor

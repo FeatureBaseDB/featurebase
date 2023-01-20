@@ -98,17 +98,7 @@ func (p *Parser) parseNonExplainStatement() (Statement, error) {
 	//case ANALYZE:
 	//	return p.parseAnalyzeStatement()
 	case ALTER:
-		return p.parseAlterTableStatement()
-		//	case BEGIN:
-		//		return p.parseBeginStatement()
-		//	case COMMIT, END:
-		//		return p.parseCommitStatement()
-		//	case ROLLBACK:
-		//		return p.parseRollbackStatement()
-		//	case SAVEPOINT:
-		//		return p.parseSavepointStatement()
-		//	case RELEASE:
-		//		return p.parseReleaseStatement()
+		return p.parseAlterStatement()
 	case BULK:
 		return p.parseBulkInsertStatement()
 	case CREATE:
@@ -334,6 +324,20 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 		return p.parseCreateFunctionStatement(pos)
 	default:
 		return nil, p.errorExpected(pos, tok, "TABLE, VIEW or FUNCTION")
+	}
+}
+
+func (p *Parser) parseAlterStatement() (Statement, error) {
+	assert(p.peek() == ALTER)
+	pos, tok, _ := p.scan()
+
+	switch p.peek() {
+	case TABLE:
+		return p.parseAlterTableStatement(pos)
+	case VIEW:
+		return p.parseAlterViewStatement(pos)
+	default:
+		return nil, p.errorExpected(pos, tok, "TABLE or VIEW")
 	}
 }
 
@@ -1054,25 +1058,73 @@ func (p *Parser) parseCreateViewStatement(createPos Pos) (_ *CreateViewStatement
 		return &stmt, err
 	}
 
+	// TODO(pok) - we'll do this later - right now views are implemented as
+	// jit compiled from text, which makes implementing these columns a pain
+	// when we can pre-compile a plan op subgraph and stored it, we can put this
+	// back in
 	// Parse optional column list.
-	if p.peek() == LP {
-		stmt.Lparen, _, _ = p.scan()
-		for {
-			col, err := p.parseIdent("column name")
-			if err != nil {
-				return &stmt, err
-			}
-			stmt.Columns = append(stmt.Columns, col)
+	// if p.peek() == LP {
+	// 	stmt.Lparen, _, _ = p.scan()
+	// 	for {
+	// 		col, err := p.parseIdent("column name")
+	// 		if err != nil {
+	// 			return &stmt, err
+	// 		}
+	// 		stmt.Columns = append(stmt.Columns, col)
 
-			if p.peek() == RP {
-				break
-			} else if p.peek() != COMMA {
-				return &stmt, p.errorExpected(p.pos, p.tok, "comma or right paren")
-			}
-			p.scan()
-		}
-		stmt.Rparen, _, _ = p.scan()
+	// 		if p.peek() == RP {
+	// 			break
+	// 		} else if p.peek() != COMMA {
+	// 			return &stmt, p.errorExpected(p.pos, p.tok, "comma or right paren")
+	// 		}
+	// 		p.scan()
+	// 	}
+	// 	stmt.Rparen, _, _ = p.scan()
+	// }
+
+	// Parse "AS select-stmt"
+	if p.peek() != AS {
+		return &stmt, p.errorExpected(p.pos, p.tok, "AS")
 	}
+	stmt.As, _, _ = p.scan()
+	if stmt.Select, err = p.parseSelectStatement(false, nil); err != nil {
+		return &stmt, err
+	}
+	return &stmt, nil
+}
+
+func (p *Parser) parseAlterViewStatement(alterPos Pos) (_ *AlterViewStatement, err error) {
+	var stmt AlterViewStatement
+	stmt.Alter = alterPos
+	if p.peek() != VIEW {
+		return &stmt, p.errorExpected(p.pos, p.tok, "VIEW")
+	}
+	stmt.View, _, _ = p.scan()
+
+	if stmt.Name, err = p.parseIdent("view name"); err != nil {
+		return &stmt, err
+	}
+
+	// TODO(pok) - we'll do this later - see note in parseCompileView()
+	// Parse optional column list.
+	// if p.peek() == LP {
+	// 	stmt.Lparen, _, _ = p.scan()
+	// 	for {
+	// 		col, err := p.parseIdent("column name")
+	// 		if err != nil {
+	// 			return &stmt, err
+	// 		}
+	// 		stmt.Columns = append(stmt.Columns, col)
+
+	// 		if p.peek() == RP {
+	// 			break
+	// 		} else if p.peek() != COMMA {
+	// 			return &stmt, p.errorExpected(p.pos, p.tok, "comma or right paren")
+	// 		}
+	// 		p.scan()
+	// 	}
+	// 	stmt.Rparen, _, _ = p.scan()
+	// }
 
 	// Parse "AS select-stmt"
 	if p.peek() != AS {
@@ -2222,7 +2274,7 @@ func (p *Parser) parseSource() (source Source, err error) {
 	for {
 		// Exit immediately if not part of a join operator.
 		switch p.peek() {
-		case COMMA, NATURAL, LEFT, INNER, CROSS, JOIN:
+		case COMMA, LEFT, RIGHT, FULL, INNER /*CROSS, */, JOIN:
 		default:
 			return source, nil
 		}
@@ -2288,21 +2340,28 @@ func (p *Parser) parseJoinOperator() (*JoinOperator, error) {
 		return &op, nil
 	}
 
-	if p.peek() == NATURAL {
-		op.Natural, _, _ = p.scan()
-	}
-
-	// Parse "LEFT", "LEFT OUTER", "INNER", or "CROSS"
+	// Parse  "INNER", "LEFT [OUTER]", "RIGHT [OUTER]", "FULL [OUTER]", or "CROSS"
 	switch p.peek() {
 	case LEFT:
 		op.Left, _, _ = p.scan()
 		if p.peek() == OUTER {
 			op.Outer, _, _ = p.scan()
 		}
+	case RIGHT:
+		op.Right, _, _ = p.scan()
+		if p.peek() == OUTER {
+			op.Outer, _, _ = p.scan()
+		}
+	case FULL:
+		op.Full, _, _ = p.scan()
+		if p.peek() == OUTER {
+			op.Outer, _, _ = p.scan()
+		}
 	case INNER:
 		op.Inner, _, _ = p.scan()
-	case CROSS:
-		op.Cross, _, _ = p.scan()
+
+		// case CROSS:
+		// 	op.Cross, _, _ = p.scan()
 	}
 
 	// Parse final JOIN.
@@ -2310,7 +2369,6 @@ func (p *Parser) parseJoinOperator() (*JoinOperator, error) {
 		return &op, p.errorExpected(p.pos, p.tok, "JOIN")
 	}
 	op.Join, _, _ = p.scan()
-
 	return &op, nil
 }
 
@@ -3225,11 +3283,9 @@ func (p *Parser) parseIntegerLiteral(desc string) (*IntegerLit, error) {
 	}
 }
 
-func (p *Parser) parseAlterTableStatement() (_ *AlterTableStatement, err error) {
-	assert(p.peek() == ALTER)
-
+func (p *Parser) parseAlterTableStatement(alterPos Pos) (_ *AlterTableStatement, err error) {
 	var stmt AlterTableStatement
-	stmt.Alter, _, _ = p.scan()
+	stmt.Alter = alterPos
 	if p.peek() != TABLE {
 		return &stmt, p.errorExpected(p.pos, p.tok, "TABLE")
 	}

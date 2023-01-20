@@ -10,7 +10,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	"github.com/pkg/errors"
 )
 
 // compileDropTableStatement compiles a DROP TABLE statement into a
@@ -20,7 +19,7 @@ func (p *ExecutionPlanner) compileDropTableStatement(stmt *parser.DropTableState
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, tableName)
 		}
 		return nil, err

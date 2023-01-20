@@ -21,16 +21,16 @@ type importer struct {
 	noder   dax.Noder
 	schemar dax.Schemar
 
-	mu   sync.Mutex
-	qual dax.TableQualifier
-	tbl  *dax.Table
+	mu    sync.Mutex
+	qdbid dax.QualifiedDatabaseID
+	tbl   *dax.Table
 }
 
-func NewImporter(noder dax.Noder, schemar dax.Schemar, qual dax.TableQualifier, tbl *dax.Table) *importer {
+func NewImporter(noder dax.Noder, schemar dax.Schemar, qdbid dax.QualifiedDatabaseID, tbl *dax.Table) *importer {
 	return &importer{
 		noder:   noder,
 		schemar: schemar,
-		qual:    qual,
+		qdbid:   qdbid,
 		tbl:     tbl,
 	}
 }
@@ -248,8 +248,6 @@ func (m *importer) DoImport(ctx context.Context, tid dax.TableID, fld *dax.Field
 	return fbClient.DoImport(string(qtbl.Key()), shard, path, data)
 }
 
-func (m *importer) StatsTiming(name string, value time.Duration, rate float64) {}
-
 // getQtbl takes a table (TableKey) and sets the local m.qtbl value. When we
 // originally set up this type, it was only used by IDK, and the table was known
 // at the beginning of the process, so it could be set on this import. But
@@ -263,10 +261,10 @@ func (m *importer) getQtbl(ctx context.Context, tid dax.TableID) (*dax.Qualified
 	defer m.mu.Unlock()
 
 	if m.tbl != nil {
-		return dax.NewQualifiedTable(m.qual, m.tbl), nil
+		return dax.NewQualifiedTable(m.qdbid, m.tbl), nil
 	}
 
-	qtid := dax.NewQualifiedTableID(m.qual, tid)
+	qtid := dax.NewQualifiedTableID(m.qdbid, tid)
 
 	qtbl, err := m.schemar.TableByID(ctx, qtid)
 	if err != nil {

@@ -264,11 +264,15 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 	case "LTRIM":
 		return p.analyseFunctionTrim(call, scope)
 	case "SUFFIX":
-		return p.analyseFunctionPrefixSuffix(call, scope)
+		return p.analyseFunctionPrefixSuffixReplicate(call, scope)
 	case "PREFIX":
-		return p.analyseFunctionPrefixSuffix(call, scope)
+		return p.analyseFunctionPrefixSuffixReplicate(call, scope)
 	case "SPACE":
 		return p.analyseFunctionSpace(call, scope)
+	case "LEN":
+		return p.analyseFunctionLen(call, scope)
+	case "REPLICATE":
+		return p.analyseFunctionPrefixSuffixReplicate(call, scope)
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

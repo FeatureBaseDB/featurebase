@@ -1516,6 +1516,10 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluatePrefix(currentRow)
 	case "SPACE":
 		return n.EvaluateSpace(currentRow)
+	case "LEN":
+		return n.EvaluateLen(currentRow)
+	case "REPLICATE":
+		return n.EvaluateReplicate(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}

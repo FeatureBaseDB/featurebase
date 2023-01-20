@@ -1,38 +1,42 @@
 package controller
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 type Balancer interface {
-	AddWorker(ctx context.Context, worker fmt.Stringer) ([]dax.WorkerDiff, error)
-	RemoveWorker(ctx context.Context, worker fmt.Stringer) ([]dax.WorkerDiff, error)
-	AddJobs(ctx context.Context, job ...fmt.Stringer) ([]dax.WorkerDiff, error)
-	RemoveJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error)
-	Balance(ctx context.Context) ([]dax.WorkerDiff, error)
-	CurrentState(ctx context.Context) ([]dax.WorkerInfo, error)
-	WorkerState(ctx context.Context, worker dax.Worker) (dax.WorkerInfo, error)
-	WorkersForJobs(ctx context.Context, jobs []dax.Job) ([]dax.WorkerInfo, error)
+	// AddWorker adds a worker to the global pool of available workers.
+	AddWorker(tx dax.Transaction, node *dax.Node) ([]dax.WorkerDiff, error)
 
-	// WorkersForJobPrefix returns all workers and their job
-	// assignments which start with `prefix` for all jobs that start
-	// with `prefix`. If there are free jobs that start with `prefix`
-	// an error is returned.
-	//
-	// The motivating use case is getting all workers for a particular
-	// table so we can execute a query that will hit every shard in a
-	// table. If there are jobs representing shards in that table
-	// which are not assigned to any worker, that means the query
-	// would return incomplete data, so we want to error.
-	WorkersForJobPrefix(ctx context.Context, prefix string) ([]dax.WorkerInfo, error)
+	// RemoveWorker removes a worker from the system. If the worker is currently
+	// assigned to a database and has jobs, it will be removed and its jobs will
+	// be either transferred to other workers or placed on the free job list.
+	RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error)
 
-	// RemoveJobs is for e.g. when dropping a table remove all jobs
-	// associated with that table without needing to look up in
-	// advance which shards or partitions are actually present.
-	RemoveJobs(ctx context.Context, prefix string) ([]dax.WorkerDiff, error)
+	// AddJobs adds new jobs for the given database.
+	AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error)
+
+	// RemoveJobs removes jobs for the given database.
+	RemoveJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error)
+
+	// BalanceDatabase forces a database balance. TODO(tlt): currently this is
+	// only used in tests, so perhaps we can get rid of it.
+	BalanceDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerDiff, error)
+
+	// CurrentState returns the workers and jobs currently active for the given
+	// database.
+	CurrentState(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerInfo, error)
+
+	// WorkerState returns the jobs currently active for the given worker.
+	WorkerState(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) (dax.WorkerInfo, error)
+
+	// WorkersForJobs returns the workers and jobs currently responsible for the
+	// given jobs.
+	WorkersForJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs ...dax.Job) ([]dax.WorkerInfo, error)
+
+	// WorkersForTable returns the workers responsible for any job related to
+	// the given table.
+	WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) ([]dax.WorkerInfo, error)
 }
 
 // Ensure type implements interface.
@@ -45,34 +49,30 @@ func NewNopBalancer() *NopBalancer {
 	return &NopBalancer{}
 }
 
-func (b *NopBalancer) AddWorker(ctx context.Context, worker fmt.Stringer) ([]dax.WorkerDiff, error) {
+func (b *NopBalancer) AddWorker(tx dax.Transaction, node *dax.Node) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) RemoveWorker(ctx context.Context, worker fmt.Stringer) ([]dax.WorkerDiff, error) {
+func (b *NopBalancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) AddJobs(ctx context.Context, job ...fmt.Stringer) ([]dax.WorkerDiff, error) {
+func (b *NopBalancer) AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) RemoveJob(ctx context.Context, job fmt.Stringer) ([]dax.WorkerDiff, error) {
+func (b *NopBalancer) RemoveJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) Balance(ctx context.Context) ([]dax.WorkerDiff, error) {
+func (b *NopBalancer) BalanceDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) CurrentState(ctx context.Context) ([]dax.WorkerInfo, error) {
+func (b *NopBalancer) CurrentState(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerInfo, error) {
 	return []dax.WorkerInfo{}, nil
 }
-func (b *NopBalancer) WorkerState(ctx context.Context, worker dax.Worker) (dax.WorkerInfo, error) {
+func (b *NopBalancer) WorkerState(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) (dax.WorkerInfo, error) {
 	return dax.WorkerInfo{}, nil
 }
-func (b *NopBalancer) WorkersForJobs(ctx context.Context, jobs []dax.Job) ([]dax.WorkerInfo, error) {
+func (b *NopBalancer) WorkersForJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs ...dax.Job) ([]dax.WorkerInfo, error) {
 	return []dax.WorkerInfo{}, nil
 }
-func (b *NopBalancer) WorkersForJobPrefix(ctx context.Context, prefix string) ([]dax.WorkerInfo, error) {
+func (b *NopBalancer) WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) ([]dax.WorkerInfo, error) {
 	return []dax.WorkerInfo{}, nil
-}
-
-func (b *NopBalancer) RemoveJobs(ctx context.Context, prefix string) ([]dax.WorkerDiff, error) {
-	return nil, nil
 }

@@ -6,12 +6,10 @@ import (
 	"context"
 	"strings"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	"github.com/pkg/errors"
 )
 
 type alterOperation int64
@@ -31,7 +29,7 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {
-		if errors.Is(err, pilosa.ErrIndexNotFound) {
+		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, tableName)
 		}
 		return nil, err

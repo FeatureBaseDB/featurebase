@@ -18,7 +18,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/stats"
 	"github.com/featurebasedb/featurebase/v3/storage"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/featurebasedb/featurebase/v3/vprint"
@@ -79,9 +78,6 @@ type Holder struct {
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
-
-	// Stats
-	Stats stats.StatsClient
 
 	// Data directory path.
 	path string
@@ -257,7 +253,6 @@ type HolderConfig struct {
 	Schemator            disco.Schemator
 	Sharder              disco.Sharder
 	CacheFlushInterval   time.Duration
-	StatsClient          stats.StatsClient
 	Logger               logger.Logger
 
 	StorageConfig *storage.Config
@@ -282,7 +277,6 @@ func DefaultHolderConfig() *HolderConfig {
 		Schemator:            disco.NewInMemSchemator(),
 		Sharder:              disco.InMemSharder,
 		CacheFlushInterval:   defaultCacheFlushInterval,
-		StatsClient:          stats.NopStatsClient,
 		Logger:               logger.NopLogger,
 		StorageConfig:        storage.NewDefaultConfig(),
 		RBFConfig:            rbfcfg.NewDefaultConfig(),
@@ -324,7 +318,6 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		broadcaster: NopBroadcaster,
 
 		partitionN:           cfg.PartitionN,
-		Stats:                cfg.StatsClient,
 		cacheFlushInterval:   cfg.CacheFlushInterval,
 		OpenTranslateStore:   cfg.OpenTranslateStore,
 		OpenTranslateReader:  cfg.OpenTranslateReader,
@@ -527,8 +520,6 @@ func (h *Holder) Open() error {
 	// Check if deletion was in progress when server was shutdown
 	h.processDeleteInflight()
 
-	h.Stats.Open()
-
 	h.opened.Close()
 
 	_ = testhook.Opened(h.Auditor, h, nil)
@@ -628,8 +619,6 @@ func (h *Holder) Close() error {
 	if globalUseStatTx {
 		fmt.Printf("%v\n", globalCallStats.report())
 	}
-
-	h.Stats.Close()
 
 	// Notify goroutines of closing and wait for completion.
 	close(h.closing)
@@ -1157,7 +1146,6 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
 	index.serializer = h.serializer
 	index.OpenTranslateStore = h.OpenTranslateStore
@@ -1329,9 +1317,6 @@ type holderSyncer struct {
 	stopInitializeReplicationCh chan struct{}
 
 	syncers errgroup.Group
-
-	// Stats
-	Stats stats.StatsClient
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}

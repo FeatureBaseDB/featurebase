@@ -2,7 +2,6 @@ package boltdb
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -39,14 +38,13 @@ func NewNodeService(db *DB, logger logger.Logger) *NodeService {
 	}
 }
 
-func (s *NodeService) CreateNode(ctx context.Context, addr dax.Address, node *dax.Node) error {
-	tx, err := s.db.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "getting transaction")
+func (s *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax.Node) error {
+	txx, ok := tx.(*Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
-	bkt := tx.Bucket(bucketNodes)
+	bkt := txx.Bucket(bucketNodes)
 	if bkt == nil {
 		return errors.Errorf(ErrFmtBucketNotFound, bucketNodes)
 	}
@@ -60,17 +58,16 @@ func (s *NodeService) CreateNode(ctx context.Context, addr dax.Address, node *da
 		return errors.Wrap(err, "putting node")
 	}
 
-	return tx.Commit()
+	return nil
 }
 
-func (s *NodeService) ReadNode(ctx context.Context, addr dax.Address) (*dax.Node, error) {
-	tx, err := s.db.BeginTx(ctx, false)
-	if err != nil {
-		return nil, errors.Wrap(err, "beginning tx")
+func (s *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
+	txx, ok := tx.(*Tx)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
-	bkt := tx.Bucket(bucketNodes)
+	bkt := txx.Bucket(bucketNodes)
 	if bkt == nil {
 		return nil, errors.Errorf(ErrFmtBucketNotFound, bucketNodes)
 	}
@@ -88,14 +85,13 @@ func (s *NodeService) ReadNode(ctx context.Context, addr dax.Address) (*dax.Node
 	return node, nil
 }
 
-func (s *NodeService) DeleteNode(ctx context.Context, addr dax.Address) error {
-	tx, err := s.db.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
+func (s *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
+	txx, ok := tx.(*Tx)
+	if !ok {
+		return dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
-	bkt := tx.Bucket(bucketNodes)
+	bkt := txx.Bucket(bucketNodes)
 	if bkt == nil {
 		return errors.Errorf(ErrFmtBucketNotFound, bucketNodes)
 	}
@@ -104,17 +100,16 @@ func (s *NodeService) DeleteNode(ctx context.Context, addr dax.Address) error {
 		return errors.Wrapf(err, "deleting node key: %s", addressKey(addr))
 	}
 
-	return tx.Commit()
+	return nil
 }
 
-func (s *NodeService) Nodes(ctx context.Context) ([]*dax.Node, error) {
-	tx, err := s.db.BeginTx(ctx, false)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting tx")
+func (s *NodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
+	txx, ok := tx.(*Tx)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction()
 	}
-	defer tx.Rollback()
 
-	nodes, err := s.getNodes(ctx, tx)
+	nodes, err := s.getNodes(txx)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting nodes")
 	}
@@ -122,7 +117,7 @@ func (s *NodeService) Nodes(ctx context.Context) ([]*dax.Node, error) {
 	return nodes, nil
 }
 
-func (s *NodeService) getNodes(ctx context.Context, tx *Tx) ([]*dax.Node, error) {
+func (s *NodeService) getNodes(tx *Tx) ([]*dax.Node, error) {
 	c := tx.Bucket(bucketNodes).Cursor()
 
 	// Deserialize rows into Node objects.
