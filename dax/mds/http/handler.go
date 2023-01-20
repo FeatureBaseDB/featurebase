@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	"github.com/gorilla/mux"
 )
 
 func Handler(mds *mds.MDS) http.Handler {

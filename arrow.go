@@ -17,9 +17,9 @@ import (
 	"github.com/apache/arrow/go/v10/parquet"
 	"github.com/apache/arrow/go/v10/parquet/file"
 	"github.com/apache/arrow/go/v10/parquet/pqarrow"
-	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/pkg/errors"
 )
 

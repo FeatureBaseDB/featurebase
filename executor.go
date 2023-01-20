@@ -17,8 +17,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/gomem/gomem/pkg/dataframe"
-	"github.com/lib/pq"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -28,6 +26,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/task"
 	"github.com/featurebasedb/featurebase/v3/testhook"
 	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/gomem/gomem/pkg/dataframe"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"

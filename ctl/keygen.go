@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/gorilla/securecookie"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/gorilla/securecookie"
 )
 
 // Keygen represents a command for generating a cryptographic key.

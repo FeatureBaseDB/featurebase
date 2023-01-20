@@ -23,7 +23,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/felixge/fgprof"
 	pilosacore "github.com/featurebasedb/featurebase/v3"
 	pilosagrpc "github.com/featurebasedb/featurebase/v3/api/client"
 	pilosabatch "github.com/featurebasedb/featurebase/v3/batch"
@@ -35,6 +34,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	proto "github.com/featurebasedb/featurebase/v3/proto"
+	"github.com/felixge/fgprof"
 	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

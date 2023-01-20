@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/gorilla/mux"
-	"github.com/jaffee/commandeer/pflag"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/api"
+	"github.com/gorilla/mux"
+	"github.com/jaffee/commandeer/pflag"
 	"github.com/pkg/errors"
 )
 

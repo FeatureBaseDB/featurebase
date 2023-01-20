@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-	)
+)
 
 func TestPlanner_Misc(t *testing.T) {
 	d, err := pql.ParseDecimal("12.345678")

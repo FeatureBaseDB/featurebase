@@ -5,7 +5,6 @@ package prometheus_test
 import (
 	"testing"
 
-
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"

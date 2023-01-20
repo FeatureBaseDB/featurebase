@@ -20,13 +20,13 @@ import (
 
 	fbcontext "github.com/featurebasedb/featurebase/v3/context"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
 	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )

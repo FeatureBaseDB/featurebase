@@ -10,11 +10,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	liavro "github.com/linkedin/goavro/v2"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/common"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	liavro "github.com/linkedin/goavro/v2"
 	"github.com/pkg/errors"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/featurebasedb/featurebase/v3/idk/datagen"
 	"github.com/jaffee/commandeer"
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/featurebasedb/featurebase/v3/idk/datagen"
 	pflag13 "github.com/spf13/pflag"
 )
 

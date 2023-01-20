@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/felixge/fgprof"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/felixge/fgprof"
 	"github.com/pkg/errors"
 )
 

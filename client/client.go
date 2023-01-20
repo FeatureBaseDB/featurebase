@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/client/types"
 	fbproto "github.com/featurebasedb/featurebase/v3/encoding/proto" // TODO use this everywhere and get rid of proto import
@@ -30,6 +29,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/vprint"
+	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

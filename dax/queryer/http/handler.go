@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
+	"github.com/gorilla/mux"
 )
 
 func Handler(q *queryer.Queryer) http.Handler {

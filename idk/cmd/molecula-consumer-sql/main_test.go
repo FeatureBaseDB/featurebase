@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/featurebasedb/featurebase/v3/idk/sql"
 	"github.com/jaffee/commandeer"
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/featurebasedb/featurebase/v3/idk/sql"
 	pflag13 "github.com/spf13/pflag"
 )
 

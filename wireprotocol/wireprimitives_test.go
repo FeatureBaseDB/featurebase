@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/featurebasedb/featurebase/v3/wireprotocol"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestWireProtocol_Schema(t *testing.T) {

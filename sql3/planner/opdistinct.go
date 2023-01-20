@@ -8,8 +8,8 @@ import (
 	"fmt"
 
 	"github.com/featurebasedb/featurebase/v3/bufferpool"
-        "github.com/featurebasedb/featurebase/v3/extendiblehash"
-        "github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/extendiblehash"
+	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 

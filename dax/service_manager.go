@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/gorilla/mux"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/gorilla/mux"
 )
 
 // ServiceKey is a unique key used to identify one service managed by the
