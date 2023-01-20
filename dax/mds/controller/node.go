@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/molecula/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
 // NodeService represents a service for managing Nodes.
