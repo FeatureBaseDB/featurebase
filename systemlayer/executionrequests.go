@@ -5,14 +5,20 @@ import (
 	"sync"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
+	pilosa "github.com/molecula/featurebase/v3"
+)
+
+const (
+	keepLastRequests int = 2000
+	truncateTextAt   int = 4096
 )
 
 // ExecutionRequests is an internal struct that keeps a list of sql execution requests
 // this data allows visbility into queries that have been run and are running
 type ExecutionRequests struct {
 	sync.RWMutex
-	requests map[string]*pilosa.ExecutionRequest
+	requestsList []string
+	requests     map[string]*pilosa.ExecutionRequest
 }
 
 // Ensure type implements interface.
@@ -20,19 +26,39 @@ var _ pilosa.ExecutionRequestsAPI = (*ExecutionRequests)(nil)
 
 func NewExecutionRequestsAPI() *ExecutionRequests {
 	return &ExecutionRequests{
-		requests: make(map[string]*pilosa.ExecutionRequest),
+		requestsList: make([]string, 0),
+		requests:     make(map[string]*pilosa.ExecutionRequest),
 	}
 }
 
 // AddRequest adds a new request to the ExecutionRequests struct
-// TODO(pok) ensure a cap on these so we don't suck up too much memory
 func (e *ExecutionRequests) AddRequest(requestID string, userID string, startTime time.Time, sql string) error {
 	e.Lock()
 	defer e.Unlock()
 
+	// we're going to add a new request so clear out oldest request if we've hit
+	// the threshhold
+	if len(e.requestsList) >= keepLastRequests {
+		// get the oldest request
+		delId := e.requestsList[0]
+
+		// make sure it's not this request, unlikely, but
+		// we've all been bitten by 'this should never happen' before
+		// and if it isn't delete it from the map and the list
+		if delId != requestID {
+			delete(e.requests, delId)
+			e.requestsList = e.requestsList[1:]
+		}
+	}
+	// add the request to the end
+	e.requestsList = append(e.requestsList, requestID)
+	//update the request
 	_, ok := e.requests[requestID]
 	if ok {
 		return fmt.Errorf("request %s already exists", requestID)
+	}
+	if len(sql) > truncateTextAt {
+		sql = sql[:truncateTextAt] //truncate to 4k, if we need more later, we'll worry about that later
 	}
 	e.requests[requestID] = &pilosa.ExecutionRequest{
 		RequestID: requestID,
@@ -64,6 +90,9 @@ func (e *ExecutionRequests) UpdateRequest(requestID string,
 	request, ok := e.requests[requestID]
 	if !ok {
 		return fmt.Errorf("request %s not found", requestID)
+	}
+	if len(plan) > truncateTextAt {
+		plan = plan[:truncateTextAt] //truncate to 4k, if we need more later, we'll worry about that later
 	}
 	request.EndTime = endTime
 	request.Status = status
