@@ -8,6 +8,7 @@ import (
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
 	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
 	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
@@ -118,15 +119,21 @@ type CommandConfig struct {
 }
 
 func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
-	var wlSvc *writelogger.Writelogger
+	var wlSvc computer.WritelogService
 	if cfg.ComputerConfig.WriteloggerDir != "" {
 		wlSvc = writelogger.New(cfg.ComputerConfig.WriteloggerDir, cfg.Logger)
+	} else {
+		wlSvc = computer.NewNopWritelogService()
+		cfg.Logger.Warnf("No writelogger configured, dynamic scaling will not function properly.")
 	}
 
 	// Set up Snapshotter.
-	var ssSvc *snapshotter.Snapshotter
+	var ssSvc computer.SnapshotService
 	if cfg.ComputerConfig.SnapshotterDir != "" {
 		ssSvc = snapshotter.New(cfg.ComputerConfig.SnapshotterDir, cfg.Logger)
+	} else {
+		ssSvc = computer.NewNopSnapshotterService()
+		cfg.Logger.Warnf("No snapshotter configured.")
 	}
 
 	// Set the FeatureBase.Config values based on the top-level Config
@@ -135,14 +142,6 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 	cfg.ComputerConfig.Advertise = addr.HostPort()
 	cfg.ComputerConfig.GRPCListener = &nopListener{}
 	cfg.ComputerConfig.DataDir = cfg.RootDataDir + "/" + cfg.Name
-
-	if wlSvc == nil {
-		cfg.Logger.Warnf("No writelogger configured, dynamic scaling will not function properly.")
-	}
-
-	if ssSvc == nil {
-		cfg.Logger.Warnf("No snapshotter configured.")
-	}
 
 	fbcmd := fbserver.NewCommand(cfg.Stderr,
 		fbserver.OptCommandSetConfig(&cfg.ComputerConfig),
