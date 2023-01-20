@@ -3181,11 +3181,11 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			}
 
 			opt.PreTranslated = true
-			aggregateCount, err := e.execute(ctx, qcx, index, &pql.Query{Calls: []*pql.Call{countDistinctIntersect}}, []uint64{}, opt)
+			aggregateCount, err := e.executeCall(ctx, qcx, index, countDistinctIntersect, shards, opt)
 			if err != nil {
 				return nil, err
 			}
-			results[n].Agg = int64(aggregateCount[0].(uint64))
+			results[n].Agg = int64(aggregateCount.(uint64))
 		}
 	}
 
