@@ -345,80 +345,6 @@ linters-settings:
     # Default: true
     ignore-calls: false
 
-  gocritic:
-    # Which checks should be enabled; can't be combined with 'disabled-checks'.
-    # See https://go-critic.github.io/overview#checks-overview.
-    # To check which checks are enabled run `GL_DEBUG=gocritic golangci-lint run`.
-    # By default, list of stable checks is used.
-    enabled-checks:
-      - nestingReduce
-      - unnamedResult
-      - ruleguard
-      - truncateCmp
-
-    # Which checks should be disabled; can't be combined with 'enabled-checks'.
-    # Default: []
-    disabled-checks: []
-
-    # Settings passed to gocritic.
-    # The settings key is the name of a supported gocritic checker.
-    # The list of supported checkers can be find in https://go-critic.github.io/overview.
-    settings:
-      # Must be valid enabled check name.
-      nestingReduce:
-        # Min number of statements inside a branch to trigger a warning.
-        # Default: 5
-        bodyWidth: 4
-      ruleguard:
-        # Enable debug to identify which 'Where' condition was rejected.
-        # The value of the parameter is the name of a function in a ruleguard file.
-        #
-        # When a rule is evaluated:
-        # If:
-        #   The Match() clause is accepted; and
-        #   One of the conditions in the Where() clause is rejected,
-        # Then:
-        #   ruleguard prints the specific Where() condition that was rejected.
-        #
-        # The flag is passed to the ruleguard 'debug-group' argument.
-        # Default: ""
-        debug: 'emptyDecl'
-        # Determines the behavior when an error occurs while parsing ruleguard files.
-        # If flag is not set, log error and skip rule files that contain an error.
-        # If flag is set, the value must be a comma-separated list of error conditions.
-        # - 'all':    fail on all errors.
-        # - 'import': ruleguard rule imports a package that cannot be found.
-        # - 'dsl':    gorule file does not comply with the ruleguard DSL.
-        # Default: ""
-        failOn: dsl
-        # Comma-separated list of file paths containing ruleguard rules.
-        # If a path is relative, it is relative to the directory where the golangci-lint command is executed.
-        # The special '${configDir}' variable is substituted with the absolute directory containing the golangci config file.
-        # Glob patterns such as 'rules-*.go' may be specified.
-        # Default: ""
-        rules: '${configDir}/ruleguard/rules-*.go,${configDir}/myrule1.go'
-        # Comma-separated list of enabled groups or skip empty to enable everything.
-        # Tags can be defined with # character prefix.
-        # Default: "<all>"
-        enable: "myGroupName,#myTagName"
-        # Comma-separated list of disabled groups or skip empty to enable everything.
-        # Tags can be defined with # character prefix.
-        # Default: ""
-        disable: "myGroupName,#myTagName"
-      truncateCmp:
-        # Whether to skip int/uint/uintptr types.
-        # Default: true
-        skipArchDependent: false
-      unnamedResult:
-        # Whether to check exported functions.
-        # Default: false
-        checkExported: true
-
-  gocyclo:
-    # Minimal code complexity to report.
-    # Default: 30 (but we recommend 10-20)
-    min-complexity: 10
-
   godot:
     # Comments to be checked: `declarations`, `toplevel`, or `all`.
     # Default: declarations
@@ -853,29 +779,6 @@ linters-settings:
     # The maximum number of methods allowed for an interface.
     # Default: 10
     max: 5
-
-  ireturn:
-    # ireturn allows using `allow` and `reject` settings at the same time.
-    # Both settings are lists of the keywords and regular expressions matched to interface or package names.
-    # keywords:
-    # - `empty` for `interface{}`
-    # - `error` for errors
-    # - `stdlib` for standard library
-    # - `anon` for anonymous interfaces
-
-    # By default, it allows using errors, empty interfaces, anonymous interfaces,
-    # and interfaces provided by the standard library.
-    allow:
-      - anon
-      - error
-      - empty
-      - stdlib
-      # You can specify idiomatic endings for interface
-      - (or|er)$
-
-    # reject-list of interfaces
-    reject:
-      - github.com\/user\/package\/v4\.Type
 
   lll:
     # Max line length, lines longer will be reported.
@@ -1649,8 +1552,6 @@ linters:
     - gochecknoinits
     - gocognit
     - goconst
-    - gocritic
-    - gocyclo
     - godot
     - godox
     - goerr113
@@ -1669,7 +1570,6 @@ linters:
     - importas
     - ineffassign
     - interfacebloat
-    - ireturn
     - lll
     - maintidx
     - makezero
