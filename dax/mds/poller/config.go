@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	AddressManager dax.AddressManager
+	NodeService    dax.NodeService
 	NodePoller     NodePoller
 	PollInterval   time.Duration
 	Logger         logger.Logger

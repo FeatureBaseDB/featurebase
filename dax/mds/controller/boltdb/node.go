@@ -6,32 +6,34 @@ import (
 	"fmt"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 var (
-	bucketNodes = Bucket("nodeServiceNodes")
+	bucketNodes = boltdb.Bucket("nodeServiceNodes")
 )
 
 // NodeServiceBuckets defines the buckets used by this package. It can be called
 // during setup to create the buckets ahead of time.
-var NodeServiceBuckets []Bucket = []Bucket{
+var NodeServiceBuckets []boltdb.Bucket = []boltdb.Bucket{
 	bucketNodes,
 }
 
 // Ensure type implements interface.
-var _ dax.NodeService = (*NodeService)(nil)
+var _ controller.NodeService = (*NodeService)(nil)
 
 // NodeService represents a service for managing nodes.
 type NodeService struct {
-	db *DB
+	db *boltdb.DB
 
 	logger logger.Logger
 }
 
 // NewNodeService returns a new instance of NodeService with default values.
-func NewNodeService(db *DB, logger logger.Logger) *NodeService {
+func NewNodeService(db *boltdb.DB, logger logger.Logger) *NodeService {
 	return &NodeService{
 		db:     db,
 		logger: logger,
@@ -39,14 +41,14 @@ func NewNodeService(db *DB, logger logger.Logger) *NodeService {
 }
 
 func (s *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax.Node) error {
-	txx, ok := tx.(*Tx)
+	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
 		return dax.NewErrInvalidTransaction()
 	}
 
 	bkt := txx.Bucket(bucketNodes)
 	if bkt == nil {
-		return errors.Errorf(ErrFmtBucketNotFound, bucketNodes)
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNodes)
 	}
 
 	val, err := json.Marshal(node)
@@ -62,14 +64,14 @@ func (s *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax
 }
 
 func (s *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
-	txx, ok := tx.(*Tx)
+	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction()
 	}
 
 	bkt := txx.Bucket(bucketNodes)
 	if bkt == nil {
-		return nil, errors.Errorf(ErrFmtBucketNotFound, bucketNodes)
+		return nil, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNodes)
 	}
 
 	b := bkt.Get(addressKey(addr))
@@ -86,14 +88,14 @@ func (s *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node,
 }
 
 func (s *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
-	txx, ok := tx.(*Tx)
+	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
 		return dax.NewErrInvalidTransaction()
 	}
 
 	bkt := txx.Bucket(bucketNodes)
 	if bkt == nil {
-		return errors.Errorf(ErrFmtBucketNotFound, bucketNodes)
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNodes)
 	}
 
 	if err := bkt.Delete(addressKey(addr)); err != nil {
@@ -104,7 +106,7 @@ func (s *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 }
 
 func (s *NodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
-	txx, ok := tx.(*Tx)
+	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction()
 	}
@@ -117,7 +119,7 @@ func (s *NodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	return nodes, nil
 }
 
-func (s *NodeService) getNodes(tx *Tx) ([]*dax.Node, error) {
+func (s *NodeService) getNodes(tx *boltdb.Tx) ([]*dax.Node, error) {
 	c := tx.Bucket(bucketNodes).Cursor()
 
 	// Deserialize rows into Node objects.

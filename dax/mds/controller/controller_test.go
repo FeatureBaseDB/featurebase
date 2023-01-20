@@ -10,6 +10,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
 	balancerdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/balancer/boltdb"
+	controllerdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/boltdb"
 	schemardb "github.com/featurebasedb/featurebase/v3/dax/mds/schemar/boltdb"
 	daxtest "github.com/featurebasedb/featurebase/v3/dax/test"
 	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
@@ -592,14 +593,18 @@ func TestController(t *testing.T) {
 		db := testbolt.MustOpenDB(t)
 		db.InitializeBuckets(balancerdb.BalancerBuckets...)
 		db.InitializeBuckets(schemardb.SchemarBuckets...)
+		db.InitializeBuckets(controllerdb.NodeServiceBuckets...)
 		defer func() {
 			testbolt.MustCloseDB(t, db)
 			testbolt.CleanupDB(t, db.Path())
 		}()
 
+		nodeService := controllerdb.NewNodeService(db, logger.StderrLogger)
+
 		cfg := controller.Config{
 			Director:      director,
 			Schemar:       schemar,
+			NodeService:   nodeService,
 			BoltDB:        db,
 			StorageMethod: "boltdb",
 			Balancer:      balancerdb.NewBalancer(db, schemar, logger.StderrLogger),

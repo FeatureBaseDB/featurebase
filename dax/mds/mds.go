@@ -12,6 +12,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
 	balancerboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/balancer/boltdb"
+	controllerboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/poller"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
 	schemarboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/schemar/boltdb"
@@ -91,6 +92,7 @@ func New(cfg Config) *MDS {
 	}
 
 	buckets := append(schemarboltdb.SchemarBuckets, balancerboltdb.BalancerBuckets...)
+	buckets = append(buckets, controllerboltdb.NodeServiceBuckets...)
 	controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "controller", buckets...)
 	if err != nil {
 		logr.Printf(errors.Wrap(err, "creating controller bolt").Error())
@@ -104,6 +106,8 @@ func New(cfg Config) *MDS {
 		Schemar:  schemar,
 
 		Balancer: balancerboltdb.NewBalancer(controllerDB, schemar, logr),
+
+		NodeService: controllerboltdb.NewNodeService(controllerDB, logr),
 
 		RegistrationBatchTimeout: cfg.RegistrationBatchTimeout,
 		SnappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
@@ -122,17 +126,12 @@ func New(cfg Config) *MDS {
 
 	pollerCfg := poller.Config{
 		AddressManager: controller,
+		NodeService:    controller,
 		NodePoller:     poller.NewHTTPNodePoller(logr),
 		PollInterval:   cfg.PollInterval,
 		Logger:         logr,
 	}
 	poller := poller.New(pollerCfg)
-
-	// The controller needs to tell the poller about nodes which have been
-	// added/removed.
-	// TODO: this feels hacky. We need an elegant way to register interface
-	// implementations across services without an explicit Set method like this.
-	controller.SetPoller(poller)
 
 	return &MDS{
 		controller: controller,
@@ -151,13 +150,7 @@ func New(cfg Config) *MDS {
 
 // Start starts MDS services, such as the Poller.
 func (m *MDS) Start() error {
-	// Initialize the poller (in the case where this MDS instance has restarted
-	// or is a replacement). Then start the poller.
-	if err := m.controller.InitializePoller(context.Background()); err != nil {
-		return errors.Wrap(err, "initializing the poller")
-	}
 	m.poller.Run()
-
 	return m.controller.Run()
 }
 

@@ -14,9 +14,9 @@ import (
 type Poller struct {
 	mu sync.RWMutex
 
-	addresses map[dax.Address]struct{}
-
 	addressManager dax.AddressManager
+
+	nodeService dax.NodeService
 
 	nodePoller   NodePoller
 	pollInterval time.Duration
@@ -30,8 +30,8 @@ type Poller struct {
 // New returns a new instance of Poller with default values.
 func New(cfg Config) *Poller {
 	p := &Poller{
-		addresses:      make(map[dax.Address]struct{}),
 		addressManager: dax.NewNopAddressManager(),
+		nodeService:    dax.NewNopNodeService(),
 		nodePoller:     NewNopNodePoller(),
 		pollInterval:   time.Second,
 		stopping:       make(chan struct{}),
@@ -41,6 +41,9 @@ func New(cfg Config) *Poller {
 	// Set config options.
 	if cfg.AddressManager != nil {
 		p.addressManager = cfg.AddressManager
+	}
+	if cfg.NodeService != nil {
+		p.nodeService = cfg.NodeService
 	}
 	if cfg.NodePoller != nil {
 		p.nodePoller = cfg.NodePoller
@@ -55,35 +58,15 @@ func New(cfg Config) *Poller {
 	return p
 }
 
-func (p *Poller) AddAddresses(ctx context.Context, addrs ...dax.Address) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for _, addr := range addrs {
-		p.addresses[addr] = struct{}{}
-	}
-
-	return nil
-}
-
-func (p *Poller) RemoveAddresses(ctx context.Context, addrs ...dax.Address) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for _, addr := range addrs {
-		delete(p.addresses, addr)
-	}
-
-	return nil
-}
-
 func (p *Poller) Addresses() []dax.Address {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	nodes, err := p.nodeService.Nodes(context.Background())
+	if err != nil {
+		p.logger.Printf("POLLER: unable to get nodes from node service")
+	}
 
-	addrs := make([]dax.Address, 0, len(p.addresses))
-	for addr := range p.addresses {
-		addrs = append(addrs, addr)
+	addrs := make([]dax.Address, 0, len(nodes))
+	for _, node := range nodes {
+		addrs = append(addrs, node.Address)
 	}
 
 	return addrs

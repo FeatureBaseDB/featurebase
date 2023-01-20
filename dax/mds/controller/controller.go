@@ -21,6 +21,7 @@ import (
 // Ensure type implements interface.
 var _ computer.Registrar = (*Controller)(nil)
 var _ dax.Schemar = (*Controller)(nil)
+var _ dax.NodeService = (*Controller)(nil)
 
 type Controller struct {
 	// Schemar used by the controller to get table information. The controller
@@ -28,9 +29,9 @@ type Controller struct {
 	// made outside of the controller (at this point that happens in MDS).
 	Schemar schemar.Schemar
 
-	// nodeService is the interface to working with nodes, by address, which
+	// NodeService is the interface to working with nodes, by address, which
 	// have registered with the controller.
-	nodeService dax.NodeService
+	NodeService NodeService
 
 	boltDB   *boltdb.DB
 	Balancer Balancer
@@ -40,9 +41,6 @@ type Controller struct {
 
 	// Director is used to send directives to computer workers.
 	Director Director
-
-	// poller is used to notify a Poller if nodes have been added or removed.
-	poller dax.AddressManager
 
 	directiveVersion dax.DirectiveVersion
 
@@ -68,9 +66,9 @@ func New(cfg Config) *Controller {
 		boltDB:   cfg.BoltDB,
 		Balancer: cfg.Balancer,
 
-		Director: NewNopDirector(),
+		NodeService: NewNopNodeService(),
 
-		poller: dax.NewNopAddressManager(),
+		Director: NewNopDirector(),
 
 		registrationBatchTimeout: cfg.RegistrationBatchTimeout,
 		nodeChan:                 make(chan *dax.Node, 10),
@@ -90,11 +88,6 @@ func New(cfg Config) *Controller {
 
 	switch cfg.StorageMethod {
 	case "boltdb":
-		if err := cfg.BoltDB.InitializeBuckets(boltdb.NodeServiceBuckets...); err != nil {
-			c.logger.Panicf("initializing node service buckets: %v", err)
-		}
-		c.nodeService = boltdb.NewNodeService(cfg.BoltDB, c.logger)
-
 		if err := cfg.BoltDB.InitializeBuckets(boltdb.DirectiveBuckets...); err != nil {
 			c.logger.Panicf("initializing directive buckets: %v", err)
 		}
@@ -103,6 +96,9 @@ func New(cfg Config) *Controller {
 		c.logger.Panicf("storage method '%s' unsupported. (hint: try boltdb)", cfg.StorageMethod)
 	}
 
+	if cfg.NodeService != nil {
+		c.NodeService = cfg.NodeService
+	}
 	if cfg.Director != nil {
 		c.Director = cfg.Director
 	}
@@ -158,8 +154,8 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 
 	// Create node if we don't already have it
 	for _, n := range nodes {
-		if node, _ := c.nodeService.ReadNode(tx, n.Address); node == nil {
-			if err := c.nodeService.CreateNode(tx, n.Address, n); err != nil {
+		if node, _ := c.NodeService.ReadNode(tx, n.Address); node == nil {
+			if err := c.NodeService.CreateNode(tx, n.Address, n); err != nil {
 				return errors.Wrapf(err, "creating node: %s", n.Address)
 			}
 
@@ -199,16 +195,6 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 	// directive.
 	for addr := range diffByAddr {
 		workerSet.Add(addr)
-	}
-
-	addrs := []dax.Address{}
-	for _, n := range nodes {
-		addrs = append(addrs, n.Address)
-	}
-
-	// Tell the poller about the new nodes.
-	if err := c.poller.AddAddresses(tx.Context(), addrs...); err != nil {
-		return NewErrInternal(err.Error())
 	}
 
 	// No need to send directives if the workerSet is empty.
@@ -261,7 +247,7 @@ func (c *Controller) RegisterNode(ctx context.Context, n *dax.Node) error {
 	}
 	defer tx.Rollback()
 
-	if node, _ := c.nodeService.ReadNode(tx, n.Address); node != nil {
+	if node, _ := c.NodeService.ReadNode(tx, n.Address); node != nil {
 		return nil
 	}
 
@@ -288,7 +274,7 @@ func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
 	// Directive; then we could check that the compute node is actually doing
 	// what we expect it to be doing. But for now, we're just checking that we
 	// know about the compute node at all.
-	if node, _ := c.nodeService.ReadNode(tx, n.Address); node != nil {
+	if node, _ := c.NodeService.ReadNode(tx, n.Address); node != nil {
 		return nil
 	}
 
@@ -354,13 +340,9 @@ func (c *Controller) DeregisterNodes(ctx context.Context, addresses ...dax.Addre
 	}
 
 	for _, address := range addresses {
-		if err := c.nodeService.DeleteNode(tx, address); err != nil {
+		if err := c.NodeService.DeleteNode(tx, address); err != nil {
 			return errors.Wrapf(err, "deleting node at address: %s", address)
 		}
-	}
-
-	if err := c.poller.RemoveAddresses(tx.Context(), addresses...); err != nil {
-		return NewErrInternal(err.Error())
 	}
 
 	// No need to send Directives if nothing has ultimately changed.
@@ -1179,34 +1161,6 @@ func (c *Controller) buildDirectives(tx dax.Transaction, addrs []addressMethod) 
 	return directives, nil
 }
 
-func (c *Controller) SetPoller(poller dax.AddressManager) {
-	c.poller = poller
-}
-
-// InitializePoller sends the list of known nodes (to be polled) to the poller.
-// This is useful in the case where MDS has restarted (or has been replaced) and
-// its poller is emtpy (i.e. it doesn't know about any nodes).
-func (c *Controller) InitializePoller(ctx context.Context) error {
-	tx, err := c.boltDB.BeginTx(ctx, false)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
-
-	nodes, err := c.nodeService.Nodes(tx)
-	if err != nil {
-		return errors.Wrap(err, "initializing poller")
-	}
-
-	for _, node := range nodes {
-		if err := c.poller.AddAddresses(ctx, node.Address); err != nil {
-			return errors.Wrapf(err, "adding address to poller: %s", node.Address)
-		}
-	}
-
-	return nil
-}
-
 // SnapshotTable snapshots a table. It might also snapshot everything
 // else... no guarantees here, only used in tests as of this writing.
 func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) error {
@@ -1793,7 +1747,7 @@ func (c *Controller) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
 	}
 	defer tx.Rollback()
 
-	return c.nodeService.Nodes(tx)
+	return c.NodeService.Nodes(tx)
 }
 
 // sanitizeQTID populates Table.ID (by looking up the table, by name, in
@@ -1836,4 +1790,25 @@ func (c *Controller) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID,
 	defer tx.Rollback()
 
 	return c.Schemar.TableID(tx, qdbid, name)
+}
+
+// NodeService
+
+func (c *Controller) CreateNode(context.Context, dax.Address, *dax.Node) error {
+	return errors.Errorf("Controller.CreateNode() not implemented")
+}
+func (c *Controller) ReadNode(context.Context, dax.Address) (*dax.Node, error) {
+	return nil, errors.Errorf("Controller.ReadNode() not implemented")
+}
+func (c *Controller) DeleteNode(context.Context, dax.Address) error {
+	return errors.Errorf("Controller.DeleteNode() not implemented")
+}
+func (c *Controller) Nodes(ctx context.Context) ([]*dax.Node, error) {
+	tx, err := c.boltDB.BeginTx(ctx, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	return c.NodeService.Nodes(tx)
 }

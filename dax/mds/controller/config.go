@@ -16,6 +16,8 @@ type Config struct {
 
 	Balancer Balancer
 
+	NodeService NodeService
+
 	StorageMethod string
 	BoltDB        *boltdb.DB
 

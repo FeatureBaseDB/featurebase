@@ -40,10 +40,33 @@ type AssignedNode struct {
 
 // NodeService represents a service for managing Nodes.
 type NodeService interface {
-	CreateNode(Transaction, Address, *Node) error
-	ReadNode(Transaction, Address) (*Node, error)
-	DeleteNode(Transaction, Address) error
-	Nodes(Transaction) ([]*Node, error)
+	CreateNode(context.Context, Address, *Node) error
+	ReadNode(context.Context, Address) (*Node, error)
+	DeleteNode(context.Context, Address) error
+	Nodes(context.Context) ([]*Node, error)
+}
+
+// Ensure type implements interface.
+var _ NodeService = &nopNodeService{}
+
+// nopNoder is a no-op implementation of the Noder interface.
+type nopNodeService struct{}
+
+func NewNopNodeService() *nopNodeService {
+	return &nopNodeService{}
+}
+
+func (n *nopNodeService) CreateNode(context.Context, Address, *Node) error {
+	return nil
+}
+func (n *nopNodeService) ReadNode(context.Context, Address) (*Node, error) {
+	return nil, nil
+}
+func (n *nopNodeService) DeleteNode(context.Context, Address) error {
+	return nil
+}
+func (n *nopNodeService) Nodes(context.Context) ([]*Node, error) {
+	return []*Node{}, nil
 }
 
 // ComputeNode represents a compute node and the table/shards for which it is

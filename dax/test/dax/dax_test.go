@@ -20,6 +20,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
+	goerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -723,7 +724,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 							rows := resp.Data
 							var err error
 							if resp.Error != "" {
-								err = errors.Errorf(resp.Error)
+								err = goerrors.New(resp.Error)
 							}
 
 							// Check expected error instead of results.
@@ -800,7 +801,7 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 							rows := resp.Data
 							var err error
 							if resp.Error != "" {
-								err = errors.Errorf(resp.Error)
+								err = goerrors.New(resp.Error)
 							}
 
 							// Check expected error instead of results.

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/boltdb"
 	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
