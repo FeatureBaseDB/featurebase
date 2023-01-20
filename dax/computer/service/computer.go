@@ -8,7 +8,6 @@ import (
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
 	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
 	"github.com/featurebasedb/featurebase/v3/dax/writelogger"

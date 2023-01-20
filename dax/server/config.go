@@ -12,8 +12,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax/mds"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
-	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
-	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	fbserver "github.com/featurebasedb/featurebase/v3/server"
 )
