@@ -47,13 +47,17 @@ func (c *computerService) Start() error {
 	// happen in a reasonable order like we do with the other service types.
 	if c.computer == nil {
 		c.cfg.Name = string(c.Key())
-		c.computer = newCommand(c.addr, c.cfg)
+		if cmd, err := newCommand(c.addr, c.cfg); err != nil {
+			return errors.Wrapf(err, "getting new command for computer config: %s", c.cfg.Name)
+		} else {
+			c.computer = cmd
+		}
 
 		if c.cfg.ComputerConfig.MDSAddress != "" {
 			mdsAddr := dax.Address(c.cfg.ComputerConfig.MDSAddress)
 			// Set mds (registrar) on computer.
 			if err := c.SetMDS(mdsAddr); err != nil {
-				return errors.Wrapf(err, "setting mds service on computer: %s, %v", c.cfg.Name, err)
+				return errors.Wrapf(err, "setting mds service on computer: %s", c.cfg.Name)
 			}
 		}
 	}
@@ -118,22 +122,29 @@ type CommandConfig struct {
 	Logger logger.Logger
 }
 
-func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
+func newCommand(addr dax.Address, cfg CommandConfig) (*fbserver.Command, error) {
+	// Set up Writelogger.
 	var wlSvc computer.WritelogService
-	if cfg.ComputerConfig.WriteloggerDir != "" {
-		wlSvc = writelogger.New(cfg.ComputerConfig.WriteloggerDir, cfg.Logger)
-	} else {
+	switch cfg.ComputerConfig.WriteloggerDir {
+	case "":
+		return nil, errors.New(errors.ErrUncoded, "no writelogger directory configured")
+	case "NULL":
 		wlSvc = computer.NewNopWritelogService()
 		cfg.Logger.Warnf("No writelogger configured, dynamic scaling will not function properly.")
+	default:
+		wlSvc = writelogger.New(cfg.ComputerConfig.WriteloggerDir, cfg.Logger)
 	}
 
 	// Set up Snapshotter.
 	var ssSvc computer.SnapshotService
-	if cfg.ComputerConfig.SnapshotterDir != "" {
-		ssSvc = snapshotter.New(cfg.ComputerConfig.SnapshotterDir, cfg.Logger)
-	} else {
+	switch cfg.ComputerConfig.SnapshotterDir {
+	case "":
+		return nil, errors.New(errors.ErrUncoded, "no snapshotter directory configured")
+	case "NULL":
 		ssSvc = computer.NewNopSnapshotterService()
-		cfg.Logger.Warnf("No snapshotter configured.")
+		cfg.Logger.Warnf("No snapshotter configured, dynamic scaling will not function properly.")
+	default:
+		ssSvc = snapshotter.New(cfg.ComputerConfig.SnapshotterDir, cfg.Logger)
 	}
 
 	// Set the FeatureBase.Config values based on the top-level Config
@@ -156,7 +167,7 @@ func newCommand(addr dax.Address, cfg CommandConfig) *fbserver.Command {
 		}),
 	)
 
-	return fbcmd
+	return fbcmd, nil
 }
 
 type nopListener struct{}
