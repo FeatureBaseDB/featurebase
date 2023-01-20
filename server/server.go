@@ -44,7 +44,6 @@ import (
         "github.com/featurebasedb/featurebase/v3/sql3/planner"
         "github.com/featurebasedb/featurebase/v3/statik"
         "github.com/featurebasedb/featurebase/v3/stats"
-        "github.com/featurebasedb/featurebase/v3/statsd"
         "github.com/featurebasedb/featurebase/v3/systemlayer"
         "github.com/featurebasedb/featurebase/v3/syswrap"
         "github.com/featurebasedb/featurebase/v3/testhook"

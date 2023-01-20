@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	featurebase "github.com/molecula/featurebase/v3"
-	"github.com/molecula/featurebase/v3/cli"
-	"github.com/molecula/featurebase/v3/logger"
+	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/cli"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )

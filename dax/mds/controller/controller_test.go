@@ -9,7 +9,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
-	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/naive/boltdb"
 	daxtest "github.com/featurebasedb/featurebase/v3/dax/test"
 	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
 	"github.com/featurebasedb/featurebase/v3/errors"

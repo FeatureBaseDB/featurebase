@@ -1,9 +1,6 @@
 package controller
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/featurebasedb/featurebase/v3/dax"
 )
 

@@ -11,7 +11,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
-	naiveboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/naive/boltdb"
+	balancerboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/balancer/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/poller"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
 	schemarboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/schemar/boltdb"

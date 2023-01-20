@@ -2,8 +2,6 @@
 package schemar
 
 import (
-	"context"
-
 	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
