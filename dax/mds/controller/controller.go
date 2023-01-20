@@ -29,10 +29,6 @@ type Controller struct {
 	// made outside of the controller (at this point that happens in MDS).
 	Schemar schemar.Schemar
 
-	// NodeService is the interface to working with nodes, by address, which
-	// have registered with the controller.
-	NodeService NodeService
-
 	boltDB   *boltdb.DB
 	Balancer Balancer
 
@@ -66,8 +62,6 @@ func New(cfg Config) *Controller {
 		boltDB:   cfg.BoltDB,
 		Balancer: cfg.Balancer,
 
-		NodeService: NewNopNodeService(),
-
 		Director: NewNopDirector(),
 
 		registrationBatchTimeout: cfg.RegistrationBatchTimeout,
@@ -96,9 +90,6 @@ func New(cfg Config) *Controller {
 		c.logger.Panicf("storage method '%s' unsupported. (hint: try boltdb)", cfg.StorageMethod)
 	}
 
-	if cfg.NodeService != nil {
-		c.NodeService = cfg.NodeService
-	}
 	if cfg.Director != nil {
 		c.Director = cfg.Director
 	}
@@ -152,22 +143,6 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 	// and therefore need to be sent an updated Directive.
 	workerSet := NewAddressSet()
 
-	// Create node if we don't already have it
-	for _, n := range nodes {
-		if node, _ := c.NodeService.ReadNode(tx, n.Address); node == nil {
-			if err := c.NodeService.CreateNode(tx, n.Address, n); err != nil {
-				return errors.Wrapf(err, "creating node: %s", n.Address)
-			}
-
-			// Add the node to the workerSet so that it receives a directive.
-			// Even if there is currently no data for this worker (i.e. it
-			// doesn't result in a diffByAddr entry below), we still want to
-			// send it a "reset" directive so that in the off chance it has some
-			// local data, that data gets removed.
-			workerSet.Add(n.Address)
-		}
-	}
-
 	// diffByAddr keeps track of the diffs that have been applied to each
 	// specific address.
 	// TODO(tlt): I don't understand why we're keeping track of the
@@ -175,7 +150,20 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 	// doesn't ever seem to be used.
 	diffByAddr := make(map[dax.Address]dax.WorkerDiff)
 
+	// Create node if we don't already have it
 	for _, n := range nodes {
+		// If the node already exists, skip it.
+		if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
+			continue
+		}
+
+		// Add the node to the workerSet so that it receives a directive.
+		// Even if there is currently no data for this worker (i.e. it
+		// doesn't result in a diffByAddr entry below), we still want to
+		// send it a "reset" directive so that in the off chance it has some
+		// local data, that data gets removed.
+		workerSet.Add(n.Address)
+
 		adiffs, err := c.Balancer.AddWorker(tx, n)
 		if err != nil {
 			return errors.Wrap(err, "adding worker")
@@ -247,7 +235,7 @@ func (c *Controller) RegisterNode(ctx context.Context, n *dax.Node) error {
 	}
 	defer tx.Rollback()
 
-	if node, _ := c.NodeService.ReadNode(tx, n.Address); node != nil {
+	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
 		return nil
 	}
 
@@ -274,7 +262,7 @@ func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
 	// Directive; then we could check that the compute node is actually doing
 	// what we expect it to be doing. But for now, we're just checking that we
 	// know about the compute node at all.
-	if node, _ := c.NodeService.ReadNode(tx, n.Address); node != nil {
+	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
 		return nil
 	}
 
@@ -337,12 +325,6 @@ func (c *Controller) DeregisterNodes(ctx context.Context, addresses ...dax.Addre
 	// while holding a mu.Lock on Controller.
 	for _, addr := range addresses {
 		workerSet.Remove(addr)
-	}
-
-	for _, address := range addresses {
-		if err := c.NodeService.DeleteNode(tx, address); err != nil {
-			return errors.Wrapf(err, "deleting node at address: %s", address)
-		}
 	}
 
 	// No need to send Directives if nothing has ultimately changed.
@@ -1747,7 +1729,7 @@ func (c *Controller) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
 	}
 	defer tx.Rollback()
 
-	return c.NodeService.Nodes(tx)
+	return c.Balancer.Nodes(tx)
 }
 
 // sanitizeQTID populates Table.ID (by looking up the table, by name, in
@@ -1810,5 +1792,5 @@ func (c *Controller) Nodes(ctx context.Context) ([]*dax.Node, error) {
 	}
 	defer tx.Rollback()
 
-	return c.NodeService.Nodes(tx)
+	return c.Balancer.Nodes(tx)
 }

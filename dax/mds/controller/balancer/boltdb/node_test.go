@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/balancer/boltdb"
 	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -23,7 +23,7 @@ func TestNodeService(t *testing.T) {
 	ctx := context.Background()
 
 	// Initialize the buckets.
-	assert.NoError(t, db.InitializeBuckets(boltdb.NodeServiceBuckets...))
+	assert.NoError(t, db.InitializeBuckets(boltdb.BalancerBuckets...))
 
 	t.Run("Nodes", func(t *testing.T) {
 		ns := boltdb.NewNodeService(db, logger.NopLogger)

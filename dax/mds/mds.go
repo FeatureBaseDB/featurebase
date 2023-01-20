@@ -12,7 +12,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/controller"
 	balancerboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/balancer/boltdb"
-	controllerboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/controller/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/poller"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
 	schemarboltdb "github.com/featurebasedb/featurebase/v3/dax/mds/schemar/boltdb"
@@ -92,7 +91,6 @@ func New(cfg Config) *MDS {
 	}
 
 	buckets := append(schemarboltdb.SchemarBuckets, balancerboltdb.BalancerBuckets...)
-	buckets = append(buckets, controllerboltdb.NodeServiceBuckets...)
 	controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "controller", buckets...)
 	if err != nil {
 		logr.Printf(errors.Wrap(err, "creating controller bolt").Error())
@@ -106,8 +104,6 @@ func New(cfg Config) *MDS {
 		Schemar:  schemar,
 
 		Balancer: balancerboltdb.NewBalancer(controllerDB, schemar, logr),
-
-		NodeService: controllerboltdb.NewNodeService(controllerDB, logr),
 
 		RegistrationBatchTimeout: cfg.RegistrationBatchTimeout,
 		SnappingTurtleTimeout:    cfg.SnappingTurtleTimeout,

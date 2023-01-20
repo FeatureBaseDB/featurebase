@@ -12,16 +12,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
-var (
-	bucketNodes = boltdb.Bucket("nodeServiceNodes")
-)
-
-// NodeServiceBuckets defines the buckets used by this package. It can be called
-// during setup to create the buckets ahead of time.
-var NodeServiceBuckets []boltdb.Bucket = []boltdb.Bucket{
-	bucketNodes,
-}
-
 // Ensure type implements interface.
 var _ controller.NodeService = (*NodeService)(nil)
 
@@ -46,9 +36,9 @@ func (s *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax
 		return dax.NewErrInvalidTransaction()
 	}
 
-	bkt := txx.Bucket(bucketNodes)
+	bkt := txx.Bucket(bucketBalancer)
 	if bkt == nil {
-		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNodes)
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketBalancer)
 	}
 
 	val, err := json.Marshal(node)
@@ -69,9 +59,9 @@ func (s *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node,
 		return nil, dax.NewErrInvalidTransaction()
 	}
 
-	bkt := txx.Bucket(bucketNodes)
+	bkt := txx.Bucket(bucketBalancer)
 	if bkt == nil {
-		return nil, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNodes)
+		return nil, errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketBalancer)
 	}
 
 	b := bkt.Get(addressKey(addr))
@@ -93,9 +83,9 @@ func (s *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 		return dax.NewErrInvalidTransaction()
 	}
 
-	bkt := txx.Bucket(bucketNodes)
+	bkt := txx.Bucket(bucketBalancer)
 	if bkt == nil {
-		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketNodes)
+		return errors.Errorf(boltdb.ErrFmtBucketNotFound, bucketBalancer)
 	}
 
 	if err := bkt.Delete(addressKey(addr)); err != nil {
@@ -120,7 +110,7 @@ func (s *NodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 }
 
 func (s *NodeService) getNodes(tx *boltdb.Tx) ([]*dax.Node, error) {
-	c := tx.Bucket(bucketNodes).Cursor()
+	c := tx.Bucket(bucketBalancer).Cursor()
 
 	// Deserialize rows into Node objects.
 	nodes := make([]*dax.Node, 0)
