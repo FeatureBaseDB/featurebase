@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/chzyer/readline"
-	"github.com/jedib0t/go-pretty/table"
-	"github.com/jedib0t/go-pretty/text"
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/cli/fbcloud"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/jedib0t/go-pretty/table"
+	"github.com/jedib0t/go-pretty/text"
 	"github.com/pkg/errors"
 )
 
@@ -292,6 +292,13 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 			return errors.Wrap(err, "reading line")
 		}
 
+		if !inMidCommand {
+			// Handle the exit command.
+			if line == exitCommand || line == exitCommand+terminationChar {
+				break
+			}
+		}
+
 		// We append a line feed at the end of each line because at this point
 		// we have effectively stripped any intentional line feeds (since we are
 		// reading a line at a time), and we don't want to do that. An example
@@ -312,13 +319,6 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 		// We want to preserve the line feeds that are contained in the x''
 		// block; those are intentional as they demarc records within the csv.
 		line += "\n"
-
-		if !inMidCommand {
-			// Handle the exit command.
-			if line == exitCommand || line == exitCommand+terminationChar {
-				break
-			}
-		}
 
 		// Look for a termination character;
 		parts := strings.Split(line, terminationChar)
