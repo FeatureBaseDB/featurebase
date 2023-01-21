@@ -3,6 +3,8 @@
 package errors
 
 import (
+	"encoding/json"
+
 	"github.com/pkg/errors"
 )
 
@@ -12,8 +14,8 @@ type Code string
 
 func New(code Code, message string) error {
 	return errors.WithStack(codedError{
-		code:    code,
-		message: message,
+		Code:    code,
+		Message: message,
 	})
 }
 
@@ -33,7 +35,7 @@ func Errorf(format string, args ...interface{}) error {
 // an error Code instead of an error.
 func Is(err error, target Code) bool {
 	match := codedError{
-		code: target,
+		Code: target,
 	}
 	return errors.Is(err, match)
 }
@@ -65,12 +67,13 @@ func Wrapf(err error, fmt string, args ...interface{}) error {
 // codedError is the fundamental type used by this package to provide coded
 // errors.
 type codedError struct {
-	code    Code
-	message string
+	Code    Code   `json:"code"`
+	Message string `json:"message"`
+	Wrapped string `json:"wrapped,omitempty"`
 }
 
 func (ce codedError) Error() string {
-	return ce.message
+	return ce.Message
 }
 
 // func (ce codedError) As(target interface{}) bool {
@@ -78,7 +81,7 @@ func (ce codedError) Error() string {
 // }
 
 func (ce codedError) Is(err error) bool {
-	if e, ok := err.(codedError); ok && ce.code == e.code {
+	if e, ok := err.(codedError); ok && ce.Code == e.Code {
 		return true
 	}
 	return false
@@ -87,3 +90,50 @@ func (ce codedError) Is(err error) bool {
 const (
 	ErrUncoded Code = "Uncoded"
 )
+
+// MarshalJSON returns the provided error as a json object (as a string)
+// representing a codedError. If err is not already a codedError, the json
+// object will still represent a codedError but its `code` value will be empty.
+// Note: an empty code here is intentional and is different from code
+// `errors.Uncoded` which is a valid code; it just means the developer returned
+// a codedError but didn't bother to choose (or create) a useful error code.
+func MarshalJSON(err error) string {
+	cause := Cause(err)
+
+	var out *codedError
+
+	switch v := cause.(type) {
+	case codedError:
+		v.Wrapped = err.Error()
+		out = &v
+	default:
+		out = &codedError{
+			Message: cause.Error(),
+			Wrapped: err.Error(),
+		}
+	}
+
+	// Marshal the codedError to json as output.
+	j, jerr := json.Marshal(out)
+	if jerr != nil {
+		return out.Error()
+	}
+
+	return string(j)
+
+}
+
+// UnmarshalJSON converts the byte slice into a codedError. If the bytes can't
+// unmarshal to a codedError, a normal error will be returned containing the
+// string value of the byte slice.
+func UnmarshalJSON(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+
+	out := &codedError{}
+	if err := json.Unmarshal(b, out); err != nil {
+		return errors.New(string(b))
+	}
+	return out
+}

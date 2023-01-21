@@ -6,6 +6,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/gorilla/mux"
 )
 
@@ -148,7 +149,7 @@ func (s *server) postDatabaseByName(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.controller.DatabaseByName(ctx, req.OrganizationID, req.Name)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 

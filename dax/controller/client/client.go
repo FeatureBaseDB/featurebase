@@ -159,7 +159,7 @@ func (c *Client) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, n
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return nil, errors.Wrapf(errors.UnmarshalJSON(b), "status code: %d", resp.StatusCode)
 	}
 
 	var qdb *dax.QualifiedDatabase
