@@ -3,11 +3,10 @@ package dax_test
 import (
 	"context"
 	"fmt"
-	"io/fs"
+	"io"
 	"log"
-	"path/filepath"
+	"os"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +16,6 @@ import (
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
-	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
 	goerrors "github.com/pkg/errors"
@@ -603,45 +601,40 @@ func TestDAXIntegration(t *testing.T) {
 			testconfigs...,
 		)
 
-		fmt.Printf("%s\n", mc.Config.Computer.Config.DataDir)
-		err := filepath.WalkDir(mc.Config.Computer.Config.DataDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			name := strings.TrimPrefix(path, mc.Config.Computer.Config.DataDir)
-			numSlash := strings.Count(name, "/")
-			for i := 0; i < numSlash; i++ {
-				fmt.Print(" ")
-			}
-			fmt.Printf("%s\n", name)
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walking dir: %v", err)
-		}
+		rootDir := mc.Config.Computer.Config.DataDir
+
+		// Ensure the index and writelogger directories are empty.
+		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
+		assert.False(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
+		assert.False(t, dirIsEmpty(t, rootDir+"/mds"))
+		assert.False(t, dirIsEmpty(t, rootDir+"/wl"))
 
 		resp := runSQL(t, svcmgr.Queryer.Address(), testconfigs[0].qdbid, "drop table keyed")
-		fmt.Println("RESP: ", resp)
+		assert.Empty(t, resp.Error)
 
+		// Wait for the delete to complete.
 		time.Sleep(time.Second * 5)
 
-		fmt.Printf("%s\n", mc.Config.Computer.Config.DataDir)
-		err = filepath.WalkDir(mc.Config.Computer.Config.DataDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			name := strings.TrimPrefix(path, mc.Config.Computer.Config.DataDir)
-			numSlash := strings.Count(name, "/")
-			for i := 0; i < numSlash; i++ {
-				fmt.Print(" ")
-			}
-			fmt.Printf("%s\n", name)
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walking dir: %v", err)
-		}
+		// Ensure the index and writelogger directories are empty.
+		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
+		assert.True(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
+		assert.False(t, dirIsEmpty(t, rootDir+"/mds"))
+		assert.True(t, dirIsEmpty(t, rootDir+"/wl"))
 	})
+}
+
+func dirIsEmpty(t *testing.T, name string) bool {
+	f, err := os.Open(name)
+	assert.NoError(t, err)
+	defer f.Close()
+
+	_, err = f.Readdirnames(1) // Or f.Readdir(1)
+	if err == io.EOF {
+		return true
+	}
+	assert.NoError(t, err)
+
+	return false
 }
 
 ///////////////////////////////////////////////////
