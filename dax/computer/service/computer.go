@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -122,13 +123,19 @@ type CommandConfig struct {
 	Logger logger.Logger
 }
 
+// serviceOffValue is a reserved term used to explicitly disable a service. When
+// used, the service will be set to use its no-op implementation. For the user,
+// this is case-insensitive.
+var serviceOffValue = "off"
+
 func newCommand(addr dax.Address, cfg CommandConfig) (*fbserver.Command, error) {
 	// Set up Writelogger.
 	var wlSvc computer.WritelogService
-	switch cfg.ComputerConfig.WriteloggerDir {
+	wlDirToCompare := strings.TrimSpace(strings.ToLower(cfg.ComputerConfig.WriteloggerDir))
+	switch wlDirToCompare {
 	case "":
 		return nil, errors.New(errors.ErrUncoded, "no writelogger directory configured")
-	case "NULL":
+	case serviceOffValue:
 		wlSvc = computer.NewNopWritelogService()
 		cfg.Logger.Warnf("No writelogger configured, dynamic scaling will not function properly.")
 	default:
@@ -137,10 +144,11 @@ func newCommand(addr dax.Address, cfg CommandConfig) (*fbserver.Command, error) 
 
 	// Set up Snapshotter.
 	var ssSvc computer.SnapshotService
-	switch cfg.ComputerConfig.SnapshotterDir {
+	ssDirToCompare := strings.TrimSpace(strings.ToLower(cfg.ComputerConfig.SnapshotterDir))
+	switch ssDirToCompare {
 	case "":
 		return nil, errors.New(errors.ErrUncoded, "no snapshotter directory configured")
-	case "NULL":
+	case serviceOffValue:
 		ssSvc = computer.NewNopSnapshotterService()
 		cfg.Logger.Warnf("No snapshotter configured, dynamic scaling will not function properly.")
 	default:

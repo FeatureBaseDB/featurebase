@@ -612,9 +612,6 @@ func TestDAXIntegration(t *testing.T) {
 		resp := runSQL(t, svcmgr.Queryer.Address(), testconfigs[0].qdbid, "drop table keyed")
 		assert.Empty(t, resp.Error)
 
-		// Wait for the delete to complete.
-		time.Sleep(time.Second * 5)
-
 		// Ensure the index and writelogger directories are empty.
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
