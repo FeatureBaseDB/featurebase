@@ -9,16 +9,21 @@ import (
 )
 
 const (
-	keepLastRequests int = 2000
-	truncateTextAt   int = 4096
+	keepLastRequests = 2000
+	truncateTextAt   = 4096
 )
 
 // ExecutionRequests is an internal struct that keeps a list of sql execution requests
 // this data allows visbility into queries that have been run and are running
 type ExecutionRequests struct {
 	sync.RWMutex
+	// requestsList being used a FIFO queue here
+	// to track both number of stored requests and
+	// which one to delete next (always 0)
 	requestsList []string
-	requests     map[string]*pilosa.ExecutionRequest
+	// the actual rquests being stored - we use a map
+	// so we can look them up by request id which is a uuid
+	requests map[string]*pilosa.ExecutionRequest
 }
 
 // Ensure type implements interface.
@@ -39,20 +44,14 @@ func (e *ExecutionRequests) AddRequest(requestID string, userID string, startTim
 	// we're going to add a new request so clear out oldest request if we've hit
 	// the threshhold
 	if len(e.requestsList) >= keepLastRequests {
-		// get the oldest request
+		// get the oldest request and delete it
 		delId := e.requestsList[0]
-
-		// make sure it's not this request, unlikely, but
-		// we've all been bitten by 'this should never happen' before
-		// and if it isn't delete it from the map and the list
-		if delId != requestID {
-			delete(e.requests, delId)
-			e.requestsList = e.requestsList[1:]
-		}
+		delete(e.requests, delId)
+		e.requestsList = e.requestsList[1:]
 	}
 	// add the request to the end
 	e.requestsList = append(e.requestsList, requestID)
-	//update the request
+	// update the request
 	_, ok := e.requests[requestID]
 	if ok {
 		return fmt.Errorf("request %s already exists", requestID)
