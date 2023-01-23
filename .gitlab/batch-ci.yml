@@ -1,0 +1,28 @@
+run go tests batch:
+  variables:
+    PROJECT: batch_${CI_CONCURRENT_ID}
+  # this test relies on stuff that happens after build-lattice, which
+  # makes it pause the entire CI run waiting for this. we accept the
+  # small risk of wasting a build against the near certainty of spending
+  # five minutes running only one job.
+  stage: nonblocking
+  retry: 1
+  script:
+    - echo "Running test-all"
+    - cd ./batch/
+    - echo $PROJECT
+    - make build-featurebase
+    - make test-all
+  after_script:
+    - cd ./batch/
+    - make save-featurebase-logs
+    - make shutdown
+  artifacts:
+    paths:
+      - ./batch/testdata/*_coverage.out
+      - ./batch/testdata/*_logs.txt
+  tags:
+    - shell
+    - aws
+  needs:
+    - job: build amd container fb
