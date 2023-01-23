@@ -506,12 +506,67 @@ func (e *executor) dumpPrecomputedCalls(ctx context.Context, c *pql.Call) {
 
 // handlePreCallChildren handles any pre-calls in the children of a given call.
 func (e *executor) handlePreCallChildren(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) error {
-	for i := range c.Children {
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return newNotFoundError(ErrIndexNotFound, index)
+	}
+	for _, child := range c.Children {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := e.handlePreCalls(ctx, qcx, index, c.Children[i], shards, opt); err != nil {
+		if err := e.handlePreCalls(ctx, qcx, index, child, shards, opt); err != nil {
 			return err
+		}
+		// GroupBy has some special rules for handling its children; on the
+		// starting node, some calls will be turned into EmbeddedData, and
+		// get a `valueidx` parameter set on them.
+		if c.Name == "GroupBy" && !opt.Remote {
+			// Check "field" first for backwards compatibility, then set _field.
+			// TODO: remove at Pilosa 2.0
+			if fieldName, ok := child.Args["field"].(string); ok {
+				child.Args["_field"] = fieldName
+			}
+
+			if child.Name != "Rows" {
+				return errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", child.Name)
+			}
+			_, hasLimit, err := child.UintArg("limit")
+			if err != nil {
+				return errors.Wrap(err, "getting limit")
+			}
+			_, hasCol, err := child.UintArg("column")
+			if err != nil {
+				return errors.Wrap(err, "getting column")
+			}
+			_, hasLike, err := child.StringArg("like")
+			if err != nil {
+				return errors.Wrap(err, "getting like")
+			}
+			_, hasIn, err := child.UintSliceArg("in")
+			if err != nil {
+				return errors.Wrap(err, "getting 'in'")
+			}
+
+			// Some kinds of Rows calls require a cluster-wide evaluation which has to
+			// happen before we potentially start locking for our real working transaction.
+			// Handle those here. It's okay if they produce an empty result; executeGroupBy
+			// can deal with that when it gets there.
+			if hasLimit || hasCol || hasLike || hasIn { // we need to perform this query cluster-wide ahead of executeGroupByShard
+				r, er := e.executeRows(ctx, qcx, index, child, shards, opt)
+				if er != nil {
+					return errors.Wrap(er, "getting rows for ")
+				}
+				// need to sort because filters assume ordering
+				sort.Slice(r, func(x, y int) bool { return r[x] < r[y] })
+
+				// Stuff the result into opt.EmbeddedData so that it gets sent to other nodes in the map-reduce.
+				// This is flagged as "NoSplit" to ensure that the entire row gets sent out.
+				// We stash this in opt.EmbeddedData, where we'll pick it up later in executeGroupBy.
+				rowsRow := NewRow(r...)
+				rowsRow.NoSplit = true
+				child.Args["valueidx"] = int64(len(opt.EmbeddedData))
+				opt.EmbeddedData = append(opt.EmbeddedData, rowsRow)
+			}
 		}
 	}
 	for key, val := range c.Args {
@@ -688,7 +743,6 @@ func (vc *ValCount) Cleanup() {
 func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeCall")
 	defer span.Finish()
-	e.Holder.Logger.Infof("executeCall: %#v", c)
 
 	if err := validateQueryContext(ctx); err != nil {
 		return nil, err
@@ -3032,31 +3086,7 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 	bases := make(map[int]int64)
 	childRows := make([]RowIDs, len(c.Children))
 	for i, child := range c.Children {
-		// Check "field" first for backwards compatibility, then set _field.
-		// TODO: remove at Pilosa 2.0
-		if fieldName, ok := child.Args["field"].(string); ok {
-			child.Args["_field"] = fieldName
-		}
 
-		if child.Name != "Rows" {
-			return nil, errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", child.Name)
-		}
-		_, hasLimit, err := child.UintArg("limit")
-		if err != nil {
-			return nil, errors.Wrap(err, "getting limit")
-		}
-		_, hasCol, err := child.UintArg("column")
-		if err != nil {
-			return nil, errors.Wrap(err, "getting column")
-		}
-		_, hasLike, err := child.StringArg("like")
-		if err != nil {
-			return nil, errors.Wrap(err, "getting like")
-		}
-		_, hasIn, err := child.UintSliceArg("in")
-		if err != nil {
-			return nil, errors.Wrap(err, "getting 'in'")
-		}
 		fieldName, ok := child.Args["_field"].(string)
 		if !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", child.Name, child.Args["_field"])
@@ -3070,30 +3100,9 @@ func (e *executor) executeGroupBy(ctx context.Context, qcx *Qcx, index string, c
 			bases[i] = f.bsiGroup(f.name).Base
 		}
 
-		if hasLimit || hasCol || hasLike || hasIn { // we need to perform this query cluster-wide ahead of executeGroupByShard
-			if idx, ok := child.Args["valueidx"].(int64); ok {
-				// The rows query was already completed on the initiating node.
-				childRows[i] = opt.EmbeddedData[idx].Columns()
-				continue
-			}
-
-			r, er := e.executeRows(ctx, qcx, index, child, shards, opt)
-			if er != nil {
-				return nil, errors.Wrap(er, "getting rows for ")
-			}
-			// need to sort because filters assume ordering
-			sort.Slice(r, func(x, y int) bool { return r[x] < r[y] })
-			childRows[i] = r
-			if len(childRows[i]) == 0 { // there are no results because this field has no values.
-				return &GroupCounts{}, nil
-			}
-
-			// Stuff the result into opt.EmbeddedData so that it gets sent to other nodes in the map-reduce.
-			// This is flagged as "NoSplit" to ensure that the entire row gets sent out.
-			rowsRow := NewRow(childRows[i]...)
-			rowsRow.NoSplit = true
-			child.Args["valueidx"] = int64(len(opt.EmbeddedData))
-			opt.EmbeddedData = append(opt.EmbeddedData, rowsRow)
+		if idx, ok := child.Args["valueidx"].(int64); ok {
+			// The rows query was already completed on the initiating node.
+			childRows[i] = opt.EmbeddedData[idx].Columns()
 		}
 	}
 
