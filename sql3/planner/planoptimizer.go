@@ -619,33 +619,41 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 	//only do this if we have one TableScanOperator
 	if len(tables) == 1 {
 		return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-			switch n := node.(type) {
+			switch thisNode := node.(type) {
 			case *PlanOpGroupBy:
+
 				//only do this if there are no group by expressions
-				if len(n.GroupByExprs) == 0 {
-
-					//table scan
-					table := tables[0]
-					ops := make([]*PlanOpPQLAggregate, 0)
-
-					for _, agg := range n.Aggregates {
-						aggregable, ok := agg.(types.Aggregable)
-						if !ok {
-							return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
-						}
-
-						ops = append(ops, NewPlanOpPQLAggregate(a, table.tableName, aggregable, table.filter))
-					}
-					newOp := NewPlanOpPQLMultiAggregate(a, ops)
-					lenOps := len(ops)
-					if lenOps > 1 {
-						newOp.AddWarning(fmt.Sprintf("Multiple (%d) aggregates referenced in select list will result in multiple aggregate queries being executed.", lenOps))
-					}
-					return newOp, false, nil
+				if len(thisNode.GroupByExprs) != 0 {
+					return thisNode, true, nil
 				}
-				return n, true, nil
+
+				//table scan
+				table := tables[0]
+
+				// if the child of the group by is not the table scan, we bail here too
+				if thisNode.ChildOp != table {
+					return thisNode, true, nil
+				}
+
+				ops := make([]*PlanOpPQLAggregate, 0)
+
+				for _, agg := range thisNode.Aggregates {
+					aggregable, ok := agg.(types.Aggregable)
+					if !ok {
+						return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
+					}
+
+					ops = append(ops, NewPlanOpPQLAggregate(a, table.tableName, aggregable, table.filter))
+				}
+				newOp := NewPlanOpPQLMultiAggregate(a, ops)
+				lenOps := len(ops)
+				if lenOps > 1 {
+					newOp.AddWarning(fmt.Sprintf("Multiple (%d) aggregates referenced in select list will result in multiple aggregate queries being executed.", lenOps))
+				}
+				return newOp, false, nil
+
 			default:
-				return n, true, nil
+				return thisNode, true, nil
 			}
 		})
 	}
