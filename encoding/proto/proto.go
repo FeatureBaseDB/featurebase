@@ -15,8 +15,6 @@ import (
 	"github.com/apache/arrow/go/v10/parquet"
 	"github.com/apache/arrow/go/v10/parquet/file"
 	"github.com/apache/arrow/go/v10/parquet/pqarrow"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gomem/gomem/pkg/dataframe"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
@@ -24,6 +22,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/vprint"
+	"github.com/gogo/protobuf/proto"
+	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/pkg/errors"
 )
 

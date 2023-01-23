@@ -13,10 +13,10 @@ import (
 	"time"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/jaffee/commandeer/pflag"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/jaffee/commandeer/pflag"
 	"github.com/pkg/errors"
 )
 

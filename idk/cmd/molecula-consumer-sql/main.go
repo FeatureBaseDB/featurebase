@@ -4,9 +4,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/jaffee/commandeer/pflag"
 	"github.com/featurebasedb/featurebase/v3/idk/sql"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/jaffee/commandeer/pflag"
 )
 
 func main() {

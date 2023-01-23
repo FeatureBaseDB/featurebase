@@ -14,10 +14,10 @@ import (
 	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/array"
 	"github.com/apache/arrow/go/v10/arrow/memory"
-	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/featurebasedb/featurebase/v3/vprint"
+	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/pkg/errors"
 
 	ivy "robpike.io/ivy/arrow"
@@ -95,7 +95,7 @@ func IvyReduce(reduceCode string, opCode string, opt *ExecOptions) (func(ctx con
 			col := value.ToArrowColumn(accumulator, pool)
 			return dataframe.NewDataFrameFromColumns(pool, []arrow.Column{*col})
 		}
-		// only acutally reduce on the initiating node i hate the network
+		// only actually reduce on the initiating node i hate the network
 		// over head but oh well
 		ctxIvy.AssignGlobal("_", accumulator)
 		ok, err := runIvyString(ctxIvy, reduceCode)
@@ -541,7 +541,7 @@ func (sf *ShardFile) Save(name string) error {
 		if sf.table != nil {
 			// we append if there was existing file
 			column := sf.table.Column(col)
-			// if primative type
+			// if primitive type
 			switch column.DataType() {
 			case arrow.BinaryTypes.String:
 				chunks = sf.buildFromStrings(col, mem)

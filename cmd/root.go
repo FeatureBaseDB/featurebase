@@ -107,6 +107,7 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newCLICommand(logdest))
 	rc.AddCommand(newDAXCommand(stderr))
 	rc.AddCommand(newDataframeCsvLoaderCommand(logdest))
+	rc.AddCommand(newPreSortCommand(logdest))
 
 	rc.SetOutput(stderr)
 	return rc

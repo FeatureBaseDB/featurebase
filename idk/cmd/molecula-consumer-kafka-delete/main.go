@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/jaffee/commandeer/pflag"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka"
+	"github.com/jaffee/commandeer/pflag"
 )
 
 func main() {

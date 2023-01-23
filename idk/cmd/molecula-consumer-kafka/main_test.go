@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jaffee/commandeer"
-	"github.com/jaffee/commandeer/pflag"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka"
+	"github.com/jaffee/commandeer"
+	"github.com/jaffee/commandeer/pflag"
 	pflag13 "github.com/spf13/pflag"
 )
 

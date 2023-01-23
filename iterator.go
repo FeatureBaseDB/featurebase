@@ -4,7 +4,6 @@ package pilosa
 
 import (
 	"fmt"
-
 )
 
 // iterator is an interface for looping over row/column pairs.

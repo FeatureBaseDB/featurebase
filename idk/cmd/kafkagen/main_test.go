@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/featurebasedb/featurebase/v3/idk/kafkagen"
 	"github.com/jaffee/commandeer"
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/featurebasedb/featurebase/v3/idk/kafkagen"
 	pflag13 "github.com/spf13/pflag"
 )
 

@@ -15,13 +15,13 @@ import (
 	"time"
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/go-avro/avro"
-	liavro "github.com/linkedin/goavro/v2"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/common"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/go-avro/avro"
+	liavro "github.com/linkedin/goavro/v2"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

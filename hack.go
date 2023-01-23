@@ -6,9 +6,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/featurebasedb/featurebase/v3/pb"
 	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/gogo/protobuf/proto"
 )
 
 func UnmarshalIndexOptions(name string, createdAt int64, buf []byte) (*IndexOptions, error) {

@@ -11,11 +11,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/glycerine/vprint"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/glycerine/vprint"
 	"github.com/pkg/errors"
 
 	"github.com/featurebasedb/featurebase/v3/idk/common"

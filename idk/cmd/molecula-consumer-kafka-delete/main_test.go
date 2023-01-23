@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/featurebasedb/featurebase/v3/idk/kafka"
 	"github.com/jaffee/commandeer"
 	"github.com/jaffee/commandeer/pflag"
-	"github.com/featurebasedb/featurebase/v3/idk/kafka"
 	pflag13 "github.com/spf13/pflag"
 )
 

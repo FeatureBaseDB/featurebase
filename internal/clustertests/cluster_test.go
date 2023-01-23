@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/ctl"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
 )
 
