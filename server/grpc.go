@@ -1637,7 +1637,10 @@ func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
 
 // LogQuery logs requests
 func LogQuery(ctx context.Context, method string, req interface{}, logger logger.Logger) {
-	uinfo, _ := ctx.Value("userinfo").(*authn.UserInfo)
+	uinfo, ok := authn.GetUserInfo(ctx)
+	if !ok {
+		uinfo = &authn.UserInfo{}
+	}
 	md, _ := metadata.FromIncomingContext(ctx)
 	p, ok := peer.FromContext(ctx)
 	ip := ""
