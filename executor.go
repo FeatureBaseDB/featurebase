@@ -178,6 +178,35 @@ func (e *executor) InitStats() {
 	}
 }
 
+// analyze combines the behavior previously associated with
+// handlePreCalls, preprocessQuery, using WriteCallN to determine whether
+// a transaction was a write, and key translation. It returns a new
+// Query, which may contain new calls. It also returns an indicator
+// as to whether the query requires write operations.
+//
+// analyze should be called with a Qcx that does not have writes
+// enabled. I know that doesn't matter with Qcx/Tx; it will with
+// QueryContext, which this is intended to make more practical. Any
+// calls that require execution in advance before the rest of the
+// operation can continue will be executed using that context locally.
+func (e *executor) analyze(ctx context.Context, qcx *Qcx, index string, q *pql.Query, shards []uint64) (out *pql.Query, write bool, err error) {
+	return nil, false, nil
+}
+
+// analyzeCall analyzes a call and returns a possibly-modified call
+// which is safe to use.
+//
+// analyze should be called with a Qcx that does not have writes
+// enabled. I know that doesn't matter with Qcx/Tx; it will with
+// QueryContext, which this is intended to make more practical.
+//
+// Remote calls will be handled as we get to them, which means that
+// if you have multiple remote calls that need precomputation, we make
+// multiple remote queries.
+func (e *executor) analyzeCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64) (out *pql.Call, write bool, err error) {
+	return nil, false, nil
+}
+
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, tableKeyer dax.TableKeyer, q *pql.Query, shards []uint64, opt *ExecOptions) (QueryResponse, error) {
 	index := string(tableKeyer.Key())
@@ -403,6 +432,23 @@ func (e *executor) handlePreCalls(ctx context.Context, qcx *Qcx, index string, c
 	if err := e.handlePreCallChildren(ctx, qcx, index, c, shards, opt); err != nil {
 		return err
 	}
+	// preprocess All(limit...) into Limit(All).
+	if c.Name == "All" {
+		_, hasLimit, err := c.UintArg("limit")
+		if err != nil {
+			return errors.Wrap(err, "parsing All() call")
+		}
+		_, hasOffset, err := c.UintArg("offset")
+		if err != nil {
+			return errors.Wrap(err, "parsing All() call")
+		}
+		if hasLimit || hasOffset {
+			c.Children = []*pql.Call{
+				{Name: "All"},
+			}
+			c.Name = "Limit"
+		}
+	}
 	// child calls already handled, no precall for this, so we're done
 	if c.Type == pql.PrecallNone {
 		return nil
@@ -565,16 +611,27 @@ func (e *executor) execute(ctx context.Context, qcx *Qcx, index string, q *pql.Q
 		// about the positive values, because only positive values
 		// are valid column IDs. So we don't actually eat top-level
 		// pre calls.
-		if call.Name == "Count" {
-			// Handle count specially, skipping the level directly underneath it.
+		switch call.Name {
+		case "Count":
+			// don't pre-handle its direct children, which could be Distinct
+			// queries we actually want to execute globally and then get back
 			for _, child := range call.Children {
 				err := e.handlePreCallChildren(ctx, qcx, index, child, shards, opt)
 				if err != nil {
 					return nil, err
 				}
 			}
-		} else {
+		case "Distinct":
+			// Leave the top-level Distinct alone; it only gets precomputed when
+			// it's a child of something that isn't a Count.
 			err := e.handlePreCallChildren(ctx, qcx, index, call, shards, opt)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			// handle precalls, which includes top-level analysis like substituting
+			// Limit(All) for direct Limit calls.
+			err := e.handlePreCalls(ctx, qcx, index, call, shards, opt)
 			if err != nil {
 				return nil, err
 			}
@@ -627,57 +684,11 @@ func (vc *ValCount) Cleanup() {
 	}
 }
 
-// preprocessQuery expands any calls that need preprocessing.
-func (e *executor) preprocessQuery(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*pql.Call, error) {
-	switch c.Name {
-	case "All":
-		_, hasLimit, err := c.UintArg("limit")
-		if err != nil {
-			return nil, err
-		}
-		_, hasOffset, err := c.UintArg("offset")
-		if err != nil {
-			return nil, err
-		}
-		if !hasLimit && !hasOffset {
-			return c, nil
-		}
-
-		// Rewrite the All() w/ limit to Limit(All()).
-		c.Children = []*pql.Call{
-			{
-				Name: "All",
-			},
-		}
-		c.Name = "Limit"
-		return c, nil
-
-	default:
-		// Recurse through child calls.
-		out := make([]*pql.Call, len(c.Children))
-		var changed bool
-		for i, child := range c.Children {
-			res, err := e.preprocessQuery(ctx, qcx, index, child, shards, opt)
-			if err != nil {
-				return nil, err
-			}
-			if res != child {
-				changed = true
-			}
-			out[i] = res
-		}
-		if changed {
-			c = c.Clone()
-			c.Children = out
-		}
-		return c, nil
-	}
-}
-
 // executeCall executes a call.
 func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "executor.executeCall")
 	defer span.Finish()
+	e.Holder.Logger.Infof("executeCall: %#v", c)
 
 	if err := validateQueryContext(ctx); err != nil {
 		return nil, err
@@ -711,11 +722,6 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		if len(shards) == 0 {
 			shards = []uint64{0}
 		}
-	}
-	// Preprocess the query.
-	c, err := e.preprocessQuery(ctx, qcx, index, c, shards, opt)
-	if err != nil {
-		return nil, err
 	}
 
 	switch c.Name {
