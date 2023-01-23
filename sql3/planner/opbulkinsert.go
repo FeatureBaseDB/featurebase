@@ -593,7 +593,11 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 				case *parser.DataTypeStringSet:
 					switch v := evalValue.(type) {
 					case float64:
-						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						if v == float64(int64(v)) {
+							result[idx] = []string{fmt.Sprintf("%d", int64(v))}
+						} else {
+							result[idx] = []string{fmt.Sprintf("%f", v)}
+						}
 
 					case []interface{}:
 						setValue := make([]string, 0)
