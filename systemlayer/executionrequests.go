@@ -8,10 +8,21 @@ import (
 	pilosa "github.com/featurebasedb/featurebase/v3"
 )
 
+const (
+	keepLastRequests = 2000
+	truncateTextAt   = 4096
+)
+
 // ExecutionRequests is an internal struct that keeps a list of sql execution requests
 // this data allows visbility into queries that have been run and are running
 type ExecutionRequests struct {
 	sync.RWMutex
+	// requestsList being used a FIFO queue here
+	// to track both number of stored requests and
+	// which one to delete next (always 0)
+	requestsList []string
+	// the actual rquests being stored - we use a map
+	// so we can look them up by request id which is a uuid
 	requests map[string]*pilosa.ExecutionRequest
 }
 
@@ -20,19 +31,33 @@ var _ pilosa.ExecutionRequestsAPI = (*ExecutionRequests)(nil)
 
 func NewExecutionRequestsAPI() *ExecutionRequests {
 	return &ExecutionRequests{
-		requests: make(map[string]*pilosa.ExecutionRequest),
+		requestsList: make([]string, 0),
+		requests:     make(map[string]*pilosa.ExecutionRequest),
 	}
 }
 
 // AddRequest adds a new request to the ExecutionRequests struct
-// TODO(pok) ensure a cap on these so we don't suck up too much memory
 func (e *ExecutionRequests) AddRequest(requestID string, userID string, startTime time.Time, sql string) error {
 	e.Lock()
 	defer e.Unlock()
 
+	// we're going to add a new request so clear out oldest request if we've hit
+	// the threshhold
+	if len(e.requestsList) >= keepLastRequests {
+		// get the oldest request and delete it
+		delId := e.requestsList[0]
+		delete(e.requests, delId)
+		e.requestsList = e.requestsList[1:]
+	}
+	// add the request to the end
+	e.requestsList = append(e.requestsList, requestID)
+	// update the request
 	_, ok := e.requests[requestID]
 	if ok {
 		return fmt.Errorf("request %s already exists", requestID)
+	}
+	if len(sql) > truncateTextAt {
+		sql = sql[:truncateTextAt] //truncate to 4k, if we need more later, we'll worry about that later
 	}
 	e.requests[requestID] = &pilosa.ExecutionRequest{
 		RequestID: requestID,
@@ -64,6 +89,9 @@ func (e *ExecutionRequests) UpdateRequest(requestID string,
 	request, ok := e.requests[requestID]
 	if !ok {
 		return fmt.Errorf("request %s not found", requestID)
+	}
+	if len(plan) > truncateTextAt {
+		plan = plan[:truncateTextAt] //truncate to 4k, if we need more later, we'll worry about that later
 	}
 	request.EndTime = endTime
 	request.Status = status
