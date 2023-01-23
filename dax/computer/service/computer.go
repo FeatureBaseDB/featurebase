@@ -10,7 +10,7 @@ import (
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
-	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
+	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
 	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
 	"github.com/featurebasedb/featurebase/v3/errors"
@@ -54,11 +54,11 @@ func (c *computerService) Start() error {
 			c.computer = cmd
 		}
 
-		if c.cfg.ComputerConfig.MDSAddress != "" {
-			mdsAddr := dax.Address(c.cfg.ComputerConfig.MDSAddress)
-			// Set mds (registrar) on computer.
-			if err := c.SetMDS(mdsAddr); err != nil {
-				return errors.Wrapf(err, "setting mds service on computer: %s", c.cfg.Name)
+		if c.cfg.ComputerConfig.ControllerAddress != "" {
+			controllerAddr := dax.Address(c.cfg.ComputerConfig.ControllerAddress)
+			// Set Controller (registrar) on computer.
+			if err := c.SetController(controllerAddr); err != nil {
+				return errors.Wrapf(err, "setting controller service on computer: %s", c.cfg.Name)
 			}
 		}
 	}
@@ -103,8 +103,8 @@ func (c *computerService) HTTPHandler() http.Handler {
 	return c.computer.HTTPHandler()
 }
 
-func (c *computerService) SetMDS(addr dax.Address) error {
-	c.computer.Registrar = mdsclient.New(addr, c.logger)
+func (c *computerService) SetController(addr dax.Address) error {
+	c.computer.Registrar = controllerclient.New(addr, c.logger)
 	return nil
 }
 

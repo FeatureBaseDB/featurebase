@@ -1312,13 +1312,13 @@ func (f Fields) ContainsBool() bool {
 
 // SchemaManager is meant to be an interface for managing schema information;
 // i.e. for interacting with a single source of truth for schema information,
-// like the MDS Schemar. But... it currently contains methods which are not
-// related to schema because the first goal was just to introduce an interface
-// in ingest.go for any methods being called on *m.client. We don't want a
-// FeatureBase client directly called from ingest, rather, we want to call these
-// interface methods and allow for different implementations (such as an MDS
-// implementation which uses the Schemar in MDS as opposed to a FeatureBase node
-// or cluster).
+// like the Serverless Schemar. But... it currently contains methods which are
+// not related to schema because the first goal was just to introduce an
+// interface in ingest.go for any methods being called on *m.client. We don't
+// want a FeatureBase client directly called from ingest, rather, we want to
+// call these interface methods and allow for different implementations (such as
+// a Serverless implementation which uses the Schemar in Serverless as opposed
+// to a FeatureBase node or cluster).
 type SchemaManager interface {
 	StartTransaction(id string, timeout time.Duration, exclusive bool, requestTimeout time.Duration) (*pilosacore.Transaction, error)
 	FinishTransaction(id string) (*pilosacore.Transaction, error)

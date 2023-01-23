@@ -8,7 +8,7 @@ import (
 )
 
 // Registrar represents the methods which Computer uses to register itself with
-// MDS.
+// the Controller.
 type Registrar interface {
 	RegisterNode(ctx context.Context, node *dax.Node) error
 	CheckInNode(ctx context.Context, node *dax.Node) error

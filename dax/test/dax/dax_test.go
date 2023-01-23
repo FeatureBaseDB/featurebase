@@ -12,7 +12,7 @@ import (
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
-	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
+	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
@@ -63,20 +63,20 @@ func TestDAXIntegration(t *testing.T) {
 
 			svcmgr := mc.Manage()
 
-			var mdsKey dax.ServiceKey
+			var controllerKey dax.ServiceKey
 			var queryerKey dax.ServiceKey
 			var computerKey0 dax.ServiceKey
 			var computerKey1 dax.ServiceKey
 
-			assert.False(t, mc.Healthy(mdsKey))
+			assert.False(t, mc.Healthy(controllerKey))
 			assert.False(t, mc.Healthy(queryerKey))
 			assert.False(t, mc.Healthy(computerKey0))
 			assert.False(t, mc.Healthy(computerKey1))
 
-			// Start MDS.
-			mdsKey = mc.NewMDS(cfg.MDS.Config)
-			assert.NoError(t, svcmgr.MDSStart())
-			assert.True(t, mc.Healthy(mdsKey))
+			// Start Controller.
+			controllerKey = mc.NewController(cfg.Controller.Config)
+			assert.NoError(t, svcmgr.ControllerStart())
+			assert.True(t, mc.Healthy(controllerKey))
 			assert.False(t, mc.Healthy(queryerKey))
 			assert.False(t, mc.Healthy(computerKey0))
 			assert.False(t, mc.Healthy(computerKey1))
@@ -84,7 +84,7 @@ func TestDAXIntegration(t *testing.T) {
 			// Start Queryer.
 			queryerKey = mc.NewQueryer(cfg.Queryer.Config)
 			assert.NoError(t, svcmgr.QueryerStart())
-			assert.True(t, mc.Healthy(mdsKey))
+			assert.True(t, mc.Healthy(controllerKey))
 			assert.True(t, mc.Healthy(queryerKey))
 			assert.False(t, mc.Healthy(computerKey0))
 			assert.False(t, mc.Healthy(computerKey1))
@@ -92,7 +92,7 @@ func TestDAXIntegration(t *testing.T) {
 			// New and Start Computer 0.
 			computerKey0 = mc.NewComputer()
 			assert.NoError(t, svcmgr.ComputerStart(computerKey0))
-			assert.True(t, mc.Healthy(mdsKey))
+			assert.True(t, mc.Healthy(controllerKey))
 			assert.True(t, mc.Healthy(queryerKey))
 			assert.True(t, mc.Healthy(computerKey0))
 			assert.False(t, mc.Healthy(computerKey1))
@@ -100,14 +100,14 @@ func TestDAXIntegration(t *testing.T) {
 			// New and Start Computer 1.
 			computerKey1 = mc.NewComputer()
 			assert.NoError(t, svcmgr.ComputerStart(computerKey1))
-			assert.True(t, mc.Healthy(mdsKey))
+			assert.True(t, mc.Healthy(controllerKey))
 			assert.True(t, mc.Healthy(queryerKey))
 			assert.True(t, mc.Healthy(computerKey0))
 			assert.True(t, mc.Healthy(computerKey1))
 
 			// Stop Computer 1.
 			assert.NoError(t, svcmgr.ComputerStop(computerKey0))
-			assert.True(t, mc.Healthy(mdsKey))
+			assert.True(t, mc.Healthy(controllerKey))
 			assert.True(t, mc.Healthy(queryerKey))
 			assert.False(t, mc.Healthy(computerKey0))
 			assert.True(t, mc.Healthy(computerKey1))
@@ -120,13 +120,13 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		// skips is a list of tests which are currently not passing in dax. We
 		// need to get these passing before alpha.
@@ -194,13 +194,13 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		runTableTests(t,
 			mc.Manage().Queryer.Address(),
@@ -216,13 +216,13 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 2
 		qdb.Options.WorkersMax = 2
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		computers := svcmgr.Computers()
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
@@ -234,7 +234,7 @@ func TestDAXIntegration(t *testing.T) {
 			basicTableTestConfig(qdbid, defs.Keyed)...,
 		)
 
-		qtid, err := mdsClient.TableID(context.Background(), qdbid, dax.TableName(defs.Keyed.Name(0)))
+		qtid, err := controllerClient.TableID(context.Background(), qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
 		// ensure partitions are covered
@@ -243,7 +243,7 @@ func TestDAXIntegration(t *testing.T) {
 		allPartitions := append(partitions0, partitions1...)
 		sort.Sort(allPartitions)
 
-		nodes, err := mdsClient.TranslateNodes(context.Background(), qtid, allPartitions...)
+		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 2) {
 			// computer0 (node0)
@@ -262,7 +262,7 @@ func TestDAXIntegration(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		// ensure paritions are still covered
-		nodes, err = mdsClient.TranslateNodes(context.Background(), qtid, append(partitions0, partitions1...)...)
+		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, append(partitions0, partitions1...)...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 1) {
 			// computer1 (node0)
@@ -277,13 +277,13 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
@@ -331,13 +331,13 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
@@ -355,10 +355,10 @@ func TestDAXIntegration(t *testing.T) {
 
 		// Snapshot table
 		ctx := context.Background()
-		qtid, err := mdsClient.TableID(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
+		qtid, err := controllerClient.TableID(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
-		mdsClient.SnapshotTable(ctx, qtid)
+		controllerClient.SnapshotTable(ctx, qtid)
 
 		// Ingest more data.
 		t.Run("ingest and query more data", func(t *testing.T) {
@@ -403,24 +403,24 @@ func TestDAXIntegration(t *testing.T) {
 		})
 	})
 
-	t.Run("MDS_Persistence", func(t *testing.T) {
+	t.Run("Controller_Persistence", func(t *testing.T) {
 		mc := test.MustRunManagedCommand(t)
 		defer mc.Close()
 
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
-		mdsKey := dax.ServiceKey(dax.ServicePrefixMDS)
-		assert.True(t, mc.Healthy(mdsKey))
+		controllerKey := dax.ServiceKey(dax.ServicePrefixController)
+		assert.True(t, mc.Healthy(controllerKey))
 
 		// Ingest and query some data.
 		runTableTests(t,
@@ -428,13 +428,13 @@ func TestDAXIntegration(t *testing.T) {
 			basicTableTestConfig(qdbid, defs.Keyed)...,
 		)
 
-		qtid, err := mdsClient.TableID(context.Background(), qdbid, dax.TableName(defs.Keyed.Name(0)))
+		qtid, err := controllerClient.TableID(context.Background(), qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
 		// ensure partitions are covered
 		partitions := dax.PartitionNums{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
 
-		nodes, err := mdsClient.TranslateNodes(context.Background(), qtid, partitions...)
+		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, partitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 1) {
 			// computer0 (node0)
@@ -442,17 +442,17 @@ func TestDAXIntegration(t *testing.T) {
 			assert.Equal(t, partitions, nodes[0].Partitions)
 		}
 
-		// Stop MDS.
-		assert.NoError(t, svcmgr.MDSStop())
-		assert.False(t, mc.Healthy(mdsKey))
+		// Stop Controller.
+		assert.NoError(t, svcmgr.ControllerStop())
+		assert.False(t, mc.Healthy(controllerKey))
 
-		// Start New MDS.
-		mdsKey = mc.NewMDS(mc.Config.MDS.Config)
-		assert.NoError(t, svcmgr.MDSStart())
-		assert.True(t, mc.Healthy(mdsKey))
+		// Start New Controller.
+		controllerKey = mc.NewController(mc.Config.Controller.Config)
+		assert.NoError(t, svcmgr.ControllerStart())
+		assert.True(t, mc.Healthy(controllerKey))
 
 		// ensure paritions are still covered
-		nodes, err = mdsClient.TranslateNodes(context.Background(), qtid, partitions...)
+		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, partitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 1) {
 			// computer0 (node0)
@@ -467,13 +467,13 @@ func TestDAXIntegration(t *testing.T) {
 
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 
@@ -520,13 +520,13 @@ func TestDAXIntegration(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		// Create two tables with data. Query the data to ensure it exists.
 		runTableTests(t,
@@ -535,23 +535,23 @@ func TestDAXIntegration(t *testing.T) {
 		)
 
 		// Make sure the database and tables exist.
-		db, err := mdsClient.DatabaseByName(ctx, orgID, dbname)
+		db, err := controllerClient.DatabaseByName(ctx, orgID, dbname)
 		assert.NoError(t, err)
 		assert.NotNil(t, db)
 
-		tbl1, err := mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
+		tbl1, err := controllerClient.TableByName(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 		assert.NotNil(t, tbl1)
 
-		tbl2, err := mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Unkeyed.Name(0)))
+		tbl2, err := controllerClient.TableByName(ctx, qdbid, dax.TableName(defs.Unkeyed.Name(0)))
 		assert.NoError(t, err)
 		assert.NotNil(t, tbl2)
 
 		// Drop the database
-		assert.NoError(t, mdsClient.DropDatabase(ctx, qdbid))
+		assert.NoError(t, controllerClient.DropDatabase(ctx, qdbid))
 
 		// Make sure the database and tables no longer exist.
-		db, err = mdsClient.DatabaseByName(ctx, orgID, dbname)
+		db, err = controllerClient.DatabaseByName(ctx, orgID, dbname)
 		if assert.Error(t, err) {
 			assert.Contains(t, err.Error(), "database name 'dbname1' does not exist")
 			// TODO(tlt): replace the previous line with the following once we
@@ -560,7 +560,7 @@ func TestDAXIntegration(t *testing.T) {
 		}
 		assert.Nil(t, db)
 
-		tbl1, err = mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
+		tbl1, err = controllerClient.TableByName(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
 		if assert.Error(t, err) {
 			assert.Contains(t, err.Error(), "table name 'keyed' does not exist")
 			// TODO(tlt): replace the previous line with the following once we
@@ -569,7 +569,7 @@ func TestDAXIntegration(t *testing.T) {
 		}
 		assert.Nil(t, tbl1)
 
-		tbl2, err = mdsClient.TableByName(ctx, qdbid, dax.TableName(defs.Unkeyed.Name(0)))
+		tbl2, err = controllerClient.TableByName(ctx, qdbid, dax.TableName(defs.Unkeyed.Name(0)))
 		if assert.Error(t, err) {
 			assert.Contains(t, err.Error(), "table name 'unkeyed' does not exist")
 			// TODO(tlt): replace the previous line with the following once we
@@ -584,13 +584,13 @@ func TestDAXIntegration(t *testing.T) {
 		defer mc.Close()
 		svcmgr := mc.Manage()
 
-		// Set up MDS client.
-		mdsClient := mdsclient.New(svcmgr.MDS.Address(), svcmgr.Logger)
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
 
 		// Create database.
 		qdb.Options.WorkersMin = 1
 		qdb.Options.WorkersMax = 1
-		assert.NoError(t, mdsClient.CreateDatabase(context.Background(), qdb))
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
 
 		testconfigs := basicTableTestConfig(qdbid, defs.Keyed)
 		for i := range testconfigs {
@@ -606,7 +606,7 @@ func TestDAXIntegration(t *testing.T) {
 		// Ensure the index and writelogger directories are empty.
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
-		assert.False(t, dirIsEmpty(t, rootDir+"/mds"))
+		assert.False(t, dirIsEmpty(t, rootDir+"/controller"))
 		assert.False(t, dirIsEmpty(t, rootDir+"/wl"))
 
 		resp := runSQL(t, svcmgr.Queryer.Address(), testconfigs[0].qdbid, "drop table keyed")
@@ -615,7 +615,7 @@ func TestDAXIntegration(t *testing.T) {
 		// Ensure the index and writelogger directories are empty.
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
-		assert.False(t, dirIsEmpty(t, rootDir+"/mds"))
+		assert.False(t, dirIsEmpty(t, rootDir+"/controller"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/wl"))
 	})
 }

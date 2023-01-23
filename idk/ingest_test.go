@@ -19,9 +19,9 @@ import (
 	batch "github.com/featurebasedb/featurebase/v3/batch"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/dax"
-	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
+	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	"github.com/featurebasedb/featurebase/v3/idk/idktest"
-	"github.com/featurebasedb/featurebase/v3/idk/mds"
+	"github.com/featurebasedb/featurebase/v3/idk/serverless"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/golang-jwt/jwt"
@@ -44,8 +44,8 @@ func configureTestFlags(main *Main) {
 	main.Stats = ""
 }
 
-func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedTable) {
-	main.MDSAddress = address.String()
+func configureTestFlagsController(main *Main, address dax.Address, qtbl *dax.QualifiedTable) {
+	main.ControllerAddress = address.String()
 	main.Stats = ""
 	main.Pprof = ""
 	main.PackBools = ""
@@ -53,12 +53,12 @@ func configureTestFlagsMDS(main *Main, address dax.Address, qtbl *dax.QualifiedT
 	main.DatabaseID = qtbl.Qualifier().DatabaseID
 	main.TableName = qtbl.Name
 	main.Qtbl = qtbl
-	main.SchemaManager = mds.NewSchemaManager(address, qtbl.Qualifier(), logger.StderrLogger)
+	main.SchemaManager = serverless.NewSchemaManager(address, qtbl.Qualifier(), logger.StderrLogger)
 	main.Index = string(qtbl.Key())
 
-	mdsClient := mdsclient.New(dax.Address(address), logger.StderrLogger)
+	controllerClient := controllerclient.New(dax.Address(address), logger.StderrLogger)
 	main.NewImporterFn = func() pilosa.Importer {
-		return mds.NewImporter(mdsClient, qtbl.QualifiedDatabaseID, &qtbl.Table)
+		return serverless.NewImporter(controllerClient, qtbl.QualifiedDatabaseID, &qtbl.Table)
 	}
 }
 
@@ -1744,19 +1744,19 @@ func TestBoolIngest(t *testing.T) {
 	}
 }
 
-func TestBatchTargetMDS(t *testing.T) {
-	var mdsHost string
-	if mds, ok := os.LookupEnv("IDK_TEST_MDS_HOST"); ok {
-		mdsHost = mds
+func TestBatchTargetServerless(t *testing.T) {
+	var controllerHost string
+	if controller, ok := os.LookupEnv("IDK_TEST_CONTROLLER_HOST"); ok {
+		controllerHost = controller
 	} else {
-		mdsHost = "dax:8080"
+		controllerHost = "dax:8080"
 	}
 
-	mdsAddress := dax.Address(mdsHost + "/" + dax.ServicePrefixMDS)
+	controllerAddress := dax.Address(controllerHost + "/" + dax.ServicePrefixController)
 	orgID := dax.OrganizationID("acme")
 	dbID := dax.DatabaseID("db1")
 
-	mdsClient := mdsclient.New(mdsAddress, logger.StderrLogger)
+	controllerClient := controllerclient.New(controllerAddress, logger.StderrLogger)
 
 	ctx := context.Background()
 
@@ -1772,7 +1772,7 @@ func TestBatchTargetMDS(t *testing.T) {
 			},
 		},
 	}
-	mdsClient.CreateDatabase(ctx, qdb)
+	controllerClient.CreateDatabase(ctx, qdb)
 
 	t.Run("FieldTypes", func(t *testing.T) {
 		tests := []struct {
@@ -1850,7 +1850,7 @@ func TestBatchTargetMDS(t *testing.T) {
 					{1, time.Now()},
 					{2, time.Now()},
 				},
-				fieldOptions: dax.FieldOptions{TimeUnit: "s", Epoch: time.Unix(0, 0)}, // TODO w/o this, it used to silently fail (just logs in the mds svc). Eventually should probably have a default unit and not fail at all.
+				fieldOptions: dax.FieldOptions{TimeUnit: "s", Epoch: time.Unix(0, 0)}, // TODO w/o this, it used to silently fail (just logs in the controller svc). Eventually should probably have a default unit and not fail at all.
 			},
 		}
 		for i, test := range tests {
@@ -1881,14 +1881,14 @@ func TestBatchTargetMDS(t *testing.T) {
 					tbl,
 				)
 
-				// Create the table in MDS Schemar.
-				if err := mdsClient.CreateTable(ctx, qtbl); err != nil {
+				// Create the table in Controller Schemar.
+				if err := controllerClient.CreateTable(ctx, qtbl); err != nil {
 					t.Fatalf("creating table: %v", err)
 				}
 
-				// qtblWithID is the same as qtbl above, but now MDS has
+				// qtblWithID is the same as qtbl above, but now Controller has
 				// assigned the table a unique ID.
-				qtblWithID, err := mdsClient.Table(ctx, qtbl.QualifiedID())
+				qtblWithID, err := controllerClient.Table(ctx, qtbl.QualifiedID())
 				assert.NoError(t, err)
 
 				ts := newTestSource([]Field{
@@ -1897,7 +1897,7 @@ func TestBatchTargetMDS(t *testing.T) {
 				}, test.in)
 
 				ingester := NewMain()
-				configureTestFlagsMDS(ingester, mdsAddress, qtblWithID)
+				configureTestFlagsController(ingester, controllerAddress, qtblWithID)
 
 				ingester.NewSource = func() (Source, error) { return ts, nil }
 				ingester.BatchSize = 10

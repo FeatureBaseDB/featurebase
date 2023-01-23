@@ -26,7 +26,7 @@ const (
 	TargetFeaturebase = "featurebase"
 	TargetKafka       = "kafka"
 	TargetKafkaStatic = "kafkastatic"
-	TargetMDS         = "mds"
+	TargetServerless  = "serverless"
 )
 
 // Main is the top-level datagen struct. It represents datagen-specific
@@ -61,7 +61,7 @@ type Main struct {
 	// Used strictly for configuration of the targets.
 	Pilosa      PilosaConfig
 	Kafka       KafkaConfig
-	MDS         MDSConfig
+	Serverless  ServerlessConfig
 	FeatureBase FeatureBaseConfig `flag:"featurebase" help:"qualified featurebase table"`
 
 	DryRun bool `help:"Dry run - just flag parsing."`
@@ -103,11 +103,11 @@ type KafkaConfig struct {
 	NumPartitions     int    `short:"" help:"set partition for kafka cluster"`
 }
 
-// MDSConfig represents the configuration options to be used when target = mds.
-// These are really just a sub-set of idk.Main, containing only those arguments
-// that really apply to datagen.
-type MDSConfig struct {
-	Address string `short:"" help:"MDS host:port to connect to"`
+// ServerlessConfig represents the configuration options to be used when target
+// = serverless. These are really just a sub-set of idk.Main, containing only
+// those arguments that really apply to datagen.
+type ServerlessConfig struct {
+	Address string `short:"" help:"Controller host:port to connect to"`
 }
 
 // NewMain returns a new instance of Main.
@@ -286,7 +286,7 @@ func (m *Main) Preload() error {
 		m.KafkaPut.FBIDField = m.idkMain.IDField
 		m.KafkaPut.FBIndexName = m.Pilosa.Index
 
-	case TargetMDS:
+	case TargetServerless:
 		m.idkMain.Namespace = "ingester_datagen"
 		m.idkMain.Concurrency = m.Concurrency
 		m.idkMain.CacheLength = m.Pilosa.CacheLength
@@ -298,8 +298,8 @@ func (m *Main) Preload() error {
 			m.idkMain.BatchSize = m.Pilosa.BatchSize
 		}
 
-		// MDS-specific
-		m.idkMain.MDSAddress = m.MDS.Address
+		// Serverless-specific
+		m.idkMain.ControllerAddress = m.Serverless.Address
 		m.idkMain.OrganizationID = dax.OrganizationID(m.FeatureBase.OrganizationID)
 		m.idkMain.DatabaseID = dax.DatabaseID(m.FeatureBase.DatabaseID)
 		m.idkMain.TableName = dax.TableName(m.FeatureBase.TableName)

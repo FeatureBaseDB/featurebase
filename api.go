@@ -3070,9 +3070,9 @@ func (api *API) Directive(ctx context.Context, d *dax.Directive) error {
 }
 
 // DirectiveApplied returns true if the computer's current Directive has been
-// applied and is ready to be queried. This it temporary (primarily for tests)
-// and needs to be refactored as we improve the logic around mds-to-computer
-// communication.
+// applied and is ready to be queried. This is temporary (primarily for tests)
+// and needs to be refactored as we improve the logic around
+// controller-to-computer communication.
 func (api *API) DirectiveApplied(ctx context.Context) (bool, error) {
 	return api.holder.DirectiveApplied(), nil
 }
@@ -3085,7 +3085,7 @@ func (api *API) SnapshotShardData(ctx context.Context, req *dax.SnapshotShardDat
 	}
 	// TODO(jaffee) confirm this node is actually responsible for the given
 	// shard? Not sure we need to given that this request comes from
-	// MDS, but might be a belt&suspenders situation.
+	// the Controller, but might be a belt&suspenders situation.
 
 	qtid := req.TableKey.QualifiedTableID()
 

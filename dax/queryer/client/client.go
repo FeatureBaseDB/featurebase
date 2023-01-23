@@ -1,4 +1,4 @@
-// Package client is an HTTP client for MDS.
+// Package client is an HTTP client for the Queryer.
 package client
 
 import (
@@ -20,8 +20,8 @@ const (
 	defaultScheme = "http"
 )
 
-// Client is an HTTP client that operates on the MDS endpoints exposed by the
-// main MDS service.
+// Client is an HTTP client that operates on the Controller endpoints exposed by
+// the main Controller service.
 type Client struct {
 	address dax.Address
 	logger  logger.Logger
