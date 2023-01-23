@@ -982,5 +982,135 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			Compare: CompareExactOrdered,
 		},
+		{
+			name: "StrIntValue",
+			SQLs: sqls(
+				"select str(12345)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("     12345")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "StrIntValueAtEdge",
+			SQLs: sqls(
+				"select str(12345, 5)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("12345")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "StrIntValueWithPrecision",
+			SQLs: sqls(
+				"select str(12345, 5, 5)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("*****")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "StrDecimalValue",
+			SQLs: sqls(
+				"select str(12345.678)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("     12346")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "StrDecimalValueAtEdge",
+			SQLs: sqls(
+				"select str(12345.19, 5)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("12345")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "StrDecimalValueWithPrecision",
+			SQLs: sqls(
+				"select str(12345.789, 8, 2)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("12345.79")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "StrNegativeDecimalValueWithPrecision",
+			SQLs: sqls(
+				"select str(-2345.789, 8, 2)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("-2345.79")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "TooFewArgumentsforStr",
+			SQLs: sqls(
+				"select str()",
+			),
+			ExpErr: "'str': count of formal parameters (1) does not match count of actual parameters (0)",
+		},
+		{
+			name: "TooManyArgumentsforStr",
+			SQLs: sqls(
+				"select str(1, 1, 1, 1)",
+			),
+			ExpErr: "'str': count of formal parameters (1) does not match count of actual parameters (4)",
+		},
+		{
+			name: "StrPrecisionLargerThanValue",
+			SQLs: sqls(
+				"select str(1234.99, 10, 200)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("**********")),
+			),
+			Compare: CompareExactOrdered,
+		}, {
+			name: "StrNull",
+			SQLs: sqls(
+				"select str(null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
 	},
 }

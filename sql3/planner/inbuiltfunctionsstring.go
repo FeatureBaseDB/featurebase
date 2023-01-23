@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
@@ -782,4 +783,80 @@ func (n *callPlanExpression) EvaluateCharIndex(currentRow []interface{}) (interf
 		return int64(newpos), nil
 	}
 	return int64(res), nil
+}
+
+func (p *ExecutionPlanner) analyseFunctionStr(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) < 1 || len(call.Args) > 3 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+	targetType := parser.NewDataTypeDecimal(4)
+	if !typesAreAssignmentCompatible(targetType, call.Args[0].DataType()) {
+		return nil, sql3.NewErrTypeAssignmentIncompatible(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeDescription(), targetType.TypeDescription())
+	}
+
+	// the second and third parameters are optional
+	for i := 1; i < len(call.Args); i++ {
+		if !typeIsInteger(call.Args[i].DataType()) {
+			return nil, sql3.NewErrIntExpressionExpected(call.Args[i].Pos().Line, call.Args[i].Pos().Column)
+		}
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+
+	return call, nil
+}
+
+func (n *callPlanExpression) EvaluateStr(currentRow []interface{}) (interface{}, error) {
+	argOneEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return "", err
+	}
+	if argOneEval == nil {
+		return nil, nil
+	}
+
+	coercedValue, err := coerceValue(n.args[0].Type(), parser.NewDataTypeDecimal(4), argOneEval, parser.Pos{})
+
+	decimalArgOne, ok := coercedValue.(pql.Decimal)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type conversion '%T'", coercedValue)
+	}
+
+	intArgTwo := int64(10)
+	if len(n.args) > 1 {
+		argEval, err := n.args[1].Evaluate(currentRow)
+		if err != nil {
+			return nil, err
+		}
+		intArgTwo, ok = argEval.(int64)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		}
+	}
+
+	intArgThree := int64(0)
+	if len(n.args) > 2 {
+		argEval, err := n.args[2].Evaluate(currentRow)
+		if err != nil {
+			return nil, err
+		}
+		intArgThree, ok = argEval.(int64)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		}
+	}
+
+	floatValue := decimalArgOne.Float64()
+	strFormat := fmt.Sprintf("%%%d.%df", intArgTwo, intArgThree)
+	decimalString := fmt.Sprintf(strFormat, floatValue)
+
+	// check if value can be displayed within allocated length
+	if int64(len(decimalString)) > intArgTwo {
+		decimalString = ""
+		for i := int64(0); i < intArgTwo; i++ {
+			decimalString += "*"
+		}
+	}
+
+	return decimalString, nil
 }
