@@ -506,10 +506,6 @@ func (e *executor) dumpPrecomputedCalls(ctx context.Context, c *pql.Call) {
 
 // handlePreCallChildren handles any pre-calls in the children of a given call.
 func (e *executor) handlePreCallChildren(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) error {
-	idx := e.Holder.Index(index)
-	if idx == nil {
-		return newNotFoundError(ErrIndexNotFound, index)
-	}
 	for _, child := range c.Children {
 		if err := ctx.Err(); err != nil {
 			return err
