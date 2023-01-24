@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -207,6 +208,21 @@ func (p *ExecutionPlanner) analyseFunctionLen(call *parser.Call, scope parser.St
 	return call, nil
 }
 
+// format(format_string, args...)
+func (p *ExecutionPlanner) analyseFunctionFormat(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	// should have at least one argument to check call.args[0] string
+	if len(call.Args) < 1 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+	}
+
+	if !typeIsString(call.Args[0].DataType()) && !typeIsVoid(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeString()
+	return call, nil
+}
+
 // reverses the string
 func (n *callPlanExpression) EvaluateReverse(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
@@ -218,7 +234,7 @@ func (n *callPlanExpression) EvaluateReverse(currentRow []interface{}) (interfac
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	// reverse the string
@@ -239,7 +255,7 @@ func (n *callPlanExpression) EvaluateLower(currentRow []interface{}) (interface{
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	return strings.ToLower(stringArg), nil
@@ -256,7 +272,7 @@ func (n *callPlanExpression) EvaluateUpper(currentRow []interface{}) (interface{
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	// convert to Upper
@@ -274,7 +290,7 @@ func (n *callPlanExpression) EvaluateChar(currentRow []interface{}) (interface{}
 	}
 	intArg, ok := argEval.(int64)
 	if !ok {
-		return 0, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return 0, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 	// ascii range is [0-255]
 	if intArg < 0 || intArg > 255 {
@@ -298,7 +314,7 @@ func (n *callPlanExpression) EvaluateAscii(currentRow []interface{}) (interface{
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	if len(stringArg) == 0 {
@@ -324,7 +340,7 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 	}
 	stringArgOne, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	// this takes a sliding window approach to evaluate substring.
@@ -338,7 +354,7 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 
 	startIndex, ok := argEval.(int64)
 	if !ok {
-		return 0, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return 0, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	if startIndex < 0 || startIndex >= int64(len(stringArgOne)) {
@@ -356,7 +372,7 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 		}
 		ln, ok := argEval.(int64)
 		if !ok {
-			return 0, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+			return 0, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 		}
 		endIndex = startIndex + ln
 	}
@@ -380,7 +396,7 @@ func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (inter
 	}
 	stringArgOne, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 	argEval, err = n.args[1].Evaluate(currentRow)
 	if err != nil {
@@ -391,7 +407,7 @@ func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (inter
 	}
 	stringArgTwo, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 	argEval, err = n.args[2].Evaluate(currentRow)
 	if err != nil {
@@ -402,7 +418,7 @@ func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (inter
 	}
 	stringArgThree, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 	return strings.ReplaceAll(stringArgOne, stringArgTwo, stringArgThree), nil
 }
@@ -418,7 +434,7 @@ func (n *callPlanExpression) EvaluateStringSplit(currentRow []interface{}) (inte
 	}
 	inputString, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	argEval, err = n.args[1].Evaluate(currentRow)
@@ -430,7 +446,7 @@ func (n *callPlanExpression) EvaluateStringSplit(currentRow []interface{}) (inte
 	}
 	seperator, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	if len(n.args) == 2 {
@@ -445,7 +461,7 @@ func (n *callPlanExpression) EvaluateStringSplit(currentRow []interface{}) (inte
 	}
 	pos, ok := argEval.(int64)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	res := strings.Split(inputString, seperator)
@@ -468,7 +484,7 @@ func (n *callPlanExpression) EvaluateTrim(currentRow []interface{}) (interface{}
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	// Trim the whitespace from string
@@ -486,7 +502,7 @@ func (n *callPlanExpression) EvaluateRTrim(currentRow []interface{}) (interface{
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	// Trim the trailing whitespace from string
@@ -504,7 +520,7 @@ func (n *callPlanExpression) EvaluateLTrim(currentRow []interface{}) (interface{
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	// Trim the leading whitespace from string
@@ -521,7 +537,7 @@ func (n *callPlanExpression) EvaluatePrefix(currentRow []interface{}) (interface
 	}
 	stringArgOne, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	argEval, err = n.args[1].Evaluate(currentRow)
@@ -533,7 +549,7 @@ func (n *callPlanExpression) EvaluatePrefix(currentRow []interface{}) (interface
 	}
 	intArgTwo, ok := argEval.(int64)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	if intArgTwo < 0 || intArgTwo > int64(len(stringArgOne)) {
@@ -553,7 +569,7 @@ func (n *callPlanExpression) EvaluateSuffix(currentRow []interface{}) (interface
 	}
 	stringArgOne, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	argEval, err = n.args[1].Evaluate(currentRow)
@@ -565,7 +581,7 @@ func (n *callPlanExpression) EvaluateSuffix(currentRow []interface{}) (interface
 	}
 	intArgTwo, ok := argEval.(int64)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	if intArgTwo < 0 || intArgTwo > int64(len(stringArgOne)) {
@@ -586,7 +602,7 @@ func (n *callPlanExpression) EvaluateSpace(currentRow []interface{}) (interface{
 	}
 	intArg, ok := argEval.(int64)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	// Return a string containing a number of spaces equal to the integer value
@@ -607,7 +623,7 @@ func (n *callPlanExpression) EvaluateLen(currentRow []interface{}) (interface{},
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	return int64(len([]rune(stringArg))), nil
@@ -622,7 +638,7 @@ func (n *callPlanExpression) EvaluateReplicate(currentRow []interface{}) (interf
 	}
 	stringArg, ok := argEval.(string)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	argEval, err = n.args[1].Evaluate(currentRow)
@@ -634,7 +650,7 @@ func (n *callPlanExpression) EvaluateReplicate(currentRow []interface{}) (interf
 	}
 	intArg, ok := argEval.(int64)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
 	}
 
 	if intArg < 0 {
@@ -643,4 +659,35 @@ func (n *callPlanExpression) EvaluateReplicate(currentRow []interface{}) (interf
 
 	return strings.Repeat(stringArg, int(intArg)), nil
 
+}
+
+// implements fmt.Sprintf
+func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface{}, error) {
+	// first arg must be a string
+	argEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	formatString, ok := argEval.(string)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexpected type conversion %T", argEval)
+	}
+
+	var args []interface{}
+
+	// loop, since args can be of any length.
+	for _, arg := range n.args[1:] {
+		argEval, err = arg.Evaluate(currentRow)
+		if err != nil {
+			return nil, err
+		}
+		if argEval == nil {
+			return nil, nil
+		}
+		args = append(args, argEval)
+	}
+	return fmt.Sprintf(formatString, args...), nil
 }
