@@ -167,6 +167,10 @@ var TableTests []TableTest = []TableTest{
 	joinTestsOrders,
 	joinTests,
 
+	// bulk insert
+	bulkInsertTable,
+	bulkInsert,
+
 	//bool (batch logic)
 	boolTests,
 
@@ -176,6 +180,14 @@ var TableTests []TableTest = []TableTest{
 
 func knownTimestamp() time.Time {
 	tm, err := time.ParseInLocation(time.RFC3339, "2012-11-01T22:08:41+00:00", time.UTC)
+	if err != nil {
+		panic(err.Error())
+	}
+	return tm
+}
+
+func timestampFromString(s string) time.Time {
+	tm, err := time.ParseInLocation(time.RFC3339, s, time.UTC)
 	if err != nil {
 		panic(err.Error())
 	}
