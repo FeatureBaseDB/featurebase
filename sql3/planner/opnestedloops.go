@@ -36,7 +36,9 @@ func (p *PlanOpNestedLoops) Plan() map[string]interface{} {
 	result["_schema"] = p.Schema().Plan()
 	result["top"] = p.top.Plan()
 	result["bottom"] = p.bottom.Plan()
-	result["condition"] = p.cond.Plan()
+	if p.cond != nil {
+		result["condition"] = p.cond.Plan()
+	}
 	return result
 }
 
@@ -93,10 +95,9 @@ func (p *PlanOpNestedLoops) Expressions() []types.PlanExpression {
 }
 
 func (p *PlanOpNestedLoops) WithUpdatedExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
-	if len(exprs) != 1 {
-		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
+	if len(exprs) == 1 {
+		p.cond = exprs[0]
 	}
-	p.cond = exprs[0]
 	return p, nil
 }
 

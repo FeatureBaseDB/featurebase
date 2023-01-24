@@ -643,12 +643,24 @@ func (p *ExecutionPlanner) analyzeSelectStatementWildcards(stmt *parser.SelectSt
 	return nil
 }
 
+// TODO(pok) - looks increasingly likely that this can be factored out since all join types
+// do the same thing
 func (p *ExecutionPlanner) columnsFromSource(source parser.Source) ([]*parser.ResultColumn, error) {
 	result := []*parser.ResultColumn{}
 
 	switch src := source.(type) {
 	case *parser.JoinClause:
-		return nil, sql3.NewErrInternal("joins are not currently supported")
+		for _, oc := range src.PossibleOutputColumns() {
+			result = append(result, &parser.ResultColumn{
+				Expr: &parser.QualifiedRef{
+					Table:       &parser.Ident{Name: oc.TableName},
+					Column:      &parser.Ident{Name: oc.ColumnName},
+					ColumnIndex: oc.ColumnIndex,
+				},
+			})
+		}
+		return result, nil
+
 	case *parser.ParenSource:
 		for _, oc := range src.PossibleOutputColumns() {
 			result = append(result, &parser.ResultColumn{
