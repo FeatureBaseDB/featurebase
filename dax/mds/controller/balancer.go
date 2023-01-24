@@ -37,6 +37,12 @@ type Balancer interface {
 	// WorkersForTable returns the workers responsible for any job related to
 	// the given table.
 	WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) ([]dax.WorkerInfo, error)
+
+	// ReadNode returns the node for the given address.
+	ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error)
+
+	// Nodes returns all nodes known by the Balancer.
+	Nodes(tx dax.Transaction) ([]*dax.Node, error)
 }
 
 // Ensure type implements interface.
@@ -75,4 +81,10 @@ func (b *NopBalancer) WorkersForJobs(tx dax.Transaction, roleType dax.RoleType, 
 }
 func (b *NopBalancer) WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) ([]dax.WorkerInfo, error) {
 	return []dax.WorkerInfo{}, nil
+}
+func (b *NopBalancer) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
+	return nil, nil
+}
+func (b *NopBalancer) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
+	return []*dax.Node{}, nil
 }

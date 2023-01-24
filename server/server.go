@@ -74,7 +74,7 @@ type Command struct {
 
 	Registrar         computer.Registrar
 	serverlessStorage *storage.ResourceManager
-	writeLogService   computer.WriteLogService
+	writeLogService   computer.WritelogService
 	snapshotService   computer.SnapshotService
 
 	Handler      pilosa.HandlerI
@@ -124,7 +124,6 @@ func OptCommandConfig(config *Config) CommandOption {
 			c.Config.Auth = config.Auth
 			c.Config.TLS = config.TLS
 			c.Config.MDSAddress = config.MDSAddress
-			c.Config.WriteLogger = config.WriteLogger
 			c.Config.SQL.EndpointEnabled = config.SQL.EndpointEnabled
 			return nil
 		}
@@ -147,8 +146,8 @@ func OptCommandSetConfig(config *Config) CommandOption {
 // OptCommandInjections injects the interface implementations.
 func OptCommandInjections(inj Injections) CommandOption {
 	return func(c *Command) error {
-		if inj.WriteLogger != nil {
-			c.writeLogService = inj.WriteLogger
+		if inj.Writelogger != nil {
+			c.writeLogService = inj.Writelogger
 		}
 		if inj.Snapshotter != nil {
 			c.snapshotService = inj.Snapshotter
@@ -159,7 +158,7 @@ func OptCommandInjections(inj Injections) CommandOption {
 }
 
 type Injections struct {
-	WriteLogger   computer.WriteLogService
+	Writelogger   computer.WritelogService
 	Snapshotter   computer.SnapshotService
 	IsComputeNode bool
 }

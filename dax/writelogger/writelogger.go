@@ -8,15 +8,17 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
-type WriteLogger struct {
+type Writelogger struct {
 	dataDir string
 
 	mu        sync.RWMutex
@@ -26,22 +28,22 @@ type WriteLogger struct {
 	logger logger.Logger
 }
 
-func New(cfg Config) *WriteLogger {
-	return &WriteLogger{
-		dataDir:   cfg.DataDir,
+func New(dir string, log logger.Logger) *Writelogger {
+	return &Writelogger{
+		dataDir:   dir,
 		logFiles:  make(map[string]*os.File),
 		lockFiles: make(map[string]*os.File),
-		logger:    logger.NopLogger,
+		logger:    log,
 	}
 }
 
 // SetLogger sets the logger used for logging messages. Note, this is not the
-// same "logger" that the WriteLogger represents, which logs data writes.
-func (w *WriteLogger) SetLogger(l logger.Logger) {
+// same "logger" that the Writelogger represents, which logs data writes.
+func (w *Writelogger) SetLogger(l logger.Logger) {
 	w.logger = l
 }
 
-func (w *WriteLogger) AppendMessage(bucket string, key string, version int, message []byte) error {
+func (w *Writelogger) AppendMessage(bucket string, key string, version int, message []byte) error {
 	fKey := fullKey(bucket, key, version)
 	logFile, err := w.logFileByKey(fKey)
 	if err != nil {
@@ -56,7 +58,7 @@ func (w *WriteLogger) AppendMessage(bucket string, key string, version int, mess
 	return errors.Wrapf(err, "syncing log file %s", logFile.Name())
 }
 
-func (w *WriteLogger) List(bucket, key string) ([]computer.WriteLogInfo, error) {
+func (w *Writelogger) List(bucket, key string) ([]computer.WriteLogInfo, error) {
 	dirpath := path.Join(w.dataDir, bucket, key)
 
 	entries, err := os.ReadDir(dirpath)
@@ -80,11 +82,11 @@ func (w *WriteLogger) List(bucket, key string) ([]computer.WriteLogInfo, error) 
 	return wLogs, nil
 }
 
-func (w *WriteLogger) LogReader(bucket, key string, version int) (io.ReadCloser, error) {
+func (w *Writelogger) LogReader(bucket, key string, version int) (io.ReadCloser, error) {
 	return w.LogReaderFrom(bucket, key, version, 0)
 }
 
-func (w *WriteLogger) LogReaderFrom(bucket string, key string, version int, offset int) (io.ReadCloser, error) {
+func (w *Writelogger) LogReaderFrom(bucket string, key string, version int, offset int) (io.ReadCloser, error) {
 	_, filePath := w.paths(fullKey(bucket, key, version))
 
 	f, err := os.Open(filePath)
@@ -97,12 +99,12 @@ func (w *WriteLogger) LogReaderFrom(bucket string, key string, version int, offs
 	if offset > 0 {
 		f.Seek(int64(offset), io.SeekStart)
 	}
-	w.logger.Debugf("WriteLogger LogReader file: %s", f.Name())
+	w.logger.Debugf("Writelogger LogReader file: %s", f.Name())
 
 	return f, nil
 }
 
-func (w *WriteLogger) DeleteLog(bucket string, key string, version int) error {
+func (w *Writelogger) DeleteLog(bucket string, key string, version int) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -118,16 +120,18 @@ func (w *WriteLogger) DeleteLog(bucket string, key string, version int) error {
 		return errors.Wrap(err, "closing log file")
 	}
 
+	delete(w.logFiles, fullKey)
+
 	// Remove the log file.
 	return os.Remove(f.Name())
 }
 
-func (w *WriteLogger) lockFile(bucket, key string) (string, string) {
+func (w *Writelogger) lockFile(bucket, key string) (string, string) {
 	lockFile := path.Join(w.dataDir, bucket, fmt.Sprintf("_lock_%s", key))
 	return path.Dir(lockFile), lockFile
 }
 
-func (w *WriteLogger) Lock(bucket, key string) error {
+func (w *Writelogger) Lock(bucket, key string) error {
 	lockDir, lockFile := w.lockFile(bucket, key)
 
 	if err := os.MkdirAll(lockDir, 0777); err != nil {
@@ -153,20 +157,30 @@ func (w *WriteLogger) Lock(bucket, key string) error {
 
 }
 
-func (w *WriteLogger) Unlock(bucket, key string) error {
+func (w *Writelogger) Unlock(bucket, key string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	// remove all local state associated with this bucket/key
+	keyPrefix := path.Join(bucket, key)
+	for logKey, logFile := range w.logFiles {
+		if strings.HasPrefix(logKey, keyPrefix) {
+			_ = logFile.Close()
+			delete(w.logFiles, logKey)
+		}
+	}
 	// TODO(jaffee) since the file isn't guaranteed to be removed if
 	// the process is killed, we should actually use flock instead of
 	// EXCL file creation. Problem with that is it makes testing
 	// tricky because file handles from the same process are able to
 	// acquire the flock simultaneously. Headache.
 	_, lockFile := w.lockFile(bucket, key)
-	f, ok := w.lockFiles[lockFile]
-	if !ok {
-		return errors.New(errors.ErrUncoded, "couldn't find file to unlock")
+
+	if f, ok := w.lockFiles[lockFile]; ok {
+		_ = f.Close()
+	} else {
+		w.logger.Warnf("unlocking %s not find cached file to unlock", lockFile)
 	}
-	f.Close()
 	err := os.Remove(lockFile)
 	delete(w.lockFiles, lockFile)
 
@@ -182,10 +196,19 @@ func (w *WriteLogger) Unlock(bucket, key string) error {
 	return errors.Wrap(err, "removing lock file")
 }
 
+func (w *Writelogger) DeleteTable(qtid dax.QualifiedTableID) error {
+	dir := path.Join(w.dataDir, string(qtid.Key()))
+	err := os.RemoveAll(dir)
+	if err != nil {
+		return errors.Wrapf(err, "dropping %s from writelogger", dir)
+	}
+	return nil
+}
+
 // paths takes a key and returns the full file path (including the root data
 // directory) as well as the full directory path (i.e. the file path without the
 // file portion).
-func (w *WriteLogger) paths(key string) (string, string) {
+func (w *Writelogger) paths(key string) (string, string) {
 	filePath := path.Join(w.dataDir, key)
 	dirPath, _ := path.Split(filePath)
 	return dirPath, filePath
@@ -194,7 +217,7 @@ func (w *WriteLogger) paths(key string) (string, string) {
 // logFileByKey returns a pointer to the file specified by key. If the file does
 // not exist, the file is created (along with any directories in which the file
 // is nested).
-func (w *WriteLogger) logFileByKey(key string) (*os.File, error) {
+func (w *Writelogger) logFileByKey(key string) (*os.File, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

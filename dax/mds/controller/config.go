@@ -19,6 +19,9 @@ type Config struct {
 	StorageMethod string
 	BoltDB        *boltdb.DB
 
+	SnapshotterDir string
+	WriteloggerDir string
+
 	// RegistrationBatchTimeout is the time that the controller will
 	// wait after a node registers itself to see if any more nodes
 	// will register before sending out directives to all nodes which

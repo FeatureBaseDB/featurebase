@@ -279,19 +279,14 @@ func (m *Command) setupServer() error {
 func (m *Command) setupServices() error {
 	// Set up MDS.
 	if m.Config.MDS.Run {
-		mdsCfg := mds.Config{
-			RegistrationBatchTimeout: m.Config.MDS.Config.RegistrationBatchTimeout,
-			StorageMethod:            m.Config.MDS.Config.StorageMethod,
-			DataDir:                  m.Config.MDS.Config.DataDir,
-			SnappingTurtleTimeout:    m.Config.MDS.Config.SnappingTurtleTimeout,
-			Logger:                   m.logger,
-			Director: controllerhttp.NewDirector(
-				controllerhttp.DirectorConfig{
-					DirectivePath:       "directive",
-					SnapshotRequestPath: "snapshot",
-					Logger:              m.logger,
-				}),
-		}
+		mdsCfg := m.Config.MDS.Config
+		mdsCfg.Logger = m.logger
+		mdsCfg.Director = controllerhttp.NewDirector(
+			controllerhttp.DirectorConfig{
+				DirectivePath:       "directive",
+				SnapshotRequestPath: "snapshot",
+				Logger:              m.logger,
+			})
 
 		m.svcmgr.MDS = mdssvc.New(m.advertiseURI, mds.New(mdsCfg))
 		if err := m.svcmgr.MDSStart(); err != nil {
@@ -344,11 +339,7 @@ func (m *Command) setupServices() error {
 		for i := 0; i < n; i++ {
 			m.logger.Printf("Set up computer (%d)", i)
 			cfg := computersvc.CommandConfig{
-				WriteLoggerRun:    m.Config.WriteLogger.Run,
-				WriteLoggerConfig: m.Config.WriteLogger.Config,
-				SnapshotterRun:    m.Config.Snapshotter.Run,
-				SnapshotterConfig: m.Config.Snapshotter.Config,
-				ComputerConfig:    m.Config.Computer.Config,
+				ComputerConfig: m.Config.Computer.Config,
 
 				Listener:    m.ln,
 				RootDataDir: rootDataDir,

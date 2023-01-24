@@ -14,9 +14,9 @@ type Registrar interface {
 	CheckInNode(ctx context.Context, node *dax.Node) error
 }
 
-// WriteLogService represents the WriteLogService methods which Computer uses.
-// These are typically implemented by the WriteLogger client.
-type WriteLogService interface {
+// WritelogService represents the WritelogService methods which Computer uses.
+// These are typically implemented by the Writelogger client.
+type WritelogService interface {
 	AppendMessage(bucket string, key string, version int, msg []byte) error
 	LogReader(bucket string, key string, version int) (io.ReadCloser, error)
 	LogReaderFrom(bucket string, key string, version int, offset int) (io.ReadCloser, error)
@@ -45,5 +45,56 @@ type SnapInfo struct {
 type WriteLogInfo SnapInfo
 
 // LogMessage is implemented by a variety of types which can be serialized as
-// messages to the WriteLogger.
+// messages to the Writelogger.
 type LogMessage interface{}
+
+/////////// No-op implementations of the interfaces //////////////
+
+// nopWritelogService is a no-op implementation of the WritelogService
+// interface.
+type nopWritelogService struct{}
+
+func NewNopWritelogService() *nopWritelogService {
+	return &nopWritelogService{}
+}
+func (b *nopWritelogService) AppendMessage(bucket string, key string, version int, msg []byte) error {
+	return nil
+}
+func (b *nopWritelogService) LogReader(bucket string, key string, version int) (io.ReadCloser, error) {
+	return nil, nil
+}
+func (b *nopWritelogService) LogReaderFrom(bucket string, key string, version int, offset int) (io.ReadCloser, error) {
+	return nil, nil
+}
+func (b *nopWritelogService) DeleteLog(bucket string, key string, version int) error {
+	return nil
+}
+func (b *nopWritelogService) List(bucket, key string) ([]WriteLogInfo, error) {
+	return nil, nil
+}
+func (b *nopWritelogService) Lock(bucket, key string) error {
+	return nil
+}
+func (b *nopWritelogService) Unlock(bucket, key string) error {
+	return nil
+}
+
+// nopSnapshotterService is a no-op implementation of the WritelogService
+// interface.
+type nopSnapshotterService struct{}
+
+func NewNopSnapshotterService() *nopSnapshotterService {
+	return &nopSnapshotterService{}
+}
+func (b *nopSnapshotterService) Read(bucket string, key string, version int) (io.ReadCloser, error) {
+	return nil, nil
+}
+func (b *nopSnapshotterService) Write(bucket string, key string, version int, rc io.ReadCloser) error {
+	return nil
+}
+func (b *nopSnapshotterService) WriteTo(bucket string, key string, version int, wrTo io.WriterTo) error {
+	return nil
+}
+func (b *nopSnapshotterService) List(bucket, key string) ([]SnapInfo, error) {
+	return nil, nil
+}

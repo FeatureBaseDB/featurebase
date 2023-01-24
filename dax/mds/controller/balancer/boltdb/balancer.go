@@ -31,8 +31,9 @@ func NewBalancer(db *boltdb.DB, schemar schemar.Schemar, logger logger.Logger) c
 	fjs := newFreeJobService(db)
 	wjs := newWorkerJobService(db, logger)
 	fws := newFreeWorkerService(db)
+	ns := NewNodeService(db, logger)
 
-	return balancer.New(fjs, wjs, fws, schemar, logger)
+	return balancer.New(ns, fjs, wjs, fws, schemar, logger)
 }
 
 // Ensure type implements interface.

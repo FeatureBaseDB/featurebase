@@ -39,10 +39,8 @@ services:
       FEATUREBASE_BIND: 0.0.0.0:8080
       FEATUREBASE_VERBOSE: "true"
       FEATUREBASE_STORAGE_METHOD: boltdb
-      FEATUREBASE_WRITELOGGER_RUN: "true"
-      FEATUREBASE_WRITELOGGER_CONFIG_DATA_DIR: "/dax-data/writelogger"
-      FEATUREBASE_SNAPSHOTTER_RUN: "true"
-      FEATUREBASE_SNAPSHOTTER_CONFIG_DATA_DIR: "/dax-data/snapshotter"
+      FEATUREBASE_COMPUTER_CONFIG_WRITELOGGER_DIR: "/dax-data/writelogger"
+      FEATUREBASE_COMPUTER_CONFIG_SNAPSHOTTER_DIR: "/dax-data/snapshotter"
     volumes:
       - "./dax-data/writelogger:/dax-data/writelogger"
       - "./dax-data/snapshotter:/dax-data/snapshotter"

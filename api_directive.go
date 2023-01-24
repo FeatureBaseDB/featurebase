@@ -42,10 +42,6 @@ func (api *API) ApplyDirective(ctx context.Context, d *dax.Directive) error {
 		if err := api.deleteAllIndexes(ctx); err != nil {
 			return errors.Wrap(err, "deleting all indexes")
 		}
-		if err := api.serverlessStorage.RemoveAll(); err != nil {
-			return errors.Wrap(err, "removing all managers")
-		}
-
 		// Set previousDirective to empty so the diff handles everything as new.
 		previousDirective = dax.Directive{}
 
@@ -64,7 +60,7 @@ func (api *API) ApplyDirective(ctx context.Context, d *dax.Directive) error {
 	// the "enactDirective" stage of ApplyDirective which validates against this
 	// cached Directive, so it's important that it be set before calling
 	// enactDirective(). An example: when loading partition data from the
-	// WriteLogger, there are validations to ensure that the partition being
+	// Writelogger, there are validations to ensure that the partition being
 	// loaded is meant to be handled by this node; that validation is done
 	// against the cached Directive.
 	// TODO(tlt): despite what this comment says, this logic is not sound; we
@@ -250,7 +246,7 @@ func (api *API) enactTables(ctx context.Context, fromD, toD *dax.Directive) erro
 	// Remove all indexes that are no longer part of the directive.
 	for _, tkey := range sc.removed() {
 		idx := string(tkey)
-		if err := api.holder.deleteIndex(idx); err != nil {
+		if err := api.DeleteIndex(ctx, idx); err != nil {
 			return errors.Wrapf(err, "deleting index: %s", tkey)
 		}
 	}
@@ -328,7 +324,7 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 	// Get the diff between from/to directive.partitions.
 	partComp := newPartitionsComparer(fromD.TranslatePartitionsMap(), toPartitionsMap)
 
-	// Loop over the partition map and load from WriteLogger.
+	// Loop over the partition map and load from Writelogger.
 	for tkey, partitions := range partComp.added() {
 		// Get index in order to find the translate stores (by partition) for
 		// the table.
@@ -415,7 +411,7 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 	// Get the diff between from/to directive.fields.
 	fieldComp := newFieldsComparer(fromD.TranslateFieldsMap(), toD.TranslateFieldsMap())
 
-	// Loop over the field map and load from WriteLogger.
+	// Loop over the field map and load from Writelogger.
 	for tkey, fields := range fieldComp.added() {
 		for _, field := range fields {
 			jobs <- directiveJobFieldKeys{
@@ -499,7 +495,7 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 	// Get the diff between from/to directive shards.
 	shardComp := newShardsComparer(fromD.ComputeShardsMap(), shardMap)
 
-	// Loop over the shard map and load from WriteLogger.
+	// Loop over the shard map and load from Writelogger.
 	for tkey, shards := range shardComp.added() {
 		for _, shard := range shards {
 			jobs <- directiveJobShards{

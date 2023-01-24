@@ -12,8 +12,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax/mds"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
-	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
-	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	fbserver "github.com/featurebasedb/featurebase/v3/server"
 )
@@ -45,26 +43,14 @@ type Config struct {
 	// LogPath configures where Pilosa will write logs.
 	LogPath string `toml:"log-path"`
 
-	MDS         MDSOptions         `toml:"mds"`
-	WriteLogger WriteLoggerOptions `toml:"writelogger"`
-	Snapshotter SnapshotterOptions `toml:"snapshotter"`
-	Queryer     QueryerOptions     `toml:"queryer"`
-	Computer    ComputerOptions    `toml:"computer"`
+	MDS      MDSOptions      `toml:"mds"`
+	Queryer  QueryerOptions  `toml:"queryer"`
+	Computer ComputerOptions `toml:"computer"`
 }
 
 type MDSOptions struct {
 	Run    bool       `toml:"run"`
 	Config mds.Config `toml:"config"`
-}
-
-type WriteLoggerOptions struct {
-	Run    bool               `toml:"run"`
-	Config writelogger.Config `toml:"config"`
-}
-
-type SnapshotterOptions struct {
-	Run    bool               `toml:"run"`
-	Config snapshotter.Config `toml:"config"`
 }
 
 type QueryerOptions struct {

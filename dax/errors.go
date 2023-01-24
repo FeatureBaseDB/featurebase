@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	ErrDatabaseIDExists       errors.Code = "DatabaseIDExists"
-	ErrDatabaseIDDoesNotExist errors.Code = "DatabaseIDDoesNotExist"
+	ErrDatabaseIDExists         errors.Code = "DatabaseIDExists"
+	ErrDatabaseIDDoesNotExist   errors.Code = "DatabaseIDDoesNotExist"
+	ErrDatabaseNameDoesNotExist errors.Code = "DatabaseNameDoesNotExist"
 
 	ErrTableIDExists         errors.Code = "TableIDExists"
 	ErrTableKeyExists        errors.Code = "TableKeyExists"
@@ -39,6 +40,13 @@ func NewErrDatabaseIDDoesNotExist(qdbid QualifiedDatabaseID) error {
 	return errors.New(
 		ErrDatabaseIDDoesNotExist,
 		fmt.Sprintf("database ID '%s' does not exist", qdbid),
+	)
+}
+
+func NewErrDatabaseNameDoesNotExist(dbName DatabaseName) error {
+	return errors.New(
+		ErrDatabaseNameDoesNotExist,
+		fmt.Sprintf("database name '%s' does not exist", dbName),
 	)
 }
 

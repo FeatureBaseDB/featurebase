@@ -20,14 +20,6 @@ func BuildDAXFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.MDS.Config.DataDir, "mds.config.data-dir", srv.Config.MDS.Config.DataDir, "MDS directory to use in process.")
 	flags.DurationVar(&srv.Config.MDS.Config.SnappingTurtleTimeout, "mds.config.snapping-turtle-timeout", srv.Config.MDS.Config.SnappingTurtleTimeout, "Period for running automatic snapshotting routine.")
 
-	// WriteLogger
-	flags.BoolVar(&srv.Config.WriteLogger.Run, "writelogger.run", srv.Config.WriteLogger.Run, "Run the WriteLogger service in process.")
-	flags.StringVar(&srv.Config.WriteLogger.Config.DataDir, "writelogger.config.data-dir", srv.Config.WriteLogger.Config.DataDir, "WriteLogger directory to use in process.")
-
-	// Snapshotter
-	flags.BoolVar(&srv.Config.Snapshotter.Run, "snapshotter.run", srv.Config.Snapshotter.Run, "Run the Snapshotter service in process.")
-	flags.StringVar(&srv.Config.Snapshotter.Config.DataDir, "snapshotter.config.data-dir", srv.Config.Snapshotter.Config.DataDir, "Snapshotter directory to use in process.")
-
 	// Queryer
 	flags.BoolVar(&srv.Config.Queryer.Run, "queryer.run", srv.Config.Queryer.Run, "Run the Queryer service in process.")
 	flags.StringVar(&srv.Config.Queryer.Config.MDSAddress, "queryer.config.mds-address", srv.Config.Queryer.Config.MDSAddress, "Address of remote MDS process.")

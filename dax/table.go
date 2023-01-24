@@ -113,6 +113,13 @@ type OrganizationID string
 // value could be any string.
 type DatabaseID string
 
+// DatabaseIDs is a sortable slice of DatabaseID.
+type DatabaseIDs []DatabaseID
+
+func (s DatabaseIDs) Len() int           { return len(s) }
+func (s DatabaseIDs) Less(i, j int) bool { return s[i] < s[j] }
+func (s DatabaseIDs) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
 // DatabaseKey is a globally unique identifier for a database; it is effectively the
 // compound key: (org, database). This is (hopefully) the value that will
 // be used when interfacing with services which are unaware of qualifiers.

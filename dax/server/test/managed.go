@@ -96,11 +96,7 @@ func (mc *ManagedCommand) NewQueryer(cfg queryer.Config) dax.ServiceKey {
 // NewComputer adds a new ComputerService to the ManagedCommands ServiceManager.
 func (mc *ManagedCommand) NewComputer() dax.ServiceKey {
 	cfg := computersvc.CommandConfig{
-		WriteLoggerRun:    mc.Config.WriteLogger.Run,
-		WriteLoggerConfig: mc.Config.WriteLogger.Config,
-		SnapshotterRun:    mc.Config.Snapshotter.Run,
-		SnapshotterConfig: mc.Config.Snapshotter.Config,
-		ComputerConfig:    mc.Config.Computer.Config,
+		ComputerConfig: mc.Config.Computer.Config,
 
 		RootDataDir: mc.Config.Computer.Config.DataDir,
 
@@ -192,8 +188,10 @@ func NewManagedCommand(tb fbtest.DirCleaner, opts ...server.CommandOption) *Mana
 	mc.Config.Bind = "http://localhost:0"
 	mc.Config.MDS.Config.DataDir = path + "/mds"
 	mc.Config.Computer.Config.DataDir = path
-	mc.Config.WriteLogger.Config.DataDir = path + "/wl"
-	mc.Config.Snapshotter.Config.DataDir = path + "/sn"
+	mc.Config.Computer.Config.WriteloggerDir = path + "/wl"
+	mc.Config.MDS.Config.WriteloggerDir = path + "/wl"
+	mc.Config.Computer.Config.SnapshotterDir = path + "/sn"
+	mc.Config.MDS.Config.SnapshotterDir = path + "/sn"
 
 	return mc
 }
@@ -207,8 +205,6 @@ func DefaultConfig() *server.Config {
 	cfg.Queryer.Run = true
 	cfg.Computer.Run = true
 	cfg.Computer.N = 1
-	cfg.WriteLogger.Run = true
-	cfg.Snapshotter.Run = true
 	return cfg
 }
 

@@ -130,6 +130,12 @@ func (s AddressSet) Add(p dax.Address) {
 	s[p] = struct{}{}
 }
 
+func (s AddressSet) Merge(o AddressSet) {
+	for k := range o {
+		s[k] = struct{}{}
+	}
+}
+
 func (s AddressSet) Remove(p dax.Address) {
 	delete(s, p)
 }

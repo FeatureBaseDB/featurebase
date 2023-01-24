@@ -10,7 +10,7 @@ import (
 )
 
 func TestSnapshotter(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "testWriteLogger-*")
+	tmpDir, err := os.MkdirTemp("", "testWritelogger-*")
 	assert.NoError(t, err)
 
 	// Remove the temp directory.

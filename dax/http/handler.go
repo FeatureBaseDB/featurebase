@@ -30,7 +30,7 @@ type Handler struct {
 	server *http.Server
 
 	mds         *mds.MDS
-	writeLogger *writelogger.WriteLogger
+	writeLogger *writelogger.Writelogger
 	snapshotter *snapshotter.Snapshotter
 	queryer     *queryer.Queryer
 
@@ -56,7 +56,7 @@ func OptHandlerMDS(m *mds.MDS) HandlerOption {
 	}
 }
 
-func OptHandlerWriteLogger(w *writelogger.WriteLogger) HandlerOption {
+func OptHandlerWritelogger(w *writelogger.Writelogger) HandlerOption {
 	return func(h *Handler) error {
 		h.writeLogger = w
 		return nil

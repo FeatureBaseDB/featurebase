@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestWriteLogger(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "testWriteLogger-*")
+func TestWritelogger(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "testWritelogger-*")
 	assert.NoError(t, err)
 
 	// Remove the temp directory.
@@ -27,10 +28,7 @@ func TestWriteLogger(t *testing.T) {
 			Bar int    `json:"bar"`
 		}
 
-		cfg := writelogger.Config{
-			DataDir: tmpDir,
-		}
-		wl := writelogger.New(cfg)
+		wl := writelogger.New(tmpDir, logger.NopLogger)
 
 		table := "tbl"
 		partition := 1

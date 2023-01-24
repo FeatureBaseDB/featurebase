@@ -9,11 +9,19 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
+	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
+	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"golang.org/x/sync/errgroup"
 )
+
+// Ensure type implements interface.
+var _ computer.Registrar = (*Controller)(nil)
+var _ dax.Schemar = (*Controller)(nil)
+var _ dax.NodeService = (*Controller)(nil)
 
 type Controller struct {
 	// Schemar used by the controller to get table information. The controller
@@ -21,18 +29,14 @@ type Controller struct {
 	// made outside of the controller (at this point that happens in MDS).
 	Schemar schemar.Schemar
 
-	// nodeService is the interface to working with nodes, by address, which
-	// have registered with the controller.
-	nodeService dax.NodeService
-
 	boltDB   *boltdb.DB
 	Balancer Balancer
 
+	Snapshotter *snapshotter.Snapshotter
+	Writelogger *writelogger.Writelogger
+
 	// Director is used to send directives to computer workers.
 	Director Director
-
-	// poller is used to notify a Poller if nodes have been added or removed.
-	poller dax.AddressManager
 
 	directiveVersion dax.DirectiveVersion
 
@@ -60,8 +64,6 @@ func New(cfg Config) *Controller {
 
 		Director: NewNopDirector(),
 
-		poller: dax.NewNopAddressManager(),
-
 		registrationBatchTimeout: cfg.RegistrationBatchTimeout,
 		nodeChan:                 make(chan *dax.Node, 10),
 		snappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
@@ -75,13 +77,11 @@ func New(cfg Config) *Controller {
 		c.logger = cfg.Logger
 	}
 
+	c.Snapshotter = snapshotter.New(cfg.SnapshotterDir, c.logger)
+	c.Writelogger = writelogger.New(cfg.WriteloggerDir, c.logger)
+
 	switch cfg.StorageMethod {
 	case "boltdb":
-		if err := cfg.BoltDB.InitializeBuckets(boltdb.NodeServiceBuckets...); err != nil {
-			c.logger.Panicf("initializing node service buckets: %v", err)
-		}
-		c.nodeService = boltdb.NewNodeService(cfg.BoltDB, c.logger)
-
 		if err := cfg.BoltDB.InitializeBuckets(boltdb.DirectiveBuckets...); err != nil {
 			c.logger.Panicf("initializing directive buckets: %v", err)
 		}
@@ -143,22 +143,6 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 	// and therefore need to be sent an updated Directive.
 	workerSet := NewAddressSet()
 
-	// Create node if we don't already have it
-	for _, n := range nodes {
-		if node, _ := c.nodeService.ReadNode(tx, n.Address); node == nil {
-			if err := c.nodeService.CreateNode(tx, n.Address, n); err != nil {
-				return errors.Wrapf(err, "creating node: %s", n.Address)
-			}
-
-			// Add the node to the workerSet so that it receives a directive.
-			// Even if there is currently no data for this worker (i.e. it
-			// doesn't result in a diffByAddr entry below), we still want to
-			// send it a "reset" directive so that in the off chance it has some
-			// local data, that data gets removed.
-			workerSet.Add(n.Address)
-		}
-	}
-
 	// diffByAddr keeps track of the diffs that have been applied to each
 	// specific address.
 	// TODO(tlt): I don't understand why we're keeping track of the
@@ -166,7 +150,20 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 	// doesn't ever seem to be used.
 	diffByAddr := make(map[dax.Address]dax.WorkerDiff)
 
+	// Create node if we don't already have it
 	for _, n := range nodes {
+		// If the node already exists, skip it.
+		if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
+			continue
+		}
+
+		// Add the node to the workerSet so that it receives a directive.
+		// Even if there is currently no data for this worker (i.e. it
+		// doesn't result in a diffByAddr entry below), we still want to
+		// send it a "reset" directive so that in the off chance it has some
+		// local data, that data gets removed.
+		workerSet.Add(n.Address)
+
 		adiffs, err := c.Balancer.AddWorker(tx, n)
 		if err != nil {
 			return errors.Wrap(err, "adding worker")
@@ -186,16 +183,6 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 	// directive.
 	for addr := range diffByAddr {
 		workerSet.Add(addr)
-	}
-
-	addrs := []dax.Address{}
-	for _, n := range nodes {
-		addrs = append(addrs, n.Address)
-	}
-
-	// Tell the poller about the new nodes.
-	if err := c.poller.AddAddresses(tx.Context(), addrs...); err != nil {
-		return NewErrInternal(err.Error())
 	}
 
 	// No need to send directives if the workerSet is empty.
@@ -248,7 +235,7 @@ func (c *Controller) RegisterNode(ctx context.Context, n *dax.Node) error {
 	}
 	defer tx.Rollback()
 
-	if node, _ := c.nodeService.ReadNode(tx, n.Address); node != nil {
+	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
 		return nil
 	}
 
@@ -275,7 +262,7 @@ func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
 	// Directive; then we could check that the compute node is actually doing
 	// what we expect it to be doing. But for now, we're just checking that we
 	// know about the compute node at all.
-	if node, _ := c.nodeService.ReadNode(tx, n.Address); node != nil {
+	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
 		return nil
 	}
 
@@ -338,16 +325,6 @@ func (c *Controller) DeregisterNodes(ctx context.Context, addresses ...dax.Addre
 	// while holding a mu.Lock on Controller.
 	for _, addr := range addresses {
 		workerSet.Remove(addr)
-	}
-
-	for _, address := range addresses {
-		if err := c.nodeService.DeleteNode(tx, address); err != nil {
-			return errors.Wrapf(err, "deleting node at address: %s", address)
-		}
-	}
-
-	if err := c.poller.RemoveAddresses(tx.Context(), addresses...); err != nil {
-		return NewErrInternal(err.Error())
 	}
 
 	// No need to send Directives if nothing has ultimately changed.
@@ -603,6 +580,65 @@ func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatab
 	return tx.Commit()
 }
 
+func (c *Controller) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
+	tx, err := c.boltDB.BeginTx(ctx, true)
+	if err != nil {
+		return errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	// Get all the tables for the database and call dropTable on each one.
+	qtbls, err := c.Schemar.Tables(tx, qdbid)
+	if err != nil {
+		return errors.Wrapf(err, "getting tables for database: %s", qdbid)
+	}
+
+	// workerSet maintains the set of workers which have a job assignment change
+	// and therefore need to be sent an updated Directive.
+	workerSet := NewAddressSet()
+
+	for _, qtbl := range qtbls {
+		qtid := qtbl.QualifiedID()
+		addrs, err := c.dropTable(tx, qtid)
+		if err != nil {
+			return errors.Wrapf(err, "dropping table: %s", qtid)
+		}
+		workerSet.Merge(addrs)
+	}
+
+	// Drop the database record from the schema.
+	if err := c.Schemar.DropDatabase(tx, qdbid); err != nil {
+		return errors.Wrap(err, "dropping database from schemar")
+	}
+
+	// Convert the slice of addresses into a slice of addressMethod containing
+	// the appropriate method.
+	addressMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
+
+	// Finally, send the directives based on the dropTable calls.
+	if err := c.sendDirectives(tx, addressMethods...); err != nil {
+		return NewErrDirectiveSendFailure(err.Error())
+	}
+
+	return tx.Commit()
+}
+
+// DatabaseByName returns the database for the given name.
+func (c *Controller) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
+	tx, err := c.boltDB.BeginTx(ctx, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	qdb, err := c.Schemar.DatabaseByName(tx, orgID, dbname)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting database by name from schemar")
+	}
+
+	return qdb, nil
+}
+
 // DatabaseByID returns the database for the given id.
 func (c *Controller) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
 	tx, err := c.boltDB.BeginTx(ctx, false)
@@ -613,7 +649,7 @@ func (c *Controller) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDataba
 
 	qdb, err := c.Schemar.DatabaseByID(tx, qdbid)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting database from schemar")
+		return nil, errors.Wrap(err, "getting database by id from schemar")
 	}
 
 	return qdb, nil
@@ -632,6 +668,17 @@ func (c *Controller) SetDatabaseOptions(ctx context.Context, qdbid dax.Qualified
 	}
 
 	return tx.Commit()
+}
+
+func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, ids ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
+	tx, err := c.boltDB.BeginTx(ctx, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	// Get the tables from the schemar.
+	return c.Schemar.Databases(tx, orgID, ids...)
 }
 
 // CreateTable adds a table to the schemar, and then sends directives to all
@@ -731,9 +778,28 @@ func (c *Controller) DropTable(ctx context.Context, qtid dax.QualifiedTableID) e
 	}
 	defer tx.Rollback()
 
+	addrs, err := c.dropTable(tx, qtid)
+	if err != nil {
+		return errors.Wrapf(err, "dropping table: %s", qtid)
+	}
+
+	// Convert the slice of addresses into a slice of addressMethod containing
+	// the appropriate method.
+	addressMethods := applyAddressMethod(addrs.SortedSlice(), dax.DirectiveMethodDiff)
+
+	if err := c.sendDirectives(tx, addressMethods...); err != nil {
+		return NewErrDirectiveSendFailure(err.Error())
+	}
+
+	return tx.Commit()
+}
+
+// dropTable removes a table from the schema and sends directives to all affected
+// nodes based on the change.
+func (c *Controller) dropTable(tx dax.Transaction, qtid dax.QualifiedTableID) (AddressSet, error) {
 	// Get the table from the schemar.
 	if _, err := c.Schemar.Table(tx, qtid); err != nil {
-		return errors.Wrapf(err, "table not in schemar: %s", qtid)
+		return nil, errors.Wrapf(err, "table not in schemar: %s", qtid)
 	}
 
 	// workerSet maintains the set of workers which have a job assignment change
@@ -742,7 +808,7 @@ func (c *Controller) DropTable(ctx context.Context, qtid dax.QualifiedTableID) e
 
 	diffs, err := c.Balancer.RemoveJobs(tx, dax.RoleTypeCompute, qtid)
 	if err != nil {
-		return errors.Wrapf(err, "removing compute jobs for table: %s", qtid)
+		return nil, errors.Wrapf(err, "removing compute jobs for table: %s", qtid)
 	}
 	for _, diff := range diffs {
 		workerSet.Add(dax.Address(diff.Address))
@@ -750,30 +816,30 @@ func (c *Controller) DropTable(ctx context.Context, qtid dax.QualifiedTableID) e
 
 	diffs, err = c.Balancer.RemoveJobs(tx, dax.RoleTypeTranslate, qtid)
 	if err != nil {
-		return errors.Wrapf(err, "removing translate jobs for table: %s", qtid)
+		return nil, errors.Wrapf(err, "removing translate jobs for table: %s", qtid)
 	}
 	for _, diff := range diffs {
 		workerSet.Add(dax.Address(diff.Address))
 	}
 
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addressMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-	if err := c.sendDirectives(tx, addressMethods...); err != nil {
-		return NewErrDirectiveSendFailure(err.Error())
-	}
-
 	// Remove table from schemar.
 	if err := c.Schemar.DropTable(tx, qtid); err != nil {
-		return errors.Wrapf(err, "dropping table from schemar: %s", qtid)
+		return nil, errors.Wrapf(err, "dropping table from schemar: %s", qtid)
 	}
 
-	return tx.Commit()
+	// Delete relavent table files from snapshotter and writelogger.
+	if err := c.Snapshotter.DeleteTable(qtid); err != nil {
+		return nil, errors.Wrap(err, "deleting from snapshotter")
+	}
+	if err := c.Writelogger.DeleteTable(qtid); err != nil {
+		return nil, errors.Wrap(err, "deleting from writelogger")
+	}
+
+	return workerSet, nil
 }
 
-// Table returns a table by quaified table id.
-func (c *Controller) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
+// TableByID returns a table by quaified table id.
+func (c *Controller) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
@@ -1055,10 +1121,10 @@ func (c *Controller) buildDirectives(tx dax.Transaction, addrs []addressMethod) 
 
 		if len(tableSet) > 0 {
 			dTables := make([]*dax.QualifiedTable, 0)
-			for qual, tblIDs := range tableSet.QualifiedSortedSlice() {
-				qtbls, err := c.Schemar.Tables(tx, qual, tblIDs...)
+			for qdbid, tblIDs := range tableSet.QualifiedSortedSlice() {
+				qtbls, err := c.Schemar.Tables(tx, qdbid, tblIDs...)
 				if err != nil {
-					return nil, errors.Wrapf(err, "getting directive tables for qual: %s", qual)
+					return nil, errors.Wrapf(err, "getting directive tables for qdbid: %s", qdbid)
 				}
 				dTables = append(dTables, qtbls...)
 			}
@@ -1077,34 +1143,6 @@ func (c *Controller) buildDirectives(tx dax.Transaction, addrs []addressMethod) 
 	return directives, nil
 }
 
-func (c *Controller) SetPoller(poller dax.AddressManager) {
-	c.poller = poller
-}
-
-// InitializePoller sends the list of known nodes (to be polled) to the poller.
-// This is useful in the case where MDS has restarted (or has been replaced) and
-// its poller is emtpy (i.e. it doesn't know about any nodes).
-func (c *Controller) InitializePoller(ctx context.Context) error {
-	tx, err := c.boltDB.BeginTx(ctx, false)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
-
-	nodes, err := c.nodeService.Nodes(tx)
-	if err != nil {
-		return errors.Wrap(err, "initializing poller")
-	}
-
-	for _, node := range nodes {
-		if err := c.poller.AddAddresses(ctx, node.Address); err != nil {
-			return errors.Wrapf(err, "adding address to poller: %s", node.Address)
-		}
-	}
-
-	return nil
-}
-
 // SnapshotTable snapshots a table. It might also snapshot everything
 // else... no guarantees here, only used in tests as of this writing.
 func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) error {
@@ -1114,7 +1152,7 @@ func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableI
 
 // SnapshotShardData forces the compute node responsible for the given shard to
 // snapshot that shard, then increment its shard version for logs written to the
-// WriteLogger.
+// Writelogger.
 func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTableID, shardNum dax.ShardNum) error {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {
@@ -1157,7 +1195,7 @@ func (c *Controller) snapshotShardData(tx dax.Transaction, qtid dax.QualifiedTab
 
 // SnapshotTableKeys forces the translate node responsible for the given
 // partition to snapshot the table keys for that partition, then increment its
-// version for logs written to the WriteLogger.
+// version for logs written to the Writelogger.
 func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partitionNum dax.PartitionNum) error {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {
@@ -1200,7 +1238,7 @@ func (c *Controller) snapshotTableKeys(tx dax.Transaction, qtid dax.QualifiedTab
 
 // SnapshotFieldKeys forces the translate node responsible for the given field
 // to snapshot the keys for that field, then increment its version for logs
-// written to the WriteLogger.
+// written to the Writelogger.
 func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName) error {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {
@@ -1691,7 +1729,7 @@ func (c *Controller) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
 	}
 	defer tx.Rollback()
 
-	return c.nodeService.Nodes(tx)
+	return c.Balancer.Nodes(tx)
 }
 
 // sanitizeQTID populates Table.ID (by looking up the table, by name, in
@@ -1707,7 +1745,25 @@ func (c *Controller) sanitizeQTID(tx dax.Transaction, qtid *dax.QualifiedTableID
 	return nil
 }
 
-// TableID handles a table id (i.e. by name) request.
+// TableByName gets the full table by name.
+func (c *Controller) TableByName(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (*dax.QualifiedTable, error) {
+	tx, err := c.boltDB.BeginTx(ctx, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	qtid, err := c.Schemar.TableID(tx, qdbid, name)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting table id")
+	}
+
+	// Get the table from the schemar.
+	return c.Schemar.Table(tx, qtid)
+}
+
+// TableID returns the table id by table name.
+// TODO(tlt): try to phase this out in favor of TableByName().
 func (c *Controller) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
 	tx, err := c.boltDB.BeginTx(ctx, false)
 	if err != nil {
@@ -1716,4 +1772,25 @@ func (c *Controller) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID,
 	defer tx.Rollback()
 
 	return c.Schemar.TableID(tx, qdbid, name)
+}
+
+// NodeService
+
+func (c *Controller) CreateNode(context.Context, dax.Address, *dax.Node) error {
+	return errors.Errorf("Controller.CreateNode() not implemented")
+}
+func (c *Controller) ReadNode(context.Context, dax.Address) (*dax.Node, error) {
+	return nil, errors.Errorf("Controller.ReadNode() not implemented")
+}
+func (c *Controller) DeleteNode(context.Context, dax.Address) error {
+	return errors.Errorf("Controller.DeleteNode() not implemented")
+}
+func (c *Controller) Nodes(ctx context.Context) ([]*dax.Node, error) {
+	tx, err := c.boltDB.BeginTx(ctx, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "beginning tx")
+	}
+	defer tx.Rollback()
+
+	return c.Balancer.Nodes(tx)
 }

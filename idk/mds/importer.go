@@ -18,20 +18,18 @@ var _ featurebase.Importer = &importer{}
 
 // importer
 type importer struct {
-	noder   dax.Noder
-	schemar dax.Schemar
+	controller dax.Controller
 
 	mu    sync.Mutex
 	qdbid dax.QualifiedDatabaseID
 	tbl   *dax.Table
 }
 
-func NewImporter(noder dax.Noder, schemar dax.Schemar, qdbid dax.QualifiedDatabaseID, tbl *dax.Table) *importer {
+func NewImporter(controller dax.Controller, qdbid dax.QualifiedDatabaseID, tbl *dax.Table) *importer {
 	return &importer{
-		noder:   noder,
-		schemar: schemar,
-		qdbid:   qdbid,
-		tbl:     tbl,
+		controller: controller,
+		qdbid:      qdbid,
+		tbl:        tbl,
 	}
 }
 
@@ -77,7 +75,7 @@ func (m *importer) CreateTableKeys(ctx context.Context, tid dax.TableID, keys ..
 	// all the partitions at once, then getting the distinct list of addresses
 	// and looping over that instead.
 	for partition, ks := range partitions {
-		address, err := m.noder.IngestPartition(context.Background(), qtbl.QualifiedID(), partition)
+		address, err := m.controller.IngestPartition(context.Background(), qtbl.QualifiedID(), partition)
 		if err != nil {
 			return nil, errors.Wrapf(err, "calling ingest-partition on table: %s, partition: %d", qtbl, partition)
 		}
@@ -114,7 +112,7 @@ func (m *importer) CreateFieldKeys(ctx context.Context, tid dax.TableID, fname d
 	// different partitionN for field translation.
 	partition := dax.PartitionNum(0)
 
-	address, err := m.noder.IngestPartition(context.Background(), qtbl.QualifiedID(), partition)
+	address, err := m.controller.IngestPartition(context.Background(), qtbl.QualifiedID(), partition)
 	if err != nil {
 		return nil, errors.Wrapf(err, "calling ingest-partition on table: %s, partition: %d", qtbl, partition)
 	}
@@ -139,7 +137,7 @@ func (m *importer) ImportRoaringBitmap(ctx context.Context, tid dax.TableID, fld
 		return errors.Wrapf(err, "getting qtbl")
 	}
 
-	address, err := m.noder.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
+	address, err := m.controller.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
 	if err != nil {
 		return errors.Wrap(err, "calling ingest-shard")
 	}
@@ -164,7 +162,7 @@ func (m *importer) ImportRoaringShard(ctx context.Context, tid dax.TableID, shar
 		return errors.Wrapf(err, "getting qtbl")
 	}
 
-	address, err := m.noder.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
+	address, err := m.controller.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
 	if err != nil {
 		return errors.Wrap(err, "calling ingest-shard")
 	}
@@ -184,7 +182,7 @@ func (m *importer) EncodeImportValues(ctx context.Context, tid dax.TableID, fld 
 		return "", nil, errors.Wrapf(err, "getting qtbl")
 	}
 
-	address, err := m.noder.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
+	address, err := m.controller.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
 	if err != nil {
 		return "", nil, errors.Wrap(err, "calling ingest-shard")
 	}
@@ -209,7 +207,7 @@ func (m *importer) EncodeImport(ctx context.Context, tid dax.TableID, fld *dax.F
 		return "", nil, errors.Wrapf(err, "getting qtbl")
 	}
 
-	address, err := m.noder.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
+	address, err := m.controller.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
 	if err != nil {
 		return "", nil, errors.Wrap(err, "calling ingest-shard")
 	}
@@ -234,7 +232,7 @@ func (m *importer) DoImport(ctx context.Context, tid dax.TableID, fld *dax.Field
 		return errors.Wrapf(err, "getting qtbl")
 	}
 
-	address, err := m.noder.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
+	address, err := m.controller.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
 	if err != nil {
 		return errors.Wrap(err, "calling ingest-shard")
 	}
@@ -266,7 +264,7 @@ func (m *importer) getQtbl(ctx context.Context, tid dax.TableID) (*dax.Qualified
 
 	qtid := dax.NewQualifiedTableID(m.qdbid, tid)
 
-	qtbl, err := m.schemar.TableByID(ctx, qtid)
+	qtbl, err := m.controller.TableByID(ctx, qtid)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting table")
 	}

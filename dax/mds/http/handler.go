@@ -19,7 +19,10 @@ func Handler(mds *mds.MDS) http.Handler {
 
 	// mds endpoints.
 	router.HandleFunc("/create-database", server.postCreateDatabase).Methods("POST").Name("PostCreateDatabase")
+	router.HandleFunc("/drop-database", server.postDropDatabase).Methods("POST").Name("PostDropDatabase")
 	router.HandleFunc("/database-by-id", server.postDatabaseByID).Methods("POST").Name("PostDatabaseByID")
+	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
+	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")
@@ -85,7 +88,27 @@ func (s *server) postCreateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// POST /database
+// POST /drop-database
+func (s *server) postDropDatabase(w http.ResponseWriter, r *http.Request) {
+	body := r.Body
+	defer body.Close()
+
+	ctx := r.Context()
+
+	req := dax.QualifiedDatabaseID{}
+	if err := json.NewDecoder(body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err := s.mds.DropDatabase(ctx, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+}
+
+// POST /database-by-id
 func (s *server) postDatabaseByID(w http.ResponseWriter, r *http.Request) {
 	body := r.Body
 	defer body.Close()
@@ -107,6 +130,68 @@ func (s *server) postDatabaseByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+}
+
+// POST /database-by-name
+func (s *server) postDatabaseByName(w http.ResponseWriter, r *http.Request) {
+	body := r.Body
+	defer body.Close()
+
+	ctx := r.Context()
+
+	req := &DatabaseByNameRequest{}
+	if err := json.NewDecoder(body).Decode(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	resp, err := s.mds.DatabaseByName(ctx, req.OrganizationID, req.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+}
+
+type DatabaseByNameRequest struct {
+	OrganizationID dax.OrganizationID `json:"org-id"`
+	Name           dax.DatabaseName   `json:"name"`
+}
+
+// POST /databases
+func (s *server) postDatabases(w http.ResponseWriter, r *http.Request) {
+	body := r.Body
+	defer body.Close()
+
+	ctx := r.Context()
+
+	req := DatabasesRequest{}
+	if err := json.NewDecoder(body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	ids := req.DatabaseIDs
+
+	resp, err := s.mds.Databases(ctx, req.OrganizationID, ids...)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+}
+
+type DatabasesRequest struct {
+	OrganizationID dax.OrganizationID `json:"org-id"`
+	DatabaseIDs    dax.DatabaseIDs    `json:"database-ids"`
+	// DatabaseNames     dax.DatabaseNames     `json:"database-names"`
 }
 
 // POST /create-table
@@ -146,7 +231,7 @@ func (s *server) postTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	resp, err := s.mds.Table(ctx, qtid)
+	resp, err := s.mds.TableByID(ctx, qtid)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -171,11 +256,12 @@ func (s *server) postTableID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qtid, err := s.mds.TableID(ctx, req.QualifiedDatabaseID, req.Name)
+	qtbl, err := s.mds.TableByName(ctx, req.QualifiedDatabaseID, req.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	qtid := qtbl.QualifiedID()
 
 	if err := json.NewEncoder(w).Encode(qtid); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

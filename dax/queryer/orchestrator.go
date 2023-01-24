@@ -45,7 +45,7 @@ type Topologer interface {
 }
 
 type MDSTopology struct {
-	noder dax.Noder
+	controller dax.Controller
 }
 
 func (m *MDSTopology) ComputeNodes(ctx context.Context, index string, shards []uint64) ([]dax.ComputeNode, error) {
@@ -59,7 +59,7 @@ func (m *MDSTopology) ComputeNodes(ctx context.Context, index string, shards []u
 	// interface altogether and replace it with dax.Noder.
 	qtid := dax.TableKey(index).QualifiedTableID()
 
-	return m.noder.ComputeNodes(ctx, qtid, daxShards...)
+	return m.controller.ComputeNodes(ctx, qtid, daxShards...)
 }
 
 // TODO(jaffee) we need version info in here ASAP. whenever schema or topo

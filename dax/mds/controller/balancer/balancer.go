@@ -28,6 +28,8 @@ type Balancer struct {
 	// current represents the current state of worker/job assigments.
 	current WorkerJobService
 
+	nodeService controller.NodeService
+
 	// freeJobs is the set of jobs which have yet to be assigned to a worker.
 	// This could be because there are no available workers, or because a worker
 	// has been removed and the jobs for which it was responsible have yet to be
@@ -42,9 +44,10 @@ type Balancer struct {
 }
 
 // New returns a new instance of Balancer.
-func New(fjs FreeJobService, wjs WorkerJobService, fws FreeWorkerService, schemar schemar.Schemar, logger logger.Logger) *Balancer {
+func New(ns controller.NodeService, fjs FreeJobService, wjs WorkerJobService, fws FreeWorkerService, schemar schemar.Schemar, logger logger.Logger) *Balancer {
 	return &Balancer{
 		current:     wjs,
+		nodeService: ns,
 		freeJobs:    fjs,
 		freeWorkers: fws,
 		schemar:     schemar,
@@ -59,6 +62,10 @@ func New(fjs FreeJobService, wjs WorkerJobService, fws FreeWorkerService, schema
 func (b *Balancer) AddWorker(tx dax.Transaction, node *dax.Node) ([]dax.WorkerDiff, error) {
 	addr := node.Address
 	b.logger.Debugf("AddWorker(%s)", addr)
+
+	if err := b.nodeService.CreateNode(tx, addr, node); err != nil {
+		return nil, errors.Wrapf(err, "creating node on node service: %s", addr)
+	}
 
 	diffs := NewInternalDiffs()
 
@@ -235,19 +242,29 @@ func (b *Balancer) databaseHasJobs(tx dax.Transaction, roleType dax.RoleType, qd
 func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error) {
 	diffs := NewInternalDiffs()
 
-	// See if the worker is assigned to a database.
+	// Remove the worker from the free worker list (if it's there).
+	for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
+		if err := b.freeWorkers.RemoveWorker(tx, rt, addr); err != nil {
+			return nil, errors.Wrapf(err, "removing worker from free list: (%s) %s", rt, addr)
+		}
+	}
+
+	// Remove the worker (i.e. Node) from the node service.
+	if err := b.nodeService.DeleteNode(tx, addr); err != nil {
+		return nil, errors.Wrapf(err, "deleting node from node service: %s", addr)
+	}
+
+	////// The rest is database specific. ////////////
+
+	// See if the worker is assigned to a database. If it's not, return early.
 	dbkey := b.current.DatabaseForWorker(tx, addr)
 	if dbkey == "" {
 		return diffs.Output(), nil
 	}
+
 	qdbid := dbkey.QualifiedDatabaseID()
 
 	for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
-		// Remove the worker form the free worker list (if it's there).
-		if err := b.freeWorkers.RemoveWorker(tx, rt, addr); err != nil {
-			return nil, errors.Wrapf(err, "removing worker from free list: (%s) %s", rt, addr)
-		}
-
 		if diff, err := b.removeDatabaseWorker(tx, rt, qdbid, addr); err != nil {
 			return nil, errors.Wrapf(err, "removing worker: (%s) %s", rt, addr)
 		} else {
@@ -785,6 +802,14 @@ func (b *Balancer) workerForJob(tx dax.Transaction, roleType dax.RoleType, qdbid
 		}
 	}
 	return "", false, nil
+}
+
+func (b *Balancer) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
+	return b.nodeService.ReadNode(tx, addr)
+}
+
+func (b *Balancer) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
+	return b.nodeService.Nodes(tx)
 }
 
 type WorkerJobService interface {

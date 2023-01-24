@@ -35,8 +35,7 @@ type Queryer struct {
 
 	fbClient *featurebase.InternalClient
 
-	noder   dax.Noder
-	schemar dax.Schemar
+	controller dax.Controller
 
 	logger logger.Logger
 }
@@ -44,8 +43,7 @@ type Queryer struct {
 // New returns a new instance of Queryer.
 func New(cfg Config) *Queryer {
 	q := &Queryer{
-		noder:         dax.NewNopNoder(),
-		schemar:       dax.NewNopSchemar(),
+		controller:    dax.NewNopController(),
 		orchestrators: make(map[dax.QualifiedDatabaseID]*qualifiedOrchestrator),
 		logger:        logger.NopLogger,
 	}
@@ -80,12 +78,12 @@ func (q *Queryer) Orchestrator(qdbid dax.QualifiedDatabaseID) *qualifiedOrchestr
 		return orch
 	}
 
-	sapi := newQualifiedSchemaAPI(qdbid, q.schemar)
+	sapi := newQualifiedSchemaAPI(qdbid, q.controller)
 
 	orch := &orchestrator{
 		schema:   sapi,
-		trans:    NewMDSTranslator(q.noder, q.schemar),
-		topology: &MDSTopology{noder: q.noder},
+		trans:    NewMDSTranslator(q.controller),
+		topology: &MDSTopology{controller: q.controller},
 		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
 		client: q.fbClient,
 		logger: q.logger,
@@ -97,21 +95,14 @@ func (q *Queryer) Orchestrator(qdbid dax.QualifiedDatabaseID) *qualifiedOrchestr
 	return qorch
 }
 
-func (q *Queryer) SetNoder(noder dax.Noder) error {
-	q.noder = noder
-	return nil
-}
-
-func (q *Queryer) SetSchemar(schemar dax.Schemar) error {
-	q.schemar = schemar
+func (q *Queryer) SetController(controller dax.Controller) error {
+	q.controller = controller
 	return nil
 }
 
 func (q *Queryer) Start() error {
-	if q.noder == nil {
-		return errors.New(errors.ErrUncoded, "queryer requires noder to be configured")
-	} else if q.schemar == nil {
-		return errors.New(errors.ErrUncoded, "queryer requires schemar to be configured")
+	if q.controller == nil {
+		return errors.New(errors.ErrUncoded, "queryer requires controller to be configured")
 	}
 
 	// fbClient is an instance of internal client. It's used in one place in the
@@ -174,10 +165,10 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	}
 
 	// SchemaAPI
-	sapi := newQualifiedSchemaAPI(qdbid, q.schemar)
+	sapi := newQualifiedSchemaAPI(qdbid, q.controller)
 
 	// Importer
-	imp := idkmds.NewImporter(q.noder, q.schemar, qdbid, nil)
+	imp := idkmds.NewImporter(q.controller, qdbid, nil)
 
 	// TODO(tlt): We need a dax-compatible implementation of the SystemAPI.
 	sysapi := &featurebase.NopSystemAPI{}
@@ -259,7 +250,7 @@ func (q *Queryer) parseAndQueryPQL(ctx context.Context, qdbid dax.QualifiedDatab
 // pql package.
 func (q *Queryer) convertIndex(ctx context.Context, qdbid dax.QualifiedDatabaseID, call *featurebase_pql.Call) {
 	if index := call.CallIndex(); index != "" {
-		qtbl, err := q.schemar.TableByName(ctx, qdbid, dax.TableName(index))
+		qtbl, err := q.controller.TableByName(ctx, qdbid, dax.TableName(index))
 		if err != nil {
 			return
 		}
@@ -311,7 +302,7 @@ func (q *Queryer) queryPQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, t
 	// Replace any "index" arguments within the PQL with a TableKey.
 	q.convertIndex(ctx, qdbid, qry.Calls[0])
 
-	qtbl, err := q.schemar.TableByName(ctx, qdbid, dax.TableName(table))
+	qtbl, err := q.controller.TableByName(ctx, qdbid, dax.TableName(table))
 	if err != nil {
 		return nil, errors.Wrap(err, "converting index to qualified table")
 	}
