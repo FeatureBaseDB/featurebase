@@ -751,3 +751,7 @@ func NewErrStringLengthMismatch(line, col, len int, val interface{}) error {
 		fmt.Sprintf("[%d:%d] value '%v' should be of the length %d", line, col, val, len),
 	)
 }
+
+func NewErrUnexpectedTypeConversion(line, col int, val interface{}) error {
+	return NewErrInternalf("unexpected type conversion %T", val)
+}

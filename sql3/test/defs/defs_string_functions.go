@@ -829,7 +829,7 @@ var stringScalarFunctionsTests = TableTest{
 				hdr("", fldTypeString),
 			),
 			ExpRows: rows(
-				row(string("this")),
+				row(string("this or that")),
 			),
 			Compare: CompareExactOrdered,
 		},
@@ -887,6 +887,19 @@ var stringScalarFunctionsTests = TableTest{
 				"select format()",
 			),
 			ExpErr: "[1:15] 'format': count of formal parameters (1) does not match count of actual parameters (0)",
+		},
+		{
+			name: "FormatLengthOne",
+			SQLs: sqls(
+				"select format('noArg')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("noArg")),
+			),
+			Compare: CompareExactOrdered,
 		},
 	},
 }
