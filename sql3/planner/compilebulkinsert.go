@@ -204,7 +204,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 			}
 		}
 	case "PARQUET":
-		// for paquet the map expressions need to be string values
+		// for parquet the map expressions need to be string values
 		// that represent the offsets in the source file
 		for _, im := range stmt.MapList {
 			if !(im.MapExpr.IsLiteral() && typeIsString(im.MapExpr.DataType())) {
