@@ -121,8 +121,9 @@ const (
 	ErrAggregateNotAllowedInGroupBy errors.Code = "ErrIdPercentileNotAllowedInGroupBy"
 
 	// function evaluation
-	ErrValueOutOfRange      errors.Code = "ErrValueOutOfRange"
-	ErrStringLengthMismatch errors.Code = "ErrStringLengthMismatch"
+	ErrValueOutOfRange          errors.Code = "ErrValueOutOfRange"
+	ErrStringLengthMismatch     errors.Code = "ErrStringLengthMismatch"
+	ErrUnexpectedTypeConversion errors.Code = "ErrUnexpectedTypeConversion"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -753,5 +754,8 @@ func NewErrStringLengthMismatch(line, col, len int, val interface{}) error {
 }
 
 func NewErrUnexpectedTypeConversion(line, col int, val interface{}) error {
-	return NewErrInternalf("unexpected type conversion %T", val)
+	return errors.New(
+		ErrUnexpectedTypeConversion,
+		NewErrInternalf("unexpected type conversion %T", val).Error(),
+	)
 }

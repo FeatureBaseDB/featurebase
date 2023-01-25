@@ -223,7 +223,7 @@ func (p *ExecutionPlanner) analyseFunctionFormat(call *parser.Call, scope parser
 	return call, nil
 }
 
-// reverses the string
+// EvaluateReverse reverses the string
 func (n *callPlanExpression) EvaluateReverse(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -261,7 +261,7 @@ func (n *callPlanExpression) EvaluateLower(currentRow []interface{}) (interface{
 	return strings.ToLower(stringArg), nil
 }
 
-// Convert string to Upper case
+// EvaluateUpper converts string to Upper case
 func (n *callPlanExpression) EvaluateUpper(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -301,7 +301,7 @@ func (n *callPlanExpression) EvaluateChar(currentRow []interface{}) (interface{}
 	return string(rune(intArg)), nil
 }
 
-// this takes a string and returns the ascii value.
+// EvaluateAscii this takes a string and returns the ascii value.
 // sthe string should be of the length 1.
 func (n *callPlanExpression) EvaluateAscii(currentRow []interface{}) (interface{}, error) {
 	// Get the string argument from the function call
@@ -329,7 +329,7 @@ func (n *callPlanExpression) EvaluateAscii(currentRow []interface{}) (interface{
 	return int64(res[0]), nil
 }
 
-// Takes string, startIndex and length and returns the substring.
+// EvaluateSubstring takes string, startIndex and length and returns the substring.
 func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -384,7 +384,7 @@ func (n *callPlanExpression) EvaluateSubstring(currentRow []interface{}) (interf
 	return stringArgOne[startIndex:endIndex], nil
 }
 
-// takes string, findstring, replacestring.
+// EvaluateReplaceAll takes string, findstring, replacestring.
 // replaces all occurances of findstring with replacestring
 func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
@@ -423,7 +423,7 @@ func (n *callPlanExpression) EvaluateReplaceAll(currentRow []interface{}) (inter
 	return strings.ReplaceAll(stringArgOne, stringArgTwo, stringArgThree), nil
 }
 
-// takes a string, seperator and the position `n`, splits the string and returns n'th substring
+// EvaluateStringSplit takes a string, seperator and the position `n`, splits the string and returns n'th substring
 func (n *callPlanExpression) EvaluateStringSplit(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -473,7 +473,7 @@ func (n *callPlanExpression) EvaluateStringSplit(currentRow []interface{}) (inte
 	return "", nil
 }
 
-// Execute Trim function to remove whitespaces from string
+// EvaluateTrim function to remove whitespaces from string
 func (n *callPlanExpression) EvaluateTrim(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -491,7 +491,7 @@ func (n *callPlanExpression) EvaluateTrim(currentRow []interface{}) (interface{}
 	return strings.TrimSpace(stringArg), nil
 }
 
-// Execute RTrim function to remove trailing whitespaces from string
+// EvaluateRTrim function removes trailing whitespaces from string
 func (n *callPlanExpression) EvaluateRTrim(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -509,7 +509,7 @@ func (n *callPlanExpression) EvaluateRTrim(currentRow []interface{}) (interface{
 	return strings.TrimRight(stringArg, " "), nil
 }
 
-// Execute LTrim function to remove leading whitespaces from string
+// EvaluateLTrim function removes leading whitespaces from string
 func (n *callPlanExpression) EvaluateLTrim(currentRow []interface{}) (interface{}, error) {
 	argEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -661,7 +661,7 @@ func (n *callPlanExpression) EvaluateReplicate(currentRow []interface{}) (interf
 
 }
 
-// implements fmt.Sprintf
+// EvaluateFormat function formats according to a format specifier and returns resulting string.
 func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface{}, error) {
 	// first arg must be a string
 	argEval, err := n.args[0].Evaluate(currentRow)
