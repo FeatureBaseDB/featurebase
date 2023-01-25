@@ -613,9 +613,9 @@ kafka consumer close timeout tests:
   image: golang:$GOVERSION
   extends: .go-cache
   variables:
-    - CONFLUENT_MAJOR_NUM: 7
-    - CONFLUENT_MINOR_NUM: 3
-    - CONFLUENT_PATCH_NUM: 1
+    - CONFLUENT_MAJOR_NUM: "7"
+    - CONFLUENT_MINOR_NUM: "3"
+    - CONFLUENT_PATCH_NUM: "1"
   script:
     - ll
     - cd
