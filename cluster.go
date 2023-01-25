@@ -26,7 +26,7 @@ const (
 )
 
 // cluster represents a collection of nodes.
-type cluster struct { // nolint: maligned
+type cluster struct { //nolint: maligned
 	noder disco.Noder
 
 	id   string
