@@ -2645,7 +2645,8 @@ type tb struct {
 	Value interface{}
 }
 
-func simpleParquetMaker(f *os.File, numRows int64, input []tb) error {
+func simpleParquetMaker(t *testing.T, f *os.File, numRows int64, input []tb) {
+	t.Helper()
 	mem := memory.NewGoAllocator()
 	chunks := make([]arrow.Array, 0)
 	for i := range input {
@@ -2679,39 +2680,29 @@ func simpleParquetMaker(f *os.File, numRows int64, input []tb) error {
 	table := array.NewTableFromRecords(schema, []arrow.Record{rec})
 	props := parquet.NewWriterProperties(parquet.WithDictionaryDefault(false))
 	arrProps := pqarrow.DefaultWriterProps()
-	err := pqarrow.WriteTable(table, f, 4096, props, arrProps)
-	if err != nil {
-		return err
-	}
-	return nil
+	pqarrow.WriteTable(table, f, 4096, props, arrProps)
 }
 
-func TestPlanner_BulkInsertParquet_File(t *testing.T) {
-	// check that can pull parquet file from URL and load
+func TestPlanner_BulkInsertParquet(t *testing.T) {
 	c := test.MustRunUnsharedCluster(t, 1)
 	defer c.Close()
 
-	_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING);`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	// create a parquet file with all the example data
-	err = simpleParquetMaker(tmpfile, 2, []tb{
-		{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1, 2}},
-		{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7}},
-		{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803}},
-		{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Run("BulkFromLocalFile", func(t *testing.T) {
+		// check that can pull parquet file from local file
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a parquet file with all the example data
+		simpleParquetMaker(t, tmpfile, 2, []tb{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1, 2}},
+			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7}},
+			{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803}},
+			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio"}},
+		})
 
-	_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
 	into j1 (_id,a,b,c ) 
 	map(
 		'id' id, 
@@ -2722,65 +2713,50 @@ func TestPlanner_BulkInsertParquet_File(t *testing.T) {
 	   '%s' 
 	   WITH FORMAT 'PARQUET' 
 	   INPUT 'FILE';`, tmpfile.Name()))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,c from j1`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if diff := cmp.Diff([][]interface{}{
-		{int64(1), int64(42), "pi"},
-		{int64(2), int64(7), "goldenratio"},
-	}, results); diff != "" {
-		t.Fatal(diff)
-	}
-	results, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select b from j1`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	d, _ := pql.FromFloat64WithScale(3.14159, 2)
-	if !pql.Decimal.EqualTo(d, results[0][0].(pql.Decimal)) {
-		t.Fatal("Should be equal")
-	}
-}
-
-func TestPlanner_BulkInsertParquet_URL(t *testing.T) {
-	// check that can pull parquet file from URL and load
-	c := test.MustRunUnsharedCluster(t, 1)
-	defer c.Close()
-
-	_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j2 (_id ID, a INT, b STRING);`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	err = simpleParquetMaker(tmpfile, 1, []tb{
-		{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
-		{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42}},
-		{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// create a parquet file with all the example data
-	mux := http.NewServeMux()
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
-	mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
-		payload, _ := ioutil.ReadFile(tmpfile.Name())
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.WriteHeader(200)
-		w.Write(payload)
+		assert.NoError(t, err)
+		results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,c from j1`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(42), "pi"},
+			{int64(2), int64(7), "goldenratio"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+		results, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select b from j1`)
+		assert.NoError(t, err)
+		d, _ := pql.FromFloat64WithScale(3.14159, 2)
+		if !pql.Decimal.EqualTo(d, results[0][0].(pql.Decimal)) {
+			t.Fatal("Should be equal")
+		}
 	})
 
-	_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	t.Run("BulkFromUrl", func(t *testing.T) {
+		// check that can pull parquet file from URL and load
+
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j2 (_id ID, a INT, b STRING);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		simpleParquetMaker(t, tmpfile, 1, []tb{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
+			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42}},
+			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi"}},
+		})
+
+		// create a parquet file with all the example data
+		mux := http.NewServeMux()
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
+			payload, _ := ioutil.ReadFile(tmpfile.Name())
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.WriteHeader(200)
+			w.Write(payload)
+		})
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
 	into j2 (_id,a,b ) 
 	map(
 		'id' id, 
@@ -2790,46 +2766,33 @@ func TestPlanner_BulkInsertParquet_URL(t *testing.T) {
 	   '%s' 
 	   WITH FORMAT 'PARQUET' 
 	   INPUT 'URL';`, ts.URL+"/static"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j2`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if diff := cmp.Diff([][]interface{}{
-		{int64(1), int64(42), "pi"},
-	}, results); diff != "" {
-		t.Fatal(diff)
-	}
-}
-
-func TestPlanner_BulkInsertParquet_FileTimeStamp(t *testing.T) {
-	// check that timestamp string and mill formating is working
-	c := test.MustRunUnsharedCluster(t, 1)
-	defer c.Close()
-
-	_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table continuum (_id ID, created timestamp, updated timestamp);`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	// create a parquet file with all the example data
-	now := time.Now()
-	err = simpleParquetMaker(tmpfile, 1, []tb{
-		{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
-		{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.UnixMilli()}},
-		{Name: "stringtime", Type: arrow.BinaryTypes.String, Value: []string{now.Format(time.RFC3339)}},
+		assert.NoError(t, err)
+		results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j2`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(42), "pi"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	t.Run("FileTimeStamp", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table continuum (_id ID, created timestamp, updated timestamp);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a parquet file with all the example data
+		now := time.Now()
+		simpleParquetMaker(t, tmpfile, 1, []tb{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
+			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.UnixMilli()}},
+			{Name: "stringtime", Type: arrow.BinaryTypes.String, Value: []string{now.Format(time.RFC3339)}},
+		})
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
 	into continuum (_id,created,updated ) 
 	map(
 		'id' id, 
@@ -2839,15 +2802,12 @@ func TestPlanner_BulkInsertParquet_FileTimeStamp(t *testing.T) {
 	   '%s' 
 	   WITH FORMAT 'PARQUET' 
 	   INPUT 'FILE';`, tmpfile.Name()))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, created,updated from continuum`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	row := results[0]
-	if row[1] != row[2] {
-		t.Fatalf("Not Equal %v == %v", row[1], row[2])
-	}
+		assert.NoError(t, err)
+		results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, created,updated from continuum`)
+		assert.NoError(t, err)
+		row := results[0]
+		if row[1] != row[2] {
+			t.Fatalf("Not Equal %v == %v", row[1], row[2])
+		}
+	})
 }

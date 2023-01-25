@@ -208,7 +208,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		// that represent the offsets in the source file
 		for _, im := range stmt.MapList {
 			if !(im.MapExpr.IsLiteral() && typeIsString(im.MapExpr.DataType())) {
-				return sql3.NewErrIntegerLiteral(im.MapExpr.Pos().Line, im.MapExpr.Pos().Column)
+				return sql3.NewErrStringLiteral(im.MapExpr.Pos().Line, im.MapExpr.Pos().Column)
 			}
 		}
 	case "NDJSON":
