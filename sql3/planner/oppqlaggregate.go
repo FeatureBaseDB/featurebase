@@ -263,23 +263,26 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			i.resultValue = int64(actualResult)
 
 		case pilosa.ValCount:
-			switch i.aggregate.Type().(type) {
+			switch t := i.aggregate.Type().(type) {
 			case *parser.DataTypeInt:
-				if i.aggregate.AggType() == types.AGGREGATE_AVG {
-					average := float64(actualResult.Val) / float64(actualResult.Count)
-					i.resultValue = pql.NewDecimal(int64(average*10000), 4)
-				} else {
-					i.resultValue = int64(actualResult.Val)
-				}
+				i.resultValue = int64(actualResult.Val)
 
 			case *parser.DataTypeDecimal:
 				if i.aggregate.AggType() == types.AGGREGATE_AVG {
 					if actualResult.DecimalVal == nil {
 						average := float64(actualResult.Val) / float64(actualResult.Count)
-						i.resultValue = pql.NewDecimal(int64(average*10000), 4)
+						daverage, err := pql.FromFloat64WithScale(average, int(t.Scale))
+						if err != nil {
+							return nil, err
+						}
+						i.resultValue = daverage
 					} else {
 						average := actualResult.DecimalVal.Float64() / float64(actualResult.Count)
-						i.resultValue = pql.NewDecimal(int64(average*10000), 4)
+						daverage, err := pql.FromFloat64WithScale(average, int(t.Scale))
+						if err != nil {
+							return nil, err
+						}
+						i.resultValue = daverage
 					}
 				} else {
 					i.resultValue = *actualResult.DecimalVal
