@@ -62,6 +62,8 @@ func TestSQL_Execute(t *testing.T) {
 								m[headers[i].Name] = i
 							}
 
+							// TODO(pok) - this will become increasingly problematic as result column headers
+							// are not unique and can be empty
 							// Put the expRows in the same column order as the headers returned
 							// by the query.
 							exp := make([][]interface{}, len(sqltest.ExpRows))

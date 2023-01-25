@@ -263,20 +263,36 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			i.resultValue = int64(actualResult)
 
 		case pilosa.ValCount:
-			if actualResult.DecimalVal == nil {
+			switch t := i.aggregate.Type().(type) {
+			case *parser.DataTypeInt:
+				i.resultValue = int64(actualResult.Val)
+
+			case *parser.DataTypeDecimal:
 				if i.aggregate.AggType() == types.AGGREGATE_AVG {
-					average := float64(actualResult.Val) / float64(actualResult.Count)
-					i.resultValue = pql.NewDecimal(int64(average*10000), 4)
-				} else {
-					i.resultValue = int64(actualResult.Val)
-				}
-			} else {
-				if i.aggregate.AggType() == types.AGGREGATE_AVG {
-					average := actualResult.DecimalVal.Float64() / float64(actualResult.Count)
-					i.resultValue = pql.NewDecimal(int64(average*10000), 4)
+					if actualResult.DecimalVal == nil {
+						average := float64(actualResult.Val) / float64(actualResult.Count)
+						daverage, err := pql.FromFloat64WithScale(average, int(t.Scale))
+						if err != nil {
+							return nil, err
+						}
+						i.resultValue = daverage
+					} else {
+						average := actualResult.DecimalVal.Float64() / float64(actualResult.Count)
+						daverage, err := pql.FromFloat64WithScale(average, int(t.Scale))
+						if err != nil {
+							return nil, err
+						}
+						i.resultValue = daverage
+					}
 				} else {
 					i.resultValue = *actualResult.DecimalVal
 				}
+
+			case *parser.DataTypeTimestamp:
+				i.resultValue = actualResult.TimestampVal
+
+			default:
+				return nil, sql3.NewErrInternalf("unhandled return type '%T'", i.aggregate.Type())
 			}
 		default:
 			return nil, sql3.NewErrInternalf("unexpected result type '%T'", queryResponse.Results[0])

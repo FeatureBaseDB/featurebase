@@ -300,8 +300,9 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 				} else {
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 				}
+			} else {
+				result[idx] = time.UnixMilli(intVal).UTC()
 			}
-			result[idx] = time.UnixMilli(intVal).UTC()
 
 		case *parser.DataTypeString:
 			result[idx] = evalValue
