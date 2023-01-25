@@ -10,7 +10,7 @@ import (
 func newPreSortCommand(logdest logger.Logger) *cobra.Command {
 	cmd := ctl.NewPreSortCommand(logdest)
 	ccmd := &cobra.Command{
-		Use:   "pre_sort",
+		Use:   "presort",
 		Short: "Sort records within files into files by FB partition for more efficient ingest",
 		Long: `
 Takes all input files and writes PartitionN numbered files to a directory, where each file contains only records that will go into the partition it is named for.

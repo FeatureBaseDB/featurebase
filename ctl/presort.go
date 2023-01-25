@@ -20,19 +20,19 @@ import (
 
 type PreSortCommand struct {
 	// Optional Index filter
-	File string `json:"file"`
+	File string
 
-	Type string `json:"type"`
+	Type string
 
-	Table string `json:"table"`
+	Table string
 
-	PrimaryKeyFields    []string `json:"primary-key-fields"`
+	PrimaryKeyFields    []string
 	PrimaryKeySeparator string
 
-	PartitionN int `json:"partition-n"`
+	PartitionN int
 
-	JobSize    int `json:"job-size"`
-	NumWorkers int `json:"num-workers"`
+	JobSize    int
+	NumWorkers int
 
 	// Path to write sorted files to
 	OutputDir string
