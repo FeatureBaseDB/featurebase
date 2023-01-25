@@ -170,8 +170,8 @@ var TableTests []TableTest = []TableTest{
 	//bool (batch logic)
 	boolTests,
 
-	//time quantums
-	// Skip for now - timeQuantumInsertTest,
+	// time quantums
+	timeQuantumInsertTest,
 }
 
 func knownTimestamp() time.Time {

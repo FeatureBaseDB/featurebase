@@ -137,6 +137,24 @@ var joinTests = TableTest{
 			),
 			ExpErr: "RIGHT join types are not supported",
 		},
+		{
+			name: "commajoin",
+			SQLs: sqls(
+				"select u._id, u.name, u.age, u2._id as u2_id, u2.name as u2name, u2.age as u2age from users u, (select * from users where _id=2) u2 where u._id=u2._id;",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("name", fldTypeString),
+				hdr("age", fldTypeInt),
+				hdr("u2_id", fldTypeID),
+				hdr("u2name", fldTypeString),
+				hdr("u2age", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2), string("c"), int64(28), int64(2), string("c"), int64(28)),
+			),
+			Compare: CompareExactUnordered,
+		},
 	},
 	PQLTests: []PQLTest{
 		{

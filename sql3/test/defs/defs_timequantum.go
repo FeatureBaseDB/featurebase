@@ -9,7 +9,6 @@ var timeQuantumInsertTest = TableTest{
 			srcHdr("i1", fldTypeInt, "min 0", "max 1000"),
 			srcHdr("ids1", fldTypeIDSet, "timequantum 'YMD'"),
 		),
-		srcRows(),
 	),
 	SQLTests: []SQLTest{
 		{

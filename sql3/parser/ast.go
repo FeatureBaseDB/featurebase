@@ -3802,7 +3802,12 @@ func (c *ParenSource) SourceFromAlias(alias string) Source {
 }
 
 func (c *ParenSource) PossibleOutputColumns() []*SourceOutputColumn {
-	return c.X.PossibleOutputColumns()
+	aliasName := IdentName(c.Alias)
+	poc := c.X.PossibleOutputColumns()
+	for _, pc := range poc {
+		pc.TableName = aliasName
+	}
+	return poc
 }
 
 func (c *ParenSource) OutputColumnNamed(name string) (*SourceOutputColumn, error) {
@@ -3817,11 +3822,10 @@ func (c *ParenSource) OutputColumnQualifierNamed(qualifier string, name string) 
 }
 
 type JoinClause struct {
-	X             Source                // lhs source
-	Operator      *JoinOperator         // join operator
-	Y             Source                // rhs source
-	Constraint    JoinConstraint        // join constraint
-	OutputColumns []*SourceOutputColumn // output columns - populated during analysis
+	X          Source         // lhs source
+	Operator   *JoinOperator  // join operator
+	Y          Source         // rhs source
+	Constraint JoinConstraint // join constraint
 }
 
 // Clone returns a deep copy of c.
@@ -3847,7 +3851,11 @@ func (c *JoinClause) String() string {
 }
 
 func (c *JoinClause) PossibleOutputColumns() []*SourceOutputColumn {
-	return c.OutputColumns
+	poc := make([]*SourceOutputColumn, 0)
+	poc = append(poc, c.X.PossibleOutputColumns()...)
+	poc = append(poc, c.Y.PossibleOutputColumns()...)
+	return poc
+
 }
 
 func (c *JoinClause) OutputColumnNamed(name string) (*SourceOutputColumn, error) {

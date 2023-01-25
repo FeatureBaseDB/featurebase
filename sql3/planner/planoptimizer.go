@@ -13,6 +13,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
+//TODO(pok) push filter down into join condition if terms reference either side of join
 //TODO(pok) push order by down as far as possible
 //TODO(pok) handle the case of the order by expressions not being in a projection list
 //TODO(pok) you can't group by _id in PQL, so we need to not use a PQL group by operator here
