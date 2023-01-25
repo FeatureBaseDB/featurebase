@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"mime"
 	"net"
@@ -1410,8 +1411,19 @@ func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Reque
 
 	ctx := r.Context()
 
-	rootOperator, err := h.api.RehydratePlanOperator(ctx, r.Body)
+	// DEBUG - hang on to the body
+	bodyBytes, err := io.ReadAll(r.Body)
+	log.Printf("handlePostSQLPlanOperator() body: %v s: %s", bodyBytes, string(bodyBytes))
+	reader := io.NopCloser(bytes.NewReader(bodyBytes))
 	if err != nil {
+		writeError(err)
+		return
+	}
+
+	rootOperator, err := h.api.RehydratePlanOperator(ctx /*r.Body*/, reader)
+	if err != nil {
+		// DEBUG - dump the body to the log
+
 		writeError(err)
 		return
 	}
