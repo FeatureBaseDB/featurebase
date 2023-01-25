@@ -427,14 +427,15 @@ var minmaxTests = TableTest{
 			srcHdr("i1", fldTypeInt, "min 0", "max 1000"),
 			srcHdr("d1", fldTypeDecimal2),
 			srcHdr("s1", fldTypeString),
+			srcHdr("ts1", fldTypeTimestamp),
 		),
 		srcRows(
-			srcRow(int64(1), int64(10), float64(10), string("foo")),
-			srcRow(int64(2), int64(10), float64(10), string("foo")),
-			srcRow(int64(3), int64(11), float64(11), string("foo")),
-			srcRow(int64(4), int64(12), float64(12), string("foo")),
-			srcRow(int64(5), int64(12), float64(12), string("foo")),
-			srcRow(int64(6), int64(13), float64(13), string("foo")),
+			srcRow(int64(1), int64(10), float64(10), string("foo"), timestampFromString("2013-07-15T01:18:46Z")),
+			srcRow(int64(2), int64(10), float64(10), string("foo"), timestampFromString("2014-07-15T01:18:46Z")),
+			srcRow(int64(3), int64(11), float64(11), string("foo"), timestampFromString("2015-07-15T01:18:46Z")),
+			srcRow(int64(4), int64(12), float64(12), string("foo"), timestampFromString("2016-07-15T01:18:46Z")),
+			srcRow(int64(5), int64(12), float64(12), string("foo"), timestampFromString("2017-07-15T01:18:46Z")),
+			srcRow(int64(6), int64(13), float64(13), string("foo"), timestampFromString("2018-07-15T01:18:46Z")),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -518,6 +519,19 @@ var minmaxTests = TableTest{
 			),
 			ExpRows: rows(
 				row(pql.NewDecimal(1300, 2)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select min(ts1) as min_val, max(ts1) as max_val from minmax_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("min_val", fldTypeTimestamp),
+				hdr("max_val", fldTypeTimestamp),
+			),
+			ExpRows: rows(
+				row(timestampFromString("2013-07-15T01:18:46Z"), timestampFromString("2018-07-15T01:18:46Z")),
 			),
 			Compare: CompareExactUnordered,
 		},
