@@ -4,7 +4,6 @@ package sql3_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -2750,7 +2749,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		defer ts.Close()
 
 		mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
-			payload, _ := ioutil.ReadFile(tmpfile.Name())
+			payload, _ := os.ReadFile(tmpfile.Name())
 			w.Header().Set("Content-Type", "application/octet-stream")
 			w.WriteHeader(200)
 			w.Write(payload)
