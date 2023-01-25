@@ -617,13 +617,18 @@ kafka consumer close timeout tests:
     - CONFLUENT_MINOR_NUM: 3
     - CONFLUENT_PATCH_NUM: 1
   script:
+    - ll
     - cd
+    - ll
+    - echo confluent-$CONFLUENT_MAJOR_NUM.$CONFLUENT_MINOR_NUM.$CONFLUENT_PATCH_NUM
     - wget https://packages.confluent.io/archive/$CONFLUENT_MAJOR_NUM.$CONFLUENT_MINOR_NUM/confluent-$CONFLUENT_MAJOR_NUM.$CONFLUENT_MINOR_NUM.$CONFLUENT_PATCH_NUM.tar.gz
     - tar -xvf confluent-$CONFLUENT_MAJOR_NUM.$CONFLUENT_MINOR_NUM.$CONFLUENT_PATCH_NUM.tar.gz
-    - export CONFLUENT_HOME=confluent-$CONFLUENT_MAJOR_NUM.$CONFLUENT_MINOR_NUM.$CONFLUENT_PATCH_NUM
+    - mv confluent-$CONFLUENT_MAJOR_NUM.$CONFLUENT_MINOR_NUM.$CONFLUENT_PATCH_NUM confluent
+    - export CONFLUENT_HOME=confluent
     - export PATH=$PATH:$CONFLUENT_HOME/bin
     - confluent local services start
-    - ~/confluent-7.3.1/bin/kafka-topics --create --topic thr --partitions 2 --bootstrap-server localhost:9092
+    - ~/confluent/bin/kafka-topics --create --topic thr --partitions 2 --bootstrap-server localhost:9092
+    - ~/confluent/bin/kafka-topics --list
 
 
 s3 dump:
