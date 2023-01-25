@@ -21,6 +21,7 @@ type ExecutionRequests struct {
 	// to track both number of stored requests and
 	// which one to delete next (always 0)
 	requestsList []string
+	curIdx       int
 	// the actual rquests being stored - we use a map
 	// so we can look them up by request id which is a uuid
 	requests map[string]*pilosa.ExecutionRequest
@@ -31,7 +32,7 @@ var _ pilosa.ExecutionRequestsAPI = (*ExecutionRequests)(nil)
 
 func NewExecutionRequestsAPI() *ExecutionRequests {
 	return &ExecutionRequests{
-		requestsList: make([]string, 0),
+		requestsList: make([]string, keepLastRequests),
 		requests:     make(map[string]*pilosa.ExecutionRequest),
 	}
 }
@@ -41,23 +42,32 @@ func (e *ExecutionRequests) AddRequest(requestID string, userID string, startTim
 	e.Lock()
 	defer e.Unlock()
 
-	// we're going to add a new request so clear out oldest request if we've hit
-	// the threshhold
-	if len(e.requestsList) >= keepLastRequests {
-		// get the oldest request and delete it
-		delId := e.requestsList[0]
-		delete(e.requests, delId)
-		e.requestsList = e.requestsList[1:]
-	}
-	// add the request to the end
-	e.requestsList = append(e.requestsList, requestID)
-	// update the request
 	_, ok := e.requests[requestID]
 	if ok {
 		return fmt.Errorf("request %s already exists", requestID)
 	}
+
+	// we're going to add a new request so clear out oldest request if we've hit
+	// the threshhold
+	if e.requestsList[e.curIdx] != "" {
+		// get the oldest request and delete it
+		delId := e.requestsList[e.curIdx]
+		delete(e.requests, delId)
+	}
+	// add the request to the end
+	e.requestsList[e.curIdx] = requestID
+	e.curIdx = (e.curIdx + 1) % keepLastRequests
+
+	// update the request
 	if len(sql) > truncateTextAt {
-		sql = sql[:truncateTextAt] //truncate to 4k, if we need more later, we'll worry about that later
+		// truncate to 4k, if we need more later, we'll worry about
+		// that later the song and dance with the copy is necessary so
+		// that the original sql string can actually get garbage
+		// collected, otherwise we might retain a reference to the
+		// whole thing
+		sqlb := make([]byte, truncateTextAt)
+		copy(sqlb, []byte(sql))
+		sql = string(sqlb)
 	}
 	e.requests[requestID] = &pilosa.ExecutionRequest{
 		RequestID: requestID,
@@ -91,7 +101,9 @@ func (e *ExecutionRequests) UpdateRequest(requestID string,
 		return fmt.Errorf("request %s not found", requestID)
 	}
 	if len(plan) > truncateTextAt {
-		plan = plan[:truncateTextAt] //truncate to 4k, if we need more later, we'll worry about that later
+		planb := make([]byte, truncateTextAt)
+		copy(planb, []byte(plan))
+		plan = string(planb)
 	}
 	request.EndTime = endTime
 	request.Status = status
