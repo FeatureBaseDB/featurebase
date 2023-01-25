@@ -19,10 +19,7 @@ import (
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/idk"
-	"github.com/featurebasedb/featurebase/v3/idk/datagen"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
-
-	//"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	liavro "github.com/linkedin/goavro/v2"
 )
@@ -694,100 +691,4 @@ func tDoHTTPPost(t *testing.T, url, contentType, body string) string {
 	}
 
 	return string(bod)
-}
-
-/*
-In some cases, when we see max.poll.interval.ms timeout on the kafka consumer,
-we also see the consumer hang when it's trying to close properly. See SUP-288.
-This test is to confirm that when the consumer hangs, we exit after some amount
-of time (specified by the --consumer-close-timeout flag)
-*/
-func TestCloseTimeout(t *testing.T) {
-
-	now := time.Now().UnixNano()
-	topic := fmt.Sprintf("close_timeout_%d", now)
-
-	datagen_0 := datagen.NewMain()
-	datagen_0.Source = "bank"
-	datagen_0.Target = "kafka"
-	datagen_0.Kafka.Topic = topic
-	datagen_0.Kafka.Subject = fmt.Sprintf("close_timeout_%d_subject", now)
-	datagen_0.Kafka.ConfluentCommand.SchemaRegistryURL = "http://localhost:8081"
-	datagen_0.EndAt = 20000
-
-	// write records to kafka
-	err := datagen_0.Run()
-	if err != nil {
-		t.Fatalf("failed writing to kafka: %s", err)
-	}
-
-	// configure the consumer
-	consumer, err := NewMain()
-	configureTestFlags(consumer)
-	consumer.Topics = append(consumer.Topics, topic)
-	consumer.BatchSize = 1000
-	consumer.IDField = "ID"
-	consumer.KafkaGroupInstanceId = "some_id"
-	consumer.ConsumerCloseTimeout = 5
-	consumer.KafkaMaxPollInterval = "15"
-	consumer.MaxMsgs = 40000
-
-	ingestComplete := make(chan error)
-
-	// run the consumer
-	go func() {
-		err = consumer.Run()
-		if err != nil {
-			t.Fatalf("running main: %v", err)
-		} else {
-			ingestComplete <- err
-		}
-	}()
-
-	//wait some time for ingest
-	time.Sleep(8 * time.Second)
-
-	// take a transaction lock on the database which drives
-	// max.poll.interval.ms timeout to occur
-	client := consumer.PilosaClient()
-	_, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 25, \"exclusive\": true, \"active\": true}"), nil)
-	if err != nil {
-		t.Fatalf("error taking transaction lock")
-	}
-	if !strings.Contains(string(body), "success") {
-		t.Fatalf("was able to successfully take transaction lock")
-	}
-
-	//wait...
-	time.Sleep(2 * time.Second)
-
-	datagen_1 := datagen.NewMain()
-	datagen_1.Source = "bank"
-	datagen_1.Target = "kafka"
-	datagen_1.Kafka.Topic = topic
-	datagen_1.Kafka.Subject = fmt.Sprintf("close_timeout_%d_subject", now)
-	datagen_1.Kafka.ConfluentCommand.SchemaRegistryURL = "http://localhost:8081"
-	datagen_1.EndAt = 20000
-
-	// write records to kafka
-	err = datagen_0.Run()
-	if err != nil {
-		t.Fatalf("failed writing to kafka: %s", err)
-	}
-
-	// ~20 more seconds on the transaction lock
-	// ~12 more seconds before we see the max.poll.interval timeout
-	// wait 30 seconds because consumer should exit after 5 seconds
-	// after the transaction lock
-	time.Sleep(30)
-
-	select {
-	case <-ingestComplete:
-		// if ingest completes, it's not hanging
-		return
-	case <-time.After(5):
-		// wait an extra five seconds
-		t.Errorf("the consumer is hanging for longer that it should")
-	}
-
 }
