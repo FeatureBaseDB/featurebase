@@ -60,7 +60,7 @@ func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *
 		mu.Unlock()
 		return e.executeArrowShard(ctx, qcx, index, c, shard, pool, columnFilter)
 	}
-	tables := make([]*basicTable, 0)
+	tables := make([]*BasicTable, 0)
 
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		mu.Lock()
@@ -70,7 +70,7 @@ func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *
 			return prev
 		}
 		switch t := v.(type) {
-		case *basicTable:
+		case *BasicTable:
 
 			if t.resolver != nil {
 				mu.Lock()
@@ -93,104 +93,103 @@ func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *
 		return nil, err
 	}
 	if len(tables) == 0 {
-		return &basicTable{name: "empty"}, nil
+		return &BasicTable{name: "empty"}, nil
 	}
 	tbl := Concat(tables[0].Schema(), tables, pool)
 	r := dataframe.NewChunkResolver(tbl.Column(0))
-	return &basicTable{resolver: &r, table: tbl}, nil
+	return &BasicTable{resolver: &r, table: tbl}, nil
 }
 
-type basicTable struct {
+type BasicTable struct {
 	resolver dataframe.Resolver
 	table    arrow.Table
 	filtered bool
 	name     string
 }
 
-func (st *basicTable) Name() string {
+func (st *BasicTable) Name() string {
 	return st.name
 }
 
-func (st *basicTable) Schema() *arrow.Schema {
+func (st *BasicTable) Schema() *arrow.Schema {
 	if st.table != nil {
 		return st.table.Schema()
 	}
 	return &arrow.Schema{}
 }
 
-func (st *basicTable) IsFiltered() bool {
+func (st *BasicTable) IsFiltered() bool {
 	return st.filtered
 }
 
-func (st *basicTable) NumRows() int64 {
+func (st *BasicTable) NumRows() int64 {
 	if st.resolver == nil {
 		return 0
 	}
 	return int64(st.resolver.NumRows())
 }
 
-func (st *basicTable) NumCols() int64 {
+func (st *BasicTable) NumCols() int64 {
 	if st.table != nil {
 		return st.table.NumCols()
 	}
 	return 0
 }
 
-func (st *basicTable) Column(i int) *arrow.Column {
+func (st *BasicTable) Column(i int) *arrow.Column {
 	if st.table != nil {
 		return st.table.Column(i)
 	}
 	return nil
 }
 
-func (st *basicTable) Retain() {
+func (st *BasicTable) Retain() {
 	if st.table != nil {
 		st.table.Retain()
 	}
 }
 
-func (st *basicTable) Release() {
+func (st *BasicTable) Release() {
 	if st.table != nil {
 		st.table.Retain()
 	}
 }
 
-func (st *basicTable) Get(column, row int) interface{} {
+func (st *BasicTable) Get(column, row int) interface{} {
 	field := st.Schema().Field(column)
 	c, i := st.resolver.Resolve(row)
 
 	chunk := st.Column(column).Data().Chunk(c)
 	switch field.Type.(type) {
-	// case *arrow.BooleanType:
-	//	v := chunk.(*array.Boolean).BooleanValues()
-	//	return v[i]
+	case *arrow.BooleanType:
+		return chunk.(*array.Boolean).Value(i)
 	case *arrow.Int8Type:
 		v := chunk.(*array.Int8).Int8Values()
-		return v[i]
+		return int64(v[i])
 	case *arrow.Int16Type:
 		v := chunk.(*array.Int16).Int16Values()
-		return v[i]
+		return int64(v[i])
 	case *arrow.Int32Type:
 		v := chunk.(*array.Int32).Int32Values()
-		return v[i]
+		return int64(v[i])
 	case *arrow.Int64Type:
 		v := chunk.(*array.Int64).Int64Values()
-		return v[i]
+		return int64(v[i])
 	case *arrow.Uint8Type:
 		v := chunk.(*array.Uint8).Uint8Values()
-		return v[i]
+		return uint64(v[i])
 	case *arrow.Uint16Type:
 		v := chunk.(*array.Uint16).Uint16Values()
-		return v[i]
+		return uint64(v[i])
 	case *arrow.Uint32Type:
 		v := chunk.(*array.Uint32).Uint32Values()
-		return v[i]
+		return uint64(v[i])
 	case *arrow.Uint64Type:
 		v := chunk.(*array.Uint64).Uint64Values()
 		return v[i]
 	case *arrow.Float32Type:
 		v := chunk.(*array.Float32).Float32Values()
-		return v[i]
+		return float64(v[i])
 	case *arrow.Float64Type:
 		v := chunk.(*array.Float64).Float64Values()
 		return v[i]
@@ -265,7 +264,7 @@ func appendData(bldr array.Builder, v interface{}) {
 	}
 }
 
-func Concat(schema *arrow.Schema, tables []*basicTable, mem memory.Allocator) arrow.Table {
+func Concat(schema *arrow.Schema, tables []*BasicTable, mem memory.Allocator) arrow.Table {
 	if len(tables) == 1 {
 		if !tables[0].IsFiltered() {
 			return tables[0]
@@ -307,7 +306,7 @@ func Concat(schema *arrow.Schema, tables []*basicTable, mem memory.Allocator) ar
 	return array.NewTable(schema, cols, -1)
 }
 
-func (st *basicTable) MarshalJSON() ([]byte, error) {
+func (st *BasicTable) MarshalJSON() ([]byte, error) {
 	results := make(map[string]interface{})
 	n := 0
 	if st.table != nil {
@@ -326,10 +325,10 @@ func (st *basicTable) MarshalJSON() ([]byte, error) {
 	return json.Marshal(results)
 }
 
-func BasicTableFromArrow(table arrow.Table, mem memory.Allocator) *basicTable {
+func BasicTableFromArrow(table arrow.Table, mem memory.Allocator) *BasicTable {
 	col := table.Column(0)
 	r := dataframe.NewChunkResolver(col)
-	return &basicTable{resolver: &r, table: table}
+	return &BasicTable{resolver: &r, table: table}
 }
 
 func filterColumns(filters []string, table arrow.Table) arrow.Table {
@@ -359,7 +358,7 @@ func filterColumns(filters []string, table arrow.Table) arrow.Table {
 	return array.NewTable(filterdSchema, cols, table.NumRows())
 }
 
-func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, pool memory.Allocator, columnFilter []string) (*basicTable, error) {
+func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, pool memory.Allocator, columnFilter []string) (*BasicTable, error) {
 	name := fmt.Sprintf("a. %v", shard)
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeArrowShard")
 	defer span.Finish()
@@ -373,7 +372,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 		filter = row
 		if !filter.Any() {
 			// no need to actuall run the query for its not operating against any values
-			return &basicTable{name: name}, nil
+			return &BasicTable{name: name}, nil
 		}
 	}
 	//
@@ -387,7 +386,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 	fname := idx.GetDataFramePath(shard)
 
 	if !e.dataFrameExists(fname) {
-		return &basicTable{name: name}, nil
+		return &BasicTable{name: name}, nil
 	}
 
 	table, err := e.getDataTable(ctx, fname, pool)
@@ -407,7 +406,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 	resolver = &p
 	if filter != nil {
 		if len(ids) == 0 {
-			return &basicTable{name: name}, nil
+			return &BasicTable{name: name}, nil
 		}
 		resolver, err = filterDataframe(resolver, pool, ids)
 		if err != nil {
@@ -415,7 +414,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 		}
 	}
 	table.Retain()
-	return &basicTable{resolver: resolver, table: table, filtered: filter != nil, name: name}, nil
+	return &BasicTable{resolver: resolver, table: table, filtered: filter != nil, name: name}, nil
 }
 
 func (e *executor) dataFrameExists(fname string) bool {

@@ -158,7 +158,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 // analyzeBulkInsertStatement analyzes a BULK INSERT statement and returns an
 // error if anything is invalid.
 func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertStatement) error {
-	//check referred to table exists
+	// check referred to table exists
 	tableName := parser.IdentName(stmt.Table)
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
@@ -200,6 +200,14 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		// that represent the offsets in the source file
 		for _, im := range stmt.MapList {
 			if !(im.MapExpr.IsLiteral() && typeIsInteger(im.MapExpr.DataType())) {
+				return sql3.NewErrIntegerLiteral(im.MapExpr.Pos().Line, im.MapExpr.Pos().Column)
+			}
+		}
+	case "PARQUET":
+		// for paquet the map expressions need to be string values
+		// that represent the offsets in the source file
+		for _, im := range stmt.MapList {
+			if !(im.MapExpr.IsLiteral() && typeIsString(im.MapExpr.DataType())) {
 				return sql3.NewErrIntegerLiteral(im.MapExpr.Pos().Line, im.MapExpr.Pos().Column)
 			}
 		}

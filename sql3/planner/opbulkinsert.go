@@ -17,6 +17,10 @@ import (
 
 	"github.com/PaesslerAG/gval"
 	"github.com/PaesslerAG/jsonpath"
+	"github.com/apache/arrow/go/v10/arrow"
+	"github.com/apache/arrow/go/v10/arrow/memory"
+	"github.com/apache/arrow/go/v10/parquet/file"
+	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -139,7 +143,7 @@ func (p *PlanOpBulkInsert) Children() []types.PlanOperator {
 func (p *PlanOpBulkInsert) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
 	switch strings.ToUpper(p.options.format) {
 	case "CSV":
-		return &bulkInsertCSVRowIter{
+		return &bulkInsertLineRowIter{
 			planner:   p.planner,
 			tableName: p.tableName,
 			options:   p.options,
@@ -155,6 +159,16 @@ func (p *PlanOpBulkInsert) Iterator(ctx context.Context, row types.Row) (types.R
 			tableName: p.tableName,
 			options:   p.options,
 			sourceIter: &bulkInsertSourceNDJsonRowIter{
+				planner: p.planner,
+				options: p.options,
+			},
+		}, nil
+	case "PARQUET":
+		return &bulkInsertLineRowIter{
+			planner:   p.planner,
+			tableName: p.tableName,
+			options:   p.options,
+			sourceIter: &bulkInsertSourceParquetRowIter{
 				planner: p.planner,
 				options: p.options,
 			},
@@ -184,7 +198,6 @@ type bulkInsertSourceCSVRowIter struct {
 var _ types.RowIterator = (*bulkInsertSourceCSVRowIter)(nil)
 
 func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error) {
-
 	if i.hasStarted == nil {
 
 		i.hasStarted = &struct{}{}
@@ -334,7 +347,12 @@ func (i *bulkInsertSourceCSVRowIter) Close(ctx context.Context) {
 	}
 }
 
-type bulkInsertCSVRowIter struct {
+type bulkInsertBasicRowIter interface {
+	Next(context.Context) (types.Row, error)
+	Close(context.Context)
+}
+
+type bulkInsertLineRowIter struct {
 	planner   *ExecutionPlanner
 	tableName string
 	options   *bulkInsertOptions
@@ -342,12 +360,12 @@ type bulkInsertCSVRowIter struct {
 
 	currentBatch [][]interface{}
 
-	sourceIter *bulkInsertSourceCSVRowIter
+	sourceIter bulkInsertBasicRowIter
 }
 
-var _ types.RowIterator = (*bulkInsertCSVRowIter)(nil)
+var _ types.RowIterator = (*bulkInsertLineRowIter)(nil)
 
-func (i *bulkInsertCSVRowIter) Next(ctx context.Context) (types.Row, error) {
+func (i *bulkInsertLineRowIter) Next(ctx context.Context) (types.Row, error) {
 	defer i.sourceIter.Close(ctx)
 	for {
 		row, err := i.sourceIter.Next(ctx)
@@ -404,7 +422,6 @@ type bulkInsertSourceNDJsonRowIter struct {
 var _ types.RowIterator = (*bulkInsertSourceNDJsonRowIter)(nil)
 
 func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, error) {
-
 	if i.hasStarted == nil {
 
 		i.hasStarted = &struct{}{}
@@ -484,7 +501,6 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 			// parse the json
 			v := interface{}(nil)
 			err := json.Unmarshal([]byte(jsonValue), &v)
-
 			if err != nil {
 				return nil, sql3.NewErrParsingJSON(0, 0, jsonValue, err.Error())
 			}
@@ -876,7 +892,6 @@ func processColumnValue(rawValue interface{}, targetType parser.ExprDataType) (t
 }
 
 func processBatch(ctx context.Context, planner *ExecutionPlanner, tableName string, currentBatch [][]interface{}, options *bulkInsertOptions) error {
-
 	insertValues := [][]types.PlanExpression{}
 
 	// we're going to take a different path if transforms are specified
@@ -888,7 +903,7 @@ func processBatch(ctx context.Context, planner *ExecutionPlanner, tableName stri
 		for _, row := range currentBatch {
 			tupleValues := []types.PlanExpression{}
 
-			//handle each transform
+			// handle each transform
 			for idx, mc := range options.transformExpressions {
 				rawValue, err := mc.Evaluate(row)
 				if err != nil {
@@ -909,7 +924,6 @@ func processBatch(ctx context.Context, planner *ExecutionPlanner, tableName stri
 			}
 			insertValues = append(insertValues, tupleValues)
 		}
-
 	} else {
 		// we are just going to take the values from the source row and copy pasta them across
 		// for each row in the batch add value to each mapped column
@@ -928,7 +942,6 @@ func processBatch(ctx context.Context, planner *ExecutionPlanner, tableName stri
 			}
 			insertValues = append(insertValues, tupleValues)
 		}
-
 	}
 
 	insert := &insertRowIter{
@@ -947,4 +960,234 @@ func processBatch(ctx context.Context, planner *ExecutionPlanner, tableName stri
 	pilosa.PerfCounterSQLBulkInsertsSec.Add(int64(len(insertValues)))
 
 	return nil
+}
+
+// /
+// TODO(twg) 2023/01/23 need to refactor this
+type colOrder struct {
+	realColumn int
+}
+type parquetReader struct {
+	table       *pilosa.BasicTable
+	rowOffset   int
+	columnOrder []colOrder
+	row         []interface{}
+}
+
+func (pr *parquetReader) Read() ([]interface{}, error) {
+	// need to read the row
+	// and package it up according to the mappings
+	if pr.rowOffset >= int(pr.table.NumRows()) {
+		return nil, io.EOF // done
+	}
+	for i, col := range pr.columnOrder {
+		// vprint.VV("check row:%v col:%v", pr.rowOffset, col.realColumn)
+		pr.row[i] = pr.table.Get(col.realColumn, pr.rowOffset)
+	}
+	pr.rowOffset++
+	return pr.row, nil
+}
+
+func process(typeMappings []*bulkInsertMapColumn, schema *arrow.Schema) ([]colOrder, error) {
+	ret := make([]colOrder, len(typeMappings))
+	find := func(n string) int {
+		for i, x := range schema.Fields() {
+			if n == x.Name {
+				return i
+			}
+		}
+		return -1
+	}
+	for i, column := range typeMappings {
+		iname, err := column.expr.Evaluate(nil)
+		if err != nil {
+			return nil, err
+		}
+		columnIdx := find(iname.(string))
+		if columnIdx < 0 {
+			return nil, sql3.NewErrInternalf("unexpected type for mapping '%v' not found in parquet", iname)
+		}
+		ret[i] = colOrder{columnIdx}
+	}
+	return ret, nil
+}
+
+func NewParquetReader(ctx context.Context, mappings []*bulkInsertMapColumn, r *os.File, mem memory.Allocator) (*parquetReader, error) {
+	pf, err := file.NewParquetReader(r)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := pqarrow.NewFileReader(pf, pqarrow.ArrowReadProperties{}, mem)
+	if err != nil {
+		return nil, err
+	}
+	table, err := reader.ReadTable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := &parquetReader{}
+	m.table = pilosa.BasicTableFromArrow(table, mem)
+	m.columnOrder, err = process(mappings, table.Schema())
+	if err != nil {
+		return nil, err
+	}
+	m.row = make([]interface{}, len(m.columnOrder))
+	return m, nil
+}
+
+type bulkInsertSourceParquetRowIter struct {
+	planner       *ExecutionPlanner
+	options       *bulkInsertOptions
+	parquetReader *parquetReader
+
+	closeFunc func()
+
+	hasStarted *struct{}
+	pool       memory.Allocator
+}
+
+var _ types.RowIterator = (*bulkInsertSourceCSVRowIter)(nil)
+
+func (i *bulkInsertSourceParquetRowIter) Next(ctx context.Context) (types.Row, error) {
+	if i.hasStarted == nil {
+
+		i.hasStarted = &struct{}{}
+		i.pool = memory.NewGoAllocator()
+
+		switch strings.ToUpper(i.options.input) {
+		case "FILE":
+			f, err := os.Open(i.options.sourceData)
+			if err != nil {
+				return nil, err
+			}
+			i.closeFunc = func() {
+				f.Close()
+			}
+			i.parquetReader, err = NewParquetReader(ctx, i.options.mapExpressions, f, i.pool)
+			if err != nil {
+				return nil, sql3.NewErrInternalf("problems with parquet file '%v' '%v'", i.options.sourceData, err)
+			}
+
+		case "URL":
+			response, err := http.Get(i.options.sourceData)
+			if err != nil {
+				return nil, err
+			}
+			if response.StatusCode != 200 {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("unexpected response %d", response.StatusCode))
+			}
+			defer response.Body.Close()
+			// download to temp file first
+			tmpFile, err := os.CreateTemp("", "BulkParquetFile.parquet")
+			if err != nil {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("error creating tempfile %v", err))
+			}
+			i.closeFunc = func() {
+				tmpFile.Close()
+			}
+			_, err = io.Copy(tmpFile, response.Body)
+			if err != nil {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("error downloading url %v %v", i.options.sourceData, err))
+			}
+			defer os.Remove(tmpFile.Name())
+
+			_, err = tmpFile.Seek(0, io.SeekStart)
+			if err != nil {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("error reseting file for reading %v ", err))
+			}
+
+			i.parquetReader, err = NewParquetReader(ctx, i.options.mapExpressions, tmpFile, i.pool)
+			if err != nil {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("reading parquet file %v ", err))
+			}
+
+		default:
+			return nil, sql3.NewErrInternalf("unexpected input specification type '%s'", i.options.input)
+		}
+
+	}
+
+	rec, err := i.parquetReader.Read()
+	if err == io.EOF {
+		return nil, types.ErrNoMoreRows
+	} else if err != nil {
+		pe, ok := err.(*csv.ParseError)
+		if ok {
+			return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
+		}
+		return nil, err
+	}
+
+	// now we do the mapping to the output row
+	// current assumption is float--> DECIMAL(n)
+	result := make([]interface{}, len(i.options.mapExpressions))
+	for idx := range i.options.mapExpressions {
+		evalValue := rec[idx]
+		mapColumn := i.options.mapExpressions[idx]
+		switch mapColumn.colType.(type) {
+		case *parser.DataTypeID, *parser.DataTypeInt:
+			if intVal, ok := evalValue.(int64); ok {
+				result[idx] = intVal
+			} else {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+		case *parser.DataTypeIDSet:
+			if intVal, ok := evalValue.(int64); ok {
+				result[idx] = []int64{intVal}
+			} else {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+
+		case *parser.DataTypeStringSet:
+			if stringVal, ok := evalValue.(string); ok {
+				result[idx] = []string{stringVal}
+			} else {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+
+		case *parser.DataTypeTimestamp:
+			if intVal, ok := evalValue.(int64); ok {
+				result[idx] = time.UnixMilli(intVal).UTC()
+			} else if stringVal, ok := evalValue.(string); ok {
+				if tm, err := time.ParseInLocation(time.RFC3339Nano, stringVal, time.UTC); err == nil {
+					result[idx] = tm
+				} else if tm, err := time.ParseInLocation(time.RFC3339, stringVal, time.UTC); err == nil {
+					result[idx] = tm
+				} else if tm, err := time.ParseInLocation("2006-01-02", stringVal, time.UTC); err == nil {
+					result[idx] = tm
+				} else {
+					return nil, sql3.NewErrTypeConversionOnMap(0, 0, stringVal, mapColumn.colType.TypeDescription())
+				}
+			}
+
+		case *parser.DataTypeString:
+			if stringVal, ok := evalValue.(string); ok {
+				result[idx] = stringVal
+			} else {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+
+		case *parser.DataTypeBool:
+			if boolVal, ok := evalValue.(bool); ok {
+				result[idx] = boolVal
+			} else {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+		case *parser.DataTypeDecimal:
+			if floatVal, ok := evalValue.(float64); ok {
+				result[idx] = pql.FromFloat64(floatVal)
+			} else {
+				return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
+			}
+		default:
+			return nil, sql3.NewErrInternalf("unhandled type '%T'", mapColumn.colType)
+		}
+	}
+	return result, nil
+}
+
+func (i *bulkInsertSourceParquetRowIter) Close(ctx context.Context) {
+	if i.closeFunc != nil {
+		i.closeFunc()
+	}
 }
