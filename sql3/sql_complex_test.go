@@ -2688,7 +2688,7 @@ func simpleParquetMaker(f *os.File, numRows int64, input []tb) error {
 
 func TestPlanner_BulkInsertParquet_File(t *testing.T) {
 	// check that can pull parquet file from URL and load
-	c := test.MustRunCluster(t, 1)
+	c := test.MustRunUnsharedCluster(t, 1)
 	defer c.Close()
 
 	_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING);`)
@@ -2747,7 +2747,7 @@ func TestPlanner_BulkInsertParquet_File(t *testing.T) {
 
 func TestPlanner_BulkInsertParquet_URL(t *testing.T) {
 	// check that can pull parquet file from URL and load
-	c := test.MustRunCluster(t, 1)
+	c := test.MustRunUnsharedCluster(t, 1)
 	defer c.Close()
 
 	_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j2 (_id ID, a INT, b STRING);`)
@@ -2806,7 +2806,7 @@ func TestPlanner_BulkInsertParquet_URL(t *testing.T) {
 
 func TestPlanner_BulkInsertParquet_FileTimeStamp(t *testing.T) {
 	// check that timestamp string and mill formating is working
-	c := test.MustRunCluster(t, 1)
+	c := test.MustRunUnsharedCluster(t, 1)
 	defer c.Close()
 
 	_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table continuum (_id ID, created timestamp, updated timestamp);`)
