@@ -2777,9 +2777,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 
 	t.Run("FileTimeStamp", func(t *testing.T) {
 		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table continuum (_id ID, created timestamp, updated timestamp);`)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
 		assert.NoError(t, err)
 		defer os.Remove(tmpfile.Name())
@@ -2805,8 +2803,6 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, created,updated from continuum`)
 		assert.NoError(t, err)
 		row := results[0]
-		if row[1] != row[2] {
-			t.Fatalf("Not Equal %v == %v", row[1], row[2])
-		}
+		assert.Equal(t, row[1], row[2])
 	})
 }
