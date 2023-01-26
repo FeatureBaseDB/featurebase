@@ -816,6 +816,9 @@ func (n *callPlanExpression) EvaluateStr(currentRow []interface{}) (interface{},
 	}
 
 	coercedValue, err := coerceValue(n.args[0].Type(), parser.NewDataTypeDecimal(4), argOneEval, parser.Pos{})
+	if err != nil {
+		return "", err
+	}
 
 	decimalArgOne, ok := coercedValue.(pql.Decimal)
 	if !ok {
