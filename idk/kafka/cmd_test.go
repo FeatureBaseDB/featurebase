@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -599,6 +598,12 @@ func TestCmdSchemaChange(t *testing.T) {
 	rec = makeRecord(t, []string{"id", "a", "b", "c"}, []interface{}{2, true, 22, 9_876_543_210})
 	tPutRecordsKafka(t, p, topic, schemaID3, licodec3, "akey", rec)
 
+	// run ingest
+	err = m.Run()
+	if err != nil {
+		t.Logf("running main: %v", err)
+	}
+
 	client := m.PilosaClient()
 	schema, err := client.Schema()
 	if err != nil {
@@ -796,7 +801,7 @@ func TestCloseTimeout(t *testing.T) {
 
 	select {
 	case <-consumerError:
-		buf, err := ioutil.ReadFile(log_path)
+		buf, err := os.ReadFile(log_path)
 		if err != nil {
 			t.Errorf("issue reading consumer log: %s", err)
 		}
