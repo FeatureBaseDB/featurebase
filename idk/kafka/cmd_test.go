@@ -179,13 +179,32 @@ func TestConfigOptions(t *testing.T) {
 		t.Fatalf("getting main: %v", err)
 	}
 
-	m.KafkaDebug = "consumer"
-	m.KafkaClientId = "blah"
-	m.SkipOld = true
-	m.KafkaGroupInstanceId = "instId"
-	m.KafkaMaxPollInterval = "30"
-	m.KafkaSessionTimeout = "20"
-	m.KafkaSocketKeepaliveEnable = "true"
+	debug := "consumer"
+	clientID := "blah"
+	autoOffsetReset := true
+	groupInstanceID := "instId"
+	maxPollIntervalMs := "30"
+	sessionTimeoutMs := "20"
+	socketKeepaliveEnable := "true"
+
+	m.KafkaDebug = debug
+	m.KafkaClientId = clientID
+	m.SkipOld = autoOffsetReset
+	m.KafkaGroupInstanceId = groupInstanceID
+	m.KafkaMaxPollInterval = maxPollIntervalMs
+	m.KafkaSessionTimeout = sessionTimeoutMs
+	m.KafkaSocketKeepaliveEnable = socketKeepaliveEnable
+
+	//kafka config name, expected value
+	tests := [][2]interface{}{
+		{"debug", debug},
+		{"client.id", clientID},
+		{"auto.offset.reset", "latest"},
+		{"group.instance.id", groupInstanceID},
+		{"max.poll.interval.ms", maxPollIntervalMs},
+		{"session.timeout.ms", sessionTimeoutMs},
+		{"socket.keepalive.enable", socketKeepaliveEnable},
+	}
 
 	// call NewSource to get and open source which calls some setup
 	// stuff that we want. We don't expect it to open successfully
@@ -198,26 +217,10 @@ func TestConfigOptions(t *testing.T) {
 
 	cfg := src.(*Source).ConfigMap
 
-	if val, err := cfg.Get("debug", nil); err != nil || val.(string) != "consumer" {
-		t.Fatalf("unexpected val for debug val: %v, err: %v", val, err)
-	}
-	if val, err := cfg.Get("client.id", nil); err != nil || val.(string) != "blah" {
-		t.Fatalf("unexpected val for client.id val: %v, err: %v", val, err)
-	}
-	if val, err := cfg.Get("auto.offset.reset", nil); err != nil || val.(string) != "latest" {
-		t.Fatalf("unexpected val for auto.offset.reset val: %v, err: %v", val, err)
-	}
-	if val, err := cfg.Get("group.instance.id", nil); err != nil || val.(string) != "isntId" {
-		t.Fatalf("unexpected group.instance.id val: %v, err: %v", val, err)
-	}
-	if val, err := cfg.Get("max.poll.interval.ms", nil); err != nil || val.(string) != "30" {
-		t.Fatalf("unexpected val for max.poll.interval.ms val: %v, err: %v", val, err)
-	}
-	if val, err := cfg.Get("session.timeout.ms", nil); err != nil || val.(string) != "20" {
-		t.Fatalf("unexpected val for session.timeout.ms val: %v, err: %v", val, err)
-	}
-	if val, err := cfg.Get("socket.keepalive.enable", nil); err != nil || val.(string) != "true" {
-		t.Fatalf("unexpected val for socket.keepalive.enable val: %v, err: %v", val, err)
+	for _, pair := range tests {
+		if val, err := cfg.Get(pair[0].(string), nil); err != nil || val.(string) != fmt.Sprintf("%v", pair[1]) {
+			t.Fatalf("unexpected val for %s val: %v, err: %v", pair[0].(string), val, err)
+		}
 	}
 }
 
