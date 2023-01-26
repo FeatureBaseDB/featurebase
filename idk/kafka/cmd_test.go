@@ -1443,9 +1443,9 @@ This test:
     a. the consumer did leave the group due to exceeding max.poll.interval.ms
     b. we close the consumer and log that we weren't able to confirm it closed properly
 
-It could be possible this test fails even though there isn't necessarily. This would be
-the case if a fix comes along to the kafka-go lib that prevents the consumer from hanging
-during the call it's consumer.Close() func.
+It could be possible this test fails even though there isn't necessarily an issue. This
+would be the case if a fix comes along to the kafka-go lib that prevents the consumer
+from hanging during the call it's consumer.Close() func.
 */
 func TestCloseTimeout(t *testing.T) {
 
@@ -1457,6 +1457,7 @@ func TestCloseTimeout(t *testing.T) {
 	topic := fmt.Sprintf("close_timeout_%d", now)
 	subject := fmt.Sprintf("close_timeout_%d_subject", now)
 	log_path := fmt.Sprintf("./consumer_%d.log", now)
+	genNumRecords := 5000
 
 	// configure the consumer
 	consumer, err := NewMain()
@@ -1475,9 +1476,9 @@ func TestCloseTimeout(t *testing.T) {
 	consumer.KafkaSessionTimeout = "10000"
 	consumer.LogPath = log_path
 
-	// run datagen and caputre stdout and stderr in case of error
+	// run datagen and capture stdout and stderr in case of error
 	var datagen_0_stdout, datagen_0_stderr bytes.Buffer
-	cmdString := fmt.Sprintf("go run ../cmd/datagen/main.go --source %s --target %s --kafka.topic %s --kafka.subject %s --end-at 5000 --kafka.confluent-command.schema-registry-url %s --kafka.confluent-command.kafka-bootstrap-servers %s", source, target, topic, subject, consumer.SchemaRegistryURL, consumer.KafkaBootstrapServers[0])
+	cmdString := fmt.Sprintf("go run ../cmd/datagen/main.go --source %s --target %s --kafka.topic %s --kafka.subject %s --end-at %d --kafka.confluent-command.schema-registry-url %s --kafka.confluent-command.kafka-bootstrap-servers %s", source, target, topic, subject, genNumRecords, consumer.SchemaRegistryURL, consumer.KafkaBootstrapServers[0])
 	cmd := exec.Command("bash", "-c", cmdString)
 	cmd.Stdout = &datagen_0_stdout
 	cmd.Stderr = &datagen_0_stderr
@@ -1488,14 +1489,28 @@ func TestCloseTimeout(t *testing.T) {
 		t.Fatalf("issue generating records for kafka: %s", err)
 	}
 
+	// run the consumer
 	consumerError := make(chan error)
 	go func() {
 		consumerErr := consumer.Run()
 		consumerError <- consumerErr
 	}()
 
-	//wait some time for ingest - takes ~5 seconds locally
-	time.Sleep(5 * time.Second)
+	// wait until all 5000 messages to be consumed
+	complete := false
+	start := time.Now()
+
+	for !complete {
+		buf, _ := os.ReadFile(log_path)
+		s := string(buf)
+		if strings.Contains(s, "records processed 0-> (5000)") {
+			complete = true
+		}
+		elapsed := time.Since(start)
+		if elapsed > 15*1000*1000*1000 { //15 seconds
+			t.Fatalf("unable to read from consumer log file")
+		}
+	}
 
 	// take a transaction lock on the database which drives
 	// max.poll.interval.ms timeout to occur
@@ -1534,6 +1549,6 @@ func TestCloseTimeout(t *testing.T) {
 			t.Errorf("the consumer did not exceed max.poll.interval.ms or the consumer was closed properly when it shouldn't have")
 		}
 	case <-time.After(30 * time.Second):
-		t.Errorf("the consumer is living longer that it should")
+		t.Errorf("the consumer is living longer than it should")
 	}
 }
