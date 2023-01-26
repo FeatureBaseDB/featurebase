@@ -53,7 +53,7 @@ func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interf
 			return nil, nil, err
 		}
 	}
-	//temporarily transform to Columns()
+	// temporarily transform to Columns()
 	cols := make([]*featurebase.WireQueryField, 0)
 	for _, oc := range ocolumns {
 		cols = append(cols, &featurebase.WireQueryField{

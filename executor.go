@@ -347,7 +347,7 @@ func safeCopy(resp QueryResponse) (out QueryResponse) {
 		case *dataframe.DataFrame:
 			// dumpTable(x)
 			out.Results = append(out.Results, x)
-		case *basicTable:
+		case *BasicTable:
 			// dumpTable(x)
 			out.Results = append(out.Results, x)
 		case ExtractedIDMatrixSorted:

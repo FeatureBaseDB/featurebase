@@ -4,6 +4,8 @@ package sql3_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"sort"
@@ -11,6 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/arrow/go/v10/arrow"
+	"github.com/apache/arrow/go/v10/arrow/array"
+	"github.com/apache/arrow/go/v10/arrow/memory"
+	"github.com/apache/arrow/go/v10/parquet"
+	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -119,7 +126,6 @@ func TestPlanner_SystemTableFanout(t *testing.T) {
 			t.Fatal(diff)
 		}
 	})
-
 }
 
 func TestPlanner_Show(t *testing.T) {
@@ -2630,4 +2636,173 @@ func TestPlanner_BulkInsert_FB1831(t *testing.T) {
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatal("Expecting to be equal")
 	}
+}
+
+type tb struct {
+	Name  string
+	Type  arrow.DataType
+	Value interface{}
+}
+
+func simpleParquetMaker(t *testing.T, f *os.File, numRows int64, input []tb) {
+	t.Helper()
+	mem := memory.NewGoAllocator()
+	chunks := make([]arrow.Array, 0)
+	for i := range input {
+		switch input[i].Type {
+
+		case arrow.PrimitiveTypes.Int64:
+			idbuild := array.NewInt64Builder(mem)
+			idbuild.AppendValues(input[i].Value.([]int64), nil)
+			newChunk := idbuild.NewArray()
+			chunks = append(chunks, newChunk)
+		case arrow.PrimitiveTypes.Float64:
+			fbuild := array.NewFloat64Builder(mem)
+			fbuild.AppendValues(input[i].Value.([]float64), nil)
+			newChunk := fbuild.NewArray()
+			chunks = append(chunks, newChunk)
+		case arrow.BinaryTypes.String:
+			sbuild := array.NewStringBuilder(mem)
+			sbuild.AppendValues(input[i].Value.([]string), nil)
+			newChunk := sbuild.NewArray()
+			chunks = append(chunks, newChunk)
+		}
+	}
+	// make schema
+	fields := make([]arrow.Field, len(input))
+	for i := range input {
+		fields[i].Name = input[i].Name
+		fields[i].Type = input[i].Type
+	}
+	schema := arrow.NewSchema(fields, nil)
+	rec := array.NewRecord(schema, chunks, numRows)
+	table := array.NewTableFromRecords(schema, []arrow.Record{rec})
+	props := parquet.NewWriterProperties(parquet.WithDictionaryDefault(false))
+	arrProps := pqarrow.DefaultWriterProps()
+	pqarrow.WriteTable(table, f, 4096, props, arrProps)
+}
+
+func TestPlanner_BulkInsertParquet(t *testing.T) {
+	c := test.MustRunUnsharedCluster(t, 1)
+	defer c.Close()
+
+	t.Run("BulkFromLocalFile", func(t *testing.T) {
+		// check that can pull parquet file from local file
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a parquet file with all the example data
+		simpleParquetMaker(t, tmpfile, 2, []tb{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1, 2}},
+			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7}},
+			{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803}},
+			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio"}},
+		})
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	into j1 (_id,a,b,c ) 
+	map(
+		'id' id, 
+		'int64V' INT, 
+		'float64V' DECIMAL(2), 
+		'stringV' STRING) 
+    from 
+	   '%s' 
+	   WITH FORMAT 'PARQUET' 
+	   INPUT 'FILE';`, tmpfile.Name()))
+		assert.NoError(t, err)
+		results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,c from j1`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(42), "pi"},
+			{int64(2), int64(7), "goldenratio"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+		results, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select b from j1`)
+		assert.NoError(t, err)
+		d, _ := pql.FromFloat64WithScale(3.14159, 2)
+		if !pql.Decimal.EqualTo(d, results[0][0].(pql.Decimal)) {
+			t.Fatal("Should be equal")
+		}
+	})
+
+	t.Run("BulkFromUrl", func(t *testing.T) {
+		// check that can pull parquet file from URL and load
+
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j2 (_id ID, a INT, b STRING);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		simpleParquetMaker(t, tmpfile, 1, []tb{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
+			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42}},
+			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi"}},
+		})
+
+		// create a parquet file with all the example data
+		mux := http.NewServeMux()
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
+			payload, _ := os.ReadFile(tmpfile.Name())
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.WriteHeader(200)
+			w.Write(payload)
+		})
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	into j2 (_id,a,b ) 
+	map(
+		'id' id, 
+		'int64V' INT, 
+		'stringV' STRING) 
+    from 
+	   '%s' 
+	   WITH FORMAT 'PARQUET' 
+	   INPUT 'URL';`, ts.URL+"/static"))
+		assert.NoError(t, err)
+		results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j2`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(42), "pi"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
+	t.Run("FileTimeStamp", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table continuum (_id ID, created timestamp, updated timestamp);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a parquet file with all the example data
+		now := time.Now()
+		simpleParquetMaker(t, tmpfile, 1, []tb{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
+			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.UnixMilli()}},
+			{Name: "stringtime", Type: arrow.BinaryTypes.String, Value: []string{now.Format(time.RFC3339)}},
+		})
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	into continuum (_id,created,updated ) 
+	map(
+		'id' id, 
+		'unixtime' timestamp, 
+		'stringtime' timestamp ) 
+    from 
+	   '%s' 
+	   WITH FORMAT 'PARQUET' 
+	   INPUT 'FILE';`, tmpfile.Name()))
+		assert.NoError(t, err)
+		results, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, created,updated from continuum`)
+		assert.NoError(t, err)
+		row := results[0]
+		assert.Equal(t, row[1], row[2])
+	})
 }
