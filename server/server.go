@@ -80,7 +80,7 @@ type Command struct {
 
 	Registrar         computer.Registrar
 	serverlessStorage *storage.ResourceManager
-	writeLogService   computer.WritelogService
+	writelogService   computer.WritelogService
 	snapshotService   computer.SnapshotService
 
 	Handler      pilosa.HandlerI
@@ -153,7 +153,7 @@ func OptCommandSetConfig(config *Config) CommandOption {
 func OptCommandInjections(inj Injections) CommandOption {
 	return func(c *Command) error {
 		if inj.Writelogger != nil {
-			c.writeLogService = inj.Writelogger
+			c.writelogService = inj.Writelogger
 		}
 		if inj.Snapshotter != nil {
 			c.snapshotService = inj.Snapshotter
@@ -556,8 +556,8 @@ func (m *Command) setupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
-	if m.writeLogService != nil && m.snapshotService != nil {
-		m.serverlessStorage = storage.NewResourceManager(m.snapshotService, m.writeLogService, m.logger)
+	if m.writelogService != nil && m.snapshotService != nil {
+		m.serverlessStorage = storage.NewResourceManager(m.snapshotService, m.writelogService, m.logger)
 	}
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {

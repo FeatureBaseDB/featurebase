@@ -676,6 +676,23 @@ func (c *Controller) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedD
 		return errors.Wrapf(err, "setting database option: %s", option)
 	}
 
+	diffs, err := c.Balancer.BalanceDatabase(tx, qdbid)
+	if err != nil {
+		return errors.Wrapf(err, "balancing database: %s", qdbid)
+	}
+
+	workerSet := NewAddressSet()
+	for _, diff := range diffs {
+		workerSet.Add(dax.Address(diff.Address))
+	}
+
+	// Convert the slice of addresses into a slice of addressMethod containing
+	// the appropriate method.
+	addressMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
+	if err := c.sendDirectives(tx, addressMethods...); err != nil {
+		return NewErrDirectiveSendFailure(err.Error())
+	}
+
 	return tx.Commit()
 }
 
