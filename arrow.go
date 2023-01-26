@@ -158,8 +158,13 @@ func (st *BasicTable) Release() {
 func (st *BasicTable) Get(column, row int) interface{} {
 	field := st.Schema().Field(column)
 	c, i := st.resolver.Resolve(row)
+	nullable := field.Nullable
 
 	chunk := st.Column(column).Data().Chunk(c)
+	// TODO(twg) 2023/01/26 potential NULL support?
+	if nullable && chunk.IsNull(i) {
+		return nil
+	}
 	switch field.Type.(type) {
 	case *arrow.BooleanType:
 		return chunk.(*array.Boolean).Value(i)
