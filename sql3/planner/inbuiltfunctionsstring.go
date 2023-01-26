@@ -219,6 +219,11 @@ func (p *ExecutionPlanner) analyseFunctionFormat(call *parser.Call, scope parser
 		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 	}
 
+	for i := 1; i < len(call.Args); i++ {
+		if typeIsVoid(call.Args[i].DataType()) {
+			return nil, sql3.NewErrLiteralNullNotAllowed(call.Args[i].Pos().Line, call.Args[i].Pos().Column)
+		}
+	}
 	call.ResultDataType = parser.NewDataTypeString()
 	return call, nil
 }
@@ -685,7 +690,8 @@ func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface
 			return nil, err
 		}
 		if argEval == nil {
-			return nil, nil
+			// this should never happen.
+			return nil, sql3.NewErrLiteralNullNotAllowed(0, 0)
 		}
 		args = append(args, argEval)
 	}

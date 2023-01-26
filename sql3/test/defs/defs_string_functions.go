@@ -844,6 +844,7 @@ var stringScalarFunctionsTests = TableTest{
 			ExpRows: rows(
 				row(string("is this true?")),
 			),
+			Compare: CompareExactOrdered,
 		},
 		{
 			name: "FormatInteger",
@@ -856,6 +857,7 @@ var stringScalarFunctionsTests = TableTest{
 			ExpRows: rows(
 				row(string("11 > 9")),
 			),
+			Compare: CompareExactOrdered,
 		},
 		{
 			name: "FormatNullString",
@@ -868,25 +870,15 @@ var stringScalarFunctionsTests = TableTest{
 			ExpRows: rows(
 				row(nil),
 			),
-		},
-		{
-			name: "FormatNullArg",
-			SQLs: sqls(
-				"select format('this = %s', null)",
-			),
-			ExpHdrs: hdrs(
-				hdr("", fldTypeString),
-			),
-			ExpRows: rows(
-				row(nil),
-			),
+			Compare: CompareExactOrdered,
 		},
 		{
 			name: "FormatLengthZero",
 			SQLs: sqls(
 				"select format()",
 			),
-			ExpErr: "[1:15] 'format': count of formal parameters (1) does not match count of actual parameters (0)",
+			ExpErr:  "[1:15] 'format': count of formal parameters (1) does not match count of actual parameters (0)",
+			Compare: CompareExactOrdered,
 		},
 		{
 			name: "FormatLengthOne",

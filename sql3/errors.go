@@ -50,6 +50,7 @@ const (
 	ErrIntegerLiteral                   errors.Code = "ErrIntegerLiteral"
 	ErrStringLiteral                    errors.Code = "ErrStringLiteral"
 	ErrBoolLiteral                      errors.Code = "ErrBoolLiteral"
+	ErrLiteralNullNotAllowed            errors.Code = "ErrLiteralNullNotAllowed"
 	ErrLiteralEmptySetNotAllowed        errors.Code = "ErrLiteralEmptySetNotAllowed"
 	ErrLiteralEmptyTupleNotAllowed      errors.Code = "ErrLiteralEmptyTupleNotAllowed"
 	ErrSetLiteralMustContainIntOrString errors.Code = "ErrSetLiteralMustContainIntOrString"
@@ -266,6 +267,13 @@ func NewErrSetLiteralMustContainIntOrString(line, col int) error {
 	return errors.New(
 		ErrSetLiteralMustContainIntOrString,
 		fmt.Sprintf("[%d:%d] set literal must contain ints or strings", line, col),
+	)
+}
+
+func NewErrLiteralNullNotAllowed(line, col int) error {
+	return errors.New(
+		ErrLiteralNullNotAllowed,
+		fmt.Sprintf("[%d:%d] null literal not allowed", line, col),
 	)
 }
 
