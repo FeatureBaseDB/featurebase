@@ -108,6 +108,7 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newDAXCommand(stderr))
 	rc.AddCommand(newDataframeCsvLoaderCommand(logdest))
 	rc.AddCommand(newPreSortCommand(logdest))
+	rc.AddCommand(newParquetInfoCommand(logdest))
 
 	rc.SetOutput(stderr)
 	return rc
