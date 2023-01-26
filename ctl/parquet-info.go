@@ -36,7 +36,7 @@ func NewParquetInfoCommand(logdest logger.Logger) *ParquetInfoCommand {
 	}
 }
 
-// Run displays information about a
+// Run displays schema and samples data from a parquet file
 func (cmd *ParquetInfoCommand) Run(ctx context.Context) error {
 	// Open database.
 	var f *os.File
