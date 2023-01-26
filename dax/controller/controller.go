@@ -664,16 +664,16 @@ func (c *Controller) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDataba
 	return qdb, nil
 }
 
-// SetDatabaseOptions sets the options on the given database.
-func (c *Controller) SetDatabaseOptions(ctx context.Context, qdbid dax.QualifiedDatabaseID, opts dax.DatabaseOptions) error {
+// SetDatabaseOption sets the option on the given database.
+func (c *Controller) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatabaseID, option string, value string) error {
 	tx, err := c.BoltDB.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
 	defer tx.Rollback()
 
-	if err := c.Schemar.SetDatabaseOptions(tx, qdbid, opts); err != nil {
-		return errors.Wrap(err, "setting database options")
+	if err := c.Schemar.SetDatabaseOption(tx, qdbid, option, value); err != nil {
+		return errors.Wrapf(err, "setting database option: %s", option)
 	}
 
 	return tx.Commit()

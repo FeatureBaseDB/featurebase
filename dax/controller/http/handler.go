@@ -23,6 +23,7 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/database-by-id", server.postDatabaseByID).Methods("POST").Name("PostDatabaseByID")
 	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
 	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
+	// router.HandleFunc("/database/options", server.handlePatchDatabaseOptions).Methods("PATCH").Name("PatchDatabaseOptions")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")

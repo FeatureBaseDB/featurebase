@@ -25,7 +25,7 @@ type Schemar interface {
 	// be returned.
 	Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error)
 
-	// SetDatabaseOptions(context.Context, QualifiedDatabaseID, DatabaseOptions) error
+	// SetDatabaseOption(ctx context.Context, qdbid QualifiedDatabaseID, option string, value string) error
 
 	//////////////////////////////////////////////////////////////////////////
 	// Table methods
