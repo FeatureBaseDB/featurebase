@@ -873,6 +873,14 @@ var stringScalarFunctionsTests = TableTest{
 			Compare: CompareExactOrdered,
 		},
 		{
+			name: "FormatNullArgument",
+			SQLs: sqls(
+				"select format('format = %d', null)",
+			),
+			ExpErr:  "[1:30] null literal not allowed",
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "FormatLengthZero",
 			SQLs: sqls(
 				"select format()",
