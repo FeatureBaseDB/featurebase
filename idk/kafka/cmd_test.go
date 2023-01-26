@@ -4,11 +4,14 @@
 package kafka
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"reflect"
 	"sort"
 	"strconv"
@@ -691,4 +694,118 @@ func tDoHTTPPost(t *testing.T, url, contentType, body string) string {
 	}
 
 	return string(bod)
+}
+
+/*
+In some cases, when we see max.poll.interval.ms exceeded on the kafka consumer,
+we also see the consumer hang when it's trying to close properly. See SUP-288.
+
+This test:
+ 1. configures the consumer such that it will hang if max.poll.interval.ms is exceeded.
+ 2. checks that
+    a. the consumer did leave the group due to exceeding max.poll.interval.ms
+    b. we close the consumer and log that we weren't able to confirm it closed properly
+
+It could be possible this test fails even though there isn't necessarily. This would be
+the case if a fix comes along to the kafka-go lib that prevents the consumer from hanging
+during the call it's consumer.Close() func.
+*/
+func TestCloseTimeout(t *testing.T) {
+
+	// produce messages
+	// wait for completion
+	// start consumer
+	// sleep 10
+	// take lock
+	// produce messages
+
+	//define some vars
+	source := "bank"
+	target := "kafka"
+	now := time.Now().UnixNano()
+	index := fmt.Sprintf("close_timeout_%d", now)
+	topic := fmt.Sprintf("close_timeout_%d", now)
+	subject := fmt.Sprintf("close_timeout_%d_subject", now)
+	log_path := fmt.Sprintf("./consumer_%d.log", now)
+
+	// configure the consumer
+	consumer, err := NewMain()
+	if err != nil {
+		t.Fatalf("issues creating a consumer")
+	}
+	configureTestFlags(consumer)
+	consumer.Topics = []string{topic}
+	consumer.BatchSize = 1000
+	consumer.IDField = "user_id"
+	consumer.KafkaGroupInstanceId = "some_id"
+	consumer.ConsumerCloseTimeout = 3
+	consumer.KafkaMaxPollInterval = "15000"
+	consumer.MaxMsgs = 10000
+	consumer.Index = index
+	consumer.KafkaSessionTimeout = "10000"
+	consumer.LogPath = log_path
+
+	// run datagen and caputre stdout and stderr in case of error
+	var datagen_0_stdout bytes.Buffer
+	var datagen_0_stderr bytes.Buffer
+	cmdString := fmt.Sprintf("go run ../cmd/datagen/main.go --source %s --target %s --kafka.topic %s --kafka.subject %s --end-at 5000 --kafka.confluent-command.schema-registry-url %s --kafka.confluent-command.kafka-bootstrap-servers %s", source, target, topic, subject, consumer.SchemaRegistryURL, consumer.KafkaBootstrapServers[0])
+	cmd := exec.Command("bash", "-c", cmdString)
+	cmd.Stdout = &datagen_0_stdout
+	cmd.Stderr = &datagen_0_stderr
+	err = cmd.Run()
+	if err != nil {
+		t.Errorf("stdout: %s", datagen_0_stdout.String())
+		t.Errorf("stderr: %s", datagen_0_stderr.String())
+		t.Fatalf("issue generating records for kafka: %s", err)
+	}
+
+	consumerError := make(chan error)
+	go func() {
+		consumerErr := consumer.Run()
+		consumerError <- consumerErr
+	}()
+
+	//wait some time for ingest - takes ~5 seconds locally
+	time.Sleep(5 * time.Second)
+
+	// take a transaction lock on the database which drives
+	// max.poll.interval.ms timeout to occur
+	client := consumer.PilosaClient()
+	status, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 20, \"exclusive\": true, \"active\": true}"), nil)
+	if err != nil {
+		t.Fatalf("error taking transaction lock")
+	}
+	if status != 200 || !strings.Contains(string(body), "active\":true") {
+		t.Fatalf("was unable to successfully take transaction lock: %s", string(body))
+	}
+
+	// produce to kafka again capturing stdout and stderr in case of error
+	cmd = exec.Command("bash", "-c", cmdString)
+
+	var datagen_1_stdout bytes.Buffer
+	var datagen_1_stderr bytes.Buffer
+
+	cmd.Stdout = &datagen_1_stdout
+	cmd.Stderr = &datagen_1_stderr
+	err = cmd.Run()
+	if err != nil {
+		t.Errorf("stdout: %s", datagen_1_stdout.String())
+		t.Errorf("stderr: %s", datagen_1_stderr.String())
+		t.Fatalf("issue generating records for kafka: %s", err)
+	}
+
+	select {
+	case <-consumerError:
+		buf, err := ioutil.ReadFile(log_path)
+		if err != nil {
+			t.Errorf("issue reading consumer log: %s", err)
+		}
+		s := string(buf)
+		if !strings.Contains(s, "Application maximum poll interval") && !strings.Contains(s, "Unable to properly close consumer") {
+			t.Errorf("the consumer did not exceed max.poll.interval.ms or the consumer was closed properly when it shouldn't have")
+		}
+	case <-time.After(30 * time.Second):
+		// wait an extra 10 seconds
+		t.Errorf("the consumer is hanging for longer that it should")
+	}
 }
