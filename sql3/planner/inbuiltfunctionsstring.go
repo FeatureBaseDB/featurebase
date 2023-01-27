@@ -722,7 +722,7 @@ func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface
 	return fmt.Sprintf(formatString, args...), nil
 }
 
-// EvaluateCharIndex [function to get the position of the substring in the given string]
+// EvaluateCharIndex function gets the position of the substring in the given string
 func (n *callPlanExpression) EvaluateCharIndex(currentRow []interface{}) (interface{}, error) {
 
 	argEval, err := n.args[0].Evaluate(currentRow)
