@@ -901,5 +901,86 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			Compare: CompareExactOrdered,
 		},
+		{
+			name: "CharIndexIncorrectNumberofArguments",
+			SQLs: sqls(
+				"select charindex('is','this is great',3,4)",
+			),
+			ExpErr: "'charindex': count of formal parameters (3) does not match count of actual parameters (4)",
+		},
+		{
+			name: "CharIndexIncorrectTypeofArgumentsforPosition",
+			SQLs: sqls(
+				"select charindex('is','this is great','you')",
+			),
+			ExpErr: "integer expression expected",
+		},
+		{
+			name: "CharIndexIncorrectTypeofArgumentsforInputString",
+			SQLs: sqls(
+				"select charindex('is',23,3)",
+			),
+			ExpErr: "string expression expected",
+		},
+		{
+			name: "CharIndexIncorrectTypeofArgumentsforSubString",
+			SQLs: sqls(
+				"select charindex(1,'this is great',3)",
+			),
+			ExpErr: "string expression expected",
+		},
+		{
+			name: "CharIndexPositionOutofRangewithNegativePosition",
+			SQLs: sqls(
+				"select charindex('is','this is great',-1)",
+			),
+			ExpErr: "value '-1' out of range",
+		},
+		{
+			name: "CharIndexPositionOutofRange",
+			SQLs: sqls(
+				"select charindex('is','this is great',15)",
+			),
+			ExpErr: "value '15' out of range",
+		},
+		{
+			name: "CharIndexofSubstring",
+			SQLs: sqls(
+				"Select charindex('is','this is great')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "CharIndexofSubstringwithPosition",
+			SQLs: sqls(
+				"Select charindex('is','this is great',3)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(5)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "CharIndexSubstringNotfound",
+			SQLs: sqls(
+				"Select charindex('abc','this is great',3)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(-1)),
+			),
+			Compare: CompareExactOrdered,
+		},
 	},
 }
