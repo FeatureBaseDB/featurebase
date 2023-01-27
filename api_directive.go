@@ -331,10 +331,7 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 	for tkey, partitions := range partComp.removed() {
 		qtid := tkey.QualifiedTableID()
 		for _, partition := range partitions {
-			resource := api.serverlessStorage.GetTableKeyResource(qtid, partition)
-			if err := resource.Unlock(); err != nil {
-				log.Printf("error unlocking partition: %s, %d, err: %v", tkey, partition, err)
-			}
+			api.serverlessStorage.RemoveTableKeyResource(qtid, partition)
 		}
 	}
 
@@ -432,10 +429,7 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 	for tkey, fields := range fieldComp.removed() {
 		qtid := tkey.QualifiedTableID()
 		for _, field := range fields {
-			resource := api.serverlessStorage.GetFieldKeyResource(qtid, field)
-			if err := resource.Unlock(); err != nil {
-				log.Printf("error unlocking field key: %s, %s, err: %v", tkey, field, err)
-			}
+			api.serverlessStorage.RemoveFieldKeyResource(qtid, field)
 		}
 	}
 
@@ -531,10 +525,7 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 		qtid := tkey.QualifiedTableID()
 		for _, shard := range shards {
 			partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
-			resource := api.serverlessStorage.GetShardResource(qtid, partition, shard)
-			if err := resource.Unlock(); err != nil {
-				log.Printf("error unlocking shard: %s, %d, err: %v", tkey, shard, err)
-			}
+			api.serverlessStorage.RemoveShardResource(qtid, partition, shard)
 		}
 	}
 
