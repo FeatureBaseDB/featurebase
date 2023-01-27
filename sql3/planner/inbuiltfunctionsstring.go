@@ -690,7 +690,6 @@ func (n *callPlanExpression) EvaluateReplicate(currentRow []interface{}) (interf
 
 }
 
-<<<<<<< HEAD
 // EvaluateFormat function formats according to a format specifier and returns resulting string.
 func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface{}, error) {
 	// first arg must be a string
@@ -723,10 +722,7 @@ func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface
 	return fmt.Sprintf(formatString, args...), nil
 }
 
-// function to get the index of substring in the given string
-=======
 // EvaluateCharIndex [function to get the position of the substring in the given string]
->>>>>>> 7a58a135 (Updates per review comments)
 func (n *callPlanExpression) EvaluateCharIndex(currentRow []interface{}) (interface{}, error) {
 
 	argEval, err := n.args[0].Evaluate(currentRow)
