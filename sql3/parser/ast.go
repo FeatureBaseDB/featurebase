@@ -13,6 +13,7 @@ type Node interface {
 	fmt.Stringer
 }
 
+func (*AlterDatabaseStatement) node()   {}
 func (*AlterTableStatement) node()      {}
 func (*AlterViewStatement) node()       {}
 func (*AnalyzeStatement) node()         {}
@@ -104,6 +105,7 @@ type Statement interface {
 	stmt()
 }
 
+func (*AlterDatabaseStatement) stmt()   {}
 func (*AlterTableStatement) stmt()      {}
 func (*AlterViewStatement) stmt()       {}
 func (*AnalyzeStatement) stmt()         {}
@@ -140,6 +142,8 @@ func CloneStatement(stmt Statement) Statement {
 	}
 
 	switch stmt := stmt.(type) {
+	case *AlterDatabaseStatement:
+		return stmt.Clone()
 	case *AlterTableStatement:
 		return stmt.Clone()
 	case *AnalyzeStatement:
@@ -1435,6 +1439,39 @@ func (s *AnalyzeStatement) Clone() *AnalyzeStatement {
 // String returns the string representation of the statement.
 func (s *AnalyzeStatement) String() string {
 	return fmt.Sprintf("ANALYZE %s", s.Name.String())
+}
+
+type AlterDatabaseStatement struct {
+	Alter    Pos    // position of ALTER keyword
+	Database Pos    // position of DATABASE keyword
+	Name     *Ident // database name
+
+	Set Pos // position of SET keyword
+
+	Option DatabaseOption
+}
+
+// Clone returns a deep copy of s.
+func (s *AlterDatabaseStatement) Clone() *AlterDatabaseStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Name = other.Name.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *AlterDatabaseStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("ALTER DATABASE ")
+	buf.WriteString(s.Name.String())
+
+	if s.Option != nil {
+		buf.WriteString(" SET ")
+		buf.WriteString(s.Option.String())
+	}
+	return buf.String()
 }
 
 type AlterTableStatement struct {

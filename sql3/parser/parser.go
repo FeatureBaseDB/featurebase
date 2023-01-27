@@ -348,12 +348,14 @@ func (p *Parser) parseAlterStatement() (Statement, error) {
 	pos, tok, _ := p.scan()
 
 	switch p.peek() {
+	case DATABASE:
+		return p.parseAlterDatabaseStatement(pos)
 	case TABLE:
 		return p.parseAlterTableStatement(pos)
 	case VIEW:
 		return p.parseAlterViewStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE or VIEW")
+		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE or VIEW")
 	}
 }
 
@@ -3409,6 +3411,36 @@ func (p *Parser) parseIntegerLiteral(desc string) (*IntegerLit, error) {
 	default:
 		return nil, p.errorExpected(p.pos, p.tok, desc)
 	}
+}
+
+func (p *Parser) parseAlterDatabaseStatement(alterPos Pos) (_ *AlterDatabaseStatement, err error) {
+	var stmt AlterDatabaseStatement
+	stmt.Alter = alterPos
+	if p.peek() != DATABASE {
+		return &stmt, p.errorExpected(p.pos, p.tok, "DATABASE")
+	}
+	stmt.Database, _, _ = p.scan()
+
+	if stmt.Name, err = p.parseIdent("database name"); err != nil {
+		return &stmt, err
+	}
+
+	switch p.peek() {
+	case SET:
+		stmt.Set, _, _ = p.scan()
+
+		// look for database option
+		if !isDatabaseOptionStartToken(p.peek()) {
+			return &stmt, p.errorExpected(p.pos, p.tok, "UNITS")
+		}
+		if stmt.Option, err = p.parseDatabaseOption(); err != nil {
+			return &stmt, err
+		}
+	default:
+		return &stmt, p.errorExpected(p.pos, p.tok, "SET")
+	}
+
+	return &stmt, nil
 }
 
 func (p *Parser) parseAlterTableStatement(alterPos Pos) (_ *AlterTableStatement, err error) {

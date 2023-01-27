@@ -137,6 +137,16 @@ func TestCreateDatabaseStatement_String(t *testing.T) {
 	}, `CREATE DATABASE db1 UNITS 4`)
 }
 
+func TestAlterDatabaseStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.AlterDatabaseStatement{
+		Name: &parser.Ident{Name: "db1"},
+		Option: &parser.UnitsOption{
+			Units: pos(0),
+			Expr:  &parser.IntegerLit{Value: "4"},
+		},
+	}, `ALTER DATABASE db1 SET UNITS 4`)
+}
+
 func TestCreateTableStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateTableStatement{
 		Name:        &parser.Ident{Name: "foo"},

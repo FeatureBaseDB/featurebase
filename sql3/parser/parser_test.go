@@ -349,6 +349,27 @@ func TestParser_ParseCacheTypeConstraints(t *testing.T) {
 }
 
 func TestParser_ParseAlterStatement(t *testing.T) {
+	t.Run("AlterDatabase", func(t *testing.T) {
+		AssertParseStatement(t, `ALTER DATABASE db1 SET UNITS 4`, &parser.AlterDatabaseStatement{
+			Alter:    pos(0),
+			Database: pos(6),
+			Name:     &parser.Ident{NamePos: pos(15), Name: "db1"},
+			Set:      pos(19),
+			Option: &parser.UnitsOption{
+				Units: pos(23),
+				Expr: &parser.IntegerLit{
+					ValuePos: pos(29),
+					Value:    "4",
+				},
+			},
+		})
+
+		AssertParseStatementError(t, `ALTER`, `1:1: expected DATABASE, TABLE or VIEW`)
+		AssertParseStatementError(t, `ALTER DATABASE`, `1:14: expected database name, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1`, `1:18: expected SET, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1 SET`, `1:22: expected UNITS, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1 SET UNITS`, `1:28: expected literal, found 'EOF'`)
+	})
 
 	t.Run("AlterTable", func(t *testing.T) {
 		/*AssertParseStatement(t, `ALTER TABLE tbl RENAME TO new_tbl`, &parser.AlterTableStatement{
@@ -427,7 +448,7 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 			DropColumnName: &parser.Ident{NamePos: pos(28), Name: "col"},
 		})
 
-		AssertParseStatementError(t, `ALTER`, `1:1: expected TABLE or VIEW`)
+		AssertParseStatementError(t, `ALTER`, `1:1: expected DATABASE, TABLE or VIEW`)
 		AssertParseStatementError(t, `ALTER TABLE`, `1:11: expected table name, found 'EOF'`)
 		AssertParseStatementError(t, `ALTER TABLE tbl`, `1:15: expected ADD, DROP or RENAME, found 'EOF'`)
 		AssertParseStatementError(t, `ALTER TABLE tbl RENAME`, `1:22: expected COLUMN keyword or column name, found 'EOF'`)

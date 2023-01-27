@@ -18,6 +18,7 @@ const (
 	alterOpAdd alterOperation = iota
 	alterOpDrop
 	alterOpRename
+	alterOpSet
 )
 
 // compileAlterTableStatement compiles an ALTER TABLE statement into a

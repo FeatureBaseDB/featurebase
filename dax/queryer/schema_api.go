@@ -58,7 +58,8 @@ func (s *qualifiedSchemaAPI) DatabaseByID(ctx context.Context, dbid dax.Database
 }
 
 func (s *qualifiedSchemaAPI) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
-	return nil
+	qdbid := dax.NewQualifiedDatabaseID(s.qdbid.OrganizationID, dbid)
+	return s.schemar.SetDatabaseOption(ctx, qdbid, option, value)
 }
 
 func (s *qualifiedSchemaAPI) Databases(ctx context.Context, dbids ...dax.DatabaseID) ([]*dax.Database, error) {

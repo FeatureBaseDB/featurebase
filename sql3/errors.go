@@ -71,9 +71,10 @@ const (
 	ErrInsertMustHaveIDColumn          errors.Code = "ErrInsertMustHaveIDColumn"
 	ErrInsertMustAtLeastOneNonIDColumn errors.Code = "ErrInsertMustAtLeastOneNonIDColumn"
 
-	ErrDatabaseNotFound  errors.Code = "ErrDatabaseNotFound"
-	ErrDatabaseExists    errors.Code = "ErrDatabaseExists"
-	ErrInvalidUnitsValue errors.Code = "ErrInvalidUnitsValue"
+	ErrDatabaseNotFound      errors.Code = "ErrDatabaseNotFound"
+	ErrDatabaseExists        errors.Code = "ErrDatabaseExists"
+	ErrInvalidDatabaseOption errors.Code = "ErrInvalidDatabaseOption"
+	ErrInvalidUnitsValue     errors.Code = "ErrInvalidUnitsValue"
 
 	ErrTableMustHaveIDColumn     errors.Code = "ErrTableMustHaveIDColumn"
 	ErrTableIDColumnType         errors.Code = "ErrTableIDColumnType"
@@ -576,6 +577,13 @@ func NewErrTableColumnNotFound(line, col int, tableName string, columnName strin
 	return errors.New(
 		ErrTableColumnNotFound,
 		fmt.Sprintf("[%d:%d] column '%s' not found in table '%s'", line, col, columnName, tableName),
+	)
+}
+
+func NewErrInvalidDatabaseOption(line, col int, option string) error {
+	return errors.New(
+		ErrInvalidDatabaseOption,
+		fmt.Sprintf("[%d:%d] invalid database option '%s'", line, col, option),
 	)
 }
 
