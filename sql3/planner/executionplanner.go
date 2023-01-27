@@ -65,12 +65,16 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	switch stmt := stmt.(type) {
 	case *parser.SelectStatement:
 		rootOperator, err = p.compileSelectStatement(stmt, false)
+	case *parser.ShowDatabasesStatement:
+		rootOperator, err = p.compileShowDatabasesStatement(stmt)
 	case *parser.ShowTablesStatement:
 		rootOperator, err = p.compileShowTablesStatement(stmt)
 	case *parser.ShowColumnsStatement:
 		rootOperator, err = p.compileShowColumnsStatement(stmt)
 	case *parser.ShowCreateTableStatement:
 		rootOperator, err = p.compileShowCreateTableStatement(stmt)
+	case *parser.CreateDatabaseStatement:
+		rootOperator, err = p.compileCreateDatabaseStatement(stmt)
 	case *parser.CreateTableStatement:
 		rootOperator, err = p.compileCreateTableStatement(stmt)
 	case *parser.CreateViewStatement:
@@ -118,12 +122,16 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 	case *parser.SelectStatement:
 		_, err := p.analyzeSelectStatement(stmt)
 		return err
+	case *parser.ShowDatabasesStatement:
+		return nil
 	case *parser.ShowTablesStatement:
 		return nil
 	case *parser.ShowColumnsStatement:
 		return nil
 	case *parser.ShowCreateTableStatement:
 		return nil
+	case *parser.CreateDatabaseStatement:
+		return p.analyzeCreateDatabaseStatement(stmt)
 	case *parser.CreateTableStatement:
 		return p.analyzeCreateTableStatement(stmt)
 	case *parser.CreateViewStatement:

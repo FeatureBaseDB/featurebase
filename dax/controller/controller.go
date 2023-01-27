@@ -582,6 +582,11 @@ func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatab
 	}
 	defer tx.Rollback()
 
+	// Create Database ID.
+	if _, err := qdb.CreateID(); err != nil {
+		return errors.Wrap(err, "creating database ID")
+	}
+
 	if err := c.Schemar.CreateDatabase(tx, qdb); err != nil {
 		return errors.Wrap(err, "creating database in schemar")
 	}

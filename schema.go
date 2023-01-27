@@ -42,7 +42,7 @@ func (s *onPremSchema) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseI
 	return nil
 }
 func (s *onPremSchema) Databases(context.Context, ...dax.DatabaseID) ([]*dax.Database, error) {
-	return nil, errors.Errorf("unimplemented: onPremSchema.Databases()")
+	return []*dax.Database{}, nil
 }
 
 func (s *onPremSchema) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {

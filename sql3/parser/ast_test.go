@@ -116,6 +116,13 @@ func TestCreateIndexStatement_String(t *testing.T) {
 	}, `CREATE UNIQUE INDEX IF NOT EXISTS "foo" ON "bar" ("baz", "bat") WHERE TRUE`)
 }
 
+func TestCreateDatabaseStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
+		Name:        &parser.Ident{Name: "db1"},
+		IfNotExists: pos(0),
+	}, `CREATE DATABASE IF NOT EXISTS db1`)
+}
+
 func TestCreateTableStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateTableStatement{
 		Name:        &parser.Ident{Name: "foo"},

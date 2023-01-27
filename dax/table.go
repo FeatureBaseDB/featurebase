@@ -10,6 +10,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/pql"
+	uuid "github.com/satori/go.uuid"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -154,6 +155,25 @@ type Database struct {
 	UpdatedBy   string `json:"updatedBy,omitempty"`
 }
 
+// CreateID generates a unique identifier for Database. If Database has already
+// been assigned an ID, then this no-ops. The reason for this is that the cloud
+// implementation of FeatureBase may allocate an ID before calling
+// CreateDatabase on the controller.
+func (d *Database) CreateID() (DatabaseID, error) {
+	if d.ID != "" {
+		return d.ID, nil
+	}
+
+	id, err := uuid.NewV4()
+	if err != nil {
+		return "", errors.Wrap(err, "generating uuid")
+	}
+
+	d.ID = DatabaseID(id.String())
+
+	return d.ID, nil
+}
+
 // DatabaseOptions are used to configure a database.
 type DatabaseOptions struct {
 	WorkersMin int `json:"workers-min"`
@@ -193,6 +213,15 @@ func (opts *DatabaseOptions) Set(option string, value string) error {
 type QualifiedDatabase struct {
 	OrganizationID OrganizationID `json:"org-id"`
 	Database
+}
+
+// NewQualifiedDatabase returns the db as a QualifiedDatabase with the provided
+// OrganizationID.
+func NewQualifiedDatabase(orgID OrganizationID, db *Database) *QualifiedDatabase {
+	return &QualifiedDatabase{
+		OrganizationID: orgID,
+		Database:       *db,
+	}
 }
 
 type QualifiedDatabases []*QualifiedDatabase

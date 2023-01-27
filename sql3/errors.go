@@ -71,6 +71,8 @@ const (
 	ErrInsertMustHaveIDColumn          errors.Code = "ErrInsertMustHaveIDColumn"
 	ErrInsertMustAtLeastOneNonIDColumn errors.Code = "ErrInsertMustAtLeastOneNonIDColumn"
 
+	ErrDatabaseExists errors.Code = "ErrDatabaseExists"
+
 	ErrTableMustHaveIDColumn     errors.Code = "ErrTableMustHaveIDColumn"
 	ErrTableIDColumnType         errors.Code = "ErrTableIDColumnType"
 	ErrTableIDColumnConstraints  errors.Code = "ErrTableIDColumnConstraints"
@@ -495,6 +497,13 @@ func NewErrInsertMustAtLeastOneNonIDColumn(line int, col int) error {
 	return errors.New(
 		ErrInsertMustAtLeastOneNonIDColumn,
 		fmt.Sprintf("[%d:%d] insert column list must have at least one non '_id' column specified", line, col),
+	)
+}
+
+func NewErrDatabaseExists(line, col int, databaseName string) error {
+	return errors.New(
+		ErrDatabaseExists,
+		fmt.Sprintf("[%d:%d] database '%s' already exists", line, col, databaseName),
 	)
 }
 

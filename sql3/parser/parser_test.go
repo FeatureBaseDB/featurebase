@@ -623,12 +623,16 @@ func TestParser_ParseStatement(t *testing.T) {
 	})
 
 	t.Run("ShowTables", func(t *testing.T) {
+		AssertParseStatement(t, `SHOW DATABASES`, &parser.ShowDatabasesStatement{
+			Show:      pos(0),
+			Databases: pos(5),
+		})
 		AssertParseStatement(t, `SHOW TABLES`, &parser.ShowTablesStatement{
 			Show:   pos(0),
 			Tables: pos(5),
 		})
-		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS or CREATE, found 'EOF'`)
-		AssertParseStatementError(t, `SHOW BLAH`, `1:6: expected TABLES, COLUMNS or CREATE, found BLAH`)
+		AssertParseStatementError(t, `SHOW`, `1:4: expected DATABASES, TABLES, COLUMNS or CREATE, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW BLAH`, `1:6: expected DATABASES, TABLES, COLUMNS or CREATE, found BLAH`)
 	})
 
 	t.Run("ShowColumns", func(t *testing.T) {
@@ -641,7 +645,7 @@ func TestParser_ParseStatement(t *testing.T) {
 				NamePos: pos(18),
 			},
 		})
-		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS or CREATE, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW`, `1:4: expected DATABASES, TABLES, COLUMNS or CREATE, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW COLUMNS`, `1:12: expected FROM, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW COLUMNS FOO`, `1:14: expected FROM, found FOO`)
 		AssertParseStatementError(t, `SHOW COLUMNS FROM`, `1:17: expected table name, found 'EOF'`)
@@ -658,7 +662,7 @@ func TestParser_ParseStatement(t *testing.T) {
 				NamePos: pos(18),
 			},
 		})
-		AssertParseStatementError(t, `SHOW`, `1:4: expected TABLES, COLUMNS or CREATE, found 'EOF'`)
+		AssertParseStatementError(t, `SHOW`, `1:4: expected DATABASES, TABLES, COLUMNS or CREATE, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW CREATE`, `1:11: expected TABLES, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW CREATE TABLE`, `1:17: expected table name, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW CREATE TABLE 12`, `1:19: expected table name, found 12`)
@@ -1636,7 +1640,7 @@ func TestParser_ParseStatement(t *testing.T) {
 			IfExists: pos(13),
 			Name:     &parser.Ident{NamePos: pos(20), Name: "vw"},
 		})
-		AssertParseStatementError(t, `DROP`, `1:1: expected TABLE, VIEW or FUNCTION`)
+		AssertParseStatementError(t, `DROP`, `1:1: expected DATABASE, TABLE, VIEW or FUNCTION`)
 		AssertParseStatementError(t, `DROP VIEW`, `1:9: expected view name, found 'EOF'`)
 		AssertParseStatementError(t, `DROP VIEW IF`, `1:12: expected EXISTS, found 'EOF'`)
 		AssertParseStatementError(t, `DROP VIEW IF EXISTS`, `1:19: expected view name, found 'EOF'`)
