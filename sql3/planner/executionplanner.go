@@ -21,6 +21,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func isDatabaseNotFoundError(err error) bool {
+	// TODO (pok) take out the second part of this check once we return correct error types across network boundaries
+	return errors.Is(err, dax.ErrDatabaseNameDoesNotExist) || strings.Contains(err.Error(), "does not exist")
+}
+
 func isTableNotFoundError(err error) bool {
 	// TODO (pok) take out the second part of this check once we return correct error types across network boundaries
 	return errors.Is(err, dax.ErrTableNameDoesNotExist) || strings.Contains(err.Error(), "does not exist")
@@ -83,6 +88,8 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 		rootOperator, err = p.compileAlterTableStatement(stmt)
 	case *parser.AlterViewStatement:
 		rootOperator, err = p.compileAlterViewStatement(stmt)
+	case *parser.DropDatabaseStatement:
+		rootOperator, err = p.compileDropDatabaseStatement(stmt)
 	case *parser.DropTableStatement:
 		rootOperator, err = p.compileDropTableStatement(stmt)
 	case *parser.DropViewStatement:
@@ -140,6 +147,8 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 		return p.analyzeAlterTableStatement(stmt)
 	case *parser.AlterViewStatement:
 		return p.analyzeAlterViewStatement(stmt)
+	case *parser.DropDatabaseStatement:
+		return nil
 	case *parser.DropTableStatement:
 		return nil
 	case *parser.DropViewStatement:

@@ -42,6 +42,7 @@ func (*CreateViewStatement) node()      {}
 func (*DateLit) node()                  {}
 func (*DefaultConstraint) node()        {}
 func (*DeleteStatement) node()          {}
+func (*DropDatabaseStatement) node()    {}
 func (*DropIndexStatement) node()       {}
 func (*DropTableStatement) node()       {}
 func (*DropFunctionStatement) node()    {}
@@ -118,6 +119,7 @@ func (*CreateTableStatement) stmt()     {}
 func (*CreateFunctionStatement) stmt()  {}
 func (*CreateViewStatement) stmt()      {}
 func (*DeleteStatement) stmt()          {}
+func (*DropDatabaseStatement) stmt()    {}
 func (*DropIndexStatement) stmt()       {}
 func (*DropTableStatement) stmt()       {}
 func (*DropFunctionStatement) stmt()    {}
@@ -156,6 +158,8 @@ func CloneStatement(stmt Statement) Statement {
 	case *CreateViewStatement:
 		return stmt.Clone()
 	case *DeleteStatement:
+		return stmt.Clone()
+	case *DropDatabaseStatement:
 		return stmt.Clone()
 	case *DropIndexStatement:
 		return stmt.Clone()
@@ -2516,12 +2520,41 @@ type ColumnArg interface {
 	columnArg()
 }
 
+type DropDatabaseStatement struct {
+	Drop     Pos    // position of DROP keyword
+	Database Pos    // position of DATABASE keyword
+	If       Pos    // position of IF keyword
+	IfExists Pos    // position of EXISTS keyword after IF
+	Name     *Ident // database name
+}
+
+// Clone returns a deep copy of s.
+func (s *DropDatabaseStatement) Clone() *DropDatabaseStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Name = s.Name.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *DropDatabaseStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("DROP DATABASE")
+	if s.IfExists.IsValid() {
+		buf.WriteString(" IF EXISTS")
+	}
+	fmt.Fprintf(&buf, " %s", s.Name.String())
+	return buf.String()
+}
+
 type DropTableStatement struct {
 	Drop     Pos    // position of DROP keyword
 	Table    Pos    // position of TABLE keyword
 	If       Pos    // position of IF keyword
 	IfExists Pos    // position of EXISTS keyword after IF
-	Name     *Ident // view name
+	Name     *Ident // table name
 }
 
 // Clone returns a deep copy of s.

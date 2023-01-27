@@ -6,8 +6,6 @@ import (
 	"io"
 	"strings"
 	"time"
-
-	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 // Parser represents a SQL parser.
@@ -365,8 +363,7 @@ func (p *Parser) parseDropStatement() (Statement, error) {
 
 	switch p.peek() {
 	case DATABASE:
-		// return p.parseDropDatabaseStatement(pos)
-		return nil, errors.Errorf("Parser drop database not implemented")
+		return p.parseDropDatabaseStatement(pos)
 	case TABLE:
 		return p.parseDropTableStatement(pos)
 	case VIEW:
@@ -1099,6 +1096,29 @@ func (p *Parser) parseTimeQuantumConstraint(constraintPos Pos, name *Ident) (_ *
 
 	return &cons, nil
 }*/
+
+func (p *Parser) parseDropDatabaseStatement(dropPos Pos) (_ *DropDatabaseStatement, err error) {
+	assert(p.peek() == DATABASE)
+
+	var stmt DropDatabaseStatement
+	stmt.Drop = dropPos
+	stmt.Database, _, _ = p.scan()
+
+	// Parse optional "IF EXISTS".
+	if p.peek() == IF {
+		stmt.If, _, _ = p.scan()
+		if p.peek() != EXISTS {
+			return &stmt, p.errorExpected(p.pos, p.tok, "EXISTS")
+		}
+		stmt.IfExists, _, _ = p.scan()
+	}
+
+	if stmt.Name, err = p.parseIdent("database name"); err != nil {
+		return &stmt, err
+	}
+
+	return &stmt, nil
+}
 
 func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, err error) {
 	assert(p.peek() == TABLE)

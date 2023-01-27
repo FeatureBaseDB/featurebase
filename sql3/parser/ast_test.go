@@ -485,6 +485,17 @@ func TestDropIndexStatement_String(t *testing.T) {
 	}, `DROP INDEX IF EXISTS "idx"`)
 }
 
+func TestDropDatabaseStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.DropDatabaseStatement{
+		Name: &parser.Ident{Name: "db"},
+	}, `DROP DATABASE db`)
+
+	AssertStatementStringer(t, &parser.DropDatabaseStatement{
+		IfExists: pos(0),
+		Name:     &parser.Ident{Name: "db"},
+	}, `DROP DATABASE IF EXISTS db`)
+}
+
 func TestDropTableStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.DropTableStatement{
 		Name: &parser.Ident{Name: "tbl"},

@@ -71,7 +71,8 @@ const (
 	ErrInsertMustHaveIDColumn          errors.Code = "ErrInsertMustHaveIDColumn"
 	ErrInsertMustAtLeastOneNonIDColumn errors.Code = "ErrInsertMustAtLeastOneNonIDColumn"
 
-	ErrDatabaseExists errors.Code = "ErrDatabaseExists"
+	ErrDatabaseNotFound errors.Code = "ErrDatabaseNotFound"
+	ErrDatabaseExists   errors.Code = "ErrDatabaseExists"
 
 	ErrTableMustHaveIDColumn     errors.Code = "ErrTableMustHaveIDColumn"
 	ErrTableIDColumnType         errors.Code = "ErrTableIDColumnType"
@@ -532,6 +533,13 @@ func NewErrTableIDColumnAlter(line, col int) error {
 	return errors.New(
 		ErrTableIDColumnAlter,
 		fmt.Sprintf("[%d:%d] _id column cannot be added to an existing table", line, col),
+	)
+}
+
+func NewErrDatabaseNotFound(line, col int, databaseName string) error {
+	return errors.New(
+		ErrDatabaseNotFound,
+		fmt.Sprintf("[%d:%d] database '%s' not found", line, col, databaseName),
 	)
 }
 

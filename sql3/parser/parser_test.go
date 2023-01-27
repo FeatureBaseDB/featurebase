@@ -1551,6 +1551,24 @@ func TestParser_ParseStatement(t *testing.T) {
 		})
 	})
 
+	t.Run("DropDatabase", func(t *testing.T) {
+		AssertParseStatement(t, `DROP DATABASE db`, &parser.DropDatabaseStatement{
+			Drop:     pos(0),
+			Database: pos(5),
+			Name:     &parser.Ident{NamePos: pos(14), Name: "db"},
+		})
+		AssertParseStatement(t, `DROP DATABASE IF EXISTS db`, &parser.DropDatabaseStatement{
+			Drop:     pos(0),
+			Database: pos(5),
+			If:       pos(14),
+			IfExists: pos(17),
+			Name:     &parser.Ident{NamePos: pos(24), Name: "db"},
+		})
+		AssertParseStatementError(t, `DROP DATABASE`, `1:13: expected database name, found 'EOF'`)
+		AssertParseStatementError(t, `DROP DATABASE IF`, `1:16: expected EXISTS, found 'EOF'`)
+		AssertParseStatementError(t, `DROP DATABASE IF EXISTS`, `1:23: expected database name, found 'EOF'`)
+	})
+
 	t.Run("DropTable", func(t *testing.T) {
 		AssertParseStatement(t, `DROP TABLE vw`, &parser.DropTableStatement{
 			Drop:  pos(0),
