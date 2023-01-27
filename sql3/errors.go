@@ -50,6 +50,7 @@ const (
 	ErrIntegerLiteral                   errors.Code = "ErrIntegerLiteral"
 	ErrStringLiteral                    errors.Code = "ErrStringLiteral"
 	ErrBoolLiteral                      errors.Code = "ErrBoolLiteral"
+	ErrLiteralNullNotAllowed            errors.Code = "ErrLiteralNullNotAllowed"
 	ErrLiteralEmptySetNotAllowed        errors.Code = "ErrLiteralEmptySetNotAllowed"
 	ErrLiteralEmptyTupleNotAllowed      errors.Code = "ErrLiteralEmptyTupleNotAllowed"
 	ErrSetLiteralMustContainIntOrString errors.Code = "ErrSetLiteralMustContainIntOrString"
@@ -121,8 +122,9 @@ const (
 	ErrAggregateNotAllowedInGroupBy errors.Code = "ErrIdPercentileNotAllowedInGroupBy"
 
 	// function evaluation
-	ErrValueOutOfRange      errors.Code = "ErrValueOutOfRange"
-	ErrStringLengthMismatch errors.Code = "ErrStringLengthMismatch"
+	ErrValueOutOfRange          errors.Code = "ErrValueOutOfRange"
+	ErrStringLengthMismatch     errors.Code = "ErrStringLengthMismatch"
+	ErrUnexpectedTypeConversion errors.Code = "ErrUnexpectedTypeConversion"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -265,6 +267,13 @@ func NewErrSetLiteralMustContainIntOrString(line, col int) error {
 	return errors.New(
 		ErrSetLiteralMustContainIntOrString,
 		fmt.Sprintf("[%d:%d] set literal must contain ints or strings", line, col),
+	)
+}
+
+func NewErrLiteralNullNotAllowed(line, col int) error {
+	return errors.New(
+		ErrLiteralNullNotAllowed,
+		fmt.Sprintf("[%d:%d] null literal not allowed", line, col),
 	)
 }
 
@@ -749,5 +758,12 @@ func NewErrStringLengthMismatch(line, col, len int, val interface{}) error {
 	return errors.New(
 		ErrStringLengthMismatch,
 		fmt.Sprintf("[%d:%d] value '%v' should be of the length %d", line, col, val, len),
+	)
+}
+
+func NewErrUnexpectedTypeConversion(line, col int, val interface{}) error {
+	return errors.New(
+		ErrUnexpectedTypeConversion,
+		NewErrInternalf("unexpected type conversion %T", val).Error(),
 	)
 }

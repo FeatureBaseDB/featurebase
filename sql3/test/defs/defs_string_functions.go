@@ -820,5 +820,86 @@ var stringScalarFunctionsTests = TableTest{
 			),
 			ExpErr: "[0:0] value '-1' out of range",
 		},
+		{
+			name: "FormatString",
+			SQLs: sqls(
+				"select format('this or %s', 'that')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("this or that")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FormatBoolean",
+			SQLs: sqls(
+				"select format('is this %t?', true)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("is this true?")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FormatInteger",
+			SQLs: sqls(
+				"select format('%d > %d', 11 , 9)",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("11 > 9")),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FormatNullString",
+			SQLs: sqls(
+				"select format(null,'this')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FormatNullArgument",
+			SQLs: sqls(
+				"select format('format = %d', null)",
+			),
+			ExpErr:  "[1:30] null literal not allowed",
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FormatLengthZero",
+			SQLs: sqls(
+				"select format()",
+			),
+			ExpErr:  "[1:15] 'format': count of formal parameters (1) does not match count of actual parameters (0)",
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "FormatLengthOne",
+			SQLs: sqls(
+				"select format('noArg')",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("noArg")),
+			),
+			Compare: CompareExactOrdered,
+		},
 	},
 }
