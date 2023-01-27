@@ -25,6 +25,26 @@ func NewOnPremSchema(api *API) *onPremSchema {
 	}
 }
 
+func (s *onPremSchema) CreateDatabase(context.Context, *dax.Database) error {
+	return errors.Errorf("unimplemented: onPremSchema.CreateDatabase()")
+}
+func (s *onPremSchema) DropDatabase(context.Context, dax.DatabaseID) error {
+	return errors.Errorf("unimplemented: onPremSchema.DropDatabase()")
+}
+
+func (s *onPremSchema) DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: onPremSchema.DatabaseByName()")
+}
+func (s *onPremSchema) DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: onPremSchema.DatabaseByID()")
+}
+func (s *onPremSchema) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
+	return nil
+}
+func (s *onPremSchema) Databases(context.Context, ...dax.DatabaseID) ([]*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: onPremSchema.Databases()")
+}
+
 func (s *onPremSchema) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	idx, err := s.api.IndexInfo(context.Background(), string(tname))
 	if err != nil {

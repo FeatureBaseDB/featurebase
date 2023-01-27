@@ -40,7 +40,7 @@ type ExecutionPlanner struct {
 func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer pilosa.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
 	return &ExecutionPlanner{
 		executor:       executor,
-		schemaAPI:      newSystemTableDefintionsWrapper(schemaAPI),
+		schemaAPI:      newSystemTableDefinitionsWrapper(schemaAPI),
 		systemAPI:      systemAPI,
 		systemLayerAPI: systemLayerAPI,
 		importer:       importer,

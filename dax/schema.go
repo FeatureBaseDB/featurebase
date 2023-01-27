@@ -19,13 +19,13 @@ type Schemar interface {
 	DatabaseByName(ctx context.Context, orgID OrganizationID, dbname DatabaseName) (*QualifiedDatabase, error)
 	DatabaseByID(ctx context.Context, qdbid QualifiedDatabaseID) (*QualifiedDatabase, error)
 
+	SetDatabaseOption(ctx context.Context, qdbid QualifiedDatabaseID, option string, value string) error
+
 	// Databases returns a list of databases. If the list of DatabaseIDs is
 	// empty, all databases will be returned. If greater than zero DatabaseIDs
 	// are passed in the second argument, only databases matching those IDs will
 	// be returned.
 	Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error)
-
-	// SetDatabaseOption(ctx context.Context, qdbid QualifiedDatabaseID, option string, value string) error
 
 	//////////////////////////////////////////////////////////////////////////
 	// Table methods
@@ -75,6 +75,9 @@ func (s *NopSchemar) DatabaseByName(ctx context.Context, orgID OrganizationID, d
 }
 func (s *NopSchemar) DatabaseByID(ctx context.Context, qdbid QualifiedDatabaseID) (*QualifiedDatabase, error) {
 	return nil, nil
+}
+func (s *NopSchemar) SetDatabaseOption(ctx context.Context, qdbid QualifiedDatabaseID, option string, value string) error {
+	return nil
 }
 func (s *NopSchemar) Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error) {
 	return nil, nil

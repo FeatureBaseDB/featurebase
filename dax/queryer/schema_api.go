@@ -27,6 +27,26 @@ func newQualifiedSchemaAPI(qdbid dax.QualifiedDatabaseID, schema dax.Schemar) *q
 	}
 }
 
+func (s *qualifiedSchemaAPI) CreateDatabase(context.Context, *dax.Database) error {
+	return errors.Errorf("unimplemented: qualifiedSchemaAPI.CreateDatabase()")
+}
+func (s *qualifiedSchemaAPI) DropDatabase(context.Context, dax.DatabaseID) error {
+	return errors.Errorf("unimplemented: qualifiedSchemaAPI.DropDatabase()")
+}
+
+func (s *qualifiedSchemaAPI) DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: qualifiedSchemaAPI.DatabaseByName()")
+}
+func (s *qualifiedSchemaAPI) DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: qualifiedSchemaAPI.DatabaseByID()")
+}
+func (s *qualifiedSchemaAPI) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
+	return nil
+}
+func (s *qualifiedSchemaAPI) Databases(context.Context, ...dax.DatabaseID) ([]*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: qualifiedSchemaAPI.Databases()")
+}
+
 func (s *qualifiedSchemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	qtbl, err := s.schemar.TableByName(ctx, s.qdbid, tname)
 	if err != nil {

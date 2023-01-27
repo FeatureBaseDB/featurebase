@@ -13,19 +13,39 @@ import (
 )
 
 // Ensure type implements interface.
-var _ pilosa.SchemaAPI = (*systemTableDefintionsWrapper)(nil)
+var _ pilosa.SchemaAPI = (*systemTableDefinitionsWrapper)(nil)
 
-type systemTableDefintionsWrapper struct {
+type systemTableDefinitionsWrapper struct {
 	schemaAPI pilosa.SchemaAPI
 }
 
-func newSystemTableDefintionsWrapper(api pilosa.SchemaAPI) *systemTableDefintionsWrapper {
-	return &systemTableDefintionsWrapper{
+func newSystemTableDefinitionsWrapper(api pilosa.SchemaAPI) *systemTableDefinitionsWrapper {
+	return &systemTableDefinitionsWrapper{
 		schemaAPI: api,
 	}
 }
 
-func (s *systemTableDefintionsWrapper) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
+func (s *systemTableDefinitionsWrapper) CreateDatabase(ctx context.Context, db *dax.Database) error {
+	return s.schemaAPI.CreateDatabase(ctx, db)
+}
+func (s *systemTableDefinitionsWrapper) DropDatabase(ctx context.Context, dbid dax.DatabaseID) error {
+	return s.schemaAPI.DropDatabase(ctx, dbid)
+}
+
+func (s *systemTableDefinitionsWrapper) DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error) {
+	return s.schemaAPI.DatabaseByName(ctx, dbname)
+}
+func (s *systemTableDefinitionsWrapper) DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error) {
+	return s.schemaAPI.DatabaseByID(ctx, dbid)
+}
+func (s *systemTableDefinitionsWrapper) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
+	return s.schemaAPI.SetDatabaseOption(ctx, dbid, option, value)
+}
+func (s *systemTableDefinitionsWrapper) Databases(ctx context.Context, dbids ...dax.DatabaseID) ([]*dax.Database, error) {
+	return s.schemaAPI.Databases(ctx, dbids...)
+}
+
+func (s *systemTableDefinitionsWrapper) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	tbl, err := s.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
@@ -41,11 +61,11 @@ func (s *systemTableDefintionsWrapper) TableByName(ctx context.Context, tname da
 	return tbl, nil
 }
 
-func (s *systemTableDefintionsWrapper) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
+func (s *systemTableDefinitionsWrapper) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
 	return s.schemaAPI.TableByID(ctx, tid)
 }
 
-func (s *systemTableDefintionsWrapper) Tables(ctx context.Context) ([]*dax.Table, error) {
+func (s *systemTableDefinitionsWrapper) Tables(ctx context.Context) ([]*dax.Table, error) {
 	tbls, err := s.schemaAPI.Tables(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting tables")
@@ -63,19 +83,19 @@ func (s *systemTableDefintionsWrapper) Tables(ctx context.Context) ([]*dax.Table
 	return tbls, nil
 }
 
-func (s *systemTableDefintionsWrapper) CreateTable(ctx context.Context, tbl *dax.Table) error {
+func (s *systemTableDefinitionsWrapper) CreateTable(ctx context.Context, tbl *dax.Table) error {
 	return s.schemaAPI.CreateTable(ctx, tbl)
 }
 
-func (s *systemTableDefintionsWrapper) CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error {
+func (s *systemTableDefinitionsWrapper) CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error {
 	return s.schemaAPI.CreateField(ctx, tname, fld)
 }
 
-func (s *systemTableDefintionsWrapper) DeleteTable(ctx context.Context, tname dax.TableName) error {
+func (s *systemTableDefinitionsWrapper) DeleteTable(ctx context.Context, tname dax.TableName) error {
 	return s.schemaAPI.DeleteTable(ctx, tname)
 }
 
-func (s *systemTableDefintionsWrapper) DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error {
+func (s *systemTableDefinitionsWrapper) DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error {
 	return s.schemaAPI.DeleteField(ctx, tname, fname)
 }
 
