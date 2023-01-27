@@ -441,10 +441,27 @@ func (p *Parser) parseDatabaseOption() (_ DatabaseOption, err error) {
 
 	// Parse database options.
 	switch p.peek() {
+	case UNITS:
+		return p.parseUnitsOption(optionPos)
 	default:
 		assert(p.peek() == COMMENT)
 		return p.parseCommentOption(optionPos)
 	}
+}
+
+func (p *Parser) parseUnitsOption(optionPos Pos) (_ *UnitsOption, err error) {
+	assert(p.peek() == UNITS)
+
+	var opt UnitsOption
+	opt.Units, _, _ = p.scan()
+
+	if isLiteralToken(p.peek()) {
+		opt.Expr = p.mustParseLiteral()
+	} else {
+		return &opt, p.errorExpected(p.pos, p.tok, "literal")
+	}
+
+	return &opt, nil
 }
 
 func (p *Parser) parseCreateTableStatement(createPos Pos) (_ *CreateTableStatement, err error) {
@@ -3568,7 +3585,7 @@ func (e Error) Error() string {
 // isDatabaseOptionStartToken returns true if tok is the initial token of a table option.
 func isDatabaseOptionStartToken(tok Token) bool {
 	switch tok {
-	case COMMENT:
+	case UNITS, COMMENT:
 		return true
 	default:
 		return false

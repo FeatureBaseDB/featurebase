@@ -18,16 +18,18 @@ type PlanOpCreateDatabase struct {
 	planner      *ExecutionPlanner
 	databaseName string
 	failIfExists bool
+	units        int
 	description  string
 	warnings     []string
 }
 
 // NewPlanOpCreateDatabase returns a new PlanOpCreateDatabase planoperator
-func NewPlanOpCreateDatabase(p *ExecutionPlanner, databaseName string, failIfExists bool, description string) *PlanOpCreateDatabase {
+func NewPlanOpCreateDatabase(p *ExecutionPlanner, databaseName string, failIfExists bool, units int, description string) *PlanOpCreateDatabase {
 	return &PlanOpCreateDatabase{
 		planner:      p,
 		databaseName: databaseName,
 		failIfExists: failIfExists,
+		units:        units,
 		description:  description,
 		warnings:     make([]string, 0),
 	}
@@ -66,6 +68,7 @@ func (p *PlanOpCreateDatabase) Iterator(ctx context.Context, row types.Row) (typ
 		planner:      p.planner,
 		databaseName: p.databaseName,
 		failIfExists: p.failIfExists,
+		units:        p.units,
 		description:  p.description,
 	}, nil
 }
@@ -78,6 +81,7 @@ type createDatabaseRowIter struct {
 	planner      *ExecutionPlanner
 	databaseName string
 	failIfExists bool
+	units        int
 	description  string
 }
 
@@ -87,6 +91,10 @@ func (i *createDatabaseRowIter) Next(ctx context.Context) (types.Row, error) {
 	//create the database
 	db := &dax.Database{
 		Name: dax.DatabaseName(i.databaseName),
+		Options: dax.DatabaseOptions{
+			WorkersMin: i.units,
+			WorkersMax: i.units,
+		},
 
 		Description: i.description,
 	}

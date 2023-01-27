@@ -118,9 +118,23 @@ func TestCreateIndexStatement_String(t *testing.T) {
 
 func TestCreateDatabaseStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
+		Name: &parser.Ident{Name: "db1"},
+	}, `CREATE DATABASE db1`)
+
+	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
 		Name:        &parser.Ident{Name: "db1"},
 		IfNotExists: pos(0),
 	}, `CREATE DATABASE IF NOT EXISTS db1`)
+
+	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
+		Name: &parser.Ident{Name: "db1"},
+		Options: []parser.DatabaseOption{
+			&parser.UnitsOption{
+				Units: pos(0),
+				Expr:  &parser.IntegerLit{Value: "4"},
+			},
+		},
+	}, `CREATE DATABASE db1 UNITS 4`)
 }
 
 func TestCreateTableStatement_String(t *testing.T) {

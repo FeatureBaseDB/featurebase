@@ -238,6 +238,7 @@ const (
 	UNBOUNDED
 	UNION
 	UNIQUE
+	UNITS
 	UPDATE
 	USING
 	VACUUM
@@ -463,6 +464,7 @@ var tokens = [...]string{
 	UNBOUNDED:         "UNBOUNDED",
 	UNION:             "UNION",
 	UNIQUE:            "UNIQUE",
+	UNITS:             "UNITS",
 	UPDATE:            "UPDATE",
 	USING:             "USING",
 	VACUUM:            "VACUUM",

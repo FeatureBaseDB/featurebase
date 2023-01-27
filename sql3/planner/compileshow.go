@@ -59,8 +59,14 @@ func (p *ExecutionPlanner) compileShowDatabasesStatement(stmt parser.Statement) 
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_databases",
-			columnName:  "description",
+			columnName:  "units",
 			columnIndex: 6,
+			dataType:    parser.NewDataTypeInt(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "description",
+			columnIndex: 7,
 			dataType:    parser.NewDataTypeString(),
 		}}
 

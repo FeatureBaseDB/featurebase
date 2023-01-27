@@ -90,6 +90,7 @@ func (*TupleLiteralExpr) node()         {}
 func (*Type) node()                     {}
 func (*UnaryExpr) node()                {}
 func (*UniqueConstraint) node()         {}
+func (*UnitsOption) node()              {}
 func (*UpdateStatement) node()          {}
 func (*UpsertClause) node()             {}
 func (*UsingConstraint) node()          {}
@@ -713,6 +714,11 @@ func (s *CreateDatabaseStatement) String() string {
 	buf.WriteString(" ")
 	buf.WriteString(s.Name.String())
 
+	for _, opt := range s.Options {
+		buf.WriteString(" ")
+		buf.WriteString(opt.String())
+	}
+
 	return buf.String()
 }
 
@@ -825,7 +831,20 @@ type DatabaseOption interface {
 	dbOption()
 }
 
+func (*UnitsOption) dbOption()   {}
 func (*CommentOption) dbOption() {}
+
+type UnitsOption struct {
+	Units Pos  // position of UNITS keyword
+	Expr  Expr // expression
+}
+
+func (o *UnitsOption) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("UNITS ")
+	buf.WriteString(o.Expr.String())
+	return buf.String()
+}
 
 type TableOption interface {
 	Node

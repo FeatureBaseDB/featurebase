@@ -125,6 +125,7 @@ func (i *showDatabasesRowIter) Next(ctx context.Context) (types.Row, error) {
 			i.dbs[i.rowIndex].UpdatedBy,
 			createdAt.Format(time.RFC3339),
 			updatedAt.Format(time.RFC3339),
+			i.dbs[i.rowIndex].Options.WorkersMin,
 			i.dbs[i.rowIndex].Description,
 		}
 		i.rowIndex += 1

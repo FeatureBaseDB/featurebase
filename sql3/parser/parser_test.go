@@ -622,7 +622,7 @@ func TestParser_ParseStatement(t *testing.T) {
 		AssertParseStatementError(t, `123`, `1:1: expected statement, found 123`)
 	})
 
-	t.Run("ShowTables", func(t *testing.T) {
+	t.Run("ShowDatabasesAndTables", func(t *testing.T) {
 		AssertParseStatement(t, `SHOW DATABASES`, &parser.ShowDatabasesStatement{
 			Show:      pos(0),
 			Databases: pos(5),
@@ -858,6 +858,30 @@ func TestParser_ParseStatement(t *testing.T) {
 			AssertParseStatementError(t, `RELEASE 123`, `1:9: expected savepoint name, found 123`)
 		})
 	})*/
+
+	t.Run("CreateDatabase", func(t *testing.T) {
+		AssertParseStatement(t, `CREATE DATABASE db UNITS 4`, &parser.CreateDatabaseStatement{
+			Create:   pos(0),
+			Database: pos(7),
+			Name: &parser.Ident{
+				Name:    "db",
+				NamePos: pos(16),
+			},
+			Options: []parser.DatabaseOption{
+				&parser.UnitsOption{
+					Units: pos(19),
+					Expr: &parser.IntegerLit{
+						ValuePos: pos(25),
+						Value:    "4",
+					},
+				},
+			},
+		})
+
+		AssertParseStatementError(t, `CREATE DATABASE`, `1:15: expected database name, found 'EOF'`)
+		AssertParseStatementError(t, `CREATE DATABASE db (`, `1:20: expected semicolon or EOF, found '('`)
+		AssertParseStatementError(t, `CREATE DATABASE db extra`, `1:20: expected semicolon or EOF, found extra`)
+	})
 
 	t.Run("CreateTable", func(t *testing.T) {
 		AssertParseStatement(t, `CREATE TABLE tbl (col1 TEXT, col2 DECIMAL(2))`, &parser.CreateTableStatement{

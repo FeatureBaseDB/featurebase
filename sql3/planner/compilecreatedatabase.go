@@ -3,6 +3,8 @@
 package planner
 
 import (
+	"strconv"
+
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
@@ -14,17 +16,25 @@ func (p *ExecutionPlanner) compileCreateDatabaseStatement(stmt *parser.CreateDat
 	databaseName := parser.IdentName(stmt.Name)
 	failIfExists := !stmt.IfNotExists.IsValid()
 
-	// apply table options
+	// apply database options
+	units := 0
 	description := ""
 	for _, option := range stmt.Options {
 		switch o := option.(type) {
+		case *parser.UnitsOption:
+			e := o.Expr.(*parser.IntegerLit)
+			i, err := strconv.ParseInt(e.Value, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			units = int(i)
 		case *parser.CommentOption:
 			e := o.Expr.(*parser.StringLit)
 			description = e.Value
 		}
 	}
 
-	cop := NewPlanOpCreateDatabase(p, databaseName, failIfExists, description)
+	cop := NewPlanOpCreateDatabase(p, databaseName, failIfExists, units, description)
 	return NewPlanOpQuery(p, cop, p.sql), nil
 }
 
@@ -35,6 +45,21 @@ func (p *ExecutionPlanner) analyzeCreateDatabaseStatement(stmt *parser.CreateDat
 	for _, option := range stmt.Options {
 
 		switch o := option.(type) {
+		case *parser.UnitsOption:
+			//check the type of the expression
+			literal, ok := o.Expr.(*parser.IntegerLit)
+			if !ok {
+				return sql3.NewErrIntegerLiteral(o.Expr.Pos().Line, o.Expr.Pos().Column)
+			}
+			// units needs to be >=0 and we'll cap conservatively at 10000
+			i, err := strconv.ParseInt(literal.Value, 10, 64)
+			if err != nil {
+				return err
+			}
+			if i < 0 || i > 10000 {
+				return sql3.NewErrInvalidUnitsValue(o.Expr.Pos().Line, o.Expr.Pos().Column, i)
+			}
+
 		case *parser.CommentOption:
 			_, ok := o.Expr.(*parser.StringLit)
 			if !ok {

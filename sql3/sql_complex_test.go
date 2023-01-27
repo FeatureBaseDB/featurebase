@@ -213,6 +213,7 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("updated_by"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldTimestamp("updated_at"),
+			wireQueryFieldInt("units"),
 			wireQueryFieldString("description"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
