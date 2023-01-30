@@ -1514,16 +1514,18 @@ func (n *inOpPlanExpression) WithChildren(children ...types.PlanExpression) (typ
 
 // callPlanExpression is a function call
 type callPlanExpression struct {
-	name     string
-	args     []types.PlanExpression
-	dataType parser.ExprDataType
+	name         string
+	args         []types.PlanExpression
+	dataType     parser.ExprDataType
+	udfReference *functionSystemObject
 }
 
-func newCallPlanExpression(name string, args []types.PlanExpression, dataType parser.ExprDataType) *callPlanExpression {
+func newCallPlanExpression(name string, args []types.PlanExpression, dataType parser.ExprDataType, udfReference *functionSystemObject) *callPlanExpression {
 	return &callPlanExpression{
-		name:     name,
-		args:     args,
-		dataType: dataType,
+		name:         name,
+		args:         args,
+		dataType:     dataType,
+		udfReference: udfReference,
 	}
 }
 
@@ -1591,6 +1593,9 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case "DATETIMEDIFF":
 		return n.EvaluateDatetimeDiff(currentRow)
 	default:
+		if n.udfReference != nil {
+			return n.evaluateUserDefinedFunction(currentRow)
+		}
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}
 }
@@ -1632,7 +1637,7 @@ func (n *callPlanExpression) WithChildren(children ...types.PlanExpression) (typ
 	if len(children) != len(n.args) {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return newCallPlanExpression(n.name, children, n.dataType), nil
+	return newCallPlanExpression(n.name, children, n.dataType, n.udfReference), nil
 }
 
 // aliasPlanExpression is a alias ref
@@ -2049,30 +2054,30 @@ func (n *sysVariablePlanExpression) WithChildren(children ...types.PlanExpressio
 	return n, nil
 }
 
-// dateLiteralPlanExpression is a date literal
-type dateLiteralPlanExpression struct {
+// timestampLiteralPlanExpression is a date literal
+type timestampLiteralPlanExpression struct {
 	value time.Time
 }
 
-func newDateLiteralPlanExpression(value time.Time) *dateLiteralPlanExpression {
-	return &dateLiteralPlanExpression{
+func newTimestampLiteralPlanExpression(value time.Time) *timestampLiteralPlanExpression {
+	return &timestampLiteralPlanExpression{
 		value: value,
 	}
 }
 
-func (n *dateLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+func (n *timestampLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
 	return n.value, nil
 }
 
-func (n *dateLiteralPlanExpression) Type() parser.ExprDataType {
+func (n *timestampLiteralPlanExpression) Type() parser.ExprDataType {
 	return parser.NewDataTypeTimestamp()
 }
 
-func (n *dateLiteralPlanExpression) String() string {
+func (n *timestampLiteralPlanExpression) String() string {
 	return n.value.Format(time.RFC3339Nano)
 }
 
-func (n *dateLiteralPlanExpression) Plan() map[string]interface{} {
+func (n *timestampLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
 	result["description"] = n.String()
@@ -2081,11 +2086,11 @@ func (n *dateLiteralPlanExpression) Plan() map[string]interface{} {
 	return result
 }
 
-func (n *dateLiteralPlanExpression) Children() []types.PlanExpression {
+func (n *timestampLiteralPlanExpression) Children() []types.PlanExpression {
 	return []types.PlanExpression{}
 }
 
-func (n *dateLiteralPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
+func (n *timestampLiteralPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
 	return n, nil
 }
 
@@ -2660,7 +2665,7 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 		return newFloatLiteralPlanExpression(expr.Value), nil
 
 	case *parser.DateLit:
-		return newDateLiteralPlanExpression(expr.Value), nil
+		return newTimestampLiteralPlanExpression(expr.Value), nil
 
 	case *parser.SysVariable:
 		return newSysVariablePlanExpression(expr.Name(), expr.Token), nil
@@ -2892,6 +2897,14 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 		agg := newPercentilePlanExpression(args[0], args[1], expr.ResultDataType)
 		return agg, nil
 
+	case "CORR":
+		agg := newCorrPlanExpression(args[0], args[1], expr.ResultDataType)
+		return agg, nil
+
+	case "VAR":
+		agg := newVarPlanExpression(args[0], expr.ResultDataType)
+		return agg, nil
+
 	case "MIN":
 		agg := newMinPlanExpression(args[0], expr.ResultDataType)
 		return agg, nil
@@ -2901,7 +2914,15 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 		return agg, nil
 
 	default:
-		return newCallPlanExpression(parser.IdentName(expr.Name), args, expr.ResultDataType), nil
+		// could be a udf - try to look it up in functions
+		fn, err := p.getFunctionByName(strings.ToLower(callName))
+		if err != nil {
+			return nil, err
+		}
+		if fn != nil {
+			return newCallPlanExpression(parser.IdentName(expr.Name), args, expr.ResultDataType, fn), nil
+		}
+		return newCallPlanExpression(parser.IdentName(expr.Name), args, expr.ResultDataType, nil), nil
 	}
 }
 

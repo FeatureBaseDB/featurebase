@@ -1,7 +1,7 @@
 package defs
 
-var topTests = TableTest{
-	name: "top-tests",
+var topLimitTests = TableTest{
+	name: "top-limit-tests",
 	Table: tbl(
 		"skills",
 		srcHdrs(
@@ -20,7 +20,25 @@ var topTests = TableTest{
 	SQLTests: []SQLTest{
 		{
 			SQLs: sqls(
-				"select  top(1) * from skills where setcontains(skills, 'Marketing Manager');",
+				"select top(1) * from skills where setcontains(skills, 'Marketing Manager');",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("bools", fldTypeStringSet),
+				hdr("bools-exist", fldTypeStringSet),
+				hdr("id1", fldTypeID),
+				hdr("skills", fldTypeStringSet),
+				hdr("titles", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row(int64(1), nil, []string{"available_for_hire"}, int64(288), []string{"Marketing Manager"}, []string{"Alumni Relations", "OEM negotiations"}),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select * from skills where setcontains(skills, 'Marketing Manager') limit 1;",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -57,6 +75,21 @@ var topTests = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"select count(*), skills from skills group by skills limit 10;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("skills", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row(int64(1), string("Marketing Manager")),
+				row(int64(1), string("Software Engineer I")),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
 				"select top(1) count(*) from skills;",
 			),
 			ExpHdrs: hdrs(
@@ -67,6 +100,25 @@ var topTests = TableTest{
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select count(*) from skills limit 1;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(2)),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select top(1) count(*) from skills limit 1;",
+			),
+			ExpErr: "TOP and LIMIT cannot cannot be used at the same time",
 		},
 	},
 }
