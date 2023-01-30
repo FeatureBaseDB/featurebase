@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"sync"
 
+	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
+
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/felixge/fgprof"
 	"github.com/gorilla/mux"
 )
 
@@ -313,6 +316,8 @@ func (s *ServiceManager) resetRouter() {
 func (s *ServiceManager) buildRouter() *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/health", getHealth).Methods("GET").Name("GetHealth")
+	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
+	router.PathPrefix("/debug/fgprof").Handler(fgprof.Handler()).Methods("GET")
 
 	// Controller.
 	if s.Controller != nil && s.controllerStarted {
