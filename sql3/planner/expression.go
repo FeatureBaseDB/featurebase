@@ -1522,6 +1522,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateReplicate(currentRow)
 	case "FORMAT":
 		return n.EvaluateFormat(currentRow)
+	case "CHARINDEX":
+		return n.EvaluateCharIndex(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}
