@@ -25,10 +25,9 @@ import (
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	computersvc "github.com/featurebasedb/featurebase/v3/dax/computer/service"
+	controllerhttp "github.com/featurebasedb/featurebase/v3/dax/controller/http"
+	controllersvc "github.com/featurebasedb/featurebase/v3/dax/controller/service"
 	daxhttp "github.com/featurebasedb/featurebase/v3/dax/http"
-	"github.com/featurebasedb/featurebase/v3/dax/mds"
-	controllerhttp "github.com/featurebasedb/featurebase/v3/dax/mds/controller/http"
-	mdssvc "github.com/featurebasedb/featurebase/v3/dax/mds/service"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
 	queryersvc "github.com/featurebasedb/featurebase/v3/dax/queryer/service"
 	"github.com/featurebasedb/featurebase/v3/errors"
@@ -277,20 +276,20 @@ func (m *Command) setupServer() error {
 
 // setupServices uses the configuration to set up the configured services.
 func (m *Command) setupServices() error {
-	// Set up MDS.
-	if m.Config.MDS.Run {
-		mdsCfg := m.Config.MDS.Config
-		mdsCfg.Logger = m.logger
-		mdsCfg.Director = controllerhttp.NewDirector(
+	// Set up Controller.
+	if m.Config.Controller.Run {
+		controllerCfg := m.Config.Controller.Config
+		controllerCfg.Logger = m.logger
+		controllerCfg.Director = controllerhttp.NewDirector(
 			controllerhttp.DirectorConfig{
 				DirectivePath:       "directive",
 				SnapshotRequestPath: "snapshot",
 				Logger:              m.logger,
 			})
 
-		m.svcmgr.MDS = mdssvc.New(m.advertiseURI, mds.New(mdsCfg))
-		if err := m.svcmgr.MDSStart(); err != nil {
-			return errors.Wrap(err, "starting mds service")
+		m.svcmgr.Controller = controllersvc.New(m.advertiseURI, controllerCfg)
+		if err := m.svcmgr.ControllerStart(); err != nil {
+			return errors.Wrap(err, "starting controller service")
 		}
 	}
 
@@ -302,18 +301,18 @@ func (m *Command) setupServices() error {
 
 		m.svcmgr.Queryer = queryersvc.New(m.advertiseURI, queryer.New(qryrCfg), m.logger)
 
-		var mdsAddr dax.Address
-		if m.Config.Queryer.Config.MDSAddress != "" {
-			mdsAddr = dax.Address(m.Config.Queryer.Config.MDSAddress)
-		} else if m.svcmgr.MDS != nil {
-			mdsAddr = m.svcmgr.MDS.Address()
+		var controllerAddr dax.Address
+		if m.Config.Queryer.Config.ControllerAddress != "" {
+			controllerAddr = dax.Address(m.Config.Queryer.Config.ControllerAddress)
+		} else if m.svcmgr.Controller != nil {
+			controllerAddr = m.svcmgr.Controller.Address()
 		} else {
-			return errors.Errorf("queryer requires MDS")
+			return errors.Errorf("queryer requires Controller")
 		}
 
-		// Set MDS
-		if err := m.svcmgr.Queryer.SetMDS(mdsAddr); err != nil {
-			return errors.Wrap(err, "setting mds")
+		// Set Controller
+		if err := m.svcmgr.Queryer.SetController(controllerAddr); err != nil {
+			return errors.Wrap(err, "setting controller")
 		}
 
 		// Start queryer.
@@ -348,8 +347,8 @@ func (m *Command) setupServices() error {
 				Logger: m.logger,
 			}
 
-			if cfg.ComputerConfig.MDSAddress == "" && m.svcmgr.MDS != nil {
-				cfg.ComputerConfig.MDSAddress = string(m.svcmgr.MDS.Address())
+			if cfg.ComputerConfig.ControllerAddress == "" && m.svcmgr.Controller != nil {
+				cfg.ComputerConfig.ControllerAddress = string(m.svcmgr.Controller.Address())
 			}
 
 			// Add new computer service.

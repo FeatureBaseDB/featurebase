@@ -13,8 +13,8 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	computersvc "github.com/featurebasedb/featurebase/v3/dax/computer/service"
-	"github.com/featurebasedb/featurebase/v3/dax/mds"
-	mdssvc "github.com/featurebasedb/featurebase/v3/dax/mds/service"
+	"github.com/featurebasedb/featurebase/v3/dax/controller"
+	controllersvc "github.com/featurebasedb/featurebase/v3/dax/controller/service"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
 	queryersvc "github.com/featurebasedb/featurebase/v3/dax/queryer/service"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
@@ -62,13 +62,13 @@ func (mc *ManagedCommand) Close() error {
 	return mc.Command.Close()
 }
 
-// NewMDS adds a new MDSService to the ManagedCommands ServiceManager.
-func (mc *ManagedCommand) NewMDS(cfg mds.Config) dax.ServiceKey {
+// NewController adds a new ControllerService to the ManagedCommands ServiceManager.
+func (mc *ManagedCommand) NewController(cfg controller.Config) dax.ServiceKey {
 	uri := mc.URI()
 	cfg.Logger = mc.svcmgr.Logger
-	mc.svcmgr.MDS = mdssvc.New(uri, mds.New(cfg))
+	mc.svcmgr.Controller = controllersvc.New(uri, cfg)
 
-	return dax.ServicePrefixMDS
+	return dax.ServicePrefixController
 }
 
 // NewQueryer adds a new QueryerService to the ManagedCommands ServiceManager.
@@ -78,16 +78,16 @@ func (mc *ManagedCommand) NewQueryer(cfg queryer.Config) dax.ServiceKey {
 	cfg.Logger = logger
 	mc.svcmgr.Queryer = queryersvc.New(uri, queryer.New(cfg), logger)
 
-	var mdsAddr dax.Address
-	if cfg.MDSAddress != "" {
-		mdsAddr = dax.Address(cfg.MDSAddress + "/" + dax.ServicePrefixMDS)
-	} else if mc.svcmgr.MDS != nil {
-		mdsAddr = mc.svcmgr.MDS.Address()
+	var controllerAddr dax.Address
+	if cfg.ControllerAddress != "" {
+		controllerAddr = dax.Address(cfg.ControllerAddress + "/" + dax.ServicePrefixController)
+	} else if mc.svcmgr.Controller != nil {
+		controllerAddr = mc.svcmgr.Controller.Address()
 	}
 
-	// Set MDS
-	if err := mc.svcmgr.Queryer.SetMDS(mdsAddr); err != nil {
-		logger.Panicf(errors.Wrap(err, "setting mds").Error())
+	// Set Controller
+	if err := mc.svcmgr.Queryer.SetController(controllerAddr); err != nil {
+		logger.Panicf(errors.Wrap(err, "setting controller").Error())
 	}
 
 	return dax.ServicePrefixQueryer
@@ -104,7 +104,7 @@ func (mc *ManagedCommand) NewComputer() dax.ServiceKey {
 		Logger: mc.svcmgr.Logger,
 	}
 
-	cfg.ComputerConfig.MDSAddress = mc.svcmgr.MDS.Address().String()
+	cfg.ComputerConfig.ControllerAddress = mc.svcmgr.Controller.Address().String()
 
 	// Add new computer service.
 	return mc.svcmgr.AddComputer(
@@ -186,12 +186,12 @@ func NewManagedCommand(tb fbtest.DirCleaner, opts ...server.CommandOption) *Mana
 	mc.svcmgr = svcmgr
 
 	mc.Config.Bind = "http://localhost:0"
-	mc.Config.MDS.Config.DataDir = path + "/mds"
+	mc.Config.Controller.Config.DataDir = path + "/controller"
 	mc.Config.Computer.Config.DataDir = path
 	mc.Config.Computer.Config.WriteloggerDir = path + "/wl"
-	mc.Config.MDS.Config.WriteloggerDir = path + "/wl"
+	mc.Config.Controller.Config.WriteloggerDir = path + "/wl"
 	mc.Config.Computer.Config.SnapshotterDir = path + "/sn"
-	mc.Config.MDS.Config.SnapshotterDir = path + "/sn"
+	mc.Config.Controller.Config.SnapshotterDir = path + "/sn"
 
 	return mc
 }
@@ -200,8 +200,8 @@ func NewManagedCommand(tb fbtest.DirCleaner, opts ...server.CommandOption) *Mana
 func DefaultConfig() *server.Config {
 	cfg := server.NewConfig()
 	cfg.Verbose = true
-	cfg.MDS.Run = true
-	cfg.MDS.Config.RegistrationBatchTimeout = 0
+	cfg.Controller.Run = true
+	cfg.Controller.Config.RegistrationBatchTimeout = 0
 	cfg.Queryer.Run = true
 	cfg.Computer.Run = true
 	cfg.Computer.N = 1
@@ -231,7 +231,7 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 	}
 
 	if basic {
-		assert.True(tb, mc.Healthy(dax.ServicePrefixMDS))
+		assert.True(tb, mc.Healthy(dax.ServicePrefixController))
 		assert.True(tb, mc.Healthy(dax.ServicePrefixQueryer))
 		assert.True(tb, mc.Healthy(dax.ServicePrefixComputer+"0"))
 	}

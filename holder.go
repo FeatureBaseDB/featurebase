@@ -137,11 +137,11 @@ type Holder struct {
 	directive *dax.Directive
 
 	// directiveApplied is used for testing (in an attempt to avoid sleeps). It
-	// should be removed once we sort out the logic between MDS and computer
-	// nodes. For example, MDS really needs to send out directives
-	// asynchronously and allow a computer to load data from
-	// snapshotter/writelogger; then MDS should only start directing queries to
-	// that computer once it has completed applying the snapshot.
+	// should be removed once we sort out the logic between controller and
+	// computer nodes. For example, the Controller really needs to send out
+	// directives asynchronously and allow a computer to load data from
+	// snapshotter/writelogger; then the Controller should only start directing
+	// queries to that computer once it has completed applying the snapshot.
 	directiveApplied bool
 }
 

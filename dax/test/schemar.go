@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
-	"github.com/featurebasedb/featurebase/v3/dax/mds/schemar"
-	schemarbolt "github.com/featurebasedb/featurebase/v3/dax/mds/schemar/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
+	schemarbolt "github.com/featurebasedb/featurebase/v3/dax/controller/schemar/boltdb"
 	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )

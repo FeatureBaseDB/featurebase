@@ -14,7 +14,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/errors"
-	idkmds "github.com/featurebasedb/featurebase/v3/idk/mds"
+	idkserverless "github.com/featurebasedb/featurebase/v3/idk/serverless"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	featurebase_pql "github.com/featurebasedb/featurebase/v3/pql"
 	fbproto "github.com/featurebasedb/featurebase/v3/proto"
@@ -82,8 +82,8 @@ func (q *Queryer) Orchestrator(qdbid dax.QualifiedDatabaseID) *qualifiedOrchestr
 
 	orch := &orchestrator{
 		schema:   sapi,
-		trans:    NewMDSTranslator(q.controller),
-		topology: &MDSTopology{controller: q.controller},
+		trans:    NewServerlessTranslator(q.controller),
+		topology: &ServerlessTopology{controller: q.controller},
 		// TODO(jaffee) using default http.Client probably bad... need to set some timeouts.
 		client: q.fbClient,
 		logger: q.logger,
@@ -168,7 +168,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	sapi := newQualifiedSchemaAPI(qdbid, q.controller)
 
 	// Importer
-	imp := idkmds.NewImporter(q.controller, qdbid, nil)
+	imp := idkserverless.NewImporter(q.controller, qdbid, nil)
 
 	// TODO(tlt): We need a dax-compatible implementation of the SystemAPI.
 	sysapi := &featurebase.NopSystemAPI{}

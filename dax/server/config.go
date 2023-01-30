@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	fbserver "github.com/featurebasedb/featurebase/v3/server"
@@ -43,14 +43,14 @@ type Config struct {
 	// LogPath configures where Pilosa will write logs.
 	LogPath string `toml:"log-path"`
 
-	MDS      MDSOptions      `toml:"mds"`
-	Queryer  QueryerOptions  `toml:"queryer"`
-	Computer ComputerOptions `toml:"computer"`
+	Controller ControllerOptions `toml:"controller"`
+	Queryer    QueryerOptions    `toml:"queryer"`
+	Computer   ComputerOptions   `toml:"computer"`
 }
 
-type MDSOptions struct {
-	Run    bool       `toml:"run"`
-	Config mds.Config `toml:"config"`
+type ControllerOptions struct {
+	Run    bool              `toml:"run"`
+	Config controller.Config `toml:"config"`
 }
 
 type QueryerOptions struct {
@@ -67,8 +67,8 @@ type ComputerOptions struct {
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		MDS: MDSOptions{
-			Config: mds.Config{
+		Controller: ControllerOptions{
+			Config: controller.Config{
 				RegistrationBatchTimeout: time.Second * 3,
 				StorageMethod:            defaultStorageMethod,
 				SnappingTurtleTimeout:    time.Second * 10,

@@ -7,21 +7,21 @@ import (
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	featurebase_client "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/mds/controller/partitioner"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/partitioner"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/encoding/proto"
 	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 // Ensure type implements interface.
-var _ Translator = (*mdsTranslator)(nil)
+var _ Translator = (*serverlessTranslator)(nil)
 
-type mdsTranslator struct {
+type serverlessTranslator struct {
 	controller dax.Controller
 }
 
-func NewMDSTranslator(controller dax.Controller) *mdsTranslator {
-	return &mdsTranslator{
+func NewServerlessTranslator(controller dax.Controller) *serverlessTranslator {
+	return &serverlessTranslator{
 		controller: controller,
 	}
 }
@@ -37,7 +37,7 @@ func fbClient(address dax.Address) (*featurebase_client.Client, error) {
 	)
 }
 
-func (m *mdsTranslator) CreateIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
+func (m *serverlessTranslator) CreateIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
 	tkey := dax.TableKey(table)
 	qtid := tkey.QualifiedTableID()
 
@@ -78,7 +78,7 @@ func (m *mdsTranslator) CreateIndexKeys(ctx context.Context, table string, keys 
 	return out, nil
 }
 
-func (m *mdsTranslator) CreateFieldKeys(ctx context.Context, table string, field string, keys []string) (map[string]uint64, error) {
+func (m *serverlessTranslator) CreateFieldKeys(ctx context.Context, table string, field string, keys []string) (map[string]uint64, error) {
 	qtid := dax.TableKey(table).QualifiedTableID()
 	address, err := m.controller.IngestPartition(ctx, qtid, dax.PartitionNum(0))
 	if err != nil {
@@ -96,7 +96,7 @@ func (m *mdsTranslator) CreateFieldKeys(ctx context.Context, table string, field
 	return fbClient.CreateFieldKeys(fld, keys...)
 }
 
-func (m *mdsTranslator) FindIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
+func (m *serverlessTranslator) FindIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
 	tkey := dax.TableKey(table)
 	qtid := tkey.QualifiedTableID()
 
@@ -149,7 +149,7 @@ func (m *mdsTranslator) FindIndexKeys(ctx context.Context, table string, keys []
 	return out, nil
 }
 
-func (m *mdsTranslator) FindFieldKeys(ctx context.Context, table, field string, keys []string) (map[string]uint64, error) {
+func (m *serverlessTranslator) FindFieldKeys(ctx context.Context, table, field string, keys []string) (map[string]uint64, error) {
 	qtid := dax.TableKey(table).QualifiedTableID()
 	address, err := m.controller.IngestPartition(ctx, qtid, dax.PartitionNum(0))
 	if err != nil {
@@ -167,7 +167,7 @@ func (m *mdsTranslator) FindFieldKeys(ctx context.Context, table, field string, 
 	return fbClient.FindFieldKeys(fld, keys...)
 }
 
-func (m *mdsTranslator) TranslateIndexIDs(ctx context.Context, index string, ids []uint64) ([]string, error) {
+func (m *serverlessTranslator) TranslateIndexIDs(ctx context.Context, index string, ids []uint64) ([]string, error) {
 	idsByPartition := splitIDsByPartition(index, ids, 1<<20) // TODO(jaffee), don't hardcode shardwidth...need to get this from index info
 	daxPartitions := make([]dax.PartitionNum, 0)
 	for partition := range idsByPartition {
@@ -210,7 +210,7 @@ func (m *mdsTranslator) TranslateIndexIDs(ctx context.Context, index string, ids
 	return ret, nil
 }
 
-func (m *mdsTranslator) TranslateIndexIDSet(ctx context.Context, table string, ids map[uint64]struct{}) (map[uint64]string, error) {
+func (m *serverlessTranslator) TranslateIndexIDSet(ctx context.Context, table string, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, 0, len(ids))
 	for id := range ids {
 		idList = append(idList, id)
@@ -227,7 +227,7 @@ func (m *mdsTranslator) TranslateIndexIDSet(ctx context.Context, table string, i
 	}
 	return ret, nil
 }
-func (m *mdsTranslator) TranslateFieldIDs(ctx context.Context, tableKeyer dax.TableKeyer, field string, ids map[uint64]struct{}) (map[uint64]string, error) {
+func (m *serverlessTranslator) TranslateFieldIDs(ctx context.Context, tableKeyer dax.TableKeyer, field string, ids map[uint64]struct{}) (map[uint64]string, error) {
 	idList := make([]uint64, 0, len(ids))
 	for id := range ids {
 		idList = append(idList, id)
@@ -248,7 +248,7 @@ func (m *mdsTranslator) TranslateFieldIDs(ctx context.Context, tableKeyer dax.Ta
 	}
 	return ret, nil
 }
-func (m *mdsTranslator) TranslateFieldListIDs(ctx context.Context, index, field string, ids []uint64) ([]string, error) {
+func (m *serverlessTranslator) TranslateFieldListIDs(ctx context.Context, index, field string, ids []uint64) ([]string, error) {
 	qtid := dax.TableKey(index).QualifiedTableID()
 	address, err := m.controller.IngestPartition(ctx, qtid, dax.PartitionNum(0))
 	if err != nil {

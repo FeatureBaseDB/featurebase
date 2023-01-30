@@ -1,8 +1,8 @@
 package dax
 
-// Directive contains the instructions, sent from MDS, which a compute node is
-// to follow. A Directive is typically JSON-encoded and POSTed to a compute
-// node's `/directive` endpoint.
+// Directive contains the instructions, sent from the Controller, which a
+// compute node is to follow. A Directive is typically JSON-encoded and POSTed
+// to a compute node's `/directive` endpoint.
 type Directive struct {
 	Address Address `json:"address"`
 

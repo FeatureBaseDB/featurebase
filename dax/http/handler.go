@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/featurebasedb/featurebase/v3/dax/mds"
+	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
 	"github.com/featurebasedb/featurebase/v3/dax/snapshotter"
 	"github.com/featurebasedb/featurebase/v3/dax/writelogger"
@@ -29,7 +29,7 @@ type Handler struct {
 
 	server *http.Server
 
-	mds         *mds.MDS
+	controller  *controller.Controller
 	writeLogger *writelogger.Writelogger
 	snapshotter *snapshotter.Snapshotter
 	queryer     *queryer.Queryer
@@ -49,9 +49,9 @@ func OptHandlerBind(b string) HandlerOption {
 	}
 }
 
-func OptHandlerMDS(m *mds.MDS) HandlerOption {
+func OptHandlerController(c *controller.Controller) HandlerOption {
 	return func(h *Handler) error {
-		h.mds = m
+		h.controller = c
 		return nil
 	}
 }

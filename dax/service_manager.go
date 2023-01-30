@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"sync"
 
+	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
+
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/felixge/fgprof"
 	"github.com/gorilla/mux"
 )
 
@@ -20,9 +23,9 @@ type ServiceKey string
 type ServiceManager struct {
 	mu sync.RWMutex
 
-	// MDS
-	MDS        MDSService
-	mdsStarted bool
+	// Controller
+	Controller        ControllerService
+	controllerStarted bool
 
 	// Queryer
 	Queryer        QueryerService
@@ -62,9 +65,9 @@ func (s *ServiceManager) HTTPHandler() http.Handler {
 
 // StartAll starts all services which have been added to ServiceManager.
 func (s *ServiceManager) StartAll() error {
-	// MDS
-	if err := s.MDSStart(); err != nil {
-		return errors.Wrap(err, "starting mds")
+	// Controller
+	if err := s.ControllerStart(); err != nil {
+		return errors.Wrap(err, "starting controller")
 	}
 
 	// Queryer
@@ -91,51 +94,51 @@ func (s *ServiceManager) StopAll() error {
 	if err := s.QueryerStop(); err != nil {
 		s.Logger.Printf("stopping queryer: %v", err)
 	}
-	return s.MDSStop()
+	return s.ControllerStop()
 }
 
-// MDSStart starts the MDS service.
-func (s *ServiceManager) MDSStart() error {
-	if s.MDS == nil {
+// ControllerStart starts the Controller service.
+func (s *ServiceManager) ControllerStart() error {
+	if s.Controller == nil {
 		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.mdsStarted {
+	if s.controllerStarted {
 		return nil
 	}
 
-	s.mdsStarted = true
+	s.controllerStarted = true
 	s.resetRouter()
 
-	if err := s.MDS.Start(); err != nil {
-		s.mdsStarted = false
-		return errors.Wrap(err, "starting mds")
+	if err := s.Controller.Start(); err != nil {
+		s.controllerStarted = false
+		return errors.Wrap(err, "starting controller")
 	}
 
 	return nil
 }
 
-// MDSStop stops the MDS service.
-func (s *ServiceManager) MDSStop() error {
-	if s.MDS == nil {
+// ControllerStop stops the Controller service.
+func (s *ServiceManager) ControllerStop() error {
+	if s.Controller == nil {
 		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.mdsStarted {
+	if !s.controllerStarted {
 		return nil
 	}
 
-	s.mdsStarted = false
+	s.controllerStarted = false
 	s.resetRouter()
 
-	if err := s.MDS.Stop(); err != nil {
-		s.mdsStarted = true
+	if err := s.Controller.Stop(); err != nil {
+		s.controllerStarted = true
 		return errors.Wrap(err, "stopping controller")
 	}
 
@@ -313,12 +316,14 @@ func (s *ServiceManager) resetRouter() {
 func (s *ServiceManager) buildRouter() *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/health", getHealth).Methods("GET").Name("GetHealth")
+	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
+	router.PathPrefix("/debug/fgprof").Handler(fgprof.Handler()).Methods("GET")
 
-	// MDS.
-	if s.MDS != nil && s.mdsStarted {
-		pre := "/" + ServicePrefixMDS
+	// Controller.
+	if s.Controller != nil && s.controllerStarted {
+		pre := "/" + ServicePrefixController
 		router.PathPrefix(pre + "/").Handler(
-			http.StripPrefix(pre, s.MDS.HTTPHandler()))
+			http.StripPrefix(pre, s.Controller.HTTPHandler()))
 	}
 
 	// Computers.
@@ -363,20 +368,20 @@ type MultiService interface {
 	Key() ServiceKey
 }
 
-type MDSService interface {
+type ControllerService interface {
 	Service
 }
 
 type ComputerService interface {
 	MultiService
 
-	SetMDS(Address) error
+	SetController(Address) error
 }
 
 type QueryerService interface {
 	Service
 
-	SetMDS(Address) error
+	SetController(Address) error
 }
 
 //////////////////////////////////////////
