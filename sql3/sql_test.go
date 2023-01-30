@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/sql3"
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
 	"github.com/featurebasedb/featurebase/v3/test"
@@ -116,5 +118,12 @@ func sortStringKeys(in [][]interface{}) {
 				sort.Strings(v)
 			}
 		}
+	}
+}
+
+func TestInternalError(t *testing.T) {
+	e := sql3.NewErrInternal("foo")
+	if !strings.Contains(e.Error(), "test.go") {
+		t.Fatalf("internal error from *_test.go file should contain test.go string")
 	}
 }

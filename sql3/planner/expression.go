@@ -756,7 +756,7 @@ func (n *rangePlanExpression) Children() []types.PlanExpression {
 }
 
 func (n *rangePlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
-	if len(children) != 1 {
+	if len(children) != 2 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
 	return newRangeOpPlanExpression(children[0], children[1], n.resultDataType), nil

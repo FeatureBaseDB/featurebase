@@ -278,6 +278,7 @@ func TestPlanner_Show(t *testing.T) {
 			speciess stringset cachetype ranked size 1000
 			speciesidsq idset timequantum 'YMD'
 			speciessq stringset timequantum 'YMD'
+			specieslen decimal(4) min 0 max 270
 			) keypartitions 12
 		`)
 		if err != nil {
@@ -293,7 +294,7 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([][]interface{}{
-			{string("create table iris1 (_id id, speciesid id cachetype ranked size 1000, species string cachetype ranked size 1000, speciesids idset cachetype ranked size 1000, speciess stringset cachetype ranked size 1000, speciesidsq idset timequantum 'YMD', speciessq stringset timequantum 'YMD');")},
+			{string("create table iris1 (_id id, speciesid id cachetype ranked size 1000, species string cachetype ranked size 1000, speciesids idset cachetype ranked size 1000, speciess stringset cachetype ranked size 1000, speciesidsq idset timequantum 'YMD', speciessq stringset timequantum 'YMD', specieslen decimal(4) min 0 max 270);")},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
@@ -845,7 +846,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 }
 
-func TestPlanner_DropTable(t *testing.T) {
+func TestPlanner_DropThings(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
@@ -862,6 +863,28 @@ func TestPlanner_DropTable(t *testing.T) {
 
 	t.Run("DropTable", func(t *testing.T) {
 		_, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`DROP TABLE %i`, c))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`DROP TABLE %j`, c))
+		if err == nil || !strings.Contains(err.Error(), `not found`) {
+			t.Fatalf("expected 'table not found', got %v", err)
+		}
+	})
+	t.Run("DropView", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `CREATE VIEW vw AS SELECT true`)
+		if err != nil {
+			t.Fatalf("creating view: %v", err)
+		}
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `DROP VIEW vw`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `DROP VIEW vw`)
+		if err == nil || !strings.Contains(err.Error(), `not found`) {
+			t.Fatalf("expected 'table not found', got %v", err)
+		}
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `DROP VIEW IF EXISTS vw`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1603,6 +1626,42 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 	})
 
+	t.Run("BulkBadSource", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 23 WITH FORMAT 'CSV' INPUT 'FILE';`)
+		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("BulkBadFormat", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 'foo' WITH FORMAT 12 INPUT 'FILE';`)
+		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("BulkBadMap", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, "3" int, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, "3" int, 2 int) from 'foo' WITH FORMAT 'NDJSON' INPUT 'FILE';`)
+		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 3 aunt, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		if err == nil || !strings.Contains(err.Error(), `unknown type 'aunt'`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("BulkBadInput", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 23;`)
+		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("BulkCSVFileDefault", func(t *testing.T) {
 		tmpfile, err := os.CreateTemp("", "BulkCSVFileDefault.*.csv")
 		if err != nil {
@@ -1650,6 +1709,24 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	t.Run("BulkCSVFileBadBatchSize", func(t *testing.T) {
 		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' BATCHSIZE 0;`)
 		if err == nil || !strings.Contains(err.Error(), `invalid batch size '0'`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' BATCHSIZE 'foo';`)
+		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("BulkBadRowsLimit", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' ROWSLIMIT 'foo';`)
+		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("BulkTransformBadName", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) transform (@0, @1, @z) from 'foo' WITH FORMAT 'NDJSON' INPUT 'FILE';`)
+		if err == nil || !strings.Contains(err.Error(), `unknown identifier 'z'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

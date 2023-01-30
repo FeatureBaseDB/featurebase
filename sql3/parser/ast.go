@@ -146,6 +146,8 @@ func CloneStatement(stmt Statement) Statement {
 		return stmt.Clone()
 	case *AlterTableStatement:
 		return stmt.Clone()
+	case *AlterViewStatement:
+		return stmt.Clone()
 	case *AnalyzeStatement:
 		return stmt.Clone()
 	case *BeginStatement:
@@ -187,6 +189,14 @@ func CloneStatement(stmt Statement) Statement {
 	case *SelectStatement:
 		return stmt.Clone()
 	case *UpdateStatement:
+		return stmt.Clone()
+	case *ShowTablesStatement:
+		return stmt.Clone()
+	case *ShowColumnsStatement:
+		return stmt.Clone()
+	case *ShowCreateTableStatement:
+		return stmt.Clone()
+	case *ShowDatabasesStatement:
 		return stmt.Clone()
 	default:
 		panic(fmt.Sprintf("invalid statement type: %T", stmt))
@@ -275,6 +285,8 @@ func CloneExpr(expr Expr) Expr {
 		return expr.Clone()
 	case *NullLit:
 		return expr.Clone()
+	case *FloatLit:
+		return expr.Clone()
 	case *IntegerLit:
 		return expr.Clone()
 	case *ParenExpr:
@@ -289,7 +301,6 @@ func CloneExpr(expr Expr) Expr {
 		return expr.Clone()
 	case *Variable:
 		return expr.Clone()
-
 	default:
 		panic(fmt.Sprintf("invalid expr type: %T", expr))
 	}
@@ -495,6 +506,12 @@ func (s *ShowDatabasesStatement) String() string {
 	return "SHOW DATABASES"
 }
 
+// String returns the string representation of the statement.
+func (s *ShowDatabasesStatement) Clone() *ShowDatabasesStatement {
+	o := *s
+	return &o
+}
+
 type ShowTablesStatement struct {
 	Show   Pos // position of SHOW
 	Tables Pos // position of TABLES
@@ -503,6 +520,11 @@ type ShowTablesStatement struct {
 // String returns the string representation of the statement.
 func (s *ShowTablesStatement) String() string {
 	return "SHOW TABLES"
+}
+
+func (s *ShowTablesStatement) Clone() *ShowTablesStatement {
+	other := *s
+	return &other
 }
 
 type ShowColumnsStatement struct {
@@ -517,10 +539,15 @@ func (s *ShowColumnsStatement) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("SHOW COLUMNS ")
 	if s.TableName != nil {
-		buf.WriteString(" FROM")
+		buf.WriteString("FROM")
 		fmt.Fprintf(&buf, " %s", s.TableName.String())
 	}
 	return buf.String()
+}
+
+func (s *ShowColumnsStatement) Clone() *ShowColumnsStatement {
+	other := *s
+	return &other
 }
 
 type ShowCreateTableStatement struct {
@@ -533,11 +560,17 @@ type ShowCreateTableStatement struct {
 // String returns the string representation of the statement.
 func (s *ShowCreateTableStatement) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("SHOW CREATE TABLE ")
+	buf.WriteString("SHOW CREATE TABLE")
 	if s.TableName != nil {
 		fmt.Fprintf(&buf, " %s", s.TableName.String())
 	}
 	return buf.String()
+}
+
+func (s *ShowCreateTableStatement) Clone() *ShowCreateTableStatement {
+	other := *s
+	other.TableName = s.TableName.Clone()
+	return &other
 }
 
 type BeginStatement struct {
@@ -758,6 +791,7 @@ func (s *CreateTableStatement) Clone() *CreateTableStatement {
 	other.Name = s.Name.Clone()
 	other.Columns = cloneColumnDefinitions(s.Columns)
 	other.Constraints = cloneConstraints(s.Constraints)
+	other.Options = cloneTableOptions(s.Options)
 	other.Select = s.Select.Clone()
 	return &other
 }
@@ -773,7 +807,10 @@ func (s *CreateTableStatement) String() string {
 	buf.WriteString(s.Name.String())
 
 	if s.Select != nil {
-		buf.WriteString(" AS ")
+		buf.WriteString(" ")
+		if s.As.IsValid() {
+			buf.WriteString("AS ")
+		}
 		buf.WriteString(s.Select.String())
 	} else {
 		buf.WriteString(" (")
@@ -788,6 +825,10 @@ func (s *CreateTableStatement) String() string {
 			buf.WriteString(s.Constraints[i].String())
 		}
 		buf.WriteString(")")
+	}
+	for i := range s.Options {
+		buf.WriteString(" ")
+		buf.WriteString(s.Options[i].String())
 	}
 
 	return buf.String()
@@ -860,6 +901,32 @@ type TableOption interface {
 	option()
 }
 
+func cloneTableOptions(a []TableOption) []TableOption {
+	if a == nil {
+		return nil
+	}
+	other := make([]TableOption, len(a))
+	for i := range a {
+		other[i] = CloneTableOption(a[i])
+	}
+	return other
+}
+
+func CloneTableOption(opt TableOption) TableOption {
+	if opt == nil {
+		return nil
+	}
+
+	switch cons := opt.(type) {
+	case *KeyPartitionsOption:
+		return cons.Clone()
+	case *CommentOption:
+		return cons.Clone()
+	default:
+		panic(fmt.Sprintf("invalid table option type: %T", cons))
+	}
+}
+
 func (*KeyPartitionsOption) option() {}
 func (*CommentOption) option()       {}
 
@@ -870,10 +937,15 @@ type KeyPartitionsOption struct {
 
 func (o *KeyPartitionsOption) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("KEYPARTITIONS (")
+	buf.WriteString("KEYPARTITIONS ")
 	buf.WriteString(o.Expr.String())
-	buf.WriteString(")")
 	return buf.String()
+}
+
+func (o *KeyPartitionsOption) Clone() *KeyPartitionsOption {
+	other := *o
+	other.Expr = CloneExpr(o.Expr)
+	return &other
 }
 
 type CommentOption struct {
@@ -883,10 +955,15 @@ type CommentOption struct {
 
 func (o *CommentOption) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("COMMENT (")
+	buf.WriteString("COMMENT ")
 	buf.WriteString(o.Expr.String())
-	buf.WriteString(")")
 	return buf.String()
+}
+
+func (o *CommentOption) Clone() *CommentOption {
+	other := *o
+	other.Expr = CloneExpr(o.Expr)
+	return &other
 }
 
 type Constraint interface {
@@ -924,6 +1001,16 @@ func CloneConstraint(cons Constraint) Constraint {
 	case *DefaultConstraint:
 		return cons.Clone()
 	case *ForeignKeyConstraint:
+		return cons.Clone()
+	case *MaxConstraint:
+		return cons.Clone()
+	case *MinConstraint:
+		return cons.Clone()
+	case *CacheTypeConstraint:
+		return cons.Clone()
+	case *TimeUnitConstraint:
+		return cons.Clone()
+	case *TimeQuantumConstraint:
 		return cons.Clone()
 	default:
 		panic(fmt.Sprintf("invalid constraint type: %T", cons))
@@ -1188,15 +1275,15 @@ func (c *TimeQuantumConstraint) Clone() *TimeQuantumConstraint {
 	}
 	other := *c
 	other.Expr = CloneExpr(c.Expr)
+	other.TtlExpr = CloneExpr(c.TtlExpr)
 	return &other
 }
 
 // String returns the string representation of the constraint.
 func (c *TimeQuantumConstraint) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("TIMEQUANTUM (")
+	buf.WriteString("TIMEQUANTUM ")
 	buf.WriteString(c.Expr.String())
-	buf.WriteString(")")
 	return buf.String()
 }
 
@@ -1524,17 +1611,23 @@ func (s *AlterTableStatement) String() string {
 	buf.WriteString(s.Name.String())
 
 	if s.OldColumnName != nil {
-		buf.WriteString(" RENAME COLUMN ")
+		buf.WriteString(" RENAME ")
+		if s.RenameColumn.IsValid() {
+			buf.WriteString("COLUMN ")
+		}
 		buf.WriteString(s.OldColumnName.String())
 		buf.WriteString(" TO ")
 		buf.WriteString(s.NewColumnName.String())
 	} else if s.DropColumnName != nil {
-		buf.WriteString(" DROP COLUMN ")
+		buf.WriteString(" DROP ")
+		if s.DropColumn.IsValid() {
+			buf.WriteString("COLUMN ")
+		}
 		buf.WriteString(s.DropColumnName.String())
 	} else if s.ColumnDef != nil {
-		buf.WriteString(" ADD COLUMN ")
+		buf.WriteString(" ADD ")
 		if s.AddColumn.IsValid() {
-			buf.WriteString(" COLUMN ")
+			buf.WriteString("COLUMN ")
 		}
 		buf.WriteString(s.ColumnDef.String())
 	}
@@ -1654,6 +1747,9 @@ func (t *Type) String() string {
 		return fmt.Sprintf("%s(%s,%s)", t.Name.Name, t.Precision.String(), t.Scale.String())
 	} else if t.Precision != nil {
 		return fmt.Sprintf("%s(%s)", t.Name.Name, t.Precision.String())
+	} else if t.Scale != nil {
+		// I'm not sure how you're supposed to tell this from the t.Precision case.
+		return fmt.Sprintf("%s(%s)", t.Name.Name, t.Scale.String())
 	}
 	return t.Name.Name
 }
@@ -2033,7 +2129,7 @@ func (expr *CastExpr) Clone() *CastExpr {
 
 // String returns the string representation of the expression.
 func (expr *CastExpr) String() string {
-	return fmt.Sprintf("CAST(%s AS %s)", expr.X.String(), expr.Type.String())
+	return fmt.Sprintf("CAST (%s AS %s)", expr.X.String(), expr.Type.String())
 }
 
 type CaseExpr struct {
@@ -2515,7 +2611,7 @@ func (s *FrameSpec) Clone() *FrameSpec {
 	}
 	other := *s
 	other.X = CloneExpr(s.X)
-	other.X = CloneExpr(s.Y)
+	other.Y = CloneExpr(s.Y)
 	return &other
 }
 
@@ -2925,7 +3021,7 @@ func (s *CreateFunctionStatement) String() string {
 
 type DropFunctionStatement struct {
 	Drop     Pos    // position of DROP keyword
-	Trigger  Pos    // position of TRIGGER keyword
+	Function Pos    // position of FUNCTION keyword
 	If       Pos    // position of IF keyword
 	IfExists Pos    // position of EXISTS keyword after IF
 	Name     *Ident // trigger name
@@ -2943,7 +3039,7 @@ func (s *DropFunctionStatement) Clone() *DropFunctionStatement {
 
 func (s *DropFunctionStatement) String() string {
 	var buf bytes.Buffer
-	buf.WriteString("DROP TRIGGER")
+	buf.WriteString("DROP FUNCTION")
 	if s.IfExists.IsValid() {
 		buf.WriteString(" IF EXISTS")
 	}
@@ -3757,7 +3853,11 @@ func (c *ResultColumn) String() string {
 	if c.Star.IsValid() {
 		return "*"
 	} else if c.Alias != nil {
-		return fmt.Sprintf("%s AS %s", c.Expr.String(), c.Alias.String())
+		if c.As.IsValid() {
+			return fmt.Sprintf("%s AS %s", c.Expr.String(), c.Alias.String())
+		} else {
+			return fmt.Sprintf("%s %s", c.Expr.String(), c.Alias.String())
+		}
 	}
 	return c.Expr.String()
 }
@@ -3804,7 +3904,10 @@ func (n *QualifiedTableName) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(n.Name.String())
 	if n.Alias != nil {
-		fmt.Fprintf(&buf, " AS %s", n.Alias.String())
+		if n.As.IsValid() {
+			buf.WriteString(" AS")
+		}
+		fmt.Fprintf(&buf, " %s", n.Alias.String())
 	}
 
 	if n.Index != nil {
@@ -3882,7 +3985,10 @@ func (n *TableValuedFunction) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(n.Name.String())
 	if n.Alias != nil {
-		fmt.Fprintf(&buf, " AS %s", n.Alias.String())
+		if n.As.IsValid() {
+			buf.WriteString(" AS")
+		}
+		fmt.Fprintf(&buf, " %s", n.Alias.String())
 	}
 
 	return buf.String()
@@ -4228,8 +4334,10 @@ func (cte *CTE) String() string {
 		}
 		buf.WriteString(")")
 	}
-
-	fmt.Fprintf(&buf, " AS (%s)", cte.Select.String())
+	if cte.As.IsValid() {
+		buf.WriteString(" AS")
+	}
+	fmt.Fprintf(&buf, " (%s)", cte.Select.String())
 
 	return buf.String()
 }

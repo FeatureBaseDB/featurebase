@@ -1521,7 +1521,7 @@ func (p *Parser) parseDropFunctionStatement(dropPos Pos) (_ *DropFunctionStateme
 
 	var stmt DropFunctionStatement
 	stmt.Drop = dropPos
-	stmt.Trigger, _, _ = p.scan()
+	stmt.Function, _, _ = p.scan()
 
 	// Parse optional "IF EXISTS".
 	if p.peek() == IF {

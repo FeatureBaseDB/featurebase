@@ -58,12 +58,14 @@ func AssertSplitExprTree(tb testing.TB, s string, want []parser.Expr) {
 func TestAlterTableStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.AlterTableStatement{
 		Name:          &parser.Ident{Name: "foo"},
+		RenameColumn:  pos(0),
 		OldColumnName: &parser.Ident{Name: "col1"},
 		NewColumnName: &parser.Ident{Name: "col2"},
 	}, `ALTER TABLE foo RENAME COLUMN col1 TO col2`)
 
 	AssertStatementStringer(t, &parser.AlterTableStatement{
-		Name: &parser.Ident{Name: "foo"},
+		Name:      &parser.Ident{Name: "foo"},
+		AddColumn: pos(0),
 		ColumnDef: &parser.ColumnDefinition{
 			Name: &parser.Ident{Name: "bar"},
 			Type: &parser.Type{Name: &parser.Ident{Name: "INTEGER"}},
@@ -71,6 +73,7 @@ func TestAlterTableStatement_String(t *testing.T) {
 	}, `ALTER TABLE foo ADD COLUMN bar INTEGER`)
 	AssertStatementStringer(t, &parser.AlterTableStatement{
 		Name:           &parser.Ident{Name: "foo"},
+		DropColumn:     pos(0),
 		DropColumnName: &parser.Ident{Name: "bar"},
 	}, `ALTER TABLE foo DROP COLUMN bar`)
 }
@@ -462,7 +465,7 @@ func TestAlterViewStatement_String(t *testing.T) {
 
 func TestDeleteStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.DeleteStatement{
-		TableName: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}, Alias: &parser.Ident{Name: "tbl2"}},
+		TableName: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}, Alias: &parser.Ident{Name: "tbl2"}, As: pos(0)},
 	}, `DELETE FROM tbl AS tbl2`)
 
 	// AssertStatementStringer(t, &sql.DeleteStatement{
@@ -724,7 +727,7 @@ func TestSavepointStatement_String(t *testing.T) {
 func TestSelectStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{
-			{Expr: &parser.Ident{Name: "x"}, Alias: &parser.Ident{Name: "y"}},
+			{Expr: &parser.Ident{Name: "x"}, Alias: &parser.Ident{Name: "y"}, As: pos(0)},
 			{Expr: &parser.Ident{Name: "z"}},
 		},
 	}, `SELECT x AS y, z`)
@@ -1038,7 +1041,7 @@ func TestBinaryExpr_String(t *testing.T) {
 }
 
 func TestCastExpr_String(t *testing.T) {
-	AssertExprStringer(t, &parser.CastExpr{X: &parser.IntegerLit{Value: "1"}, Type: &parser.Type{Name: &parser.Ident{Name: "INTEGER"}}}, `CAST(1 AS INTEGER)`)
+	AssertExprStringer(t, &parser.CastExpr{X: &parser.IntegerLit{Value: "1"}, Type: &parser.Type{Name: &parser.Ident{Name: "INTEGER"}}}, `CAST (1 AS INTEGER)`)
 }
 
 func TestCaseExpr_String(t *testing.T) {
@@ -1239,10 +1242,66 @@ func TestExists_String(t *testing.T) {
 
 func AssertExprStringer(tb testing.TB, expr parser.Expr, s string) {
 	tb.Helper()
+
 	if str := expr.String(); str != s {
 		tb.Fatalf("String()=%s, expected %s", str, s)
 	} else if _, err := parser.NewParser(strings.NewReader(str)).ParseExpr(); err != nil {
 		tb.Fatalf("cannot parse string: %s; err=%s", str, err)
+	} else {
+		AssertExprSanity(tb, expr, s)
+	}
+}
+
+// AssertExprSanity checks that an expression can be cloned, and that
+// the clone's string matches the string we're given. This is a
+// kind of round-trip test both for AssertExprStringer and
+// AssertParseExpr, although they approach it from different directions.
+func AssertExprSanity(tb testing.TB, expr parser.Expr, s string) {
+	_, err := parser.Walk(parser.VisitFunc(func(node parser.Node) (parser.Node, error) {
+		return node, nil
+	}), expr)
+	if err != nil {
+		tb.Fatalf("walking expression %q: %v", s, err)
+	}
+	clone := parser.CloneExpr(expr)
+	cloneStr := clone.String()
+	// We case-smash keywords a lot, and trying to match them all exhaustively sucks.
+	// This means this test alone won't catch some hypothetical case smashing
+	// errors on provided data, but those should be getting tested directly anyway.
+	if !strings.EqualFold(s, cloneStr) {
+		tb.Fatalf("expression %q cloned to %q", s, cloneStr)
+	}
+}
+
+// AssertStatementSanity checks that a statement can be cloned, and that
+// the clone's string matches the string we're given. This is a
+// kind of round-trip test both for AssertStatementStringer and
+// AssertParseStatement, although they approach it from different
+// directions. Similarly, this checks that, if a statement has a source,
+// SourceList for that source produces at least one source, which
+// logically it should. This lets us get coverage of the Source logic
+// across a broad variety of statements.
+func AssertStatementSanity(tb testing.TB, stmt parser.Statement, s string) {
+	_, err := parser.Walk(parser.VisitFunc(func(node parser.Node) (parser.Node, error) {
+		return node, nil
+	}), stmt)
+	if err != nil {
+		tb.Fatalf("walking expression %q: %v", s, err)
+	}
+	clone := parser.CloneStatement(stmt)
+	cloneStr := clone.String()
+	// We case-smash keywords a lot, and trying to match them all exhaustively sucks.
+	// This means this test alone won't catch some hypothetical case smashing
+	// errors on provided data, but those should be getting tested directly anyway.
+	if !strings.EqualFold(s, cloneStr) {
+		tb.Fatalf("statement %q cloned to %q", s, cloneStr)
+	}
+	src := parser.StatementSource(stmt)
+	if src != nil {
+		list := parser.SourceList(src)
+		if len(list) == 0 {
+			tb.Fatalf("statement %q has a source, but that source has a total of 0 sources", s)
+		}
 	}
 }
 
@@ -1252,6 +1311,8 @@ func AssertStatementStringer(tb testing.TB, stmt parser.Statement, s string) {
 		tb.Fatalf("String()=%s, expected %s", str, s)
 	} else if _, err := parser.NewParser(strings.NewReader(str)).ParseStatement(); err != nil {
 		tb.Fatalf("cannot parse string: %s; err=%s", str, err)
+	} else {
+		AssertStatementSanity(tb, stmt, s)
 	}
 }
 

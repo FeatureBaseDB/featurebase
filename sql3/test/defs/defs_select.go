@@ -50,7 +50,7 @@ var selectTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select * from un-keyed where _id = 1",
+				"select *, an_int AS foo from un-keyed where _id = 1",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -60,9 +60,10 @@ var selectTests = TableTest{
 				hdr("a_string", fldTypeString),
 				hdr("a_string_set", fldTypeStringSet),
 				hdr("a_decimal", fldTypeDecimal2),
+				hdr("foo", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}, pql.NewDecimal(12345, 2)),
+				row(int64(1), int64(11), []int64{11, 12, 13}, int64(101), "str1", []string{"a1", "b1", "c1"}, pql.NewDecimal(12345, 2), int64(11)),
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,
