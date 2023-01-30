@@ -1262,9 +1262,10 @@ var binOpExprWithBoolBool = TableTest{
 			srcHdr("_id", fldTypeID),
 			srcHdr("a", fldTypeBool),
 			srcHdr("b", fldTypeBool),
+			srcHdr("c", fldTypeBool),
 		),
 		srcRows(
-			srcRow(int64(1), bool(true), bool(true)),
+			srcRow(int64(1), bool(true), bool(true), bool(false)),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -1283,6 +1284,54 @@ var binOpExprWithBoolBool = TableTest{
 		{
 			SQLs: sqls(
 				"select a = b from binoptestb_b;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(true)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select a AND b from binoptestb_b;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(true)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select a OR b from binoptestb_b;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(true)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select a AND c from binoptestb_b;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(false)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select a OR c from binoptestb_b;",
 			),
 			ExpHdrs: hdrs(
 				hdr("", fldTypeBool),
