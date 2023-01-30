@@ -14,7 +14,7 @@ func newCLICommand(logdest logger.Logger) *cobra.Command {
 	cliCmd = cli.NewCLICommand(logdest)
 	cobraCmd := &cobra.Command{
 		Use:   "cli",
-		Short: "Query FB with SQL3 from the command line",
+		Short: "Query FeatureBase with SQL from the command line",
 		Long:  ``,
 		RunE:  usageErrorWrapper(cliCmd),
 	}

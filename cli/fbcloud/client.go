@@ -46,7 +46,7 @@ type tokenizedSQL struct {
 }
 
 // Query issues a SQL query formatted for the FeatureBase cloud query endpoint.
-func (cq *Queryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
+func (cq *Queryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
 	if time.Since(cq.lastRefresh) > TokenRefreshTimeout {
 		if err := cq.tokenRefresh(); err != nil {
 			return nil, errors.Wrap(err, "refreshing token")
@@ -54,9 +54,18 @@ func (cq *Queryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, e
 	}
 	url := fmt.Sprintf("%s/v2/databases/%s/query/sql", cq.Host, db)
 
+	// TODO(tlt): this needs to be removed; we should be passing the sql
+	// io.Reader to the http.Post() body. In order to do that, we need to get
+	// rid of this json object.
+	tmpBuf := new(strings.Builder)
+	_, err := io.Copy(tmpBuf, sql)
+	if err != nil {
+		return nil, err
+	}
+
 	sqlReq := &tokenizedSQL{
 		Language:  "sql",
-		Statement: sql,
+		Statement: tmpBuf.String(),
 	}
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(sqlReq); err != nil {

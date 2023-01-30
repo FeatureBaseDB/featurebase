@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -14,7 +15,7 @@ import (
 )
 
 type Queryer interface {
-	Query(org, db, sql string) (*featurebase.WireQueryResponse, error)
+	Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error)
 }
 
 // Ensure type implements interface.
@@ -27,13 +28,10 @@ type standardQueryer struct {
 	Port string
 }
 
-func (qryr *standardQueryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
-	buf := bytes.Buffer{}
+func (qryr *standardQueryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
 	url := fmt.Sprintf("%s/sql", hostPort(qryr.Host, qryr.Port))
 
-	buf.Write([]byte(sql))
-
-	resp, err := http.Post(url, "application/json", &buf)
+	resp, err := http.Post(url, "application/json", sql)
 	if err != nil {
 		return nil, errors.Wrapf(err, "posting query")
 	}
@@ -63,14 +61,23 @@ type daxQueryer struct {
 	Port string
 }
 
-func (qryr *daxQueryer) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
+func (qryr *daxQueryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
 	buf := bytes.Buffer{}
 	url := fmt.Sprintf("%s/queryer/sql", hostPort(qryr.Host, qryr.Port))
+
+	// TODO(tlt): this needs to be removed; we should be passing the sql
+	// io.Reader to the http.Post() body. In order to do that, we need to get
+	// rid of this json object.
+	tmpBuf := new(strings.Builder)
+	_, err := io.Copy(tmpBuf, sql)
+	if err != nil {
+		return nil, err
+	}
 
 	sqlReq := &queryerhttp.SQLRequest{
 		OrganizationID: dax.OrganizationID(org),
 		DatabaseID:     dax.DatabaseID(db),
-		SQL:            sql,
+		SQL:            tmpBuf.String(),
 	}
 	if err := json.NewEncoder(&buf).Encode(sqlReq); err != nil {
 		return nil, errors.Wrapf(err, "encoding sql request: %s", sql)
