@@ -7421,6 +7421,7 @@ func backupTest(t *testing.T, c *test.Cluster, index string) {
 }
 
 func chkSumCluster(t *testing.T, c *test.Cluster) string {
+	t.Helper()
 	buf := &bytes.Buffer{}
 	chkSumLog := logger.NewStandardLogger(buf)
 	chkSum := ctl.NewChkSumCommand(chkSumLog)
