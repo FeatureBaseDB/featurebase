@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
 type VersionChecker struct {
@@ -18,26 +22,36 @@ func NewVersionChecker(endpoint string) *VersionChecker {
 	return &v
 }
 
-func (v *VersionChecker) CheckIn() (*Response, error) {
+func (v *VersionChecker) CheckIn() (*VerCheckResponse, error) {
+
+	id, err := v.WriteClientUUID()
+	if err != nil {
+		return nil, err
+	}
 
 	body := make(map[string]string, 2)
 	body["entry_type"] = "user"
-	body["version"] = VersionInfo(true)
+	body["version"] = Version
+	body["client_id"] = id
+
 	req, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	_, err = http.Post(v.URL, "application/json", bytes.NewBuffer(req))
+
+	wReq := bytes.NewReader(req)
+
 	if err != nil {
 		return nil, err
 	}
 
-	var json_resp Response
-	r, err := http.Get(v.URL)
+	var json_resp VerCheckResponse
+	r, err := http.Post(v.URL, "application/json", wReq)
 	if err != nil {
 		return nil, err
 	}
 	data, err := io.ReadAll(r.Body)
+
 	if err != nil {
 		return nil, err
 	}
@@ -51,10 +65,52 @@ func (v *VersionChecker) CheckIn() (*Response, error) {
 
 }
 
-type Response struct {
-	Information InfoSubResponse `json:"info"`
+func (v *VersionChecker) GenerateClientUUID() (string, error) {
+	clientUUID := uuid.New()
+	cleanedUUID := strings.Replace(clientUUID.String(), "-", "", -1)
+	return cleanedUUID, nil
 }
 
-type InfoSubResponse struct {
-	Version string `json:"version"`
+func (v *VersionChecker) WriteClientUUID() (string, error) {
+	filename := ".client_id.txt"
+	_, err := os.Stat(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fh, err := os.Create(filename)
+			if err != nil {
+				return "", err
+			}
+			defer fh.Close()
+			id, err := v.GenerateClientUUID()
+			if err != nil {
+				return "", err
+			}
+
+			_, err = fh.WriteString(id)
+			if err != nil {
+				return "", err
+			}
+
+			return "", err
+		} else {
+			return "", err
+		}
+	}
+
+	fh, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	defer fh.Close()
+	buf, err := os.ReadFile(filename)
+
+	if err != nil {
+		return "", err
+	}
+	return string(buf), nil
+
+}
+
+type VerCheckResponse struct {
+	Version string `json:"latest_version"`
 }
