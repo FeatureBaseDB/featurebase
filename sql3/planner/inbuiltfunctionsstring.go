@@ -822,7 +822,7 @@ func (n *callPlanExpression) EvaluateStr(currentRow []interface{}) (interface{},
 
 	decimalArgOne, ok := coercedValue.(pql.Decimal)
 	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected type conversion '%T'", coercedValue)
+		return nil, sql3.NewErrUnexpectedTypeConversion(0, 0, coercedValue)
 	}
 
 	intArgTwo := int64(10)
@@ -833,7 +833,7 @@ func (n *callPlanExpression) EvaluateStr(currentRow []interface{}) (interface{},
 		}
 		intArgTwo, ok = argEval.(int64)
 		if !ok {
-			return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+			return nil, sql3.NewErrUnexpectedTypeConversion(0, 0, argEval)
 		}
 	}
 
@@ -845,7 +845,7 @@ func (n *callPlanExpression) EvaluateStr(currentRow []interface{}) (interface{},
 		}
 		intArgThree, ok = argEval.(int64)
 		if !ok {
-			return nil, sql3.NewErrInternalf("unexpected type converion %T", argEval)
+			return nil, sql3.NewErrUnexpectedTypeConversion(0, 0, argEval)
 		}
 	}
 
