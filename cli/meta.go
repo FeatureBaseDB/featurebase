@@ -31,6 +31,7 @@ var _ metaCommand = (*metaBang)(nil)
 var _ metaCommand = (*metaChangeDirectory)(nil)
 var _ metaCommand = (*metaConnect)(nil)
 var _ metaCommand = (*metaFile)(nil)
+var _ metaCommand = (*metaHelp)(nil)
 var _ metaCommand = (*metaInclude)(nil)
 var _ metaCommand = (*metaPrint)(nil)
 var _ metaCommand = (*metaQuit)(nil)
@@ -141,6 +142,46 @@ func (m *metaFile) execute(cmd *CLICommand) (action, error) {
 	// the \i command to accept files containing SQL.
 	_, err = cmd.buffer.addPart(pf)
 	return actionNone, errors.Wrap(err, "adding part file")
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// help (?)
+// ////////////////////////////////////////////////////////////////////////////
+type metaHelp struct {
+	args []string
+}
+
+func newMetaHelp(args []string) *metaHelp {
+	return &metaHelp{
+		args: args,
+	}
+}
+
+func (m *metaHelp) execute(cmd *CLICommand) (action, error) {
+	helpText := `General
+  \q[uit]                quit psql
+
+Help
+  \? [commands]          show help on backslash commands
+
+Query Buffer
+  \p[rint]               show the contents of the query buffer
+  \r[eset]               reset (clear) the query buffer
+
+Input/Output
+  \file ...              reference a local file to stream to the server
+  \i[nclude] FILE        execute commands from file
+
+Connection
+  \c[onnect] [DBNAME]    connect to new database
+
+Operating System
+  \cd [DIR]              change the current working directory
+  \! [COMMAND]           execute command in shell or start interactive shell
+`
+	cmd.Printf("%s\n", helpText)
+
+	return actionNone, nil
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -301,6 +342,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaConnect(args), nil
 	case "file":
 		return newMetaFile(args), nil
+	case "?":
+		return newMetaHelp(args), nil
 	case "i", "include":
 		return newMetaInclude(args), nil
 	case "p", "print":
