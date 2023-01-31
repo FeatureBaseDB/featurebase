@@ -44,17 +44,17 @@ type Topologer interface {
 	ComputeNodes(ctx context.Context, index string, shards []uint64) ([]dax.ComputeNode, error)
 }
 
-type MDSTopology struct {
+type ServerlessTopology struct {
 	controller dax.Controller
 }
 
-func (m *MDSTopology) ComputeNodes(ctx context.Context, index string, shards []uint64) ([]dax.ComputeNode, error) {
+func (m *ServerlessTopology) ComputeNodes(ctx context.Context, index string, shards []uint64) ([]dax.ComputeNode, error) {
 	var daxShards = make(dax.ShardNums, len(shards))
 	for i, s := range shards {
 		daxShards[i] = dax.ShardNum(s)
 	}
 
-	// TODO(tlt): this needs review; MDSTopology is converting from
+	// TODO(tlt): this needs review; ServerlessTopology is converting from
 	// string/uint64 to qtid/shardNum?? Perhaps we can get rid of the Topologer
 	// interface altogether and replace it with dax.Noder.
 	qtid := dax.TableKey(index).QualifiedTableID()
@@ -64,7 +64,7 @@ func (m *MDSTopology) ComputeNodes(ctx context.Context, index string, shards []u
 
 // TODO(jaffee) we need version info in here ASAP. whenever schema or topo
 // changes, version gets bumped and nodes know to reject queries
-// and update their info from the MDS instead of querying it every
+// and update their info from the Controller instead of querying it every
 // time.
 type Translator interface {
 	CreateIndexKeys(ctx context.Context, index string, keys []string) (map[string]uint64, error)
@@ -2177,7 +2177,7 @@ func (o *orchestrator) mapper(ctx context.Context, eg *errgroup.Group, ch chan m
 				// replica) and a valid error from a healthy node. In the case of
 				// the latter, there's no need to retry a replica, we should trust
 				// the error from the healthy node and return that immediately.
-				// TODO(jaffee) retries should contact MDS and find out who is up and has access to shards needed
+				// TODO(jaffee) retries should contact Controller and find out who is up and has access to shards needed
 				results, err := o.remoteExec(ctx, node.Address, index, &pql.Query{Calls: []*pql.Call{c}}, shards, embeddedRowsForNode)
 				if len(results) > 0 {
 					resp.result = results[0]

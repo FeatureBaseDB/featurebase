@@ -33,7 +33,7 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 
 	flags := pflag.NewFlagSet("featurebase", pflag.ExitOnError)
 	flags.StringVar(&srv.Name, pre("name"), srv.Name, "Name of the node in the cluster.")
-	flags.StringVar(&srv.MDSAddress, pre("mds-address"), srv.MDSAddress, "MDS service to register with.")
+	flags.StringVar(&srv.ControllerAddress, pre("controller-address"), srv.ControllerAddress, "Controller service to register with.")
 	flags.StringVar(&srv.WriteloggerDir, pre("writelogger-dir"), srv.WriteloggerDir, "Writelogger directory to read/write append logs.")
 	flags.StringVar(&srv.SnapshotterDir, pre("snapshotter-dir"), srv.SnapshotterDir, "Snapshotter directory to read/write snapshots.")
 	flags.StringVarP(&srv.DataDir, pre("data-dir"), short("d"), srv.DataDir, "Directory to store FeatureBase data files.")
@@ -112,7 +112,7 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 
 	flags.BoolVar(&srv.SQL.EndpointEnabled, pre("sql.endpoint-enabled"), srv.SQL.EndpointEnabled, "Enable FeatureBase SQL /sql endpoint (default false)")
 
-	flags.DurationVar(&srv.CheckInInterval, pre("check-in-interval"), srv.CheckInInterval, "Interval between check-ins to MDS")
+	flags.DurationVar(&srv.CheckInInterval, pre("check-in-interval"), srv.CheckInInterval, "Interval between check-ins to the Controller")
 
 	// Future flags.
 	flags.BoolVar(&srv.Future.Rename, pre("future.rename"), false, "Present application name as FeatureBase. Defaults to false, will default to true in an upcoming release.")

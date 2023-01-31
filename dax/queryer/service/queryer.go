@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
-	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
+	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
 	queryerhttp "github.com/featurebasedb/featurebase/v3/dax/queryer/http"
 	"github.com/featurebasedb/featurebase/v3/errors"
@@ -49,8 +49,8 @@ func (q *queryerService) HTTPHandler() http.Handler {
 	return queryerhttp.Handler(q.queryer)
 }
 
-func (q *queryerService) SetMDS(addr dax.Address) error {
-	mdscli := mdsclient.New(addr, q.logger)
-	q.queryer.SetController(mdscli)
+func (q *queryerService) SetController(addr dax.Address) error {
+	controllercli := controllerclient.New(addr, q.logger)
+	q.queryer.SetController(controllercli)
 	return nil
 }

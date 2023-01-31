@@ -275,6 +275,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 		return p.analyseFunctionPrefixSuffixReplicate(call, scope)
 	case "FORMAT":
 		return p.analyseFunctionFormat(call, scope)
+	case "CHARINDEX":
+		return p.analyseFunctionCharIndex(call, scope)
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

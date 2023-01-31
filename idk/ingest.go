@@ -29,8 +29,8 @@ import (
 	pilosaclient "github.com/featurebasedb/featurebase/v3/client"
 	client_types "github.com/featurebasedb/featurebase/v3/client/types"
 	"github.com/featurebasedb/featurebase/v3/dax"
-	mdsclient "github.com/featurebasedb/featurebase/v3/dax/mds/client"
-	"github.com/featurebasedb/featurebase/v3/idk/mds"
+	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
+	"github.com/featurebasedb/featurebase/v3/idk/serverless"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	proto "github.com/featurebasedb/featurebase/v3/proto"
@@ -97,10 +97,10 @@ type Main struct {
 
 	UseShardTransactionalEndpoint bool `flag:"use-shard-transactional-endpoint" help:"Use alternate import endpoint that ingests data for all fields in a shard in a single atomic request. No negative performance impact and better consistency. Recommended."`
 
-	MDSAddress     string             `short:"" help:"MDS address."`
-	OrganizationID dax.OrganizationID `short:"" help:"auto-assigned organization ID"`
-	DatabaseID     dax.DatabaseID     `short:"" help:"auto-assigned database ID"`
-	TableName      dax.TableName      `short:"" help:"human friendly table name"`
+	ControllerAddress string             `short:"" help:"Controller address."`
+	OrganizationID    dax.OrganizationID `short:"" help:"auto-assigned organization ID"`
+	DatabaseID        dax.DatabaseID     `short:"" help:"auto-assigned database ID"`
+	TableName         dax.TableName      `short:"" help:"human friendly table name"`
 
 	csvWriter *csv.Writer
 	csvFile   *os.File
@@ -984,7 +984,7 @@ func (m *Main) setupClient() (*tls.Config, error) {
 		)
 	}
 
-	if m.useMDS() {
+	if m.useController() {
 		// We should only have one "pilosa host" here. Get the path from that
 		// and use it as the client path prefix.
 		var prefix string
@@ -1003,28 +1003,28 @@ func (m *Main) setupClient() (*tls.Config, error) {
 	}
 
 	// Set up the SchemaManager
-	if m.useMDS() {
+	if m.useController() {
 		ctx := context.Background()
 
-		// MDS doesn't auto-create a table based on IDK ingest; the table must
-		// already exist.
-		mdsClient := mdsclient.New(dax.Address(m.MDSAddress), m.log)
+		// Controller doesn't auto-create a table based on IDK ingest; the table
+		// must already exist.
+		controllerClient := controllerclient.New(dax.Address(m.ControllerAddress), m.log)
 		qdbid := dax.NewQualifiedDatabaseID(m.OrganizationID, m.DatabaseID)
-		qtid, err := mdsClient.TableID(ctx, qdbid, m.TableName)
+		qtid, err := controllerClient.TableID(ctx, qdbid, m.TableName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting table id: qual: %s, table name: %s", qdbid, m.TableName)
 		}
-		qtbl, err := mdsClient.Table(ctx, qtid)
+		qtbl, err := controllerClient.Table(ctx, qtid)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting table id: qtid: %s", qtid)
 		}
 
 		m.Qtbl = qtbl
 		m.Index = string(qtbl.Key())
-		m.SchemaManager = mds.NewSchemaManager(dax.Address(m.MDSAddress), qdbid, m.log)
+		m.SchemaManager = serverless.NewSchemaManager(dax.Address(m.ControllerAddress), qdbid, m.log)
 
 		m.NewImporterFn = func() pilosacore.Importer {
-			return mds.NewImporter(mdsClient, qtbl.Qualifier(), &qtbl.Table)
+			return serverless.NewImporter(controllerClient, qtbl.Qualifier(), &qtbl.Table)
 		}
 	} else {
 		m.SchemaManager = m.client
@@ -1815,10 +1815,10 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosabatch.Record
 	}
 
 	// The table name we use to look up in the index in the schema returned from
-	// SchemaManager.Schema() differs depending on whether this is MDS supported
-	// or not (i.e. whether it has a table qualifier).
+	// SchemaManager.Schema() differs depending on whether this is Serverless
+	// supported or not (i.e. whether it has a table qualifier).
 	tblName := m.index.Name()
-	if m.useMDS() {
+	if m.useController() {
 		tblName = string(m.Qtbl.Key())
 	}
 
@@ -1847,7 +1847,7 @@ func (m *Main) newBatch(fields []*pilosaclient.Field) (pilosabatch.RecordBatch, 
 		pilosabatch.OptUseShardTransactionalEndpoint(m.UseShardTransactionalEndpoint),
 	}
 	var importer pilosacore.Importer
-	if m.useMDS() {
+	if m.useController() {
 		importer = m.NewImporterFn()
 	} else {
 		sapi := pilosaclient.NewSchemaAPI(m.client)
@@ -2157,7 +2157,7 @@ func (m *Main) validate() error {
 		return errors.New("must set exactly one of --primary-key-field <fieldnames>, --id-field <fieldname>, --auto-generate")
 	}
 
-	if m.useMDS() {
+	if m.useController() {
 		if m.OrganizationID == "" {
 			return errors.New("must set an organization with --featurebase.org-id")
 		} else if m.DatabaseID == "" {
@@ -2189,6 +2189,6 @@ func (m *Main) allowError(err error) bool {
 	}
 }
 
-func (m *Main) useMDS() bool {
-	return m.MDSAddress != ""
+func (m *Main) useController() bool {
+	return m.ControllerAddress != ""
 }

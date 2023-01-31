@@ -52,11 +52,11 @@ type Config struct {
 	// Name a unique name for this node in the cluster.
 	Name string `toml:"name"`
 
-	// MDSAddress is the location at which this node should register itself and
-	// retrieve its instructions. For example, after registring, the MDS service
-	// might tell this node that it is responsible for specific shards for a
-	// particular index.
-	MDSAddress string `toml:"mds-address"`
+	// ControllerAddress is the location at which this node should register
+	// itself and retrieve its instructions. For example, after registring, the
+	// Controller service might tell this node that it is responsible for
+	// specific shards for a particular index.
+	ControllerAddress string `toml:"controller-address"`
 
 	// WriteloggerDir is the location at which this node should
 	// read/write change logs. Typically a network mounted filesystem
@@ -210,7 +210,7 @@ type Config struct {
 	} `toml:"sql"`
 
 	// CheckInTimeout is the amount of time between compute node check-ins to
-	// MDS.
+	// Controller.
 	CheckInInterval time.Duration `toml:"check-in-interval"`
 
 	// Storage.Backend determines which Tx implementation the holder/Index will

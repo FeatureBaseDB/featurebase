@@ -214,7 +214,6 @@ func (p *ExecutionPlanner) analyseFunctionFormat(call *parser.Call, scope parser
 	if len(call.Args) < 1 {
 		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
 	}
-
 	if !typeIsString(call.Args[0].DataType()) && !typeIsVoid(call.Args[0].DataType()) {
 		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 	}
@@ -225,6 +224,31 @@ func (p *ExecutionPlanner) analyseFunctionFormat(call *parser.Call, scope parser
 		}
 	}
 	call.ResultDataType = parser.NewDataTypeString()
+	return call, nil
+}
+
+// charindex(substring, str, pos)
+func (p *ExecutionPlanner) analyseFunctionCharIndex(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) <= 1 || len(call.Args) > 3 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 3, len(call.Args))
+	}
+	// first paramater is the substring for which index needs to be identified
+	if !typeIsString(call.Args[0].DataType()) && !typeIsVoid(call.Args[0].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
+	}
+
+	// second paramater is the string where we search the position of the substring ( first param)
+	if !typeIsString(call.Args[1].DataType()) && !typeIsVoid(call.Args[1].DataType()) {
+		return nil, sql3.NewErrStringExpressionExpected(call.Args[1].Pos().Line, call.Args[1].Pos().Column)
+	}
+
+	// the third parameter is the position. optional, defaults to 0
+	if len(call.Args) == 3 && !typeIsInteger(call.Args[2].DataType()) && !typeIsVoid(call.Args[2].DataType()) {
+		return nil, sql3.NewErrIntExpressionExpected(call.Args[2].Pos().Line, call.Args[2].Pos().Column)
+	}
+
+	call.ResultDataType = parser.NewDataTypeInt()
+
 	return call, nil
 }
 
@@ -696,4 +720,66 @@ func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface
 		args = append(args, argEval)
 	}
 	return fmt.Sprintf(formatString, args...), nil
+}
+
+// EvaluateCharIndex function gets the position of the substring in the given string
+func (n *callPlanExpression) EvaluateCharIndex(currentRow []interface{}) (interface{}, error) {
+
+	argEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	subString, ok := argEval.(string)
+	if !ok {
+		return nil, sql3.NewErrUnexpectedTypeConversion(0, 0, argEval)
+	}
+
+	argEval, err = n.args[1].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	inputString, ok := argEval.(string)
+	if !ok {
+		return nil, sql3.NewErrUnexpectedTypeConversion(0, 0, argEval)
+	}
+
+	if len(n.args) == 2 {
+		res := strings.Index(inputString, subString)
+		if res > -1 {
+			newpos := int64(res)
+			return int64(newpos), nil
+		}
+		return int64(res), nil
+	}
+
+	argEval, err = n.args[2].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	if argEval == nil {
+		return nil, nil
+	}
+	pos, ok := argEval.(int64)
+	if !ok {
+		return nil, sql3.NewErrUnexpectedTypeConversion(0, 0, argEval)
+	}
+
+	if pos < 0 {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, pos)
+	}
+	if pos >= int64(len(inputString)) {
+		return nil, sql3.NewErrValueOutOfRange(0, 0, pos)
+	}
+	res := strings.Index(inputString[pos:], subString)
+	if res > -1 {
+		newpos := int64(res) + pos
+		return int64(newpos), nil
+	}
+	return int64(res), nil
 }

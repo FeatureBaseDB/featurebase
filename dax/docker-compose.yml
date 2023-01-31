@@ -1,15 +1,15 @@
 version: '3'
 
 services:
-  mds:
+  controller:
     build:
       context: ../.quick
       dockerfile: ../Dockerfile-dax-quick
     environment:
       FEATUREBASE_BIND: 0.0.0.0:8080
       FEATUREBASE_VERBOSE: "true"
-      FEATUREBASE_MDS_RUN: "true"
-      FEATUREBASE_CONFIG_DATA_DIR: file:/dax-data/mds
+      FEATUREBASE_CONTROLLER_RUN: "true"
+      FEATUREBASE_CONFIG_DATA_DIR: file:/dax-data/controller
     ports:
       - "8081:8080"
 
@@ -21,9 +21,9 @@ services:
       FEATUREBASE_BIND: 0.0.0.0:8080
       FEATUREBASE_VERBOSE: "true"
       FEATUREBASE_QUERYER_RUN: "true"
-      FEATUREBASE_QUERYER_CONFIG_MDS_ADDRESS: "mds:8080/mds"
+      FEATUREBASE_QUERYER_CONFIG_CONTROLLER_ADDRESS: "controller:8080/controller"
     depends_on:
-      - mds
+      - controller
     ports:
       - "8080:8080"
 
@@ -33,7 +33,7 @@ services:
       dockerfile: ../Dockerfile-dax-quick
     environment:
       FEATUREBASE_COMPUTER_RUN: "true"
-      FEATUREBASE_COMPUTER_CONFIG_MDS_ADDRESS: "mds:8080/mds"
+      FEATUREBASE_COMPUTER_CONFIG_CONTROLLER_ADDRESS: "controller:8080/controller"
       FEATUREBASE_COMPUTER_CONFIG_DATA_DIR: /dax-data/computer
       FEATUREBASE_COMPUTER_CONFIG_VERBOSE: true
       FEATUREBASE_BIND: 0.0.0.0:8080
@@ -45,7 +45,7 @@ services:
       - "./dax-data/writelogger:/dax-data/writelogger"
       - "./dax-data/snapshotter:/dax-data/snapshotter"
     depends_on:
-      - mds
+      - controller
     deploy:
       replicas: 1
 
@@ -60,5 +60,5 @@ services:
       GEN_FEATUREBASE_DB_ID: "testdb"
       GEN_USE_SHARD_TRANSACTIONAL_ENDPOINT: "true"
       GEN_SOURCE: "custom"
-      GEN_TARGET: "mds"
-      GEN_MDS_ADDRESS: "mds:8080/mds"
+      GEN_TARGET: "serverless"
+      GEN_CONTROLLER_ADDRESS: "controller:8080/controller"

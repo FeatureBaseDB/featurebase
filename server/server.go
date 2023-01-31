@@ -123,7 +123,7 @@ func OptCommandConfig(config *Config) CommandOption {
 			c.Config.Etcd = config.Etcd
 			c.Config.Auth = config.Auth
 			c.Config.TLS = config.TLS
-			c.Config.MDSAddress = config.MDSAddress
+			c.Config.ControllerAddress = config.ControllerAddress
 			c.Config.SQL.EndpointEnabled = config.SQL.EndpointEnabled
 			return nil
 		}
@@ -280,7 +280,7 @@ func (m *Command) StartNoServe(addr dax.Address) (err error) {
 	}
 
 	// Start the "check-in" background process which periodically checks in with
-	// MDS.
+	// the Controller.
 	go m.checkIn(addr)
 
 	return nil
@@ -303,7 +303,7 @@ func (m *Command) checkIn(addr dax.Address) {
 			m.logger.Debugf("node check-in in last %s, address: %s", interval, m.Config.Advertise)
 
 			if m.Registrar == nil {
-				m.logger.Printf("no MDS implementation with which to check-in on node: %s", m.Config.Advertise)
+				m.logger.Printf("no Controller implementation with which to check-in on node: %s", m.Config.Advertise)
 			}
 
 			node := &dax.Node{
