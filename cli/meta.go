@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"os"
 	"os/exec"
 	"strings"
@@ -29,6 +30,7 @@ type metaCommand interface {
 var _ metaCommand = (*metaBang)(nil)
 var _ metaCommand = (*metaChangeDirectory)(nil)
 var _ metaCommand = (*metaConnect)(nil)
+var _ metaCommand = (*metaFile)(nil)
 var _ metaCommand = (*metaInclude)(nil)
 var _ metaCommand = (*metaPrint)(nil)
 var _ metaCommand = (*metaQuit)(nil)
@@ -111,6 +113,37 @@ func (m *metaConnect) execute(cmd *CLICommand) (action, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
+// file
+// ////////////////////////////////////////////////////////////////////////////
+type metaFile struct {
+	args []string
+}
+
+func newMetaFile(args []string) *metaFile {
+	return &metaFile{
+		args: args,
+	}
+}
+
+func (m *metaFile) execute(cmd *CLICommand) (action, error) {
+	if len(m.args) != 1 {
+		return actionNone, errors.Errorf("meta command 'file' requires exactly one argument")
+	}
+
+	file, err := os.Open(m.args[0])
+	if err != nil {
+		return actionNone, errors.Wrapf(err, "opening file: %s", m.args[0])
+	}
+
+	pf := newPartFile(file)
+
+	// TODO: addPart returns a query. We'll have to revisit this when we update
+	// the \i command to accept files containing SQL.
+	_, err = cmd.buffer.addPart(pf)
+	return actionNone, errors.Wrap(err, "adding part file")
+}
+
+// ////////////////////////////////////////////////////////////////////////////
 // include (or i)
 // ////////////////////////////////////////////////////////////////////////////
 type metaInclude struct {
@@ -132,13 +165,39 @@ func (m *metaInclude) execute(cmd *CLICommand) (action, error) {
 	if err != nil {
 		return actionNone, errors.Wrapf(err, "opening file: %s", m.args[0])
 	}
+	defer file.Close()
 
-	pf := newPartFile(file)
+	splitter := newSplitter()
+	buffer := newBuffer()
 
-	// TODO: addPart returns a query. We'll have to revisit this when we update
-	// the \i command to accept files containing SQL.
-	_, err = cmd.buffer.addPart(pf)
-	return actionNone, errors.Wrap(err, "adding part file")
+	// Read the file by line, pushing the lines into a new line splitter, then
+	// sending that output to a new buffer.
+	sc := bufio.NewScanner(file)
+	for sc.Scan() {
+		line := sc.Text() // GET the line string
+
+		qps, mcs, err := splitter.split(line)
+		if err != nil {
+			return actionNone, errors.Wrapf(err, "splitting lines")
+		} else if len(mcs) > 0 {
+			return actionNone, errors.Errorf("include does  not support meta-commands")
+		}
+
+		for i := range qps {
+			if qry, err := buffer.addPart(qps[i]); err != nil {
+				return actionNone, errors.Wrap(err, "adding part to buffer")
+			} else if qry != nil {
+				if err := cmd.executeQuery(qry); err != nil {
+					return actionNone, errors.Wrap(err, "executing query")
+				}
+			}
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return actionNone, errors.Wrapf(err, "scanning file: %s", m.args[0])
+	}
+
+	return actionReset, nil
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -240,6 +299,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaChangeDirectory(args), nil
 	case "c", "connect":
 		return newMetaConnect(args), nil
+	case "file":
+		return newMetaFile(args), nil
 	case "i", "include":
 		return newMetaInclude(args), nil
 	case "p", "print":

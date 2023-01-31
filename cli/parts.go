@@ -86,6 +86,31 @@ func (p *partFile) Reader() io.Reader {
 }
 
 func (p *partFile) String() string {
+	return fmt.Sprintf("[file: %s]", p.file.Name())
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// include (sql commands)
+// ////////////////////////////////////////////////////////////////////////////
+
+// Ensure type implements interface.
+var _ queryPart = (*partInclude)(nil)
+
+type partInclude struct {
+	file *os.File
+}
+
+func newPartInclude(f *os.File) *partInclude {
+	return &partInclude{
+		file: f,
+	}
+}
+
+func (p *partInclude) Reader() io.Reader {
+	return p.file
+}
+
+func (p *partInclude) String() string {
 	return fmt.Sprintf("[include: %s]", p.file.Name())
 }
 
