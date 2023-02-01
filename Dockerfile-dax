@@ -16,7 +16,7 @@ RUN make build FLAGS="-o build/featurebase" ${MAKE_FLAGS}
 ### FeatureBase runner ###
 ##########################
 
-FROM alpine:3.13.2 as runner
+FROM golang:alpine as runner
 
 LABEL maintainer "dev@featurebase.com"
 
