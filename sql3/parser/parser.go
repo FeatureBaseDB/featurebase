@@ -407,9 +407,16 @@ func (p *Parser) parseCreateDatabaseStatement(createPos Pos) (_ *CreateDatabaseS
 		return &stmt, err
 	}
 
-	// look for database options
-	if stmt.Options, err = p.parseDatabaseOptions(); err != nil {
-		return &stmt, err
+	switch p.peek() {
+	case WITH:
+		stmt.With, _, _ = p.scan()
+
+		// look for database options
+		if stmt.Options, err = p.parseDatabaseOptions(); err != nil {
+			return &stmt, err
+		}
+	default:
+		return &stmt, p.errorExpected(p.pos, p.tok, "WITH")
 	}
 
 	return &stmt, nil
@@ -3426,8 +3433,8 @@ func (p *Parser) parseAlterDatabaseStatement(alterPos Pos) (_ *AlterDatabaseStat
 	}
 
 	switch p.peek() {
-	case SET:
-		stmt.Set, _, _ = p.scan()
+	case WITH:
+		stmt.With, _, _ = p.scan()
 
 		// look for database option
 		if !isDatabaseOptionStartToken(p.peek()) {
@@ -3437,7 +3444,7 @@ func (p *Parser) parseAlterDatabaseStatement(alterPos Pos) (_ *AlterDatabaseStat
 			return &stmt, err
 		}
 	default:
-		return &stmt, p.errorExpected(p.pos, p.tok, "SET")
+		return &stmt, p.errorExpected(p.pos, p.tok, "WITH")
 	}
 
 	return &stmt, nil

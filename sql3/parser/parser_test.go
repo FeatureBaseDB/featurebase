@@ -350,15 +350,15 @@ func TestParser_ParseCacheTypeConstraints(t *testing.T) {
 
 func TestParser_ParseAlterStatement(t *testing.T) {
 	t.Run("AlterDatabase", func(t *testing.T) {
-		AssertParseStatement(t, `ALTER DATABASE db1 SET UNITS 4`, &parser.AlterDatabaseStatement{
+		AssertParseStatement(t, `ALTER DATABASE db1 WITH UNITS 4`, &parser.AlterDatabaseStatement{
 			Alter:    pos(0),
 			Database: pos(6),
 			Name:     &parser.Ident{NamePos: pos(15), Name: "db1"},
-			Set:      pos(19),
+			With:     pos(19),
 			Option: &parser.UnitsOption{
-				Units: pos(23),
+				Units: pos(24),
 				Expr: &parser.IntegerLit{
-					ValuePos: pos(29),
+					ValuePos: pos(30),
 					Value:    "4",
 				},
 			},
@@ -366,9 +366,9 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 
 		AssertParseStatementError(t, `ALTER`, `1:1: expected DATABASE, TABLE or VIEW`)
 		AssertParseStatementError(t, `ALTER DATABASE`, `1:14: expected database name, found 'EOF'`)
-		AssertParseStatementError(t, `ALTER DATABASE db1`, `1:18: expected SET, found 'EOF'`)
-		AssertParseStatementError(t, `ALTER DATABASE db1 SET`, `1:22: expected UNITS, found 'EOF'`)
-		AssertParseStatementError(t, `ALTER DATABASE db1 SET UNITS`, `1:28: expected literal, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1`, `1:18: expected WITH, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1 WITH`, `1:22: expected UNITS, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1 WITH UNITS`, `1:28: expected literal, found 'EOF'`)
 	})
 
 	t.Run("AlterTable", func(t *testing.T) {
@@ -881,18 +881,19 @@ func TestParser_ParseStatement(t *testing.T) {
 	})*/
 
 	t.Run("CreateDatabase", func(t *testing.T) {
-		AssertParseStatement(t, `CREATE DATABASE db UNITS 4`, &parser.CreateDatabaseStatement{
+		AssertParseStatement(t, `CREATE DATABASE db WITH UNITS 4`, &parser.CreateDatabaseStatement{
 			Create:   pos(0),
 			Database: pos(7),
 			Name: &parser.Ident{
 				Name:    "db",
 				NamePos: pos(16),
 			},
+			With: pos(19),
 			Options: []parser.DatabaseOption{
 				&parser.UnitsOption{
-					Units: pos(19),
+					Units: pos(24),
 					Expr: &parser.IntegerLit{
-						ValuePos: pos(25),
+						ValuePos: pos(30),
 						Value:    "4",
 					},
 				},
@@ -900,8 +901,9 @@ func TestParser_ParseStatement(t *testing.T) {
 		})
 
 		AssertParseStatementError(t, `CREATE DATABASE`, `1:15: expected database name, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE DATABASE db (`, `1:20: expected semicolon or EOF, found '('`)
-		AssertParseStatementError(t, `CREATE DATABASE db extra`, `1:20: expected semicolon or EOF, found extra`)
+		AssertParseStatementError(t, `CREATE DATABASE db (`, `1:20: expected WITH, found '('`)
+		AssertParseStatementError(t, `CREATE DATABASE db extra`, `1:20: expected WITH, found extra`)
+		AssertParseStatementError(t, `CREATE DATABASE db WITH UNITS`, `1:29: expected literal, found 'EOF'`)
 	})
 
 	t.Run("CreateTable", func(t *testing.T) {

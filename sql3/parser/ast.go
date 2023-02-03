@@ -695,6 +695,8 @@ type CreateDatabaseStatement struct {
 	IfNotExists Pos    // position of EXISTS keyword (optional)
 	Name        *Ident // database name
 
+	With Pos // position of WITH keyword
+
 	Options []DatabaseOption // database options
 }
 
@@ -1446,7 +1448,7 @@ type AlterDatabaseStatement struct {
 	Database Pos    // position of DATABASE keyword
 	Name     *Ident // database name
 
-	Set Pos // position of SET keyword
+	With Pos // position of WITH keyword
 
 	Option DatabaseOption
 }
