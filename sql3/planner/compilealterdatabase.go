@@ -36,8 +36,5 @@ func (p *ExecutionPlanner) compileAlterDatabaseStatement(stmt *parser.AlterDatab
 // analyzeAlterDatabaseStatement analyze an ALTER DATABASE statement and returns an
 // error if anything is invalid.
 func (p *ExecutionPlanner) analyzeAlterDatabaseStatement(stmt *parser.AlterDatabaseStatement) error {
-	if stmt.With.IsValid() {
-		//no checks for now
-	}
 	return nil
 }
