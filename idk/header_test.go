@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 func TestHeaderToField(t *testing.T) {
@@ -420,4 +422,10 @@ func (r *recordingLogger) Printf(format string, v ...interface{}) {
 }
 func (r *recordingLogger) Debugf(format string, v ...interface{}) {
 	r.debugs = append(r.debugs, fmt.Sprintf(format, v...))
+}
+
+// WithPrefix does nothing for the recording logger... just makes it
+// implement the interface. Do not use.
+func (r *recordingLogger) WithPrefix(prefix string) logger.Logger {
+	panic("unimplemented")
 }
