@@ -12,7 +12,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -73,7 +72,7 @@ func OptCommandConfig(config *Config) CommandOption {
 
 // OptCommandServiceManager allows the ability to pass in a ServiceManage that
 // has been initialized outside of the Command. This is useful for testing where
-// we want to controll the service manager during a test run.
+// we want to control the service manager during a test run.
 func OptCommandServiceManager(svcmgr *dax.ServiceManager) CommandOption {
 	return func(c *Command) error {
 		c.svcmgr = svcmgr
@@ -111,7 +110,6 @@ func (m *Command) Start() (err error) {
 	if seed == 0 {
 		seed = time.Now().UTC().UnixNano()
 	}
-	log.Printf("Random seed: %d", seed)
 	rand.Seed(seed)
 
 	if err := m.setupServer(); err != nil {
@@ -217,7 +215,7 @@ func (m *Command) setupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "marshalling config")
 	}
-	m.logger.Printf("Config: %s", conf)
+	m.logger.Debugf("Config: %s", conf)
 
 	// validateAddrs sets the appropriate values for Bind and Advertise
 	// based on the inputs. It is not responsible for applying defaults, although

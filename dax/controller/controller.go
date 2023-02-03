@@ -108,7 +108,7 @@ func (c *Controller) Start() error {
 	c.poller.Run()
 
 	go c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
-	go c.snappingTurtleRoutine(c.snappingTurtleTimeout, c.snapControl)
+	go c.snappingTurtleRoutine(c.snappingTurtleTimeout, c.snapControl, c.logger.WithPrefix("Snapping Turtle: "))
 
 	return nil
 }

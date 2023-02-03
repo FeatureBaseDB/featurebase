@@ -100,8 +100,10 @@ func (s *ServiceManager) StopAll() error {
 // ControllerStart starts the Controller service.
 func (s *ServiceManager) ControllerStart() error {
 	if s.Controller == nil {
+		s.Logger.Debugf("Skipping Controller")
 		return nil
 	}
+	s.Logger.Printf("Starting Controller")
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,6 +128,7 @@ func (s *ServiceManager) ControllerStop() error {
 	if s.Controller == nil {
 		return nil
 	}
+	s.Logger.Printf("Stopping Controller")
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -148,8 +151,10 @@ func (s *ServiceManager) ControllerStop() error {
 // QueryerStart starts the Queryer service.
 func (s *ServiceManager) QueryerStart() error {
 	if s.Queryer == nil {
+		s.Logger.Debugf("Skipping Queryer")
 		return nil
 	}
+	s.Logger.Printf("Starting Queryer")
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -174,6 +179,7 @@ func (s *ServiceManager) QueryerStop() error {
 	if s.Queryer == nil {
 		return nil
 	}
+	s.Logger.Printf("Stopping Queryer")
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -207,6 +213,8 @@ func (s *ServiceManager) ComputerStart(key ServiceKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.Logger.Printf("Starting Computer: %s", key)
+
 	serviceState, ok := s.computers[key]
 	if !ok {
 		return errors.Errorf("computer to be started does not exist: %s", key)
@@ -237,6 +245,8 @@ func (s *ServiceManager) ComputerStart(key ServiceKey) error {
 func (s *ServiceManager) ComputerStop(key ServiceKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.Logger.Printf("Stopping Computer: %s", key)
 
 	serviceState, ok := s.computers[key]
 	if !ok {

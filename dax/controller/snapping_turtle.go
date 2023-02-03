@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
-func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan struct{}) {
+func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan struct{}, log logger.Logger) {
 	if period == 0 {
 		return // disable automatic snapshotting
 	}
@@ -16,45 +17,45 @@ func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan st
 		select {
 		case <-c.stopping:
 			ticker.Stop()
-			c.logger.Debugf("TURTLE: Stopping Snapping Turtle")
+			log.Debugf("Stopping Snapping Turtle")
 			return
 		case <-ticker.C:
-			c.snapAll()
+			c.snapAll(log)
 		case <-control:
-			c.snapAll()
+			c.snapAll(log)
 		}
 	}
-
 }
 
-func (c *Controller) snapAll() {
-	c.logger.Debugf("TURTLE: snapAll")
+func (c *Controller) snapAll(log logger.Logger) {
+	start := time.Now()
+	defer func() {
+		log.Printf("full snapshot took: %v", time.Since(start))
+	}()
 	ctx := context.Background()
 
 	tx, err := c.BoltDB.BeginTx(ctx, false)
 	if err != nil {
-		c.logger.Printf("Error getting transaction for snapping turtle: %v", err)
+		log.Printf("Error getting transaction for snapping turtle: %v", err)
 		return
 	}
 	defer tx.Rollback()
 
 	qdbs, err := c.Schemar.Databases(tx, "")
 	if err != nil {
-		c.logger.Printf("couldn't get databases: %v", err)
+		log.Printf("couldn't get databases: %v", err)
 	}
 
 	for _, qdb := range qdbs {
-		c.snapAllForDatabase(tx, qdb.QualifiedID())
+		c.snapAllForDatabase(tx, qdb.QualifiedID(), log)
 	}
-
-	c.logger.Debugf("TURTLE: snapAll complete")
 }
 
-func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) {
-	c.logger.Debugf("TURTLE: snapAllForDatabase: %s", qdbid)
+func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, log logger.Logger) {
+	log.Debugf("snapAllForDatabase: %s", qdbid)
 	computeNodes, err := c.Balancer.CurrentState(tx, dax.RoleTypeCompute, qdbid)
 	if err != nil {
-		c.logger.Printf("Error getting compute balancer state for snapping turtle: %v", err)
+		log.Printf("Error getting compute balancer state for snapping turtle: %v", err)
 	}
 
 	// Weird nested loop for snapshotting shard data. The reason for
@@ -72,10 +73,10 @@ func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedD
 			stillWorking = true
 			j, err := decodeShard(workerInfo.Jobs[i])
 			if err != nil {
-				c.logger.Printf("couldn't decode a shard out of the job: '%s', err: %v", workerInfo.Jobs[i], err)
+				log.Printf("couldn't decode a shard out of the job: '%s', err: %v", workerInfo.Jobs[i], err)
 			}
 			if err := c.snapshotShardData(tx, j.t.QualifiedTableID(), j.shardNum()); err != nil {
-				c.logger.Printf("Couldn't snapshot table: %s, shard: %d, error: %v", j.t, j.shardNum(), err)
+				log.Printf("Couldn't snapshot table: %s, shard: %d, error: %v", j.t, j.shardNum(), err)
 			}
 		}
 		i++
@@ -86,7 +87,7 @@ func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedD
 	// partitions.
 	tables, err := c.Schemar.Tables(tx, dax.QualifiedDatabaseID{})
 	if err != nil {
-		c.logger.Printf("Couldn't get schema for snapshotting keys: %v", err)
+		log.Printf("Couldn't get schema for snapshotting keys: %v", err)
 		return
 	}
 	// snapshot keyed fields
@@ -96,7 +97,7 @@ func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedD
 		for _, f := range table.Fields {
 			if f.StringKeys() && !f.IsPrimaryKey() {
 				if err := c.snapshotFieldKeys(tx, table.QualifiedID(), f.Name); err != nil {
-					c.logger.Printf("Couldn't snapshot table: %s, field: %s, error: %v", table, f.Name, err)
+					log.Printf("Couldn't snapshot table: %s, field: %s, error: %v", table, f.Name, err)
 				}
 			}
 		}
@@ -108,7 +109,7 @@ func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedD
 	// back to back.
 	translateNodes, err := c.Balancer.CurrentState(tx, dax.RoleTypeTranslate, qdbid)
 	if err != nil {
-		c.logger.Printf("Error getting translate balancer state for snapping turtle: %v", err)
+		log.Printf("Error getting translate balancer state for snapping turtle: %v", err)
 	}
 
 	i = 0
@@ -125,13 +126,13 @@ func (c *Controller) snapAllForDatabase(tx dax.Transaction, qdbid dax.QualifiedD
 				table := tableMap[j.table()]
 				if table.StringKeys() {
 					if err := c.snapshotTableKeys(tx, table.QualifiedID(), j.partitionNum()); err != nil {
-						c.logger.Printf("Couldn't snapshot table: %s, partition: %d, error: %v", table, j.partitionNum(), err)
+						log.Printf("Couldn't snapshot table: %s, partition: %d, error: %v", table, j.partitionNum(), err)
 					}
 				}
-				c.logger.Printf("couldn't decode a partition out of the job: '%s', err: %v", workerInfo.Jobs[i], err)
+				log.Printf("couldn't decode a partition out of the job: '%s', err: %v", workerInfo.Jobs[i], err)
 			}
 		}
 		i++
 	}
-	c.logger.Debugf("TURTLE: snapAllForDatabase complete: %s", qdbid)
+	log.Debugf("snapAllForDatabase complete: %s", qdbid)
 }

@@ -35,7 +35,7 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 	// Set up logger.
 	var logr logger.Logger = logger.StderrLogger
 	if cfg.Logger != nil {
-		logr = cfg.Logger
+		logr = cfg.Logger.WithPrefix("Controller: ")
 	}
 
 	// Storage methods.
