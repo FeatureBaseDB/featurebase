@@ -16,21 +16,24 @@ func (p *ExecutionPlanner) compileCreateDatabaseStatement(stmt *parser.CreateDat
 	databaseName := parser.IdentName(stmt.Name)
 	failIfExists := !stmt.IfNotExists.IsValid()
 
-	// apply database options
 	units := 0
 	description := ""
-	for _, option := range stmt.Options {
-		switch o := option.(type) {
-		case *parser.UnitsOption:
-			e := o.Expr.(*parser.IntegerLit)
-			i, err := strconv.ParseInt(e.Value, 10, 64)
-			if err != nil {
-				return nil, err
+
+	// apply database options
+	if stmt.With.IsValid() {
+		for _, option := range stmt.Options {
+			switch o := option.(type) {
+			case *parser.UnitsOption:
+				e := o.Expr.(*parser.IntegerLit)
+				i, err := strconv.ParseInt(e.Value, 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				units = int(i)
+			case *parser.CommentOption:
+				e := o.Expr.(*parser.StringLit)
+				description = e.Value
 			}
-			units = int(i)
-		case *parser.CommentOption:
-			e := o.Expr.(*parser.StringLit)
-			description = e.Value
 		}
 	}
 
@@ -41,6 +44,11 @@ func (p *ExecutionPlanner) compileCreateDatabaseStatement(stmt *parser.CreateDat
 // analyzeCreateDatabaseStatement analyzes a CREATE DATABASE statement and
 // returns an error if anything is invalid.
 func (p *ExecutionPlanner) analyzeCreateDatabaseStatement(stmt *parser.CreateDatabaseStatement) error {
+	if stmt.With.IsValid() {
+		// no checks if WITH is not provided
+		return nil
+	}
+
 	//check database options
 	for _, option := range stmt.Options {
 

@@ -26,7 +26,7 @@ func (p *ExecutionPlanner) compileAlterDatabaseStatement(stmt *parser.AlterDatab
 		return nil, err
 	}
 
-	if stmt.Set.IsValid() {
+	if stmt.With.IsValid() {
 		return NewPlanOpQuery(p, NewPlanOpAlterDatabase(p, db, alterOpSet, stmt.Option), p.sql), nil
 	} else {
 		return nil, sql3.NewErrInternal("unhandled alter operation")
@@ -36,7 +36,7 @@ func (p *ExecutionPlanner) compileAlterDatabaseStatement(stmt *parser.AlterDatab
 // analyzeAlterDatabaseStatement analyze an ALTER DATABASE statement and returns an
 // error if anything is invalid.
 func (p *ExecutionPlanner) analyzeAlterDatabaseStatement(stmt *parser.AlterDatabaseStatement) error {
-	if stmt.Set.IsValid() {
+	if stmt.With.IsValid() {
 		//no checks for now
 	}
 	return nil
