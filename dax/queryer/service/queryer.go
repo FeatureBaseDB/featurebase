@@ -25,7 +25,7 @@ func New(uri *fbnet.URI, queryer *queryer.Queryer, logger logger.Logger) *querye
 	return &queryerService{
 		uri:     uri,
 		queryer: queryer,
-		logger:  logger,
+		logger:  logger.WithPrefix("Queryer: "),
 	}
 }
 

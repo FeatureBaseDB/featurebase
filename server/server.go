@@ -296,6 +296,7 @@ func (m *Command) StartNoServe(addr dax.Address) (err error) {
 // If the interval period is 0, the check-in is disabled.
 func (m *Command) checkIn(addr dax.Address) {
 	interval := m.Config.CheckInInterval
+	m.logger.Printf("CheckInInterval: %v", interval)
 
 	if interval == 0 {
 		return

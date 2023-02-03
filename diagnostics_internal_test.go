@@ -115,7 +115,7 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 	// Create a new client.
 	d := newDiagnosticsCollector("localhost:10101")
 
-	logs := logger.NewCaptureLogger()
+	logs := logger.NewBufferLogger()
 	d.Logger = logs
 
 	version := "0.1.1"
@@ -126,11 +126,14 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checking version: %v", err)
 	}
-	if len(logs.Prints) != 1 {
-		t.Fatalf("expected a version upgrade message")
+
+	allLogs, err := logs.ReadAll()
+	if err != nil {
+		t.Fatalf("reading all logs: %v", err)
 	}
-	if !strings.Contains(logs.Prints[0], "a newer version") {
-		t.Fatalf("expected version upgrade message, got '%s'", logs.Prints[0])
+
+	if !strings.Contains(string(allLogs), "a newer version") {
+		t.Fatalf("expected version upgrade message, got '%s'", allLogs)
 	}
 }
 

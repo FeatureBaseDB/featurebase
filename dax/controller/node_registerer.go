@@ -43,10 +43,9 @@ func (c *Controller) nodeRegistrationDelayed(nodes chan *dax.Node, timeout time.
 		case <-c.stopping:
 			return nil
 		case node := <-nodes:
-			c.logger.Debugf("adding node: %+v", node)
+			c.logger.Printf("Adding node to registration batch: %+v", node)
 			batch = append(batch, node)
 		case <-time.After(timeout):
-			c.logger.Debugf("no new nodes in last %s, batch: %d", timeout, len(batch))
 			if len(batch) > 0 {
 				err := c.RegisterNodes(context.Background(), batch...)
 				if err != nil {

@@ -35,7 +35,7 @@ func New(addr dax.Address, cfg CommandConfig, logger logger.Logger) *computerSer
 	return &computerService{
 		addr:   addr,
 		cfg:    cfg,
-		logger: logger,
+		logger: logger.WithPrefix("Computer: "),
 	}
 }
 

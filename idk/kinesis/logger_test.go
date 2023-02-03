@@ -59,6 +59,10 @@ func (msl *MapStashLogger) Panicf(format string, v ...interface{}) {
 	msl.messages["PANIC"] = append(msl.messages["PANIC"], fmt.Sprintf(format, v...))
 }
 
+func (msl *MapStashLogger) WithPrefix(prefix string) logger.Logger {
+	panic("unimplemented")
+}
+
 // In-memory error store implementation to use in unit tests.
 type MapStashErrorStore struct {
 	storage        map[ErrorType][]string

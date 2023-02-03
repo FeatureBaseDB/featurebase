@@ -71,7 +71,7 @@ func NewConfig() *Config {
 			Config: controller.Config{
 				RegistrationBatchTimeout: time.Second * 3,
 				StorageMethod:            defaultStorageMethod,
-				SnappingTurtleTimeout:    time.Second * 10,
+				SnappingTurtleTimeout:    time.Minute * 3,
 			},
 		},
 		Bind: ":" + defaultBindPort,

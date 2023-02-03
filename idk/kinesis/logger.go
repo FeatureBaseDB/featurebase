@@ -232,3 +232,7 @@ func (esl *ErrorStreamLogger) Panicf(format string, v ...interface{}) {
 		esl.base.Errorf(errors.Wrap(err, errMsg).Error())
 	}
 }
+
+func (esl *ErrorStreamLogger) WithPrefix(prefix string) logger.Logger {
+	return NewErrorStreamLogger(esl.base.WithPrefix(prefix), esl.store)
+}
