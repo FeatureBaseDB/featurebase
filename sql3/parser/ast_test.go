@@ -128,13 +128,14 @@ func TestCreateDatabaseStatement_String(t *testing.T) {
 
 	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
 		Name: &parser.Ident{Name: "db1"},
+		With: pos(10),
 		Options: []parser.DatabaseOption{
 			&parser.UnitsOption{
 				Units: pos(0),
 				Expr:  &parser.IntegerLit{Value: "4"},
 			},
 		},
-	}, `CREATE DATABASE db1 UNITS 4`)
+	}, `CREATE DATABASE db1 WITH UNITS 4`)
 }
 
 func TestAlterDatabaseStatement_String(t *testing.T) {
@@ -144,7 +145,7 @@ func TestAlterDatabaseStatement_String(t *testing.T) {
 			Units: pos(0),
 			Expr:  &parser.IntegerLit{Value: "4"},
 		},
-	}, `ALTER DATABASE db1 SET UNITS 4`)
+	}, `ALTER DATABASE db1 WITH UNITS 4`)
 }
 
 func TestCreateTableStatement_String(t *testing.T) {

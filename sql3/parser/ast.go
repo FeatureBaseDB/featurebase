@@ -720,9 +720,12 @@ func (s *CreateDatabaseStatement) String() string {
 	buf.WriteString(" ")
 	buf.WriteString(s.Name.String())
 
-	for _, opt := range s.Options {
-		buf.WriteString(" ")
-		buf.WriteString(opt.String())
+	if s.With.IsValid() {
+		buf.WriteString(" WITH")
+		for _, opt := range s.Options {
+			buf.WriteString(" ")
+			buf.WriteString(opt.String())
+		}
 	}
 
 	return buf.String()
@@ -1470,7 +1473,7 @@ func (s *AlterDatabaseStatement) String() string {
 	buf.WriteString(s.Name.String())
 
 	if s.Option != nil {
-		buf.WriteString(" SET ")
+		buf.WriteString(" WITH ")
 		buf.WriteString(s.Option.String())
 	}
 	return buf.String()

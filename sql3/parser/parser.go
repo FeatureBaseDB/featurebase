@@ -415,8 +415,6 @@ func (p *Parser) parseCreateDatabaseStatement(createPos Pos) (_ *CreateDatabaseS
 		if stmt.Options, err = p.parseDatabaseOptions(); err != nil {
 			return &stmt, err
 		}
-	default:
-		return &stmt, p.errorExpected(p.pos, p.tok, "WITH")
 	}
 
 	return &stmt, nil

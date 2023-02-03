@@ -367,8 +367,8 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 		AssertParseStatementError(t, `ALTER`, `1:1: expected DATABASE, TABLE or VIEW`)
 		AssertParseStatementError(t, `ALTER DATABASE`, `1:14: expected database name, found 'EOF'`)
 		AssertParseStatementError(t, `ALTER DATABASE db1`, `1:18: expected WITH, found 'EOF'`)
-		AssertParseStatementError(t, `ALTER DATABASE db1 WITH`, `1:22: expected UNITS, found 'EOF'`)
-		AssertParseStatementError(t, `ALTER DATABASE db1 WITH UNITS`, `1:28: expected literal, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1 WITH`, `1:23: expected UNITS, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER DATABASE db1 WITH UNITS`, `1:29: expected literal, found 'EOF'`)
 	})
 
 	t.Run("AlterTable", func(t *testing.T) {
@@ -901,8 +901,8 @@ func TestParser_ParseStatement(t *testing.T) {
 		})
 
 		AssertParseStatementError(t, `CREATE DATABASE`, `1:15: expected database name, found 'EOF'`)
-		AssertParseStatementError(t, `CREATE DATABASE db (`, `1:20: expected WITH, found '('`)
-		AssertParseStatementError(t, `CREATE DATABASE db extra`, `1:20: expected WITH, found extra`)
+		AssertParseStatementError(t, `CREATE DATABASE db (`, `1:20: expected semicolon or EOF, found '('`)
+		AssertParseStatementError(t, `CREATE DATABASE db extra`, `1:20: expected semicolon or EOF, found extra`)
 		AssertParseStatementError(t, `CREATE DATABASE db WITH UNITS`, `1:29: expected literal, found 'EOF'`)
 	})
 
