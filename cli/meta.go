@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"unicode"
 
@@ -33,10 +34,12 @@ var _ metaCommand = (*metaConnect)(nil)
 var _ metaCommand = (*metaFile)(nil)
 var _ metaCommand = (*metaHelp)(nil)
 var _ metaCommand = (*metaInclude)(nil)
+var _ metaCommand = (*metaOutput)(nil)
 var _ metaCommand = (*metaPrint)(nil)
 var _ metaCommand = (*metaQuit)(nil)
 var _ metaCommand = (*metaReset)(nil)
 var _ metaCommand = (*metaSet)(nil)
+var _ metaCommand = (*metaTiming)(nil)
 
 // ////////////////////////////////////////////////////////////////////////////
 // bang (!)
@@ -131,6 +134,10 @@ func (m *metaFile) execute(cmd *CLICommand) (action, error) {
 		return actionNone, errors.Errorf("meta command 'file' requires exactly one argument")
 	}
 
+	// TODO(tlt): I think instead of opening the file here, we should get the
+	// absolute path to the file and store that until we actually need to open
+	// the file (i.e until we actualy execute the query). But to do that we'll
+	// need to change the Reader() method to return an error.
 	file, err := os.Open(m.args[0])
 	if err != nil {
 		return actionNone, errors.Wrapf(err, "opening file: %s", m.args[0])
@@ -171,12 +178,14 @@ Query Buffer
 Input/Output
   \file ...              reference a local file to stream to the server
   \i[nclude] FILE        execute commands from file
+  \o [FILE]              send all query results to file
 
 Connection
   \c[onnect] [DBNAME]    connect to new database
 
 Operating System
   \cd [DIR]              change the current working directory
+  \timing [on|off]       toggle timing of commands
   \! [COMMAND]           execute command in shell or start interactive shell
 `
 	cmd.Printf("%s\n", helpText)
@@ -242,6 +251,38 @@ func (m *metaInclude) execute(cmd *CLICommand) (action, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
+// output (o)
+// ////////////////////////////////////////////////////////////////////////////
+type metaOutput struct {
+	args []string
+}
+
+func newMetaOutput(args []string) *metaOutput {
+	return &metaOutput{
+		args: args,
+	}
+}
+
+func (m *metaOutput) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+	case 0:
+		cmd.writer = newStandardWriter(Stdout, Stderr)
+		return actionNone, nil
+	case 1:
+		// If the argument is a fully-qualifed file path, just use that.
+		// Otherwise, prepend it with the current working directory.
+		fpath, err := filepath.Abs(m.args[0])
+		if err != nil {
+			return actionNone, errors.Wrapf(err, "getting absolute file path for file: %s", m.args[0])
+		}
+		cmd.writer = newFileWriter(fpath, Stdout, Stderr)
+		return actionNone, nil
+	default:
+		return actionNone, errors.Errorf("meta command 'output' takes zero or one argument")
+	}
+}
+
+// ////////////////////////////////////////////////////////////////////////////
 // print (or p)
 // ////////////////////////////////////////////////////////////////////////////
 type metaPrint struct{}
@@ -300,6 +341,45 @@ func (m *metaSet) execute(cmd *CLICommand) (action, error) {
 	return actionNone, nil
 }
 
+// ////////////////////////////////////////////////////////////////////////////
+// timing
+// ////////////////////////////////////////////////////////////////////////////
+type metaTiming struct {
+	args []string
+}
+
+func newMetaTiming(args []string) *metaTiming {
+	return &metaTiming{
+		args: args,
+	}
+}
+
+func (m *metaTiming) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+	case 0:
+		cmd.writeFormat.timing = !cmd.writeFormat.timing
+	case 1:
+		switch m.args[0] {
+		case "on":
+			cmd.writeFormat.timing = true
+		case "off":
+			cmd.writeFormat.timing = false
+		default:
+			return actionNone, errors.Errorf("unrecognized value \"%s\" for \"\timing\": Boolean expected", m.args[0])
+		}
+	default:
+		return actionNone, errors.Errorf("meta command 'timing' takes zero or one argument")
+	}
+
+	sTiming := "on"
+	if !cmd.writeFormat.timing {
+		sTiming = "off"
+	}
+
+	cmd.Printf("Timing is %s.\n", sTiming)
+	return actionNone, nil
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 // splitMetaCommand takes a string which follows a backslash, with a
@@ -346,6 +426,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaHelp(args), nil
 	case "i", "include":
 		return newMetaInclude(args), nil
+	case "o":
+		return newMetaOutput(args), nil
 	case "p", "print":
 		return newMetaPrint(), nil
 	case "q", "quit":
@@ -354,6 +436,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaReset(), nil
 	case "set":
 		return newMetaSet(args), nil
+	case "timing":
+		return newMetaTiming(args), nil
 	default:
 		return nil, errors.Errorf("unsupported meta-command: '%s'", key)
 	}

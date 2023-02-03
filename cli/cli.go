@@ -15,8 +15,6 @@ import (
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/cli/fbcloud"
 	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/jedib0t/go-pretty/table"
-	"github.com/jedib0t/go-pretty/text"
 	"github.com/pkg/errors"
 )
 
@@ -55,6 +53,9 @@ type CLICommand struct {
 	buffer     *buffer
 	workingDir *workingDir
 
+	writer      Writer
+	writeFormat *writeFormat
+
 	OrganizationID string `json:"org-id"`
 	DatabaseID     string `json:"db-id"`
 
@@ -79,6 +80,9 @@ func NewCLICommand(logdest logger.Logger) *CLICommand {
 		splitter:   newSplitter(),
 		buffer:     newBuffer(),
 		workingDir: newWorkingDir(),
+
+		writer:      newStandardWriter(Stdout, Stderr),
+		writeFormat: defaultWriteFormat(),
 
 		Stdin:  Stdin,
 		Stdout: Stdout,
@@ -152,7 +156,7 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 		// block; those are intentional as they demarc records within the csv.
 		qps, mcs, err := cmd.splitter.split(line + "\n")
 		if err != nil {
-			cmd.Errorf(err.Error())
+			cmd.Errorf("error splitting line: %s\n", err)
 			continue
 		}
 
@@ -219,12 +223,12 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 }
 
 func (cmd *CLICommand) executeQuery(qry query) error {
-	sqlResponse, err := cmd.Queryer.Query(cmd.OrganizationID, cmd.DatabaseID, qry.Reader())
+	queryResponse, err := cmd.Queryer.Query(cmd.OrganizationID, cmd.DatabaseID, qry.Reader())
 	if err != nil {
 		return errors.Wrap(err, "making query")
 	}
 
-	if err := writeOutput(sqlResponse, cmd.Stdout, cmd.Stderr); err != nil {
+	if err := cmd.writer.Write(queryResponse, cmd.writeFormat); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
 
@@ -244,78 +248,19 @@ func (cmd *CLICommand) Errorf(format string, a ...any) {
 }
 
 func writeWarnings(r *featurebase.WireQueryResponse, w io.Writer) error {
-	if len(r.Warnings) > 0 {
-		if _, err := w.Write([]byte("\n")); err != nil {
-			return errors.Wrapf(err, "writing warning: %s", r.Error)
-		}
-		for _, warning := range r.Warnings {
-			if _, err := w.Write([]byte("Warning: " + warning + "\n")); err != nil {
-				return errors.Wrapf(err, "writing warning: %s", r.Error)
-			}
+	if len(r.Warnings) == 0 {
+		return nil
+	}
+
+	if _, err := w.Write([]byte("\n")); err != nil {
+		return errors.Wrapf(err, "writing line feed")
+	}
+	for _, warning := range r.Warnings {
+		if _, err := w.Write([]byte("Warning: " + warning + "\n")); err != nil {
+			return errors.Wrapf(err, "writing warning: %s", warning)
 		}
 	}
 	return nil
-}
-
-func writeOutput(r *featurebase.WireQueryResponse, wOut io.Writer, wErr io.Writer) error {
-	if r == nil {
-		return errors.New("attempt to write out nil response")
-	}
-	if r.Error != "" {
-		if _, err := wErr.Write([]byte("Error: " + r.Error + "\n")); err != nil {
-			return errors.Wrapf(err, "writing error: %s", r.Error)
-		}
-		return writeWarnings(r, wOut)
-	}
-
-	t := table.NewWriter()
-	t.SetOutputMirror(wOut)
-
-	// Don't uppercase the header values.
-	t.Style().Format.Header = text.FormatDefault
-
-	t.AppendHeader(schemaToRow(r.Schema))
-	for _, row := range r.Data {
-		// If the value is nil, replace it with a null string; go-pretty doesn't
-		// expect nil pointers in the data values.
-		for i := range row {
-			if row[i] == nil {
-				row[i] = nullValue
-			}
-		}
-		t.AppendRow(table.Row(row))
-	}
-	t.Render()
-
-	err := writeWarnings(r, wOut)
-	if err != nil {
-		return err
-	}
-	lifeAffirmingMessage := ""
-	if r.ExecutionTime < 1000000 {
-		lifeAffirmingMessage = " (You're welcome! 🚀)"
-	}
-
-	if r.ExecutionTime > 5000000 {
-		lifeAffirmingMessage = " (Sorry! That took longer than expected 😭)"
-	}
-
-	if _, err := wOut.Write([]byte(fmt.Sprintf("\nExecution time: %dμs%s\n", r.ExecutionTime, lifeAffirmingMessage))); err != nil {
-		return errors.Wrapf(err, "writing execution time: %s", r.Error)
-	}
-
-	// Add some white space after query results.
-	wOut.Write([]byte("\n"))
-
-	return nil
-}
-
-func schemaToRow(schema featurebase.WireQuerySchema) []interface{} {
-	ret := make([]interface{}, len(schema.Fields))
-	for i, field := range schema.Fields {
-		ret[i] = field.Name
-	}
-	return ret
 }
 
 func (cmd *CLICommand) setupHistory() {
@@ -357,7 +302,7 @@ func (cmd *CLICommand) setupClient() error {
 	}
 
 	if strings.TrimSpace(cmd.Host) == "" {
-		return errors.Errorf("no host provided")
+		return errors.Errorf("no host provided\n")
 	}
 
 	if !strings.HasPrefix(cmd.Host, "http") {
