@@ -34,6 +34,8 @@ var _ metaCommand = (*metaConnect)(nil)
 var _ metaCommand = (*metaFile)(nil)
 var _ metaCommand = (*metaHelp)(nil)
 var _ metaCommand = (*metaInclude)(nil)
+var _ metaCommand = (*metaListDatabases)(nil)
+var _ metaCommand = (*metaListTables)(nil)
 var _ metaCommand = (*metaOutput)(nil)
 var _ metaCommand = (*metaPrint)(nil)
 var _ metaCommand = (*metaQuit)(nil)
@@ -180,6 +182,12 @@ Input/Output
   \i[nclude] FILE        execute commands from file
   \o [FILE]              send all query results to file
 
+Informational
+  \d                     list tables and views
+  \dt                    list tables
+  \dv                    list views
+  \l                     list databases
+
 Connection
   \c[onnect] [DBNAME]    connect to new database
 
@@ -245,6 +253,48 @@ func (m *metaInclude) execute(cmd *CLICommand) (action, error) {
 	}
 	if err := sc.Err(); err != nil {
 		return actionNone, errors.Wrapf(err, "scanning file: %s", m.args[0])
+	}
+
+	return actionReset, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// list databases (l)
+// ////////////////////////////////////////////////////////////////////////////
+type metaListDatabases struct{}
+
+func newMetaListDatabases() *metaListDatabases {
+	return &metaListDatabases{}
+}
+
+func (m *metaListDatabases) execute(cmd *CLICommand) (action, error) {
+	qry := []queryPart{
+		newPartRaw("SHOW DATABASES"),
+	}
+
+	if err := cmd.executeQuery(qry); err != nil {
+		return actionNone, errors.Wrap(err, "executing query")
+	}
+
+	return actionReset, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// list tables (d or dt)
+// ////////////////////////////////////////////////////////////////////////////
+type metaListTables struct{}
+
+func newMetaListTables() *metaListTables {
+	return &metaListTables{}
+}
+
+func (m *metaListTables) execute(cmd *CLICommand) (action, error) {
+	qry := []queryPart{
+		newPartRaw("SHOW TABLES"),
+	}
+
+	if err := cmd.executeQuery(qry); err != nil {
+		return actionNone, errors.Wrap(err, "executing query")
 	}
 
 	return actionReset, nil
@@ -420,12 +470,16 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaChangeDirectory(args), nil
 	case "c", "connect":
 		return newMetaConnect(args), nil
+	case "d", "dt":
+		return newMetaListTables(), nil
 	case "file":
 		return newMetaFile(args), nil
 	case "?":
 		return newMetaHelp(args), nil
 	case "i", "include":
 		return newMetaInclude(args), nil
+	case "l":
+		return newMetaListDatabases(), nil
 	case "o":
 		return newMetaOutput(args), nil
 	case "p", "print":
