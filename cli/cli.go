@@ -58,6 +58,7 @@ type CLICommand struct {
 
 	OrganizationID string `json:"org-id"`
 	DatabaseID     string `json:"db-id"`
+	DatabaseName   string `json:"db-name"`
 
 	Queryer Queryer `json:"-"`
 
@@ -76,6 +77,7 @@ func NewCLICommand(logdest logger.Logger) *CLICommand {
 
 		OrganizationID: "",
 		DatabaseID:     "",
+		DatabaseName:   "",
 
 		splitter:   newSplitter(),
 		buffer:     newBuffer(),
@@ -172,7 +174,7 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 				if qry, err := cmd.buffer.addPart(qps[i]); err != nil {
 					return errors.Wrap(err, "adding part to buffer")
 				} else if qry != nil {
-					if err := cmd.executeQuery(qry); err != nil {
+					if err := cmd.executeAndWriteQuery(qry); err != nil {
 						return errors.Wrap(err, "executing query")
 					}
 					// In addition to saving each line in the history, we also
@@ -222,8 +224,8 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 	}
 }
 
-func (cmd *CLICommand) executeQuery(qry query) error {
-	queryResponse, err := cmd.Queryer.Query(cmd.OrganizationID, cmd.DatabaseID, qry.Reader())
+func (cmd *CLICommand) executeAndWriteQuery(qry query) error {
+	queryResponse, err := cmd.executeQuery(qry)
 	if err != nil {
 		return errors.Wrap(err, "making query")
 	}
@@ -233,6 +235,10 @@ func (cmd *CLICommand) executeQuery(qry query) error {
 	}
 
 	return nil
+}
+
+func (cmd *CLICommand) executeQuery(qry query) (*featurebase.WireQueryResponse, error) {
+	return cmd.Queryer.Query(cmd.OrganizationID, cmd.DatabaseID, qry.Reader())
 }
 
 // Printf is a helper method which sends the given payload to stdout.
@@ -285,12 +291,12 @@ func (cmd *CLICommand) setupHistory() {
 	cmd.HistoryPath = historyPath
 }
 
-// printQualifiers displays the currently set OrganizationID and DatabaseID.
+// printQualifiers displays the currently set OrganizationID and DatabaseName.
 func (cmd *CLICommand) printQualifiers() {
 	cmd.Printf(" Host: %s\n  Org: %s\n   DB: %s\n",
 		hostPort(cmd.Host, cmd.Port),
 		cmd.OrganizationID,
-		cmd.DatabaseID,
+		cmd.DatabaseName,
 	)
 }
 

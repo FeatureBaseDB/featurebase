@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -107,17 +108,43 @@ func newMetaConnect(args []string) *metaConnect {
 }
 
 func (m *metaConnect) execute(cmd *CLICommand) (action, error) {
+	msg := func() string {
+		return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.DatabaseName, cmd.DatabaseID)
+	}
+
 	switch len(m.args) {
 	case 0:
-		if cmd.DatabaseID == "" {
+		if cmd.DatabaseName == "" {
 			cmd.Printf("You are not connected to a database.\n")
 		} else {
-			cmd.Printf("You are now connected to database \"%s\" as user \"???\".\n", cmd.DatabaseID)
+			cmd.Printf(msg())
 		}
 		return actionNone, nil
 	case 1:
-		cmd.DatabaseID = m.args[0]
-		return actionReset, nil
+		dbName := m.args[0]
+
+		// Look up dbID based on dbName.
+		qry := []queryPart{
+			newPartRaw("SHOW DATABASES"),
+		}
+
+		qr, err := cmd.executeQuery(qry)
+		if err != nil {
+			return actionNone, errors.Wrap(err, "executing query")
+		}
+
+		for _, db := range qr.Data {
+			// 0: _id
+			// 1: name
+			if db[1] == dbName {
+				cmd.DatabaseName = dbName
+				cmd.DatabaseID = db[0].(string)
+				cmd.Printf(msg())
+				return actionReset, nil
+			}
+		}
+		return actionNone, errors.Errorf("invalid database: %s", dbName)
+
 	default:
 		return actionNone, errors.Errorf("meta command 'connect' takes zero or one argument")
 	}
@@ -251,7 +278,7 @@ func (m *metaInclude) execute(cmd *CLICommand) (action, error) {
 			if qry, err := buffer.addPart(qps[i]); err != nil {
 				return actionNone, errors.Wrap(err, "adding part to buffer")
 			} else if qry != nil {
-				if err := cmd.executeQuery(qry); err != nil {
+				if err := cmd.executeAndWriteQuery(qry); err != nil {
 					return actionNone, errors.Wrap(err, "executing query")
 				}
 			}
@@ -278,7 +305,7 @@ func (m *metaListDatabases) execute(cmd *CLICommand) (action, error) {
 		newPartRaw("SHOW DATABASES"),
 	}
 
-	if err := cmd.executeQuery(qry); err != nil {
+	if err := cmd.executeAndWriteQuery(qry); err != nil {
 		return actionNone, errors.Wrap(err, "executing query")
 	}
 
@@ -299,7 +326,7 @@ func (m *metaListTables) execute(cmd *CLICommand) (action, error) {
 		newPartRaw("SHOW TABLES"),
 	}
 
-	if err := cmd.executeQuery(qry); err != nil {
+	if err := cmd.executeAndWriteQuery(qry); err != nil {
 		return actionNone, errors.Wrap(err, "executing query")
 	}
 
@@ -476,7 +503,7 @@ func (m *metaWatch) execute(cmd *CLICommand) (action, error) {
 		ticker := time.NewTicker(period)
 		for {
 			cmd.Printf("%s (every %s)\n\n", time.Now(), period)
-			if err := cmd.executeQuery(qry); err != nil {
+			if err := cmd.executeAndWriteQuery(qry); err != nil {
 				return actionNone, errors.Wrap(err, "executing query")
 			}
 			select {
