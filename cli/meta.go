@@ -4,8 +4,12 @@ import (
 	"bufio"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 	"unicode"
 
 	"github.com/featurebasedb/featurebase/v3/errors"
@@ -42,6 +46,7 @@ var _ metaCommand = (*metaQuit)(nil)
 var _ metaCommand = (*metaReset)(nil)
 var _ metaCommand = (*metaSet)(nil)
 var _ metaCommand = (*metaTiming)(nil)
+var _ metaCommand = (*metaWatch)(nil)
 
 // ////////////////////////////////////////////////////////////////////////////
 // bang (!)
@@ -169,6 +174,7 @@ func newMetaHelp(args []string) *metaHelp {
 func (m *metaHelp) execute(cmd *CLICommand) (action, error) {
 	helpText := `General
   \q[uit]                quit psql
+  \watch [SEC]           execute query every SEC seconds
 
 Help
   \? [commands]          show help on backslash commands
@@ -430,6 +436,60 @@ func (m *metaTiming) execute(cmd *CLICommand) (action, error) {
 	return actionNone, nil
 }
 
+// ////////////////////////////////////////////////////////////////////////////
+// watch
+// ////////////////////////////////////////////////////////////////////////////
+type metaWatch struct {
+	args []string
+}
+
+func newMetaWatch(args []string) *metaWatch {
+	return &metaWatch{
+		args: args,
+	}
+}
+
+func (m *metaWatch) execute(cmd *CLICommand) (action, error) {
+	period := 2 * time.Second
+
+	qry := cmd.buffer.lastQuery
+	if qry == nil {
+		cmd.Errorf(`\watch cannot be used with an empty query` + "\n")
+		return actionNone, nil
+	}
+
+	switch len(m.args) {
+	case 1:
+		val, err := strconv.Atoi(m.args[0])
+		if err != nil {
+			return actionNone, errors.Errorf("invalid watch argument: %s", m.args[0])
+		}
+		period = time.Duration(val) * time.Second
+		fallthrough
+	case 0:
+		// Listen for a SIGTERM to cancel out of the \watch loop.
+		controlC := make(chan os.Signal, 2)
+		signal.Notify(controlC, os.Interrupt, syscall.SIGTERM)
+
+		// In the absence of a SIGTERM, use a ticker to execute the query every
+		// "period" duration.
+		ticker := time.NewTicker(period)
+		for {
+			cmd.Printf("%s (every %s)\n\n", time.Now(), period)
+			if err := cmd.executeQuery(qry); err != nil {
+				return actionNone, errors.Wrap(err, "executing query")
+			}
+			select {
+			case <-controlC:
+				return actionNone, nil
+			case <-ticker.C:
+			}
+		}
+	default:
+		return actionNone, errors.Errorf("meta command 'watch' takes zero or one argument")
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 // splitMetaCommand takes a string which follows a backslash, with a
@@ -492,6 +552,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaSet(args), nil
 	case "timing":
 		return newMetaTiming(args), nil
+	case "watch":
+		return newMetaWatch(args), nil
 	default:
 		return nil, errors.Errorf("unsupported meta-command: '%s'", key)
 	}

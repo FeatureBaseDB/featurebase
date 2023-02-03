@@ -209,7 +209,7 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 			}
 			return nil
 		}(); err != nil {
-			cmd.Errorf(err.Error())
+			cmd.Errorf(err.Error() + "\n")
 			continue
 		}
 
