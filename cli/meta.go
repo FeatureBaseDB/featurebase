@@ -52,6 +52,7 @@ var _ metaCommand = (*metaSet)(nil)
 var _ metaCommand = (*metaTiming)(nil)
 var _ metaCommand = (*metaWarn)(nil)
 var _ metaCommand = (*metaWatch)(nil)
+var _ metaCommand = (*metaWrite)(nil)
 
 // ////////////////////////////////////////////////////////////////////////////
 // bang (!)
@@ -254,6 +255,7 @@ Help
 Query Buffer
   \p[rint]               show the contents of the query buffer
   \r[eset]               reset (clear) the query buffer
+  \w FILE                write query buffer to file
 
 Input/Output
   \echo [-n] [STRING]    write string to standard output (-n for no newline)
@@ -405,8 +407,8 @@ func (m *metaOutput) execute(cmd *CLICommand) (action, error) {
 		// Set cmd.output to cmd.Stdout.
 		cmd.output = cmd.Stdout
 
-		// cmd.writer = newStandardWriter(Stdout, Stderr)
 		return actionNone, nil
+
 	case 1:
 		// If the argument is a fully-qualifed file path, just use that.
 		// Otherwise, prepend it with the current working directory.
@@ -420,9 +422,8 @@ func (m *metaOutput) execute(cmd *CLICommand) (action, error) {
 			return actionNone, errors.Wrapf(err, "opening file: %s", fpath)
 		}
 
-		// cmd.writer = newFileWriter(fpath, Stdout, Stderr)
-
 		return actionNone, nil
+
 	default:
 		return actionNone, errors.Errorf("meta command 'output' takes zero or one argument")
 	}
@@ -614,6 +615,50 @@ func (m *metaWatch) execute(cmd *CLICommand) (action, error) {
 	}
 }
 
+// ////////////////////////////////////////////////////////////////////////////
+// write (w)
+// ////////////////////////////////////////////////////////////////////////////
+type metaWrite struct {
+	args []string
+}
+
+func newMetaWrite(args []string) *metaWrite {
+	return &metaWrite{
+		args: args,
+	}
+}
+
+func (m *metaWrite) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+	case 0:
+		cmd.Errorf(`\w: missing required argument` + "\n")
+		return actionNone, nil
+
+	case 1:
+		// Open file.
+		fpath, err := filepath.Abs(m.args[0])
+		if err != nil {
+			return actionNone, errors.Wrapf(err, "getting absolute file path for file: %s", m.args[0])
+		}
+
+		file, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE, 0o600)
+		if err != nil {
+			return actionNone, errors.Wrapf(err, "opening file: %s", fpath)
+		}
+		defer file.Close()
+
+		// Write query buffer to file.
+		if _, err := io.Copy(file, cmd.buffer.Reader()); err != nil {
+			return actionNone, errors.Wrapf(err, "writing query buffer to file: %s", fpath)
+		}
+
+		return actionNone, nil
+
+	default:
+		return actionNone, errors.Errorf("meta command 'w' exactly one argument")
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 // splitMetaCommand takes a string which follows a backslash, with a
@@ -684,6 +729,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaWarn(args), nil
 	case "watch":
 		return newMetaWatch(args), nil
+	case "w":
+		return newMetaWrite(args), nil
 	default:
 		return nil, errors.Errorf("unsupported meta-command: '%s'", key)
 	}

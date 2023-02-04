@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"io"
+	"strings"
+
 	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
@@ -70,4 +73,19 @@ func (b *buffer) reset() string {
 	b.parts = b.parts[:0]
 	b.hasBatchFile = false
 	return "Query buffer reset (cleared)."
+}
+
+func (b *buffer) Reader() io.Reader {
+	if len(b.parts) > 0 {
+		return query(b.parts).Reader()
+	} else if b.lastQuery != nil {
+		r := b.lastQuery.Reader()
+		// TODO(tlt): terminating the query here results in a line feed just
+		// before the semi-colon (for example, when you print out the query
+		// buffer using `\w [FILE]`). The removal and re-introduction of line
+		// feeds is kind of a mess.
+		term := strings.NewReader(";")
+		return io.MultiReader(r, term)
+	}
+	return strings.NewReader("")
 }
