@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -36,6 +37,7 @@ type metaCommand interface {
 var _ metaCommand = (*metaBang)(nil)
 var _ metaCommand = (*metaChangeDirectory)(nil)
 var _ metaCommand = (*metaConnect)(nil)
+var _ metaCommand = (*metaEcho)(nil)
 var _ metaCommand = (*metaFile)(nil)
 var _ metaCommand = (*metaHelp)(nil)
 var _ metaCommand = (*metaInclude)(nil)
@@ -43,10 +45,12 @@ var _ metaCommand = (*metaListDatabases)(nil)
 var _ metaCommand = (*metaListTables)(nil)
 var _ metaCommand = (*metaOutput)(nil)
 var _ metaCommand = (*metaPrint)(nil)
+var _ metaCommand = (*metaQEcho)(nil)
 var _ metaCommand = (*metaQuit)(nil)
 var _ metaCommand = (*metaReset)(nil)
 var _ metaCommand = (*metaSet)(nil)
 var _ metaCommand = (*metaTiming)(nil)
+var _ metaCommand = (*metaWarn)(nil)
 var _ metaCommand = (*metaWatch)(nil)
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -151,6 +155,47 @@ func (m *metaConnect) execute(cmd *CLICommand) (action, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
+// echo
+// ////////////////////////////////////////////////////////////////////////////
+type metaEcho struct {
+	args []string
+}
+
+func newMetaEcho(args []string) *metaEcho {
+	return &metaEcho{
+		args: args,
+	}
+}
+
+func (m *metaEcho) execute(cmd *CLICommand) (action, error) {
+	return echo(m.args, cmd.Stdout)
+}
+
+func echo(args []string, w io.Writer) (action, error) {
+	switch len(args) {
+	case 0:
+		w.Write([]byte("\n"))
+		return actionNone, nil
+	default:
+		var s string
+		switch args[0] {
+		// TODO(tlt): currently the "-n" doesn't *appear* to work because
+		// the readline package, on its next iteration of the read loop,
+		// clobbers anything written to the current line (i.e. anything
+		// without a line feed). We need to figure out how to keep the
+		// contents of the current line, and append the next readline prompt
+		// to the end of it.
+		case "-n":
+			s = strings.Join(args[1:], " ")
+		default:
+			s = strings.Join(args, " ") + "\n"
+		}
+		w.Write([]byte(s))
+		return actionNone, nil
+	}
+}
+
+// ////////////////////////////////////////////////////////////////////////////
 // file
 // ////////////////////////////////////////////////////////////////////////////
 type metaFile struct {
@@ -211,9 +256,12 @@ Query Buffer
   \r[eset]               reset (clear) the query buffer
 
 Input/Output
+  \echo [-n] [STRING]    write string to standard output (-n for no newline)
   \file ...              reference a local file to stream to the server
   \i[nclude] FILE        execute commands from file
   \o [FILE]              send all query results to file
+  \qecho [-n] [STRING]   write string to \o output stream (-n for no newline)
+  \warn [-n] [STRING]    write string to standard error (-n for no newline)
 
 Informational
   \d                     list tables and views
@@ -349,7 +397,15 @@ func newMetaOutput(args []string) *metaOutput {
 func (m *metaOutput) execute(cmd *CLICommand) (action, error) {
 	switch len(m.args) {
 	case 0:
-		cmd.writer = newStandardWriter(Stdout, Stderr)
+		// Close cmd.output (if closable).
+		if err := cmd.closeOutput(); err != nil {
+			return actionNone, errors.Wrapf(err, "closing output")
+		}
+
+		// Set cmd.output to cmd.Stdout.
+		cmd.output = cmd.Stdout
+
+		// cmd.writer = newStandardWriter(Stdout, Stderr)
 		return actionNone, nil
 	case 1:
 		// If the argument is a fully-qualifed file path, just use that.
@@ -358,7 +414,14 @@ func (m *metaOutput) execute(cmd *CLICommand) (action, error) {
 		if err != nil {
 			return actionNone, errors.Wrapf(err, "getting absolute file path for file: %s", m.args[0])
 		}
-		cmd.writer = newFileWriter(fpath, Stdout, Stderr)
+
+		cmd.output, err = os.OpenFile(fpath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+		if err != nil {
+			return actionNone, errors.Wrapf(err, "opening file: %s", fpath)
+		}
+
+		// cmd.writer = newFileWriter(fpath, Stdout, Stderr)
+
 		return actionNone, nil
 	default:
 		return actionNone, errors.Errorf("meta command 'output' takes zero or one argument")
@@ -377,6 +440,23 @@ func newMetaPrint() *metaPrint {
 func (m *metaPrint) execute(cmd *CLICommand) (action, error) {
 	cmd.Printf(cmd.buffer.print() + "\n")
 	return actionNone, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// qecho
+// ////////////////////////////////////////////////////////////////////////////
+type metaQEcho struct {
+	args []string
+}
+
+func newMetaQEcho(args []string) *metaQEcho {
+	return &metaQEcho{
+		args: args,
+	}
+}
+
+func (m *metaQEcho) execute(cmd *CLICommand) (action, error) {
+	return echo(m.args, cmd.output)
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -440,13 +520,13 @@ func newMetaTiming(args []string) *metaTiming {
 func (m *metaTiming) execute(cmd *CLICommand) (action, error) {
 	switch len(m.args) {
 	case 0:
-		cmd.writeFormat.timing = !cmd.writeFormat.timing
+		cmd.writeOptions.timing = !cmd.writeOptions.timing
 	case 1:
 		switch m.args[0] {
 		case "on":
-			cmd.writeFormat.timing = true
+			cmd.writeOptions.timing = true
 		case "off":
-			cmd.writeFormat.timing = false
+			cmd.writeOptions.timing = false
 		default:
 			return actionNone, errors.Errorf("unrecognized value \"%s\" for \"\timing\": Boolean expected", m.args[0])
 		}
@@ -455,12 +535,29 @@ func (m *metaTiming) execute(cmd *CLICommand) (action, error) {
 	}
 
 	sTiming := "on"
-	if !cmd.writeFormat.timing {
+	if !cmd.writeOptions.timing {
 		sTiming = "off"
 	}
 
 	cmd.Printf("Timing is %s.\n", sTiming)
 	return actionNone, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// warn
+// ////////////////////////////////////////////////////////////////////////////
+type metaWarn struct {
+	args []string
+}
+
+func newMetaWarn(args []string) *metaWarn {
+	return &metaWarn{
+		args: args,
+	}
+}
+
+func (m *metaWarn) execute(cmd *CLICommand) (action, error) {
+	return echo(m.args, cmd.Stderr)
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -559,6 +656,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaConnect(args), nil
 	case "d", "dt":
 		return newMetaListTables(), nil
+	case "echo":
+		return newMetaEcho(args), nil
 	case "file":
 		return newMetaFile(args), nil
 	case "?":
@@ -571,6 +670,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaOutput(args), nil
 	case "p", "print":
 		return newMetaPrint(), nil
+	case "qecho":
+		return newMetaQEcho(args), nil
 	case "q", "quit":
 		return newMetaQuit(), nil
 	case "r", "reset":
@@ -579,6 +680,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaSet(args), nil
 	case "timing":
 		return newMetaTiming(args), nil
+	case "warn":
+		return newMetaWarn(args), nil
 	case "watch":
 		return newMetaWatch(args), nil
 	default:

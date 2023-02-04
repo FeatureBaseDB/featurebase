@@ -53,9 +53,6 @@ type CLICommand struct {
 	buffer     *buffer
 	workingDir *workingDir
 
-	writer      Writer
-	writeFormat *writeFormat
-
 	OrganizationID string `json:"org-id"`
 	DatabaseID     string `json:"db-id"`
 	DatabaseName   string `json:"db-name"`
@@ -65,6 +62,11 @@ type CLICommand struct {
 	Stdin  io.ReadCloser `json:"-"`
 	Stdout io.Writer     `json:"-"`
 	Stderr io.Writer     `json:"-"`
+
+	// output is where actual results are written. This might point to stdout,
+	// or to a file, based on the current configuration.
+	output       io.Writer `json:"-"`
+	writeOptions *writeOptions
 
 	// quit gets closed when Run should stop listening for input.
 	quit chan struct{}
@@ -83,12 +85,12 @@ func NewCLICommand(logdest logger.Logger) *CLICommand {
 		buffer:     newBuffer(),
 		workingDir: newWorkingDir(),
 
-		writer:      newStandardWriter(Stdout, Stderr),
-		writeFormat: defaultWriteFormat(),
-
 		Stdin:  Stdin,
 		Stdout: Stdout,
 		Stderr: Stderr,
+
+		output:       Stdout,
+		writeOptions: defaultWriteOptions(),
 
 		quit: make(chan struct{}),
 	}
@@ -217,11 +219,20 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 
 		select {
 		case <-cmd.quit:
+			if err := cmd.close(); err != nil {
+				cmd.Errorf("closing: %s", err)
+			}
 			return nil
 		default:
 			//pass
 		}
 	}
+}
+
+// close is called upon quitting. It should close any remaining open file
+// handles used by the CLICommand.
+func (cmd *CLICommand) close() error {
+	return cmd.closeOutput()
 }
 
 func (cmd *CLICommand) executeAndWriteQuery(qry query) error {
@@ -230,7 +241,7 @@ func (cmd *CLICommand) executeAndWriteQuery(qry query) error {
 		return errors.Wrap(err, "making query")
 	}
 
-	if err := cmd.writer.Write(queryResponse, cmd.writeFormat); err != nil {
+	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
 
@@ -247,26 +258,16 @@ func (cmd *CLICommand) Printf(format string, a ...any) {
 	cmd.Stdout.Write([]byte(out))
 }
 
+// Outputf is a helper method which sends the given payload to output.
+func (cmd *CLICommand) Outputf(format string, a ...any) {
+	out := fmt.Sprintf(format, a...)
+	cmd.output.Write([]byte(out))
+}
+
 // Errorf is a helper method which sends the given payload to stderr.
 func (cmd *CLICommand) Errorf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
 	cmd.Stderr.Write([]byte(out))
-}
-
-func writeWarnings(r *featurebase.WireQueryResponse, w io.Writer) error {
-	if len(r.Warnings) == 0 {
-		return nil
-	}
-
-	if _, err := w.Write([]byte("\n")); err != nil {
-		return errors.Wrapf(err, "writing line feed")
-	}
-	for _, warning := range r.Warnings {
-		if _, err := w.Write([]byte("Warning: " + warning + "\n")); err != nil {
-			return errors.Wrapf(err, "writing warning: %s", warning)
-		}
-	}
-	return nil
 }
 
 func (cmd *CLICommand) setupHistory() {
@@ -434,4 +435,16 @@ func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
 	}
 
 	return featurebaseTypeCloud, nil
+}
+
+func (cmd *CLICommand) closeOutput() error {
+	if cmd.output == nil {
+		return nil
+	}
+
+	if closer, ok := cmd.output.(io.Closer); ok {
+		return closer.Close()
+	}
+
+	return nil
 }
