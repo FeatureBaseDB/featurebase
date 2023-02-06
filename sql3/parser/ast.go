@@ -13,9 +13,12 @@ type Node interface {
 	fmt.Stringer
 }
 
+func (*AlterDatabaseStatement) node()   {}
 func (*AlterTableStatement) node()      {}
+func (*AlterViewStatement) node()       {}
 func (*AnalyzeStatement) node()         {}
 func (*Assignment) node()               {}
+func (*ShowDatabasesStatement) node()   {}
 func (*ShowTablesStatement) node()      {}
 func (*ShowColumnsStatement) node()     {}
 func (*ShowCreateTableStatement) node() {}
@@ -32,14 +35,15 @@ func (*CastExpr) node()                 {}
 func (*CheckConstraint) node()          {}
 func (*ColumnDefinition) node()         {}
 func (*CommitStatement) node()          {}
+func (*CreateDatabaseStatement) node()  {}
 func (*CreateIndexStatement) node()     {}
 func (*CreateTableStatement) node()     {}
 func (*CreateFunctionStatement) node()  {}
 func (*CreateViewStatement) node()      {}
-func (*AlterViewStatement) node()       {}
 func (*DateLit) node()                  {}
 func (*DefaultConstraint) node()        {}
 func (*DeleteStatement) node()          {}
+func (*DropDatabaseStatement) node()    {}
 func (*DropIndexStatement) node()       {}
 func (*DropTableStatement) node()       {}
 func (*DropFunctionStatement) node()    {}
@@ -87,6 +91,7 @@ func (*TupleLiteralExpr) node()         {}
 func (*Type) node()                     {}
 func (*UnaryExpr) node()                {}
 func (*UniqueConstraint) node()         {}
+func (*UnitsOption) node()              {}
 func (*UpdateStatement) node()          {}
 func (*UpsertClause) node()             {}
 func (*UsingConstraint) node()          {}
@@ -100,20 +105,24 @@ type Statement interface {
 	stmt()
 }
 
+func (*AlterDatabaseStatement) stmt()   {}
 func (*AlterTableStatement) stmt()      {}
+func (*AlterViewStatement) stmt()       {}
 func (*AnalyzeStatement) stmt()         {}
 func (*BeginStatement) stmt()           {}
 func (*BulkInsertStatement) stmt()      {}
+func (*ShowDatabasesStatement) stmt()   {}
 func (*ShowTablesStatement) stmt()      {}
 func (*ShowColumnsStatement) stmt()     {}
 func (*ShowCreateTableStatement) stmt() {}
 func (*CommitStatement) stmt()          {}
+func (*CreateDatabaseStatement) stmt()  {}
 func (*CreateIndexStatement) stmt()     {}
 func (*CreateTableStatement) stmt()     {}
 func (*CreateFunctionStatement) stmt()  {}
 func (*CreateViewStatement) stmt()      {}
-func (*AlterViewStatement) stmt()       {}
 func (*DeleteStatement) stmt()          {}
+func (*DropDatabaseStatement) stmt()    {}
 func (*DropIndexStatement) stmt()       {}
 func (*DropTableStatement) stmt()       {}
 func (*DropFunctionStatement) stmt()    {}
@@ -133,6 +142,8 @@ func CloneStatement(stmt Statement) Statement {
 	}
 
 	switch stmt := stmt.(type) {
+	case *AlterDatabaseStatement:
+		return stmt.Clone()
 	case *AlterTableStatement:
 		return stmt.Clone()
 	case *AnalyzeStatement:
@@ -140,6 +151,8 @@ func CloneStatement(stmt Statement) Statement {
 	case *BeginStatement:
 		return stmt.Clone()
 	case *CommitStatement:
+		return stmt.Clone()
+	case *CreateDatabaseStatement:
 		return stmt.Clone()
 	case *CreateIndexStatement:
 		return stmt.Clone()
@@ -150,6 +163,8 @@ func CloneStatement(stmt Statement) Statement {
 	case *CreateViewStatement:
 		return stmt.Clone()
 	case *DeleteStatement:
+		return stmt.Clone()
+	case *DropDatabaseStatement:
 		return stmt.Clone()
 	case *DropIndexStatement:
 		return stmt.Clone()
@@ -470,6 +485,16 @@ func (s *ExplainStatement) String() string {
 	return buf.String()
 }
 
+type ShowDatabasesStatement struct {
+	Show      Pos // position of SHOW
+	Databases Pos // position of DATABASES
+}
+
+// String returns the string representation of the statement.
+func (s *ShowDatabasesStatement) String() string {
+	return "SHOW DATABASES"
+}
+
 type ShowTablesStatement struct {
 	Show   Pos // position of SHOW
 	Tables Pos // position of TABLES
@@ -662,9 +687,53 @@ func (s *ReleaseStatement) String() string {
 	return buf.String()
 }
 
+type CreateDatabaseStatement struct {
+	Create      Pos    // position of CREATE keyword
+	Database    Pos    // position of DATABASE keyword
+	If          Pos    // position of IF keyword (optional)
+	IfNot       Pos    // position of NOT keyword (optional)
+	IfNotExists Pos    // position of EXISTS keyword (optional)
+	Name        *Ident // database name
+
+	With Pos // position of WITH keyword
+
+	Options []DatabaseOption // database options
+}
+
+// Clone returns a deep copy of s.
+func (s *CreateDatabaseStatement) Clone() *CreateDatabaseStatement {
+	if s == nil {
+		return s
+	}
+	other := *s
+	other.Name = s.Name.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *CreateDatabaseStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("CREATE DATABASE")
+	if s.IfNotExists.IsValid() {
+		buf.WriteString(" IF NOT EXISTS")
+	}
+	buf.WriteString(" ")
+	buf.WriteString(s.Name.String())
+
+	if s.With.IsValid() {
+		buf.WriteString(" WITH")
+		for _, opt := range s.Options {
+			buf.WriteString(" ")
+			buf.WriteString(opt.String())
+		}
+	}
+
+	return buf.String()
+}
+
 type CreateTableStatement struct {
 	Create      Pos    // position of CREATE keyword
-	Table       Pos    // position of CREATE keyword
+	Table       Pos    // position of TABLE keyword
 	If          Pos    // position of IF keyword (optional)
 	IfNot       Pos    // position of NOT keyword (optional)
 	IfNotExists Pos    // position of EXISTS keyword (optional)
@@ -763,6 +832,26 @@ func (c *ColumnDefinition) String() string {
 		buf.WriteString(" ")
 		buf.WriteString(c.Constraints[i].String())
 	}
+	return buf.String()
+}
+
+type DatabaseOption interface {
+	Node
+	dbOption()
+}
+
+func (*UnitsOption) dbOption()   {}
+func (*CommentOption) dbOption() {}
+
+type UnitsOption struct {
+	Units Pos  // position of UNITS keyword
+	Expr  Expr // expression
+}
+
+func (o *UnitsOption) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("UNITS ")
+	buf.WriteString(o.Expr.String())
 	return buf.String()
 }
 
@@ -1355,6 +1444,39 @@ func (s *AnalyzeStatement) Clone() *AnalyzeStatement {
 // String returns the string representation of the statement.
 func (s *AnalyzeStatement) String() string {
 	return fmt.Sprintf("ANALYZE %s", s.Name.String())
+}
+
+type AlterDatabaseStatement struct {
+	Alter    Pos    // position of ALTER keyword
+	Database Pos    // position of DATABASE keyword
+	Name     *Ident // database name
+
+	With Pos // position of WITH keyword
+
+	Option DatabaseOption
+}
+
+// Clone returns a deep copy of s.
+func (s *AlterDatabaseStatement) Clone() *AlterDatabaseStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Name = other.Name.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *AlterDatabaseStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("ALTER DATABASE ")
+	buf.WriteString(s.Name.String())
+
+	if s.Option != nil {
+		buf.WriteString(" WITH ")
+		buf.WriteString(s.Option.String())
+	}
+	return buf.String()
 }
 
 type AlterTableStatement struct {
@@ -2459,12 +2581,41 @@ type ColumnArg interface {
 	columnArg()
 }
 
+type DropDatabaseStatement struct {
+	Drop     Pos    // position of DROP keyword
+	Database Pos    // position of DATABASE keyword
+	If       Pos    // position of IF keyword
+	IfExists Pos    // position of EXISTS keyword after IF
+	Name     *Ident // database name
+}
+
+// Clone returns a deep copy of s.
+func (s *DropDatabaseStatement) Clone() *DropDatabaseStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Name = s.Name.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *DropDatabaseStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("DROP DATABASE")
+	if s.IfExists.IsValid() {
+		buf.WriteString(" IF EXISTS")
+	}
+	fmt.Fprintf(&buf, " %s", s.Name.String())
+	return buf.String()
+}
+
 type DropTableStatement struct {
 	Drop     Pos    // position of DROP keyword
 	Table    Pos    // position of TABLE keyword
 	If       Pos    // position of IF keyword
 	IfExists Pos    // position of EXISTS keyword after IF
-	Name     *Ident // view name
+	Name     *Ident // table name
 }
 
 // Clone returns a deep copy of s.

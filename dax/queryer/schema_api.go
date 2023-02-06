@@ -27,6 +27,55 @@ func newQualifiedSchemaAPI(qdbid dax.QualifiedDatabaseID, schema dax.Schemar) *q
 	}
 }
 
+func (s *qualifiedSchemaAPI) CreateDatabase(ctx context.Context, db *dax.Database) error {
+	qdb := dax.NewQualifiedDatabase(s.qdbid.OrganizationID, db)
+	return s.schemar.CreateDatabase(ctx, qdb)
+}
+
+func (s *qualifiedSchemaAPI) DropDatabase(ctx context.Context, dbid dax.DatabaseID) error {
+	qdbid := dax.NewQualifiedDatabaseID(s.qdbid.OrganizationID, dbid)
+	return s.schemar.DropDatabase(ctx, qdbid)
+}
+
+func (s *qualifiedSchemaAPI) DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error) {
+	orgID := s.qdbid.OrganizationID
+	qdb, err := s.schemar.DatabaseByName(ctx, orgID, dbname)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting database by name: (%s) %s", orgID, dbname)
+	}
+	return &qdb.Database, nil
+}
+
+func (s *qualifiedSchemaAPI) DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error) {
+	qdbid := dax.NewQualifiedDatabaseID(s.qdbid.OrganizationID, dbid)
+
+	qdb, err := s.schemar.DatabaseByID(ctx, qdbid)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting database: %s", qdbid)
+	}
+
+	return &qdb.Database, nil
+}
+
+func (s *qualifiedSchemaAPI) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
+	qdbid := dax.NewQualifiedDatabaseID(s.qdbid.OrganizationID, dbid)
+	return s.schemar.SetDatabaseOption(ctx, qdbid, option, value)
+}
+
+func (s *qualifiedSchemaAPI) Databases(ctx context.Context, dbids ...dax.DatabaseID) ([]*dax.Database, error) {
+	qdbs, err := s.schemar.Databases(ctx, s.qdbid.OrganizationID, dbids...)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting databases")
+	}
+
+	dbs := make([]*dax.Database, 0, len(qdbs))
+	for _, qdbl := range qdbs {
+		dbs = append(dbs, &qdbl.Database)
+	}
+
+	return dbs, nil
+}
+
 func (s *qualifiedSchemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	qtbl, err := s.schemar.TableByName(ctx, s.qdbid, tname)
 	if err != nil {

@@ -26,6 +26,26 @@ func NewSchemaAPI(c *Client) *schemaAPI {
 	}
 }
 
+func (s *schemaAPI) CreateDatabase(context.Context, *dax.Database) error {
+	return errors.Errorf("unimplemented: schemaAPI.CreateDatabase()")
+}
+func (s *schemaAPI) DropDatabase(context.Context, dax.DatabaseID) error {
+	return errors.Errorf("unimplemented: schemaAPI.DropDatabase()")
+}
+
+func (s *schemaAPI) DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: schemaAPI.DatabaseByName()")
+}
+func (s *schemaAPI) DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: schemaAPI.DatabaseByID()")
+}
+func (s *schemaAPI) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
+	return nil
+}
+func (s *schemaAPI) Databases(context.Context, ...dax.DatabaseID) ([]*dax.Database, error) {
+	return nil, errors.Errorf("unimplemented: schemaAPI.Databases()")
+}
+
 func (s *schemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	return nil, errors.New(errors.ErrUncoded, "schemaAPI.TableByName not implemented")
 }

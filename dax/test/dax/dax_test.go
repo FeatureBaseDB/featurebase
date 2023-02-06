@@ -618,6 +618,93 @@ func TestDAXIntegration(t *testing.T) {
 		assert.False(t, dirIsEmpty(t, rootDir+"/controller"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/wl"))
 	})
+
+	t.Run("DatabaseOptions", func(t *testing.T) {
+		cfg := test.DefaultConfig()
+		cfg.Computer.N = 4
+		opt := server.OptCommandConfig(cfg)
+		mc := test.MustRunManagedCommand(t, opt)
+
+		svcmgr := mc.Manage()
+
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 2
+		qdb.Options.WorkersMax = 2
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
+
+		computers := svcmgr.Computers()
+		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
+		computerKey1 := dax.ServiceKey(dax.ServicePrefixComputer + "1")
+		computerKey2 := dax.ServiceKey(dax.ServicePrefixComputer + "2")
+		// computerKey3 := dax.ServiceKey(dax.ServicePrefixComputer + "3")
+
+		// Ingest and query some data.
+		runTableTests(t,
+			svcmgr.Queryer.Address(),
+			basicTableTestConfig(qdbid, defs.Keyed)...,
+		)
+
+		qtid, err := controllerClient.TableID(context.Background(), qdbid, dax.TableName(defs.Keyed.Name(0)))
+		assert.NoError(t, err)
+
+		// ensure partitions are covered
+		partitions0 := dax.PartitionNums{0, 2, 4, 6, 8, 10}
+		partitions1 := dax.PartitionNums{1, 3, 5, 7, 9, 11}
+		allPartitions := append(partitions0, partitions1...)
+		sort.Sort(allPartitions)
+
+		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
+		assert.NoError(t, err)
+		if assert.Len(t, nodes, 2) {
+			// computer0 (node0)
+			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
+			assert.Equal(t, partitions0, nodes[0].Partitions)
+			// computer1 (node1)
+			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
+			assert.Equal(t, partitions1, nodes[1].Partitions)
+		}
+
+		// Change DatabaseOptions.WorkersMin to 3.
+		assert.NoError(t, controllerClient.SetDatabaseOption(context.Background(), qdbid, dax.DatabaseOptionWorkersMin, "3"))
+
+		// Query the same data.
+		t.Run("query the same data", func(t *testing.T) {
+			runTableTests(t,
+				svcmgr.Queryer.Address(),
+				tableTestConfig{
+					qdbid:      qdbid,
+					test:       defs.Keyed,
+					skipCreate: true,
+					skipInsert: true,
+					querySet:   0,
+				},
+			)
+		})
+
+		// ensure partitions are still covered
+		partitions0 = dax.PartitionNums{0, 10}
+		partitions1 = dax.PartitionNums{1, 11}
+		partitions2 := dax.PartitionNums{2, 3, 4, 5, 6, 7, 8, 9}
+		allPartitions = append(append(partitions0, partitions1...), partitions2...)
+		sort.Sort(allPartitions)
+
+		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
+		assert.NoError(t, err)
+		if assert.Len(t, nodes, 3) {
+			// computer0 (node0)
+			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
+			assert.Equal(t, partitions0, nodes[0].Partitions)
+			// computer1 (node1)
+			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
+			assert.Equal(t, partitions1, nodes[1].Partitions)
+			// computer2 (node2)
+			assert.Equal(t, computers[computerKey2].Address(), nodes[2].Address)
+			assert.Equal(t, partitions2, nodes[2].Partitions)
+		}
+	})
 }
 
 func dirIsEmpty(t *testing.T, name string) bool {

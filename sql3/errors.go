@@ -71,6 +71,11 @@ const (
 	ErrInsertMustHaveIDColumn          errors.Code = "ErrInsertMustHaveIDColumn"
 	ErrInsertMustAtLeastOneNonIDColumn errors.Code = "ErrInsertMustAtLeastOneNonIDColumn"
 
+	ErrDatabaseNotFound      errors.Code = "ErrDatabaseNotFound"
+	ErrDatabaseExists        errors.Code = "ErrDatabaseExists"
+	ErrInvalidDatabaseOption errors.Code = "ErrInvalidDatabaseOption"
+	ErrInvalidUnitsValue     errors.Code = "ErrInvalidUnitsValue"
+
 	ErrTableMustHaveIDColumn     errors.Code = "ErrTableMustHaveIDColumn"
 	ErrTableIDColumnType         errors.Code = "ErrTableIDColumnType"
 	ErrTableIDColumnConstraints  errors.Code = "ErrTableIDColumnConstraints"
@@ -498,6 +503,13 @@ func NewErrInsertMustAtLeastOneNonIDColumn(line int, col int) error {
 	)
 }
 
+func NewErrDatabaseExists(line, col int, databaseName string) error {
+	return errors.New(
+		ErrDatabaseExists,
+		fmt.Sprintf("[%d:%d] database '%s' already exists", line, col, databaseName),
+	)
+}
+
 func NewErrTableMustHaveIDColumn(line, col int) error {
 	return errors.New(
 		ErrTableMustHaveIDColumn,
@@ -523,6 +535,13 @@ func NewErrTableIDColumnAlter(line, col int) error {
 	return errors.New(
 		ErrTableIDColumnAlter,
 		fmt.Sprintf("[%d:%d] _id column cannot be added to an existing table", line, col),
+	)
+}
+
+func NewErrDatabaseNotFound(line, col int, databaseName string) error {
+	return errors.New(
+		ErrDatabaseNotFound,
+		fmt.Sprintf("[%d:%d] database '%s' not found", line, col, databaseName),
 	)
 }
 
@@ -558,6 +577,20 @@ func NewErrTableColumnNotFound(line, col int, tableName string, columnName strin
 	return errors.New(
 		ErrTableColumnNotFound,
 		fmt.Sprintf("[%d:%d] column '%s' not found in table '%s'", line, col, columnName, tableName),
+	)
+}
+
+func NewErrInvalidDatabaseOption(line, col int, option string) error {
+	return errors.New(
+		ErrInvalidDatabaseOption,
+		fmt.Sprintf("[%d:%d] invalid database option '%s'", line, col, option),
+	)
+}
+
+func NewErrInvalidUnitsValue(line, col int, units int64) error {
+	return errors.New(
+		ErrInvalidUnitsValue,
+		fmt.Sprintf("[%d:%d] invalid value '%d' for units (should be a number between 0-10000)", line, col, units),
 	)
 }
 

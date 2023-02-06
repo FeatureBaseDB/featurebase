@@ -582,6 +582,11 @@ func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatab
 	}
 	defer tx.Rollback()
 
+	// Create Database ID.
+	if _, err := qdb.CreateID(); err != nil {
+		return errors.Wrap(err, "creating database ID")
+	}
+
 	if err := c.Schemar.CreateDatabase(tx, qdb); err != nil {
 		return errors.Wrap(err, "creating database in schemar")
 	}
@@ -664,16 +669,33 @@ func (c *Controller) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDataba
 	return qdb, nil
 }
 
-// SetDatabaseOptions sets the options on the given database.
-func (c *Controller) SetDatabaseOptions(ctx context.Context, qdbid dax.QualifiedDatabaseID, opts dax.DatabaseOptions) error {
+// SetDatabaseOption sets the option on the given database.
+func (c *Controller) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatabaseID, option string, value string) error {
 	tx, err := c.BoltDB.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
 	defer tx.Rollback()
 
-	if err := c.Schemar.SetDatabaseOptions(tx, qdbid, opts); err != nil {
-		return errors.Wrap(err, "setting database options")
+	if err := c.Schemar.SetDatabaseOption(tx, qdbid, option, value); err != nil {
+		return errors.Wrapf(err, "setting database option: %s", option)
+	}
+
+	diffs, err := c.Balancer.BalanceDatabase(tx, qdbid)
+	if err != nil {
+		return errors.Wrapf(err, "balancing database: %s", qdbid)
+	}
+
+	workerSet := NewAddressSet()
+	for _, diff := range diffs {
+		workerSet.Add(dax.Address(diff.Address))
+	}
+
+	// Convert the slice of addresses into a slice of addressMethod containing
+	// the appropriate method.
+	addressMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
+	if err := c.sendDirectives(tx, addressMethods...); err != nil {
+		return NewErrDirectiveSendFailure(err.Error())
 	}
 
 	return tx.Commit()

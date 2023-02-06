@@ -23,6 +23,7 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/database-by-id", server.postDatabaseByID).Methods("POST").Name("PostDatabaseByID")
 	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
 	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
+	router.HandleFunc("/database/options", server.patchDatabaseOptions).Methods("PATCH").Name("PatchDatabaseOptions")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")
@@ -192,6 +193,32 @@ type DatabasesRequest struct {
 	OrganizationID dax.OrganizationID `json:"org-id"`
 	DatabaseIDs    dax.DatabaseIDs    `json:"database-ids"`
 	// DatabaseNames     dax.DatabaseNames     `json:"database-names"`
+}
+
+// handlePatchDatabaseOptions handles updates to database options.
+func (s *server) patchDatabaseOptions(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req DatabaseOptionRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.controller.SetDatabaseOption(r.Context(), req.QualifiedDatabaseID, req.Option, req.Value); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+}
+
+// DatabaseOptionRequest represents a change to a database option. The thinking
+// is to only support changing one database option at a time to keep the
+// implementation sane. At time of writing, only WorkersMin is supported.
+type DatabaseOptionRequest struct {
+	QualifiedDatabaseID dax.QualifiedDatabaseID `json:"qdbid"`
+	Option              string                  `json:"option"`
+	Value               string                  `json:"value"`
 }
 
 // POST /create-table

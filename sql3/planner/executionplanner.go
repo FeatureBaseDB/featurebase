@@ -21,6 +21,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func isDatabaseNotFoundError(err error) bool {
+	// TODO (pok) take out the second part of this check once we return correct error types across network boundaries
+	return errors.Is(err, dax.ErrDatabaseNameDoesNotExist) || strings.Contains(err.Error(), "does not exist")
+}
+
 func isTableNotFoundError(err error) bool {
 	// TODO (pok) take out the second part of this check once we return correct error types across network boundaries
 	return errors.Is(err, dax.ErrTableNameDoesNotExist) || strings.Contains(err.Error(), "does not exist")
@@ -40,7 +45,7 @@ type ExecutionPlanner struct {
 func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, systemAPI pilosa.SystemAPI, systemLayerAPI pilosa.SystemLayerAPI, importer pilosa.Importer, logger logger.Logger, sql string) *ExecutionPlanner {
 	return &ExecutionPlanner{
 		executor:       executor,
-		schemaAPI:      newSystemTableDefintionsWrapper(schemaAPI),
+		schemaAPI:      newSystemTableDefinitionsWrapper(schemaAPI),
 		systemAPI:      systemAPI,
 		systemLayerAPI: systemLayerAPI,
 		importer:       importer,
@@ -65,20 +70,28 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	switch stmt := stmt.(type) {
 	case *parser.SelectStatement:
 		rootOperator, err = p.compileSelectStatement(stmt, false)
+	case *parser.ShowDatabasesStatement:
+		rootOperator, err = p.compileShowDatabasesStatement(stmt)
 	case *parser.ShowTablesStatement:
 		rootOperator, err = p.compileShowTablesStatement(stmt)
 	case *parser.ShowColumnsStatement:
 		rootOperator, err = p.compileShowColumnsStatement(stmt)
 	case *parser.ShowCreateTableStatement:
 		rootOperator, err = p.compileShowCreateTableStatement(stmt)
+	case *parser.CreateDatabaseStatement:
+		rootOperator, err = p.compileCreateDatabaseStatement(stmt)
 	case *parser.CreateTableStatement:
 		rootOperator, err = p.compileCreateTableStatement(stmt)
 	case *parser.CreateViewStatement:
 		rootOperator, err = p.compileCreateViewStatement(stmt)
+	case *parser.AlterDatabaseStatement:
+		rootOperator, err = p.compileAlterDatabaseStatement(stmt)
 	case *parser.AlterTableStatement:
 		rootOperator, err = p.compileAlterTableStatement(stmt)
 	case *parser.AlterViewStatement:
 		rootOperator, err = p.compileAlterViewStatement(stmt)
+	case *parser.DropDatabaseStatement:
+		rootOperator, err = p.compileDropDatabaseStatement(stmt)
 	case *parser.DropTableStatement:
 		rootOperator, err = p.compileDropTableStatement(stmt)
 	case *parser.DropViewStatement:
@@ -118,20 +131,28 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 	case *parser.SelectStatement:
 		_, err := p.analyzeSelectStatement(stmt)
 		return err
+	case *parser.ShowDatabasesStatement:
+		return nil
 	case *parser.ShowTablesStatement:
 		return nil
 	case *parser.ShowColumnsStatement:
 		return nil
 	case *parser.ShowCreateTableStatement:
 		return nil
+	case *parser.CreateDatabaseStatement:
+		return p.analyzeCreateDatabaseStatement(stmt)
 	case *parser.CreateTableStatement:
 		return p.analyzeCreateTableStatement(stmt)
 	case *parser.CreateViewStatement:
 		return p.analyzeCreateViewStatement(stmt)
+	case *parser.AlterDatabaseStatement:
+		return p.analyzeAlterDatabaseStatement(stmt)
 	case *parser.AlterTableStatement:
 		return p.analyzeAlterTableStatement(stmt)
 	case *parser.AlterViewStatement:
 		return p.analyzeAlterViewStatement(stmt)
+	case *parser.DropDatabaseStatement:
+		return nil
 	case *parser.DropTableStatement:
 		return nil
 	case *parser.DropViewStatement:

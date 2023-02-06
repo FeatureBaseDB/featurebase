@@ -206,6 +206,44 @@ func (c *Client) Databases(ctx context.Context, orgID dax.OrganizationID, ids ..
 	return qdbs, nil
 }
 
+func (c *Client) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatabaseID, option string, value string) error {
+	url := fmt.Sprintf("%s/database/options", c.address.WithScheme(defaultScheme))
+
+	req := &controllerhttp.DatabaseOptionRequest{
+		QualifiedDatabaseID: qdbid,
+		Option:              option,
+		Value:               value,
+	}
+
+	// Encode the request.
+	postBody, err := json.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	request, err := http.NewRequest(http.MethodPatch, url, responseBody)
+	if err != nil {
+		return errors.Wrap(err, "creating http request")
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	// Post the request as PATCH.
+	c.logger.Debugf("PATCH database/option request: url: %s", url)
+	resp, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return errors.Wrap(err, "posting database/option request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	return nil
+}
+
 // TODO(tlt): collapse Table into this
 func (c *Client) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
 	return c.Table(ctx, qtid)

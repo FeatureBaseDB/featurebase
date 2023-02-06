@@ -116,6 +116,38 @@ func TestCreateIndexStatement_String(t *testing.T) {
 	}, `CREATE UNIQUE INDEX IF NOT EXISTS "foo" ON "bar" ("baz", "bat") WHERE TRUE`)
 }
 
+func TestCreateDatabaseStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
+		Name: &parser.Ident{Name: "db1"},
+	}, `CREATE DATABASE db1`)
+
+	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
+		Name:        &parser.Ident{Name: "db1"},
+		IfNotExists: pos(0),
+	}, `CREATE DATABASE IF NOT EXISTS db1`)
+
+	AssertStatementStringer(t, &parser.CreateDatabaseStatement{
+		Name: &parser.Ident{Name: "db1"},
+		With: pos(10),
+		Options: []parser.DatabaseOption{
+			&parser.UnitsOption{
+				Units: pos(0),
+				Expr:  &parser.IntegerLit{Value: "4"},
+			},
+		},
+	}, `CREATE DATABASE db1 WITH UNITS 4`)
+}
+
+func TestAlterDatabaseStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.AlterDatabaseStatement{
+		Name: &parser.Ident{Name: "db1"},
+		Option: &parser.UnitsOption{
+			Units: pos(0),
+			Expr:  &parser.IntegerLit{Value: "4"},
+		},
+	}, `ALTER DATABASE db1 WITH UNITS 4`)
+}
+
 func TestCreateTableStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateTableStatement{
 		Name:        &parser.Ident{Name: "foo"},
@@ -476,6 +508,17 @@ func TestDropIndexStatement_String(t *testing.T) {
 		IfExists: pos(0),
 		Name:     &parser.Ident{Name: "idx"},
 	}, `DROP INDEX IF EXISTS "idx"`)
+}
+
+func TestDropDatabaseStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.DropDatabaseStatement{
+		Name: &parser.Ident{Name: "db"},
+	}, `DROP DATABASE db`)
+
+	AssertStatementStringer(t, &parser.DropDatabaseStatement{
+		IfExists: pos(0),
+		Name:     &parser.Ident{Name: "db"},
+	}, `DROP DATABASE IF EXISTS db`)
 }
 
 func TestDropTableStatement_String(t *testing.T) {

@@ -204,9 +204,9 @@ func (s *Schemar) DropDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID
 	return nil
 }
 
-// SetDatabaseOptions overwrites the existing database options with those
-// provided for the given database.
-func (s *Schemar) SetDatabaseOptions(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, opts dax.DatabaseOptions) error {
+// SetDatabaseOption overwrites the existing database option with the provided
+// value.
+func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, option string, value string) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
 		return dax.NewErrInvalidTransaction()
@@ -218,8 +218,10 @@ func (s *Schemar) SetDatabaseOptions(tx dax.Transaction, qdbid dax.QualifiedData
 		return errors.Wrapf(err, "getting database: %s", qdbid)
 	}
 
-	// Set the new options.
-	qdb.Options = opts
+	// Set the new option.
+	if err := qdb.Options.Set(option, value); err != nil {
+		return errors.Wrapf(err, "setting option on database: %s", qdbid)
+	}
 
 	// Put the database.
 	if err := s.putDatabase(txx, qdb); err != nil {

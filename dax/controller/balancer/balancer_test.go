@@ -398,9 +398,7 @@ func TestBalancer(t *testing.T) {
 		// are updating the database option first, and then adding a worker to
 		// satisfy those options.
 		t.Run(fmt.Sprintf("test-%s", "set database options db min 3"), func(t *testing.T) {
-			dbOptions.WorkersMin = 3
-			dbOptions.WorkersMax = 3
-			assert.NoError(t, schemar.SetDatabaseOptions(tx, qdb.QualifiedID(), dbOptions))
+			assert.NoError(t, schemar.SetDatabaseOption(tx, qdb.QualifiedID(), dax.DatabaseOptionWorkersMin, "3"))
 		})
 
 		runTestPart(testPart{
@@ -675,9 +673,7 @@ func TestBalancer(t *testing.T) {
 
 		// Set WorkersMin back to 2 so we can test the change to 3 again.
 		t.Run(fmt.Sprintf("test-%s", "set database options db min back to 2"), func(t *testing.T) {
-			dbOptions.WorkersMin = 2
-			dbOptions.WorkersMax = 2
-			assert.NoError(t, schemar.SetDatabaseOptions(tx, qdb.QualifiedID(), dbOptions))
+			assert.NoError(t, schemar.SetDatabaseOption(tx, qdb.QualifiedID(), dax.DatabaseOptionWorkersMin, "2"))
 		})
 
 		runTestPart(testPart{
@@ -705,9 +701,7 @@ func TestBalancer(t *testing.T) {
 		// have added a worker which will satisfy this option, and then updated
 		// the option.
 		t.Run(fmt.Sprintf("test-%s", "set database options db min back to 3"), func(t *testing.T) {
-			dbOptions.WorkersMin = 3
-			dbOptions.WorkersMax = 3
-			assert.NoError(t, schemar.SetDatabaseOptions(tx, qdb.QualifiedID(), dbOptions))
+			assert.NoError(t, schemar.SetDatabaseOption(tx, qdb.QualifiedID(), dax.DatabaseOptionWorkersMin, "3"))
 		})
 
 		// This implies that there is a condition where the database does not
@@ -1052,9 +1046,7 @@ func TestBalancer(t *testing.T) {
 
 		// Update database options on schemar so min worker for db is 3.
 		t.Run(fmt.Sprintf("test-%s", "set database options db min 3"), func(t *testing.T) {
-			dbOptions.WorkersMin = 3
-			dbOptions.WorkersMax = 3
-			assert.NoError(t, schemar.SetDatabaseOptions(tx, qdb.QualifiedID(), dbOptions))
+			assert.NoError(t, schemar.SetDatabaseOption(tx, qdb.QualifiedID(), dax.DatabaseOptionWorkersMin, "3"))
 		})
 
 		// Now, add a worker and confirm that it has received some jobs.

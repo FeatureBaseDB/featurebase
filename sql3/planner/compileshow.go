@@ -14,6 +14,65 @@ import (
 	"github.com/pkg/errors"
 )
 
+func (p *ExecutionPlanner) compileShowDatabasesStatement(stmt parser.Statement) (types.PlanOperator, error) {
+	dbs, err := p.schemaAPI.Databases(context.Background())
+	if err != nil {
+		return nil, errors.Wrap(err, "getting databases")
+	}
+
+	columns := []types.PlanExpression{
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "_id",
+			columnIndex: 0,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "name",
+			columnIndex: 1,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "owner",
+			columnIndex: 2,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "updated_by",
+			columnIndex: 3,
+			dataType:    parser.NewDataTypeString(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "created_at",
+			columnIndex: 4,
+			dataType:    parser.NewDataTypeTimestamp(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "updated_at",
+			columnIndex: 5,
+			dataType:    parser.NewDataTypeTimestamp(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "units",
+			columnIndex: 6,
+			dataType:    parser.NewDataTypeInt(),
+		},
+		&qualifiedRefPlanExpression{
+			tableName:   "fb_databases",
+			columnName:  "description",
+			columnIndex: 7,
+			dataType:    parser.NewDataTypeString(),
+		}}
+
+	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseDatabases(p, dbs)), p.sql), nil
+}
+
 func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (types.PlanOperator, error) {
 	tbls, err := p.schemaAPI.Tables(context.Background())
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
@@ -138,10 +139,24 @@ func (w *Writelogger) Lock(bucket, key string) error {
 		return errors.Wrapf(err, "lock dir %s", lockDir)
 	}
 
-	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|syscall.O_NONBLOCK, 0644)
-	if err != nil {
+	// We introduced this retry logic when we thought that a node which was
+	// having its partition ownership removed (in place of this node) was still
+	// holding the lock. While that still may be the case, it's more likely that
+	// the problem we were seeing was that we weren't actually calling
+	// `resource.Unlock()` in ApplyDirective for resources being removed. With
+	// that said, it doesn't hurt to leave this retry logic here.
+	var f *os.File
+	var err error
+	if err := w.retryUntil(10*time.Second, func() error {
+		f, err = os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|syscall.O_NONBLOCK, 0644)
+		if err != nil {
+			return errors.Wrapf(err, "opening lock file: %s", lockFile)
+		}
+		return nil
+	}); err != nil {
 		return errors.Wrapf(err, "opening lock file: %s", lockFile)
 	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.lockFiles[lockFile] = f
@@ -154,7 +169,29 @@ func (w *Writelogger) Lock(bucket, key string) error {
 	// 	Type: syscall.F_WRLCK,
 	// })
 	return nil
+}
 
+// retryUntil repeatedly executes fn until it returns nil or timeout occurs.
+func (w *Writelogger) retryUntil(timeout time.Duration, fn func() error) (err error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	var i int
+	for {
+		if err = fn(); err == nil {
+			return nil
+		}
+		i++
+		w.logger.Debugf("Writelogger retryUntil try: %d", i)
+
+		select {
+		case <-timer.C:
+			return err
+		case <-ticker.C:
+		}
+	}
 }
 
 func (w *Writelogger) Unlock(bucket, key string) error {
