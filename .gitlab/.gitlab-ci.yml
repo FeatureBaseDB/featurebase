@@ -29,6 +29,13 @@ stages:
   - nonblocking
   - cleanup_build
 
+default:
+  image: $CI_IMAGE
+  tags: ["docker+machine"]
+  retry:
+    max: 2
+    when: runner_system_failure
+
 gosec-sast:
   allow_failure: false
   before_script:
@@ -60,11 +67,35 @@ gosec-sast:
     paths:
       - .go/pkg/mod/
 
+.fb-ci_aws_vars:
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  variables:
+    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
+    AWS_DEFAULT_REGION: "us-east-2"
+
+build_ci_image:
+  stage: ci_image_build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.9.1-debug
+    entrypoint: [""]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"' # must be limited to push since we're using 'changes' below
+      changes:
+        # Have to do both files right now because we use the GOVERSION variable specified in this file to
+        # change the GOVERSION installed in the image we create.
+        - .gitlab/Dockerfile-ci
+        - .gitlab/.gitlab-ci.yml
+  script:
+    - /kaniko/executor
+      --build-arg GOVERSION=$GOVERSION
+      --dockerfile "${CI_PROJECT_DIR}/.gitlab/Dockerfile-ci"
+      --destination "${CI_IMAGE}"
+      --cache=true
+
 smoke build:
-  image: golang:$GOVERSION
   extends: .go-cache
   stage: lint
-  allow_failure: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -84,7 +115,6 @@ golangci-lint:
 
 go mod tidy:
   stage: lint
-  image: golang:$GOVERSION
   extends: .go-cache
   rules:
     - if: '$CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
@@ -94,24 +124,14 @@ go mod tidy:
 
 build lattice:
   stage: test
-  image: node:14
+  extends: .fb-ci_aws_vars
   variables:
-    AWS_PROFILE: "service-fb-ci"
-    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     CI: "false"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   before_script:
-    - curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    - unzip -qq awscliv2.zip
-    - ./aws/install
     - aws --version
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $AWS_PROFILE
-    - aws sts get-caller-identity # ensure we have a valid AWS login
+    - aws sts get-caller-identity
   script:
     - cd lattice
     - cache=$(find . -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -d ' ' -f 1)
@@ -147,7 +167,6 @@ build lattice:
 
 build featurebase:
   stage: test
-  image: golang:$GOVERSION
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -157,10 +176,12 @@ build featurebase:
     - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
-    - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
-    - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
-    - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
-    - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          GOOS="${goos}" GOARCH="${goarch}" make build FLAGS="-o featurebase_${goos}_${goarch}"
+        done
+      done
   artifacts:
     paths:
       - featurebase_linux_amd64
@@ -170,6 +191,7 @@ build featurebase:
   needs:
     - job: build lattice
 
+# TODO use kaniko here... (how would the SOURCE_DATE_EPOCH part work?)
 build amd container fb:
   stage: test
   tags:
@@ -189,7 +211,6 @@ build amd container fb:
 
 run jest tests:
   stage: test
-  image: node:14
   variables:
     CI: "true"
   rules:
@@ -208,7 +229,6 @@ run jest tests:
 # long time and even now it's pretty slow.
 run go tests race:
   stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
-  image: golang:$GOVERSION
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -217,15 +237,12 @@ run go tests race:
     - echo "Running featurebase race tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
     - RAMDISK=/mnt/ramdisk go test -race -v -timeout=10m ${PKG_LIST//,/ }
-  tags:
-    - docker
 
 # We run our base tests against $GOVERSION (a reasonably current version that we trust)
 # and use shardwidth22 for them. This gives us a canary for things breaking for
 # unusual shard widths.
 run go tests:
   stage: test
-  image: golang:$GOVERSION
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -236,14 +253,9 @@ run go tests:
   artifacts:
     paths:
       - coverage.out
-  tags:
-    - docker
 
 run go tests dax/test/dax:
   stage: test
-  image: golang:$GOVERSION
-  tags:
-    - aws
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -400,7 +412,6 @@ upload to sonarcloud:
 
 package for linux amd64:
   stage: build
-  image: golang:$GOVERSION
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -408,8 +419,6 @@ package for linux amd64:
     GOOS: "linux"
     GOARCH: "amd64"
   script:
-    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
     - make package
   artifacts:
     paths:
@@ -437,7 +446,6 @@ trigger_m-cloud-images:
 
 package for linux arm64:
   stage: build
-  image: golang:$GOVERSION
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -445,14 +453,13 @@ package for linux arm64:
     GOOS: "linux"
     GOARCH: "arm64"
   script:
-    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
     - make package
   artifacts:
     paths:
       - "*.deb"
       - "*.rpm"
 
+# TODO: do this with kaniko
 build arm container fb:
   stage: build
   needs:
@@ -519,6 +526,7 @@ idk build_arm64:
 
 # building them all serially because otherwise you get container name conflicts.
 # only do containers on default branch
+# TODO do this with kaniko
 idk package_docker_all:
   stage: build
   tags:
@@ -536,21 +544,12 @@ idk package_docker_all:
 
 idk s3 dump:
   stage: post build
-  allow_failure: false
-  variables:
-    PROFILE: "service-fb-ci"
-    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-  tags:
-    - shell
+  extends: .fb-ci_aws_vars
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  before_script:
+    - aws sts get-caller-identity
   script:
-    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
     - aws s3 cp ./idk/build/ s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/ --recursive
     - aws s3 cp ./idk/build/ s3://molecula-artifact-storage/idk/${CI_COMMIT_BRANCH}/_latest/ --recursive
   needs:
@@ -559,21 +558,14 @@ idk s3 dump:
 
 idk s3 dump tag:
   stage: post build
+  extends: .fb-ci_aws_vars
   variables:
-    PROFILE: "service-fb-ci"
-    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     LOCATION: molecula-artifact-storage/idk/_tags
-  tags:
-    - shell
   rules:
     - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web")'
+  before_script:
+    - aws sts get-caller-identity # ensure we have valid login
   script:
-    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
     - |
       for goos in "darwin" "linux"; do
         for goarch in "amd64" "arm64"; do
@@ -593,7 +585,6 @@ idk s3 dump tag:
 
 external lookup tests:
   stage: integration
-  image: golang:$GOVERSION
   extends: .go-cache
   # TODO: no rules here, do we need to add the rules line?
   variables:
@@ -610,48 +601,32 @@ external lookup tests:
 
 s3 dump:
   stage: post build
-  variables:
-    PROFILE: "service-fb-ci"
-    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
-  tags:
-    - shell
+  extends: .fb-ci_aws_vars
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web"'
+  before_script:
+    - aws sts get-caller-identity # ensure we have a valid AWS login
   script:
-    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
-    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_amd64
-    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_amd64
-    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_arm64
-    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64
-    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_amd64
-    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_amd64
-    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
-    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          aws s3 cp "featurebase_${goos}_${goarch}" "s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_${goos}_${goarch}"
+          aws s3 cp "featurebase_${goos}_${goarch}" "s3://molecula-artifact-storage/featurbase/${CI_COMMIT_BRANCH}/_latest/featurebase_${goos}_${goarch}"
+        done
+      done
   needs:
     - job: build featurebase
 
 s3 dump tag:
   stage: post build
+  extends: .fb-ci_aws_vars
   variables:
-    PROFILE: "service-fb-ci"
-    AWS_SSH_PRIVATE_KEY: $AWS_FBCI_SSH_KEY
-    AWS_ACCESS_KEY_ID: $AWS_FBCI_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_FBCI_SECRET_ACCESS_KEY
     LOCATION: molecula-artifact-storage/featurebase/_tags
-  tags:
-    - shell
   rules:
     - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
+  before_script:
+    - aws sts get-caller-identity # ensure we have a valid AWS login
   script:
-    - aws configure set aws_access_key_id $AWS_FBCI_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
-    - aws configure set region "us-east-2"
-    - aws configure set aws_profile $PROFILE
     - |
       for goos in "darwin" "linux"; do
         for goarch in "amd64" "arm64"; do

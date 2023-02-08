@@ -1,0 +1,65 @@
+ARG GOVERSION
+FROM golang:$GOVERSION
+
+# not a secure way to do this
+RUN echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
+
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+  nfpm=2.11.3 \
+  unzip \
+  postgresql-client \
+  gnupg \
+  software-properties-common \
+  curl \
+  git \
+  jq \
+  wget \
+  git \
+  libnss3-tools \
+  xz-utils \
+  openssh-client \
+  ; \
+  wget -O- https://apt.releases.hashicorp.com/gpg | \
+  gpg --dearmor | \
+  tee /usr/share/keyrings/hashicorp-archive-keyring.gpg; \
+  echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list; \
+  apt-get update; \
+  apt-get install \
+  terraform \
+  ; \
+  rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+  curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"; \
+  unzip -qq awscliv2.zip; \
+  ./aws/install; \
+  rm -rf aws awscliv2.zip
+
+RUN go install github.com/rakyll/statik@v0.1.7
+
+ENV NODE_VERSION 14.21.1
+ENV ARCH x64
+
+# Still need to install nodejs somehow...
+RUN set -eux; \
+  curl -fsSLO --compressed "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$ARCH.tar.xz"; \
+  tar -xJf "node-v$NODE_VERSION-linux-$ARCH.tar.xz" -C /usr/local --strip-components=1 --no-same-owner; \
+  rm "node-v$NODE_VERSION-linux-$ARCH.tar.xz"; \
+  ln -s /usr/local/bin/node /usr/local/bin/nodejs; \
+  # smoke tests
+  node --version; \
+  npm --version
+
+ENV YARN_VERSION 1.22.19
+
+RUN set -eux; \
+  curl -fsSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz"; \
+  mkdir -p /opt; \
+  tar -xzf yarn-v$YARN_VERSION.tar.gz -C /opt/; \
+  ln -s /opt/yarn-v$YARN_VERSION/bin/yarn /usr/local/bin/yarn; \
+  ln -s /opt/yarn-v$YARN_VERSION/bin/yarnpkg /usr/local/bin/yarnpkg; \
+  rm yarn-v$YARN_VERSION.tar.gz; \
+  # smoke test
+  yarn --version
