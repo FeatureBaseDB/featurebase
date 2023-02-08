@@ -32,7 +32,7 @@ const (
 
 var (
 	ErrNoFieldSpec      = errors.New("no field spec in this header")
-	ErrInvalidFieldName = errors.New("field name must match [a-z][a-z0-9_-]{0,229}")
+	ErrInvalidFieldName = errors.New("field name must match [a-z][a-z0-9_-Θ]{0,229}")
 	ErrParsingEpoch     = "parsing epoch for "
 	ErrDecodingConfig   = "decoding config for field "
 )
