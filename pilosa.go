@@ -135,7 +135,7 @@ func newPreconditionFailedError(err error) PreconditionFailedError {
 }
 
 // Regular expression to validate index and field names.
-var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-Θ]{0,229}$`)
+var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9Θ_-]{0,229}$`)
 
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
