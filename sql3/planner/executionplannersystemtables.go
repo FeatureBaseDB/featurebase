@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -104,6 +105,7 @@ func indexInfoFromSystemTableB(st *systemTable) (*dax.Table, error) {
 
 	for _, f := range st.schema {
 		var baseType dax.BaseType
+		var epoch time.Time
 		switch f.Type.(type) {
 		case *parser.DataTypeInt:
 			baseType = dax.BaseTypeInt
@@ -113,13 +115,15 @@ func indexInfoFromSystemTableB(st *systemTable) (*dax.Table, error) {
 			baseType = dax.BaseTypeString
 		case *parser.DataTypeTimestamp:
 			baseType = dax.BaseTypeTimestamp
+			epoch = time.Unix(0, 0)
 		default:
 			return nil, sql3.NewErrInternalf("unexpected system table field type '%T'", f.Type)
 		}
-
+		_ = dax.FieldOptions{}
 		fld := &dax.Field{
-			Name: dax.FieldName(f.ColumnName),
-			Type: baseType,
+			Name:    dax.FieldName(f.ColumnName),
+			Type:    baseType,
+			Options: dax.FieldOptions{Epoch: epoch},
 		}
 		fields = append(fields, fld)
 	}
