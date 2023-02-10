@@ -643,7 +643,7 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 						return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
 					}
 					switch aggregable.AggExpression().Type().(type) {
-					case *parser.DataTypeID:
+					case *parser.DataTypeID, *parser.DataTypeString:
 						return thisNode, true, nil
 					}
 				}

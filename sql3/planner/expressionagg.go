@@ -619,6 +619,21 @@ func (m *aggregateMin) Update(ctx context.Context, row types.Row) error {
 			m.val = thisVal
 		}
 
+	case *parser.DataTypeString:
+		thisVal, ok := v.(string)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		aggVal, ok := m.val.(string)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		if thisVal < aggVal {
+			m.val = thisVal
+		}
+
 	default:
 		return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
 	}
@@ -753,6 +768,21 @@ func (m *aggregateMax) Update(ctx context.Context, row types.Row) error {
 		}
 
 		aggVal, ok := m.val.(int64)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		if thisVal > aggVal {
+			m.val = thisVal
+		}
+
+	case *parser.DataTypeString:
+		thisVal, ok := v.(string)
+		if !ok {
+			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+		}
+
+		aggVal, ok := m.val.(string)
 		if !ok {
 			return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
 		}

@@ -17,26 +17,27 @@ const (
 	ErrUnknownType       errors.Code = "ErrUnknownType"
 	ErrUnknownIdentifier errors.Code = "ErrUnknownIdentifier"
 
-	ErrTypeIncompatibleWithBitwiseOperator       errors.Code = "ErrTypeIncompatibleWithBitwiseOperator"
-	ErrTypeIncompatibleWithLogicalOperator       errors.Code = "ErrTypeIncompatibleWithLogicalOperator"
-	ErrTypeIncompatibleWithEqualityOperator      errors.Code = "ErrTypeIncompatibleWithEqualityOperator"
-	ErrTypeIncompatibleWithComparisonOperator    errors.Code = "ErrTypeIncompatibleWithComparisonOperator"
-	ErrTypeIncompatibleWithArithmeticOperator    errors.Code = "ErrTypeIncompatibleWithArithmeticOperator"
-	ErrTypeIncompatibleWithConcatOperator        errors.Code = "ErrTypeIncompatibleWithConcatOperator"
-	ErrTypeIncompatibleWithLikeOperator          errors.Code = "ErrTypeIncompatibleWithLikeOperator"
-	ErrTypeIncompatibleWithBetweenOperator       errors.Code = "ErrTypeIncompatibleWithBetweenOperator"
-	ErrTypeCannotBeUsedAsRangeSubscript          errors.Code = "ErrTypeCannotBeUsedAsRangeSubscript"
-	ErrTypesAreNotEquatable                      errors.Code = "ErrTypesAreNotEquatable"
-	ErrTypeMismatch                              errors.Code = "ErrTypeMismatch"
-	ErrIncompatibleTypesForRangeSubscripts       errors.Code = "ErrIncompatibleTypesForRangeSubscripts"
-	ErrExpressionListExpected                    errors.Code = "ErrExpressionListExpected"
-	ErrBooleanExpressionExpected                 errors.Code = "ErrBooleanExpressionExpected"
-	ErrIntExpressionExpected                     errors.Code = "ErrIntExpressionExpected"
-	ErrIntOrDecimalExpressionExpected            errors.Code = "ErrIntOrDecimalExpressionExpected"
-	ErrIntOrDecimalOrTimestampExpressionExpected errors.Code = "ErrIntOrDecimalOrTimestampExpressionExpected"
-	ErrStringExpressionExpected                  errors.Code = "ErrStringExpressionExpected"
-	ErrSetExpressionExpected                     errors.Code = "ErrSetExpressionExpected"
-	ErrSingleRowExpected                         errors.Code = "ErrSingleRowExpected"
+	ErrTypeIncompatibleWithBitwiseOperator               errors.Code = "ErrTypeIncompatibleWithBitwiseOperator"
+	ErrTypeIncompatibleWithLogicalOperator               errors.Code = "ErrTypeIncompatibleWithLogicalOperator"
+	ErrTypeIncompatibleWithEqualityOperator              errors.Code = "ErrTypeIncompatibleWithEqualityOperator"
+	ErrTypeIncompatibleWithComparisonOperator            errors.Code = "ErrTypeIncompatibleWithComparisonOperator"
+	ErrTypeIncompatibleWithArithmeticOperator            errors.Code = "ErrTypeIncompatibleWithArithmeticOperator"
+	ErrTypeIncompatibleWithConcatOperator                errors.Code = "ErrTypeIncompatibleWithConcatOperator"
+	ErrTypeIncompatibleWithLikeOperator                  errors.Code = "ErrTypeIncompatibleWithLikeOperator"
+	ErrTypeIncompatibleWithBetweenOperator               errors.Code = "ErrTypeIncompatibleWithBetweenOperator"
+	ErrTypeCannotBeUsedAsRangeSubscript                  errors.Code = "ErrTypeCannotBeUsedAsRangeSubscript"
+	ErrTypesAreNotEquatable                              errors.Code = "ErrTypesAreNotEquatable"
+	ErrTypeMismatch                                      errors.Code = "ErrTypeMismatch"
+	ErrIncompatibleTypesForRangeSubscripts               errors.Code = "ErrIncompatibleTypesForRangeSubscripts"
+	ErrExpressionListExpected                            errors.Code = "ErrExpressionListExpected"
+	ErrBooleanExpressionExpected                         errors.Code = "ErrBooleanExpressionExpected"
+	ErrIntExpressionExpected                             errors.Code = "ErrIntExpressionExpected"
+	ErrIntOrDecimalExpressionExpected                    errors.Code = "ErrIntOrDecimalExpressionExpected"
+	ErrIntOrDecimalOrTimestampExpressionExpected         errors.Code = "ErrIntOrDecimalOrTimestampExpressionExpected"
+	ErrIntOrDecimalOrTimestampOrStringExpressionExpected errors.Code = "ErrIntOrDecimalOrTimestampOrStringExpressionExpected"
+	ErrStringExpressionExpected                          errors.Code = "ErrStringExpressionExpected"
+	ErrSetExpressionExpected                             errors.Code = "ErrSetExpressionExpected"
+	ErrSingleRowExpected                                 errors.Code = "ErrSingleRowExpected"
 
 	// type related errors
 
@@ -419,6 +420,13 @@ func NewErrIntOrDecimalOrTimestampExpressionExpected(line, col int) error {
 	return errors.New(
 		ErrIntOrDecimalOrTimestampExpressionExpected,
 		fmt.Sprintf("[%d:%d] integer, decimal or timestamp expression expected", line, col),
+	)
+}
+
+func NewErrIntOrDecimalOrTimestampOrStringExpressionExpected(line, col int) error {
+	return errors.New(
+		ErrIntOrDecimalOrTimestampOrStringExpressionExpected,
+		fmt.Sprintf("[%d:%d] integer, decimal, timestamp or string expression expected", line, col),
 	)
 }
 
