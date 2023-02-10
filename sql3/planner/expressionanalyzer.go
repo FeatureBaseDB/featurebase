@@ -807,11 +807,11 @@ func (p *ExecutionPlanner) analyzeRangeExpression(ctx context.Context, expr *par
 	if !typeCanBeUsedInRange(expr.Y.DataType()) {
 		return nil, sql3.NewErrTypeCannotBeUsedAsRangeSubscript(expr.Y.Pos().Line, expr.Y.Pos().Column, expr.Y.DataType().TypeDescription())
 	}
-	if !typesOfRangeBoundsAreTheSame(expr.X.DataType(), expr.Y.DataType()) {
+	canbeUsed, coercedType := typesOfRangeBoundsAreTheSame(expr.X.DataType(), expr.Y.DataType())
+	if !canbeUsed {
 		return nil, sql3.NewErrIncompatibleTypesForRangeSubscripts(expr.Pos().Line, expr.Pos().Column, expr.X.DataType().TypeDescription(), expr.Y.DataType().TypeDescription())
 	}
-
-	expr.ResultDataType = parser.NewDataTypeRange(expr.X.DataType())
+	expr.ResultDataType = parser.NewDataTypeRange(coercedType)
 
 	return expr, nil
 }

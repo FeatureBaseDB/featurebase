@@ -181,20 +181,34 @@ func typesAreRangeComparable(testTypeL parser.ExprDataType, testTypeR parser.Exp
 
 			default:
 				return false, sql3.NewErrInternalf("unhandled rhs type '%T' for lhs type '%T'", rhsType, lhsType)
-
 			}
+
 		case *parser.DataTypeInt, *parser.DataTypeID:
 			switch lhsType := testTypeL.(type) {
 			case *parser.DataTypeID:
 				return true, nil
 			case *parser.DataTypeInt:
 				return true, nil
+			case *parser.DataTypeDecimal:
+				// change subscript type to be decimal
+				rhsType.SubscriptType = lhsType
+				return true, nil
 
 			default:
 				return false, sql3.NewErrInternalf("unhandled rhs type '%T' for lhs type '%T'", rhsType, lhsType)
-
 			}
+
+		case *parser.DataTypeDecimal:
+			switch lhsType := testTypeL.(type) {
+			case *parser.DataTypeDecimal:
+				return true, nil
+
+			default:
+				return false, sql3.NewErrInternalf("unhandled rhs type '%T' for lhs type '%T'", rhsType, lhsType)
+			}
+
 		}
+
 	default:
 		return false, sql3.NewErrInternalf("type '%T' is not a range type", rhsType)
 	}
@@ -363,7 +377,7 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 // returns true if the type can be used as a range subscript
 func typeCanBeUsedInRange(testType parser.ExprDataType) bool {
 	switch testType.(type) {
-	case *parser.DataTypeID, *parser.DataTypeInt, *parser.DataTypeTimestamp:
+	case *parser.DataTypeID, *parser.DataTypeInt, *parser.DataTypeTimestamp, *parser.DataTypeDecimal:
 		return true
 	default:
 		return false
@@ -371,43 +385,62 @@ func typeCanBeUsedInRange(testType parser.ExprDataType) bool {
 }
 
 // returns true if the types can be considered the same when used as a range bounds
-func typesOfRangeBoundsAreTheSame(testTypeL parser.ExprDataType, testTypeR parser.ExprDataType) bool {
+func typesOfRangeBoundsAreTheSame(testTypeL parser.ExprDataType, testTypeR parser.ExprDataType) (bool, parser.ExprDataType) {
 	switch testTypeL.(type) {
 	case *parser.DataTypeInt:
 		switch testTypeR.(type) {
 		case *parser.DataTypeInt:
-			return true
+			return true, testTypeL
 
 		case *parser.DataTypeID:
-			return true
+			return true, testTypeL
+
+		case *parser.DataTypeDecimal:
+			// 'widen' both to decimal
+			return true, testTypeR
 
 		default:
-			return false
+			return false, nil
 		}
 
 	case *parser.DataTypeID:
 		switch testTypeR.(type) {
 		case *parser.DataTypeID:
-			return true
+			return true, testTypeL
 
 		case *parser.DataTypeInt:
-			return true
+			return true, testTypeL
 
 		default:
-			return false
+			return false, nil
 		}
 
 	case *parser.DataTypeTimestamp:
 		switch testTypeR.(type) {
 		case *parser.DataTypeTimestamp:
-			return true
+			return true, testTypeL
 
 		default:
-			return false
+			return false, nil
+		}
+
+	case *parser.DataTypeDecimal:
+		switch testTypeR.(type) {
+		case *parser.DataTypeInt:
+			return true, testTypeL
+
+		case *parser.DataTypeID:
+			return true, testTypeL
+
+		case *parser.DataTypeDecimal:
+			return true, testTypeL
+
+		default:
+			return false, nil
 		}
 
 	default:
-		return false
+		return false, nil
 	}
 }
 

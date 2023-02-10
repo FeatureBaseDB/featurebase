@@ -810,7 +810,7 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		return res, errors.Wrap(err, "executeUnionRows")
 	case "ConstRow":
 		statFn(CounterQueryConstRowTotal)
-		res, err := e.executeConstRow(ctx, index, c)
+		res, err := e.executeConstRow(ctx, qcx, index, c, opt)
 		return res, errors.Wrap(err, "executeConstRow")
 	case "Limit":
 		statFn(CounterQueryLimitTotal)
@@ -5356,14 +5356,96 @@ func (e *executor) executeNotShard(ctx context.Context, qcx *Qcx, index string, 
 	return existenceRow.Difference(row), nil
 }
 
-func (e *executor) executeConstRow(ctx context.Context, index string, c *pql.Call) (res *Row, err error) {
+func (e *executor) executeConstRow(ctx context.Context, qcx *Qcx, index string, c *pql.Call, opt *ExecOptions) (res *Row, err error) {
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, newNotFoundError(ErrIndexNotFound, index)
+	} else if idx.existenceField() == nil {
+		ids, ok := c.Args["columns"].([]uint64)
+		if !ok {
+			return nil, errors.New("missing columns list")
+		}
+		return NewRow(ids...), nil
+	}
 	// Fetch user-provided columns list.
-	ids, ok := c.Args["columns"].([]uint64)
-	if !ok {
-		return nil, errors.New("missing columns list")
+	availableBitmap := roaring.NewBitmap()
+	var records []uint64
+	if opt.Remote {
+		ids, _ := c.Args["columns"].([]interface{})
+		if len(ids) == 0 {
+			return NewRow(), nil
+		}
+		for _, idi := range ids {
+			id := idi.(int64)
+			availableBitmap.Add(uint64(id) / ShardWidth)
+			records = append(records, uint64(id))
+		}
+
+	} else {
+		ids, ok := c.Args["columns"].([]uint64)
+		if !ok {
+			return nil, errors.New("missing columns list")
+		}
+		if len(ids) == 0 {
+			return NewRow(), nil
+		}
+		for _, id := range ids {
+			availableBitmap.Add(id / ShardWidth)
+			records = append(records, id)
+		}
 	}
 
-	return NewRow(ids...), nil
+	filteredShards := availableBitmap.Slice()
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
+		return e.executeConstRowShard(ctx, qcx, index, c, shard, NewRow(records...))
+	}
+	// Merge returned results at coordinating node.
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+		other, _ := prev.(*Row)
+		if other == nil {
+			other = NewRow()
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		other.Merge(v.(*Row))
+		return other
+	}
+
+	other, err := e.mapReduce(ctx, index, filteredShards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "map reduce")
+	}
+
+	row, _ := other.(*Row)
+
+	return row, nil
+}
+
+func (e *executor) executeConstRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, src *Row) (res *Row, err error) {
+	idx := e.Holder.Index(index)
+	var existenceRow *Row
+	existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
+	if existenceFrag == nil {
+		existenceRow = NewRow()
+	} else {
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Fragment: existenceFrag, Shard: shard})
+		if err != nil {
+			return nil, err
+		}
+
+		defer finisher(&err)
+
+		if existenceRow, err = existenceFrag.row(tx, 0); err != nil {
+			return nil, err
+		}
+
+	}
+	return src.Intersect(existenceRow), nil
 }
 
 func (e *executor) executeUnionRows(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*Row, error) {

@@ -369,7 +369,7 @@ func NewErrTypeCannotBeUsedAsRangeSubscript(line, col int, type1 string) error {
 func NewErrIncompatibleTypesForRangeSubscripts(line, col int, type1 string, type2 string) error {
 	return errors.New(
 		ErrIncompatibleTypesForRangeSubscripts,
-		fmt.Sprintf("[%d:%d] incompatible types '%s' and '%s' useds as range subscripts", line, col, type1, type2),
+		fmt.Sprintf("[%d:%d] incompatible types '%s' and '%s' used as range subscripts", line, col, type1, type2),
 	)
 }
 
