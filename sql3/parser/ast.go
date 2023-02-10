@@ -1593,6 +1593,10 @@ func IdentName(ident *Ident) string {
 	return ident.Name
 }
 
+func CaseNeutralIdentName(ident *Ident) string {
+	return strings.ToLower(IdentName(ident))
+}
+
 type Variable struct {
 	NamePos       Pos    // variable position
 	Name          string // variable name

@@ -15,7 +15,7 @@ import (
 // compileDropTableStatement compiles a DROP TABLE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileDropTableStatement(stmt *parser.DropTableStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.Name)
+	tableName := parser.CaseNeutralIdentName(stmt.Name)
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
 	if err != nil {

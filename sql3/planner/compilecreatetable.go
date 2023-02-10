@@ -25,7 +25,7 @@ type createTableField struct {
 // compileCreateTableStatement compiles a CREATE TABLE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.Name)
+	tableName := parser.CaseNeutralIdentName(stmt.Name)
 	failIfExists := !stmt.IfNotExists.IsValid()
 
 	// apply table options
@@ -50,7 +50,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 
 	var columns = []*createTableField{}
 	for _, col := range stmt.Columns {
-		columnName := parser.IdentName(col.Name)
+		columnName := parser.CaseNeutralIdentName(col.Name)
 		typeName := parser.IdentName(col.Type.Name)
 
 		if strings.ToLower(columnName) == "_id" {
@@ -77,7 +77,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 // compiles a column def
 func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createTableField, error) {
 	var err error
-	columnName := parser.IdentName(col.Name)
+	columnName := parser.CaseNeutralIdentName(col.Name)
 	typeName := parser.IdentName(col.Type.Name)
 
 	column := &createTableField{
