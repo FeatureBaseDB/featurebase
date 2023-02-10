@@ -686,6 +686,20 @@ func TestPlanner_CreateTable(t *testing.T) {
 		}
 	})
 
+	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, server, `create table lowercase (_id id, name string, SomeColumn string, legalname string);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, server, `create table MixedCcase (_id id, name string, SomeColumn string, legalname string);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("DropTable1", func(t *testing.T) {
 		_, _, err := sql_test.MustQueryRows(t, server, `drop table allcoltypes`)
 		if err != nil {

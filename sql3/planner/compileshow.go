@@ -139,7 +139,7 @@ func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt 
 }
 
 func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.TableName)
+	tableName := strings.ToLower(parser.IdentName(stmt.TableName))
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
@@ -225,7 +225,7 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt
 }
 
 func (p *ExecutionPlanner) compileShowCreateTableStatement(ctx context.Context, stmt *parser.ShowCreateTableStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.TableName)
+	tableName := strings.ToLower(parser.IdentName(stmt.TableName))
 	tname := dax.TableName(tableName)
 	if _, err := p.schemaAPI.TableByName(ctx, tname); err != nil {
 		if isTableNotFoundError(err) {

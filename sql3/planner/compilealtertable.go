@@ -24,7 +24,7 @@ const (
 // compileAlterTableStatement compiles an ALTER TABLE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileAlterTableStatement(ctx context.Context, stmt *parser.AlterTableStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.Name)
+	tableName := strings.ToLower(parser.IdentName(stmt.Name))
 
 	// does the table exist
 	tname := dax.TableName(tableName)
@@ -37,7 +37,7 @@ func (p *ExecutionPlanner) compileAlterTableStatement(ctx context.Context, stmt 
 	}
 
 	if stmt.Drop.IsValid() {
-		columnName := parser.IdentName(stmt.DropColumnName)
+		columnName := strings.ToLower(parser.IdentName(stmt.DropColumnName))
 
 		// does this column exist
 		found := false
@@ -54,7 +54,7 @@ func (p *ExecutionPlanner) compileAlterTableStatement(ctx context.Context, stmt 
 		return NewPlanOpQuery(p, NewPlanOpAlterTable(p, tableName, alterOpDrop, columnName, "", nil), p.sql), nil
 	} else if stmt.Add.IsValid() {
 		col := stmt.ColumnDef
-		columnName := parser.IdentName(col.Name)
+		columnName := strings.ToLower(parser.IdentName(col.Name))
 
 		// does this column exist
 		for _, f := range tbl.Fields {
@@ -70,8 +70,8 @@ func (p *ExecutionPlanner) compileAlterTableStatement(ctx context.Context, stmt 
 		return NewPlanOpQuery(p, NewPlanOpAlterTable(p, tableName, alterOpAdd, "", columnName, column), p.sql), nil
 
 	} else if stmt.Rename.IsValid() {
-		oldColumnName := parser.IdentName(stmt.OldColumnName)
-		newColumnName := parser.IdentName(stmt.NewColumnName)
+		oldColumnName := strings.ToLower(parser.IdentName(stmt.OldColumnName))
+		newColumnName := strings.ToLower(parser.IdentName(stmt.NewColumnName))
 		return NewPlanOpQuery(p, NewPlanOpAlterTable(p, tableName, alterOpRename, oldColumnName, newColumnName, nil), p.sql), nil
 	} else {
 		return nil, sql3.NewErrInternal("unhandled alter operation")
@@ -86,7 +86,7 @@ func (p *ExecutionPlanner) analyzeAlterTableStatement(stmt *parser.AlterTableSta
 		//no checks for now
 	} else if stmt.Add.IsValid() {
 		col := stmt.ColumnDef
-		columnName := parser.IdentName(col.Name)
+		columnName := strings.ToLower(parser.IdentName(col.Name))
 		typeName := parser.IdentName(col.Type.Name)
 		if !parser.IsValidTypeName(typeName) {
 			return sql3.NewErrUnknownType(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column, typeName)
@@ -103,8 +103,8 @@ func (p *ExecutionPlanner) analyzeAlterTableStatement(stmt *parser.AlterTableSta
 		}
 	} else if stmt.Rename.IsValid() {
 		//check the new and old are not the same
-		oldColumnName := parser.IdentName(stmt.OldColumnName)
-		newColumnName := parser.IdentName(stmt.NewColumnName)
+		oldColumnName := strings.ToLower(parser.IdentName(stmt.OldColumnName))
+		newColumnName := strings.ToLower(parser.IdentName(stmt.NewColumnName))
 		if strings.EqualFold(oldColumnName, newColumnName) {
 			return sql3.NewErrDuplicateColumn(stmt.NewColumnName.NamePos.Line, stmt.NewColumnName.NamePos.Column, newColumnName)
 		}

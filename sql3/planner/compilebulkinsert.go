@@ -20,7 +20,7 @@ import (
 // compileBulkInsertStatement compiles a BULK INSERT statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileBulkInsertStatement(ctx context.Context, stmt *parser.BulkInsertStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.Table)
+	tableName := strings.ToLower(parser.IdentName(stmt.Table))
 
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(ctx, tname)
@@ -159,7 +159,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(ctx context.Context, stmt 
 // error if anything is invalid.
 func (p *ExecutionPlanner) analyzeBulkInsertStatement(ctx context.Context, stmt *parser.BulkInsertStatement) error {
 	// check referred to table exists
-	tableName := parser.IdentName(stmt.Table)
+	tableName := strings.ToLower(parser.IdentName(stmt.Table))
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {

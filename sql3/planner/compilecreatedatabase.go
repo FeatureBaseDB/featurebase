@@ -4,6 +4,7 @@ package planner
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
@@ -13,7 +14,7 @@ import (
 // compileCreateDatabaseStatement compiles a CREATE DATABASE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileCreateDatabaseStatement(stmt *parser.CreateDatabaseStatement) (_ types.PlanOperator, err error) {
-	databaseName := parser.IdentName(stmt.Name)
+	databaseName := strings.ToLower(parser.IdentName(stmt.Name))
 	failIfExists := !stmt.IfNotExists.IsValid()
 
 	units := 0

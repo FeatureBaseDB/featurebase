@@ -2592,7 +2592,7 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 		return ref, nil
 
 	case *parser.QualifiedRef:
-		ref := newQualifiedRefPlanExpression(parser.IdentName(expr.Table), parser.IdentName(expr.Column), expr.ColumnIndex, expr.DataType())
+		ref := newQualifiedRefPlanExpression(strings.ToLower(parser.IdentName(expr.Table)), strings.ToLower(parser.IdentName(expr.Column)), expr.ColumnIndex, expr.DataType())
 		return ref, nil
 
 	case *parser.Range:
