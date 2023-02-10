@@ -188,7 +188,7 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("uri"),
 			wireQueryFieldString("grpc_uri"),
 			wireQueryFieldBool("is_primary"),
-			wireQueryFieldBool("space_used"),
+			wireQueryFieldInt("space_used"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
