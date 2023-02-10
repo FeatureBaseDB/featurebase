@@ -2341,3 +2341,58 @@ func testImportBatchBools(t *testing.T, importer featurebase.Importer, sapi feat
 	assert.True(t, ok, "wrong return type: %T", resp.Results[0])
 	assert.Equal(t, uint64(2), count)
 }
+
+func TestConvert(t *testing.T) {
+	t.Run("timestampToInt", func(t *testing.T) {
+		tests := []struct {
+			unit TimeUnit
+			ts   string
+			exp  int64
+		}{
+			{unit: "s", ts: "2022-01-01T00:00:00Z", exp: 1640995200},
+			{unit: "ms", ts: "2022-01-01T00:00:00Z", exp: 1640995200000},
+			{unit: "us", ts: "2022-01-01T00:00:00Z", exp: 1640995200000000},
+			{unit: "ns", ts: "2022-01-01T00:00:00Z", exp: 1640995200000000000},
+			{unit: "x", ts: "2022-01-01T00:00:00Z", exp: 0},
+		}
+		for i, test := range tests {
+			t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
+				ts, err := time.Parse(time.RFC3339, test.ts)
+				assert.NoError(t, err)
+				v := timestampToInt(test.unit, ts)
+				assert.Equal(t, test.exp, v)
+			})
+		}
+	})
+
+	t.Run("Int64ToTimestamp", func(t *testing.T) {
+		tests := []struct {
+			unit  TimeUnit
+			epoch string
+			val   int64
+			exp   time.Time
+		}{
+			{
+				unit:  "ms",
+				epoch: "2022-01-01T00:00:00Z",
+				val:   0,
+				exp:   time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC),
+			},
+			{
+				unit:  "s",
+				epoch: "2022-01-01T00:00:00Z",
+				val:   86400,
+				exp:   time.Date(2022, 1, 2, 0, 0, 0, 0, time.UTC),
+			},
+		}
+		for i, test := range tests {
+			t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
+				epoch, err := time.Parse(time.RFC3339, test.epoch)
+				assert.NoError(t, err)
+				ts, err := Int64ToTimestamp(test.unit, epoch, test.val)
+				assert.NoError(t, err)
+				assert.Equal(t, test.exp, ts)
+			})
+		}
+	})
+}
