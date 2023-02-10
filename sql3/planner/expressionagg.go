@@ -435,6 +435,15 @@ func (a *aggregateAvg) Update(ctx context.Context, row types.Row) error {
 			thisVal := pql.FromInt64(thisIVal, returnType.Scale)
 			a.sum = pql.AddDecimal(thisVal, aggVal)
 
+		case *parser.DataTypeID:
+			thisIVal, ok := v.(uint64)
+			if !ok {
+				return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
+			}
+
+			thisVal := pql.FromInt64(int64(thisIVal), returnType.Scale)
+			a.sum = pql.AddDecimal(thisVal, aggVal)
+
 		default:
 			return sql3.NewErrInternalf("unhandled aggregate expression datatype '%T'", dataType)
 		}

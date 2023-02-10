@@ -636,6 +636,18 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 					return thisNode, true, nil
 				}
 
+				// make sure all the aggregates are bsi types
+				for _, agg := range thisNode.Aggregates {
+					aggregable, ok := agg.(types.Aggregable)
+					if !ok {
+						return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
+					}
+					switch aggregable.AggExpression().Type().(type) {
+					case *parser.DataTypeID:
+						return thisNode, true, nil
+					}
+				}
+
 				ops := make([]*PlanOpPQLAggregate, 0)
 
 				for _, agg := range thisNode.Aggregates {
