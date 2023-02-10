@@ -19,11 +19,11 @@ import (
 
 // compileBulkInsertStatement compiles a BULK INSERT statement into a
 // PlanOperator.
-func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileBulkInsertStatement(ctx context.Context, stmt *parser.BulkInsertStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Table)
 
 	tname := dax.TableName(tableName)
-	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -31,7 +31,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 		return nil, err
 	}
 
-	err = p.checkAccess(context.Background(), tableName, accessTypeWriteData)
+	err = p.checkAccess(ctx, tableName, accessTypeWriteData)
 	if err != nil {
 		return nil, err
 	}
@@ -157,11 +157,11 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(stmt *parser.BulkInsertSta
 
 // analyzeBulkInsertStatement analyzes a BULK INSERT statement and returns an
 // error if anything is invalid.
-func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertStatement) error {
+func (p *ExecutionPlanner) analyzeBulkInsertStatement(ctx context.Context, stmt *parser.BulkInsertStatement) error {
 	// check referred to table exists
 	tableName := parser.IdentName(stmt.Table)
 	tname := dax.TableName(tableName)
-	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
 			return sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -293,7 +293,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		if !parser.IsValidTypeName(typeName) {
 			return sql3.NewErrUnknownType(m.Type.Name.NamePos.Line, m.Type.Name.NamePos.Column, typeName)
 		}
-		ex, err := p.analyzeExpression(m.MapExpr, stmt)
+		ex, err := p.analyzeExpression(ctx, m.MapExpr, stmt)
 		if err != nil {
 			return err
 		}
@@ -330,7 +330,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(stmt *parser.BulkInsertSta
 		}
 
 		for i, t := range stmt.TransformList {
-			ex, err := p.analyzeExpression(t, stmt)
+			ex, err := p.analyzeExpression(ctx, t, stmt)
 			if err != nil {
 				return err
 			}

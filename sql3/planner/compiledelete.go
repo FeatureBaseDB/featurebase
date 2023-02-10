@@ -3,6 +3,8 @@
 package planner
 
 import (
+	"context"
+
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
@@ -52,16 +54,16 @@ func (p *ExecutionPlanner) compileDeleteStatement(stmt *parser.DeleteStatement) 
 	return query.WithChildren(children...)
 }
 
-func (p *ExecutionPlanner) analyzeDeleteStatement(stmt *parser.DeleteStatement) error {
+func (p *ExecutionPlanner) analyzeDeleteStatement(ctx context.Context, stmt *parser.DeleteStatement) error {
 
-	_, err := p.analyzeSource(stmt.Source, stmt)
+	_, err := p.analyzeSource(ctx, stmt.Source, stmt)
 	if err != nil {
 		return err
 	}
 
 	// if we have a where clause, check that
 	if stmt.WhereExpr != nil {
-		expr, err := p.analyzeExpression(stmt.WhereExpr, stmt)
+		expr, err := p.analyzeExpression(ctx, stmt.WhereExpr, stmt)
 		if err != nil {
 			return err
 		}

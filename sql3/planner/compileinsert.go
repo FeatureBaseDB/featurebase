@@ -14,14 +14,14 @@ import (
 )
 
 // compileInsertStatement compiles an INSERT statement into a PlanOperator.
-func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileInsertStatement(ctx context.Context, stmt *parser.InsertStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Table)
 
 	targetColumns := []*qualifiedRefPlanExpression{}
 	insertValues := [][]types.PlanExpression{}
 
 	tname := dax.TableName(tableName)
-	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -72,11 +72,11 @@ func (p *ExecutionPlanner) compileInsertStatement(stmt *parser.InsertStatement) 
 
 // analyzeInsertStatement analyzes an INSERT statement and returns and error if
 // anything is invalid.
-func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) error {
+func (p *ExecutionPlanner) analyzeInsertStatement(ctx context.Context, stmt *parser.InsertStatement) error {
 	// Check that referred table exists.
 	tableName := parser.IdentName(stmt.Table)
 	tname := dax.TableName(tableName)
-	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
 			return sql3.NewErrTableNotFound(stmt.Table.NamePos.Line, stmt.Table.NamePos.Column, tableName)
@@ -171,7 +171,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(stmt *parser.InsertStatement) 
 	// Check each of the expressions.
 	for _, tuple := range stmt.TupleList {
 		for i, expr := range tuple.Exprs {
-			e, err := p.analyzeExpression(expr, stmt)
+			e, err := p.analyzeExpression(ctx, expr, stmt)
 			if err != nil {
 				return err
 			}

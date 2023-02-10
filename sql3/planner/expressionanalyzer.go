@@ -3,6 +3,7 @@
 package planner
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -11,23 +12,23 @@ import (
 )
 
 // analyze a parser.Expr. returns the analyzed parser.Expr
-func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyzeExpression(ctx context.Context, expr parser.Expr, scope parser.Statement) (parser.Expr, error) {
 	if expr == nil {
 		return nil, nil
 	}
 
 	switch e := expr.(type) {
 	case *parser.BinaryExpr:
-		return p.analyzeBinaryExpression(e, scope)
+		return p.analyzeBinaryExpression(ctx, e, scope)
 
 	case *parser.BoolLit:
 		return e, nil
 
 	case *parser.Call:
-		return p.analyzeCallExpression(e, scope)
+		return p.analyzeCallExpression(ctx, e, scope)
 
 	case *parser.CastExpr:
-		analyzedExpr, err := p.analyzeExpression(e.X, scope)
+		analyzedExpr, err := p.analyzeExpression(ctx, e.X, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -45,7 +46,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 
 	case *parser.ExprList:
 		for i, ex := range e.Exprs {
-			listExpr, err := p.analyzeExpression(ex, scope)
+			listExpr, err := p.analyzeExpression(ctx, ex, scope)
 			if err != nil {
 				return nil, err
 			}
@@ -80,7 +81,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 				},
 				ColumnIndex: oc.ColumnIndex,
 			}
-			return p.analyzeExpression(ident, scope)
+			return p.analyzeExpression(ctx, ident, scope)
 
 		case *parser.InsertStatement:
 			return nil, sql3.NewErrColumnNotFound(e.NamePos.Line, e.NamePos.Column, e.Name)
@@ -106,7 +107,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 				},
 				ColumnIndex: oc.ColumnIndex,
 			}
-			return p.analyzeExpression(ident, scope)
+			return p.analyzeExpression(ctx, ident, scope)
 
 		default:
 			return nil, sql3.NewErrInternalf("unhandled scope type '%T'", sc)
@@ -151,7 +152,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 		return e, nil
 
 	case *parser.ParenExpr:
-		pexpr, err := p.analyzeExpression(e.X, scope)
+		pexpr, err := p.analyzeExpression(ctx, e.X, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +161,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 
 	case *parser.SetLiteralExpr:
 		for i, ex := range e.Members {
-			listExpr, err := p.analyzeExpression(ex, scope)
+			listExpr, err := p.analyzeExpression(ctx, ex, scope)
 			if err != nil {
 				return nil, err
 			}
@@ -200,7 +201,7 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 	case *parser.TupleLiteralExpr:
 		memberTypes := make([]parser.ExprDataType, 0)
 		for i, ex := range e.Members {
-			memberExpr, err := p.analyzeExpression(ex, scope)
+			memberExpr, err := p.analyzeExpression(ctx, ex, scope)
 			if err != nil {
 				return nil, err
 			}
@@ -265,24 +266,24 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 		}
 
 	case *parser.Range:
-		return p.analyzeRangeExpression(e, scope)
+		return p.analyzeRangeExpression(ctx, e, scope)
 
 	case *parser.CaseExpr:
-		operand, err := p.analyzeExpression(e.Operand, scope)
+		operand, err := p.analyzeExpression(ctx, e.Operand, scope)
 		if err != nil {
 			return nil, err
 		}
 		e.Operand = operand
 
 		for i, ex := range e.Blocks {
-			block, err := p.analyzeCaseBlockExpression(ex, e, scope)
+			block, err := p.analyzeCaseBlockExpression(ctx, ex, e, scope)
 			if err != nil {
 				return nil, err
 			}
 			e.Blocks[i] = block
 		}
 
-		elseExpr, err := p.analyzeExpression(e.ElseExpr, scope)
+		elseExpr, err := p.analyzeExpression(ctx, e.ElseExpr, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -331,10 +332,10 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 		return e, nil
 
 	case *parser.UnaryExpr:
-		return p.analyzeUnaryExpression(e, scope)
+		return p.analyzeUnaryExpression(ctx, e, scope)
 
 	case *parser.SelectStatement:
-		selExpr, err := p.analyzeSelectStatement(e)
+		selExpr, err := p.analyzeSelectStatement(ctx, e)
 		if err != nil {
 			return nil, err
 		}
@@ -349,9 +350,9 @@ func (p *ExecutionPlanner) analyzeExpression(expr parser.Expr, scope parser.Stat
 	}
 }
 
-func (p *ExecutionPlanner) analyzeUnaryExpression(expr *parser.UnaryExpr, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyzeUnaryExpression(ctx context.Context, expr *parser.UnaryExpr, scope parser.Statement) (parser.Expr, error) {
 
-	x, err := p.analyzeExpression(expr.X, scope)
+	x, err := p.analyzeExpression(ctx, expr.X, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -390,15 +391,15 @@ func (p *ExecutionPlanner) analyzeUnaryExpression(expr *parser.UnaryExpr, scope 
 	}
 }
 
-func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyzeBinaryExpression(ctx context.Context, expr *parser.BinaryExpr, scope parser.Statement) (parser.Expr, error) {
 
 	//analyze both sides first
-	x, err := p.analyzeExpression(expr.X, scope)
+	x, err := p.analyzeExpression(ctx, expr.X, scope)
 	if err != nil {
 		return nil, err
 	}
 	expr.X = x
-	y, err := p.analyzeExpression(expr.Y, scope)
+	y, err := p.analyzeExpression(ctx, expr.Y, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -757,14 +758,14 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(expr *parser.BinaryExpr, scop
 	}
 }
 
-func (p *ExecutionPlanner) analyzeRangeExpression(expr *parser.Range, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyzeRangeExpression(ctx context.Context, expr *parser.Range, scope parser.Statement) (parser.Expr, error) {
 	//analyze subscripts
-	x, err := p.analyzeExpression(expr.X, scope)
+	x, err := p.analyzeExpression(ctx, expr.X, scope)
 	if err != nil {
 		return nil, err
 	}
 	expr.X = x
-	y, err := p.analyzeExpression(expr.Y, scope)
+	y, err := p.analyzeExpression(ctx, expr.Y, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -802,13 +803,13 @@ func (p *ExecutionPlanner) analyzeRangeExpression(expr *parser.Range, scope pars
 	return expr, nil
 }
 
-func (p *ExecutionPlanner) analyzeCaseBlockExpression(expr *parser.CaseBlock, caseScope *parser.CaseExpr, scope parser.Statement) (*parser.CaseBlock, error) {
-	x, err := p.analyzeExpression(expr.Body, scope)
+func (p *ExecutionPlanner) analyzeCaseBlockExpression(ctx context.Context, expr *parser.CaseBlock, caseScope *parser.CaseExpr, scope parser.Statement) (*parser.CaseBlock, error) {
+	x, err := p.analyzeExpression(ctx, expr.Body, scope)
 	if err != nil {
 		return nil, err
 	}
 	expr.Body = x
-	y, err := p.analyzeExpression(expr.Condition, scope)
+	y, err := p.analyzeExpression(ctx, expr.Condition, scope)
 	if err != nil {
 		return nil, err
 	}

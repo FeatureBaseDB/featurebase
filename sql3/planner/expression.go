@@ -1076,14 +1076,16 @@ func newSubqueryPlanExpression(op types.PlanOperator) *subqueryPlanExpression {
 }
 
 func (n *subqueryPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+	ctx := context.Background()
+
 	//get an iterator
-	iter, err := n.op.Iterator(context.Background(), currentRow)
+	iter, err := n.op.Iterator(ctx, currentRow)
 	if err != nil {
 		return nil, err
 	}
 
 	//get the first row
-	row, err := iter.Next(context.Background())
+	row, err := iter.Next(ctx)
 	if err != nil {
 		if err == types.ErrNoMoreRows {
 			//no rows, so return null
@@ -1095,7 +1097,7 @@ func (n *subqueryPlanExpression) Evaluate(currentRow []interface{}) (interface{}
 	result := row[0]
 
 	//make sure we don't have a next row - this is an error
-	_, err = iter.Next(context.Background())
+	_, err = iter.Next(ctx)
 	if err != nil && err == types.ErrNoMoreRows {
 		return result, nil
 	}
