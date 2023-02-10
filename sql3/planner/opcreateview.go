@@ -86,7 +86,7 @@ func newCreateViewIter(planner *ExecutionPlanner, ifNotExists bool, view *viewSy
 func (i *createViewIter) Next(ctx context.Context) (types.Row, error) {
 	// make sure we have no existing table named the same as our view
 	viewName := dax.TableName(i.view.name)
-	tbl, err := i.planner.schemaAPI.TableByName(context.Background(), viewName)
+	tbl, err := i.planner.schemaAPI.TableByName(ctx, viewName)
 	if err != nil {
 		if !isTableNotFoundError(err) {
 			return nil, err
@@ -100,7 +100,7 @@ func (i *createViewIter) Next(ctx context.Context) (types.Row, error) {
 	}
 
 	// now check in the views table to see if it is exists
-	v, err := i.planner.getViewByName(i.view.name)
+	v, err := i.planner.getViewByName(ctx, i.view.name)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (i *createViewIter) Next(ctx context.Context) (types.Row, error) {
 	}
 
 	// now store the view into fb_views
-	err = i.planner.insertView(i.view)
+	err = i.planner.insertView(ctx, i.view)
 	if err != nil {
 		return nil, err
 	}

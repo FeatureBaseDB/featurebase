@@ -14,8 +14,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (p *ExecutionPlanner) compileShowDatabasesStatement(stmt parser.Statement) (types.PlanOperator, error) {
-	dbs, err := p.schemaAPI.Databases(context.Background())
+func (p *ExecutionPlanner) compileShowDatabasesStatement(ctx context.Context, stmt parser.Statement) (types.PlanOperator, error) {
+	dbs, err := p.schemaAPI.Databases(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting databases")
 	}
@@ -73,8 +73,8 @@ func (p *ExecutionPlanner) compileShowDatabasesStatement(stmt parser.Statement) 
 	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseDatabases(p, dbs)), p.sql), nil
 }
 
-func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (types.PlanOperator, error) {
-	tbls, err := p.schemaAPI.Tables(context.Background())
+func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt parser.Statement) (types.PlanOperator, error) {
+	tbls, err := p.schemaAPI.Tables(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting tables")
 	}
@@ -138,10 +138,10 @@ func (p *ExecutionPlanner) compileShowTablesStatement(stmt parser.Statement) (ty
 	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(p, pilosa.TablesToIndexInfos(tbls))), p.sql), nil
 }
 
-func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.TableName)
 	tname := dax.TableName(tableName)
-	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
@@ -229,10 +229,10 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(stmt *parser.ShowColumnsS
 	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseColumns(tbl)), p.sql), nil
 }
 
-func (p *ExecutionPlanner) compileShowCreateTableStatement(stmt *parser.ShowCreateTableStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileShowCreateTableStatement(ctx context.Context, stmt *parser.ShowCreateTableStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.TableName)
 	tname := dax.TableName(tableName)
-	if _, err := p.schemaAPI.TableByName(context.Background(), tname); err != nil {
+	if _, err := p.schemaAPI.TableByName(ctx, tname); err != nil {
 		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.TableName.NamePos.Line, stmt.TableName.NamePos.Column, tableName)
 		}

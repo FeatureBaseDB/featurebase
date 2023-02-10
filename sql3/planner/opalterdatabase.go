@@ -5,7 +5,6 @@ package planner
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -98,7 +97,6 @@ func (i *alterDatabaseRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, sql3.NewErrInvalidDatabaseOption(0, 0, i.option.String())
 		}
 
-		log.Printf("DEEBUG: SetDatabaseOption: %s = %s", optName, optValue)
 		if err := i.planner.schemaAPI.SetDatabaseOption(ctx, i.database.ID, optName, optValue); err != nil {
 			return nil, err
 		}

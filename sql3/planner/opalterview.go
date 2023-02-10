@@ -80,7 +80,7 @@ func newAlterViewIter(planner *ExecutionPlanner, view *viewSystemObject) *alterV
 
 func (i *alterViewIter) Next(ctx context.Context) (types.Row, error) {
 	// now check in the views table to see if it exists
-	v, err := i.planner.getViewByName(i.view.name)
+	v, err := i.planner.getViewByName(ctx, i.view.name)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (i *alterViewIter) Next(ctx context.Context) (types.Row, error) {
 	}
 
 	// now store the view into fb_views
-	err = i.planner.updateView(i.view)
+	err = i.planner.updateView(ctx, i.view)
 	if err != nil {
 		return nil, err
 	}

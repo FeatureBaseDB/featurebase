@@ -378,24 +378,24 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 	}
 }
 
-func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Statement) (parser.Source, error) {
+func (p *ExecutionPlanner) analyzeSource(ctx context.Context, source parser.Source, scope parser.Statement) (parser.Source, error) {
 	if source == nil {
 		return nil, nil
 	}
 	switch source := source.(type) {
 	case *parser.JoinClause:
-		x, err := p.analyzeSource(source.X, scope)
+		x, err := p.analyzeSource(ctx, source.X, scope)
 		if err != nil {
 			return nil, err
 		}
-		y, err := p.analyzeSource(source.Y, scope)
+		y, err := p.analyzeSource(ctx, source.Y, scope)
 		if err != nil {
 			return nil, err
 		}
 		if source.Constraint != nil {
 			switch join := source.Constraint.(type) {
 			case *parser.OnConstraint:
-				ex, err := p.analyzeExpression(join.X, scope)
+				ex, err := p.analyzeExpression(ctx, join.X, scope)
 				if err != nil {
 					return nil, err
 				}
@@ -409,7 +409,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		return source, nil
 
 	case *parser.ParenSource:
-		x, err := p.analyzeSource(source.X, scope)
+		x, err := p.analyzeSource(ctx, source.X, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -421,7 +421,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		objectName := parser.IdentName(source.Name)
 
 		// check views first
-		view, err := p.getViewByName(objectName)
+		view, err := p.getViewByName(ctx, objectName)
 		if err != nil {
 			return nil, err
 		}
@@ -438,7 +438,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 				return nil, sql3.NewErrInternalf("unexpected ast type")
 			}
 			// analyze the select statement
-			expr, err := p.analyzeSelectStatement(sel)
+			expr, err := p.analyzeSelectStatement(ctx, sel)
 			if err != nil {
 				return nil, err
 			}
@@ -457,7 +457,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 
 		// check table exists
 		tname := dax.TableName(objectName)
-		tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+		tbl, err := p.schemaAPI.TableByName(ctx, tname)
 		if err != nil {
 			if isTableNotFoundError(err) {
 				return nil, sql3.NewErrTableOrViewNotFound(source.Name.NamePos.Line, source.Name.NamePos.Column, objectName)
@@ -482,7 +482,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		// check it actually is a table valued function - we only support one right now; subtable()
 		switch strings.ToUpper(source.Name.Name) {
 		case "SUBTABLE":
-			_, err := p.analyzeCallExpression(source.Call, scope)
+			_, err := p.analyzeCallExpression(ctx, source.Call, scope)
 			if err != nil {
 				return nil, err
 			}
@@ -510,7 +510,7 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 		return source, nil
 
 	case *parser.SelectStatement:
-		expr, err := p.analyzeSelectStatement(source)
+		expr, err := p.analyzeSelectStatement(ctx, source)
 		if err != nil {
 			return nil, err
 		}
@@ -525,9 +525,9 @@ func (p *ExecutionPlanner) analyzeSource(source parser.Source, scope parser.Stat
 	}
 }
 
-func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyzeSelectStatement(ctx context.Context, stmt *parser.SelectStatement) (parser.Expr, error) {
 	// analyze source first - needed for name resolution
-	source, err := p.analyzeSource(stmt.Source, stmt)
+	source, err := p.analyzeSource(ctx, stmt.Source, stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +538,7 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 	}
 
 	for _, col := range stmt.Columns {
-		expr, err := p.analyzeExpression(col.Expr, stmt)
+		expr, err := p.analyzeExpression(ctx, col.Expr, stmt)
 		if err != nil {
 			return nil, err
 		}
@@ -547,7 +547,7 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 		}
 	}
 
-	expr, err := p.analyzeExpression(stmt.TopExpr, stmt)
+	expr, err := p.analyzeExpression(ctx, stmt.TopExpr, stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -558,20 +558,20 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 		stmt.TopExpr = expr
 	}
 
-	expr, err = p.analyzeExpression(stmt.HavingExpr, stmt)
+	expr, err = p.analyzeExpression(ctx, stmt.HavingExpr, stmt)
 	if err != nil {
 		return nil, err
 	}
 	stmt.HavingExpr = expr
 
-	expr, err = p.analyzeExpression(stmt.WhereExpr, stmt)
+	expr, err = p.analyzeExpression(ctx, stmt.WhereExpr, stmt)
 	if err != nil {
 		return nil, err
 	}
 	stmt.WhereExpr = expr
 
 	for i, g := range stmt.GroupByExprs {
-		expr, err = p.analyzeExpression(g, stmt)
+		expr, err = p.analyzeExpression(ctx, g, stmt)
 		if err != nil {
 			return nil, err
 		}
@@ -580,7 +580,7 @@ func (p *ExecutionPlanner) analyzeSelectStatement(stmt *parser.SelectStatement) 
 		}
 	}
 
-	expr, err = p.analyzeExpression(stmt.HavingExpr, stmt)
+	expr, err = p.analyzeExpression(ctx, stmt.HavingExpr, stmt)
 	if err != nil {
 		return nil, err
 	}

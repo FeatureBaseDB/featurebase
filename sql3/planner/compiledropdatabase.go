@@ -13,10 +13,10 @@ import (
 
 // compileDropDatabaseStatement compiles a DROP DATABASE statement into a
 // PlanOperator.
-func (p *ExecutionPlanner) compileDropDatabaseStatement(stmt *parser.DropDatabaseStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileDropDatabaseStatement(ctx context.Context, stmt *parser.DropDatabaseStatement) (_ types.PlanOperator, err error) {
 	databaseName := parser.IdentName(stmt.Name)
 	dbname := dax.DatabaseName(databaseName)
-	db, err := p.schemaAPI.DatabaseByName(context.Background(), dbname)
+	db, err := p.schemaAPI.DatabaseByName(ctx, dbname)
 	if err != nil {
 		if isDatabaseNotFoundError(err) {
 			return nil, sql3.NewErrDatabaseNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, databaseName)

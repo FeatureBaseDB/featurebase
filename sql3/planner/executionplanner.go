@@ -61,7 +61,7 @@ func NewExecutionPlanner(executor pilosa.Executor, schemaAPI pilosa.SchemaAPI, s
 // to produce a query plan.
 func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statement) (types.PlanOperator, error) {
 	// call analyze first
-	err := p.analyzePlan(stmt)
+	err := p.analyzePlan(ctx, stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -71,35 +71,35 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	case *parser.SelectStatement:
 		rootOperator, err = p.compileSelectStatement(stmt, false)
 	case *parser.ShowDatabasesStatement:
-		rootOperator, err = p.compileShowDatabasesStatement(stmt)
+		rootOperator, err = p.compileShowDatabasesStatement(ctx, stmt)
 	case *parser.ShowTablesStatement:
-		rootOperator, err = p.compileShowTablesStatement(stmt)
+		rootOperator, err = p.compileShowTablesStatement(ctx, stmt)
 	case *parser.ShowColumnsStatement:
-		rootOperator, err = p.compileShowColumnsStatement(stmt)
+		rootOperator, err = p.compileShowColumnsStatement(ctx, stmt)
 	case *parser.ShowCreateTableStatement:
-		rootOperator, err = p.compileShowCreateTableStatement(stmt)
+		rootOperator, err = p.compileShowCreateTableStatement(ctx, stmt)
 	case *parser.CreateDatabaseStatement:
 		rootOperator, err = p.compileCreateDatabaseStatement(stmt)
 	case *parser.CreateTableStatement:
-		rootOperator, err = p.compileCreateTableStatement(stmt)
+		rootOperator, err = p.compileCreateTableStatement(ctx, stmt)
 	case *parser.CreateViewStatement:
 		rootOperator, err = p.compileCreateViewStatement(stmt)
 	case *parser.AlterDatabaseStatement:
-		rootOperator, err = p.compileAlterDatabaseStatement(stmt)
+		rootOperator, err = p.compileAlterDatabaseStatement(ctx, stmt)
 	case *parser.AlterTableStatement:
-		rootOperator, err = p.compileAlterTableStatement(stmt)
+		rootOperator, err = p.compileAlterTableStatement(ctx, stmt)
 	case *parser.AlterViewStatement:
 		rootOperator, err = p.compileAlterViewStatement(stmt)
 	case *parser.DropDatabaseStatement:
-		rootOperator, err = p.compileDropDatabaseStatement(stmt)
+		rootOperator, err = p.compileDropDatabaseStatement(ctx, stmt)
 	case *parser.DropTableStatement:
-		rootOperator, err = p.compileDropTableStatement(stmt)
+		rootOperator, err = p.compileDropTableStatement(ctx, stmt)
 	case *parser.DropViewStatement:
-		rootOperator, err = p.compileDropViewStatement(stmt)
+		rootOperator, err = p.compileDropViewStatement(ctx, stmt)
 	case *parser.InsertStatement:
-		rootOperator, err = p.compileInsertStatement(stmt)
+		rootOperator, err = p.compileInsertStatement(ctx, stmt)
 	case *parser.BulkInsertStatement:
-		rootOperator, err = p.compileBulkInsertStatement(stmt)
+		rootOperator, err = p.compileBulkInsertStatement(ctx, stmt)
 	case *parser.DeleteStatement:
 		rootOperator, err = p.compileDeleteStatement(stmt)
 	default:
@@ -126,10 +126,10 @@ func (p *ExecutionPlanner) RehydratePlanOp(ctx context.Context, reader io.Reader
 	}
 }
 
-func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
+func (p *ExecutionPlanner) analyzePlan(ctx context.Context, stmt parser.Statement) error {
 	switch stmt := stmt.(type) {
 	case *parser.SelectStatement:
-		_, err := p.analyzeSelectStatement(stmt)
+		_, err := p.analyzeSelectStatement(ctx, stmt)
 		return err
 	case *parser.ShowDatabasesStatement:
 		return nil
@@ -144,13 +144,13 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 	case *parser.CreateTableStatement:
 		return p.analyzeCreateTableStatement(stmt)
 	case *parser.CreateViewStatement:
-		return p.analyzeCreateViewStatement(stmt)
+		return p.analyzeCreateViewStatement(ctx, stmt)
 	case *parser.AlterDatabaseStatement:
 		return p.analyzeAlterDatabaseStatement(stmt)
 	case *parser.AlterTableStatement:
 		return p.analyzeAlterTableStatement(stmt)
 	case *parser.AlterViewStatement:
-		return p.analyzeAlterViewStatement(stmt)
+		return p.analyzeAlterViewStatement(ctx, stmt)
 	case *parser.DropDatabaseStatement:
 		return nil
 	case *parser.DropTableStatement:
@@ -158,11 +158,11 @@ func (p *ExecutionPlanner) analyzePlan(stmt parser.Statement) error {
 	case *parser.DropViewStatement:
 		return nil
 	case *parser.InsertStatement:
-		return p.analyzeInsertStatement(stmt)
+		return p.analyzeInsertStatement(ctx, stmt)
 	case *parser.BulkInsertStatement:
-		return p.analyzeBulkInsertStatement(stmt)
+		return p.analyzeBulkInsertStatement(ctx, stmt)
 	case *parser.DeleteStatement:
-		return p.analyzeDeleteStatement(stmt)
+		return p.analyzeDeleteStatement(ctx, stmt)
 	default:
 		return sql3.NewErrInternalf("cannot analyze statement: %T", stmt)
 	}
