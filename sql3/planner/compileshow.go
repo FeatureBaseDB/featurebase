@@ -14,8 +14,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (p *ExecutionPlanner) compileShowDatabasesStatement(stmt parser.Statement) (types.PlanOperator, error) {
-	dbs, err := p.schemaAPI.Databases(context.Background())
+func (p *ExecutionPlanner) compileShowDatabasesStatement(ctx context.Context, stmt parser.Statement) (types.PlanOperator, error) {
+	dbs, err := p.schemaAPI.Databases(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting databases")
 	}

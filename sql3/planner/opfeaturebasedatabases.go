@@ -116,8 +116,8 @@ func (i *showDatabasesRowIter) Next(ctx context.Context) (types.Row, error) {
 		dbID := i.dbs[i.rowIndex].ID
 		dbName := i.dbs[i.rowIndex].Name
 
-		createdAt := time.Unix(0, i.dbs[i.rowIndex].CreatedAt)
-		updatedAt := time.Unix(0, i.dbs[i.rowIndex].UpdatedAt)
+		createdAt := time.Unix(i.dbs[i.rowIndex].CreatedAt, 0)
+		updatedAt := time.Unix(i.dbs[i.rowIndex].UpdatedAt, 0)
 		row := []interface{}{
 			dbID,
 			dbName,

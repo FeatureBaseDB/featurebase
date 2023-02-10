@@ -13,12 +13,12 @@ import (
 
 // compileAlterDatabaseStatement compiles an ALTER DATABASE statement into a
 // PlanOperator.
-func (p *ExecutionPlanner) compileAlterDatabaseStatement(stmt *parser.AlterDatabaseStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileAlterDatabaseStatement(ctx context.Context, stmt *parser.AlterDatabaseStatement) (_ types.PlanOperator, err error) {
 	databaseName := parser.IdentName(stmt.Name)
 
 	// does the database exist
 	dbname := dax.DatabaseName(databaseName)
-	db, err := p.schemaAPI.DatabaseByName(context.Background(), dbname)
+	db, err := p.schemaAPI.DatabaseByName(ctx, dbname)
 	if err != nil {
 		if isDatabaseNotFoundError(err) {
 			return nil, sql3.NewErrDatabaseNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, databaseName)

@@ -71,7 +71,7 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	case *parser.SelectStatement:
 		rootOperator, err = p.compileSelectStatement(stmt, false)
 	case *parser.ShowDatabasesStatement:
-		rootOperator, err = p.compileShowDatabasesStatement(stmt)
+		rootOperator, err = p.compileShowDatabasesStatement(ctx, stmt)
 	case *parser.ShowTablesStatement:
 		rootOperator, err = p.compileShowTablesStatement(stmt)
 	case *parser.ShowColumnsStatement:
@@ -85,13 +85,13 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 	case *parser.CreateViewStatement:
 		rootOperator, err = p.compileCreateViewStatement(stmt)
 	case *parser.AlterDatabaseStatement:
-		rootOperator, err = p.compileAlterDatabaseStatement(stmt)
+		rootOperator, err = p.compileAlterDatabaseStatement(ctx, stmt)
 	case *parser.AlterTableStatement:
 		rootOperator, err = p.compileAlterTableStatement(stmt)
 	case *parser.AlterViewStatement:
 		rootOperator, err = p.compileAlterViewStatement(stmt)
 	case *parser.DropDatabaseStatement:
-		rootOperator, err = p.compileDropDatabaseStatement(stmt)
+		rootOperator, err = p.compileDropDatabaseStatement(ctx, stmt)
 	case *parser.DropTableStatement:
 		rootOperator, err = p.compileDropTableStatement(stmt)
 	case *parser.DropViewStatement:
