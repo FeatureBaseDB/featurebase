@@ -1543,7 +1543,7 @@ func (p *Parser) parseIdent(desc string) (*Ident, error) {
 	pos, tok, lit := p.scan()
 	switch tok {
 	case IDENT, QIDENT:
-		return &Ident{Name: lit, NamePos: pos, Quoted: tok == QIDENT}, nil
+		return &Ident{Name: strings.ToLower(lit), NamePos: pos, Quoted: tok == QIDENT}, nil
 	default:
 		return nil, p.errorExpected(pos, tok, desc)
 	}
