@@ -20,7 +20,7 @@ Call <-  "Set" {p.startCall("Set")} open col comma args (comma time)? close {p.e
        / "Sum" {p.startCall("Sum")} open posfield (comma allargs)? close {p.endCall()}
        / "Range" {p.startCall("Range")} open field eq value comma 'from='? {p.addField("from")} timefmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timefmt {p.addVal(text)} close {p.endCall()}
        / < IDENT > { p.startCall(text) } open allargs comma? close { p.endCall() }
-ivyExpr <- ( '(' / '_' / '/' / '[' / ']' /'.' / '=' / '&' / '<'/ '>' /',' / ')' / '^' /  '!' / '|' / [*+] / '-' / '?' / [[A-Z]] / [0-9] / '#' / [ \t\n] )*
+ivyExpr <- ( '(' / '_' / '/' / '[' / ']' /'.' / '=' / '&' / '<'/ '>' /',' / ')' / '^' /  '!' / '|' / [*+] / '-' / '?' / [[A-Z]] / [0-9] / '#' / [ \t\n] / 'Θ')*
 ivyprogram <- '"'? <ivyExpr> '"' { p.addPosStr("_ivy", text) }
 ivyprogram2 <- '"'? <ivyExpr> '"' { p.addPosStr("_ivyReduce", text) }
 
