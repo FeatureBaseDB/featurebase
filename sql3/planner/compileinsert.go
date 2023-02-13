@@ -15,7 +15,7 @@ import (
 
 // compileInsertStatement compiles an INSERT statement into a PlanOperator.
 func (p *ExecutionPlanner) compileInsertStatement(ctx context.Context, stmt *parser.InsertStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.Table)
+	tableName := strings.ToLower(parser.IdentName(stmt.Table))
 
 	targetColumns := []*qualifiedRefPlanExpression{}
 	insertValues := [][]types.PlanExpression{}
@@ -31,7 +31,7 @@ func (p *ExecutionPlanner) compileInsertStatement(ctx context.Context, stmt *par
 
 	if len(stmt.Columns) > 0 {
 		for _, columnIdent := range stmt.Columns {
-			colName := parser.IdentName(columnIdent)
+			colName := strings.ToLower(parser.IdentName(columnIdent))
 
 			if strings.EqualFold(colName, "_id") {
 				targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, colName, 0, parser.NewDataTypeID()))
@@ -74,7 +74,7 @@ func (p *ExecutionPlanner) compileInsertStatement(ctx context.Context, stmt *par
 // anything is invalid.
 func (p *ExecutionPlanner) analyzeInsertStatement(ctx context.Context, stmt *parser.InsertStatement) error {
 	// Check that referred table exists.
-	tableName := parser.IdentName(stmt.Table)
+	tableName := strings.ToLower(parser.IdentName(stmt.Table))
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
@@ -108,7 +108,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(ctx context.Context, stmt *par
 		// dupes.
 		columnNameMap := make(map[string]struct{})
 		for _, columnIdent := range stmt.Columns {
-			colName := parser.IdentName(columnIdent)
+			colName := strings.ToLower(parser.IdentName(columnIdent))
 			var typeName parser.ExprDataType
 
 			if strings.EqualFold(colName, "_id") {

@@ -188,7 +188,7 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("uri"),
 			wireQueryFieldString("grpc_uri"),
 			wireQueryFieldBool("is_primary"),
-			wireQueryFieldBool("space_used"),
+			wireQueryFieldInt("space_used"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -318,7 +318,6 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
-			wireQueryFieldString("internal_type"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldString("cache_type"),
@@ -348,7 +347,6 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
-			wireQueryFieldString("internal_type"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldString("cache_type"),
@@ -688,6 +686,20 @@ func TestPlanner_CreateTable(t *testing.T) {
 		}
 	})
 
+	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, server, `create table lowercase (_id id, name string, SomeColumn string, legalname string);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, server, `create table MixedCcase (_id id, name string, SomeColumn string, legalname string);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("DropTable1", func(t *testing.T) {
 		_, _, err := sql_test.MustQueryRows(t, server, `drop table allcoltypes`)
 		if err != nil {
@@ -730,7 +742,6 @@ func TestPlanner_CreateTable(t *testing.T) {
 			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
-			wireQueryFieldString("internal_type"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldString("cache_type"),

@@ -38,9 +38,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	TempDir = getTempDirString()
-)
+var TempDir = getTempDirString()
 
 func getTempDirString() (td *string) {
 	tdflag := flag.Lookup("temp-dir")
@@ -1024,7 +1022,6 @@ func TestExecutor(t *testing.T) {
 			if columns := responses[4].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2}) {
 				t.Fatalf("unexpected columns: %+v", columns)
 			}
-
 		})
 		// Ensure that ClearRow returns false when the row to clear needs translation.
 		t.Run("WithKeys", func(t *testing.T) {
@@ -1198,6 +1195,7 @@ func TestExecutor_Execute_ConstRow(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
+	// without track existnce you just get back the columns you request
 	c.CreateField(t, c.Idx(), pilosa.IndexOptions{}, "h")
 	c.ImportBits(t, c.Idx(), "h", [][2]uint64{
 		{1, 2},
@@ -1205,7 +1203,27 @@ func TestExecutor_Execute_ConstRow(t *testing.T) {
 		{5, 6},
 	})
 
-	resp := c.Query(t, c.Idx(), `ConstRow(columns=[2,6])`)
+	resp := c.Query(t, c.Idx(), `ConstRow(columns=[2,6,7])`)
+	expect := []uint64{2, 6, 7}
+	got := resp.Results[0].(*pilosa.Row).Columns()
+	if !reflect.DeepEqual(expect, got) {
+		t.Errorf("expected %v but got %v", expect, got)
+	}
+}
+
+func TestExecutor_Execute_ConstRowTrackExistence(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	// with track existnce you
+	c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, "h")
+	c.ImportBits(t, c.Idx(), "h", [][2]uint64{
+		{1, 2},
+		{3, 4},
+		{5, 6},
+	})
+
+	resp := c.Query(t, c.Idx(), `ConstRow(columns=[2,6,7])`)
 	expect := []uint64{2, 6}
 	got := resp.Results[0].(*pilosa.Row).Columns()
 	if !reflect.DeepEqual(expect, got) {
@@ -1332,7 +1350,6 @@ func TestExecutor_Execute_Xor(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 	})
-
 }
 
 // Ensure a count query can be executed.
@@ -1476,7 +1493,6 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			} else if !res.Results[0].(bool) {
 				t.Fatalf("expected column changed with integer column key")
 			}
-
 		})
 	})
 }
@@ -3049,7 +3065,8 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		// EQ null
 		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(other == null)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{1,
+		} else if !reflect.DeepEqual([]uint64{
+			1,
 			50,
 			ShardWidth,
 			ShardWidth + 1,
@@ -3148,7 +3165,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		}
 		for i, test := range tests {
 			t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
-				var expected = []uint64{}
+				expected := []uint64{}
 				if test.exp {
 					expected = []uint64{0}
 				}
@@ -3585,7 +3602,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("json format groupBy on timestamps", func(t *testing.T) {
-		//SUP-138
+		// SUP-138
 		c.CreateField(t, c.Idx("t"), pilosa.IndexOptions{TrackExistence: true}, "timestamp", pilosa.OptFieldTypeTimestamp(pilosa.DefaultEpoch, pilosa.TimeUnitSeconds))
 		c.Query(t, c.Idx("t"), `
 		Set(8, timestamp='2021-01-27T08:00:00Z')
@@ -3816,7 +3833,7 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 	defer c.Close()
 	hldr := c.GetHolder(0)
 
-	var rangeTests = []struct {
+	rangeTests := []struct {
 		quantum  pilosa.TimeQuantum
 		expected []uint64
 	}{
@@ -3942,10 +3959,11 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 
 		node0 := c.GetNode(0)
 		// Set bits.
-		if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `` +
-			fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+2, 20),
+		if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: c.Idx(), Query: `` +
+				fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
+				fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
+				fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+2, 20),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -9199,6 +9217,8 @@ func TestExternalLookup(t *testing.T) {
 	// Populate a field with some data that can be used in queries.
 	c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, "f")
 	c.ImportBits(t, c.Idx(), "f", [][2]uint64{
+		{0, 0},
+		{0, 4},
 		{1, 1},
 		{1, 3},
 		{2, 2},

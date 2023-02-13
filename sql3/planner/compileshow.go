@@ -139,7 +139,7 @@ func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt 
 }
 
 func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.TableName)
+	tableName := strings.ToLower(parser.IdentName(stmt.TableName))
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
@@ -159,70 +159,65 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt
 		columnName:  "name",
 		columnIndex: 1,
 		dataType:    parser.NewDataTypeString(),
-	}, &qualifiedRefPlanExpression{ // the SQL3 data type description
+	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "type",
 		columnIndex: 2,
 		dataType:    parser.NewDataTypeString(),
-	}, &qualifiedRefPlanExpression{ // the FeatureBase 'native' data type description
-		tableName:   "fb_table_columns",
-		columnName:  "internal_type",
-		columnIndex: 3,
-		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "created_at",
-		columnIndex: 4,
+		columnIndex: 3,
 		dataType:    parser.NewDataTypeTimestamp(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "keys",
-		columnIndex: 5,
+		columnIndex: 4,
 		dataType:    parser.NewDataTypeBool(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "cache_type",
-		columnIndex: 6,
+		columnIndex: 5,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "cache_size",
-		columnIndex: 7,
+		columnIndex: 6,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "scale",
-		columnIndex: 8,
+		columnIndex: 7,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "min",
-		columnIndex: 9,
+		columnIndex: 8,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "max",
-		columnIndex: 10,
+		columnIndex: 9,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "timeunit",
-		columnIndex: 11,
+		columnIndex: 10,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "epoch",
-		columnIndex: 12,
+		columnIndex: 11,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "timequantum",
-		columnIndex: 13,
+		columnIndex: 12,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "ttl",
-		columnIndex: 14,
+		columnIndex: 13,
 		dataType:    parser.NewDataTypeString(),
 	}}
 
@@ -230,7 +225,7 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt
 }
 
 func (p *ExecutionPlanner) compileShowCreateTableStatement(ctx context.Context, stmt *parser.ShowCreateTableStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.TableName)
+	tableName := strings.ToLower(parser.IdentName(stmt.TableName))
 	tname := dax.TableName(tableName)
 	if _, err := p.schemaAPI.TableByName(ctx, tname); err != nil {
 		if isTableNotFoundError(err) {

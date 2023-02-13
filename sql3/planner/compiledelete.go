@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
@@ -13,7 +14,7 @@ import (
 func (p *ExecutionPlanner) compileDeleteStatement(stmt *parser.DeleteStatement) (types.PlanOperator, error) {
 	query := NewPlanOpQuery(p, NewPlanOpNullTable(), p.sql)
 
-	tableName := parser.IdentName(stmt.TableName.Name)
+	tableName := strings.ToLower(parser.IdentName(stmt.TableName.Name))
 
 	// source expression
 	source, err := p.compileSource(query, stmt.Source)

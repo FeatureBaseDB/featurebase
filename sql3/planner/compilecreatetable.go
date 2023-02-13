@@ -26,7 +26,7 @@ type createTableField struct {
 // compileCreateTableStatement compiles a CREATE TABLE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileCreateTableStatement(ctx context.Context, stmt *parser.CreateTableStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.Name)
+	tableName := strings.ToLower(parser.IdentName(stmt.Name))
 	failIfExists := !stmt.IfNotExists.IsValid()
 
 	// apply table options
@@ -51,7 +51,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(ctx context.Context, stmt
 
 	var columns = []*createTableField{}
 	for _, col := range stmt.Columns {
-		columnName := parser.IdentName(col.Name)
+		columnName := strings.ToLower(parser.IdentName(col.Name))
 		typeName := parser.IdentName(col.Type.Name)
 
 		if strings.ToLower(columnName) == "_id" {
@@ -78,7 +78,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(ctx context.Context, stmt
 // compiles a column def
 func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.ColumnDefinition) (*createTableField, error) {
 	var err error
-	columnName := parser.IdentName(col.Name)
+	columnName := strings.ToLower(parser.IdentName(col.Name))
 	typeName := parser.IdentName(col.Type.Name)
 
 	column := &createTableField{
@@ -251,7 +251,7 @@ func (p *ExecutionPlanner) analyzeCreateTableStatement(stmt *parser.CreateTableS
 	//iterate columns, check types, check constraints, ensure we have no dupe names and make sure there is an _id column
 	checkedColumns := make(map[string]string)
 	for _, col := range stmt.Columns {
-		columnName := parser.IdentName(col.Name)
+		columnName := strings.ToLower(parser.IdentName(col.Name))
 		_, ok := checkedColumns[strings.ToLower(columnName)]
 		if ok {
 			return sql3.NewErrDuplicateColumn(col.Name.NamePos.Line, col.Name.NamePos.Column, columnName)

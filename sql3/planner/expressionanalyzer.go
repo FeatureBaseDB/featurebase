@@ -440,6 +440,19 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(ctx context.Context, expr *pa
 		if !typeIsCompatibleWithEqualityOperator(y.DataType()) {
 			return nil, sql3.NewErrTypeIncompatibleWithEqualityOperator(y.Pos().Line, y.Pos().Column, op.String(), y.DataType().TypeDescription())
 		}
+		if typeIsTimestamp(x.DataType()) && y.IsLiteral() && typeIsString(y.DataType()) {
+			// we have a string literal on the rhs being compared to a date so
+			// try to convert to a date literal
+			rhs, ok := y.(*parser.StringLit)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected expression type '%T'", y)
+			}
+			newRhs := rhs.ConvertToTimestamp()
+			if newRhs != nil {
+				expr.Y = newRhs
+				y = newRhs
+			}
+		}
 		if !typesAreComparable(x.DataType(), y.DataType()) {
 			return nil, sql3.NewErrTypesAreNotEquatable(x.Pos().Line, x.Pos().Column, x.DataType().TypeDescription(), y.DataType().TypeDescription())
 		}
@@ -794,11 +807,11 @@ func (p *ExecutionPlanner) analyzeRangeExpression(ctx context.Context, expr *par
 	if !typeCanBeUsedInRange(expr.Y.DataType()) {
 		return nil, sql3.NewErrTypeCannotBeUsedAsRangeSubscript(expr.Y.Pos().Line, expr.Y.Pos().Column, expr.Y.DataType().TypeDescription())
 	}
-	if !typesOfRangeBoundsAreTheSame(expr.X.DataType(), expr.Y.DataType()) {
+	canbeUsed, coercedType := typesOfRangeBoundsAreTheSame(expr.X.DataType(), expr.Y.DataType())
+	if !canbeUsed {
 		return nil, sql3.NewErrIncompatibleTypesForRangeSubscripts(expr.Pos().Line, expr.Pos().Column, expr.X.DataType().TypeDescription(), expr.Y.DataType().TypeDescription())
 	}
-
-	expr.ResultDataType = parser.NewDataTypeRange(expr.X.DataType())
+	expr.ResultDataType = parser.NewDataTypeRange(coercedType)
 
 	return expr, nil
 }

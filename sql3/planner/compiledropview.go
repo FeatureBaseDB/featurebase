@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
@@ -12,7 +13,7 @@ import (
 
 // compileDropViewStatement compiles a DROP VIEW statement into a PlanOperator.
 func (p *ExecutionPlanner) compileDropViewStatement(ctx context.Context, stmt *parser.DropViewStatement) (_ types.PlanOperator, err error) {
-	viewName := parser.IdentName(stmt.Name)
+	viewName := strings.ToLower(parser.IdentName(stmt.Name))
 	v, err := p.getViewByName(ctx, viewName)
 	if err != nil {
 		return nil, err

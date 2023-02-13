@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -14,7 +15,7 @@ import (
 // compileAlterDatabaseStatement compiles an ALTER DATABASE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileAlterDatabaseStatement(ctx context.Context, stmt *parser.AlterDatabaseStatement) (_ types.PlanOperator, err error) {
-	databaseName := parser.IdentName(stmt.Name)
+	databaseName := strings.ToLower(parser.IdentName(stmt.Name))
 
 	// does the database exist
 	dbname := dax.DatabaseName(databaseName)
