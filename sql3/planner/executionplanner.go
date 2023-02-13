@@ -340,6 +340,8 @@ func (e *ExecutionPlanner) remotePlanExec(ctx context.Context, addr string, op t
 	req.Header.Set("User-Agent", "pilosa/"+e.systemAPI.Version())
 	req.Header.Set("X-FeatureBase-Plan-Operator", fmt.Sprintf("%T", op))
 
+	log.Printf("remotePlanExec() headers: %v", req.Header)
+
 	// Execute request against the host.
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {

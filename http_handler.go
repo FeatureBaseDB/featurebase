@@ -1411,6 +1411,8 @@ func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Reque
 
 	ctx := r.Context()
 
+	log.Printf("handlePostSQLPlanOperator() headers: %v", r.Header)
+
 	// DEBUG - hang on to the body
 	bodyBytes, err := io.ReadAll(r.Body)
 	log.Printf("handlePostSQLPlanOperator() body: %v s: %s", bodyBytes, string(bodyBytes))
@@ -1476,6 +1478,8 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	log.Printf("handlePostSQL() headers: %v", r.Header)
 
 	// get the body
 	b, err := io.ReadAll(r.Body)
