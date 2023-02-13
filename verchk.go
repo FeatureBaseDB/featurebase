@@ -6,25 +6,31 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
 )
 
-type VersionChecker struct {
-	URL string
+const (
+	versionCheckerFilename = ".client_id.txt"
+)
+
+type versionChecker struct {
+	path string
+	url  string
 }
 
-func NewVersionChecker(endpoint string) *VersionChecker {
-	v := VersionChecker{
-		URL: endpoint,
+func newVersionChecker(path, endpoint string) *versionChecker {
+	v := versionChecker{
+		path: path,
+		url:  endpoint,
 	}
 	return &v
 }
 
-func (v *VersionChecker) CheckIn() (*VerCheckResponse, error) {
-
-	id, err := v.WriteClientUUID()
+func (v *versionChecker) checkIn() (*verCheckResponse, error) {
+	id, err := v.writeClientUUID()
 	if err != nil {
 		return nil, err
 	}
@@ -38,60 +44,54 @@ func (v *VersionChecker) CheckIn() (*VerCheckResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	wReq := bytes.NewReader(req)
 
+	var jsonResp verCheckResponse
+	r, err := http.Post(v.url, "application/json", wReq)
 	if err != nil {
 		return nil, err
 	}
 
-	var json_resp VerCheckResponse
-	r, err := http.Post(v.URL, "application/json", wReq)
-	if err != nil {
-		return nil, err
-	}
 	data, err := io.ReadAll(r.Body)
-
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(data, &json_resp)
+	err = json.Unmarshal(data, &jsonResp)
 	if err != nil {
 
 		return nil, err
 	}
-	return &json_resp, nil
 
+	return &jsonResp, nil
 }
 
-func (v *VersionChecker) GenerateClientUUID() (string, error) {
+func (v *versionChecker) generateClientUUID() (string, error) {
 	clientUUID := uuid.New()
 	cleanedUUID := strings.Replace(clientUUID.String(), "-", "", -1)
 	return cleanedUUID, nil
 }
 
-func (v *VersionChecker) WriteClientUUID() (string, error) {
-	filename := ".client_id.txt"
-	_, err := os.Stat(filename)
-	if err != nil {
+func (v *versionChecker) writeClientUUID() (string, error) {
+	filename := filepath.Join(v.path, versionCheckerFilename)
+	if _, err := os.Stat(filename); err != nil {
 		if os.IsNotExist(err) {
 			fh, err := os.Create(filename)
 			if err != nil {
 				return "", err
 			}
 			defer fh.Close()
-			id, err := v.GenerateClientUUID()
+
+			id, err := v.generateClientUUID()
 			if err != nil {
 				return "", err
 			}
 
-			_, err = fh.WriteString(id)
-			if err != nil {
+			if _, err := fh.WriteString(id); err != nil {
 				return "", err
 			}
 
-			return "", err
+			return id, nil
 		} else {
 			return "", err
 		}
@@ -102,15 +102,15 @@ func (v *VersionChecker) WriteClientUUID() (string, error) {
 		return "", err
 	}
 	defer fh.Close()
-	buf, err := os.ReadFile(filename)
 
+	buf, err := os.ReadFile(filename)
 	if err != nil {
 		return "", err
 	}
-	return string(buf), nil
 
+	return string(buf), nil
 }
 
-type VerCheckResponse struct {
+type verCheckResponse struct {
 	Version string `json:"latest_version"`
 }
