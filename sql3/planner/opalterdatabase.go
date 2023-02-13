@@ -91,7 +91,7 @@ func (i *alterDatabaseRowIter) Next(ctx context.Context) (types.Row, error) {
 		switch v := i.option.(type) {
 		case *parser.UnitsOption:
 			e := v.Expr.(*parser.IntegerLit)
-			optName = "workers-min"
+			optName = dax.DatabaseOptionWorkersMin
 			optValue = e.Value
 		default:
 			return nil, sql3.NewErrInvalidDatabaseOption(0, 0, i.option.String())
