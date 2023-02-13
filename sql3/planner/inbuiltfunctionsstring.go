@@ -796,6 +796,9 @@ func (p *ExecutionPlanner) analyseFunctionStr(call *parser.Call, scope parser.St
 
 	// the second and third parameters are optional
 	for i := 1; i < len(call.Args); i++ {
+		if typeIsVoid(call.Args[i].DataType()) {
+			return nil, sql3.NewErrLiteralNullNotAllowed(call.Args[i].Pos().Line, call.Args[i].Pos().Column)
+		}
 		if !typeIsInteger(call.Args[i].DataType()) {
 			return nil, sql3.NewErrIntExpressionExpected(call.Args[i].Pos().Line, call.Args[i].Pos().Column)
 		}
