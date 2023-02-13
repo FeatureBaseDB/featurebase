@@ -320,6 +320,9 @@ Informational
   \l                     list databases
 
 Formatting
+  \pset [NAME [VALUE]]   set table output option
+                         (border|expanded|tuples_only)
+  \t [on|off]            show only rows
   \x [on|off|auto]       toggle expanded output
 
 Connection
