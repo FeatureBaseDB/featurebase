@@ -283,6 +283,12 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 		evalValue := rec[mapExpressionResult]
 
 		mapColumn := i.options.mapExpressions[idx]
+
+		// if an empty string and the map type is not a string, treat it as a null
+		if len(evalValue) == 0 && !typeIsString(mapColumn.colType) {
+			result[idx] = nil
+			continue
+		}
 		switch mapColumn.colType.(type) {
 		case *parser.DataTypeID, *parser.DataTypeInt:
 			intVal, err := strconv.ParseInt(evalValue, 10, 64)
