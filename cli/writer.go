@@ -13,12 +13,18 @@ import (
 // writeOptions contains user configuration options which describe how to write
 // the query output.
 type writeOptions struct {
-	timing bool
+	border     int
+	expanded   bool
+	timing     bool
+	tuplesOnly bool
 }
 
 func defaultWriteOptions() *writeOptions {
 	return &writeOptions{
-		timing: true,
+		border:     1,
+		expanded:   false,
+		timing:     true,
+		tuplesOnly: false,
 	}
 }
 
@@ -38,20 +44,58 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 
 	t := table.NewWriter()
 	t.SetOutputMirror(qOut)
+	switch format.border {
+	case 0:
+		t.SetStyle(styleBorder0)
+	case 1:
+		t.SetStyle(styleBorder1)
+	default:
+		t.SetStyle(styleBorder2)
+		// In expanded mode with a border, we need borders between each record.
+		if format.expanded {
+			t.Style().Options.SeparateRows = true
+		}
+	}
 
 	// Don't uppercase the header values.
 	t.Style().Format.Header = text.FormatDefault
 
-	t.AppendHeader(schemaToRow(r.Schema))
-	for _, row := range r.Data {
-		// If the value is nil, replace it with a null string; go-pretty doesn't
-		// expect nil pointers in the data values.
-		for i := range row {
-			if row[i] == nil {
-				row[i] = nullValue
+	if format.expanded {
+		// Expanded table
+		for _, row := range r.Data {
+			colRow := make([]interface{}, 2)
+			scolRow := make([]string, 2)
+			div := "\n"
+			for i, col := range r.Schema.Fields {
+				if i == len(r.Schema.Fields)-1 {
+					div = ""
+				}
+				scolRow[0] += fmt.Sprintf("%s%s", col.Name, div)
+				if row[i] == nil {
+					scolRow[1] += fmt.Sprintf("%s%s", nullValue, div)
+				} else {
+					scolRow[1] += fmt.Sprintf("%v%s", row[i], div)
+				}
 			}
+			colRow[0] = scolRow[0]
+			colRow[1] = scolRow[1]
+			t.AppendRow(table.Row(colRow[:]))
 		}
-		t.AppendRow(table.Row(row))
+	} else {
+		// Normal table (i.e. NOT expanded)
+		if !format.tuplesOnly {
+			t.AppendHeader(schemaToRow(r.Schema))
+		}
+		for _, row := range r.Data {
+			// If the value is nil, replace it with a null string; go-pretty doesn't
+			// expect nil pointers in the data values.
+			for i := range row {
+				if row[i] == nil {
+					row[i] = nullValue
+				}
+			}
+			t.AppendRow(table.Row(row))
+		}
 	}
 	t.Render()
 
@@ -94,4 +138,54 @@ func writeWarnings(r *featurebase.WireQueryResponse, w io.Writer) error {
 		}
 	}
 	return nil
+}
+
+var styleBorder2 table.Style = table.StyleDefault
+
+var styleBorder1 table.Style = table.Style{
+	Name:   "StyleBorder1",
+	Box:    table.StyleBoxDefault,
+	Color:  table.ColorOptionsDefault,
+	Format: table.FormatOptionsDefault,
+	Options: table.Options{
+		DrawBorder:      false,
+		SeparateColumns: true,
+		SeparateFooter:  true,
+		SeparateHeader:  true,
+		SeparateRows:    false,
+	},
+	Title: table.TitleOptionsDefault,
+}
+
+var styleBorder0 table.Style = table.Style{
+	Name: "StyleBorder0",
+	Box: table.BoxStyle{
+		BottomLeft:       "+",
+		BottomRight:      "+",
+		BottomSeparator:  "+",
+		Left:             "|",
+		LeftSeparator:    "+",
+		MiddleHorizontal: "-",
+		MiddleSeparator:  " ",
+		MiddleVertical:   " ",
+		PaddingLeft:      "",
+		PaddingRight:     "",
+		PageSeparator:    "\n",
+		Right:            "|",
+		RightSeparator:   "+",
+		TopLeft:          "+",
+		TopRight:         "+",
+		TopSeparator:     "+",
+		UnfinishedRow:    " ~",
+	},
+	Color:  table.ColorOptionsDefault,
+	Format: table.FormatOptionsDefault,
+	Options: table.Options{
+		DrawBorder:      false,
+		SeparateColumns: true,
+		SeparateFooter:  true,
+		SeparateHeader:  true,
+		SeparateRows:    false,
+	},
+	Title: table.TitleOptionsDefault,
 }

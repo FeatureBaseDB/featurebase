@@ -54,8 +54,9 @@ type CLICommand struct {
 	workingDir *workingDir
 
 	OrganizationID string `json:"org-id"`
-	DatabaseID     string `json:"db-id"`
-	DatabaseName   string `json:"db-name"`
+	Database       string `json:"db"`
+	databaseID     string
+	databaseName   string
 
 	Queryer Queryer `json:"-"`
 
@@ -78,8 +79,7 @@ func NewCLICommand(logdest logger.Logger) *CLICommand {
 		HistoryPath: "",
 
 		OrganizationID: "",
-		DatabaseID:     "",
-		DatabaseName:   "",
+		Database:       "",
 
 		splitter:   newSplitter(),
 		buffer:     newBuffer(),
@@ -105,7 +105,10 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 	if err := cmd.setupClient(); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
-	cmd.printQualifiers()
+	cmd.printConnInfo()
+	if err := cmd.connectToDatabase(cmd.Database); err != nil {
+		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+	}
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:                 promptBegin,
@@ -191,7 +194,8 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 			}
 			return nil
 		}(); err != nil {
-			cmd.Errorf(err.Error())
+			cmd.Errorf(err.Error() + "\n")
+			inMidCommand = false
 			continue
 		}
 
@@ -214,13 +218,14 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 			return nil
 		}(); err != nil {
 			cmd.Errorf(err.Error() + "\n")
+			inMidCommand = false
 			continue
 		}
 
 		select {
 		case <-cmd.quit:
 			if err := cmd.close(); err != nil {
-				cmd.Errorf("closing: %s", err)
+				cmd.Errorf("closing: %s\n", err)
 			}
 			return nil
 		default:
@@ -249,7 +254,7 @@ func (cmd *CLICommand) executeAndWriteQuery(qry query) error {
 }
 
 func (cmd *CLICommand) executeQuery(qry query) (*featurebase.WireQueryResponse, error) {
-	return cmd.Queryer.Query(cmd.OrganizationID, cmd.DatabaseID, qry.Reader())
+	return cmd.Queryer.Query(cmd.OrganizationID, cmd.databaseID, qry.Reader())
 }
 
 // Printf is a helper method which sends the given payload to stdout.
@@ -292,13 +297,55 @@ func (cmd *CLICommand) setupHistory() {
 	cmd.HistoryPath = historyPath
 }
 
-// printQualifiers displays the currently set OrganizationID and DatabaseName.
-func (cmd *CLICommand) printQualifiers() {
-	cmd.Printf(" Host: %s\n  Org: %s\n   DB: %s\n",
-		hostPort(cmd.Host, cmd.Port),
-		cmd.OrganizationID,
-		cmd.DatabaseName,
-	)
+// printConnInfo displays the currently set host.
+// TODO(tlt): extend this to be the output of the /conninfo meta-command.
+func (cmd *CLICommand) printConnInfo() {
+	cmd.Printf("Host: %s\n", hostPort(cmd.Host, cmd.Port))
+}
+
+func (cmd *CLICommand) connectToDatabase(dbName string) error {
+	if dbName == "" {
+		cmd.databaseID = ""
+		cmd.databaseName = ""
+		cmd.Printf(cmd.connectionMessage())
+		return nil
+	}
+
+	// Look up dbID based on dbName.
+	qry := []queryPart{
+		newPartRaw("SHOW DATABASES"),
+	}
+
+	qr, err := cmd.executeQuery(qry)
+	if err != nil {
+		return errors.Wrap(err, "executing query")
+	}
+
+	for _, db := range qr.Data {
+		// 0: _id
+		// 1: name
+		if db[1] == dbName {
+			cmd.databaseName = dbName
+			cmd.databaseID = db[0].(string)
+			cmd.Printf(cmd.connectionMessage())
+			return nil
+		}
+	}
+	return errors.Errorf("invalid database: %s", dbName)
+}
+
+func (cmd *CLICommand) orgMessage() string {
+	if cmd.OrganizationID == "" {
+		return "You have not set an organization.\n"
+	}
+	return fmt.Sprintf("You have set organization \"%s\".\n", cmd.OrganizationID)
+}
+
+func (cmd *CLICommand) connectionMessage() string {
+	if cmd.databaseName == "" {
+		return "You are not connected to a database.\n"
+	}
+	return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.databaseName, cmd.databaseID)
 }
 
 func (cmd *CLICommand) setupClient() error {
@@ -322,20 +369,33 @@ func (cmd *CLICommand) setupClient() error {
 	}
 
 	switch typ {
-	case featurebaseTypeStandard:
-		cmd.Printf("Detected standard deployment\n")
+	case featurebaseTypeOnPremClassic:
+		cmd.Printf("Detected on-prem, classic deployment.\n")
 		cmd.Queryer = &standardQueryer{
 			Host: cmd.Host,
 			Port: cmd.Port,
 		}
-	case featurebaseTypeDAX:
-		cmd.Printf("Detected dax deployment\n")
-		cmd.Queryer = &daxQueryer{
+	case featurebaseTypeOnPremServerless:
+		cmd.Printf("Detected on-prem, serverless deployment.\n")
+		cmd.Queryer = &serverlessQueryer{
 			Host: cmd.Host,
 			Port: cmd.Port,
 		}
 	case featurebaseTypeCloud:
-		cmd.Printf("Detected cloud deployment\n")
+		cmd.Printf("Detected cloud deployment.\n")
+		cmd.Queryer = &fbcloud.Queryer{
+			Host: hostPort(cmd.Host, cmd.Port),
+
+			ClientID: cmd.ClientID,
+			Region:   cmd.Region,
+			Email:    cmd.Email,
+			Password: cmd.Password,
+		}
+	case featurebaseTypeUnknown:
+		cmd.Printf("Could not detect deployment\n")
+		// cmd.Queryer = &nopQueryer{}
+		// Instead of using a no-op queryer when the type can't be detected, we
+		// default to using a cloud queryer.
 		cmd.Queryer = &fbcloud.Queryer{
 			Host: hostPort(cmd.Host, cmd.Port),
 
@@ -353,9 +413,10 @@ func (cmd *CLICommand) setupClient() error {
 type featurebaseType string
 
 const (
-	featurebaseTypeStandard featurebaseType = "standard" // on-prem, classic
-	featurebaseTypeDAX      featurebaseType = "dax"      // on-prem, serverless
-	featurebaseTypeCloud    featurebaseType = "cloud"    // cloud, (both classic and serverless)?
+	featurebaseTypeUnknown          featurebaseType = "unknown"            // unknown
+	featurebaseTypeOnPremClassic    featurebaseType = "on-prem-standard"   // on-prem, classic
+	featurebaseTypeOnPremServerless featurebaseType = "on-prem-serverless" // on-prem, serverless
+	featurebaseTypeCloud            featurebaseType = "cloud"              // cloud, (both classic and serverless)?
 )
 
 func hostPort(host, port string) string {
@@ -378,51 +439,55 @@ func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
 	// process is running there which can support the cli requests.
 	trials := []trial{}
 
+	var clientTimeout time.Duration
 	if cmd.Port != "" {
+		clientTimeout = 100 * time.Millisecond
 		trials = append(trials,
-			// dax
+			// on-prem, serverless
 			trial{
 				port:   cmd.Port,
 				health: "/queryer/health",
-				typ:    featurebaseTypeDAX,
+				typ:    featurebaseTypeOnPremServerless,
 			},
-			// standard
+			// on-prem, classic
 			trial{
 				port:   cmd.Port,
 				health: "/status",
-				typ:    featurebaseTypeStandard,
+				typ:    featurebaseTypeOnPremClassic,
 			},
 		)
 	} else if strings.HasPrefix(cmd.Host, "https") {
 		// https suggesting we might be connecting to a cloud host
+		clientTimeout = 1 * time.Second
 		trials = append(trials,
 			// cloud
 			trial{
 				port:   "",
-				health: "health",
+				health: "/health",
 				typ:    featurebaseTypeCloud,
 			},
 		)
 	} else {
 		// Try default ports just in case.
+		clientTimeout = 100 * time.Millisecond
 		trials = append(trials,
-			// dax
+			// on-prem, serverless
 			trial{
 				port:   "8080",
 				health: "/queryer/health",
-				typ:    featurebaseTypeDAX,
+				typ:    featurebaseTypeOnPremServerless,
 			},
-			// standard
+			// on-prem, classic
 			trial{
 				port:   "10101",
 				health: "/status",
-				typ:    featurebaseTypeStandard,
+				typ:    featurebaseTypeOnPremClassic,
 			},
 		)
 	}
 
 	client := http.Client{
-		Timeout: 100 * time.Millisecond,
+		Timeout: clientTimeout,
 	}
 	for _, trial := range trials {
 		url := hostPort(cmd.Host, trial.port) + trial.health
@@ -434,7 +499,7 @@ func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
 		}
 	}
 
-	return featurebaseTypeCloud, nil
+	return featurebaseTypeUnknown, nil
 }
 
 func (cmd *CLICommand) closeOutput() error {

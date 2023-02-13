@@ -1,7 +1,6 @@
 package fbcloud
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,11 +39,6 @@ func (cq *Queryer) tokenRefresh() error {
 	return nil
 }
 
-type tokenizedSQL struct {
-	Language  string `json:"language"`
-	Statement string `json:"statement"`
-}
-
 // Query issues a SQL query formatted for the FeatureBase cloud query endpoint.
 func (cq *Queryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
 	if time.Since(cq.lastRefresh) > TokenRefreshTimeout {
@@ -52,34 +46,19 @@ func (cq *Queryer) Query(org string, db string, sql io.Reader) (*featurebase.Wir
 			return nil, errors.Wrap(err, "refreshing token")
 		}
 	}
-	url := fmt.Sprintf("%s/v2/databases/%s/query/sql", cq.Host, db)
-
-	// TODO(tlt): this needs to be removed; we should be passing the sql
-	// io.Reader to the http.Post() body. In order to do that, we need to get
-	// rid of this json object.
-	tmpBuf := new(strings.Builder)
-	_, err := io.Copy(tmpBuf, sql)
-	if err != nil {
-		return nil, err
-	}
-
-	sqlReq := &tokenizedSQL{
-		Language:  "sql",
-		Statement: tmpBuf.String(),
-	}
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(sqlReq); err != nil {
-		return nil, errors.Wrapf(err, "encoding sql request: %s", sql)
+	url := fmt.Sprintf("%s/databases/%s/sql", cq.Host, db)
+	if db == "" {
+		url = fmt.Sprintf("%s/sql", cq.Host)
 	}
 
 	client := &http.Client{
 		Timeout: time.Second * 30,
 	}
-	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	req, err := http.NewRequest(http.MethodPost, url, sql)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating new post request")
 	}
-	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Content-Type", "text/plain")
 	req.Header.Add("Authorization", cq.token)
 
 	var resp *http.Response
@@ -149,8 +128,4 @@ func (cq *Queryer) HTTPRequest(method, path, body string, v interface{}) ([]byte
 	}
 
 	return bodbytes, nil
-}
-
-type cloudResponse struct {
-	Results featurebase.WireQueryResponse `json:"results"`
 }

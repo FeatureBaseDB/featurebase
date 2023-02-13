@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -35,21 +34,26 @@ type metaCommand interface {
 
 // Ensure type implements interface.
 var _ metaCommand = (*metaBang)(nil)
+var _ metaCommand = (*metaBorder)(nil)
 var _ metaCommand = (*metaChangeDirectory)(nil)
 var _ metaCommand = (*metaConnect)(nil)
 var _ metaCommand = (*metaEcho)(nil)
+var _ metaCommand = (*metaExpanded)(nil)
 var _ metaCommand = (*metaFile)(nil)
 var _ metaCommand = (*metaHelp)(nil)
 var _ metaCommand = (*metaInclude)(nil)
 var _ metaCommand = (*metaListDatabases)(nil)
 var _ metaCommand = (*metaListTables)(nil)
+var _ metaCommand = (*metaOrg)(nil)
 var _ metaCommand = (*metaOutput)(nil)
 var _ metaCommand = (*metaPrint)(nil)
+var _ metaCommand = (*metaPSet)(nil)
 var _ metaCommand = (*metaQEcho)(nil)
 var _ metaCommand = (*metaQuit)(nil)
 var _ metaCommand = (*metaReset)(nil)
 var _ metaCommand = (*metaSet)(nil)
 var _ metaCommand = (*metaTiming)(nil)
+var _ metaCommand = (*metaTuplesOnly)(nil)
 var _ metaCommand = (*metaWarn)(nil)
 var _ metaCommand = (*metaWatch)(nil)
 var _ metaCommand = (*metaWrite)(nil)
@@ -76,6 +80,40 @@ func (m *metaBang) execute(cmd *CLICommand) (action, error) {
 	c.Stdout = cmd.Stdout
 	err := c.Run()
 	return actionNone, errors.Wrap(err, "running bang command")
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// border (sub-command of pset)
+// ////////////////////////////////////////////////////////////////////////////
+type metaBorder struct {
+	args []string
+}
+
+func newMetaBorder(args []string) *metaBorder {
+	return &metaBorder{
+		args: args,
+	}
+}
+
+func (m *metaBorder) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+	case 0:
+		// pass
+	case 1:
+		switch m.args[0] {
+		case "1":
+			cmd.writeOptions.border = 1
+		case "2":
+			cmd.writeOptions.border = 2
+		default:
+			cmd.writeOptions.border = 0
+		}
+	default:
+		return actionNone, errors.Errorf("meta command 'border' takes zero or one argument")
+	}
+
+	cmd.Printf("Border style is %d.\n", cmd.writeOptions.border)
+	return actionNone, nil
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -113,42 +151,13 @@ func newMetaConnect(args []string) *metaConnect {
 }
 
 func (m *metaConnect) execute(cmd *CLICommand) (action, error) {
-	msg := func() string {
-		return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.DatabaseName, cmd.DatabaseID)
-	}
-
 	switch len(m.args) {
 	case 0:
-		if cmd.DatabaseName == "" {
-			cmd.Printf("You are not connected to a database.\n")
-		} else {
-			cmd.Printf(msg())
-		}
+		cmd.Printf(cmd.connectionMessage())
 		return actionNone, nil
 	case 1:
-		dbName := m.args[0]
-
-		// Look up dbID based on dbName.
-		qry := []queryPart{
-			newPartRaw("SHOW DATABASES"),
-		}
-
-		qr, err := cmd.executeQuery(qry)
-		if err != nil {
-			return actionNone, errors.Wrap(err, "executing query")
-		}
-
-		for _, db := range qr.Data {
-			// 0: _id
-			// 1: name
-			if db[1] == dbName {
-				cmd.DatabaseName = dbName
-				cmd.DatabaseID = db[0].(string)
-				cmd.Printf(msg())
-				return actionReset, nil
-			}
-		}
-		return actionNone, errors.Errorf("invalid database: %s", dbName)
+		err := cmd.connectToDatabase(m.args[0])
+		return actionNone, err
 
 	default:
 		return actionNone, errors.Errorf("meta command 'connect' takes zero or one argument")
@@ -194,6 +203,45 @@ func echo(args []string, w io.Writer) (action, error) {
 		w.Write([]byte(s))
 		return actionNone, nil
 	}
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// expanded (x)
+// ////////////////////////////////////////////////////////////////////////////
+type metaExpanded struct {
+	args []string
+}
+
+func newMetaExpanded(args []string) *metaExpanded {
+	return &metaExpanded{
+		args: args,
+	}
+}
+
+func (m *metaExpanded) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+	case 0:
+		cmd.writeOptions.expanded = !cmd.writeOptions.expanded
+	case 1:
+		switch m.args[0] {
+		case "on":
+			cmd.writeOptions.expanded = true
+		case "off":
+			cmd.writeOptions.expanded = false
+		default:
+			return actionNone, errors.Errorf("unrecognized value \"%s\" for \"expanded\": Boolean expected", m.args[0])
+		}
+	default:
+		return actionNone, errors.Errorf("meta command 'expanded' takes zero or one argument")
+	}
+
+	sExpanded := "on"
+	if !cmd.writeOptions.expanded {
+		sExpanded = "off"
+	}
+
+	cmd.Printf("Expanded display is %s.\n", sExpanded)
+	return actionNone, nil
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -271,8 +319,12 @@ Informational
   \dv                    list views
   \l                     list databases
 
+Formatting
+  \x [on|off|auto]       toggle expanded output
+
 Connection
   \c[onnect] [DBNAME]    connect to new database
+  \org [ORGNAME]         set organization id
 
 Operating System
   \cd [DIR]              change the current working directory
@@ -384,6 +436,35 @@ func (m *metaListTables) execute(cmd *CLICommand) (action, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
+// org
+// ////////////////////////////////////////////////////////////////////////////
+type metaOrg struct {
+	args []string
+}
+
+func newMetaOrg(args []string) *metaOrg {
+	return &metaOrg{
+		args: args,
+	}
+}
+
+func (m *metaOrg) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+
+	case 0:
+		cmd.Printf(cmd.orgMessage())
+		return actionNone, nil
+	case 1:
+		cmd.OrganizationID = m.args[0]
+		cmd.Printf(cmd.orgMessage())
+		return actionNone, nil
+
+	default:
+		return actionNone, errors.Errorf("meta command 'org' takes zero or one argument")
+	}
+}
+
+// ////////////////////////////////////////////////////////////////////////////
 // output (o)
 // ////////////////////////////////////////////////////////////////////////////
 type metaOutput struct {
@@ -441,6 +522,64 @@ func newMetaPrint() *metaPrint {
 func (m *metaPrint) execute(cmd *CLICommand) (action, error) {
 	cmd.Printf(cmd.buffer.print() + "\n")
 	return actionNone, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// pset
+// ////////////////////////////////////////////////////////////////////////////
+type metaPSet struct {
+	args []string
+}
+
+func newMetaPSet(args []string) *metaPSet {
+	return &metaPSet{
+		args: args,
+	}
+}
+
+func (m *metaPSet) print(cmd *CLICommand) {
+	onOff := func(b bool) string {
+		if b {
+			return "on"
+		}
+		return "off"
+	}
+
+	fmt := `border      %d
+expanded    %s
+tuples_only %s
+`
+
+	cmd.Printf(fmt,
+		cmd.writeOptions.border,
+		onOff(cmd.writeOptions.expanded),
+		onOff(cmd.writeOptions.tuplesOnly),
+	)
+
+}
+
+func (m *metaPSet) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+	case 0:
+		m.print(cmd)
+		return actionNone, nil
+	case 1, 2:
+		switch m.args[0] {
+		case "border":
+			sub := newMetaBorder(m.args[1:])
+			return sub.execute(cmd)
+		case "expanded":
+			sub := newMetaExpanded(m.args[1:])
+			return sub.execute(cmd)
+		case "tuples_only":
+			sub := newMetaTuplesOnly(m.args[1:])
+			return sub.execute(cmd)
+		default:
+			return actionNone, errors.Errorf("unrecognized value \"%s\" for \"pset\"", m.args[0])
+		}
+	default:
+		return actionNone, errors.Errorf("meta command 'pset' takes zero, one, or two arguments")
+	}
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -541,6 +680,45 @@ func (m *metaTiming) execute(cmd *CLICommand) (action, error) {
 	}
 
 	cmd.Printf("Timing is %s.\n", sTiming)
+	return actionNone, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// tuples_only (t)
+// ////////////////////////////////////////////////////////////////////////////
+type metaTuplesOnly struct {
+	args []string
+}
+
+func newMetaTuplesOnly(args []string) *metaTuplesOnly {
+	return &metaTuplesOnly{
+		args: args,
+	}
+}
+
+func (m *metaTuplesOnly) execute(cmd *CLICommand) (action, error) {
+	switch len(m.args) {
+	case 0:
+		cmd.writeOptions.tuplesOnly = !cmd.writeOptions.tuplesOnly
+	case 1:
+		switch m.args[0] {
+		case "on":
+			cmd.writeOptions.tuplesOnly = true
+		case "off":
+			cmd.writeOptions.tuplesOnly = false
+		default:
+			return actionNone, errors.Errorf("unrecognized value \"%s\" for \"tuples_only\": Boolean expected", m.args[0])
+		}
+	default:
+		return actionNone, errors.Errorf("meta command 'tuples_only' takes zero or one argument")
+	}
+
+	sTuplesOnly := "on"
+	if !cmd.writeOptions.tuplesOnly {
+		sTuplesOnly = "off"
+	}
+
+	cmd.Printf("Tuples only is %s.\n", sTuplesOnly)
 	return actionNone, nil
 }
 
@@ -713,8 +891,12 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaListDatabases(), nil
 	case "o":
 		return newMetaOutput(args), nil
+	case "org":
+		return newMetaOrg(args), nil
 	case "p", "print":
 		return newMetaPrint(), nil
+	case "pset":
+		return newMetaPSet(args), nil
 	case "qecho":
 		return newMetaQEcho(args), nil
 	case "q", "quit":
@@ -723,6 +905,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaReset(), nil
 	case "set":
 		return newMetaSet(args), nil
+	case "t":
+		return newMetaTuplesOnly(args), nil
 	case "timing":
 		return newMetaTiming(args), nil
 	case "warn":
@@ -731,6 +915,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaWatch(args), nil
 	case "w":
 		return newMetaWrite(args), nil
+	case "x":
+		return newMetaExpanded(args), nil
 	default:
 		return nil, errors.Errorf("unsupported meta-command: '%s'", key)
 	}

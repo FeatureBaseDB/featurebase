@@ -1,21 +1,26 @@
 package cli
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"time"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/dax"
-	queryerhttp "github.com/featurebasedb/featurebase/v3/dax/queryer/http"
 	"github.com/pkg/errors"
 )
 
 type Queryer interface {
 	Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error)
+}
+
+// Ensure type implements interface.
+var _ Queryer = (*nopQueryer)(nil)
+
+type nopQueryer struct{}
+
+func (qryr *nopQueryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
+	return nil, errors.Errorf("no-op queryer")
 }
 
 // Ensure type implements interface.
@@ -51,41 +56,36 @@ func (qryr *standardQueryer) Query(org string, db string, sql io.Reader) (*featu
 }
 
 // Ensure type implements interface.
-var _ Queryer = (*daxQueryer)(nil)
+var _ Queryer = (*serverlessQueryer)(nil)
 
-// daxQueryer is similar to the standardQueryer except that it hits a different
-// endpoint, and its payload is a json object which includes, in addition to the
-// sql statement, things like org and db.
-type daxQueryer struct {
+// serverlessQueryer is similar to the standardQueryer except that it hits a
+// different endpoint, and its payload is database-aware.
+type serverlessQueryer struct {
 	Host string
 	Port string
 }
 
-func (qryr *daxQueryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
-	buf := bytes.Buffer{}
-	url := fmt.Sprintf("%s/queryer/sql", hostPort(qryr.Host, qryr.Port))
+func (qryr *serverlessQueryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
+	// buf := bytes.Buffer{}
+	url := fmt.Sprintf("%s/queryer/databases/%s/sql", hostPort(qryr.Host, qryr.Port), db)
+	if db == "" {
+		url = fmt.Sprintf("%s/queryer/sql", hostPort(qryr.Host, qryr.Port))
+	}
 
-	// TODO(tlt): this needs to be removed; we should be passing the sql
-	// io.Reader to the http.Post() body. In order to do that, we need to get
-	// rid of this json object.
-	tmpBuf := new(strings.Builder)
-	_, err := io.Copy(tmpBuf, sql)
+	client := &http.Client{
+		Timeout: time.Second * 30,
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, sql)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating new post request")
 	}
+	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("OrganizationID", org)
 
-	sqlReq := &queryerhttp.SQLRequest{
-		OrganizationID: dax.OrganizationID(org),
-		DatabaseID:     dax.DatabaseID(db),
-		SQL:            tmpBuf.String(),
-	}
-	if err := json.NewEncoder(&buf).Encode(sqlReq); err != nil {
-		return nil, errors.Wrapf(err, "encoding sql request: %s", sql)
-	}
-
-	resp, err := http.Post(url, "application/json", &buf)
-	if err != nil {
-		return nil, errors.Wrapf(err, "posting query")
+	var resp *http.Response
+	if resp, err = client.Do(req); err != nil {
+		return nil, errors.Wrap(err, "executing post request")
 	}
 
 	fullbod, err := io.ReadAll(resp.Body)
