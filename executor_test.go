@@ -9217,6 +9217,8 @@ func TestExternalLookup(t *testing.T) {
 	// Populate a field with some data that can be used in queries.
 	c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, "f")
 	c.ImportBits(t, c.Idx(), "f", [][2]uint64{
+		{0, 0},
+		{0, 4},
 		{1, 1},
 		{1, 3},
 		{2, 2},
