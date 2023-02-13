@@ -41,6 +41,7 @@ var TableTests []TableTest = []TableTest{
 	stringScalarFunctionsTests,
 
 	insertTest,
+	insertTimestampTest,
 	keyedInsertTest,
 	timestampLiterals,
 	unaryOpExprWithInt,
