@@ -11,7 +11,7 @@ type Schemar interface {
 	DatabaseByName(tx dax.Transaction, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error)
 	DatabaseByID(dax.Transaction, dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error)
 
-	SetDatabaseOptions(dax.Transaction, dax.QualifiedDatabaseID, dax.DatabaseOptions) error
+	SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, option string, value string) error
 
 	// Databases returns a list of databases. If the list of DatabaseIDs is
 	// empty, all databases will be returned. If greater than zero DatabaseIDs
@@ -65,7 +65,7 @@ func (s *NopSchemar) DatabaseByID(dax.Transaction, dax.QualifiedDatabaseID) (*da
 	return nil, nil
 }
 
-func (s *NopSchemar) SetDatabaseOptions(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, opts dax.DatabaseOptions) error {
+func (s *NopSchemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, option string, value string) error {
 	return nil
 }
 

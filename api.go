@@ -3316,6 +3316,14 @@ func shardInShards(i dax.ShardNum, s dax.ShardNums) bool {
 }
 
 type SchemaAPI interface {
+	CreateDatabase(context.Context, *dax.Database) error
+	DropDatabase(context.Context, dax.DatabaseID) error
+
+	DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error)
+	DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error)
+	SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error
+	Databases(context.Context, ...dax.DatabaseID) ([]*dax.Database, error)
+
 	TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error)
 	TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error)
 	Tables(ctx context.Context) ([]*dax.Table, error)

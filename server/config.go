@@ -382,7 +382,7 @@ func NewConfig() *Config {
 
 		LongQueryTime: toml.Duration(-time.Minute),
 
-		CheckInInterval: 5 * time.Second,
+		CheckInInterval: 60 * time.Second,
 	}
 
 	// Cluster config.

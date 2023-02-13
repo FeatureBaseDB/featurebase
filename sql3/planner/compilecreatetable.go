@@ -3,6 +3,7 @@
 package planner
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ type createTableField struct {
 
 // compileCreateTableStatement compiles a CREATE TABLE statement into a
 // PlanOperator.
-func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileCreateTableStatement(ctx context.Context, stmt *parser.CreateTableStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Name)
 	failIfExists := !stmt.IfNotExists.IsValid()
 
@@ -60,7 +61,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 			continue
 		}
 
-		column, err := p.compileColumn(col)
+		column, err := p.compileColumn(ctx, col)
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +76,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(stmt *parser.CreateTableS
 }
 
 // compiles a column def
-func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createTableField, error) {
+func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.ColumnDefinition) (*createTableField, error) {
 	var err error
 	columnName := parser.IdentName(col.Name)
 	typeName := parser.IdentName(col.Type.Name)
@@ -124,7 +125,7 @@ func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createT
 				// method. There is a case where a BITNOT expression could get
 				// through, but that value as a string will fail in
 				// strconv.ParseInt() conversion.
-				if _, err := p.analyzeUnaryExpression(e, nil); err != nil {
+				if _, err := p.analyzeUnaryExpression(ctx, e, nil); err != nil {
 					return nil, err
 				}
 
@@ -151,7 +152,7 @@ func (p *ExecutionPlanner) compileColumn(col *parser.ColumnDefinition) (*createT
 				// method. There is a case where a BITNOT expression could get
 				// through, but that value as a string will fail in
 				// strconv.ParseInt() conversion.
-				if _, err := p.analyzeUnaryExpression(e, nil); err != nil {
+				if _, err := p.analyzeUnaryExpression(ctx, e, nil); err != nil {
 					return nil, err
 				}
 

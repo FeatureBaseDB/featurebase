@@ -113,6 +113,7 @@ const (
 	CURRENT_DATE
 	CURRENT_TIMESTAMP
 	DATABASE
+	DATABASES
 	DEFAULT
 	DEFERRABLE
 	DEFERRED
@@ -237,6 +238,7 @@ const (
 	UNBOUNDED
 	UNION
 	UNIQUE
+	UNITS
 	UPDATE
 	USING
 	VACUUM
@@ -337,6 +339,7 @@ var tokens = [...]string{
 	CURRENT_DATE:      "CURRENT_DATE",
 	CURRENT_TIMESTAMP: "CURRENT_TIMESTAMP",
 	DATABASE:          "DATABASE",
+	DATABASES:         "DATABASES",
 	DEFAULT:           "DEFAULT",
 	DEFERRABLE:        "DEFERRABLE",
 	DEFERRED:          "DEFERRED",
@@ -461,6 +464,7 @@ var tokens = [...]string{
 	UNBOUNDED:         "UNBOUNDED",
 	UNION:             "UNION",
 	UNIQUE:            "UNIQUE",
+	UNITS:             "UNITS",
 	UPDATE:            "UPDATE",
 	USING:             "USING",
 	VACUUM:            "VACUUM",

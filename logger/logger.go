@@ -27,6 +27,9 @@ type Logger interface {
 	Warnf(format string, v ...interface{})
 	Errorf(format string, v ...interface{})
 	Panicf(format string, v ...interface{})
+	// WithPrefix returns a new Logger with the same configuration as
+	// this one, but all logs will have the given prefix.
+	WithPrefix(prefix string) Logger
 }
 
 const (
@@ -66,10 +69,16 @@ func (n *nopLogger) Errorf(format string, v ...interface{}) {}
 // Panicf is a no-op implementation of the Logger Panicf method.
 func (n *nopLogger) Panicf(format string, v ...interface{}) {}
 
+func (n *nopLogger) WithPrefix(prefix string) Logger {
+	return n
+}
+
 // standardLogger is a basic implementation of Logger based on log.Logger.
 type standardLogger struct {
 	logger    *log.Logger
 	verbosity int
+	prefix    string
+	w         io.Writer
 }
 
 // write in UTC with constant width and microsecond resolution.
@@ -81,21 +90,23 @@ func (fl formatLog) Write(bytes []byte) (int, error) {
 	return fmt.Fprintf(fl.w, "%v %v", time.Now().UTC().Format(RFC3339UsecTz0), string(bytes))
 }
 
-func newStandardLogger(w io.Writer, verbosity int) *standardLogger {
-	logger := log.New(w, "", 0)
+func newStandardLogger(w io.Writer, verbosity int, prefix string) *standardLogger {
+	logger := log.New(w, prefix, 0)
 	logger.SetOutput(formatLog{w: w})
 	return &standardLogger{
 		logger:    logger,
 		verbosity: verbosity,
+		prefix:    prefix,
+		w:         w,
 	}
 }
 
 func NewStandardLogger(w io.Writer) *standardLogger {
-	return newStandardLogger(w, LevelInfo)
+	return newStandardLogger(w, LevelInfo, "")
 }
 
 func NewVerboseLogger(w io.Writer) *standardLogger {
-	return newStandardLogger(w, LevelDebug)
+	return newStandardLogger(w, LevelDebug, "")
 }
 
 func (s *standardLogger) printf(level int, format string, v ...interface{}) {
@@ -137,46 +148,8 @@ func (s *standardLogger) Logger() *log.Logger {
 	return s.logger
 }
 
-// CaptureLogger is a test logger that stores all the print and debug messages
-// it sees.
-type CaptureLogger struct {
-	Prints []string
-	Debugs []string
-}
-
-// NewCaptureLogger yields a CaptureLogger.
-func NewCaptureLogger() *CaptureLogger {
-	return &CaptureLogger{}
-}
-
-// Printf formats a message and appends it to Debugs.
-func (cl *CaptureLogger) Printf(format string, v ...interface{}) {
-	cl.Debugs = append(cl.Prints, fmt.Sprintf(LevelPrefix(LevelInfo)+format, v...))
-}
-
-// Debugf formats a message and appends it to Debugs.
-func (cl *CaptureLogger) Debugf(format string, v ...interface{}) {
-	cl.Debugs = append(cl.Debugs, fmt.Sprintf(LevelPrefix(LevelDebug)+format, v...))
-}
-
-// Infof formats a message and appends it to Prints.
-func (cl *CaptureLogger) Infof(format string, v ...interface{}) {
-	cl.Prints = append(cl.Prints, fmt.Sprintf(LevelPrefix(LevelInfo)+format, v...))
-}
-
-// Warnf formats a message and appends it to Prints.
-func (cl *CaptureLogger) Warnf(format string, v ...interface{}) {
-	cl.Prints = append(cl.Prints, fmt.Sprintf(LevelPrefix(LevelWarn)+format, v...))
-}
-
-// Errorf formats a message and appends it to Prints.
-func (cl *CaptureLogger) Errorf(format string, v ...interface{}) {
-	cl.Prints = append(cl.Prints, fmt.Sprintf(LevelPrefix(LevelError)+format, v...))
-}
-
-// Panicf formats a message and appends it to Prints.
-func (cl *CaptureLogger) Panicf(format string, v ...interface{}) {
-	cl.Prints = append(cl.Prints, fmt.Sprintf(LevelPrefix(LevelPanic)+format, v...))
+func (s *standardLogger) WithPrefix(prefix string) Logger {
+	return newStandardLogger(s.w, s.verbosity, prefix)
 }
 
 // Logfer is a thing that has only a Logf() method, like for instance,
@@ -213,6 +186,11 @@ func (ll *LogfLogger) Errorf(format string, v ...interface{}) {
 
 func (ll *LogfLogger) Panicf(format string, v ...interface{}) {
 	ll.wrapped.Logf(format, v...)
+}
+
+// WithPrefix does nothing for LogfLogger because I'm lazy.
+func (ll *LogfLogger) WithPrefix(prefix string) Logger {
+	return ll
 }
 
 func NewLogfLogger(l Logfer) *LogfLogger {
@@ -255,6 +233,11 @@ func (b *bufferLogger) Errorf(format string, v ...interface{}) {
 }
 func (b *bufferLogger) Panicf(format string, v ...interface{}) {
 	b.Printf(LevelPrefix(4)+format, v...)
+}
+
+// WithPrefix does nothing for bufferLogger because I'm lazy.
+func (b *bufferLogger) WithPrefix(prefix string) Logger {
+	return b
 }
 
 func (b *bufferLogger) ReadAll() ([]byte, error) {

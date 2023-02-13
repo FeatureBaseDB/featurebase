@@ -66,7 +66,7 @@ func (mm *ResourceManager) GetShardResource(qtid dax.QualifiedTableID, partition
 	}
 	mm.shardResources[key] = (&Resource{
 		snapshotter: mm.Snapshotter,
-		writeLogger: mm.Writelogger,
+		writelogger: mm.Writelogger,
 		bucket:      partitionBucket(qtid.Key(), partition),
 		key:         shardKey(shard),
 		log:         mm.Logger,
@@ -97,7 +97,7 @@ func (mm *ResourceManager) GetTableKeyResource(qtid dax.QualifiedTableID, partit
 	}
 	mm.tableKeyResources[key] = (&Resource{
 		snapshotter: mm.Snapshotter,
-		writeLogger: mm.Writelogger,
+		writelogger: mm.Writelogger,
 		bucket:      partitionBucket(qtid.Key(), partition),
 		key:         keysFileName,
 		log:         mm.Logger,
@@ -127,7 +127,7 @@ func (mm *ResourceManager) GetFieldKeyResource(qtid dax.QualifiedTableID, field 
 	}
 	mm.fieldKeyResources[key] = (&Resource{
 		snapshotter: mm.Snapshotter,
-		writeLogger: mm.Writelogger,
+		writelogger: mm.Writelogger,
 		bucket:      fieldBucket(qtid.Key(), field),
 		key:         keysFileName,
 		log:         mm.Logger,
@@ -227,7 +227,7 @@ func (mm *ResourceManager) RemoveTable(qtid dax.QualifiedTableID) error {
 // concurrently.
 type Resource struct {
 	snapshotter computer.SnapshotService
-	writeLogger computer.WritelogService
+	writelogger computer.WritelogService
 	bucket      string
 	key         string
 
@@ -298,7 +298,7 @@ func (m *Resource) LoadWriteLog() (data io.ReadCloser, err error) {
 	if m.loadWLsPastVersion == -2 {
 		return nil, errors.New(errors.ErrUncoded, "LoadWriteLog called in inconsistent state, can't tell what version to load from")
 	}
-	wLogs, err := m.writeLogger.List(m.bucket, m.key)
+	wLogs, err := m.writelogger.List(m.bucket, m.key)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing write logs")
 	}
@@ -332,7 +332,7 @@ func (m *Resource) LoadWriteLog() (data io.ReadCloser, err error) {
 	m.latestWLVersion = versions[0]
 	m.dirty = true
 
-	r, err := m.writeLogger.LogReaderFrom(m.bucket, m.key, versions[0], m.lastWLPos)
+	r, err := m.writelogger.LogReaderFrom(m.bucket, m.key, versions[0], m.lastWLPos)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting writelog")
 	}
@@ -364,7 +364,7 @@ func (m *Resource) LoadWriteLog() (data io.ReadCloser, err error) {
 func (m *Resource) Lock() error {
 	m.log.Debugf("Lock %s/%s", m.bucket, m.key)
 	// lock is sort of arbitrarily on the write log interface
-	if err := m.writeLogger.Lock(m.bucket, m.key); err != nil {
+	if err := m.writelogger.Lock(m.bucket, m.key); err != nil {
 		return errors.Wrap(err, "acquiring lock")
 	}
 	m.locked = true
@@ -380,7 +380,7 @@ func (m *Resource) Append(msg []byte) error {
 		return errors.New(errors.ErrUncoded, "can't call append before loading and locking write log")
 	}
 	m.dirty = true
-	return m.writeLogger.AppendMessage(m.bucket, m.key, m.latestWLVersion, msg)
+	return m.writelogger.AppendMessage(m.bucket, m.key, m.latestWLVersion, msg)
 }
 
 // IncrementWLVersion should be called during snapshotting with a
@@ -416,7 +416,7 @@ func (m *Resource) Snapshot(rc io.ReadCloser) error {
 	if err != nil {
 		return errors.Wrap(err, "writing snapshot")
 	}
-	err = m.writeLogger.DeleteLog(m.bucket, m.key, m.latestWLVersion-1)
+	err = m.writelogger.DeleteLog(m.bucket, m.key, m.latestWLVersion-1)
 	return errors.Wrap(err, "deleting old write log")
 }
 
@@ -429,7 +429,7 @@ func (m *Resource) SnapshotTo(wt io.WriterTo) error {
 	if err != nil {
 		return errors.Wrap(err, "writing snapshot SnapshotTo")
 	}
-	err = m.writeLogger.DeleteLog(m.bucket, m.key, m.latestWLVersion-1)
+	err = m.writelogger.DeleteLog(m.bucket, m.key, m.latestWLVersion-1)
 	return errors.Wrap(err, "deleting old write log snapshotTo")
 }
 
@@ -444,7 +444,7 @@ func (m *Resource) Unlock() error {
 	if !m.locked {
 		return errors.New(errors.ErrUncoded, "resource was not locked")
 	}
-	if err := m.writeLogger.Unlock(m.bucket, m.key); err != nil {
+	if err := m.writelogger.Unlock(m.bucket, m.key); err != nil {
 		return errors.Wrap(err, "unlocking")
 	}
 	m.locked = false

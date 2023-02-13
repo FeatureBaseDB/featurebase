@@ -82,7 +82,7 @@ func (i *dropViewRowIter) Next(ctx context.Context) (types.Row, error) {
 	}
 
 	// check in the views table to see if it exists
-	v, err := i.planner.getViewByName(i.viewName)
+	v, err := i.planner.getViewByName(ctx, i.viewName)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (i *dropViewRowIter) Next(ctx context.Context) (types.Row, error) {
 		return nil, sql3.NewErrViewNotFound(0, 0, i.viewName)
 	}
 
-	err = i.planner.deleteView(i.viewName)
+	err = i.planner.deleteView(ctx, i.viewName)
 	if err != nil {
 		return nil, err
 	}

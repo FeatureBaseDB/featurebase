@@ -373,3 +373,33 @@ func TestTable(t *testing.T) {
 		})
 	})
 }
+
+func TestDatabase(t *testing.T) {
+	databaseName := dax.DatabaseName("db1")
+
+	t.Run("Options", func(t *testing.T) {
+		{
+			db := &dax.Database{
+				Name: databaseName,
+			}
+			assert.Zero(t, db.Options.WorkersMin)
+			assert.Zero(t, db.Options.WorkersMax)
+
+			// Set WorkersMin to 5.
+			assert.NoError(t, db.Options.Set(dax.DatabaseOptionWorkersMin, "5"))
+			assert.Equal(t, 5, db.Options.WorkersMin)
+			assert.Equal(t, 5, db.Options.WorkersMax)
+
+			// Set WorkersMin back to 0.
+			assert.NoError(t, db.Options.Set(dax.DatabaseOptionWorkersMin, "0"))
+			assert.Zero(t, db.Options.WorkersMin)
+			assert.Zero(t, db.Options.WorkersMax)
+
+			// Try setting WorkersMin to an invalid value.
+			assert.Error(t, db.Options.Set(dax.DatabaseOptionWorkersMin, "abc"))
+
+			// Try setting an unsupported option.
+			assert.Error(t, db.Options.Set("invalid-option", ""))
+		}
+	})
+}

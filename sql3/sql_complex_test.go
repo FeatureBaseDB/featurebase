@@ -194,6 +194,32 @@ func TestPlanner_Show(t *testing.T) {
 		}
 	})
 
+	t.Run("ShowDatabases", func(t *testing.T) {
+		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW DATABASES`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// we don't currently support databases in the on-prem implementation,
+		// so we expect this to be empty for now.
+		if len(results) != 0 {
+			t.Fatal(fmt.Errorf("unexpected result set length"))
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("_id"),
+			wireQueryFieldString("name"),
+			wireQueryFieldString("owner"),
+			wireQueryFieldString("updated_by"),
+			wireQueryFieldTimestamp("created_at"),
+			wireQueryFieldTimestamp("updated_at"),
+			wireQueryFieldInt("units"),
+			wireQueryFieldString("description"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
 	t.Run("ShowTables", func(t *testing.T) {
 		results, columns, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW TABLES`)
 		if err != nil {

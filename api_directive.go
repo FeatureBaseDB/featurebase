@@ -324,6 +324,17 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 	// Get the diff between from/to directive.partitions.
 	partComp := newPartitionsComparer(fromD.TranslatePartitionsMap(), toPartitionsMap)
 
+	// Remove any partitions which are no longer assigned to this worker.
+	// TODO(tlt): currently, this is just removing the file lock on the
+	// resource; it's not actually removing the resource from the local
+	// computer. We should do that.
+	for tkey, partitions := range partComp.removed() {
+		qtid := tkey.QualifiedTableID()
+		for _, partition := range partitions {
+			api.serverlessStorage.RemoveTableKeyResource(qtid, partition)
+		}
+	}
+
 	// Loop over the partition map and load from Writelogger.
 	for tkey, partitions := range partComp.added() {
 		// Get index in order to find the translate stores (by partition) for
@@ -411,6 +422,17 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 	// Get the diff between from/to directive.fields.
 	fieldComp := newFieldsComparer(fromD.TranslateFieldsMap(), toD.TranslateFieldsMap())
 
+	// Remove any field keys which are no longer assigned to this worker.
+	// TODO(tlt): currently, this is just removing the file lock on the
+	// resource; it's not actually removing the resource from the local
+	// computer. We should do that.
+	for tkey, fields := range fieldComp.removed() {
+		qtid := tkey.QualifiedTableID()
+		for _, field := range fields {
+			api.serverlessStorage.RemoveFieldKeyResource(qtid, field)
+		}
+	}
+
 	// Loop over the field map and load from Writelogger.
 	for tkey, fields := range fieldComp.added() {
 		for _, field := range fields {
@@ -494,6 +516,18 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 
 	// Get the diff between from/to directive shards.
 	shardComp := newShardsComparer(fromD.ComputeShardsMap(), shardMap)
+
+	// Remove any shards which are no longer assigned to this worker.
+	// TODO(tlt): currently, this is just removing the file lock on the
+	// resource; it's not actually removing the resource from the local
+	// computer. We should do that.
+	for tkey, shards := range shardComp.removed() {
+		qtid := tkey.QualifiedTableID()
+		for _, shard := range shards {
+			partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
+			api.serverlessStorage.RemoveShardResource(qtid, partition, shard)
+		}
+	}
 
 	// Loop over the shard map and load from Writelogger.
 	for tkey, shards := range shardComp.added() {

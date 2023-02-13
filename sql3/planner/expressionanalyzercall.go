@@ -3,6 +3,7 @@
 package planner
 
 import (
+	"context"
 	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -10,10 +11,10 @@ import (
 )
 
 // analyze a *parser.Call and return the parser.Expr
-func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 	//analyze all the args
 	for i, a := range call.Args {
-		arg, err := p.analyzeExpression(a, scope)
+		arg, err := p.analyzeExpression(ctx, a, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -27,7 +28,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(call *parser.Call, scope parser
 				NamePos: call.Star,
 				Name:    "_id",
 			}
-			arg, err := p.analyzeExpression(newArg, scope)
+			arg, err := p.analyzeExpression(ctx, newArg, scope)
 			if err != nil {
 				return nil, err
 			}

@@ -18,8 +18,8 @@ type viewSystemObject struct {
 	statement string
 }
 
-func (p *ExecutionPlanner) ensureViewsSystemTableExists() error {
-	_, err := p.schemaAPI.TableByName(context.Background(), "fb_views")
+func (p *ExecutionPlanner) ensureViewsSystemTableExists(ctx context.Context) error {
+	_, err := p.schemaAPI.TableByName(ctx, "fb_views")
 	if err != nil {
 		if !isTableNotFoundError(err) {
 			return err
@@ -99,7 +99,7 @@ func (p *ExecutionPlanner) ensureViewsSystemTableExists() error {
 			description: "system table for views",
 		}
 		// call next on our iterator to create the table
-		_, err := iter.Next(context.Background())
+		_, err := iter.Next(ctx)
 		if err != nil && err != types.ErrNoMoreRows {
 			return err
 		}
@@ -107,13 +107,13 @@ func (p *ExecutionPlanner) ensureViewsSystemTableExists() error {
 	return nil
 }
 
-func (p *ExecutionPlanner) getViewByName(name string) (*viewSystemObject, error) {
-	err := p.ensureViewsSystemTableExists()
+func (p *ExecutionPlanner) getViewByName(ctx context.Context, name string) (*viewSystemObject, error) {
+	err := p.ensureViewsSystemTableExists(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tbl, err := p.schemaAPI.TableByName(context.Background(), "fb_views")
+	tbl, err := p.schemaAPI.TableByName(ctx, "fb_views")
 	if err != nil {
 		return nil, sql3.NewErrTableNotFound(0, 0, "fb_views")
 	}
@@ -136,7 +136,7 @@ func (p *ExecutionPlanner) getViewByName(name string) (*viewSystemObject, error)
 		topExpr: nil,
 	}
 
-	row, err := iter.Next(context.Background())
+	row, err := iter.Next(ctx)
 	if err != nil {
 		if err == types.ErrNoMoreRows {
 			// view does not exist
@@ -151,8 +151,8 @@ func (p *ExecutionPlanner) getViewByName(name string) (*viewSystemObject, error)
 	}, nil
 }
 
-func (p *ExecutionPlanner) insertView(view *viewSystemObject) error {
-	err := p.ensureViewsSystemTableExists()
+func (p *ExecutionPlanner) insertView(ctx context.Context, view *viewSystemObject) error {
+	err := p.ensureViewsSystemTableExists(ctx)
 	if err != nil {
 		return err
 	}
@@ -183,15 +183,15 @@ func (p *ExecutionPlanner) insertView(view *viewSystemObject) error {
 			},
 		},
 	}
-	_, err = iter.Next(context.Background())
+	_, err = iter.Next(ctx)
 	if err != nil && err != types.ErrNoMoreRows {
 		return err
 	}
 	return nil
 }
 
-func (p *ExecutionPlanner) updateView(view *viewSystemObject) error {
-	err := p.ensureViewsSystemTableExists()
+func (p *ExecutionPlanner) updateView(ctx context.Context, view *viewSystemObject) error {
+	err := p.ensureViewsSystemTableExists(ctx)
 	if err != nil {
 		return err
 	}
@@ -216,15 +216,15 @@ func (p *ExecutionPlanner) updateView(view *viewSystemObject) error {
 			},
 		},
 	}
-	_, err = iter.Next(context.Background())
+	_, err = iter.Next(ctx)
 	if err != nil && err != types.ErrNoMoreRows {
 		return err
 	}
 	return nil
 }
 
-func (p *ExecutionPlanner) deleteView(viewName string) error {
-	err := p.ensureViewsSystemTableExists()
+func (p *ExecutionPlanner) deleteView(ctx context.Context, viewName string) error {
+	err := p.ensureViewsSystemTableExists(ctx)
 	if err != nil {
 		return err
 	}
@@ -239,7 +239,7 @@ func (p *ExecutionPlanner) deleteView(viewName string) error {
 			parser.NewDataTypeBool(),
 		),
 	}
-	_, err = iter.Next(context.Background())
+	_, err = iter.Next(ctx)
 	if err != nil && err != types.ErrNoMoreRows {
 		return err
 	}

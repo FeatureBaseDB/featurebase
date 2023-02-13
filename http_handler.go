@@ -391,6 +391,7 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 func (h *Handler) extractTracing(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		span, ctx := tracing.GlobalTracer.ExtractHTTPHeaders(r)
+		span.LogKV("http.url", r.URL.String())
 		defer span.Finish()
 
 		next.ServeHTTP(w, r.WithContext(ctx))

@@ -154,9 +154,7 @@ func TestController(t *testing.T) {
 
 		// Set WorkersMin to 3 so we can used the added nodes that follow.
 		{
-			dbOptions.WorkersMin = 3
-			dbOptions.WorkersMax = 3
-			assert.NoError(t, con.SetDatabaseOptions(ctx, qdb1.QualifiedID(), dbOptions))
+			assert.NoError(t, con.SetDatabaseOption(ctx, qdb1.QualifiedID(), dax.DatabaseOptionWorkersMin, "3"))
 		}
 
 		// Register two more nodes.
@@ -459,9 +457,7 @@ func TestController(t *testing.T) {
 		// Set WorkersMin to 1 so we can add a single node and have it be used
 		// (currently just adding 1 node won't satisfy the minimum of 3).
 		{
-			dbOptions.WorkersMin = 1
-			dbOptions.WorkersMax = 1
-			assert.NoError(t, con.SetDatabaseOptions(ctx, qdb1.QualifiedID(), dbOptions))
+			assert.NoError(t, con.SetDatabaseOption(ctx, qdb1.QualifiedID(), dax.DatabaseOptionWorkersMin, "1"))
 		}
 
 		// Add a new node and ensure that the free shards get assigned to it.
@@ -674,9 +670,7 @@ func TestController(t *testing.T) {
 
 		// Set WorkersMin to 3 so we can used the two added nodes that follow.
 		{
-			dbOptions.WorkersMin = 3
-			dbOptions.WorkersMax = 3
-			assert.NoError(t, con.SetDatabaseOptions(ctx, qdb1.QualifiedID(), dbOptions))
+			assert.NoError(t, con.SetDatabaseOption(ctx, qdb1.QualifiedID(), dax.DatabaseOptionWorkersMin, "3"))
 		}
 
 		// Register two more nodes.

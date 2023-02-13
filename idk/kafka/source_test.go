@@ -826,6 +826,7 @@ func TestRegistryURLParsing(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		test := test
 		t.Run(fmt.Sprintf("%s-%d", test.name, i), func(t *testing.T) {
 			t.Parallel()
 

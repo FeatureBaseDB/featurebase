@@ -304,7 +304,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 					// Convert Base, which is the epoch for Timestamp fields, to
 					// a time.Time value.
 					unit := fbbatch.TimeUnit(opts.TimeUnit)
-					epoch, err := fbbatch.Int64ToTimestamp(unit, time.Time{}, opts.Base)
+					epoch, err := fbbatch.Int64ToTimestamp(unit, time.Unix(0, 0), opts.Base)
 					if err != nil {
 						return nil, errors.Wrapf(err, "converting base to epoch: %d", opts.Base)
 					}
@@ -326,7 +326,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 					// Convert Base, which is the epoch for Timestamp fields, to
 					// a time.Time value.
 					unit := fbbatch.TimeUnit(opts.TimeUnit)
-					epoch, err := fbbatch.Int64ToTimestamp(unit, time.Time{}, opts.Base)
+					epoch, err := fbbatch.Int64ToTimestamp(unit, time.Unix(0, 0), opts.Base)
 					if err != nil {
 						return nil, errors.Wrapf(err, "converting base to epoch: %d", opts.Base)
 					}

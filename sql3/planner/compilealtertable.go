@@ -18,16 +18,17 @@ const (
 	alterOpAdd alterOperation = iota
 	alterOpDrop
 	alterOpRename
+	alterOpSet
 )
 
 // compileAlterTableStatement compiles an ALTER TABLE statement into a
 // PlanOperator.
-func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileAlterTableStatement(ctx context.Context, stmt *parser.AlterTableStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Name)
 
 	// does the table exist
 	tname := dax.TableName(tableName)
-	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, tableName)
@@ -62,7 +63,7 @@ func (p *ExecutionPlanner) compileAlterTableStatement(stmt *parser.AlterTableSta
 			}
 		}
 
-		column, err := p.compileColumn(col)
+		column, err := p.compileColumn(ctx, col)
 		if err != nil {
 			return nil, err
 		}

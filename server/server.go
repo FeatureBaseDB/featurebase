@@ -45,9 +45,15 @@ import (
 	"github.com/featurebasedb/featurebase/v3/systemlayer"
 	"github.com/featurebasedb/featurebase/v3/syswrap"
 	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/featurebasedb/featurebase/v3/tracing/opentracing"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
 type loggerLogger interface {
@@ -74,7 +80,7 @@ type Command struct {
 
 	Registrar         computer.Registrar
 	serverlessStorage *storage.ResourceManager
-	writeLogService   computer.WritelogService
+	writelogService   computer.WritelogService
 	snapshotService   computer.SnapshotService
 
 	Handler      pilosa.HandlerI
@@ -147,7 +153,7 @@ func OptCommandSetConfig(config *Config) CommandOption {
 func OptCommandInjections(inj Injections) CommandOption {
 	return func(c *Command) error {
 		if inj.Writelogger != nil {
-			c.writeLogService = inj.Writelogger
+			c.writelogService = inj.Writelogger
 		}
 		if inj.Snapshotter != nil {
 			c.snapshotService = inj.Snapshotter
@@ -290,6 +296,7 @@ func (m *Command) StartNoServe(addr dax.Address) (err error) {
 // If the interval period is 0, the check-in is disabled.
 func (m *Command) checkIn(addr dax.Address) {
 	interval := m.Config.CheckInInterval
+	m.logger.Printf("CheckInInterval: %v", interval)
 
 	if interval == 0 {
 		return
@@ -355,6 +362,10 @@ func (m *Command) Start() (err error) {
 			m.logger.Errorf("grpc server error: %v", err)
 		}
 	}()
+
+	if err := m.setupProfilingAndTracing(); err != nil {
+		return errors.Wrap(err, "setting up profiling/tracing")
+	}
 
 	_ = testhook.Opened(pilosa.NewAuditor(), m, nil)
 	close(m.Started)
@@ -545,8 +556,8 @@ func (m *Command) setupServer() error {
 		m.Config.Etcd.Dir = filepath.Join(path, pilosa.DiscoDir)
 	}
 
-	if m.writeLogService != nil && m.snapshotService != nil {
-		m.serverlessStorage = storage.NewResourceManager(m.snapshotService, m.writeLogService, m.logger)
+	if m.writelogService != nil && m.snapshotService != nil {
+		m.serverlessStorage = storage.NewResourceManager(m.snapshotService, m.writelogService, m.logger)
 	}
 
 	executionPlannerFn := func(e pilosa.Executor, api *pilosa.API, sql string) sql3.CompilePlanner {
@@ -788,6 +799,65 @@ func (m *Command) setupQueryLogger() error {
 			}
 		}
 	}()
+	return nil
+}
+
+func (m *Command) setupProfilingAndTracing() error {
+	if m.Config.DataDog.Enable {
+		opts := make([]profiler.ProfileType, 0)
+		if m.Config.DataDog.CPUProfile {
+			opts = append(opts, profiler.CPUProfile)
+		}
+		if m.Config.DataDog.HeapProfile {
+			opts = append(opts, profiler.HeapProfile)
+		}
+		if m.Config.DataDog.BlockProfile {
+			opts = append(opts, profiler.BlockProfile)
+		}
+		if m.Config.DataDog.GoroutineProfile {
+			opts = append(opts, profiler.GoroutineProfile)
+		}
+		if m.Config.DataDog.MutexProfile {
+			opts = append(opts, profiler.MutexProfile)
+		}
+		err := profiler.Start(
+			profiler.WithService(m.Config.DataDog.Service),
+			profiler.WithEnv(m.Config.DataDog.Env),
+			profiler.WithVersion(m.Config.DataDog.Version),
+			profiler.WithTags(m.Config.DataDog.Tags),
+			profiler.WithProfileTypes(
+				opts...,
+			),
+		)
+		if err != nil {
+			return errors.Wrap(err, "starting datadog")
+		}
+		defer profiler.Stop()
+	}
+
+	if m.Config.Tracing.SamplerType != "off" {
+		// Initialize tracing in the command since it is global.
+		var cfg jaegercfg.Configuration
+		cfg.ServiceName = "pilosa"
+		cfg.Sampler = &jaegercfg.SamplerConfig{
+			Type:  m.Config.Tracing.SamplerType,
+			Param: m.Config.Tracing.SamplerParam,
+		}
+		cfg.Reporter = &jaegercfg.ReporterConfig{
+			LocalAgentHostPort: m.Config.Tracing.AgentHostPort,
+		}
+		tracer, closer, err := cfg.NewTracer()
+		if err != nil {
+			return errors.Wrap(err, "initializing jaeger tracer")
+		}
+		defer closer.Close()
+		tracing.GlobalTracer = opentracing.NewTracer(tracer, m.Logger())
+
+	} else if m.Config.DataDog.EnableTracing { // Give preference to legacy support of jaeger
+		t := opentracer.New(tracer.WithServiceName(m.Config.DataDog.Service))
+		defer tracer.Stop()
+		tracing.GlobalTracer = opentracing.NewTracer(t, m.Logger())
+	}
 	return nil
 }
 

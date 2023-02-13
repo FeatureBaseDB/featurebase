@@ -143,7 +143,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 
 		//go get the schema def and map names to indexes in the resultant row
 		tname := dax.TableName(i.tableName)
-		table, err := i.planner.schemaAPI.TableByName(context.Background(), tname)
+		table, err := i.planner.schemaAPI.TableByName(ctx, tname)
 		if err != nil {
 			if isTableNotFoundError(err) {
 				return nil, sql3.NewErrInternalf("table not found '%s'", i.tableName)

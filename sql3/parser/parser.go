@@ -149,6 +149,8 @@ func (p *Parser) parseShowStatement() (Statement, error) {
 	show, _, _ := p.scan()
 
 	switch p.peek() {
+	case DATABASES:
+		return p.parseShowDatabasesStatement(show)
 	case TABLES:
 		return p.parseShowTablesStatement(show)
 	case COLUMNS:
@@ -156,7 +158,19 @@ func (p *Parser) parseShowStatement() (Statement, error) {
 	case CREATE:
 		return p.parseShowCreateStatement(show)
 	default:
-		return nil, p.errorExpected(p.pos, p.tok, "TABLES, COLUMNS or CREATE")
+		return nil, p.errorExpected(p.pos, p.tok, "DATABASES, TABLES, COLUMNS or CREATE")
+	}
+}
+
+func (p *Parser) parseShowDatabasesStatement(showPos Pos) (*ShowDatabasesStatement, error) {
+	switch p.peek() {
+	case DATABASES:
+		var stmt ShowDatabasesStatement
+		stmt.Show = showPos
+		stmt.Databases, _, _ = p.scan()
+		return &stmt, nil
+	default:
+		return nil, p.errorExpected(p.pos, p.tok, "DATABASES")
 	}
 }
 
@@ -314,6 +328,8 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 	pos, tok, _ := p.scan()
 
 	switch p.peek() {
+	case DATABASE:
+		return p.parseCreateDatabaseStatement(pos)
 	case TABLE:
 		return p.parseCreateTableStatement(pos)
 	case VIEW:
@@ -323,7 +339,7 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 	case FUNCTION:
 		return p.parseCreateFunctionStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE, VIEW or FUNCTION")
+		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE, VIEW or FUNCTION")
 	}
 }
 
@@ -332,12 +348,14 @@ func (p *Parser) parseAlterStatement() (Statement, error) {
 	pos, tok, _ := p.scan()
 
 	switch p.peek() {
+	case DATABASE:
+		return p.parseAlterDatabaseStatement(pos)
 	case TABLE:
 		return p.parseAlterTableStatement(pos)
 	case VIEW:
 		return p.parseAlterViewStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE or VIEW")
+		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE or VIEW")
 	}
 }
 
@@ -346,6 +364,8 @@ func (p *Parser) parseDropStatement() (Statement, error) {
 	pos, tok, _ := p.scan()
 
 	switch p.peek() {
+	case DATABASE:
+		return p.parseDropDatabaseStatement(pos)
 	case TABLE:
 		return p.parseDropTableStatement(pos)
 	case VIEW:
@@ -355,8 +375,100 @@ func (p *Parser) parseDropStatement() (Statement, error) {
 	case FUNCTION:
 		return p.parseDropFunctionStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "TABLE, VIEW or FUNCTION")
+		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE, VIEW or FUNCTION")
 	}
+}
+
+func (p *Parser) parseCreateDatabaseStatement(createPos Pos) (_ *CreateDatabaseStatement, err error) {
+	assert(p.peek() == DATABASE)
+
+	var stmt CreateDatabaseStatement
+	stmt.Create = createPos
+	stmt.Database, _, _ = p.scan()
+
+	// Parse optional "IF NOT EXISTS".
+	if p.peek() == IF {
+		stmt.If, _, _ = p.scan()
+
+		pos, tok, _ := p.scan()
+		if tok != NOT {
+			return &stmt, p.errorExpected(pos, tok, "NOT")
+		}
+		stmt.IfNot = pos
+
+		pos, tok, _ = p.scan()
+		if tok != EXISTS {
+			return &stmt, p.errorExpected(pos, tok, "EXISTS")
+		}
+		stmt.IfNotExists = pos
+	}
+
+	if stmt.Name, err = p.parseIdent("database name"); err != nil {
+		return &stmt, err
+	}
+
+	switch p.peek() {
+	case WITH:
+		stmt.With, _, _ = p.scan()
+
+		// look for database options
+		if stmt.Options, err = p.parseDatabaseOptions(); err != nil {
+			return &stmt, err
+		}
+	}
+
+	return &stmt, nil
+}
+
+func (p *Parser) parseDatabaseOptions() (_ []DatabaseOption, err error) {
+	if !isDatabaseOptionStartToken(p.peek()) {
+		return nil, nil
+	}
+
+	var a []DatabaseOption
+
+	for {
+		if !isDatabaseOptionStartToken(p.peek()) {
+			return a, nil
+		}
+		cons, err := p.parseDatabaseOption()
+		if cons != nil {
+			a = append(a, cons)
+		}
+		if err != nil {
+			return a, err
+		}
+	}
+}
+
+func (p *Parser) parseDatabaseOption() (_ DatabaseOption, err error) {
+	assert(isDatabaseOptionStartToken(p.peek()))
+
+	var optionPos Pos
+
+	// Parse database options.
+	switch p.peek() {
+	case UNITS:
+		return p.parseUnitsOption(optionPos)
+	default:
+		assert(p.peek() == COMMENT)
+		return p.parseCommentOption(optionPos)
+	}
+}
+
+func (p *Parser) parseUnitsOption(optionPos Pos) (_ *UnitsOption, err error) {
+	assert(p.peek() == UNITS)
+
+	var opt UnitsOption
+	opt.Units, _, _ = p.scan()
+
+	if isLiteralToken(p.peek()) {
+		opt.Expr = p.mustParseLiteral()
+	} else {
+		return &opt, p.errorExpected(p.pos, p.tok, "literal")
+	}
+
+	return &opt, nil
 }
 
 func (p *Parser) parseCreateTableStatement(createPos Pos) (_ *CreateTableStatement, err error) {
@@ -1008,6 +1120,29 @@ func (p *Parser) parseTimeQuantumConstraint(constraintPos Pos, name *Ident) (_ *
 
 	return &cons, nil
 }*/
+
+func (p *Parser) parseDropDatabaseStatement(dropPos Pos) (_ *DropDatabaseStatement, err error) {
+	assert(p.peek() == DATABASE)
+
+	var stmt DropDatabaseStatement
+	stmt.Drop = dropPos
+	stmt.Database, _, _ = p.scan()
+
+	// Parse optional "IF EXISTS".
+	if p.peek() == IF {
+		stmt.If, _, _ = p.scan()
+		if p.peek() != EXISTS {
+			return &stmt, p.errorExpected(p.pos, p.tok, "EXISTS")
+		}
+		stmt.IfExists, _, _ = p.scan()
+	}
+
+	if stmt.Name, err = p.parseIdent("database name"); err != nil {
+		return &stmt, err
+	}
+
+	return &stmt, nil
+}
 
 func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, err error) {
 	assert(p.peek() == TABLE)
@@ -3283,6 +3418,36 @@ func (p *Parser) parseIntegerLiteral(desc string) (*IntegerLit, error) {
 	}
 }
 
+func (p *Parser) parseAlterDatabaseStatement(alterPos Pos) (_ *AlterDatabaseStatement, err error) {
+	var stmt AlterDatabaseStatement
+	stmt.Alter = alterPos
+	if p.peek() != DATABASE {
+		return &stmt, p.errorExpected(p.pos, p.tok, "DATABASE")
+	}
+	stmt.Database, _, _ = p.scan()
+
+	if stmt.Name, err = p.parseIdent("database name"); err != nil {
+		return &stmt, err
+	}
+
+	switch p.peek() {
+	case WITH:
+		stmt.With, _, _ = p.scan()
+
+		// look for database option
+		if !isDatabaseOptionStartToken(p.peek()) {
+			return &stmt, p.errorExpected(p.pos, p.tok, "UNITS")
+		}
+		if stmt.Option, err = p.parseDatabaseOption(); err != nil {
+			return &stmt, err
+		}
+	default:
+		return &stmt, p.errorExpected(p.pos, p.tok, "WITH")
+	}
+
+	return &stmt, nil
+}
+
 func (p *Parser) parseAlterTableStatement(alterPos Pos) (_ *AlterTableStatement, err error) {
 	var stmt AlterTableStatement
 	stmt.Alter = alterPos
@@ -3452,6 +3617,16 @@ func (e Error) Error() string {
 		return e.Pos.String() + ": " + e.Msg
 	}
 	return e.Msg
+}
+
+// isDatabaseOptionStartToken returns true if tok is the initial token of a table option.
+func isDatabaseOptionStartToken(tok Token) bool {
+	switch tok {
+	case UNITS, COMMENT:
+		return true
+	default:
+		return false
+	}
 }
 
 // isTableOptionStartToken returns true if tok is the initial token of a table option.

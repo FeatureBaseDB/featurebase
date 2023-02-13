@@ -4,11 +4,13 @@ import (
 	"crypto/rand"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/pql"
+	uuid "github.com/satori/go.uuid"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -153,16 +155,73 @@ type Database struct {
 	UpdatedBy   string `json:"updatedBy,omitempty"`
 }
 
+// CreateID generates a unique identifier for Database. If Database has already
+// been assigned an ID, then this no-ops. The reason for this is that the cloud
+// implementation of FeatureBase may allocate an ID before calling
+// CreateDatabase on the controller.
+func (d *Database) CreateID() (DatabaseID, error) {
+	if d.ID != "" {
+		return d.ID, nil
+	}
+
+	id, err := uuid.NewV4()
+	if err != nil {
+		return "", errors.Wrap(err, "generating uuid")
+	}
+
+	d.ID = DatabaseID(id.String())
+
+	return d.ID, nil
+}
+
 // DatabaseOptions are used to configure a database.
 type DatabaseOptions struct {
 	WorkersMin int `json:"workers-min"`
 	WorkersMax int `json:"workers-max"`
 }
 
+// DatabaseOption is a string key representing a database option.
+type DatabaseOption string
+
+const (
+	DatabaseOptionWorkersMin = "workers-min"
+	DatabaseOptionWorkersMax = "workers-max"
+)
+
+// Set sets the specified option to the provided value.
+func (opts *DatabaseOptions) Set(option string, value string) error {
+	opt := strings.ToLower(option)
+	switch opt {
+	case DatabaseOptionWorkersMin:
+		min, err := strconv.Atoi(value)
+		if err != nil {
+			return errors.Wrapf(err, "converting value to int: %s", value)
+		}
+		opts.WorkersMin = min
+		// We don't currently expose WorkersMax because we aren't yet detecting
+		// how to scale between a range, so for now we just keep it set to the
+		// same value as WorkersMin.
+		opts.WorkersMax = min
+	default:
+		return errors.Errorf("unsupported database option: %s", option)
+	}
+
+	return nil
+}
+
 // QualifiedDatabase is a Database along with its OrganizationID.
 type QualifiedDatabase struct {
 	OrganizationID OrganizationID `json:"org-id"`
 	Database
+}
+
+// NewQualifiedDatabase returns the db as a QualifiedDatabase with the provided
+// OrganizationID.
+func NewQualifiedDatabase(orgID OrganizationID, db *Database) *QualifiedDatabase {
+	return &QualifiedDatabase{
+		OrganizationID: orgID,
+		Database:       *db,
+	}
 }
 
 type QualifiedDatabases []*QualifiedDatabase

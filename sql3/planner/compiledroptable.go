@@ -14,10 +14,10 @@ import (
 
 // compileDropTableStatement compiles a DROP TABLE statement into a
 // PlanOperator.
-func (p *ExecutionPlanner) compileDropTableStatement(stmt *parser.DropTableStatement) (_ types.PlanOperator, err error) {
+func (p *ExecutionPlanner) compileDropTableStatement(ctx context.Context, stmt *parser.DropTableStatement) (_ types.PlanOperator, err error) {
 	tableName := parser.IdentName(stmt.Name)
 	tname := dax.TableName(tableName)
-	tbl, err := p.schemaAPI.TableByName(context.Background(), tname)
+	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
 			return nil, sql3.NewErrTableNotFound(stmt.Name.NamePos.Line, stmt.Name.NamePos.Column, tableName)
