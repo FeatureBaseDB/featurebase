@@ -114,7 +114,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(ctx context.Context, stmt 
 	for _, m := range stmt.Columns {
 		for idx, fld := range tbl.Fields {
 			if strings.EqualFold(string(fld.Name), m.Name) {
-				options.targetColumns = append(options.targetColumns, newQualifiedRefPlanExpression(tableName, m.Name, idx, fieldSQLDataType(pilosa.FieldToFieldInfo(fld))))
+				options.targetColumns = append(options.targetColumns, newQualifiedRefPlanExpression(tableName, strings.ToLower(m.Name), idx, fieldSQLDataType(pilosa.FieldToFieldInfo(fld))))
 				break
 			}
 		}
