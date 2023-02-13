@@ -604,11 +604,12 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Do version check in. This is in a goroutine so that we don't block server startup if the server endpoint is down/having issues.
+	// Do version check in. This is in a goroutine so that we don't block server
+	// startup if the server endpoint is down/having issues.
 	go func() {
 		s.logger.Printf("Beginning featurebase version check-in")
-		vc := VersionChecker{URL: "https://analytics.featurebase.com/v2/featurebase/metrics"}
-		resp, err := vc.CheckIn()
+		vc := newVersionChecker(s.cluster.Path, "https://analytics.featurebase.com/v2/featurebase/metrics")
+		resp, err := vc.checkIn()
 		if err != nil {
 			s.logger.Errorf("doing version checkin. Error was %s", err)
 			return
