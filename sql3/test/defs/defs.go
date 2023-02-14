@@ -16,6 +16,14 @@ var TableTests []TableTest = []TableTest{
 	selectTests,
 	selectKeyedTests,
 	selectHavingTests,
+	filterPredicates,
+	filterPredicatesIdKey,
+	filterPredicatesId,
+	filterPredicatesInt,
+	filterPredicatesBool,
+	filterPredicatesTimestamp,
+	filterPredicatesDecimal,
+	filterPredicatesString,
 	orderByTests,
 	distinctTests,
 
@@ -33,6 +41,7 @@ var TableTests []TableTest = []TableTest{
 	stringScalarFunctionsTests,
 
 	insertTest,
+	insertTimestampTest,
 	keyedInsertTest,
 	timestampLiterals,
 	unaryOpExprWithInt,

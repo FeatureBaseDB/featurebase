@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -956,7 +957,7 @@ func runSQL(tb testing.TB, queryerAddr dax.Address, qdbid dax.QualifiedDatabaseI
 
 	client := queryerclient.New(queryerAddr, logger.StderrLogger)
 
-	resp, err := client.QuerySQL(context.Background(), qdbid, sql)
+	resp, err := client.QuerySQL(context.Background(), qdbid, strings.NewReader(sql))
 	assert.NoError(tb, err)
 
 	return resp
@@ -967,7 +968,8 @@ func runPQL(tb testing.TB, queryerAddr dax.Address, qdbid dax.QualifiedDatabaseI
 
 	client := queryerclient.New(queryerAddr, logger.StderrLogger)
 
-	resp, err := client.QueryPQL(context.Background(), qdbid, dax.TableName(table), pql)
+	sqlPQL := fmt.Sprintf("[%s]%s", table, pql)
+	resp, err := client.QuerySQL(context.Background(), qdbid, strings.NewReader(sqlPQL))
 	assert.NoError(tb, err)
 
 	return resp

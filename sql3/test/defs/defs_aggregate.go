@@ -288,14 +288,15 @@ var avgTests = TableTest{
 			srcHdr("i1", fldTypeInt, "min 0", "max 1000"),
 			srcHdr("d1", fldTypeDecimal2),
 			srcHdr("s1", fldTypeString),
+			srcHdr("id1", fldTypeID),
 		),
 		srcRows(
-			srcRow(int64(1), int64(10), float64(10), string("foo")),
-			srcRow(int64(2), int64(10), float64(10), string("foo")),
-			srcRow(int64(3), int64(11), float64(11), string("foo")),
-			srcRow(int64(4), int64(12), float64(12), string("foo")),
-			srcRow(int64(5), int64(12), float64(12), string("foo")),
-			srcRow(int64(6), int64(13), float64(13), string("foo")),
+			srcRow(int64(1), int64(10), float64(10), string("foo"), int64(10)),
+			srcRow(int64(2), int64(10), float64(10), string("foo"), int64(11)),
+			srcRow(int64(3), int64(11), float64(11), string("foo"), int64(12)),
+			srcRow(int64(4), int64(12), float64(12), string("foo"), int64(13)),
+			srcRow(int64(5), int64(12), float64(12), string("foo"), int64(14)),
+			srcRow(int64(6), int64(13), float64(13), string("foo"), int64(15)),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -322,6 +323,22 @@ var avgTests = TableTest{
 				"SELECT avg(s1) AS avg_rows FROM avg_test",
 			),
 			ExpErr: "integer or decimal expression expected",
+		},
+		{
+			SQLs: sqls(
+				"SELECT avg(id1) AS avg_rows FROM avg_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(125000, 4)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
@@ -430,12 +447,12 @@ var minmaxTests = TableTest{
 			srcHdr("ts1", fldTypeTimestamp),
 		),
 		srcRows(
-			srcRow(int64(1), int64(10), float64(10), string("foo"), timestampFromString("2013-07-15T01:18:46Z")),
-			srcRow(int64(2), int64(10), float64(10), string("foo"), timestampFromString("2014-07-15T01:18:46Z")),
-			srcRow(int64(3), int64(11), float64(11), string("foo"), timestampFromString("2015-07-15T01:18:46Z")),
-			srcRow(int64(4), int64(12), float64(12), string("foo"), timestampFromString("2016-07-15T01:18:46Z")),
-			srcRow(int64(5), int64(12), float64(12), string("foo"), timestampFromString("2017-07-15T01:18:46Z")),
-			srcRow(int64(6), int64(13), float64(13), string("foo"), timestampFromString("2018-07-15T01:18:46Z")),
+			srcRow(int64(1), int64(10), float64(10), string("afoo"), timestampFromString("2013-07-15T01:18:46Z")),
+			srcRow(int64(2), int64(10), float64(10), string("bfoo"), timestampFromString("2014-07-15T01:18:46Z")),
+			srcRow(int64(3), int64(11), float64(11), string("cfoo"), timestampFromString("2015-07-15T01:18:46Z")),
+			srcRow(int64(4), int64(12), float64(12), string("dfoo"), timestampFromString("2016-07-15T01:18:46Z")),
+			srcRow(int64(5), int64(12), float64(12), string("efoo"), timestampFromString("2017-07-15T01:18:46Z")),
+			srcRow(int64(6), int64(13), float64(13), string("ffoo"), timestampFromString("2018-07-15T01:18:46Z")),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -470,9 +487,26 @@ var minmaxTests = TableTest{
 		{
 			SQLs: sqls(
 				"SELECT min(s1) AS p_rows FROM minmax_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("afoo")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
 				"SELECT max(s1) AS p_rows FROM minmax_test",
 			),
-			ExpErr: "integer, decimal or timestamp expression expected",
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeString),
+			),
+			ExpRows: rows(
+				row(string("ffoo")),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(

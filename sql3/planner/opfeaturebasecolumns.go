@@ -64,11 +64,6 @@ func (p *PlanOpFeatureBaseColumns) Schema() types.Schema {
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_table_columns",
-			ColumnName:   "internal_type",
-			Type:         parser.NewDataTypeString(),
-		},
-		&types.PlannerColumn{
-			RelationName: "fb_table_columns",
 			ColumnName:   "created_at",
 			Type:         parser.NewDataTypeTimestamp(),
 		},
@@ -155,7 +150,6 @@ func (i *showColumnsRowIter) Next(ctx context.Context) (types.Row, error) {
 		row := []interface{}{
 			fields[i.rowIndex].Name,
 			fields[i.rowIndex].Name,
-			fields[i.rowIndex].Type,
 			fields[i.rowIndex].Type,
 			tm.Format(time.RFC3339),
 			fields[i.rowIndex].StringKeys(),

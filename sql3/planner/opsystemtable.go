@@ -109,7 +109,7 @@ var systemTables = map[string]*systemTable{
 			&types.PlannerColumn{
 				RelationName: fbClusterNodes,
 				ColumnName:   "space_used",
-				Type:         parser.NewDataTypeBool(),
+				Type:         parser.NewDataTypeInt(),
 			},
 		},
 		requiresFanout: false,

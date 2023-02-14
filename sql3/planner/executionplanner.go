@@ -324,7 +324,7 @@ func (e *ExecutionPlanner) remotePlanExec(ctx context.Context, addr string, op t
 	}
 
 	// Create HTTP request.
-	u := fmt.Sprintf("%s/sql", addr)
+	u := fmt.Sprintf("%s/sql-exec-graph", addr)
 	req, err := http.NewRequest("POST", u, bytes.NewReader(b))
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")
@@ -337,7 +337,6 @@ func (e *ExecutionPlanner) remotePlanExec(ctx context.Context, addr string, op t
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Accept", "application/octet-stream")
 	req.Header.Set("User-Agent", "pilosa/"+e.systemAPI.Version())
-	req.Header.Set("X-FeatureBase-Plan-Operator", fmt.Sprintf("%T", op))
 
 	// Execute request against the host.
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))

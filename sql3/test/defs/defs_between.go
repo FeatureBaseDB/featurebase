@@ -46,6 +46,18 @@ var betweenTests = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"select d1 between 10 and 15 from between_all_types",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(true)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
 				"select b1 between true and false from between_all_types",
 			),
 			ExpErr: "type 'bool' cannot be used as a range subscript",
@@ -54,7 +66,13 @@ var betweenTests = TableTest{
 			SQLs: sqls(
 				"select d1 between 1.23 and 4.56 from between_all_types",
 			),
-			ExpErr: "type 'decimal(2)' cannot be used as a range subscript",
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(false)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
@@ -147,6 +165,18 @@ var notBetweenTests = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"select d1 not between 10 and 15 from between_all_types",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(false)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
 				"select b1 not between true and false from not_between_all_types",
 			),
 			ExpErr: "type 'bool' cannot be used as a range subscript",
@@ -155,7 +185,13 @@ var notBetweenTests = TableTest{
 			SQLs: sqls(
 				"select d1 not between 1.23 and 4.56 from not_between_all_types",
 			),
-			ExpErr: "type 'decimal(2)' cannot be used as a range subscript",
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(true)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(

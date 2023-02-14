@@ -33,38 +33,32 @@ func TestCLI(t *testing.T) {
 		none := []string{}
 
 		// One statement, one line.
-		capture.Assert("one;", []string{`one`})
+		capture.Assert("one;", []string{"one\n"})
 
 		// One statement, multiple lines.
 		capture.Assert("one", none)
 		capture.Assert(" two ", none)
-		capture.Assert("three;", []string{`one
- two 
-three`})
+		capture.Assert("three;", []string{"one\ntwo\nthree\n"})
 
 		// Multiple statements, one line.
-		capture.Assert("foo; bar;", []string{`foo`, `bar`})
+		capture.Assert("foo; bar;", []string{"foo\n", "bar\n"})
 
 		// Multiple statements, multiple lines.
 		capture.Assert("a1", none)
-		capture.Assert("a2; b1", []string{`a1
-a2`})
-		capture.Assert("b2;", []string{`b1
-b2`})
+		capture.Assert("a2; b1", []string{"a1\na2\n"})
+		capture.Assert("b2;", []string{"b1\nb2\n"})
 
 		// Blank lines.
 		capture.Assert("one", none)
 		capture.Assert("", none)
-		capture.Assert("three;", []string{`one
-
-three`})
+		capture.Assert("three;", []string{"one\nthree\n"})
 
 		// Just a semi-colon.
-		capture.Assert(";", none)
+		capture.Assert(";", []string{""})
 
 		// Multi-line with just a semi-colon.
 		capture.Assert("one", none)
-		capture.Assert(";", []string{`one`})
+		capture.Assert(";", []string{"one\n"})
 
 		// Ensure a clean exit with no errors.
 		assert.NoError(t, capture.Exit())
@@ -111,7 +105,7 @@ func newCapture(t *testing.T) *capture {
 }
 
 func (c *capture) Exit() error {
-	c.sendLine("exit")
+	c.sendLine(`\q`)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.err
@@ -183,9 +177,15 @@ func (c *capture) Write(b []byte) (n int, err error) {
 
 // Query is called by the CLI command once a full SQL statement is received
 // (signified by the terminator: `;`).
-func (c *capture) Query(org, db, sql string) (*featurebase.WireQueryResponse, error) {
+func (c *capture) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
+	tmpBuf := new(strings.Builder)
+	_, err := io.Copy(tmpBuf, sql)
+	if err != nil {
+		return nil, err
+	}
+
 	c.mu.Lock()
-	c.sqls = append(c.sqls, sql)
+	c.sqls = append(c.sqls, tmpBuf.String())
 	c.mu.Unlock()
 
 	select {

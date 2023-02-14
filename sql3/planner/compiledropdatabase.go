@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -14,7 +15,7 @@ import (
 // compileDropDatabaseStatement compiles a DROP DATABASE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileDropDatabaseStatement(ctx context.Context, stmt *parser.DropDatabaseStatement) (_ types.PlanOperator, err error) {
-	databaseName := parser.IdentName(stmt.Name)
+	databaseName := strings.ToLower(parser.IdentName(stmt.Name))
 	dbname := dax.DatabaseName(databaseName)
 	db, err := p.schemaAPI.DatabaseByName(ctx, dbname)
 	if err != nil {

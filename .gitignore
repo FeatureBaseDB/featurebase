@@ -83,3 +83,4 @@ staticcheck.conf
 dax/dax-data
 
 coverage-from-docker
+*.client_id.txt

@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"strings"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -15,7 +16,7 @@ import (
 // compileDropTableStatement compiles a DROP TABLE statement into a
 // PlanOperator.
 func (p *ExecutionPlanner) compileDropTableStatement(ctx context.Context, stmt *parser.DropTableStatement) (_ types.PlanOperator, err error) {
-	tableName := parser.IdentName(stmt.Name)
+	tableName := strings.ToLower(parser.IdentName(stmt.Name))
 	tname := dax.TableName(tableName)
 	tbl, err := p.schemaAPI.TableByName(ctx, tname)
 	if err != nil {

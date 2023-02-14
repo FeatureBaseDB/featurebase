@@ -180,7 +180,166 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			Children: []*pql.Call{x, y},
 		}, nil
 
-	case parser.EQ, parser.NE, parser.LT, parser.LE, parser.GT, parser.GE:
+	case parser.EQ:
+		lhs, ok := expr.lhs.(*qualifiedRefPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected lhs %T", expr.lhs)
+		}
+
+		pqlValue, err := planExprToValue(expr.rhs)
+		if err != nil {
+			return nil, err
+		}
+
+		switch typ := expr.lhs.Type().(type) {
+		case *parser.DataTypeInt:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pql.EQ,
+						Value: pqlValue,
+					},
+				},
+			}, nil
+
+		case *parser.DataTypeID:
+			if strings.EqualFold(lhs.columnName, "_id") {
+				return &pql.Call{
+					Name: "ConstRow",
+					Args: map[string]interface{}{
+						"columns": []interface{}{pqlValue},
+					},
+					Type: pql.PrecallGlobal,
+				}, nil
+			}
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: pqlValue,
+				},
+			}, nil
+
+		case *parser.DataTypeString:
+			if strings.EqualFold(lhs.columnName, "_id") {
+				return &pql.Call{
+					Name: "ConstRow",
+					Args: map[string]interface{}{
+						"columns": []interface{}{pqlValue},
+					},
+					Type: pql.PrecallGlobal,
+				}, nil
+			}
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: pqlValue,
+				},
+			}, nil
+
+		case *parser.DataTypeTimestamp:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pql.EQ,
+						Value: pqlValue,
+					},
+				},
+			}, nil
+
+		case *parser.DataTypeBool:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: pqlValue,
+				},
+			}, nil
+
+		case *parser.DataTypeDecimal:
+			val, ok := pqlValue.(float64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected type '%T", pqlValue)
+			}
+			d := pql.FromFloat64(val)
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pql.EQ,
+						Value: d,
+					},
+				},
+			}, nil
+
+		default:
+			return nil, sql3.NewErrInternalf("unsupported type for binary expression: %v (%T)", typ, typ)
+		}
+
+	case parser.NE:
+		lhs, ok := expr.lhs.(*qualifiedRefPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected lhs %T", expr.lhs)
+		}
+
+		pqlValue, err := planExprToValue(expr.rhs)
+		if err != nil {
+			return nil, err
+		}
+
+		switch typ := expr.lhs.Type().(type) {
+		case *parser.DataTypeInt:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pql.NEQ,
+						Value: pqlValue,
+					},
+				},
+			}, nil
+
+		case *parser.DataTypeID:
+			return nil, sql3.NewErrUnsupported(0, 0, true, "not equal operator on id typed columns")
+
+		case *parser.DataTypeString:
+			return nil, sql3.NewErrUnsupported(0, 0, true, "not equal operator on string typed columns")
+
+		case *parser.DataTypeTimestamp:
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pql.NEQ,
+						Value: pqlValue,
+					},
+				},
+			}, nil
+
+		case *parser.DataTypeBool:
+			return nil, sql3.NewErrUnsupported(0, 0, true, "not equal operator on bool typed columns")
+
+		case *parser.DataTypeDecimal:
+			val, ok := pqlValue.(float64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected type '%T", pqlValue)
+			}
+			d := pql.FromFloat64(val)
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pql.NEQ,
+						Value: d,
+					},
+				},
+			}, nil
+
+		default:
+			return nil, sql3.NewErrInternalf("unsupported type for binary expression: %v (%T)", typ, typ)
+		}
+
+	case parser.LT, parser.LE, parser.GT, parser.GE:
 		lhs, ok := expr.lhs.(*qualifiedRefPlanExpression)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected lhs %T", expr.lhs)
@@ -208,82 +367,32 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		case *parser.DataTypeID:
-			// TODO (pok) range queries on _id are not supported
-			if strings.EqualFold(lhs.columnName, "_id") {
-				cr := &pql.Call{
-					Name: "ConstRow",
-					Args: map[string]interface{}{
-						"columns": []interface{}{pqlValue},
-					},
-					Type: pql.PrecallGlobal,
-				}
-				// TODO (pok) when we fix FB-1828 (https://molecula.atlassian.net/browse/FB-1828)
-				// we can remove this - ConstRow returns a ghost record, thus to eliminate
-				// we interset with All
-				return &pql.Call{
-					Name: "Intersect",
-					Children: []*pql.Call{
-						{
-							Name: "All",
-						},
-						cr,
-					},
-				}, nil
-			}
-			return &pql.Call{
-				Name: "Row",
-				Args: map[string]interface{}{
-					lhs.columnName: pqlValue,
-				},
-			}, nil
+			return nil, sql3.NewErrUnsupported(0, 0, false, "range queries on id typed columns")
 
 		case *parser.DataTypeString:
-			// TODO (pok) range queries on _id are not supported
-			if strings.EqualFold(lhs.columnName, "_id") {
-				cr := &pql.Call{
-					Name: "ConstRow",
-					Args: map[string]interface{}{
-						"columns": []interface{}{pqlValue},
-					},
-					Type: pql.PrecallGlobal,
-				}
-				// TODO (pok) when we fix FB-1828 (https://molecula.atlassian.net/browse/FB-1828)
-				// we can remove this - ConstRow returns a ghost record, thus to eliminate
-				// we interset with All
-				return &pql.Call{
-					Name: "Intersect",
-					Children: []*pql.Call{
-						{
-							Name: "All",
-						},
-						cr,
-					},
-				}, nil
+			return nil, sql3.NewErrUnsupported(0, 0, false, "range queries on string typed columns")
+
+		case *parser.DataTypeTimestamp:
+			pqlOp, err := sqlToPQLOp(op)
+			if err != nil {
+				return nil, err
 			}
 			return &pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
-					lhs.columnName: pqlValue,
-				},
-			}, nil
-
-		case *parser.DataTypeTimestamp:
-			return &pql.Call{
-				Name: "Row",
-				Args: map[string]interface{}{
-					lhs.columnName: pqlValue,
-				},
-			}, nil
-
-		case *parser.DataTypeBool:
-			return &pql.Call{
-				Name: "Row",
-				Args: map[string]interface{}{
-					lhs.columnName: pqlValue,
+					lhs.columnName: &pql.Condition{
+						Op:    pqlOp,
+						Value: pqlValue,
+					},
 				},
 			}, nil
 
 		case *parser.DataTypeDecimal:
+
+			pqlOp, err := sqlToPQLOp(op)
+			if err != nil {
+				return nil, err
+			}
 			val, ok := pqlValue.(float64)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected type '%T", pqlValue)
@@ -292,7 +401,10 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			return &pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
-					lhs.columnName: d,
+					lhs.columnName: &pql.Condition{
+						Op:    pqlOp,
+						Value: d,
+					},
 				},
 			}, nil
 

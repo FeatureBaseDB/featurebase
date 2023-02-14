@@ -188,7 +188,7 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("uri"),
 			wireQueryFieldString("grpc_uri"),
 			wireQueryFieldBool("is_primary"),
-			wireQueryFieldBool("space_used"),
+			wireQueryFieldInt("space_used"),
 		}, columns); diff != "" {
 			t.Fatal(diff)
 		}
@@ -318,7 +318,6 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
-			wireQueryFieldString("internal_type"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldString("cache_type"),
@@ -348,7 +347,6 @@ func TestPlanner_Show(t *testing.T) {
 			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
-			wireQueryFieldString("internal_type"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldString("cache_type"),
@@ -688,6 +686,20 @@ func TestPlanner_CreateTable(t *testing.T) {
 		}
 	})
 
+	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, server, `create table lowercase (_id id, name string, SomeColumn string, legalname string);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
+		_, _, err := sql_test.MustQueryRows(t, server, `create table MixedCcase (_id id, name string, SomeColumn string, legalname string);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("DropTable1", func(t *testing.T) {
 		_, _, err := sql_test.MustQueryRows(t, server, `drop table allcoltypes`)
 		if err != nil {
@@ -730,7 +742,6 @@ func TestPlanner_CreateTable(t *testing.T) {
 			wireQueryFieldString("_id"),
 			wireQueryFieldString("name"),
 			wireQueryFieldString("type"),
-			wireQueryFieldString("internal_type"),
 			wireQueryFieldTimestamp("created_at"),
 			wireQueryFieldBool("keys"),
 			wireQueryFieldString("cache_type"),
@@ -1951,6 +1962,64 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			x'8924809397503602651,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset1,1
 			64575677503602651,TEST2,321,31.2,1,2014-07-15T01:18:46Z,stringset1,1
 			8924809397503602651,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset2,2'
+			with
+				BATCHSIZE 10000
+				format 'CSV'
+				input 'STREAM';`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("BulkInsertCSVStringNulls", func(t *testing.T) {
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-n (
+			_id ID,
+			id_col ID,
+			string_col STRING cachetype ranked size 1000,
+			int_col int,
+			decimal_col DECIMAL(2),
+			bool_col BOOL
+			time_col TIMESTAMP,
+			stringset_col STRINGSET,
+			ideset_col IDSET
+		);`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-n (
+			_id,
+			id_col,
+			string_col,
+			int_col,
+			decimal_col,
+			bool_col,
+			time_col,
+			stringset_col,
+			ideset_col)
+			map (
+			0 ID,
+			1 STRING,
+			2 INT,
+			3 DECIMAL(2),
+			4 BOOL,
+			5 TIMESTAMP,
+			6 STRINGSET,
+			7 IDSET)
+			transform(
+			@0,
+			@0,
+			@1,
+			@2,
+			@3,
+			@4,
+			@5,
+			@6,
+			@7)
+			FROM
+			x'1,,,,,,,
+			2,,,,,,,
+			3,,,,,,,'
 			with
 				BATCHSIZE 10000
 				format 'CSV'

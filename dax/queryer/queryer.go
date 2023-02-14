@@ -2,8 +2,10 @@
 package queryer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -122,7 +124,7 @@ func (q *Queryer) Start() error {
 	return nil
 }
 
-func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, sql string) (*featurebase.WireQueryResponse, error) {
+func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, sql io.Reader) (*featurebase.WireQueryResponse, error) {
 	start := time.Now()
 
 	ret := &featurebase.WireQueryResponse{}
@@ -136,9 +138,31 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 		applyExecutionTime()
 	}
 
+	// Peek at the first character of sql. If it's "[", then handle this as PQL.
+	var isPQL bool
+	peekSize := 1
+	peeker := io.LimitReader(sql, int64(peekSize))
+	peek, err := io.ReadAll(peeker)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading peeker")
+	} else if len(peek) == 1 && peek[0] == byte('[') {
+		isPQL = true
+	}
+
+	// Since we already read peekSize bytes from r, we need to prepend that peek
+	// data to what's left to read from r. To do that we stitch them back
+	// together with an io.MultiReader.
+	peekReader := bytes.NewReader(peek)
+	multiReader := io.MultiReader(peekReader, sql)
+
 	// If PQL, run that instead.
-	if len(sql) > 0 && sql[0] == '[' {
-		if pqlResp, err := q.parseAndQueryPQL(ctx, qdbid, sql); err != nil {
+	if isPQL {
+		pql, err := io.ReadAll(multiReader)
+		if err != nil {
+			applyError(errors.Wrap(err, "reading pql"))
+			return ret, nil
+		}
+		if pqlResp, err := q.parseAndQueryPQL(ctx, qdbid, string(pql)); err != nil {
 			applyError(errors.Wrap(err, "querying pql"))
 			return ret, nil
 		} else {
@@ -158,7 +182,7 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	// put the requestId in the context
 	ctx = fbcontext.WithRequestID(ctx, requestID.String())
 
-	st, err := parser.NewParser(strings.NewReader(sql)).ParseStatement()
+	st, err := parser.NewParser(multiReader).ParseStatement()
 	if err != nil {
 		applyError(errors.Wrap(err, "parsing sql"))
 		return ret, nil
@@ -170,12 +194,17 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	// Importer
 	imp := idkserverless.NewImporter(q.controller, qdbid, nil)
 
-	// TODO(tlt): We need a dax-compatible implementation of the SystemAPI.
+	// TODO(tlt): We need a serverless-compatible implementation of the
+	// SystemAPI.
 	sysapi := &featurebase.NopSystemAPI{}
 
 	systemLayer := systemlayer.NewSystemLayer()
 
-	pl := planner.NewExecutionPlanner(q.Orchestrator(qdbid), sapi, sysapi, systemLayer, imp, q.logger, sql)
+	// We intentionally don't pass the sql argument here because we're working
+	// with an io.Reader rather than a string and it's just not necessary to
+	// send it as a string to this method. Also, what happens if the sql is a
+	// large BULK INSERT?
+	pl := planner.NewExecutionPlanner(q.Orchestrator(qdbid), sapi, sysapi, systemLayer, imp, q.logger, "")
 
 	planOp, err := pl.CompilePlan(ctx, st)
 	if err != nil {

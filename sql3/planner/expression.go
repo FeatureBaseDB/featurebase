@@ -1170,7 +1170,7 @@ func (n *betweenOpPlanExpression) Evaluate(currentRow []interface{}) (interface{
 
 	switch rType := n.rhs.Type().(type) {
 	case *parser.DataTypeRange:
-		switch rType.SubscriptType.(type) {
+		switch sType := rType.SubscriptType.(type) {
 		case *parser.DataTypeInt:
 
 			nl, nlok := evalLhs.(int64)
@@ -1201,8 +1201,40 @@ func (n *betweenOpPlanExpression) Evaluate(currentRow []interface{}) (interface{
 			}
 			return result, nil
 
+		case *parser.DataTypeDecimal:
+
+			nl, nlok := evalLhs.(pql.Decimal)
+			if !(nlok) {
+				return nil, sql3.NewErrInternalf("unexpected type conversion error '%t'", nlok)
+			}
+
+			crl, err := coerceValue(exprRange.lhs.Type(), sType, rangeLower, parser.Pos{Line: 0, Column: 0})
+			if err != nil {
+				return nil, err
+			}
+
+			rl, ok := crl.(pql.Decimal)
+			if !(ok) {
+				return nil, sql3.NewErrInternalf("unexpected type conversion error '%t'", crl)
+			}
+
+			cru, err := coerceValue(exprRange.rhs.Type(), sType, rangeUpper, parser.Pos{Line: 0, Column: 0})
+			if err != nil {
+				return nil, err
+			}
+			ru, ok := cru.(pql.Decimal)
+			if !(ok) {
+				return nil, sql3.NewErrInternalf("unexpected type conversion error '%t'", cru)
+			}
+
+			result := nl.GreaterThanOrEqualTo(rl) && nl.LessThanOrEqualTo(ru)
+			if n.op == parser.NOTBETWEEN {
+				result = !result
+			}
+			return result, nil
+
 		default:
-			return nil, sql3.NewErrInternalf("unexpected range type '%T'", rType.SubscriptType)
+			return nil, sql3.NewErrInternalf("unexpected range type '%T'", sType)
 		}
 
 	default:
@@ -2562,7 +2594,7 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 		return ref, nil
 
 	case *parser.QualifiedRef:
-		ref := newQualifiedRefPlanExpression(parser.IdentName(expr.Table), parser.IdentName(expr.Column), expr.ColumnIndex, expr.DataType())
+		ref := newQualifiedRefPlanExpression(strings.ToLower(parser.IdentName(expr.Table)), strings.ToLower(parser.IdentName(expr.Column)), expr.ColumnIndex, expr.DataType())
 		return ref, nil
 
 	case *parser.Range:

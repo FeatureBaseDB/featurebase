@@ -165,8 +165,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		}
 
 		// make sure the ref is min/max-able
-		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType()) || typeIsTimestamp(ref.DataType())) {
-			return nil, sql3.NewErrIntOrDecimalOrTimestampExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
+		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType()) || typeIsTimestamp(ref.DataType()) || typeIsString(ref.DataType())) {
+			return nil, sql3.NewErrIntOrDecimalOrTimestampOrStringExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
 		}
 
 		// return the data type of the referenced column

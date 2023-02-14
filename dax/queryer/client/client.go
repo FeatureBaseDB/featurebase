@@ -2,16 +2,15 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
-	queryerhttp "github.com/featurebasedb/featurebase/v3/dax/queryer/http"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
@@ -49,67 +48,29 @@ func (c *Client) Health() bool {
 	return true
 }
 
-func (c *Client) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, sql string) (*featurebase.WireQueryResponse, error) {
-	url := fmt.Sprintf("%s/sql", c.address.WithScheme(defaultScheme))
-
-	req := &queryerhttp.SQLRequest{
-		OrganizationID: qdbid.OrganizationID,
-		DatabaseID:     qdbid.DatabaseID,
-		SQL:            sql,
+func (c *Client) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, sql io.Reader) (*featurebase.WireQueryResponse, error) {
+	url := fmt.Sprintf("%s/databases/%s/sql", c.address.WithScheme(defaultScheme), qdbid.DatabaseID)
+	if qdbid.DatabaseID == "" {
+		url = fmt.Sprintf("%s/sql", c.address.WithScheme(defaultScheme))
 	}
 
-	// Encode the request.
-	postBody, err := json.Marshal(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshalling post request")
+	client := &http.Client{
+		Timeout: time.Second * 30,
 	}
-	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
 	c.logger.Debugf("POST query sql request: url: %s", url)
-	resp, err := http.Post(url, "application/json", responseBody)
+	req, err := http.NewRequest(http.MethodPost, url, sql)
 	if err != nil {
-		return nil, errors.Wrap(err, "posting query sql request")
+		return nil, errors.Wrap(err, "creating new post request")
 	}
-	defer resp.Body.Close()
+	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("OrganizationID", string(qdbid.OrganizationID))
 
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	var resp *http.Response
+	if resp, err = client.Do(req); err != nil {
+		return nil, errors.Wrap(err, "executing post request")
 	}
-
-	var wireResp *featurebase.WireQueryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&wireResp); err != nil {
-		return nil, errors.Wrap(err, "reading response body")
-	}
-
-	return wireResp, nil
-}
-
-func (c *Client) QueryPQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, table dax.TableName, pql string) (*featurebase.WireQueryResponse, error) {
-	url := fmt.Sprintf("%s/query", c.address.WithScheme(defaultScheme))
-
-	req := &queryerhttp.QueryRequest{
-		OrganizationID: qdbid.OrganizationID,
-		DatabaseID:     qdbid.DatabaseID,
-		Table:          table,
-		PQL:            pql,
-	}
-
-	// Encode the request.
-	postBody, err := json.Marshal(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshalling post request")
-	}
-	responseBody := bytes.NewBuffer(postBody)
-
-	// Post the request.
-	c.logger.Debugf("POST query pql request: url: %s", url)
-	resp, err := http.Post(url, "application/json", responseBody)
-	if err != nil {
-		return nil, errors.Wrap(err, "posting query pql request")
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)

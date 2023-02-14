@@ -309,10 +309,10 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 
 	case *parser.QualifiedTableName:
 
-		tableName := parser.IdentName(sourceExpr.Name)
+		tableName := strings.ToLower(parser.IdentName(sourceExpr.Name))
 
 		// doing this check here because we don't have a 'system' flag that exists in the FB schema
-		st, ok := systemTables[strings.ToLower(tableName)]
+		st, ok := systemTables[tableName]
 		if ok {
 			var op types.PlanOperator
 			op = NewPlanOpSystemTable(p, st)
@@ -418,7 +418,7 @@ func (p *ExecutionPlanner) analyzeSource(ctx context.Context, source parser.Sour
 
 	case *parser.QualifiedTableName:
 
-		objectName := parser.IdentName(source.Name)
+		objectName := strings.ToLower(parser.IdentName(source.Name))
 
 		// check views first
 		view, err := p.getViewByName(ctx, objectName)
@@ -620,7 +620,7 @@ func (p *ExecutionPlanner) analyzeSelectStatementWildcards(stmt *parser.SelectSt
 		} else {
 			//handle the case of a qualified ref with a *
 			if ref, ok := col.Expr.(*parser.QualifiedRef); ok && ref.Star.IsValid() {
-				refName := parser.IdentName(ref.Table)
+				refName := strings.ToLower(parser.IdentName(ref.Table))
 				src := stmt.Source.SourceFromAlias(refName)
 				if src == nil {
 					return sql3.NewErrTableNotFound(ref.Table.NamePos.Line, ref.Table.NamePos.Column, refName)
