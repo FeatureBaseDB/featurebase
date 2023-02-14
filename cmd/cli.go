@@ -14,7 +14,7 @@ func newCLICommand(logdest logger.Logger) *cobra.Command {
 	cliCmd = cli.NewCLICommand(logdest)
 	cobraCmd := &cobra.Command{
 		Use:   "cli",
-		Short: "Query FB with SQL3 from the command line",
+		Short: "Query FeatureBase with SQL from the command line",
 		Long:  ``,
 		RunE:  usageErrorWrapper(cliCmd),
 	}
@@ -24,7 +24,7 @@ func newCLICommand(logdest logger.Logger) *cobra.Command {
 	flags.StringVarP(&cliCmd.Port, "port", "", cliCmd.Port, "port of FeatureBase.")
 	flags.StringVar(&cliCmd.HistoryPath, "history-path", cliCmd.HistoryPath, "path for history files.")
 	flags.StringVar(&cliCmd.OrganizationID, "org-id", cliCmd.OrganizationID, "OrganizationID.")
-	flags.StringVar(&cliCmd.DatabaseID, "db-id", cliCmd.DatabaseID, "DatabaseID.")
+	flags.StringVar(&cliCmd.Database, "db", cliCmd.Database, "Name of the database to connect to.")
 
 	flags.StringVar(&cliCmd.ClientID, "client-id", cliCmd.ClientID, "Cognito Client ID for FeatureBase Cloud access.")
 	flags.StringVar(&cliCmd.Region, "region", cliCmd.Region, "Cloud region for FeatureBase Cloud access (e.g. us-east-2).")

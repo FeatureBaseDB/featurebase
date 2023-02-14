@@ -694,5 +694,5 @@ func keyQualifiedDatabaseID(key []byte) (dax.QualifiedDatabaseID, error) {
 }
 
 func timestamp() int64 {
-	return time.Now().UnixNano()
+	return time.Now().Unix()
 }
