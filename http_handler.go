@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"mime"
 	"net"
@@ -550,7 +549,7 @@ func newRouter(handler *Handler) http.Handler {
 		router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
 	}
 	// internal endpoint
-	router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQLPlanOperator, authz.Admin)).Headers("X-FeatureBase-Plan-Operator", "").Methods("POST").Name("PostSQLPlanOperator")
+	router.HandleFunc("/sql-exec-graph", handler.chkAuthZ(handler.handlePostSQLPlanOperator, authz.Admin)).Methods("POST").Name("PostSQLPlanOperator")
 
 	router.HandleFunc("/query-history", handler.chkAuthZ(handler.handleGetPastQueries, authz.Admin)).Methods("GET").Name("GetPastQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
@@ -1411,21 +1410,8 @@ func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Reque
 
 	ctx := r.Context()
 
-	log.Printf("handlePostSQLPlanOperator() headers: %v", r.Header)
-
-	// DEBUG - hang on to the body
-	bodyBytes, err := io.ReadAll(r.Body)
-	log.Printf("handlePostSQLPlanOperator() body: %v s: %s", bodyBytes, string(bodyBytes))
-	reader := io.NopCloser(bytes.NewReader(bodyBytes))
+	rootOperator, err := h.api.RehydratePlanOperator(ctx, r.Body)
 	if err != nil {
-		writeError(err)
-		return
-	}
-
-	rootOperator, err := h.api.RehydratePlanOperator(ctx /*r.Body*/, reader)
-	if err != nil {
-		// DEBUG - dump the body to the log
-
 		writeError(err)
 		return
 	}
@@ -1478,8 +1464,6 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	log.Printf("handlePostSQL() headers: %v", r.Header)
 
 	// get the body
 	b, err := io.ReadAll(r.Body)

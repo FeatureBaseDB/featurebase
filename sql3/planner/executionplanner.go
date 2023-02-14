@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -325,7 +324,7 @@ func (e *ExecutionPlanner) remotePlanExec(ctx context.Context, addr string, op t
 	}
 
 	// Create HTTP request.
-	u := fmt.Sprintf("%s/sql", addr)
+	u := fmt.Sprintf("%s/sql-exec-graph", addr)
 	req, err := http.NewRequest("POST", u, bytes.NewReader(b))
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request")
@@ -338,9 +337,6 @@ func (e *ExecutionPlanner) remotePlanExec(ctx context.Context, addr string, op t
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Accept", "application/octet-stream")
 	req.Header.Set("User-Agent", "pilosa/"+e.systemAPI.Version())
-	req.Header.Set("X-FeatureBase-Plan-Operator", fmt.Sprintf("%T", op))
-
-	log.Printf("remotePlanExec() headers: %v", req.Header)
 
 	// Execute request against the host.
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
@@ -349,20 +345,13 @@ func (e *ExecutionPlanner) remotePlanExec(ctx context.Context, addr string, op t
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	log.Printf("remotePlanExec() body: %v s: %s", bodyBytes, string(bodyBytes))
-	reader := io.NopCloser(bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, err
-	}
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// we have an error
 		return nil, sql3.NewErrInternalf("error posting internally: %d", resp.StatusCode)
 	}
 
 	var rows types.Rows
-	parser := newWireProtocolParser(e, reader)
+	parser := newWireProtocolParser(e, resp.Body)
 	state := 1
 	for state <= 2 {
 		msg, err := parser.nextMessage()
