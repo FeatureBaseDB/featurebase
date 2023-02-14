@@ -3335,6 +3335,46 @@ type SchemaAPI interface {
 	DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error
 }
 
+// Ensure type implements interface.
+var _ SchemaAPI = (*NopSchemaAPI)(nil)
+
+// NopSchemaAPI is a no-op implementation of the SchemaAPI.
+type NopSchemaAPI struct{}
+
+func (n *NopSchemaAPI) ClusterName() string {
+	return ""
+}
+func (n *NopSchemaAPI) CreateDatabase(context.Context, *dax.Database) error { return nil }
+func (n *NopSchemaAPI) DropDatabase(context.Context, dax.DatabaseID) error  { return nil }
+func (n *NopSchemaAPI) DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error) {
+	return nil, nil
+}
+func (n *NopSchemaAPI) DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error) {
+	return nil, nil
+}
+func (n *NopSchemaAPI) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
+	return nil
+}
+func (n *NopSchemaAPI) Databases(context.Context, ...dax.DatabaseID) ([]*dax.Database, error) {
+	return nil, nil
+}
+func (n *NopSchemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
+	return nil, nil
+}
+func (n *NopSchemaAPI) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
+	return nil, nil
+}
+func (n *NopSchemaAPI) Tables(ctx context.Context) ([]*dax.Table, error) { return nil, nil }
+
+func (n *NopSchemaAPI) CreateTable(ctx context.Context, tbl *dax.Table) error { return nil }
+func (n *NopSchemaAPI) CreateField(ctx context.Context, tname dax.TableName, fld *dax.Field) error {
+	return nil
+}
+func (n *NopSchemaAPI) DeleteTable(ctx context.Context, tname dax.TableName) error { return nil }
+func (n *NopSchemaAPI) DeleteField(ctx context.Context, tname dax.TableName, fname dax.FieldName) error {
+	return nil
+}
+
 type ClusterNode struct {
 	ID        string
 	State     string
