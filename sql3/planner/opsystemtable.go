@@ -119,7 +119,7 @@ var systemTables = map[string]*systemTable{
 		name: fbExecRequests,
 		schema: types.Schema{
 			&types.PlannerColumn{
-				RelationName: fbPerformanceCounters,
+				RelationName: fbExecRequests,
 				ColumnName:   "nodeid",
 				Type:         parser.NewDataTypeString(),
 			},
