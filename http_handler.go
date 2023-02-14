@@ -549,7 +549,7 @@ func newRouter(handler *Handler) http.Handler {
 		router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
 	}
 	// internal endpoint
-	router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQLPlanOperator, authz.Admin)).Headers("X-FeatureBase-Plan-Operator", "").Methods("POST").Name("PostSQLPlanOperator")
+	router.HandleFunc("/sql-exec-graph", handler.chkAuthZ(handler.handlePostSQLPlanOperator, authz.Admin)).Methods("POST").Name("PostSQLPlanOperator")
 
 	router.HandleFunc("/query-history", handler.chkAuthZ(handler.handleGetPastQueries, authz.Admin)).Methods("GET").Name("GetPastQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
