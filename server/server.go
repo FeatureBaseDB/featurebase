@@ -596,6 +596,8 @@ func (m *Command) setupServer() error {
 		pilosa.OptServerServerlessStorage(m.serverlessStorage),
 		pilosa.OptServerIsDataframeEnabled(m.Config.Dataframe.Enable),
 		pilosa.OptServerDataframeUseParquet(m.Config.Dataframe.UseParquet),
+		pilosa.OptServerVerChkAddress(m.Config.VerChkAddress),
+		pilosa.OptServerUUIDFile(m.Config.UUIDFile),
 	}
 
 	if m.isComputeNode {

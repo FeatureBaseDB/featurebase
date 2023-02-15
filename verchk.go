@@ -12,19 +12,17 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	versionCheckerFilename = ".client_id.txt"
-)
-
 type versionChecker struct {
-	path string
-	url  string
+	path   string
+	url    string
+	idfile string
 }
 
-func newVersionChecker(path, endpoint string) *versionChecker {
+func newVersionChecker(path, endpoint, idfile string) *versionChecker {
 	v := versionChecker{
-		path: path,
-		url:  endpoint,
+		path:   path,
+		url:    endpoint,
+		idfile: idfile,
 	}
 	return &v
 }
@@ -62,7 +60,6 @@ func (v *versionChecker) checkIn() (*verCheckResponse, error) {
 
 		return nil, err
 	}
-
 	return &jsonResp, nil
 }
 
@@ -73,31 +70,15 @@ func (v *versionChecker) generateClientUUID() (string, error) {
 }
 
 func (v *versionChecker) writeClientUUID() (string, error) {
-	filename := filepath.Join(v.path, versionCheckerFilename)
-	if _, err := os.Stat(filename); err != nil {
-		if os.IsNotExist(err) {
-			fh, err := os.Create(filename)
-			if err != nil {
-				return "", err
-			}
-			defer fh.Close()
-
-			id, err := v.generateClientUUID()
-			if err != nil {
-				return "", err
-			}
-
-			if _, err := fh.WriteString(id); err != nil {
-				return "", err
-			}
-
-			return id, nil
-		} else {
-			return "", err
-		}
+	var filename string
+	// if v.idfile starts with a path separator then it's an absolute path
+	// otherwise it's a relative path and the file goes in the data directory
+	if v.idfile[0] == os.PathSeparator {
+		filename = v.idfile
+	} else {
+		filename = filepath.Join(v.path, v.idfile)
 	}
-
-	fh, err := os.Open(filename)
+	fh, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0744)
 	if err != nil {
 		return "", err
 	}
@@ -107,10 +88,24 @@ func (v *versionChecker) writeClientUUID() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// this just checks to see if there was anything at all in the file.
+	// we should probably check to make sure it's a valid UUID
+	if string(buf) == "" {
+		id, err := v.generateClientUUID()
+		if err != nil {
+			return "", err
+		}
+		_, err = fh.WriteString(id)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
+	}
 
 	return string(buf), nil
 }
 
 type verCheckResponse struct {
 	Version string `json:"latest_version"`
+	Error   string `json:"error"`
 }
