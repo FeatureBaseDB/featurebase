@@ -210,6 +210,12 @@ func timestampFromString(s string) time.Time {
 	return tm
 }
 
+// operatorPresentAtPath() tests if an named operator exists in a plan
+//
+//	operatorPresentAtPath() takes a FeatureBase query plan as a []byte
+//	(so we do not have to convert to and from string), a path (as a
+//	jsonpath expression) and an operator. The function returns nil if
+//	the result of the jsonpath expression evaluation contains the operator.
 func operatorPresentAtPath(jplan []byte, path string, operator string) error {
 	// fmt.Printf("%s\n", string(jplan))
 	v := interface{}(nil)
