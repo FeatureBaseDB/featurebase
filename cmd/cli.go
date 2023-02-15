@@ -3,15 +3,16 @@ package cmd
 
 import (
 	"github.com/featurebasedb/featurebase/v3/cli"
+	"github.com/featurebasedb/featurebase/v3/ctl"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
-var cliCmd *cli.CLICommand
+var cliCmd *cli.Command
 
-// newCLICommand runs the FeatureBase CLI subcommand for ingesting bulk data.
+// newCLICommand runs the FeatureBase CLI subcommand.
 func newCLICommand(logdest logger.Logger) *cobra.Command {
-	cliCmd = cli.NewCLICommand(logdest)
+	cliCmd = cli.NewCommand(logdest)
 	cobraCmd := &cobra.Command{
 		Use:   "cli",
 		Short: "Query FeatureBase with SQL from the command line",
@@ -19,17 +20,7 @@ func newCLICommand(logdest logger.Logger) *cobra.Command {
 		RunE:  usageErrorWrapper(cliCmd),
 	}
 
-	flags := cobraCmd.Flags()
-	flags.StringVarP(&cliCmd.Host, "host", "", cliCmd.Host, "hostname of FeatureBase.")
-	flags.StringVarP(&cliCmd.Port, "port", "", cliCmd.Port, "port of FeatureBase.")
-	flags.StringVar(&cliCmd.HistoryPath, "history-path", cliCmd.HistoryPath, "path for history files.")
-	flags.StringVar(&cliCmd.OrganizationID, "org-id", cliCmd.OrganizationID, "OrganizationID.")
-	flags.StringVar(&cliCmd.Database, "db", cliCmd.Database, "Name of the database to connect to.")
-
-	flags.StringVar(&cliCmd.ClientID, "client-id", cliCmd.ClientID, "Cognito Client ID for FeatureBase Cloud access.")
-	flags.StringVar(&cliCmd.Region, "region", cliCmd.Region, "Cloud region for FeatureBase Cloud access (e.g. us-east-2).")
-	flags.StringVar(&cliCmd.Email, "email", cliCmd.Email, "Email address for FeatureBase Cloud access.")
-	flags.StringVar(&cliCmd.Password, "password", cliCmd.Password, "Password for FeatureBase Cloud access.")
-
+	// Attach flags to the command.
+	ctl.BuildCLIFlags(cobraCmd, cliCmd)
 	return cobraCmd
 }

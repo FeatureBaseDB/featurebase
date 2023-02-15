@@ -38,7 +38,7 @@ Type "\q" to quit.
 `, featurebase.Version)
 )
 
-type CLICommand struct {
+type Command struct {
 	Host        string `json:"host"`
 	Port        string `json:"port"`
 	HistoryPath string `json:"history-path"`
@@ -73,10 +73,15 @@ type CLICommand struct {
 	quit chan struct{}
 }
 
-func NewCLICommand(logdest logger.Logger) *CLICommand {
-	return &CLICommand{
+func NewCommand(logdest logger.Logger) *Command {
+	return &Command{
 		Host:        defaultHost,
 		HistoryPath: "",
+
+		ClientID: "",
+		Region:   "",
+		Email:    "",
+		Password: "",
 
 		OrganizationID: "",
 		Database:       "",
@@ -98,7 +103,7 @@ func NewCLICommand(logdest logger.Logger) *CLICommand {
 
 // Run is the main entry-point to the CLI. Currently it handles the interaction
 // with a user, as opposed to calling `featurebase cli` in a script.
-func (cmd *CLICommand) Run(ctx context.Context) error {
+func (cmd *Command) Run(ctx context.Context) error {
 	// Print the splash message.
 	cmd.Printf(splash)
 	cmd.setupHistory()
@@ -236,11 +241,11 @@ func (cmd *CLICommand) Run(ctx context.Context) error {
 
 // close is called upon quitting. It should close any remaining open file
 // handles used by the CLICommand.
-func (cmd *CLICommand) close() error {
+func (cmd *Command) close() error {
 	return cmd.closeOutput()
 }
 
-func (cmd *CLICommand) executeAndWriteQuery(qry query) error {
+func (cmd *Command) executeAndWriteQuery(qry query) error {
 	queryResponse, err := cmd.executeQuery(qry)
 	if err != nil {
 		return errors.Wrap(err, "making query")
@@ -253,29 +258,29 @@ func (cmd *CLICommand) executeAndWriteQuery(qry query) error {
 	return nil
 }
 
-func (cmd *CLICommand) executeQuery(qry query) (*featurebase.WireQueryResponse, error) {
+func (cmd *Command) executeQuery(qry query) (*featurebase.WireQueryResponse, error) {
 	return cmd.Queryer.Query(cmd.OrganizationID, cmd.databaseID, qry.Reader())
 }
 
 // Printf is a helper method which sends the given payload to stdout.
-func (cmd *CLICommand) Printf(format string, a ...any) {
+func (cmd *Command) Printf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
 	cmd.Stdout.Write([]byte(out))
 }
 
 // Outputf is a helper method which sends the given payload to output.
-func (cmd *CLICommand) Outputf(format string, a ...any) {
+func (cmd *Command) Outputf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
 	cmd.output.Write([]byte(out))
 }
 
 // Errorf is a helper method which sends the given payload to stderr.
-func (cmd *CLICommand) Errorf(format string, a ...any) {
+func (cmd *Command) Errorf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
 	cmd.Stderr.Write([]byte(out))
 }
 
-func (cmd *CLICommand) setupHistory() {
+func (cmd *Command) setupHistory() {
 	// If HistoryPath has already been configured (i.e. with a command flag),
 	// don't bother setting up the default in the home directory.
 	if cmd.HistoryPath != "" {
@@ -299,11 +304,11 @@ func (cmd *CLICommand) setupHistory() {
 
 // printConnInfo displays the currently set host.
 // TODO(tlt): extend this to be the output of the /conninfo meta-command.
-func (cmd *CLICommand) printConnInfo() {
+func (cmd *Command) printConnInfo() {
 	cmd.Printf("Host: %s\n", hostPort(cmd.Host, cmd.Port))
 }
 
-func (cmd *CLICommand) connectToDatabase(dbName string) error {
+func (cmd *Command) connectToDatabase(dbName string) error {
 	if dbName == "" {
 		cmd.databaseID = ""
 		cmd.databaseName = ""
@@ -334,21 +339,21 @@ func (cmd *CLICommand) connectToDatabase(dbName string) error {
 	return errors.Errorf("invalid database: %s", dbName)
 }
 
-func (cmd *CLICommand) orgMessage() string {
+func (cmd *Command) orgMessage() string {
 	if cmd.OrganizationID == "" {
 		return "You have not set an organization.\n"
 	}
 	return fmt.Sprintf("You have set organization \"%s\".\n", cmd.OrganizationID)
 }
 
-func (cmd *CLICommand) connectionMessage() string {
+func (cmd *Command) connectionMessage() string {
 	if cmd.databaseName == "" {
 		return "You are not connected to a database.\n"
 	}
 	return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.databaseName, cmd.databaseID)
 }
 
-func (cmd *CLICommand) setupClient() error {
+func (cmd *Command) setupClient() error {
 	// If the Queryer has already been set (in tests for example), don't bother
 	// trying to detect it.
 	if cmd.Queryer != nil {
@@ -428,7 +433,7 @@ func hostPort(host, port string) string {
 
 // detectFBType determines if we're talking to standalone FeatureBase
 // or FeatureBase Cloud
-func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
+func (cmd *Command) detectFBType() (featurebaseType, error) {
 	type trial struct {
 		port   string
 		health string
@@ -502,7 +507,7 @@ func (cmd *CLICommand) detectFBType() (featurebaseType, error) {
 	return featurebaseTypeUnknown, nil
 }
 
-func (cmd *CLICommand) closeOutput() error {
+func (cmd *Command) closeOutput() error {
 	if cmd.output == nil {
 		return nil
 	}
