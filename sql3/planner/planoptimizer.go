@@ -644,7 +644,13 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 					}
 					switch aggregable.AggExpression().Type().(type) {
 					case *parser.DataTypeID, *parser.DataTypeString:
-						return thisNode, true, nil
+						// if it is any other column other than _id bail
+						ref, ok := aggregable.AggExpression().(*qualifiedRefPlanExpression)
+						if ok {
+							if !strings.EqualFold(ref.columnName, "_id") {
+								return thisNode, true, nil
+							}
+						}
 					}
 				}
 
