@@ -2,7 +2,14 @@
 package defs
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
+
+	"github.com/PaesslerAG/gval"
+	"github.com/PaesslerAG/jsonpath"
 )
 
 // TableTests is the list of tests which get run by TestSQL_Execute in
@@ -201,4 +208,28 @@ func timestampFromString(s string) time.Time {
 		panic(err.Error())
 	}
 	return tm
+}
+
+func operatorPresentAtPath(jplan []byte, path string, operator string) error {
+	// fmt.Printf("%s\n", string(jplan))
+	v := interface{}(nil)
+	err := json.Unmarshal(jplan, &v)
+	if err != nil {
+		return err
+	}
+
+	builder := gval.Full(jsonpath.PlaceholderExtension())
+	expr, err := builder.NewEvaluable(path)
+	if err != nil {
+		return err
+	}
+	eval, err := expr(context.Background(), v)
+	if err != nil {
+		return err
+	}
+	s, ok := eval.(string)
+	if ok && strings.EqualFold(s, operator) {
+		return nil
+	}
+	return fmt.Errorf("expected '%s' to be present", operator)
 }

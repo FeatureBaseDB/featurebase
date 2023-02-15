@@ -78,7 +78,7 @@ func (p *PlanOpPQLMultiGroupBy) Schema() types.Schema {
 		s := &types.PlannerColumn{
 			ColumnName:   aggOp.aggregate.String(),
 			RelationName: "",
-			Type:         aggOp.aggregate.AggExpression().Type(),
+			Type:         aggOp.aggregate.FirstChildExpr().Type(),
 		}
 		result[idx+offset] = s
 	}

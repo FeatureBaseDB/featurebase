@@ -42,7 +42,7 @@ func (p *PlanOpPQLAggregate) Plan() map[string]interface{} {
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
 	}
-	result["aggregate"] = p.aggregate.AggExpression().Plan()
+	result["aggregate"] = p.aggregate.FirstChildExpr().Plan()
 	return result
 
 }
@@ -64,7 +64,7 @@ func (p *PlanOpPQLAggregate) Schema() types.Schema {
 	s := &types.PlannerColumn{
 		ColumnName:   "",
 		RelationName: "",
-		Type:         p.aggregate.AggExpression().Type(),
+		Type:         p.aggregate.FirstChildExpr().Type(),
 	}
 	result[0] = s
 	return result
@@ -114,13 +114,13 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, err
 		}
 
-		expr, ok := i.aggregate.AggExpression().(*qualifiedRefPlanExpression)
+		expr, ok := i.aggregate.FirstChildExpr().(*qualifiedRefPlanExpression)
 		if !ok {
-			return nil, sql3.NewErrInternalf("unexpected aggregate expression type '%T'", i.aggregate.AggExpression())
+			return nil, sql3.NewErrInternalf("unexpected aggregate expression type '%T'", i.aggregate.FirstChildExpr())
 		}
 
-		switch i.aggregate.AggType() {
-		case types.AGGREGATE_COUNT_DISTINCT:
+		switch i.aggregate.(type) {
+		case *countDistinctPlanExpression:
 			//make a distinct call
 			distinctCond := &pql.Call{
 				Name: "Distinct",
@@ -135,7 +135,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 
 			call = &pql.Call{Name: "Count", Children: []*pql.Call{cond}}
 
-		case types.AGGREGATE_COUNT:
+		case *countPlanExpression:
 			if cond == nil {
 				// COUNT() should ignore null values
 				// if the data type of the expression supports an existence bitmap for
@@ -154,7 +154,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			}
 			call = &pql.Call{Name: "Count", Children: []*pql.Call{cond}}
 
-		case types.AGGREGATE_AVG:
+		case *avgPlanExpression:
 			if cond == nil {
 				// COUNT() should ignore null values
 				// if the data type of the expression supports an existence bitmap for
@@ -178,7 +178,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 				Children: []*pql.Call{cond},
 			}
 
-		case types.AGGREGATE_SUM:
+		case *sumPlanExpression:
 			if cond == nil {
 				cond = &pql.Call{Name: "All"}
 			}
@@ -188,7 +188,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 				Children: []*pql.Call{cond},
 			}
 
-		case types.AGGREGATE_MAX:
+		case *maxPlanExpression:
 			if cond == nil {
 				cond = &pql.Call{Name: "All"}
 			}
@@ -199,7 +199,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 				Children: []*pql.Call{cond},
 			}
 
-		case types.AGGREGATE_MIN:
+		case *minPlanExpression:
 			if cond == nil {
 				cond = &pql.Call{Name: "All"}
 			}
@@ -210,13 +210,12 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 				Children: []*pql.Call{cond},
 			}
 
-		case types.AGGREGATE_PERCENTILE:
-
-			additionalExprs := i.aggregate.AggAdditionalExpr()
-			if len(additionalExprs) != 1 {
-				return nil, sql3.NewErrInternalf("unexpected AggAdditionalExpr() length (%d)", len(additionalExprs))
+		case *percentilePlanExpression:
+			additionalExprs := i.aggregate.Children()
+			if len(additionalExprs) != 2 {
+				return nil, sql3.NewErrInternalf("unexpected Children() length (%d)", len(additionalExprs))
 			}
-			nthExpr := additionalExprs[0]
+			nthExpr := additionalExprs[1]
 
 			nthValue, err := nthExpr.Evaluate(nil)
 			if err != nil {
@@ -245,7 +244,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			}
 
 		default:
-			return nil, sql3.NewErrInternalf("unhandled aggregate type '%d'", i.aggregate.AggType())
+			return nil, sql3.NewErrInternalf("unhandled aggregate type '%T'", i.aggregate)
 		}
 
 		tbl, err := i.planner.schemaAPI.TableByName(ctx, dax.TableName(i.tableName))
@@ -268,7 +267,8 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 				i.resultValue = int64(actualResult.Val)
 
 			case *parser.DataTypeDecimal:
-				if i.aggregate.AggType() == types.AGGREGATE_AVG {
+				_, isAvg := i.aggregate.(*avgPlanExpression)
+				if isAvg {
 					if actualResult.DecimalVal == nil {
 						average := float64(actualResult.Val) / float64(actualResult.Count)
 						daverage, err := pql.FromFloat64WithScale(average, int(t.Scale))

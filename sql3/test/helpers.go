@@ -3,6 +3,7 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
@@ -13,34 +14,35 @@ import (
 )
 
 // MustQueryRows returns the row results as a slice of []interface{}, along with the columns.
-func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interface{}, []*featurebase.WireQueryField, error) {
+func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interface{}, []*featurebase.WireQueryField, []byte, error) {
 	tb.Helper()
 	requestId, err := uuid.NewV4()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	ctx := fbcontext.WithRequestID(context.Background(), requestId.String())
 
 	stmt, err := svr.CompileExecutionPlan(ctx, q)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// get the plan so that code runs during testing
-	_ = stmt.Plan()
+	plan := stmt.Plan()
+	bplan, _ := json.MarshalIndent(plan, "", "    ")
 
 	ocolumns := stmt.Schema()
 
 	rowIter, err := stmt.Iterator(ctx, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	results := make([][]interface{}, 0)
 
 	next, err := rowIter.Next(ctx)
 	if err != nil && err != plannertypes.ErrNoMoreRows {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	for err != plannertypes.ErrNoMoreRows {
 		result := make([]interface{}, len(ocolumns))
@@ -50,7 +52,7 @@ func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interf
 		results = append(results, result)
 		next, err = rowIter.Next(ctx)
 		if err != nil && err != plannertypes.ErrNoMoreRows {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	// temporarily transform to Columns()
@@ -63,5 +65,5 @@ func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interf
 			TypeInfo: oc.Type.TypeInfo(),
 		})
 	}
-	return results, cols, nil
+	return results, cols, bplan, nil
 }
