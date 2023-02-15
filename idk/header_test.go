@@ -353,8 +353,8 @@ func TestHeaderToField(t *testing.T) {
 		},
 		{
 			name:  "theta",
-			input: "fldΘname__String",
-			exp:   StringField{NameVal: "fldΘname", DestNameVal: "fldΘname"},
+			input: "fldΘnameΘ__String",
+			exp:   StringField{NameVal: "fldΘnameΘ", DestNameVal: "fldΘnameΘ"},
 		},
 	}
 
