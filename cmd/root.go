@@ -109,6 +109,7 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newDataframeCsvLoaderCommand(logdest))
 	rc.AddCommand(newPreSortCommand(logdest))
 	rc.AddCommand(newParquetInfoCommand(logdest))
+	rc.AddCommand(newAddNodeCommand(logdest))
 
 	rc.SetOutput(stderr)
 	return rc

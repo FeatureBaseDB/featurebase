@@ -29,16 +29,19 @@ import (
 )
 
 type Options struct {
-	Name         string `toml:"name"`
-	Dir          string `toml:"dir"`
-	LClientURL   string `toml:"listen-client-url"`
-	AClientURL   string `toml:"advertise-client-url"`
-	LPeerURL     string `toml:"listen-peer-url"`
-	APeerURL     string `toml:"advertise-peer-url"`
-	ClusterURL   string `toml:"cluster-url"`
-	InitCluster  string `toml:"initial-cluster"`
-	ClusterName  string `toml:"cluster-name"`
-	HeartbeatTTL int64  `toml:"heartbeat-ttl"`
+	Name             string `toml:"name"`
+	Dir              string `toml:"dir"`
+	LClientURL       string `toml:"listen-client-url"`
+	AClientURL       string `toml:"advertise-client-url"`
+	LPeerURL         string `toml:"listen-peer-url"`
+	APeerURL         string `toml:"advertise-peer-url"`
+	ClusterURL       string `toml:"cluster-url"`
+	InitCluster      string `toml:"initial-cluster"`
+	InitClusterToken string `toml:"initial-cluster-token"`
+	InitClusterState string `toml:"initial-cluster-state"`
+	ClusterName      string `toml:"cluster-name"`
+	HeartbeatTTL     int64  `toml:"heartbeat-ttl"`
+
 	// TLS provided tls files
 	TrustedCAFile  string `toml:"tls-trusted-cafile"`
 	ClientCertFile string `toml:"tls-cert-file"`
@@ -388,14 +391,21 @@ func (e *Etcd) parseOptions() (*embed.Config, error) {
 			// %% end sonarcloud ignore %%
 		}
 		cfg.InitialCluster = e.options.InitCluster
-		cfg.ClusterState = embed.ClusterStateFlagNew
+		if e.options.InitClusterState != embed.ClusterStateFlagNew && e.options.InitClusterState != embed.ClusterStateFlagExisting {
+			return nil, errors.New(fmt.Sprintf("embed: initial cluster state must be %s or %s", embed.ClusterStateFlagNew, embed.ClusterStateFlagExisting))
+		} else {
+			cfg.ClusterState = e.options.InitClusterState
+		}
 	} else {
 		cfg.InitialCluster = cfg.Name + "=" + e.options.APeerURL
 	}
 
-	if e.options.ClusterURL != "" {
-		return nil, errors.New("joining an existing cluster is unsupported")
-	}
+	/*
+		if e.options.ClusterURL != "" {
+			return nil, errors.New("joining an existing cluster is unsupported")
+		}
+	*/
+
 	// can only use tls if not using pre-configured listeners
 	cfg.ClientTLSInfo = transport.TLSInfo{
 		TrustedCAFile: e.options.TrustedCAFile,
@@ -415,11 +425,20 @@ func (e *Etcd) parseOptions() (*embed.Config, error) {
 
 // Start starts etcd and hearbeat
 func (e *Etcd) Start(ctx context.Context) (_ disco.InitialClusterState, err error) {
+	// starting etcd service embeded in featurebase
+
 	opts, err := e.parseOptions()
 	if err != nil {
 		return disco.InitialClusterStateNew, err
 	}
+
 	state := disco.InitialClusterState(opts.ClusterState)
+	if state == embed.ClusterStateFlagNew {
+		e.logger.Infof("Starting new cluster")
+	} else {
+		e.logger.Infof("Starting a node which will be added to an existing cluster")
+	}
+
 	// create a context that can be used for our watch processes, etcetera.
 	e.childContext, e.childCancel = context.WithCancel(context.Background())
 	if e.options.EtcdHosts != "" {

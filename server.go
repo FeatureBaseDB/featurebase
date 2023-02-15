@@ -625,8 +625,13 @@ func (s *Server) Open() error {
 	}
 	// I'm pretty sure this can't happen, because the path that would have led to it
 	// happening now generates an error already, but let's be careful.
+	/*
+		if initState == disco.InitialClusterStateExisting {
+			return errors.New("disco reports existing cluster, but this is not supported")
+		}
+	*/
 	if initState == disco.InitialClusterStateExisting {
-		return errors.New("disco reports existing cluster, but this is not supported")
+		s.logger.Infof("trying to join an existing cluster")
 	}
 
 	// Set node ID.

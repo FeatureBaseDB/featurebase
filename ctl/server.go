@@ -83,6 +83,9 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 	flags.StringVar(&srv.Etcd.EtcdHosts, "etcd.etcd-hosts", srv.Etcd.EtcdHosts, "EXPERIMENTAL etcd server host:port comma separated list")
 	flags.MarkHidden("etcd.etcd-hosts") // TODO (twg) expose when ready for public consumption
 
+	flags.StringVar(&srv.Etcd.InitClusterToken, pre("etcd.initial-cluster-token"), srv.Etcd.InitClusterToken, "EXPERIMENTAL unique token for etcd cluster.")
+	flags.StringVar(&srv.Etcd.InitClusterState, pre("etcd.initial-cluster-state"), srv.Etcd.InitClusterState, "EXPERIMENTAL initial cluster state when this node is created.")
+
 	// External postgres database for ExternalLookup
 	flags.StringVar(&srv.LookupDBDSN, pre("lookup-db-dsn"), "", "external (postgres) database DSN to use for ExternalLookup calls")
 
