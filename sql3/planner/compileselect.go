@@ -11,7 +11,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
-	"github.com/pkg/errors"
 )
 
 // compileSelectStatment compiles a parser.SelectStatment AST into a PlanOperator
@@ -20,12 +19,12 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 
 	aggregates := make([]types.PlanExpression, 0)
 
-	// handle projections
+	// compile select list and generate a list of projections
 	projections := make([]types.PlanExpression, 0)
 	for _, c := range stmt.Columns {
 		planExpr, err := p.compileExpr(c.Expr)
 		if err != nil {
-			return nil, errors.Wrap(err, "planning select column expression")
+			return nil, err
 		}
 		if c.Alias != nil {
 			planExpr = newAliasPlanExpression(c.Alias.Name, planExpr)
@@ -34,7 +33,7 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		aggregates = p.gatherExprAggregates(planExpr, aggregates)
 	}
 
-	// group by clause.
+	// compile group by clause and generate a list of group by expressions
 	groupByExprs := make([]types.PlanExpression, 0)
 	for _, expr := range stmt.GroupByExprs {
 		switch expr := expr.(type) {
@@ -44,32 +43,32 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 			return nil, sql3.NewErrInternalf("unsupported expression type in GROUP BY clause: %T", expr)
 		}
 	}
-	var err error
 
-	// handle the where clause
+	// compile the where clause
 	where, err := p.compileExpr(stmt.WhereExpr)
 	if err != nil {
 		return nil, err
 	}
 
-	// source expression
+	// compile source expression
 	source, err := p.compileSource(query, stmt.Source)
 	if err != nil {
 		return nil, err
 	}
 
-	// if we did have a where, insert the filter op
+	// if we did have a where, insert the filter op after source
 	if where != nil {
 		aggregates = p.gatherExprAggregates(where, aggregates)
 		source = NewPlanOpFilter(p, where, source)
 	}
 
-	// handle the having clause
+	// compile the having clause
 	having, err := p.compileExpr(stmt.HavingExpr)
 	if err != nil {
 		return nil, err
 	}
 
+	// if we have a having, check references
 	if having != nil {
 		// gather aggregates
 		aggregates = p.gatherExprAggregates(having, aggregates)
@@ -129,9 +128,49 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		}
 	}
 
-	// do we have straight projection or a group by?
+	// compile order by and generate a list of ordering expressions
+	orderByExprs := make([]*OrderByExpression, 0)
+	nonReferenceOrderByExpressions := make([]types.PlanExpression, 0)
+	if len(stmt.OrderingTerms) > 0 {
+		for _, ot := range stmt.OrderingTerms {
+			// compile the ordering term
+			expr, err := p.compileOrderingTermExpr(ot.X, projections, stmt.Source)
+			if err != nil {
+				return nil, err
+			}
+
+			f := &OrderByExpression{
+				Expr: expr,
+			}
+			f.Order = orderByAsc
+			if ot.Desc.IsValid() {
+				f.Order = orderByDesc
+			}
+			orderByExprs = append(orderByExprs, f)
+		}
+
+		// if the expression is just references, we
+		// can put the sort directly after the source
+		for _, oe := range orderByExprs {
+			_, ok := oe.Expr.(*qualifiedRefPlanExpression)
+			if !ok {
+				nonReferenceOrderByExpressions = append(nonReferenceOrderByExpressions, oe.Expr)
+			}
+		}
+
+		// all the order by expressions are references, so we can put the order by before the
+		// projection
+		if len(nonReferenceOrderByExpressions) == 0 {
+			source = NewPlanOpOrderBy(orderByExprs, source)
+		}
+	}
+
 	var compiledOp types.PlanOperator
+
+	// do we have straight projection or a group by?
 	if len(aggregates) > 0 {
+		// we have a group by
+
 		//check that any projections that are not aggregates are in the group by list
 		nonAggregateReferences := make([]*qualifiedRefPlanExpression, 0)
 		for _, expr := range projections {
@@ -172,37 +211,98 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		}
 		compiledOp = NewPlanOpProjection(projections, groupByOp)
 	} else {
+		// no group by, just a straight projection
 		compiledOp = NewPlanOpProjection(projections, source)
 	}
 
-	// handle order by
-	if len(stmt.OrderingTerms) > 0 {
-		orderByFields := make([]*OrderByExpression, 0)
-		for _, ot := range stmt.OrderingTerms {
-			index, err := p.compileOrderingTermExpr(ot.X)
-			if err != nil {
-				return nil, err
-			}
-			// get the data type from the projection
-			projDataType := projections[index].Type()
+	// handle the case where we have order by expressions and they are not references
+	// in this case we need to put the order by after the projection
+	if len(orderByExprs) > 0 && len(nonReferenceOrderByExpressions) > 0 {
 
-			// don't let a sort happen on something unsortable right now
-			switch projDataType.(type) {
-			case *parser.DataTypeStringSet, *parser.DataTypeIDSet:
-				return nil, sql3.NewErrExpectedSortableExpression(0, 0, projDataType.TypeDescription())
-			}
+		// if the order by expressions contain a reference not in the projection list,
+		// we have to create a new projection, add references to current projection,
+		// and place the new order by in between
 
-			f := &OrderByExpression{
-				Index:    index,
-				ExprType: projDataType,
+		// get a list of all the refs for the order by exprs
+		orderByRefs := make(map[string]*qualifiedRefPlanExpression)
+		for _, oe := range orderByExprs {
+			ex, ok := oe.Expr.(*qualifiedRefPlanExpression)
+			if ok {
+				orderByRefs[ex.String()] = ex
 			}
-			f.Order = orderByAsc
-			if ot.Desc.IsValid() {
-				f.Order = orderByDesc
-			}
-			orderByFields = append(orderByFields, f)
 		}
-		compiledOp = NewPlanOpOrderBy(orderByFields, compiledOp)
+
+		// get a list of all the projection refs
+		projRefs := make(map[string]*qualifiedRefPlanExpression)
+		for _, p := range projections {
+			InspectExpression(p, func(expr types.PlanExpression) bool {
+				switch ex := expr.(type) {
+				case *qualifiedRefPlanExpression:
+					projRefs[ex.String()] = ex
+					return false
+				}
+				return true
+			})
+		}
+
+		// iterate the order by terms, make a list of the ones not projected
+		unprojectedRefs := make([]*qualifiedRefPlanExpression, 0)
+		for kobr, obr := range orderByRefs {
+			_, found := projRefs[kobr]
+			if !found {
+				unprojectedRefs = append(unprojectedRefs, obr)
+			}
+		}
+
+		// sigh - ok. If we have unprojected refs, we need to insert a projection
+		if len(unprojectedRefs) > 0 {
+			// create the final projection list - this will go before the order by
+			newProjections := make([]types.PlanExpression, len(projections))
+			for i, p := range projections {
+				switch pe := p.(type) {
+				case *aliasPlanExpression:
+					newProjections[i] = newQualifiedRefPlanExpression("", pe.aliasName, i, pe.Type())
+				case *qualifiedRefPlanExpression:
+					newProjections[i] = newQualifiedRefPlanExpression(pe.tableName, pe.columnName, i, pe.Type())
+				default:
+					newProjections[i] = newQualifiedRefPlanExpression("", p.String(), i, p.Type())
+				}
+			}
+
+			// add the unprojected refs to the existing projection op
+			projectionOp, ok := compiledOp.(*PlanOpProjection)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected compiledOp type '%T'", compiledOp)
+			}
+			for _, uref := range unprojectedRefs {
+				projectionOp.Projections = append(projectionOp.Projections, uref)
+			}
+
+			// add the order by on top of this
+			// rewrite all the order by expressions that are not qualified refs to be qualified
+			// refs referring to the expression
+			for i, oe := range orderByExprs {
+				_, ok := oe.Expr.(*qualifiedRefPlanExpression)
+				if !ok {
+					orderByExprs[i].Expr = newQualifiedRefPlanExpression("", oe.Expr.String(), 0, oe.Expr.Type())
+				}
+			}
+			compiledOp = NewPlanOpOrderBy(orderByExprs, compiledOp)
+
+			// add the final projection on top of this
+			compiledOp = NewPlanOpProjection(newProjections, compiledOp)
+
+		} else {
+			// rewrite all the order by expressions that are not qualified refs to be qualified
+			// refs referring to the expression
+			for i, oe := range orderByExprs {
+				_, ok := oe.Expr.(*qualifiedRefPlanExpression)
+				if !ok {
+					orderByExprs[i].Expr = newQualifiedRefPlanExpression("", oe.Expr.String(), 0, oe.Expr.Type())
+				}
+			}
+			compiledOp = NewPlanOpOrderBy(orderByExprs, compiledOp)
+		}
 	}
 
 	// insert the top operator if it exists
@@ -583,11 +683,10 @@ func (p *ExecutionPlanner) analyzeSelectStatement(ctx context.Context, stmt *par
 	}
 
 	for _, term := range stmt.OrderingTerms {
-		expr, err := p.analyzeOrderingTermExpression(term.X, stmt)
+		err := p.analyzeOrderingTermExpression(term.X, stmt)
 		if err != nil {
 			return nil, err
 		}
-		term.X = expr
 	}
 
 	return stmt, nil
