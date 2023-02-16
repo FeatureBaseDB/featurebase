@@ -75,7 +75,7 @@ type Command struct {
 	// Command contains an optional command provided via the `-c` flag. If this
 	// is non-empty, the cli will run in non-interactive mode; it will quit
 	// after the command is complete.
-	Command string `json:"command"`
+	Commands []string `json:"commands"`
 
 	// quit gets closed when Run should stop listening for input.
 	quit chan struct{}
@@ -113,12 +113,15 @@ func NewCommand(logdest logger.Logger) *Command {
 // with a user, as opposed to calling `featurebase cli` in a script.
 func (cmd *Command) Run(ctx context.Context) error {
 	// Check to see if Command needs to run in non-interactive mode.
-	if cmd.Command != "" {
+	if len(cmd.Commands) > 0 {
 		if err := cmd.setupClient(newNopPrinter()); err != nil {
 			return errors.Wrap(err, "setting up client")
 		}
-		if err := cmd.handleLine(cmd.Command); err != nil {
-			cmd.Errorf(err.Error())
+		for _, line := range cmd.Commands {
+			if err := cmd.handleLine(line); err != nil {
+				cmd.Errorf(err.Error())
+				return nil
+			}
 		}
 
 		return nil
