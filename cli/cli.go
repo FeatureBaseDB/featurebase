@@ -127,6 +127,9 @@ func (cmd *Command) Run(ctx context.Context) error {
 		if err := cmd.setupClient(newNopPrinter()); err != nil {
 			return errors.Wrap(err, "setting up client")
 		}
+		if err := cmd.connectToDatabase(cmd.database); err != nil {
+			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+		}
 
 		// Run Commands.
 		for _, line := range cmd.Commands {
