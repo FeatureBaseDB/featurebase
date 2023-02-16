@@ -2259,9 +2259,23 @@ func (c *InternalClient) IndexTranslateDataReader(ctx context.Context, index str
 func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, field string) (io.ReadCloser, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FieldTranslateDataReader")
 	defer span.Finish()
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return nil, err
+	}
 
+	var primary *disco.Node
+	for _, node := range nodes {
+		if node.IsPrimary {
+			primary = node
+			break
+		}
+	}
+	if primary == nil {
+		return nil, errors.New("no primary")
+	}
 	// Execute request against the host.
-	u := fmt.Sprintf("%s%s/internal/translate/data?index=%s&field=%s", c.defaultURI, c.prefix(), url.QueryEscape(index), url.QueryEscape(field))
+	u := fmt.Sprintf("%s%s/internal/translate/data?index=%s&field=%s", primary.URI, c.prefix(), url.QueryEscape(index), url.QueryEscape(field))
 
 	// Build request.
 	req, err := http.NewRequest("GET", u, nil)
