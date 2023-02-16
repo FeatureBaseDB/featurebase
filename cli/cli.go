@@ -69,6 +69,11 @@ type Command struct {
 	output       io.Writer `json:"-"`
 	writeOptions *writeOptions
 
+	// Command contains an optional command provided via the `-c` flag. If this
+	// is non-empty, the cli will run in non-interactive mode; it will quit
+	// after the command is complete.
+	Command string `json:"command"`
+
 	// quit gets closed when Run should stop listening for input.
 	quit chan struct{}
 }

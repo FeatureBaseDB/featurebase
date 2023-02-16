@@ -20,5 +20,9 @@ func BuildCLIFlags(cmd *cobra.Command, cliCmd *cli.Command) {
 	flags.StringVar(&cliCmd.Email, "email", cliCmd.Email, "Email address for FeatureBase Cloud access.")
 	flags.StringVar(&cliCmd.Password, "password", cliCmd.Password, "Password for FeatureBase Cloud access.")
 
+	flags.StringVarP(&cliCmd.Command, "command", "c", cliCmd.Command, "Command to run.")
+
+	flags.String("config", "", "Configuration file to read from.")
+
 	flags.AddFlagSet(flags)
 }

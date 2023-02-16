@@ -323,7 +323,7 @@ Formatting
   \pset [NAME [VALUE]]   set table output option
                          (border|expanded|tuples_only)
   \t [on|off]            show only rows
-  \x [on|off|auto]       toggle expanded output
+  \x [on|off]            toggle expanded output
 
 Connection
   \c[onnect] [DBNAME]    connect to new database

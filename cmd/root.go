@@ -64,15 +64,11 @@ at https://docs.featurebase.com/.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
 
-			var envPrefix string
 			switch cmd.Use {
 			case "dax":
 				v.Set("future.rename", true) // always use FEATUREBASE env for dax
-			case "cli":
-				envPrefix = "FEATUREBASE_CLI"
 			}
-			err := setAllConfig(v, cmd.Flags(), envPrefix)
-			if err != nil {
+			if err := setAllConfig(v, cmd.Flags(), ""); err != nil {
 				return err
 			}
 
@@ -109,7 +105,6 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newServeCmd(stderr))
 	rc.AddCommand(newHolderCmd(stderr))
 	rc.AddCommand(newKeygenCommand(logdest))
-	rc.AddCommand(newCLICommand(logdest))
 	rc.AddCommand(newDAXCommand(stderr))
 	rc.AddCommand(newDataframeCsvLoaderCommand(logdest))
 	rc.AddCommand(newPreSortCommand(logdest))
