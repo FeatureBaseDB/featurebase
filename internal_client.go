@@ -2264,13 +2264,7 @@ func (c *InternalClient) FieldTranslateDataReader(ctx context.Context, index, fi
 		return nil, err
 	}
 
-	var primary *disco.Node
-	for _, node := range nodes {
-		if node.IsPrimary {
-			primary = node
-			break
-		}
-	}
+	primary := getPrimaryNode(nodes)
 	if primary == nil {
 		return nil, errors.New("no primary")
 	}
