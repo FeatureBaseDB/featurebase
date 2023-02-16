@@ -72,10 +72,15 @@ type Command struct {
 	output       io.Writer `json:"-"`
 	writeOptions *writeOptions
 
-	// Command contains an optional command provided via the `-c` flag. If this
-	// is non-empty, the cli will run in non-interactive mode; it will quit
-	// after the command is complete.
+	// Commands contains optional commands provided via one or more `-c` (or
+	// `--command`) flags. If this is non-empty, the cli will run in
+	// non-interactive mode; i.e. it will quit after the command is complete.
 	Commands []string `json:"commands"`
+
+	// Files contains optional files provided via one or more `-f` (or `--file`)
+	// flags. If this is non-empty, the cli will run in non-interactive mode;
+	// i.e. it will quit after the command is complete.
+	Files []string `json:"files"`
 
 	// quit gets closed when Run should stop listening for input.
 	quit chan struct{}
@@ -113,12 +118,22 @@ func NewCommand(logdest logger.Logger) *Command {
 // with a user, as opposed to calling `featurebase cli` in a script.
 func (cmd *Command) Run(ctx context.Context) error {
 	// Check to see if Command needs to run in non-interactive mode.
-	if len(cmd.Commands) > 0 {
+	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
 		if err := cmd.setupClient(newNopPrinter()); err != nil {
 			return errors.Wrap(err, "setting up client")
 		}
+
+		// Run Commands.
 		for _, line := range cmd.Commands {
 			if err := cmd.handleLine(line); err != nil {
+				cmd.Errorf(err.Error())
+				return nil
+			}
+		}
+
+		// Run Files.
+		for _, fname := range cmd.Files {
+			if _, err := executeFile(cmd, fname); err != nil {
 				cmd.Errorf(err.Error())
 				return nil
 			}

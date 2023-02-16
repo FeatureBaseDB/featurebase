@@ -357,9 +357,13 @@ func (m *metaInclude) execute(cmd *Command) (action, error) {
 		return actionNone, errors.Errorf("meta command 'include' requires exactly one argument")
 	}
 
-	file, err := os.Open(m.args[0])
+	return executeFile(cmd, m.args[0])
+}
+
+func executeFile(cmd *Command, fileName string) (action, error) {
+	file, err := os.Open(fileName)
 	if err != nil {
-		return actionNone, errors.Wrapf(err, "opening file: %s", m.args[0])
+		return actionNone, errors.Wrapf(err, "opening file: %s", fileName)
 	}
 	defer file.Close()
 
@@ -390,7 +394,7 @@ func (m *metaInclude) execute(cmd *Command) (action, error) {
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return actionNone, errors.Wrapf(err, "scanning file: %s", m.args[0])
+		return actionNone, errors.Wrapf(err, "scanning file: %s", fileName)
 	}
 
 	return actionReset, nil

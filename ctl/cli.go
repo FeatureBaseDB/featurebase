@@ -20,7 +20,8 @@ func BuildCLIFlags(cmd *cobra.Command, cliCmd *cli.Command) {
 	flags.StringVar(&cliCmd.Email, "email", cliCmd.Email, "Email address for FeatureBase Cloud access.")
 	flags.StringVar(&cliCmd.Password, "password", cliCmd.Password, "Password for FeatureBase Cloud access.")
 
-	flags.StringSliceVarP(&cliCmd.Commands, "command", "c", cliCmd.Commands, "Command to run.")
+	flags.StringSliceVarP(&cliCmd.Commands, "command", "c", cliCmd.Commands, "Command to run in non-interactive mode. Provide multiple flags to execute more than one command. All --command flags run before all --file flags.")
+	flags.StringSliceVarP(&cliCmd.Files, "file", "f", cliCmd.Files, "File to run in non-interactive mode. Provide multiple flags to execute more than one file. All --command flags run before all --file flags.")
 
 	flags.String("config", "", "Configuration file to read from.")
 
