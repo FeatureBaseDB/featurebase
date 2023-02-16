@@ -56,6 +56,7 @@ const (
 	CompareExactOrdered   compareMethod = "exactOrdered"
 	CompareExactUnordered compareMethod = "exactUnordered"
 	CompareIncludedIn     compareMethod = "includedIn"
+	ComparePartial        compareMethod = "comparePartial"
 )
 
 type TableTest struct {

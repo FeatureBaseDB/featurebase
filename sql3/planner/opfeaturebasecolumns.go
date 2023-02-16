@@ -148,9 +148,9 @@ func (i *showColumnsRowIter) Next(ctx context.Context) (types.Row, error) {
 		tm := time.Unix(0, fields[i.rowIndex].CreatedAt)
 
 		row := []interface{}{
-			fields[i.rowIndex].Name,
-			fields[i.rowIndex].Name,
-			fields[i.rowIndex].Type,
+			string(fields[i.rowIndex].Name),
+			string(fields[i.rowIndex].Name),
+			string(fields[i.rowIndex].Type),
 			tm.Format(time.RFC3339),
 			fields[i.rowIndex].StringKeys(),
 			fields[i.rowIndex].Options.CacheType,

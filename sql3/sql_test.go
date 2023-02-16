@@ -73,9 +73,15 @@ func TestSQL_Execute(t *testing.T) {
 								exp[i] = make([]interface{}, len(headers))
 								for j := range sqltest.ExpHdrs {
 									targetIdx := m[sqltest.ExpHdrs[j].Name]
-									assert.GreaterOrEqual(t, len(sqltest.ExpRows[i]), len(headers),
-										"expected row set has fewer columns than returned headers")
-									exp[i][targetIdx] = sqltest.ExpRows[i][j]
+									if sqltest.Compare != defs.ComparePartial {
+										assert.GreaterOrEqual(t, len(sqltest.ExpRows[i]), len(headers),
+											"expected row set has fewer columns than returned headers")
+									}
+									// if ExpRows[i] is short, that might be okay if we're doing a "partial"
+									// compare.
+									if len(sqltest.ExpRows[i]) > j {
+										exp[i][targetIdx] = sqltest.ExpRows[i][j]
+									}
 								}
 							}
 
@@ -94,6 +100,32 @@ func TestSQL_Execute(t *testing.T) {
 								assert.Equal(t, sqltest.ExpRowCount, len(rows))
 								for _, row := range rows {
 									assert.Contains(t, exp, row)
+								}
+							case defs.ComparePartial:
+								assert.LessOrEqual(t, len(sqltest.ExpRows), len(rows))
+								// Assert that every non-nil value in the row is found somewhere
+								// in the corresponding expected row.
+								for i, expRow := range exp {
+									// have we found everything in this row yet?
+									foundAll := false
+									for _, row := range rows {
+										maybeFound := true
+										for k, exp := range expRow {
+											if exp != nil {
+												if k > len(row) || row[k] != exp {
+													maybeFound = false
+													break
+												}
+											}
+										}
+										if maybeFound {
+											foundAll = true
+											break
+										}
+									}
+									if !foundAll {
+										t.Errorf("expected row %d: couldn't find any result row matching all its values %#v", i, expRow)
+									}
 								}
 							}
 
