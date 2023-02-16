@@ -117,8 +117,7 @@ func NewCommand(logdest logger.Logger) *Command {
 	}
 }
 
-// Run is the main entry-point to the CLI. Currently it handles the interaction
-// with a user, as opposed to calling `featurebase cli` in a script.
+// Run is the main entry-point to the CLI.
 func (cmd *Command) Run(ctx context.Context) error {
 	cmd.setupConfig()
 
