@@ -61,6 +61,7 @@ func (l *leasedKV) Start(initValue string) error {
 // done channel for the internal context, which will be readable as soon as either
 // our context or the parent context is done.
 func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResponse, error) {
+	log.Printf("trying to create lease and KeepAlive channel...")
 	ctx, cancel := context.WithCancel(l.parentContext)
 
 	if l.cancel != nil {
@@ -104,6 +105,8 @@ func (l *leasedKV) create(initValue string) (<-chan *clientv3.LeaseKeepAliveResp
 }
 
 func (l *leasedKV) consumeLease(ch <-chan *clientv3.LeaseKeepAliveResponse) {
+	log.Printf("consumeLease from leasedKV %v", l.leaseID)
+
 	for {
 		select {
 		case _, ok := <-ch:
