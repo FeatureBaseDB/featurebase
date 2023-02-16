@@ -376,7 +376,7 @@ func (m *metaInclude) execute(cmd *Command) (action, error) {
 		if err != nil {
 			return actionNone, errors.Wrapf(err, "splitting lines")
 		} else if len(mcs) > 0 {
-			return actionNone, errors.Errorf("include does  not support meta-commands")
+			return actionNone, errors.Errorf("include does not support meta-commands")
 		}
 
 		for i := range qps {

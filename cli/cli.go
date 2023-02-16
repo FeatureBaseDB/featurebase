@@ -14,8 +14,8 @@ import (
 	"github.com/chzyer/readline"
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/cli/fbcloud"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -37,6 +37,9 @@ var (
 Type "\q" to quit.
 `, featurebase.Version)
 )
+
+// Ensure type implments interfaces.
+var _ printer = (*Command)(nil)
 
 type Command struct {
 	Host        string `json:"host"`
@@ -109,10 +112,22 @@ func NewCommand(logdest logger.Logger) *Command {
 // Run is the main entry-point to the CLI. Currently it handles the interaction
 // with a user, as opposed to calling `featurebase cli` in a script.
 func (cmd *Command) Run(ctx context.Context) error {
+	// Check to see if Command needs to run in non-interactive mode.
+	if cmd.Command != "" {
+		if err := cmd.setupClient(newNopPrinter()); err != nil {
+			return errors.Wrap(err, "setting up client")
+		}
+		if err := cmd.handleLine(cmd.Command); err != nil {
+			cmd.Errorf(err.Error())
+		}
+
+		return nil
+	}
+
 	// Print the splash message.
 	cmd.Printf(splash)
 	cmd.setupHistory()
-	if err := cmd.setupClient(); err != nil {
+	if err := cmd.setupClient(cmd); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
 	cmd.printConnInfo()
@@ -267,6 +282,24 @@ func (cmd *Command) executeQuery(qry query) (*featurebase.WireQueryResponse, err
 	return cmd.Queryer.Query(cmd.OrganizationID, cmd.databaseID, qry.Reader())
 }
 
+// printer is an interface which encapsulates the methods used to print output
+// to the various io.Writers.
+type printer interface {
+	Printf(format string, a ...any)
+	Outputf(format string, a ...any)
+	Errorf(format string, a ...any)
+}
+
+type nopPrinter struct{}
+
+func newNopPrinter() *nopPrinter {
+	return &nopPrinter{}
+}
+
+func (n *nopPrinter) Printf(format string, a ...any)  {}
+func (n *nopPrinter) Outputf(format string, a ...any) {}
+func (n *nopPrinter) Errorf(format string, a ...any)  {}
+
 // Printf is a helper method which sends the given payload to stdout.
 func (cmd *Command) Printf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
@@ -358,7 +391,7 @@ func (cmd *Command) connectionMessage() string {
 	return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.databaseName, cmd.databaseID)
 }
 
-func (cmd *Command) setupClient() error {
+func (cmd *Command) setupClient(p printer) error {
 	// If the Queryer has already been set (in tests for example), don't bother
 	// trying to detect it.
 	if cmd.Queryer != nil {
@@ -380,19 +413,19 @@ func (cmd *Command) setupClient() error {
 
 	switch typ {
 	case featurebaseTypeOnPremClassic:
-		cmd.Printf("Detected on-prem, classic deployment.\n")
+		p.Printf("Detected on-prem, classic deployment.\n")
 		cmd.Queryer = &standardQueryer{
 			Host: cmd.Host,
 			Port: cmd.Port,
 		}
 	case featurebaseTypeOnPremServerless:
-		cmd.Printf("Detected on-prem, serverless deployment.\n")
+		p.Printf("Detected on-prem, serverless deployment.\n")
 		cmd.Queryer = &serverlessQueryer{
 			Host: cmd.Host,
 			Port: cmd.Port,
 		}
 	case featurebaseTypeCloud:
-		cmd.Printf("Detected cloud deployment.\n")
+		p.Printf("Detected cloud deployment.\n")
 		cmd.Queryer = &fbcloud.Queryer{
 			Host: hostPort(cmd.Host, cmd.Port),
 
@@ -402,7 +435,7 @@ func (cmd *Command) setupClient() error {
 			Password: cmd.Password,
 		}
 	case featurebaseTypeUnknown:
-		cmd.Printf("Could not detect deployment\n")
+		p.Printf("Could not detect deployment\n")
 		// cmd.Queryer = &nopQueryer{}
 		// Instead of using a no-op queryer when the type can't be detected, we
 		// default to using a cloud queryer.
@@ -521,5 +554,64 @@ func (cmd *Command) closeOutput() error {
 		return closer.Close()
 	}
 
+	return nil
+}
+
+func (cmd *Command) handleLine(line string) error {
+	// For single-line command handling, we handle either a meta-command, or
+	// query parts, but not both. The logic is that any line which begins with
+	// "\" will be handled as a meta-command, otherwise it will be handled as a
+	// query.
+	if len(line) == 0 {
+		return nil
+	} else if line[0] == byte('\\') {
+		return cmd.handleLineAsMetaCommand(line)
+	} else {
+		return cmd.handleLineAsQueryParts(line)
+	}
+}
+
+func (cmd *Command) handleLineAsMetaCommand(line string) error {
+	_, mcs, err := cmd.splitter.split(line)
+	if err != nil {
+		return errors.Wrapf(err, "splitting line")
+	}
+
+	for i := range mcs {
+		_, err := mcs[i].execute(cmd)
+		if err != nil {
+			return errors.Wrap(err, "executing meta command")
+		}
+	}
+
+	return nil
+}
+
+func (cmd *Command) handleLineAsQueryParts(line string) error {
+	qps, mcs, err := cmd.splitter.split(line)
+	if err != nil {
+		return errors.Wrapf(err, "splitting line")
+	} else if len(mcs) > 0 {
+		return errors.Errorf("--command does not support meta-commands")
+	}
+
+	// Add a termintor part to the end of []queryPart. We do this because the
+	// command is coming in from the --command flag, it may not end with a
+	// semi-colon, but we still want to execute it.
+	if len(qps) > 0 {
+		if _, ok := qps[len(qps)-1].(*partTerminator); !ok {
+			qps = append(qps, newPartTerminator())
+		}
+	}
+
+	for i := range qps {
+		if qry, err := cmd.buffer.addPart(qps[i]); err != nil {
+			return errors.Wrap(err, "adding part to buffer")
+		} else if qry != nil {
+			if err := cmd.executeAndWriteQuery(qry); err != nil {
+				return errors.Wrap(err, "executing query")
+			}
+		}
+	}
 	return nil
 }
