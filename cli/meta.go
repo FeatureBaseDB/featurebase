@@ -462,7 +462,7 @@ func (m *metaOrg) execute(cmd *Command) (action, error) {
 		cmd.Printf(cmd.orgMessage())
 		return actionNone, nil
 	case 1:
-		cmd.OrganizationID = m.args[0]
+		cmd.organizationID = m.args[0]
 		cmd.Printf(cmd.orgMessage())
 		return actionNone, nil
 

@@ -42,22 +42,15 @@ Type "\q" to quit.
 var _ printer = (*Command)(nil)
 
 type Command struct {
-	Host        string `json:"host"`
-	Port        string `json:"port"`
-	HistoryPath string `json:"history-path"`
-
-	// Cloud Auth
-	ClientID string `json:"client-id"`
-	Region   string `json:"region"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	host string
+	port string
 
 	splitter   *splitter
 	buffer     *buffer
 	workingDir *workingDir
 
-	OrganizationID string `json:"org-id"`
-	Database       string `json:"db"`
+	organizationID string
+	database       string
 	databaseID     string
 	databaseName   string
 
@@ -71,6 +64,10 @@ type Command struct {
 	// or to a file, based on the current configuration.
 	output       io.Writer `json:"-"`
 	writeOptions *writeOptions
+
+	Config *Config `json:"config"`
+
+	historyPath string
 
 	// Commands contains optional commands provided via one or more `-c` (or
 	// `--command`) flags. If this is non-empty, the cli will run in
@@ -88,16 +85,22 @@ type Command struct {
 
 func NewCommand(logdest logger.Logger) *Command {
 	return &Command{
-		Host:        defaultHost,
-		HistoryPath: "",
+		Config: &Config{
+			Host: defaultHost,
+			Port: "",
 
-		ClientID: "",
-		Region:   "",
-		Email:    "",
-		Password: "",
+			OrganizationID: "",
+			Database:       "",
 
-		OrganizationID: "",
-		Database:       "",
+			CloudAuth: CloudAuthConfig{
+				ClientID: "",
+				Region:   "",
+				Email:    "",
+				Password: "",
+			},
+
+			HistoryPath: "",
+		},
 
 		splitter:   newSplitter(),
 		buffer:     newBuffer(),
@@ -117,6 +120,8 @@ func NewCommand(logdest logger.Logger) *Command {
 // Run is the main entry-point to the CLI. Currently it handles the interaction
 // with a user, as opposed to calling `featurebase cli` in a script.
 func (cmd *Command) Run(ctx context.Context) error {
+	cmd.setupConfig()
+
 	// Check to see if Command needs to run in non-interactive mode.
 	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
 		if err := cmd.setupClient(newNopPrinter()); err != nil {
@@ -149,13 +154,13 @@ func (cmd *Command) Run(ctx context.Context) error {
 		return errors.Wrap(err, "setting up client")
 	}
 	cmd.printConnInfo()
-	if err := cmd.connectToDatabase(cmd.Database); err != nil {
+	if err := cmd.connectToDatabase(cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
 	}
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:                 promptBegin,
-		HistoryFile:            cmd.HistoryPath,
+		HistoryFile:            cmd.historyPath,
 		HistoryLimit:           100000,
 		DisableAutoSaveHistory: true,
 
@@ -283,6 +288,22 @@ func (cmd *Command) close() error {
 	return cmd.closeOutput()
 }
 
+// setupConfig sets up private struct members based on values provided via the
+// configuration flags.
+func (cmd *Command) setupConfig() {
+	if cmd.Config == nil {
+		return
+	}
+
+	cmd.host = cmd.Config.Host
+	cmd.port = cmd.Config.Port
+
+	cmd.organizationID = cmd.Config.OrganizationID
+	cmd.database = cmd.Config.Database
+
+	cmd.historyPath = cmd.Config.HistoryPath
+}
+
 func (cmd *Command) executeAndWriteQuery(qry query) error {
 	queryResponse, err := cmd.executeQuery(qry)
 	if err != nil {
@@ -297,7 +318,7 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 }
 
 func (cmd *Command) executeQuery(qry query) (*featurebase.WireQueryResponse, error) {
-	return cmd.Queryer.Query(cmd.OrganizationID, cmd.databaseID, qry.Reader())
+	return cmd.Queryer.Query(cmd.organizationID, cmd.databaseID, qry.Reader())
 }
 
 // printer is an interface which encapsulates the methods used to print output
@@ -339,7 +360,7 @@ func (cmd *Command) Errorf(format string, a ...any) {
 func (cmd *Command) setupHistory() {
 	// If HistoryPath has already been configured (i.e. with a command flag),
 	// don't bother setting up the default in the home directory.
-	if cmd.HistoryPath != "" {
+	if cmd.historyPath != "" {
 		return
 	}
 
@@ -355,13 +376,13 @@ func (cmd *Command) setupHistory() {
 			historyPath = filepath.Join(historyDir, "cli_history")
 		}
 	}
-	cmd.HistoryPath = historyPath
+	cmd.historyPath = historyPath
 }
 
 // printConnInfo displays the currently set host.
 // TODO(tlt): extend this to be the output of the /conninfo meta-command.
 func (cmd *Command) printConnInfo() {
-	cmd.Printf("Host: %s\n", hostPort(cmd.Host, cmd.Port))
+	cmd.Printf("Host: %s\n", hostPort(cmd.host, cmd.port))
 }
 
 func (cmd *Command) connectToDatabase(dbName string) error {
@@ -396,10 +417,10 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 }
 
 func (cmd *Command) orgMessage() string {
-	if cmd.OrganizationID == "" {
+	if cmd.organizationID == "" {
 		return "You have not set an organization.\n"
 	}
-	return fmt.Sprintf("You have set organization \"%s\".\n", cmd.OrganizationID)
+	return fmt.Sprintf("You have set organization \"%s\".\n", cmd.organizationID)
 }
 
 func (cmd *Command) connectionMessage() string {
@@ -416,12 +437,12 @@ func (cmd *Command) setupClient(p printer) error {
 		return nil
 	}
 
-	if strings.TrimSpace(cmd.Host) == "" {
+	if strings.TrimSpace(cmd.host) == "" {
 		return errors.Errorf("no host provided\n")
 	}
 
-	if !strings.HasPrefix(cmd.Host, "http") {
-		cmd.Host = "http://" + cmd.Host
+	if !strings.HasPrefix(cmd.host, "http") {
+		cmd.host = "http://" + cmd.host
 	}
 
 	typ, err := cmd.detectFBType()
@@ -433,24 +454,25 @@ func (cmd *Command) setupClient(p printer) error {
 	case featurebaseTypeOnPremClassic:
 		p.Printf("Detected on-prem, classic deployment.\n")
 		cmd.Queryer = &standardQueryer{
-			Host: cmd.Host,
-			Port: cmd.Port,
+			Host: cmd.host,
+			Port: cmd.port,
 		}
 	case featurebaseTypeOnPremServerless:
 		p.Printf("Detected on-prem, serverless deployment.\n")
 		cmd.Queryer = &serverlessQueryer{
-			Host: cmd.Host,
-			Port: cmd.Port,
+			Host: cmd.host,
+			Port: cmd.port,
 		}
 	case featurebaseTypeCloud:
 		p.Printf("Detected cloud deployment.\n")
-		cmd.Queryer = &fbcloud.Queryer{
-			Host: hostPort(cmd.Host, cmd.Port),
 
-			ClientID: cmd.ClientID,
-			Region:   cmd.Region,
-			Email:    cmd.Email,
-			Password: cmd.Password,
+		cmd.Queryer = &fbcloud.Queryer{
+			Host: hostPort(cmd.host, cmd.port),
+
+			ClientID: cmd.Config.CloudAuth.ClientID,
+			Region:   cmd.Config.CloudAuth.Region,
+			Email:    cmd.Config.CloudAuth.Email,
+			Password: cmd.Config.CloudAuth.Password,
 		}
 	case featurebaseTypeUnknown:
 		p.Printf("Could not detect deployment\n")
@@ -458,12 +480,12 @@ func (cmd *Command) setupClient(p printer) error {
 		// Instead of using a no-op queryer when the type can't be detected, we
 		// default to using a cloud queryer.
 		cmd.Queryer = &fbcloud.Queryer{
-			Host: hostPort(cmd.Host, cmd.Port),
+			Host: hostPort(cmd.host, cmd.port),
 
-			ClientID: cmd.ClientID,
-			Region:   cmd.Region,
-			Email:    cmd.Email,
-			Password: cmd.Password,
+			ClientID: cmd.Config.CloudAuth.ClientID,
+			Region:   cmd.Config.CloudAuth.Region,
+			Email:    cmd.Config.CloudAuth.Email,
+			Password: cmd.Config.CloudAuth.Password,
 		}
 	default:
 		return errors.Errorf("unknown type: %s", typ)
@@ -501,23 +523,23 @@ func (cmd *Command) detectFBType() (featurebaseType, error) {
 	trials := []trial{}
 
 	var clientTimeout time.Duration
-	if cmd.Port != "" {
+	if cmd.port != "" {
 		clientTimeout = 100 * time.Millisecond
 		trials = append(trials,
 			// on-prem, serverless
 			trial{
-				port:   cmd.Port,
+				port:   cmd.port,
 				health: "/queryer/health",
 				typ:    featurebaseTypeOnPremServerless,
 			},
 			// on-prem, classic
 			trial{
-				port:   cmd.Port,
+				port:   cmd.port,
 				health: "/status",
 				typ:    featurebaseTypeOnPremClassic,
 			},
 		)
-	} else if strings.HasPrefix(cmd.Host, "https") {
+	} else if strings.HasPrefix(cmd.host, "https") {
 		// https suggesting we might be connecting to a cloud host
 		clientTimeout = 1 * time.Second
 		trials = append(trials,
@@ -551,11 +573,11 @@ func (cmd *Command) detectFBType() (featurebaseType, error) {
 		Timeout: clientTimeout,
 	}
 	for _, trial := range trials {
-		url := hostPort(cmd.Host, trial.port) + trial.health
+		url := hostPort(cmd.host, trial.port) + trial.health
 		if resp, err := client.Get(url); err != nil {
 			continue
 		} else if resp.StatusCode/100 == 2 {
-			cmd.Port = trial.port
+			cmd.port = trial.port
 			return trial.typ, nil
 		}
 	}
