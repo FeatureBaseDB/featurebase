@@ -465,7 +465,7 @@ func (cmd *BackupTarCommand) backupTarFieldTranslateData(ctx context.Context, tw
 	}); err != nil {
 		return err
 	} else if _, err := io.Copy(tw, buf); err != nil {
-		return fmt.Errorf("copying tran&slate data to archive: %w", err)
+		return fmt.Errorf("copying translate data to archive: %w", err)
 	}
 	return nil
 }
