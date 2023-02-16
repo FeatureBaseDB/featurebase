@@ -44,7 +44,7 @@ func (p *PlanOpPQLGroupBy) Plan() map[string]interface{} {
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
 	}
-	result["aggregate"] = p.aggregate.AggExpression().Plan()
+	result["aggregate"] = p.aggregate.FirstChildExpr().Plan()
 	ps := make([]interface{}, 0)
 	for _, e := range p.groupByExprs {
 		ps = append(ps, e.Plan())
@@ -82,7 +82,7 @@ func (p *PlanOpPQLGroupBy) Schema() types.Schema {
 	s := &types.PlannerColumn{
 		ColumnName:   p.aggregate.String(),
 		RelationName: "",
-		Type:         p.aggregate.AggExpression().Type(),
+		Type:         p.aggregate.FirstChildExpr().Type(),
 	}
 	result[len(p.groupByExprs)] = s
 
@@ -159,16 +159,16 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 
 		// Apply filter & aggregate, if set.
-		aggExpr, ok := i.aggregate.AggExpression().(*qualifiedRefPlanExpression)
+		aggExpr, ok := i.aggregate.FirstChildExpr().(*qualifiedRefPlanExpression)
 		if !ok {
-			return nil, sql3.NewErrInternalf("unexpected aggregate expression type '%T'", i.aggregate.AggExpression())
+			return nil, sql3.NewErrInternalf("unexpected aggregate expression type '%T'", i.aggregate.FirstChildExpr())
 		}
 
-		switch i.aggregate.AggType() {
-		case types.AGGREGATE_COUNT:
+		switch i.aggregate.(type) {
+		case *countPlanExpression:
 			//nop
 
-		case types.AGGREGATE_COUNT_DISTINCT:
+		case *countDistinctPlanExpression:
 			aggregate := &pql.Call{
 				Name: "Count",
 				Children: []*pql.Call{{
@@ -178,24 +178,24 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 			}
 			call.Args["aggregate"] = aggregate
 
-		case types.AGGREGATE_SUM, types.AGGREGATE_AVG:
+		case *sumPlanExpression, *avgPlanExpression:
 			aggregate := &pql.Call{
 				Name: "Sum",
 				Args: map[string]interface{}{"field": aggExpr.columnName},
 			}
 			call.Args["aggregate"] = aggregate
 
-		case types.AGGREGATE_PERCENTILE:
+		case *percentilePlanExpression:
 			return nil, sql3.NewErrAggregateNotAllowedInGroupBy(0, 0, "PERCENTILE()")
 
-		case types.AGGREGATE_MIN:
+		case *minPlanExpression:
 			return nil, sql3.NewErrAggregateNotAllowedInGroupBy(0, 0, "MIN()")
 
-		case types.AGGREGATE_MAX:
+		case *maxPlanExpression:
 			return nil, sql3.NewErrAggregateNotAllowedInGroupBy(0, 0, "MAX()")
 
 		default:
-			return nil, sql3.NewErrInternalf("unexpected agg function type: %d", i.aggregate.AggType())
+			return nil, sql3.NewErrInternalf("unexpected agg function type: '%T'", i.aggregate)
 		}
 		if cond != nil {
 			call.Args["filter"] = cond
@@ -244,14 +244,14 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 		//now populate the aggregate value
 		aggIdx := len(i.groupByColumns)
-		switch i.aggregate.AggType() {
-		case types.AGGREGATE_COUNT:
+		switch i.aggregate.(type) {
+		case *countPlanExpression:
 			row[aggIdx] = int64(group.Count)
 
-		case types.AGGREGATE_COUNT_DISTINCT, types.AGGREGATE_SUM:
+		case *countDistinctPlanExpression, *sumPlanExpression:
 			row[aggIdx] = int64(group.Agg)
 
-		case types.AGGREGATE_AVG:
+		case *avgPlanExpression:
 			if group.DecimalAgg == nil {
 				average := float64(group.Agg) / float64(group.Count)
 				row[aggIdx] = pql.NewDecimal(int64(average*10000), 4)
@@ -260,7 +260,7 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 				row[aggIdx] = pql.NewDecimal(int64(average*10000), 4)
 			}
 		default:
-			return nil, sql3.NewErrInternalf("unhandled aggregate function type '%v'", i.aggregate.AggType())
+			return nil, sql3.NewErrInternalf("unhandled aggregate function type '%T'", i.aggregate)
 		}
 
 		// Move to next result element.

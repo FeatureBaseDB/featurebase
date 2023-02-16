@@ -50,6 +50,9 @@ var countTests = TableTest{
 				row(int64(6)),
 			),
 			Compare: CompareExactUnordered,
+			PlanCheck: func(jplan []byte) error {
+				return operatorPresentAtPath(jplan, "$.child.child.operators[0]._op", "*planner.PlanOpPQLAggregate")
+			},
 		},
 		{
 			SQLs: sqls(
@@ -245,7 +248,13 @@ var sumTests = TableTest{
 			SQLs: sqls(
 				"SELECT sum(1) AS sum_rows FROM sum_test",
 			),
-			ExpErr: "column reference expected",
+			ExpHdrs: hdrs(
+				hdr("sum_rows", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(6)),
+			),
+			Compare: CompareExactUnordered,
 		},
 		{
 			SQLs: sqls(
@@ -274,6 +283,18 @@ var sumTests = TableTest{
 			),
 			ExpRows: rows(
 				row(pql.NewDecimal(6800, 2)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT sum(d1 + 5) AS sum_rows FROM sum_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("sum_rows", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(9800, 2)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -354,6 +375,22 @@ var avgTests = TableTest{
 			),
 			ExpRows: rows(
 				row(pql.NewDecimal(113333, 4)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT avg(len(s1)) AS avg_rows FROM avg_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(30000, 4)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -475,8 +512,13 @@ var minmaxTests = TableTest{
 				"SELECT min(1) AS p_rows FROM minmax_test",
 				"SELECT max(1) AS p_rows FROM minmax_test",
 			),
-			ExpErr: "column reference expected",
-		},
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered},
 		{
 			SQLs: sqls(
 				"SELECT min(_id) AS p_rows FROM minmax_test",
@@ -505,6 +547,30 @@ var minmaxTests = TableTest{
 			),
 			ExpRows: rows(
 				row(string("ffoo")),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT min(len(s1)) AS p_rows FROM minmax_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(4)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT max(len(s1)) AS p_rows FROM minmax_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(4)),
 			),
 			Compare: CompareExactUnordered,
 		},

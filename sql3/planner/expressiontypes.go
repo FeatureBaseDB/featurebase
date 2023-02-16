@@ -537,6 +537,16 @@ func typeIsDecimal(testType parser.ExprDataType) bool {
 	}
 }
 
+// returns true if the type is bit-sliced
+func typeIsBSI(testType parser.ExprDataType) bool {
+	switch testType.(type) {
+	case *parser.DataTypeInt, *parser.DataTypeDecimal, *parser.DataTypeTimestamp:
+		return true
+	default:
+		return false
+	}
+}
+
 // returns true if the types can be compared
 func typesAreComparable(testTypeL parser.ExprDataType, testTypeR parser.ExprDataType) bool {
 	switch testTypeL.(type) {

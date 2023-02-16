@@ -2,7 +2,14 @@
 package defs
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
+
+	"github.com/PaesslerAG/gval"
+	"github.com/PaesslerAG/jsonpath"
 )
 
 // TableTests is the list of tests which get run by TestSQL_Execute in
@@ -201,4 +208,34 @@ func timestampFromString(s string) time.Time {
 		panic(err.Error())
 	}
 	return tm
+}
+
+// operatorPresentAtPath() tests if an named operator exists in a plan
+//
+//	operatorPresentAtPath() takes a FeatureBase query plan as a []byte
+//	(so we do not have to convert to and from string), a path (as a
+//	jsonpath expression) and an operator. The function returns nil if
+//	the result of the jsonpath expression evaluation contains the operator.
+func operatorPresentAtPath(jplan []byte, path string, operator string) error {
+	// fmt.Printf("%s\n", string(jplan))
+	v := interface{}(nil)
+	err := json.Unmarshal(jplan, &v)
+	if err != nil {
+		return err
+	}
+
+	builder := gval.Full(jsonpath.PlaceholderExtension())
+	expr, err := builder.NewEvaluable(path)
+	if err != nil {
+		return err
+	}
+	eval, err := expr(context.Background(), v)
+	if err != nil {
+		return err
+	}
+	s, ok := eval.(string)
+	if ok && strings.EqualFold(s, operator) {
+		return nil
+	}
+	return fmt.Errorf("expected '%s' to be present", operator)
 }

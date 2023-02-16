@@ -56,23 +56,18 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
 		}
 
-		//make sure it's a qualified ref
+		// if it is a ref, we shouldn't do a sum on the _id
 		ref, ok := call.Args[0].(*parser.QualifiedRef)
-		if !ok {
-			return nil, sql3.NewErrExpectedColumnReference(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
-		}
-
-		//can't do a sum on _id
-		if strings.EqualFold(ref.Column.Name, "_id") {
+		if ok && strings.EqualFold(ref.Column.Name, "_id") {
 			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
 		}
 
 		//make sure the ref is sum-able
-		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType())) {
-			return nil, sql3.NewErrIntOrDecimalExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
+		if !(typeIsInteger(call.Args[0].DataType()) || typeIsDecimal(call.Args[0].DataType())) {
+			return nil, sql3.NewErrIntOrDecimalExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 
-		call.ResultDataType = ref.DataType()
+		call.ResultDataType = call.Args[0].DataType()
 
 	case "AVG":
 		// can't do an avg on a *
@@ -85,19 +80,15 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
 		}
 
+		// if it is a ref, we shouldn't do a avg on the _id
 		ref, ok := call.Args[0].(*parser.QualifiedRef)
-		if !ok {
-			return nil, sql3.NewErrExpectedColumnReference(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
-		}
-
-		//can't do a avg on _id
-		if strings.EqualFold(ref.Column.Name, "_id") {
+		if ok && strings.EqualFold(ref.Column.Name, "_id") {
 			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
 		}
 
 		//make sure the ref is avg-able
-		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType())) {
-			return nil, sql3.NewErrIntOrDecimalExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
+		if !(typeIsInteger(call.Args[0].DataType()) || typeIsDecimal(call.Args[0].DataType())) {
+			return nil, sql3.NewErrIntOrDecimalExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 
 		call.ResultDataType = parser.NewDataTypeDecimal(4)
@@ -153,24 +144,19 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
 		}
 
-		// first arg should be a qualified ref
+		// if it is a ref, we shouldn't do a min/max on the _id
 		ref, ok := call.Args[0].(*parser.QualifiedRef)
-		if !ok {
-			return nil, sql3.NewErrExpectedColumnReference(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
-		}
-
-		// can't do a min/max on _id
-		if strings.EqualFold(ref.Column.Name, "_id") {
+		if ok && strings.EqualFold(ref.Column.Name, "_id") {
 			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
 		}
 
 		// make sure the ref is min/max-able
-		if !(typeIsInteger(ref.DataType()) || typeIsDecimal(ref.DataType()) || typeIsTimestamp(ref.DataType()) || typeIsString(ref.DataType())) {
-			return nil, sql3.NewErrIntOrDecimalOrTimestampOrStringExpressionExpected(ref.Table.NamePos.Line, ref.Table.NamePos.Column)
+		if !(typeIsInteger(call.Args[0].DataType()) || typeIsDecimal(call.Args[0].DataType()) || typeIsTimestamp(call.Args[0].DataType()) || typeIsString(call.Args[0].DataType())) {
+			return nil, sql3.NewErrIntOrDecimalOrTimestampOrStringExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 
 		// return the data type of the referenced column
-		call.ResultDataType = ref.DataType()
+		call.ResultDataType = call.Args[0].DataType()
 
 	case "SETCONTAINS":
 		// two arguments
@@ -239,7 +225,6 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 
 	case "DATEPART":
 		return p.analyzeFunctionDatePart(call, scope)
-
 	case "SUBTABLE":
 		return p.analyzeFunctionSubtable(call, scope)
 	case "REVERSE":
