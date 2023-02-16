@@ -134,7 +134,9 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 		return errors.New("no primary")
 	}
 	c := &gohttp.Client{}
+	buf := new(bytes.Buffer)
 	for {
+		buf.Reset()
 		header, err := tarReader.Next()
 		if err == io.EOF {
 			break
@@ -176,16 +178,17 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 				return fmt.Errorf("no fragmentNodes available")
 			}
 
-			shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
+			_, err = io.Copy(buf, tarReader)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "copying")
 			}
+
 			g, _ := errgroup.WithContext(ctx)
 			for _, node := range fragmentNodes {
 				node := node
 				g.Go(func() error {
 					client := &gohttp.Client{}
-					rd := bytes.NewReader(shardBytes)
+					rd := bytes.NewReader(buf.Bytes())
 					logger.Printf("shard %v %v", shard, indexName)
 					url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
 					_, err = client.Post(url, "application/octet-stream", rd)
@@ -207,16 +210,17 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 				return fmt.Errorf("no fragmentNodes available")
 			}
 
-			shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
+			_, err = io.Copy(buf, tarReader)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "copying")
 			}
+
 			g, _ := errgroup.WithContext(ctx)
 			for _, node := range fragmentNodes {
 				node := node
 				g.Go(func() error {
 					client := &gohttp.Client{}
-					rd := bytes.NewReader(shardBytes)
+					rd := bytes.NewReader(buf.Bytes())
 					logger.Printf("dataframe shard %v %v", shard, indexName)
 					url := node.URI.Path(fmt.Sprintf("/internal/dataframe/restore/%v/%v", indexName, shard))
 					_, err = client.Post(url, "application/octet-stream", rd)
@@ -236,17 +240,19 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			if err != nil {
 				return err
 			}
-			shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
+
+			_, err = io.Copy(buf, tarReader)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "copying")
 			}
+
 			g, _ := errgroup.WithContext(ctx)
 			for _, node := range partitionNodes {
 				node := node
 				g.Go(func() error {
 					// rd := bytes.NewReader(shardBytes)
 					rd := func() (io.Reader, error) {
-						return bytes.NewReader(shardBytes), nil
+						return bytes.NewReader(buf.Bytes()), nil
 					}
 
 					return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, rd)
@@ -264,17 +270,19 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
 				// needs to go to all nodes
-				shardBytes, err := io.ReadAll(tarReader) // this feels wrong but works for now
+
+				_, err = io.Copy(buf, tarReader)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "copying")
 				}
+
 				g, _ := errgroup.WithContext(ctx)
 				for _, node := range nodes {
 					node := node
 					g.Go(func() error {
 						// rd := bytes.NewReader(shardBytes)
 						rd := func() (io.Reader, error) {
-							return bytes.NewReader(shardBytes), nil
+							return bytes.NewReader(buf.Bytes()), nil
 						}
 
 						return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
