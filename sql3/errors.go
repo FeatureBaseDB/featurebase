@@ -709,7 +709,7 @@ func NewErrInsertValueOutOfRange(line, col int, columnName string, rowNumber int
 
 func NewErrUnexpectedTimeQuantumTupleLength(line, col int, columnName string, rowNumber int, badValue []interface{}, length int) error {
 	return errors.New(
-		ErrInsertValueOutOfRange,
+		ErrUnexpectedTimeQuantumTupleLength,
 		fmt.Sprintf("[%d:%d] inserting value into column '%s', row %d, value '%v' out of range", line, col, columnName, rowNumber, badValue),
 	)
 }
