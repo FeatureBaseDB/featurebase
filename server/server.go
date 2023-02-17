@@ -606,8 +606,8 @@ func (m *Command) setupServer() error {
 				disco.NewLocalNoder([]*disco.Node{
 					{ID: nodeID, URI: *advertiseURI, IsPrimary: true, State: disco.NodeStateStarted},
 				}),
-				disco.InMemSharder,
-				disco.InMemSchemator,
+				disco.NewInMemSharder(),
+				disco.NewInMemSchemator(),
 			),
 			pilosa.OptServerNodeID(nodeID),
 		)

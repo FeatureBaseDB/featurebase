@@ -271,12 +271,6 @@ func (*nopSchemator) CreateView(ctx context.Context, index, field, view string) 
 // DeleteView is a no-op implementation of the Schemator DeleteView method.
 func (*nopSchemator) DeleteView(ctx context.Context, index, field, view string) error { return nil }
 
-// InMemSchemator represents a Schemator that manages the schema in memory. The
-// intention is that this would be used for testing.
-var InMemSchemator Schemator = &inMemSchemator{
-	schema: make(Schema),
-}
-
 type inMemSchemator struct {
 	mu     sync.RWMutex
 	schema Schema
@@ -451,8 +445,10 @@ func (s *inMemSchemator) DeleteView(ctx context.Context, index, field, view stri
 	return nil
 }
 
-var InMemSharder Sharder = &inMemSharder{
-	shards: make(map[string][]byte),
+func NewInMemSharder() *inMemSharder {
+	return &inMemSharder{
+		shards: make(map[string][]byte),
+	}
 }
 
 type inMemSharder struct {

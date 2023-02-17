@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
@@ -114,7 +115,7 @@ func (p *ExecutionPlanner) generatePQLCallFromExpr(ctx context.Context, expr typ
 		}
 
 		// if it is the _id column, we can use ConstRow with a list
-		if strings.EqualFold(lhs.columnName, "_id") {
+		if strings.EqualFold(lhs.columnName, string(dax.PrimaryKeyFieldName)) {
 			values := make([]interface{}, len(list.exprs))
 			for i, m := range list.exprs {
 				pqlValue, err := planExprToValue(m)
@@ -204,7 +205,7 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		case *parser.DataTypeID:
-			if strings.EqualFold(lhs.columnName, "_id") {
+			if strings.EqualFold(lhs.columnName, string(dax.PrimaryKeyFieldName)) {
 				return &pql.Call{
 					Name: "ConstRow",
 					Args: map[string]interface{}{
@@ -221,7 +222,7 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			}, nil
 
 		case *parser.DataTypeString:
-			if strings.EqualFold(lhs.columnName, "_id") {
+			if strings.EqualFold(lhs.columnName, string(dax.PrimaryKeyFieldName)) {
 				return &pql.Call{
 					Name: "ConstRow",
 					Args: map[string]interface{}{
@@ -436,8 +437,8 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 		}
 		switch typ := expr.lhs.Type().(type) {
 		case *parser.DataTypeID:
-			if strings.EqualFold(lhs.columnName, "_id") {
-				return nil, sql3.NewErrInvalidColumnInFilterExpression(0, 0, "_id", "is/is not null")
+			if strings.EqualFold(lhs.columnName, string(dax.PrimaryKeyFieldName)) {
+				return nil, sql3.NewErrInvalidColumnInFilterExpression(0, 0, string(dax.PrimaryKeyFieldName), "is/is not null")
 			}
 			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeDescription(), "is/is not null")
 

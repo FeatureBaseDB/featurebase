@@ -49,7 +49,7 @@ func (p *PlanOpFeatureBaseColumns) Schema() types.Schema {
 	return types.Schema{
 		&types.PlannerColumn{
 			RelationName: "fb_table_columns",
-			ColumnName:   "_id",
+			ColumnName:   string(dax.PrimaryKeyFieldName),
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
