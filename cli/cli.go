@@ -92,7 +92,9 @@ type Command struct {
 }
 
 func NewCommand(logdest logger.Logger) *Command {
-	cmd := &Command{
+	variables := make(map[string]string)
+
+	return &Command{
 		Config: &Config{
 			Host: defaultHost,
 			Port: "",
@@ -111,6 +113,7 @@ func NewCommand(logdest logger.Logger) *Command {
 		},
 
 		buffer:     newBuffer(),
+		splitter:   newSplitter(newMapReplacer(variables)),
 		workingDir: newWorkingDir(),
 
 		Stdin:  Stdin,
@@ -120,14 +123,10 @@ func NewCommand(logdest logger.Logger) *Command {
 		output:       Stdout,
 		writeOptions: defaultWriteOptions(),
 
-		variables: make(map[string]string),
+		variables: variables,
 
 		quit: make(chan struct{}),
 	}
-
-	cmd.splitter = newSplitter(newMapReplacer(cmd.variables))
-
-	return cmd
 }
 
 // Run is the main entry-point to the CLI.
