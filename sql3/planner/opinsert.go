@@ -13,6 +13,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/pkg/errors"
 )
@@ -253,9 +254,9 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 				}
 
 			case pilosa.FieldTypeTime:
-				row.Time = qbatchTime
 				switch v := eval.(type) {
 				case []int64:
+					row.Time = qbatchTime
 					uint64s := make([]uint64, len(v))
 					for i := range v {
 						if v[i] < 0 {
@@ -264,6 +265,59 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 						uint64s[i] = uint64(v[i])
 					}
 					row.Values[posVals[idx]] = uint64s
+
+				case []interface{}:
+					// it's a tuple, check length
+					if len(v) != 2 {
+						return nil, sql3.NewErrUnexpectedTimeQuantumTupleLength(0, 0, columnName, rowNumber+1, v, len(v))
+					}
+
+					tupleType, ok := iv.Type().(*parser.DataTypeTuple)
+					if !ok {
+						return nil, sql3.NewErrInternalf("unexpected tuple type '%T'", v[0])
+					}
+
+					// first member must be a timestamp or coercable as one
+					cval, err := coerceValue(tupleType.Members[0], parser.NewDataTypeTimestamp(), v[0], parser.Pos{Line: 0, Column: 0})
+					if err != nil {
+						return nil, err
+					}
+					tval, ok := cval.(time.Time)
+					if !ok {
+						return nil, sql3.NewErrInternalf("unexpected tuple time value type '%T'", v[0])
+					}
+					var qrowTime fbbatch.QuantizedTime
+					qrowTime.Set(tval)
+					row.Time = qrowTime
+
+					// second member must be a set of the correct type
+					targetCol := i.targetColumns[idx]
+
+					switch targetCol.Type().(type) {
+					case *parser.DataTypeStringSetQuantum:
+						sval, ok := v[1].([]string)
+						if !ok {
+							return nil, sql3.NewErrInternalf("string set type expected '%T'", v[1])
+						}
+						row.Values[posVals[idx]] = sval
+
+					case *parser.DataTypeIDSetQuantum:
+						sval, ok := v[1].([]int64)
+						if !ok {
+							return nil, sql3.NewErrInternalf("id set type expected '%T'", v[1])
+						}
+						uint64s := make([]uint64, len(sval))
+						for i := range sval {
+							if sval[i] < 0 {
+								return nil, sql3.NewErrInternalf("converting negative slice value to uint64: %d", sval[i])
+							}
+							uint64s[i] = uint64(sval[i])
+						}
+						row.Values[posVals[idx]] = uint64s
+
+					default:
+						return nil, sql3.NewErrInternalf("unexpected set type '%T'", targetCol.Type())
+					}
 				default:
 					row.Values[posVals[idx]] = eval
 				}

@@ -109,7 +109,8 @@ const (
 
 	// insert errors
 
-	ErrInsertValueOutOfRange errors.Code = "ErrInsertValueOutOfRange"
+	ErrInsertValueOutOfRange            errors.Code = "ErrInsertValueOutOfRange"
+	ErrUnexpectedTimeQuantumTupleLength errors.Code = "ErrUnexpectedTimeQuantumTupleLength"
 
 	// bulk insert errors
 
@@ -700,6 +701,13 @@ func NewErrCallParameterValueInvalid(line, col int, badParameterValue string, pa
 // insert
 
 func NewErrInsertValueOutOfRange(line, col int, columnName string, rowNumber int, badValue interface{}) error {
+	return errors.New(
+		ErrInsertValueOutOfRange,
+		fmt.Sprintf("[%d:%d] inserting value into column '%s', row %d, value '%v' out of range", line, col, columnName, rowNumber, badValue),
+	)
+}
+
+func NewErrUnexpectedTimeQuantumTupleLength(line, col int, columnName string, rowNumber int, badValue []interface{}, length int) error {
 	return errors.New(
 		ErrInsertValueOutOfRange,
 		fmt.Sprintf("[%d:%d] inserting value into column '%s', row %d, value '%v' out of range", line, col, columnName, rowNumber, badValue),

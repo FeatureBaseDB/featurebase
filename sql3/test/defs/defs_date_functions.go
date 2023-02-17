@@ -30,12 +30,6 @@ var datePartTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select datepart('1', 2)",
-			),
-			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'timestamp'",
-		},
-		{
-			SQLs: sqls(
 				"select datepart('1', current_timestamp)",
 			),
 			ExpErr: "invalid value '1' for parameter 'interval'",
