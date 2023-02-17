@@ -2787,7 +2787,11 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 		if expr.Distinct.IsValid() {
 			agg = newCountDistinctPlanExpression(args[0], expr.ResultDataType)
 		} else {
-			agg = newCountPlanExpression(args[0], expr.ResultDataType)
+			if expr.Star.IsValid() {
+				agg = newCountStarPlanExpression(expr.ResultDataType)
+			} else {
+				agg = newCountPlanExpression(args[0], expr.ResultDataType)
+			}
 		}
 		return agg, nil
 

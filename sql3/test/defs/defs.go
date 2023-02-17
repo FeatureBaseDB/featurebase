@@ -10,6 +10,7 @@ import (
 
 	"github.com/PaesslerAG/gval"
 	"github.com/PaesslerAG/jsonpath"
+	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
 // TableTests is the list of tests which get run by TestSQL_Execute in
@@ -221,17 +222,17 @@ func operatorPresentAtPath(jplan []byte, path string, operator string) error {
 	v := interface{}(nil)
 	err := json.Unmarshal(jplan, &v)
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("expected '%s' to be present", operator))
 	}
 
 	builder := gval.Full(jsonpath.PlaceholderExtension())
 	expr, err := builder.NewEvaluable(path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("expected '%s' to be present", operator))
 	}
 	eval, err := expr(context.Background(), v)
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("expected '%s' to be present", operator))
 	}
 	s, ok := eval.(string)
 	if ok && strings.EqualFold(s, operator) {

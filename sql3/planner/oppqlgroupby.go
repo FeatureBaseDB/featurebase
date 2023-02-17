@@ -44,7 +44,7 @@ func (p *PlanOpPQLGroupBy) Plan() map[string]interface{} {
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
 	}
-	result["aggregate"] = p.aggregate.FirstChildExpr().Plan()
+	result["aggregate"] = p.aggregate.String()
 	ps := make([]interface{}, 0)
 	for _, e := range p.groupByExprs {
 		ps = append(ps, e.Plan())
@@ -82,7 +82,7 @@ func (p *PlanOpPQLGroupBy) Schema() types.Schema {
 	s := &types.PlannerColumn{
 		ColumnName:   p.aggregate.String(),
 		RelationName: "",
-		Type:         p.aggregate.FirstChildExpr().Type(),
+		Type:         p.aggregate.Type(),
 	}
 	result[len(p.groupByExprs)] = s
 
@@ -148,7 +148,7 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 				return nil, sql3.NewErrInternalf("unexpected expression type in group by list '%T'", c)
 			}
 			//don't ask for the _id field
-			if ref.Name() != "_id" {
+			if ref.Name() != string(dax.PrimaryKeyFieldName) {
 				call.Children = append(call.Children,
 					&pql.Call{
 						Name: "Rows",
@@ -165,7 +165,7 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 
 		switch i.aggregate.(type) {
-		case *countPlanExpression:
+		case *countPlanExpression, *countStarPlanExpression:
 			//nop
 
 		case *countDistinctPlanExpression:
@@ -245,7 +245,7 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 		//now populate the aggregate value
 		aggIdx := len(i.groupByColumns)
 		switch i.aggregate.(type) {
-		case *countPlanExpression:
+		case *countPlanExpression, *countStarPlanExpression:
 			row[aggIdx] = int64(group.Count)
 
 		case *countDistinctPlanExpression, *sumPlanExpression:

@@ -23,7 +23,7 @@ func (p *ExecutionPlanner) compileShowDatabasesStatement(ctx context.Context, st
 	columns := []types.PlanExpression{
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_databases",
-			columnName:  "_id",
+			columnName:  string(dax.PrimaryKeyFieldName),
 			columnIndex: 0,
 			dataType:    parser.NewDataTypeString(),
 		},
@@ -82,7 +82,7 @@ func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt 
 	columns := []types.PlanExpression{
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
-			columnName:  "_id",
+			columnName:  string(dax.PrimaryKeyFieldName),
 			columnIndex: 0,
 			dataType:    parser.NewDataTypeString(),
 		},
@@ -151,7 +151,7 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt
 
 	columns := []types.PlanExpression{&qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
-		columnName:  "_id",
+		columnName:  string(dax.PrimaryKeyFieldName),
 		columnIndex: 0,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{

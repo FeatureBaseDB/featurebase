@@ -113,6 +113,19 @@ func (p *PlanOpPQLTableScan) WithChildren(children ...types.PlanOperator) (types
 	return nil, nil
 }
 
+func (p *PlanOpPQLTableScan) PrimaryKeyType() (parser.ExprDataType, error) {
+	tname := dax.TableName(p.tableName)
+	table, err := p.planner.schemaAPI.TableByName(context.Background(), tname)
+	if err != nil {
+		return nil, err
+	}
+
+	if table.StringKeys() {
+		return parser.NewDataTypeString(), nil
+	}
+	return parser.NewDataTypeID(), nil
+}
+
 type targetColumn struct {
 	columnIdx    int
 	srcColumnIdx int
@@ -198,7 +211,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		for _, c := range i.columns {
 
 			// skip the _id field
-			if strings.EqualFold(c, "_id") {
+			if strings.EqualFold(c, string(dax.PrimaryKeyFieldName)) {
 				continue
 			}
 
@@ -250,7 +263,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 			mappedColIdx := mappedColumn.columnIdx
 			mappedSrcColIdx := mappedColumn.srcColumnIdx
 
-			if strings.EqualFold(c, "_id") {
+			if strings.EqualFold(c, string(dax.PrimaryKeyFieldName)) {
 				if result.Column.Keyed {
 					row[mappedColIdx] = result.Column.Key
 				} else {

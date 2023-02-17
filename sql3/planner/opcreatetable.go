@@ -106,7 +106,7 @@ func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 		idType = dax.BaseTypeString
 	}
 	fields = append(fields, &dax.Field{
-		Name: "_id",
+		Name: dax.PrimaryKeyFieldName,
 		Type: idType,
 	})
 
