@@ -33,7 +33,7 @@ func (p *ExecutionPlanner) compileInsertStatement(ctx context.Context, stmt *par
 		for _, columnIdent := range stmt.Columns {
 			colName := strings.ToLower(parser.IdentName(columnIdent))
 
-			if strings.EqualFold(colName, "_id") {
+			if strings.EqualFold(colName, string(dax.PrimaryKeyFieldName)) {
 				targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, colName, 0, parser.NewDataTypeID()))
 				continue
 			}
@@ -111,8 +111,8 @@ func (p *ExecutionPlanner) analyzeInsertStatement(ctx context.Context, stmt *par
 			colName := strings.ToLower(parser.IdentName(columnIdent))
 			var typeName parser.ExprDataType
 
-			if strings.EqualFold(colName, "_id") {
-				columnNameMap["_id"] = struct{}{}
+			if strings.EqualFold(colName, string(dax.PrimaryKeyFieldName)) {
+				columnNameMap[string(dax.PrimaryKeyFieldName)] = struct{}{}
 
 				// Determine, from the existing table, whether the _id is of
 				// type ID or STRING.
@@ -151,7 +151,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(ctx context.Context, stmt *par
 		}
 
 		// Ensure we have an _id column.
-		if _, ok := columnNameMap["_id"]; !ok {
+		if _, ok := columnNameMap[string(dax.PrimaryKeyFieldName)]; !ok {
 			return sql3.NewErrInsertMustHaveIDColumn(stmt.ColumnsLparen.Line, stmt.ColumnsLparen.Column)
 		}
 

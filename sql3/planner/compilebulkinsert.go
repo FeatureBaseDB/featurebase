@@ -383,7 +383,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(ctx context.Context, stmt 
 		}
 		columnNameMap[colName] = struct{}{}
 
-		if strings.EqualFold(cm.Name, "_id") {
+		if strings.EqualFold(cm.Name, string(dax.PrimaryKeyFieldName)) {
 			foundID = true
 		}
 	}

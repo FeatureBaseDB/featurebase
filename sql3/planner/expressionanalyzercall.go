@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
@@ -22,26 +23,16 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 	}
 	switch strings.ToUpper(call.Name.Name) {
 	case "COUNT":
-		//check to see if we have a star, if we do turn it into a qualified ref to _id
-		if call.Star.IsValid() && len(call.Args) == 0 {
-			newArg := &parser.Ident{
-				NamePos: call.Star,
-				Name:    "_id",
+		if len(call.Args) > 0 && !call.Star.IsValid() {
+			// one argument only
+			if len(call.Args) != 1 {
+				return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
 			}
-			arg, err := p.analyzeExpression(ctx, newArg, scope)
-			if err != nil {
-				return nil, err
+			//make sure it's a qualified ref
+			_, ok := call.Args[0].(*parser.QualifiedRef)
+			if !ok {
+				return nil, sql3.NewErrExpectedColumnReference(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 			}
-			call.Args = append(call.Args, arg)
-		}
-		// one argument only
-		if len(call.Args) != 1 {
-			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
-		}
-		//make sure it's a qualified ref
-		_, ok := call.Args[0].(*parser.QualifiedRef)
-		if !ok {
-			return nil, sql3.NewErrExpectedColumnReference(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 		//COUNT always returns int
 		call.ResultDataType = parser.NewDataTypeInt()
@@ -58,7 +49,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 
 		// if it is a ref, we shouldn't do a sum on the _id
 		ref, ok := call.Args[0].(*parser.QualifiedRef)
-		if ok && strings.EqualFold(ref.Column.Name, "_id") {
+		if ok && strings.EqualFold(ref.Column.Name, string(dax.PrimaryKeyFieldName)) {
 			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
 		}
 
@@ -82,7 +73,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 
 		// if it is a ref, we shouldn't do a avg on the _id
 		ref, ok := call.Args[0].(*parser.QualifiedRef)
-		if ok && strings.EqualFold(ref.Column.Name, "_id") {
+		if ok && strings.EqualFold(ref.Column.Name, string(dax.PrimaryKeyFieldName)) {
 			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
 		}
 
@@ -110,7 +101,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		}
 
 		//can't do a percentile on _id
-		if strings.EqualFold(ref.Column.Name, "_id") {
+		if strings.EqualFold(ref.Column.Name, string(dax.PrimaryKeyFieldName)) {
 			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
 		}
 
@@ -146,7 +137,7 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 
 		// if it is a ref, we shouldn't do a min/max on the _id
 		ref, ok := call.Args[0].(*parser.QualifiedRef)
-		if ok && strings.EqualFold(ref.Column.Name, "_id") {
+		if ok && strings.EqualFold(ref.Column.Name, string(dax.PrimaryKeyFieldName)) {
 			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
 		}
 

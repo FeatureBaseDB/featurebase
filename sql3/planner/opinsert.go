@@ -116,7 +116,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 			posVals[j] = j - 1
 			continue
 		}
-		if strings.EqualFold(i.targetColumns[j].columnName, "_id") {
+		if strings.EqualFold(i.targetColumns[j].columnName, string(dax.PrimaryKeyFieldName)) {
 			posID = j
 			foundPosID = true
 		}

@@ -54,7 +54,7 @@ func (p *ExecutionPlanner) compileCreateTableStatement(ctx context.Context, stmt
 		columnName := strings.ToLower(parser.IdentName(col.Name))
 		typeName := parser.IdentName(col.Type.Name)
 
-		if strings.ToLower(columnName) == "_id" {
+		if strings.ToLower(columnName) == string(dax.PrimaryKeyFieldName) {
 			if strings.EqualFold(typeName, dax.BaseTypeString) {
 				isKeyed = true
 			}
@@ -262,7 +262,7 @@ func (p *ExecutionPlanner) analyzeCreateTableStatement(stmt *parser.CreateTableS
 			return sql3.NewErrUnknownType(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column, typeName)
 		}
 
-		if strings.ToLower(columnName) == "_id" {
+		if strings.ToLower(columnName) == string(dax.PrimaryKeyFieldName) {
 			//check the type
 			if !(strings.EqualFold(typeName, dax.BaseTypeID) || strings.EqualFold(typeName, dax.BaseTypeString)) {
 				return sql3.NewErrTableIDColumnType(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column)
@@ -279,7 +279,7 @@ func (p *ExecutionPlanner) analyzeCreateTableStatement(stmt *parser.CreateTableS
 			return err
 		}
 	}
-	_, ok := checkedColumns["_id"]
+	_, ok := checkedColumns[string(dax.PrimaryKeyFieldName)]
 	if !ok {
 		return sql3.NewErrTableMustHaveIDColumn(stmt.Create.Line, stmt.Create.Column)
 	}

@@ -42,7 +42,7 @@ func (p *PlanOpPQLAggregate) Plan() map[string]interface{} {
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
 	}
-	result["aggregate"] = p.aggregate.FirstChildExpr().Plan()
+	result["aggregate"] = p.aggregate.String()
 	return result
 
 }
@@ -64,7 +64,7 @@ func (p *PlanOpPQLAggregate) Schema() types.Schema {
 	s := &types.PlannerColumn{
 		ColumnName:   "",
 		RelationName: "",
-		Type:         p.aggregate.FirstChildExpr().Type(),
+		Type:         p.aggregate.Type(),
 	}
 	result[0] = s
 	return result
@@ -135,7 +135,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 
 			call = &pql.Call{Name: "Count", Children: []*pql.Call{cond}}
 
-		case *countPlanExpression:
+		case *countPlanExpression, *countStarPlanExpression:
 			if cond == nil {
 				// COUNT() should ignore null values
 				// if the data type of the expression supports an existence bitmap for
@@ -156,7 +156,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 
 		case *avgPlanExpression:
 			if cond == nil {
-				// COUNT() should ignore null values
+				// SUM() should ignore null values
 				// if the data type of the expression supports an existence bitmap for
 				// the underlying FeatureBase data type use it to eliminate nulls from the aggregate
 				switch expr.dataType.(type) {

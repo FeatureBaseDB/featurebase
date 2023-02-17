@@ -92,7 +92,7 @@ func (p *ExecutionPlanner) analyzeAlterTableStatement(stmt *parser.AlterTableSta
 			return sql3.NewErrUnknownType(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column, typeName)
 		}
 
-		if strings.ToLower(columnName) == "_id" {
+		if strings.ToLower(columnName) == string(dax.PrimaryKeyFieldName) {
 			//not allowed to add an _id column after the fact
 			return sql3.NewErrTableIDColumnAlter(col.Name.NamePos.Line, col.Name.NamePos.Column)
 		}

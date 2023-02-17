@@ -76,6 +76,67 @@ func (c *aggregateCountDistinct) Eval(ctx context.Context) (interface{}, error) 
 	return int64(len(c.valueSeen)), nil
 }
 
+// countStarPlanExpression handles COUNT(*)
+type countStarPlanExpression struct {
+	arg            types.PlanExpression
+	returnDataType parser.ExprDataType
+}
+
+var _ types.Aggregable = (*countStarPlanExpression)(nil)
+
+func newCountStarPlanExpression(returnDataType parser.ExprDataType) *countStarPlanExpression {
+	return &countStarPlanExpression{
+		returnDataType: returnDataType,
+	}
+}
+
+func (n *countStarPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+	if n.arg != nil {
+		arg, ok := n.arg.(*qualifiedRefPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.arg)
+		}
+		return currentRow[arg.columnIndex], nil
+	}
+	return int64(1), nil
+}
+
+func (n *countStarPlanExpression) NewBuffer() (types.AggregationBuffer, error) {
+	return NewAggCountBuffer(n), nil
+}
+
+func (n *countStarPlanExpression) FirstChildExpr() types.PlanExpression {
+	return n.arg
+}
+
+func (n *countStarPlanExpression) Type() parser.ExprDataType {
+	return n.returnDataType
+}
+
+func (n *countStarPlanExpression) String() string {
+	return "count(*)"
+}
+
+func (n *countStarPlanExpression) Plan() map[string]interface{} {
+	result := make(map[string]interface{})
+	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
+	result["dataType"] = n.Type().TypeDescription()
+	return result
+}
+
+func (n *countStarPlanExpression) Children() []types.PlanExpression {
+	return []types.PlanExpression{}
+}
+
+func (n *countStarPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	n.arg = children[0]
+	return n, nil
+}
+
 // countPlanExpression handles COUNT()
 type countPlanExpression struct {
 	arg            types.PlanExpression

@@ -23,7 +23,7 @@ func fieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
 	// a FieldTypeID. Another thing to be updated is the "_id" value itself; in
 	// the dax package there is a constant called `PrimaryKeyFieldName` which
 	// would be used here instead.
-	if f.Name == "_id" {
+	if f.Name == string(dax.PrimaryKeyFieldName) {
 		switch f.Options.Type {
 		case "id":
 			return parser.NewDataTypeID()
