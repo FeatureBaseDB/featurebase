@@ -85,7 +85,12 @@ func (p *Pool) Stats() (live, unblocked, target int) {
 
 // Close is a Shutdown followed by waiting for all jobs to exit.
 func (p *Pool) Close() {
+	// important to note: p.cond.Wait() is actually releasing this lock,
+	// then reacquiring it when the wait succeeds. This means that
+	// nothing which uses the lock can trigger between our read of
+	// live, and our wait on the condition variable...
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.Shutdown()
 	live := atomic.LoadInt32(&p.live)
 	for live > 0 {
@@ -116,6 +121,22 @@ func (p *Pool) addWorker() {
 // too many unblocked goroutines, otherwise it exits.
 func (p *Pool) work() {
 	defer func() {
+		// The lock prevents our modification of p.live from
+		// happening between the read of p.live and the wait on
+		// the condition variable in p.Close. Otherwise, it's
+		// possible for these to interleave as:
+		//
+		// p.Close        this function
+		// -------        -------------
+		// read p.live
+		//                modify p.live
+		//                broadcast to p.cond
+		// p.Cond.Wait
+		//
+		// and the wait never terminates because the broadcast
+		// happened before that.
+		p.mu.Lock()
+		defer p.mu.Unlock()
 		live := atomic.AddInt32(&p.live, -1)
 		if p.stats != nil {
 			p.stats.PoolSize(int(live))
