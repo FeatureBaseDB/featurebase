@@ -9,6 +9,9 @@ type replacer interface {
 	replace(s string) string
 }
 
+// Ensure type implements interface.
+var _ replacer = (*nopReplacer)(nil)
+
 type nopReplacer struct{}
 
 func newNopReplacer() *nopReplacer {
@@ -17,6 +20,23 @@ func newNopReplacer() *nopReplacer {
 
 func (n *nopReplacer) replace(s string) string {
 	return s
+}
+
+// Ensure type implements interface.
+var _ replacer = (*nopReplacer)(nil)
+
+type mapReplacer struct {
+	m map[string]string
+}
+
+func newMapReplacer(m map[string]string) *mapReplacer {
+	return &mapReplacer{
+		m: m,
+	}
+}
+
+func (r *mapReplacer) replace(s string) string {
+	return replace(s, r.m)
 }
 
 // replace is a general replacement function that can be used by implementations

@@ -40,7 +40,6 @@ Type "\q" to quit.
 
 // Ensure type implments interfaces.
 var _ printer = (*Command)(nil)
-var _ replacer = (*Command)(nil)
 
 type Command struct {
 	host string
@@ -126,7 +125,7 @@ func NewCommand(logdest logger.Logger) *Command {
 		quit: make(chan struct{}),
 	}
 
-	cmd.splitter = newSplitter(cmd)
+	cmd.splitter = newSplitter(newMapReplacer(cmd.variables))
 
 	return cmd
 }
@@ -699,8 +698,4 @@ func (cmd *Command) handleLineAsQueryParts(line string) error {
 		}
 	}
 	return nil
-}
-
-func (cmd *Command) replace(s string) string {
-	return replace(s, cmd.variables)
 }

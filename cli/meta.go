@@ -373,7 +373,7 @@ func executeFile(cmd *Command, fileName string) (action, error) {
 	}
 	defer file.Close()
 
-	splitter := newSplitter(cmd)
+	splitter := newSplitter(newMapReplacer(cmd.variables))
 	buffer := newBuffer()
 
 	// Read the file by line, pushing the lines into a new line splitter, then
