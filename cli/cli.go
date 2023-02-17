@@ -123,10 +123,11 @@ func (cmd *Command) Run(ctx context.Context) error {
 
 	// Check to see if Command needs to run in non-interactive mode.
 	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
-		if err := cmd.setupClient(newNopPrinter()); err != nil {
+		printer := newNopPrinter()
+		if err := cmd.setupClient(printer); err != nil {
 			return errors.Wrap(err, "setting up client")
 		}
-		if err := cmd.connectToDatabase(cmd.database); err != nil {
+		if err := cmd.connectToDatabase(printer, cmd.database); err != nil {
 			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
 		}
 
@@ -156,7 +157,7 @@ func (cmd *Command) Run(ctx context.Context) error {
 		return errors.Wrap(err, "setting up client")
 	}
 	cmd.printConnInfo()
-	if err := cmd.connectToDatabase(cmd.database); err != nil {
+	if err := cmd.connectToDatabase(cmd, cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
 	}
 
@@ -391,11 +392,11 @@ func (cmd *Command) printConnInfo() {
 	cmd.Printf("Host: %s\n", hostPort(cmd.host, cmd.port))
 }
 
-func (cmd *Command) connectToDatabase(dbName string) error {
+func (cmd *Command) connectToDatabase(p printer, dbName string) error {
 	if dbName == "" {
 		cmd.databaseID = ""
 		cmd.databaseName = ""
-		cmd.Printf(cmd.connectionMessage())
+		p.Printf(cmd.connectionMessage())
 		return nil
 	}
 
@@ -415,7 +416,7 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 		if db[1] == dbName {
 			cmd.databaseName = dbName
 			cmd.databaseID = db[0].(string)
-			cmd.Printf(cmd.connectionMessage())
+			p.Printf(cmd.connectionMessage())
 			return nil
 		}
 	}
