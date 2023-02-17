@@ -51,6 +51,7 @@ func Handler(c *controller.Controller) http.Handler {
 
 	// debug endpoints
 	router.HandleFunc("/debug/nodes", server.getDebugNodes).Methods("GET").Name("GetDebugNodes")
+	router.HandleFunc("/debug/balancer", server.getDebugBalancer).Methods("GET").Name("getDebugBalancer")
 
 	return router
 }
@@ -747,6 +748,19 @@ func (s *server) postComputeNodes(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) getDebugNodes(w http.ResponseWriter, r *http.Request) {
 	nodes, err := s.controller.DebugNodes(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(nodes); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func (s *server) getDebugBalancer(w http.ResponseWriter, r *http.Request) {
+	nodes, err := s.controller.CurrentState(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
