@@ -269,25 +269,20 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			switch action := record[4]; action {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
-				// needs to go to all nodes
-
-				_, err = io.Copy(buf, tarReader)
-				if err != nil {
-					return errors.Wrap(err, "copying")
-				}
-
+				bc := NewBroadcaster(tarReader, len(nodes))
 				g, _ := errgroup.WithContext(ctx)
-				for _, node := range nodes {
+				for i, node := range nodes {
+					i := i
 					node := node
 					g.Go(func() error {
-						// rd := bytes.NewReader(shardBytes)
 						rd := func() (io.Reader, error) {
-							return bytes.NewReader(buf.Bytes()), nil
+							return bc.Readers[i], nil
 						}
 
 						return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
 					})
 				}
+				bc.Consume()
 				if err := g.Wait(); err != nil {
 					return err
 				}
