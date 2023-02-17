@@ -390,7 +390,25 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 						return nil, errors.Wrapf(err, "converting timestamp to int64: %s", v)
 					}
 					row.Values[posVals[idx]] = i64
-
+				//integers passed as input for Timestamp fields will be treated as time represented in number of seconds since unix epoch
+				case int64:
+					// Convert the input seconds to target timeunit defined for the Timestamp field
+					// Add Base, which is the base epoch for Timestamp fields, to the input before saving
+					unit := fbbatch.TimeUnit(opts.TimeUnit)
+					i64 := opts.Base
+					switch unit {
+					case fbbatch.TimeUnitSeconds:
+						i64 = i64 + v
+					case fbbatch.TimeUnitMilliseconds:
+						i64 = i64 + (v * 1000)
+					case fbbatch.TimeUnitMicroseconds, fbbatch.TimeUnitUSeconds:
+						i64 = i64 + (v * 1000 * 1000)
+					case fbbatch.TimeUnitNanoseconds:
+						i64 = i64 + (v * 1000 * 1000 * 1000)
+					default:
+						return nil, errors.Wrapf(err, "unknown time unit: %s", unit)
+					}
+					row.Values[posVals[idx]] = i64
 				// nil is to support `null` values.
 				case nil:
 					row.Values[posVals[idx]] = eval

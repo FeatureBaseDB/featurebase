@@ -352,6 +352,9 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 		case *parser.DataTypeString:
 			//could be a string parseable as a date
 			return true
+		case *parser.DataTypeInt:
+			//integers coerced to timestamp will be treated as time represented in number of seconds since unix epoch
+			return true
 		default:
 			return false
 		}
