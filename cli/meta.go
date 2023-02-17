@@ -156,7 +156,7 @@ func (m *metaConnect) execute(cmd *Command) (action, error) {
 		cmd.Printf(cmd.connectionMessage())
 		return actionNone, nil
 	case 1:
-		err := cmd.connectToDatabase(cmd, m.args[0])
+		err := cmd.connectToDatabase(m.args[0])
 		return actionNone, err
 
 	default:

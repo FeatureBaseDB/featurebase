@@ -36,11 +36,6 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 		return errors.New("attempt to write out nil response")
 	}
 	if r.Error != "" {
-		// TODO(tlt): once we get coded errors returned here, we may want to
-		// actually return the error here instead of just printing it out. For
-		// example, when running multiple `--command` flags, we might want the
-		// binary to exit upon any error rather then executing them all. In
-		// order to do that, we would need the error returned here.
 		if _, err := wErr.Write([]byte("Error: " + r.Error + "\n")); err != nil {
 			return errors.Wrapf(err, "writing error: %s", r.Error)
 		}

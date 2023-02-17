@@ -79,6 +79,11 @@ type Command struct {
 	// i.e. it will quit after the command is complete.
 	Files []string `json:"files"`
 
+	// nonInteractiveMode is set to true when fbsql is running in
+	// non-ineracative mode. And example of this is when the user has provided a
+	// `-c` flag in the command line.
+	nonInteractiveMode bool
+
 	// quit gets closed when Run should stop listening for input.
 	quit chan struct{}
 }
@@ -123,11 +128,12 @@ func (cmd *Command) Run(ctx context.Context) error {
 
 	// Check to see if Command needs to run in non-interactive mode.
 	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
-		printer := newNopPrinter()
-		if err := cmd.setupClient(printer); err != nil {
+		cmd.nonInteractiveMode = true
+
+		if err := cmd.setupClient(); err != nil {
 			return errors.Wrap(err, "setting up client")
 		}
-		if err := cmd.connectToDatabase(printer, cmd.database); err != nil {
+		if err := cmd.connectToDatabase(cmd.database); err != nil {
 			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
 		}
 
@@ -153,11 +159,11 @@ func (cmd *Command) Run(ctx context.Context) error {
 	// Print the splash message.
 	cmd.Printf(splash)
 	cmd.setupHistory()
-	if err := cmd.setupClient(cmd); err != nil {
+	if err := cmd.setupClient(); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
 	cmd.printConnInfo()
-	if err := cmd.connectToDatabase(cmd, cmd.database); err != nil {
+	if err := cmd.connectToDatabase(cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
 	}
 
@@ -325,7 +331,20 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 }
 
 func (cmd *Command) executeQuery(qry query) (*featurebase.WireQueryResponse, error) {
-	return cmd.Queryer.Query(cmd.organizationID, cmd.databaseID, qry.Reader())
+	wqr, err := cmd.Queryer.Query(cmd.organizationID, cmd.databaseID, qry.Reader())
+	if err != nil {
+		return nil, errors.Wrap(err, "executing query")
+	}
+
+	// If we're running in non-interactive mode, we need to check the error that
+	// comes back in the WireQueryResponse. If there's an error, we want to
+	// return it now (rather than just printing it later) so that we immediately
+	// stop any further execution of commands.
+	if cmd.nonInteractiveMode && wqr.Error != "" {
+		return nil, errors.Errorf(wqr.Error)
+	}
+
+	return wqr, nil
 }
 
 // printer is an interface which encapsulates the methods used to print output
@@ -392,7 +411,12 @@ func (cmd *Command) printConnInfo() {
 	cmd.Printf("Host: %s\n", hostPort(cmd.host, cmd.port))
 }
 
-func (cmd *Command) connectToDatabase(p printer, dbName string) error {
+func (cmd *Command) connectToDatabase(dbName string) error {
+	var p printer = cmd
+	if cmd.nonInteractiveMode {
+		p = newNopPrinter()
+	}
+
 	if dbName == "" {
 		cmd.databaseID = ""
 		cmd.databaseName = ""
@@ -437,11 +461,16 @@ func (cmd *Command) connectionMessage() string {
 	return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.databaseName, cmd.databaseID)
 }
 
-func (cmd *Command) setupClient(p printer) error {
+func (cmd *Command) setupClient() error {
 	// If the Queryer has already been set (in tests for example), don't bother
 	// trying to detect it.
 	if cmd.Queryer != nil {
 		return nil
+	}
+
+	var p printer = cmd
+	if cmd.nonInteractiveMode {
+		p = newNopPrinter()
 	}
 
 	if strings.TrimSpace(cmd.host) == "" {
