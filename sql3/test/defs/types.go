@@ -107,6 +107,8 @@ func (tt TableTest) InsertInto(t *testing.T, rowSets ...int) string {
 	return tt.Table.insertInto(t, rowSets)
 }
 
+type PlanCheckFunc func([]byte) error
+
 type SQLTest struct {
 	name           string
 	SQLs           []string
@@ -117,6 +119,7 @@ type SQLTest struct {
 	Compare        compareMethod
 	SortStringKeys bool
 	ExpRowCount    int
+	PlanCheck      PlanCheckFunc
 }
 
 // Name returns a string name which can be used to distingish test runs. It

@@ -51,7 +51,7 @@ func (p *PlanOpFeatureBaseDatabases) Schema() types.Schema {
 	return types.Schema{
 		&types.PlannerColumn{
 			RelationName: "fb_databases",
-			ColumnName:   "_id",
+			ColumnName:   string(dax.PrimaryKeyFieldName),
 			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{

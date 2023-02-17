@@ -50,6 +50,25 @@ func TestWriter(t *testing.T) {
 					"   3 | Cindy |  28 ",
 					"",
 				),
+				expOut: "",
+				expErr: "",
+			},
+			{
+				// timing on
+				format: &writeOptions{
+					border:     1,
+					expanded:   false,
+					timing:     true,
+					tuplesOnly: false,
+				},
+				expQOut: stringOfLines(
+					" _id | name  | age ",
+					"-----+-------+-----",
+					"   1 | Amy   |  44 ",
+					"   2 | Bob   |  32 ",
+					"   3 | Cindy |  28 ",
+					"",
+				),
 				expOut: "Execution time: 0μs\n",
 				expErr: "",
 			},

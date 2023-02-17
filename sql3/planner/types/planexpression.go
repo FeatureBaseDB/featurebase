@@ -7,22 +7,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
-// TODO(pok) we can get rid of this - we have expression types for all of these now...
-type AggregateFunctionType int
-
-// The list of AggregateFunction.
-const (
-	// Special tokens
-	AGGREGATE_ILLEGAL AggregateFunctionType = iota
-	AGGREGATE_COUNT
-	AGGREGATE_COUNT_DISTINCT
-	AGGREGATE_SUM
-	AGGREGATE_AVG
-	AGGREGATE_PERCENTILE
-	AGGREGATE_MIN
-	AGGREGATE_MAX
-)
-
 // PlanExpression is an expression node for an execution plan
 type PlanExpression interface {
 	fmt.Stringer
@@ -44,7 +28,7 @@ type PlanExpression interface {
 	Plan() map[string]interface{}
 }
 
-// Aggregattion buffer is an interface to something that maintains an aggregate during query
+// Aggregation buffer is an interface to something that maintains an aggregate during query
 // execution
 type AggregationBuffer interface {
 	Eval(ctx context.Context) (interface{}, error)
@@ -55,10 +39,16 @@ type AggregationBuffer interface {
 type Aggregable interface {
 	fmt.Stringer
 
+	// creates a new aggregation buffer for this aggregate
 	NewBuffer() (AggregationBuffer, error)
-	AggType() AggregateFunctionType
-	AggExpression() PlanExpression
-	AggAdditionalExpr() []PlanExpression
+
+	// convenience to get the first argument of the aggregate
+	FirstChildExpr() PlanExpression
+
+	// returns all the child expressions for this aggregate
+	Children() []PlanExpression
+
+	// returns the type of the aggregate
 	Type() parser.ExprDataType
 }
 

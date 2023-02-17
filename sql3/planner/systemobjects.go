@@ -128,7 +128,7 @@ func (p *ExecutionPlanner) getViewByName(ctx context.Context, name string) (*vie
 		tableName: "fb_views",
 		columns:   cols,
 		predicate: newBinOpPlanExpression(
-			newQualifiedRefPlanExpression("fb_views", "_id", 0, parser.NewDataTypeString()),
+			newQualifiedRefPlanExpression("fb_views", string(dax.PrimaryKeyFieldName), 0, parser.NewDataTypeString()),
 			parser.EQ,
 			newStringLiteralPlanExpression(name),
 			parser.NewDataTypeBool(),
@@ -163,7 +163,7 @@ func (p *ExecutionPlanner) insertView(ctx context.Context, view *viewSystemObjec
 		planner:   p,
 		tableName: "fb_views",
 		targetColumns: []*qualifiedRefPlanExpression{
-			newQualifiedRefPlanExpression("fb_views", "_id", 0, parser.NewDataTypeString()),
+			newQualifiedRefPlanExpression("fb_views", string(dax.PrimaryKeyFieldName), 0, parser.NewDataTypeString()),
 			newQualifiedRefPlanExpression("fb_views", "name", 0, parser.NewDataTypeString()),
 			newQualifiedRefPlanExpression("fb_views", "statement", 0, parser.NewDataTypeString()),
 			newQualifiedRefPlanExpression("fb_views", "owner", 0, parser.NewDataTypeString()),
@@ -202,7 +202,7 @@ func (p *ExecutionPlanner) updateView(ctx context.Context, view *viewSystemObjec
 		planner:   p,
 		tableName: "fb_views",
 		targetColumns: []*qualifiedRefPlanExpression{
-			newQualifiedRefPlanExpression("fb_views", "_id", 0, parser.NewDataTypeString()),
+			newQualifiedRefPlanExpression("fb_views", string(dax.PrimaryKeyFieldName), 0, parser.NewDataTypeString()),
 			newQualifiedRefPlanExpression("fb_views", "statement", 0, parser.NewDataTypeString()),
 			newQualifiedRefPlanExpression("fb_views", "updated_by", 0, parser.NewDataTypeString()),
 			newQualifiedRefPlanExpression("fb_views", "updated_at", 0, parser.NewDataTypeTimestamp()),
@@ -233,7 +233,7 @@ func (p *ExecutionPlanner) deleteView(ctx context.Context, viewName string) erro
 		planner:   p,
 		tableName: "fb_views",
 		filter: newBinOpPlanExpression(
-			newQualifiedRefPlanExpression("fb_views", "_id", 0, parser.NewDataTypeString()),
+			newQualifiedRefPlanExpression("fb_views", string(dax.PrimaryKeyFieldName), 0, parser.NewDataTypeString()),
 			parser.EQ,
 			newStringLiteralPlanExpression(viewName),
 			parser.NewDataTypeBool(),

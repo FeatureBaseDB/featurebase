@@ -41,6 +41,14 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(val*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
+
+		case *parser.DataTypeTimestamp:
+			val, ok := value.(int64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
+			}
+			tm := time.Unix(val, 0).UTC()
+			return tm, nil
 		}
 
 	case *parser.DataTypeID:
@@ -57,6 +65,14 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(int64(val)*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
+
+		case *parser.DataTypeTimestamp:
+			val, ok := value.(int64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
+			}
+			tm := time.Unix(val, 0).UTC()
+			return tm, nil
 		}
 
 	case *parser.DataTypeDecimal:
@@ -2435,34 +2451,15 @@ func newExprTupleLiteralPlanExpression(members []types.PlanExpression, dataType 
 }
 
 func (n *exprTupleLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	timestampEval, err := n.members[0].Evaluate(currentRow)
-	if err != nil {
-		return nil, err
-	}
-
-	// if it is a string, do a coercion
-	if val, ok := timestampEval.(string); ok {
-		if tm, err := timestampFromString(val); err != nil {
-			return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, n.members[0].Type().TypeDescription())
-		} else {
-			timestampEval = tm
+	result := make([]interface{}, len(n.members))
+	for i, m := range n.members {
+		v, err := m.Evaluate(currentRow)
+		if err != nil {
+			return nil, err
 		}
+		result[i] = v
 	}
-
-	setEval, err := n.members[1].Evaluate(currentRow)
-	if err != nil {
-		return nil, err
-	}
-
-	// nil if anything is nil
-	if timestampEval == nil || setEval == nil {
-		return nil, nil
-	}
-
-	return []interface{}{
-		timestampEval,
-		setEval,
-	}, nil
+	return result, nil
 }
 
 func (n *exprTupleLiteralPlanExpression) Type() parser.ExprDataType {
@@ -2787,7 +2784,11 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 		if expr.Distinct.IsValid() {
 			agg = newCountDistinctPlanExpression(args[0], expr.ResultDataType)
 		} else {
-			agg = newCountPlanExpression(args[0], expr.ResultDataType)
+			if expr.Star.IsValid() {
+				agg = newCountStarPlanExpression(expr.ResultDataType)
+			} else {
+				agg = newCountPlanExpression(args[0], expr.ResultDataType)
+			}
 		}
 		return agg, nil
 

@@ -76,6 +76,67 @@ func (c *aggregateCountDistinct) Eval(ctx context.Context) (interface{}, error) 
 	return int64(len(c.valueSeen)), nil
 }
 
+// countStarPlanExpression handles COUNT(*)
+type countStarPlanExpression struct {
+	arg            types.PlanExpression
+	returnDataType parser.ExprDataType
+}
+
+var _ types.Aggregable = (*countStarPlanExpression)(nil)
+
+func newCountStarPlanExpression(returnDataType parser.ExprDataType) *countStarPlanExpression {
+	return &countStarPlanExpression{
+		returnDataType: returnDataType,
+	}
+}
+
+func (n *countStarPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+	if n.arg != nil {
+		arg, ok := n.arg.(*qualifiedRefPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.arg)
+		}
+		return currentRow[arg.columnIndex], nil
+	}
+	return int64(1), nil
+}
+
+func (n *countStarPlanExpression) NewBuffer() (types.AggregationBuffer, error) {
+	return NewAggCountBuffer(n), nil
+}
+
+func (n *countStarPlanExpression) FirstChildExpr() types.PlanExpression {
+	return n.arg
+}
+
+func (n *countStarPlanExpression) Type() parser.ExprDataType {
+	return n.returnDataType
+}
+
+func (n *countStarPlanExpression) String() string {
+	return "count(*)"
+}
+
+func (n *countStarPlanExpression) Plan() map[string]interface{} {
+	result := make(map[string]interface{})
+	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
+	result["dataType"] = n.Type().TypeDescription()
+	return result
+}
+
+func (n *countStarPlanExpression) Children() []types.PlanExpression {
+	return []types.PlanExpression{}
+}
+
+func (n *countStarPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
+	if len(children) != 1 {
+		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
+	}
+	n.arg = children[0]
+	return n, nil
+}
+
 // countPlanExpression handles COUNT()
 type countPlanExpression struct {
 	arg            types.PlanExpression
@@ -103,16 +164,8 @@ func (n *countPlanExpression) NewBuffer() (types.AggregationBuffer, error) {
 	return NewAggCountBuffer(n), nil
 }
 
-func (n *countPlanExpression) AggType() types.AggregateFunctionType {
-	return types.AGGREGATE_COUNT
-}
-
-func (n *countPlanExpression) AggExpression() types.PlanExpression {
+func (n *countPlanExpression) FirstChildExpr() types.PlanExpression {
 	return n.arg
-}
-
-func (n *countPlanExpression) AggAdditionalExpr() []types.PlanExpression {
-	return []types.PlanExpression{}
 }
 
 func (n *countPlanExpression) Type() parser.ExprDataType {
@@ -172,16 +225,8 @@ func (n *countDistinctPlanExpression) NewBuffer() (types.AggregationBuffer, erro
 	return NewAggCountDistinctBuffer(n), nil
 }
 
-func (n *countDistinctPlanExpression) AggType() types.AggregateFunctionType {
-	return types.AGGREGATE_COUNT_DISTINCT
-}
-
-func (n *countDistinctPlanExpression) AggExpression() types.PlanExpression {
+func (n *countDistinctPlanExpression) FirstChildExpr() types.PlanExpression {
 	return n.arg
-}
-
-func (n *countDistinctPlanExpression) AggAdditionalExpr() []types.PlanExpression {
-	return []types.PlanExpression{}
 }
 
 func (n *countDistinctPlanExpression) Type() parser.ExprDataType {
@@ -320,27 +365,19 @@ func newSumPlanExpression(arg types.PlanExpression, returnDataType parser.ExprDa
 }
 
 func (n *sumPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	arg, ok := n.arg.(*qualifiedRefPlanExpression)
-	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.arg)
+	arg, err := n.arg.Evaluate(currentRow)
+	if err != nil {
+		return nil, err
 	}
-	return currentRow[arg.columnIndex], nil
+	return arg, nil
 }
 
 func (n *sumPlanExpression) NewBuffer() (types.AggregationBuffer, error) {
 	return NewAggSumBuffer(n), nil
 }
 
-func (n *sumPlanExpression) AggType() types.AggregateFunctionType {
-	return types.AGGREGATE_SUM
-}
-
-func (n *sumPlanExpression) AggExpression() types.PlanExpression {
+func (n *sumPlanExpression) FirstChildExpr() types.PlanExpression {
 	return n.arg
-}
-
-func (n *sumPlanExpression) AggAdditionalExpr() []types.PlanExpression {
-	return []types.PlanExpression{}
 }
 
 func (n *sumPlanExpression) Type() parser.ExprDataType {
@@ -426,22 +463,13 @@ func (a *aggregateAvg) Update(ctx context.Context, row types.Row) error {
 
 			a.sum = pql.AddDecimal(thisVal, aggVal)
 
-		case *parser.DataTypeInt:
+		case *parser.DataTypeInt, *parser.DataTypeID:
 			thisIVal, ok := v.(int64)
 			if !ok {
 				return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
 			}
 
 			thisVal := pql.FromInt64(thisIVal, returnType.Scale)
-			a.sum = pql.AddDecimal(thisVal, aggVal)
-
-		case *parser.DataTypeID:
-			thisIVal, ok := v.(uint64)
-			if !ok {
-				return sql3.NewErrInternalf("unexpected type conversion '%T'", v)
-			}
-
-			thisVal := pql.FromInt64(int64(thisIVal), returnType.Scale)
 			a.sum = pql.AddDecimal(thisVal, aggVal)
 
 		default:
@@ -503,27 +531,19 @@ func newAvgPlanExpression(arg types.PlanExpression, returnDataType parser.ExprDa
 }
 
 func (n *avgPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	arg, ok := n.arg.(*qualifiedRefPlanExpression)
-	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.arg)
+	arg, err := n.arg.Evaluate(currentRow)
+	if err != nil {
+		return nil, err
 	}
-	return currentRow[arg.columnIndex], nil
+	return arg, nil
 }
 
 func (n *avgPlanExpression) NewBuffer() (types.AggregationBuffer, error) {
 	return NewAggAvgBuffer(n), nil
 }
 
-func (n *avgPlanExpression) AggType() types.AggregateFunctionType {
-	return types.AGGREGATE_AVG
-}
-
-func (n *avgPlanExpression) AggExpression() types.PlanExpression {
+func (n *avgPlanExpression) FirstChildExpr() types.PlanExpression {
 	return n.arg
-}
-
-func (n *avgPlanExpression) AggAdditionalExpr() []types.PlanExpression {
-	return []types.PlanExpression{}
 }
 
 func (n *avgPlanExpression) Type() parser.ExprDataType {
@@ -660,27 +680,19 @@ func newMinPlanExpression(arg types.PlanExpression, returnDataType parser.ExprDa
 }
 
 func (n *minPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	arg, ok := n.arg.(*qualifiedRefPlanExpression)
-	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.arg)
+	arg, err := n.arg.Evaluate(currentRow)
+	if err != nil {
+		return nil, err
 	}
-	return currentRow[arg.columnIndex], nil
+	return arg, nil
 }
 
 func (n *minPlanExpression) NewBuffer() (types.AggregationBuffer, error) {
 	return NewAggMinBuffer(n), nil
 }
 
-func (n *minPlanExpression) AggType() types.AggregateFunctionType {
-	return types.AGGREGATE_MIN
-}
-
-func (n *minPlanExpression) AggExpression() types.PlanExpression {
+func (n *minPlanExpression) FirstChildExpr() types.PlanExpression {
 	return n.arg
-}
-
-func (n *minPlanExpression) AggAdditionalExpr() []types.PlanExpression {
-	return []types.PlanExpression{}
 }
 
 func (n *minPlanExpression) Type() parser.ExprDataType {
@@ -818,27 +830,19 @@ func newMaxPlanExpression(arg types.PlanExpression, returnDataType parser.ExprDa
 }
 
 func (n *maxPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	arg, ok := n.arg.(*qualifiedRefPlanExpression)
-	if !ok {
-		return nil, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.arg)
+	arg, err := n.arg.Evaluate(currentRow)
+	if err != nil {
+		return nil, err
 	}
-	return currentRow[arg.columnIndex], nil
+	return arg, nil
 }
 
 func (n *maxPlanExpression) NewBuffer() (types.AggregationBuffer, error) {
 	return NewAggMaxBuffer(n), nil
 }
 
-func (n *maxPlanExpression) AggType() types.AggregateFunctionType {
-	return types.AGGREGATE_MAX
-}
-
-func (n *maxPlanExpression) AggExpression() types.PlanExpression {
+func (n *maxPlanExpression) FirstChildExpr() types.PlanExpression {
 	return n.arg
-}
-
-func (n *maxPlanExpression) AggAdditionalExpr() []types.PlanExpression {
-	return []types.PlanExpression{}
 }
 
 func (n *maxPlanExpression) Type() parser.ExprDataType {
@@ -900,18 +904,8 @@ func (n *percentilePlanExpression) NewBuffer() (types.AggregationBuffer, error) 
 	return NewAggCountBuffer(n), nil
 }
 
-func (n *percentilePlanExpression) AggType() types.AggregateFunctionType {
-	return types.AGGREGATE_PERCENTILE
-}
-
-func (n *percentilePlanExpression) AggExpression() types.PlanExpression {
+func (n *percentilePlanExpression) FirstChildExpr() types.PlanExpression {
 	return n.arg
-}
-
-func (n *percentilePlanExpression) AggAdditionalExpr() []types.PlanExpression {
-	return []types.PlanExpression{
-		n.nthArg,
-	}
 }
 
 func (n *percentilePlanExpression) Type() parser.ExprDataType {

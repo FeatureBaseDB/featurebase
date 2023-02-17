@@ -430,3 +430,29 @@ func TestPoolStartup(t *testing.T) {
 		t.Fatalf("expected no more adds, got %d including previous 3", v)
 	}
 }
+
+// There was a race condition in Pool.Close(), where it was
+// possible to have a worker thread broadcast to the condition
+// variable *after* the Close had checked the current value of
+// p.live, but *before* it had gotten to waiting. This is a very
+// narrow window. If you're chasing this down, consider adding
+// a short time.Sleep before the `p.Cond.Wait` call in `Pool.Close`,
+// with which this test would typically deadlock within the first
+// few iterations. The 1M repetitions produced about 65% failures
+// on my laptop, with successes taking under two seconds to run.
+//
+// The key interaction is that the individual worker pool `work`
+// calls are exiting almost immediately after `p.targetN` gets set
+// to zero; if they take any time to exit, the Close will
+// be waiting on the condition variable before they get there.
+func TestPoolShutdown(t *testing.T) {
+	for i := 0; i < 1000000; i++ {
+		ch := make(chan struct{})
+		doSomething := func() {
+			<-ch
+		}
+		p := NewPool(3, doSomething, nil)
+		close(ch)
+		p.Close()
+	}
+}

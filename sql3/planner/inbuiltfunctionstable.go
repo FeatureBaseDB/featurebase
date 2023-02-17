@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
@@ -50,7 +51,7 @@ func (p *ExecutionPlanner) analyzeFunctionSubtable(call *parser.Call, scope pars
 	}
 	call.ResultDataType = parser.NewDataTypeSubtable([]*parser.SubtableColumn{
 		{
-			Name:     "_id",
+			Name:     string(dax.PrimaryKeyFieldName),
 			DataType: parser.NewDataTypeID(),
 		},
 		{

@@ -63,11 +63,12 @@ at https://docs.featurebase.com/.
 ` + pilosa.VersionInfo(true) + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
-			if cmd.Use == "dax" {
+
+			switch cmd.Use {
+			case "dax":
 				v.Set("future.rename", true) // always use FEATUREBASE env for dax
 			}
-			err := setAllConfig(v, cmd.Flags())
-			if err != nil {
+			if err := setAllConfig(v, cmd.Flags(), ""); err != nil {
 				return err
 			}
 
@@ -104,7 +105,6 @@ at https://docs.featurebase.com/.
 	rc.AddCommand(newServeCmd(stderr))
 	rc.AddCommand(newHolderCmd(stderr))
 	rc.AddCommand(newKeygenCommand(logdest))
-	rc.AddCommand(newCLICommand(logdest))
 	rc.AddCommand(newDAXCommand(stderr))
 	rc.AddCommand(newDataframeCsvLoaderCommand(logdest))
 	rc.AddCommand(newPreSortCommand(logdest))
@@ -124,17 +124,18 @@ at https://docs.featurebase.com/.
 // setAllConfig looks for environment variables which are capitalized versions
 // of the flag names with dashes replaced by underscores, and prefixed with
 // envPrefix plus an underscore.
-func setAllConfig(v *viper.Viper, flags *pflag.FlagSet) error { // nolint: unparam
+func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error { // nolint: unparam
 	// add cmd line flag def to viper
 	err := v.BindPFlags(flags)
 	if err != nil {
 		return err
 	}
 
-	envPrefix := "PILOSA"
-	rename := v.GetBool("future.rename")
-	if rename {
-		envPrefix = "FEATUREBASE"
+	if envPrefix == "" {
+		envPrefix = "PILOSA"
+		if v.GetBool("future.rename") {
+			envPrefix = "FEATUREBASE"
+		}
 	}
 
 	// add env to viper

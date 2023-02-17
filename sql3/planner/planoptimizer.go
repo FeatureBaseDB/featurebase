@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
@@ -636,26 +637,39 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 					return thisNode, true, nil
 				}
 
-				// make sure all the aggregates are bsi types
-				for _, agg := range thisNode.Aggregates {
-					aggregable, ok := agg.(types.Aggregable)
-					if !ok {
-						return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
-					}
-					switch aggregable.AggExpression().Type().(type) {
-					case *parser.DataTypeID, *parser.DataTypeString:
-						// if it is any other column other than _id bail
-						ref, ok := aggregable.AggExpression().(*qualifiedRefPlanExpression)
-						if ok {
-							if !strings.EqualFold(ref.columnName, "_id") {
+				pkType, err := table.PrimaryKeyType()
+				if err != nil {
+					return thisNode, true, err
+				}
+				// we can push down to pql if:
+				// 1. the expression we are aggregating on is a qualifiedRef
+				// 2. it is a bsi type
+				// we always push down to pql if it's a ref and it's the _id column
+				for i, agg := range thisNode.Aggregates {
+					switch aggregable := agg.(type) {
+					case *countStarPlanExpression:
+						// it's a count(*) on a pql table scan, so add the arg
+						newChildren := []types.PlanExpression{newQualifiedRefPlanExpression(table.tableName, string(dax.PrimaryKeyFieldName), 0, pkType)}
+						newAgg, err := aggregable.WithChildren(newChildren...)
+						if err != nil {
+							return n, true, err
+						}
+						thisNode.Aggregates[i] = newAgg
+
+					case types.Aggregable:
+						switch ref := aggregable.FirstChildExpr().(type) {
+						case *qualifiedRefPlanExpression:
+							if !strings.EqualFold(ref.columnName, string(dax.PrimaryKeyFieldName)) && !typeIsBSI(ref.Type()) {
 								return thisNode, true, nil
 							}
+						default:
+							return thisNode, true, nil
 						}
 					}
 				}
 
+				// if we got to here we are good to go
 				ops := make([]*PlanOpPQLAggregate, 0)
-
 				for _, agg := range thisNode.Aggregates {
 					aggregable, ok := agg.(types.Aggregable)
 					if !ok {
@@ -739,7 +753,7 @@ func tryToReplaceDistinctWithPQLDistinct(ctx context.Context, a *ExecutionPlanne
 				}
 
 				// make sure it's not the _id column
-				if strings.EqualFold(thisNode.columns[0], "_id") {
+				if strings.EqualFold(thisNode.columns[0], string(dax.PrimaryKeyFieldName)) {
 					return thisNode, true, nil
 				}
 
@@ -808,15 +822,31 @@ func tryToReplaceGroupByWithPQLGroupBy(ctx context.Context, a *ExecutionPlanner,
 				table := tables[0]
 				//only do this if we have group by expressions
 				if len(n.GroupByExprs) > 0 {
+					pkType, err := table.PrimaryKeyType()
+					if err != nil {
+						return n, true, err
+					}
+
 					//use a multi group by if more than 1 aggregate
 					if len(n.Aggregates) > 1 {
 						ops := make([]*PlanOpPQLGroupBy, 0)
 						for _, agg := range n.Aggregates {
-
 							aggregable, ok := agg.(types.Aggregable)
 							if !ok {
 								return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
 							}
+
+							// if it's a count(*) on a pql table scan, so add the arg
+							star, ok := agg.(*countStarPlanExpression)
+							if ok {
+								newChildren := []types.PlanExpression{newQualifiedRefPlanExpression(table.tableName, string(dax.PrimaryKeyFieldName), 0, pkType)}
+								newAgg, err := star.WithChildren(newChildren...)
+								if err != nil {
+									return n, true, err
+								}
+								aggregable = newAgg.(types.Aggregable)
+							}
+
 							ops = append(ops, NewPlanOpPQLGroupBy(a, table.tableName, n.GroupByExprs, table.filter, aggregable))
 						}
 						newOp := NewPlanOpPQLMultiGroupBy(a, ops, n.GroupByExprs)
@@ -827,6 +857,17 @@ func tryToReplaceGroupByWithPQLGroupBy(ctx context.Context, a *ExecutionPlanner,
 					aggregable, ok := n.Aggregates[0].(types.Aggregable)
 					if !ok {
 						return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.Aggregates[0])
+					}
+
+					// if it's a count(*) on a pql table scan, so add the arg
+					star, ok := aggregable.(*countStarPlanExpression)
+					if ok {
+						newChildren := []types.PlanExpression{newQualifiedRefPlanExpression(table.tableName, string(dax.PrimaryKeyFieldName), 0, pkType)}
+						newAgg, err := star.WithChildren(newChildren...)
+						if err != nil {
+							return n, true, err
+						}
+						aggregable = newAgg.(types.Aggregable)
 					}
 					newOp := NewPlanOpPQLGroupBy(a, table.tableName, n.GroupByExprs, table.filter, aggregable)
 					return newOp, false, nil
@@ -962,21 +1003,26 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 			switch childOp := thisNode.ChildOp.(type) {
 
 			case *PlanOpGroupBy, *PlanOpHaving, *PlanOpPQLGroupBy, *PlanOpPQLMultiAggregate, *PlanOpPQLMultiGroupBy:
+
+				// get the child op schema
 				childSchema := childOp.Schema()
 
+				// for each of the projections...
 				for idx, pj := range thisNode.Projections {
+
+					// apply a transform
 					expr, _, err := TransformExpr(pj, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
 						switch thisAggregate := e.(type) {
 						case types.Aggregable:
-							// if we have a Aggregable, the AggExpression() will be a qualified ref
-							// given we are in the context of a PlanOpProjection with a PlanOpGroupBy/Having
-							// we can use the ordinal position of the projection as the column index
+							// if we have a Aggregable we can use the ordinal position of the matching projection
+							// as the column index
 							for idx, sc := range childSchema {
 								if strings.EqualFold(thisAggregate.String(), sc.ColumnName) {
 									ae := newQualifiedRefPlanExpression("", "", idx, e.Type())
 									return ae, false, nil
 								}
 							}
+							// if we get to here not finding a match we likely have an error
 							return nil, true, sql3.NewErrColumnNotFound(0, 0, thisAggregate.String())
 
 						case *qualifiedRefPlanExpression:
@@ -989,22 +1035,13 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 									return thisAggregate, true, nil
 								}
 							}
-							return nil, true, sql3.NewErrColumnNotFound(0, 0, thisAggregate.String())
+							// we didn't find a match in the schema so we just bail unchanged
+							return e, true, nil
 
 						default:
 							return e, true, nil
 						}
 					}, func(parentExpr, childExpr types.PlanExpression) bool {
-						// if the parent is an aggregable, and the child is a qualified ref
-						// we will skip, because the qualified ref should have already been handled in
-						// fixFieldRefs
-						switch parentExpr.(type) {
-						case types.Aggregable:
-							switch childExpr.(type) {
-							case *qualifiedRefPlanExpression:
-								return false
-							}
-						}
 						return true
 					})
 					if err != nil {

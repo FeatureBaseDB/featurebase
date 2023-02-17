@@ -23,7 +23,7 @@ func fieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
 	// a FieldTypeID. Another thing to be updated is the "_id" value itself; in
 	// the dax package there is a constant called `PrimaryKeyFieldName` which
 	// would be used here instead.
-	if f.Name == "_id" {
+	if f.Name == string(dax.PrimaryKeyFieldName) {
 		switch f.Options.Type {
 		case "id":
 			return parser.NewDataTypeID()
@@ -290,12 +290,8 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 			if len(source.Members) != 2 {
 				return false
 			}
-			_, ok := source.Members[0].(*parser.DataTypeTimestamp)
-			if !ok {
-				_, ok = source.Members[0].(*parser.DataTypeString)
-				if !ok {
-					return false
-				}
+			if !typesAreAssignmentCompatible(parser.NewDataTypeTimestamp(), source.Members[0]) {
+				return false
 			}
 			_, ok = source.Members[1].(*parser.DataTypeStringSet)
 			if !ok {
@@ -324,12 +320,8 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 			if len(source.Members) != 2 {
 				return false
 			}
-			_, ok := source.Members[0].(*parser.DataTypeTimestamp)
-			if !ok {
-				_, ok = source.Members[0].(*parser.DataTypeString)
-				if !ok {
-					return false
-				}
+			if !typesAreAssignmentCompatible(parser.NewDataTypeTimestamp(), source.Members[0]) {
+				return false
 			}
 			_, ok = source.Members[1].(*parser.DataTypeIDSet)
 			if !ok {
@@ -353,6 +345,9 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 	case *parser.DataTypeTimestamp:
 		switch sourceType.(type) {
 		case *parser.DataTypeTimestamp:
+			return true
+		case *parser.DataTypeInt:
+			//could be a int convertable to a date
 			return true
 		case *parser.DataTypeString:
 			//could be a string parseable as a date
@@ -531,6 +526,16 @@ func typeIsTimestamp(testType parser.ExprDataType) bool {
 func typeIsDecimal(testType parser.ExprDataType) bool {
 	switch testType.(type) {
 	case *parser.DataTypeDecimal:
+		return true
+	default:
+		return false
+	}
+}
+
+// returns true if the type is bit-sliced
+func typeIsBSI(testType parser.ExprDataType) bool {
+	switch testType.(type) {
+	case *parser.DataTypeInt, *parser.DataTypeDecimal, *parser.DataTypeTimestamp:
 		return true
 	default:
 		return false

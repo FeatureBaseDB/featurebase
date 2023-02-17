@@ -7,13 +7,36 @@ var timeQuantumInsertTest = TableTest{
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
 			srcHdr("i1", fldTypeInt, "min 0", "max 1000"),
+			srcHdr("ss1", fldTypeStringSet, "timequantum 'YMD'"),
 			srcHdr("ids1", fldTypeIDSet, "timequantum 'YMD'"),
 		),
 	),
 	SQLTests: []SQLTest{
 		{
 			SQLs: sqls(
-				"insert into time_quantum_insert (_id, i1, ids1) values (1, 1, [1])",
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, ['1'], [1])",
+			),
+			ExpHdrs: hdrs(),
+			ExpRows: rows(),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {['1']}, {[1]})",
+			),
+			ExpErr: "an expression of type 'tuple(stringset)' cannot be assigned to type 'stringset'",
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {1676649734, ['1']}, {1676649734, [1]})",
+			),
+			ExpHdrs: hdrs(),
+			ExpRows: rows(),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {'2022-01-01T00:00:00Z', ['1']}, {'2022-01-01T00:00:00Z', [1]})",
 			),
 			ExpHdrs: hdrs(),
 			ExpRows: rows(),

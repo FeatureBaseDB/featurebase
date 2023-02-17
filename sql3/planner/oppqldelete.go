@@ -102,7 +102,7 @@ func (p *PlanOpPQLConstRowDelete) Expressions() []types.PlanExpression {
 			tableName:   p.tableName,
 			columnIndex: 0,
 			dataType:    colType,
-			columnName:  "_id",
+			columnName:  string(dax.PrimaryKeyFieldName),
 		},
 	}
 }

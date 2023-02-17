@@ -144,13 +144,16 @@ authclustertests: vendor
 	CLUSTERTESTS_FB_ARGS=$(AUTH_ARGS) $(DOCKER_COMPOSE) -f internal/clustertests/docker-compose.yml down
 
 # Install FeatureBase and IDK
-install: install-featurebase install-idk
+install: install-featurebase install-idk install-fbsql
 
 install-featurebase:
 	$(GO) install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
 
 install-idk:
 	$(MAKE) -C ./idk install
+
+install-fbsql:
+	$(GO) install ./cmd/fbsql
 
 # Build the lattice assets
 build-lattice:

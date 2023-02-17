@@ -83,12 +83,12 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		for _, agg := range aggregates {
 			InspectExpression(agg, func(expr types.PlanExpression) bool {
 				switch ex := expr.(type) {
-				case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
-					*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
-					*percentilePlanExpression:
+				case types.Aggregable:
 					ch := ex.Children()
-					// first arg is always the ref
-					aggregateAndGroupByExprs = append(aggregateAndGroupByExprs, ch[0])
+					// first arg is always the ref, except for count(*)
+					if len(ch) > 0 {
+						aggregateAndGroupByExprs = append(aggregateAndGroupByExprs, ch[0])
+					}
 					return false
 				}
 				return true
@@ -100,9 +100,7 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		havingReferences := make([]*qualifiedRefPlanExpression, 0)
 		InspectExpression(having, func(expr types.PlanExpression) bool {
 			switch ex := expr.(type) {
-			case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
-				*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
-				*percentilePlanExpression:
+			case types.Aggregable:
 				return false
 			case *qualifiedRefPlanExpression:
 				havingReferences = append(havingReferences, ex)
@@ -139,9 +137,7 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		for _, expr := range projections {
 			InspectExpression(expr, func(expr types.PlanExpression) bool {
 				switch ex := expr.(type) {
-				case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
-					*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
-					*percentilePlanExpression:
+				case types.Aggregable:
 					//return false for these, because thats as far down we want to inspect
 					return false
 				case *qualifiedRefPlanExpression:
@@ -237,9 +233,7 @@ func (p *ExecutionPlanner) gatherExprAggregates(expr types.PlanExpression, aggre
 	result := aggregates
 	InspectExpression(expr, func(expr types.PlanExpression) bool {
 		switch ex := expr.(type) {
-		case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
-			*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
-			*percentilePlanExpression:
+		case types.Aggregable:
 			found := false
 			for _, ag := range result {
 				//compare based on string representation
@@ -249,7 +243,7 @@ func (p *ExecutionPlanner) gatherExprAggregates(expr types.PlanExpression, aggre
 				}
 			}
 			if !found {
-				result = append(result, ex)
+				result = append(result, ex.(types.PlanExpression))
 			}
 			// return false because thats as far down we want to inspect
 			return false

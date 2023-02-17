@@ -28,7 +28,7 @@ type PlanOpPQLDistinctScan struct {
 }
 
 func NewPlanOpPQLDistinctScan(p *ExecutionPlanner, tableName string, column string) (*PlanOpPQLDistinctScan, error) {
-	if strings.EqualFold("_id", column) {
+	if strings.EqualFold(string(dax.PrimaryKeyFieldName), column) {
 		return nil, sql3.NewErrInternalf("non _id column required")
 	}
 	return &PlanOpPQLDistinctScan{
