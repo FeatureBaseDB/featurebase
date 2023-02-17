@@ -2,47 +2,22 @@ package cli
 
 import "strings"
 
-// replacer is implemented by any type which can replace parts of a string based
-// on some rules. For example, the Command can replace strings with values in
-// its `variables` map.
-type replacer interface {
-	replace(s string) string
-}
-
-// Ensure type implements interface.
-var _ replacer = (*nopReplacer)(nil)
-
-type nopReplacer struct{}
-
-func newNopReplacer() *nopReplacer {
-	return &nopReplacer{}
-}
-
-func (n *nopReplacer) replace(s string) string {
-	return s
-}
-
-// Ensure type implements interface.
-var _ replacer = (*nopReplacer)(nil)
-
-type mapReplacer struct {
+// replacer can replace parts of a string based on some rules and the provided
+// map[string]string. For example, the Command can replace strings with values
+// in its `variables` map.
+type replacer struct {
 	m map[string]string
 }
 
-func newMapReplacer(m map[string]string) *mapReplacer {
-	return &mapReplacer{
+func newReplacer(m map[string]string) *replacer {
+	return &replacer{
 		m: m,
 	}
 }
 
-func (r *mapReplacer) replace(s string) string {
-	return replace(s, r.m)
-}
-
-// replace is a general replacement function that can be used by implementations
-// of the replacer interface. It replaces all instances of the string pattern
-// `:key` with the value at m[key].
-func replace(s string, m map[string]string) string {
+// replace replaces all instances of the string pattern `:key` with the value at
+// m[key].
+func (r *replacer) replace(s string) string {
 	designator := ":"
 	words := strings.Split(s, " ")
 	for _, word := range words {
@@ -58,7 +33,7 @@ func replace(s string, m map[string]string) string {
 			if i == 0 {
 				continue
 			}
-			if v, ok := m[key]; ok {
+			if v, ok := r.m[key]; ok {
 				s = strings.Replace(s, designator+key, v, 1)
 			}
 		}

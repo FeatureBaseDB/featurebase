@@ -11,10 +11,10 @@ import (
 // it contains no members and just has the one `split()` method, but here we
 // are.
 type splitter struct {
-	replacer replacer
+	replacer *replacer
 }
 
-func newSplitter(r replacer) *splitter {
+func newSplitter(r *replacer) *splitter {
 	return &splitter{
 		replacer: r,
 	}

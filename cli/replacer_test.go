@@ -77,7 +77,8 @@ func TestReplacer(t *testing.T) {
 		}
 		for i, test := range tests {
 			t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
-				assert.Equal(t, test.exp, replace(test.s, test.m))
+				replacer := newReplacer(test.m)
+				assert.Equal(t, test.exp, replacer.replace(test.s))
 			})
 		}
 	})

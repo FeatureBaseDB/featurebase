@@ -113,7 +113,7 @@ func NewCommand(logdest logger.Logger) *Command {
 		},
 
 		buffer:     newBuffer(),
-		splitter:   newSplitter(newMapReplacer(variables)),
+		splitter:   newSplitter(newReplacer(variables)),
 		workingDir: newWorkingDir(),
 
 		Stdin:  Stdin,
