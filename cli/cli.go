@@ -40,6 +40,7 @@ Type "\q" to quit.
 
 // Ensure type implments interfaces.
 var _ printer = (*Command)(nil)
+var _ replacer = (*Command)(nil)
 
 type Command struct {
 	host string
@@ -92,7 +93,7 @@ type Command struct {
 }
 
 func NewCommand(logdest logger.Logger) *Command {
-	return &Command{
+	cmd := &Command{
 		Config: &Config{
 			Host: defaultHost,
 			Port: "",
@@ -110,7 +111,6 @@ func NewCommand(logdest logger.Logger) *Command {
 			HistoryPath: "",
 		},
 
-		splitter:   newSplitter(),
 		buffer:     newBuffer(),
 		workingDir: newWorkingDir(),
 
@@ -125,6 +125,10 @@ func NewCommand(logdest logger.Logger) *Command {
 
 		quit: make(chan struct{}),
 	}
+
+	cmd.splitter = newSplitter(cmd)
+
+	return cmd
 }
 
 // Run is the main entry-point to the CLI.
@@ -695,4 +699,8 @@ func (cmd *Command) handleLineAsQueryParts(line string) error {
 		}
 	}
 	return nil
+}
+
+func (cmd *Command) replace(s string) string {
+	return replace(s, cmd.variables)
 }

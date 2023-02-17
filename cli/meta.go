@@ -373,7 +373,7 @@ func executeFile(cmd *Command, fileName string) (action, error) {
 	}
 	defer file.Close()
 
-	splitter := newSplitter()
+	splitter := newSplitter(cmd)
 	buffer := newBuffer()
 
 	// Read the file by line, pushing the lines into a new line splitter, then
@@ -911,7 +911,7 @@ func (m *metaWrite) execute(cmd *Command) (action, error) {
 //	`cmd 'arg1' arg2 'arg three'`
 //
 // It returns the metaCommand which maps to `cmd`.
-func splitMetaCommand(in string) (metaCommand, error) {
+func splitMetaCommand(in string, replacer replacer) (metaCommand, error) {
 	parts := strings.SplitN(in, ` `, 2)
 	key := strings.TrimRightFunc(parts[0], unicode.IsSpace)
 
@@ -932,6 +932,11 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		if sb.Len() > 0 {
 			args = append(args, sb.String())
 		}
+	}
+
+	// Do variable replacement.
+	for i := range args {
+		args[i] = replacer.replace(args[i])
 	}
 
 	switch key {
