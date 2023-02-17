@@ -112,7 +112,13 @@ func (w *workerJobService) getWorkerInfos(tx dax.Transaction, roleType dax.RoleT
 	// Deserialize rows into WorkerInfo objects.
 	workerInfos := make(dax.WorkerInfos, 0)
 
-	prefix := []byte(fmt.Sprintf(prefixFmtWorkersDB, roleType, qdbid.Key()))
+	var prefix []byte
+	empty := dax.QualifiedDatabaseID{}
+	if roleType == "" && qdbid == empty {
+		prefix = []byte("workers/role/")
+	} else {
+		prefix = []byte(fmt.Sprintf(prefixFmtWorkersDB, roleType, qdbid.Key()))
+	}
 	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
 		addr, err := keyWorker(k)
 		if err != nil {

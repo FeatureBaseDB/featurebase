@@ -71,6 +71,7 @@ type DirectorConfig struct {
 func (d *Director) SendDirective(ctx context.Context, dir *dax.Directive) error {
 	url := fmt.Sprintf("%s/%s", dir.Address.WithScheme("http"), d.directivePath)
 	d.logger.Printf("SEND HTTP directive to: %s\n", url)
+	d.logger.Debugf("Directive: %+v", dir)
 
 	// Encode the request.
 	postBody, err := json.Marshal(dir)

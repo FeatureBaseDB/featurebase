@@ -275,7 +275,7 @@ func DefaultHolderConfig() *HolderConfig {
 		TranslationSyncer:    NopTranslationSyncer,
 		Serializer:           GobSerializer,
 		Schemator:            disco.NewInMemSchemator(),
-		Sharder:              disco.InMemSharder,
+		Sharder:              disco.NewInMemSharder(),
 		CacheFlushInterval:   defaultCacheFlushInterval,
 		Logger:               logger.NopLogger,
 		StorageConfig:        storage.NewDefaultConfig(),
