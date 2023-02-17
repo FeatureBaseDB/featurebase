@@ -49,6 +49,8 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 	flags.DurationVar((*time.Duration)(&srv.LongQueryTime), pre("long-query-time"), time.Duration(srv.LongQueryTime), "Duration that will trigger log and stat messages for slow queries. Zero to disable.")
 	flags.IntVar(&srv.QueryHistoryLength, pre("query-history-length"), srv.QueryHistoryLength, "Number of queries to remember in history.")
 	flags.Int64Var(&srv.MaxQueryMemory, pre("max-query-memory"), srv.MaxQueryMemory, "Maximum memory allowed per Extract() or SELECT query.")
+	flags.StringVar(&srv.VerChkAddress, pre("verchk-address"), srv.VerChkAddress, "Address to contact to check for latest version.")
+	flags.StringVar(&srv.UUIDFile, pre("uuid-file"), srv.UUIDFile, "File to store UUID used in checking latest version. If this is a relative path, the file will be stored in the server's data directory.")
 
 	// TLS
 	SetTLSConfig(flags, pre(""), &srv.TLS.CertificatePath, &srv.TLS.CertificateKeyPath, &srv.TLS.CACertPath, &srv.TLS.SkipVerify, &srv.TLS.EnableClientVerification)

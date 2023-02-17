@@ -20,4 +20,10 @@ func TestBuildServerFlags(t *testing.T) {
 	if cm.Flags().Lookup("log-path").Name == "" {
 		t.Fatal("log-path flag is required")
 	}
+	if cm.Flags().Lookup("verchk-address").Name == "" {
+		t.Fatal("verchk-address flag is required")
+	}
+	if cm.Flags().Lookup("uuid-file").Name == "" {
+		t.Fatal("uuid-file flag is required")
+	}
 }
