@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -54,6 +55,7 @@ var _ metaCommand = (*metaReset)(nil)
 var _ metaCommand = (*metaSet)(nil)
 var _ metaCommand = (*metaTiming)(nil)
 var _ metaCommand = (*metaTuplesOnly)(nil)
+var _ metaCommand = (*metaUnset)(nil)
 var _ metaCommand = (*metaWarn)(nil)
 var _ metaCommand = (*metaWatch)(nil)
 var _ metaCommand = (*metaWrite)(nil)
@@ -333,6 +335,10 @@ Operating System
   \cd [DIR]              change the current working directory
   \timing [on|off]       toggle timing of commands
   \! [COMMAND]           execute command in shell or start interactive shell
+
+Variables
+  \set [NAME [VALUE]]    set internal variable, or list all if no parameters
+  \unset NAME            unset (delete) internal variable
 `
 	cmd.Printf("%s\n", helpText)
 
@@ -647,7 +653,29 @@ func newMetaSet(args []string) *metaSet {
 }
 
 func (m *metaSet) execute(cmd *Command) (action, error) {
-	// TODO: set the variable (or clear it, etc)
+	switch len(m.args) {
+	case 0:
+		// Sort the variables before printing them.
+		keys := make([]string, 0, len(cmd.variables))
+		for k := range cmd.variables {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		// Print out the variables.
+		for _, k := range keys {
+			cmd.Printf("%s = '%s'\n", k, cmd.variables[k])
+		}
+		cmd.writeOptions.timing = !cmd.writeOptions.timing
+	default:
+		// The first arg is the key, the remaining args are concatenated together to form the values
+		// For example:
+		// \set one two three
+		// will result in `one = 'twothree'`
+		k := m.args[0]
+		v := strings.Join(m.args[1:], "")
+		cmd.variables[k] = v
+	}
 	return actionNone, nil
 }
 
@@ -726,6 +754,35 @@ func (m *metaTuplesOnly) execute(cmd *Command) (action, error) {
 	}
 
 	cmd.Printf("Tuples only is %s.\n", sTuplesOnly)
+	return actionNone, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// unset
+// ////////////////////////////////////////////////////////////////////////////
+type metaUnset struct {
+	args []string
+}
+
+func newMetaUnset(args []string) *metaUnset {
+	return &metaUnset{
+		args: args,
+	}
+}
+
+func (m *metaUnset) execute(cmd *Command) (action, error) {
+	switch len(m.args) {
+	case 0:
+		cmd.Printf("\\unset: missing required argument\n")
+		return actionNone, nil
+	default:
+		if len(m.args) > 1 {
+			for _, s := range m.args[1:] {
+				cmd.Printf("\\unset: extra argument \"%s\" ignored\n", s)
+			}
+		}
+		delete(cmd.variables, m.args[0])
+	}
 	return actionNone, nil
 }
 
@@ -916,6 +973,8 @@ func splitMetaCommand(in string) (metaCommand, error) {
 		return newMetaTuplesOnly(args), nil
 	case "timing":
 		return newMetaTiming(args), nil
+	case "unset":
+		return newMetaUnset(args), nil
 	case "warn":
 		return newMetaWarn(args), nil
 	case "watch":
