@@ -47,7 +47,7 @@ func (p *ExecutionPlanner) analyzeFunctionSubtable(call *parser.Call, scope pars
 	ok, _ := typeIsTimeQuantum(call.Args[0].DataType())
 	if !ok {
 		// TODO (pok) send back the right error
-		return nil, sql3.NewErrSetExpressionExpected(call.Args[1].Pos().Line, call.Args[1].Pos().Column)
+		return nil, sql3.NewErrSetExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 	}
 	call.ResultDataType = parser.NewDataTypeSubtable([]*parser.SubtableColumn{
 		{

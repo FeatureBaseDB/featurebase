@@ -32,8 +32,7 @@ const (
 
 // OrderByExpression is the expression on which an order by can be computed
 type OrderByExpression struct {
-	Index        int
-	ExprType     parser.ExprDataType
+	Expr         types.PlanExpression
 	Order        orderByOrder
 	NullOrdering nullOrdering
 }
@@ -79,6 +78,24 @@ func (n *PlanOpOrderBy) WithChildren(children ...types.PlanOperator) (types.Plan
 	return NewPlanOpOrderBy(n.orderByFields, children[0]), nil
 }
 
+func (n *PlanOpOrderBy) Expressions() []types.PlanExpression {
+	res := make([]types.PlanExpression, 0)
+	for _, e := range n.orderByFields {
+		res = append(res, e.Expr)
+	}
+	return res
+}
+
+func (n *PlanOpOrderBy) WithUpdatedExpressions(exprs ...types.PlanExpression) (types.PlanOperator, error) {
+	if len(exprs) != len(n.orderByFields) {
+		return nil, sql3.NewErrInternalf("unexpected number of exprs '%d'", len(exprs))
+	}
+	for i, e := range exprs {
+		n.orderByFields[i].Expr = e
+	}
+	return n, nil
+}
+
 func (n *PlanOpOrderBy) String() string {
 	return ""
 }
@@ -92,8 +109,7 @@ func (n *PlanOpOrderBy) Plan() map[string]interface{} {
 	ps := make([]interface{}, 0)
 	for _, e := range n.orderByFields {
 		ps = append(ps, &map[string]interface{}{
-			"index":        e.Index,
-			"exprType":     e.ExprType.TypeDescription(),
+			"expr":         e.Expr.Plan(),
 			"order":        e.Order,
 			"nullOrdering": e.NullOrdering,
 		})
@@ -200,8 +216,20 @@ func (s *OrderBySorter) Less(i, j int) bool {
 	a := s.Rows[i]
 	b := s.Rows[j]
 	for _, sf := range s.SortFields {
-		av := a[sf.Index]
-		bv := b[sf.Index]
+
+		var sortIndex int
+		switch se := sf.Expr.(type) {
+		case *qualifiedRefPlanExpression:
+			sortIndex = se.columnIndex
+		case *intLiteralPlanExpression:
+			sortIndex = int(se.value)
+		default:
+			s.LastError = sql3.NewErrInternalf("unexpected sort field expression type '%T'", se)
+			return false
+		}
+
+		av := a[sortIndex]
+		bv := b[sortIndex]
 
 		if sf.Order == orderByDesc {
 			av, bv = bv, av
@@ -215,10 +243,22 @@ func (s *OrderBySorter) Less(i, j int) bool {
 			return sf.NullOrdering != nullOrderingFirst
 		}
 
-		switch sf.ExprType.(type) {
-		case *parser.DataTypeInt, *parser.DataTypeID:
+		switch t := sf.Expr.Type().(type) {
+		case *parser.DataTypeInt:
 			avInt, aok := av.(int64)
 			bvInt, bok := bv.(int64)
+			if !(aok && bok) {
+				s.LastError = sql3.NewErrInternalf("unexpected type conversion result")
+				return false
+			}
+			if avInt > bvInt {
+				return false
+			}
+			return true
+
+		case *parser.DataTypeID:
+			avInt, aok := av.(uint64)
+			bvInt, bok := bv.(uint64)
 			if !(aok && bok) {
 				s.LastError = sql3.NewErrInternalf("unexpected type conversion result")
 				return false
@@ -277,7 +317,7 @@ func (s *OrderBySorter) Less(i, j int) bool {
 			return true
 
 		default:
-			s.LastError = sql3.NewErrInternalf("unhandled data type '%T'", sf.ExprType)
+			s.LastError = sql3.NewErrInternalf("unhandled data type '%T'", t)
 			return false
 		}
 	}

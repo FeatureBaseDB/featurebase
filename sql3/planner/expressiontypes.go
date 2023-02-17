@@ -466,7 +466,7 @@ func typeIsTimeQuantum(testType parser.ExprDataType) (bool, parser.ExprDataType)
 	switch testType.(type) {
 	case *parser.DataTypeIDSetQuantum:
 		return true, parser.NewDataTypeIDSet()
-	case *parser.DataTypeStringSet:
+	case *parser.DataTypeStringSetQuantum:
 		return true, parser.NewDataTypeStringSet()
 	default:
 		return false, nil
@@ -539,6 +539,16 @@ func typeIsBSI(testType parser.ExprDataType) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// returns true if we can sort on a type
+func typeCanBeSortedOn(testType parser.ExprDataType) bool {
+	switch testType.(type) {
+	case *parser.DataTypeStringSet, *parser.DataTypeIDSet:
+		return false
+	default:
+		return true
 	}
 }
 
