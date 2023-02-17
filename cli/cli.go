@@ -188,7 +188,11 @@ func (cmd *Command) Run(ctx context.Context) error {
 
 		// Read user provided input.
 		line, err := rl.Readline()
-		if err != nil {
+		if err == readline.ErrInterrupt {
+			inMidCommand = false
+			cmd.buffer.reset()
+			continue
+		} else if err != nil {
 			return errors.Wrap(err, "reading line")
 		}
 
