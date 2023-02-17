@@ -721,9 +721,6 @@ func (m *Command) setupServer() error {
 		return errors.Wrap(err, "new handler")
 	}
 
-	if err != nil {
-		return errors.Wrap(err, "new handler")
-	}
 	// ignore http server logs unless verbose logging in enabled
 	if uri.Scheme == "https" {
 		if !m.Config.Verbose {
