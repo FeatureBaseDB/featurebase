@@ -4,6 +4,7 @@ package errors
 
 import (
 	"encoding/json"
+	"io"
 
 	"github.com/pkg/errors"
 )
@@ -126,10 +127,8 @@ func MarshalJSON(err error) string {
 // UnmarshalJSON converts the byte slice into a codedError. If the bytes can't
 // unmarshal to a codedError, a normal error will be returned containing the
 // string value of the byte slice.
-func UnmarshalJSON(b []byte) error {
-	if len(b) == 0 {
-		return nil
-	}
+func UnmarshalJSON(r io.Reader) error {
+	b, _ := io.ReadAll(r)
 
 	out := &codedError{}
 	if err := json.Unmarshal(b, out); err != nil {

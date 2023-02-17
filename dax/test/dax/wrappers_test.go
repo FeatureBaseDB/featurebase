@@ -9,8 +9,7 @@ import (
 )
 
 var _ computer.Registrar = (*wrappedControllerClient)(nil)
-
-//var _ dax.Schemar = (*wrappedControllerClient)(nil)
+var _ dax.Schemar = (*wrappedControllerClient)(nil)
 
 // wrappedControllerClient is a wrapper around the controller client which we
 // use in tests to ensure that all of the methods for the computer.Registrar
@@ -21,13 +20,11 @@ var _ computer.Registrar = (*wrappedControllerClient)(nil)
 // package, but that seems overly compilicated right now.
 type wrappedControllerClient struct {
 	cli *controllerclient.Client
-	dax.Schemar
 }
 
 func newWrappedControllerClient(cli *controllerclient.Client) *wrappedControllerClient {
 	return &wrappedControllerClient{
-		cli:     cli,
-		Schemar: dax.NewNopSchemar(),
+		cli: cli,
 	}
 }
 
@@ -41,25 +38,54 @@ func (w *wrappedControllerClient) CheckInNode(ctx context.Context, node *dax.Nod
 
 // Schemar
 
-/*
-func (w *wrappedControllerClient) 	CreateDatabase(context.Context, *QualifiedDatabase) error
-func (w *wrappedControllerClient) 	DropDatabase(context.Context, QualifiedDatabaseID) error
+func (w *wrappedControllerClient) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
+	return w.cli.CreateDatabase(ctx, qdb)
+}
 
-	DatabaseByName(ctx context.Context, orgID OrganizationID, dbname DatabaseName) (*QualifiedDatabase, error)
-	DatabaseByID(ctx context.Context, qdbid QualifiedDatabaseID) (*QualifiedDatabase, error)
+func (w *wrappedControllerClient) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
+	return w.cli.DropDatabase(ctx, qdbid)
+}
 
-	SetDatabaseOption(ctx context.Context, qdbid QualifiedDatabaseID, option string, value string) error
+func (w *wrappedControllerClient) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
+	return w.cli.DatabaseByName(ctx, orgID, dbname)
+}
 
-	Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error)
+func (w *wrappedControllerClient) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
+	return w.cli.DatabaseByID(ctx, qdbid)
+}
 
-	CreateTable(ctx context.Context, qtbl *QualifiedTable) error
-	DropTable(ctx context.Context, qtid QualifiedTableID) error
+func (w *wrappedControllerClient) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatabaseID, option string, value string) error {
+	return w.cli.SetDatabaseOption(ctx, qdbid, option, value)
+}
 
-	TableByName(ctx context.Context, qdbid QualifiedDatabaseID, tname TableName) (*QualifiedTable, error)
-	TableByID(ctx context.Context, qtid QualifiedTableID) (*QualifiedTable, error)
+func (w *wrappedControllerClient) Databases(ctx context.Context, orgID dax.OrganizationID, dbIDs ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
+	return w.cli.Databases(ctx, orgID, dbIDs...)
+}
 
-	Tables(ctx context.Context, qdbid QualifiedDatabaseID, tids ...TableID) ([]*QualifiedTable, error)
+func (w *wrappedControllerClient) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {
+	return w.cli.CreateTable(ctx, qtbl)
+}
 
-	CreateField(ctx context.Context, qtid QualifiedTableID, fld *Field) error
-	DropField(ctx context.Context, qtid QualifiedTableID, fname FieldName) error
-*/
+func (w *wrappedControllerClient) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error {
+	return w.cli.DropTable(ctx, qtid)
+}
+
+func (w *wrappedControllerClient) TableByName(ctx context.Context, qdbid dax.QualifiedDatabaseID, tname dax.TableName) (*dax.QualifiedTable, error) {
+	return w.cli.TableByName(ctx, qdbid, tname)
+}
+
+func (w *wrappedControllerClient) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
+	return w.cli.TableByID(ctx, qtid)
+}
+
+func (w *wrappedControllerClient) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, tids ...dax.TableID) ([]*dax.QualifiedTable, error) {
+	return w.cli.Tables(ctx, qdbid, tids...)
+}
+
+func (w *wrappedControllerClient) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld *dax.Field) error {
+	return w.cli.CreateField(ctx, qtid, fld)
+}
+
+func (w *wrappedControllerClient) DropField(ctx context.Context, qtid dax.QualifiedTableID, fname dax.FieldName) error {
+	return w.cli.DropField(ctx, qtid, fname)
+}

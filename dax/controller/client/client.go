@@ -71,8 +71,7 @@ func (c *Client) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -158,8 +157,7 @@ func (c *Client) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, n
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Wrapf(errors.UnmarshalJSON(b), "status code: %d", resp.StatusCode)
+		return nil, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	var qdb *dax.QualifiedDatabase
@@ -645,8 +643,7 @@ func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Wrapf(errors.UnmarshalJSON(b), "registration request to %s status code: %d: %s", url, resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "registration request to %s status code: %d", url, resp.StatusCode)
 	}
 
 	return nil
@@ -676,8 +673,7 @@ func (c *Client) CheckInNode(ctx context.Context, node *dax.Node) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Wrapf(errors.UnmarshalJSON(b), "status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil

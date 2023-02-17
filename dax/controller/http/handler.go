@@ -81,7 +81,7 @@ func (s *server) postCreateDatabase(w http.ResponseWriter, r *http.Request) {
 
 	err := s.controller.CreateDatabase(ctx, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 

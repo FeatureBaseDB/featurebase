@@ -15,6 +15,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
@@ -739,11 +740,59 @@ func TestDAXIntegration(t *testing.T) {
 
 			t.Run("Schemar", func(t *testing.T) {
 				t.Run("CreateDatabase", func(t *testing.T) {
-					log.Printf("client: %+v", client)
-					err := client.CreateDatabase(ctx, qdb)
+					err := client.CreateDatabase(ctx, nil)
+					log.Printf("ERR: %v", err)
 					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, controller.ErrCodeNodeKeyInvalid))
+						assert.True(t, errors.Is(err, schemar.ErrCodeDatabaseNameInvalid))
 					}
+				})
+
+				t.Run("DropDatabase", func(t *testing.T) {
+					//DropDatabase(context.Context, QualifiedDatabaseID) error
+				})
+
+				t.Run("DatabaseByName", func(t *testing.T) {
+					// DatabaseByName(ctx context.Context, orgID OrganizationID, dbname DatabaseName) (*QualifiedDatabase, error)
+				})
+
+				t.Run("DatabaseByID", func(t *testing.T) {
+					// DatabaseByID(ctx context.Context, qdbid QualifiedDatabaseID) (*QualifiedDatabase, error)
+				})
+
+				t.Run("SetDatabaseOption", func(t *testing.T) {
+					// SetDatabaseOption(ctx context.Context, qdbid QualifiedDatabaseID, option string, value string) error
+				})
+
+				t.Run("Databases", func(t *testing.T) {
+					// Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error)
+				})
+
+				t.Run("CreateTable", func(t *testing.T) {
+					// CreateTable(ctx context.Context, qtbl *QualifiedTable) error
+				})
+
+				t.Run("DropTable", func(t *testing.T) {
+					// DropTable(ctx context.Context, qtid QualifiedTableID) error
+				})
+
+				t.Run("TableByName", func(t *testing.T) {
+					// TableByName(ctx context.Context, qdbid QualifiedDatabaseID, tname TableName) (*QualifiedTable, error)
+				})
+
+				t.Run("TableByID", func(t *testing.T) {
+					// TableByID(ctx context.Context, qtid QualifiedTableID) (*QualifiedTable, error)
+				})
+
+				t.Run("Tables", func(t *testing.T) {
+					// Tables(ctx context.Context, qdbid QualifiedDatabaseID, tids ...TableID) ([]*QualifiedTable, error)
+				})
+
+				t.Run("CreateField", func(t *testing.T) {
+					// CreateField(ctx context.Context, qtid QualifiedTableID, fld *Field) error
+				})
+
+				t.Run("DropField", func(t *testing.T) {
+					// DropField(ctx context.Context, qtid QualifiedTableID, fname FieldName) error
 				})
 			})
 		})
