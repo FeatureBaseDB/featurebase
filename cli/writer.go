@@ -23,7 +23,7 @@ func defaultWriteOptions() *writeOptions {
 	return &writeOptions{
 		border:     1,
 		expanded:   false,
-		timing:     true,
+		timing:     false,
 		tuplesOnly: false,
 	}
 }
