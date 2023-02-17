@@ -267,6 +267,10 @@ func (c *Controller) RegisterNode(ctx context.Context, n *dax.Node) error {
 // from its list (perhaps due to a network fault) and therefore the node needs
 // to be re-registered.
 func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
+	if n == nil || n.Address == "" {
+		return NewErrNodeKeyInvalid("")
+	}
+
 	tx, err := c.BoltDB.BeginTx(ctx, false)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")

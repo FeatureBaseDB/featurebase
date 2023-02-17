@@ -13,10 +13,12 @@ import (
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
 	goerrors "github.com/pkg/errors"
@@ -705,6 +707,46 @@ func TestDAXIntegration(t *testing.T) {
 			assert.Equal(t, computers[computerKey2].Address(), nodes[2].Address)
 			assert.Equal(t, partitions2, nodes[2].Partitions)
 		}
+	})
+
+	t.Run("HTTPError", func(t *testing.T) {
+		mc := test.MustRunManagedCommand(t)
+		defer mc.Close()
+
+		svcmgr := mc.Manage()
+		ctx := context.Background()
+
+		t.Run("controller", func(t *testing.T) {
+			// Set up Controller client.
+			client := newWrappedControllerClient(controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger))
+
+			t.Run("Registrar", func(t *testing.T) {
+				t.Run("RegisterNode", func(t *testing.T) {
+					node := &dax.Node{}
+					err := client.RegisterNode(ctx, node)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, controller.ErrCodeNodeKeyInvalid))
+					}
+				})
+				t.Run("CheckInNode", func(t *testing.T) {
+					node := &dax.Node{}
+					err := client.CheckInNode(ctx, node)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, controller.ErrCodeNodeKeyInvalid))
+					}
+				})
+			})
+
+			t.Run("Schemar", func(t *testing.T) {
+				t.Run("CreateDatabase", func(t *testing.T) {
+					log.Printf("client: %+v", client)
+					err := client.CreateDatabase(ctx, qdb)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, controller.ErrCodeNodeKeyInvalid))
+					}
+				})
+			})
+		})
 	})
 }
 

@@ -615,7 +615,7 @@ func (s *server) postRegisterNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.controller.RegisterNode(ctx, node); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 
@@ -700,7 +700,7 @@ func (s *server) postCheckInNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.controller.CheckInNode(ctx, node); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 
