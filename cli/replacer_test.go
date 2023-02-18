@@ -74,6 +74,30 @@ func TestReplacer(t *testing.T) {
 				m:   m,
 				exp: "foonewVone",
 			},
+			{
+				// two variables, different, comma
+				s:   ":v1, :v2",
+				m:   m,
+				exp: "newVone, newVtwo",
+			},
+			{
+				// single quotes
+				s:   ":'v1'",
+				m:   m,
+				exp: "'newVone'",
+			},
+			{
+				// double quotes
+				s:   `:"v2"`,
+				m:   m,
+				exp: `"newVtwo"`,
+			},
+			{
+				// more quotes
+				s:   `start :v1,:'two', :"v2" ::four :: `,
+				m:   m,
+				exp: `start newVone,:'two', "newVtwo" ::four :: `,
+			},
 		}
 		for i, test := range tests {
 			t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
