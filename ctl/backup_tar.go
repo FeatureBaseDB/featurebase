@@ -9,13 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"time"
 
-	"github.com/djherbis/buffer"
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
 	"github.com/featurebasedb/featurebase/v3/disco"
@@ -398,8 +398,9 @@ func writeToTar(tw *tar.Writer, entryName string, rc io.Reader) error {
 		spillFile.Close()
 		os.Remove(spillFile.Name())
 	}()
-	mb512 := int64(2 << 29)
-	buf := buffer.NewSpill(buffer.New(mb512), spillFile)
+	mb512 := 2 << 29
+	buf := NewFileBuffer(mb512)
+	defer buf.Close()
 
 	n, err := io.Copy(buf, rc)
 	// Read to buffer to determine size.
@@ -409,9 +410,8 @@ func writeToTar(tw *tar.Writer, entryName string, rc io.Reader) error {
 
 	// Build header & copy data to archive.
 	if err = tw.WriteHeader(&tar.Header{
-		Name: entryName,
-		Mode: 0o666,
-		// Size:    int64(buf.Len()),
+		Name:    entryName,
+		Mode:    0o666,
 		Size:    n,
 		ModTime: time.Now(),
 	}); err != nil {
@@ -420,4 +420,80 @@ func writeToTar(tw *tar.Writer, entryName string, rc io.Reader) error {
 		return fmt.Errorf("copying translate data to archive: %w", err)
 	}
 	return nil
+}
+
+func NewFileBuffer(max int) *FileBuffer {
+	return &FileBuffer{max: max}
+}
+
+type FileBuffer struct {
+	max     int
+	buf     bytes.Buffer
+	file    *os.File
+	reading bool
+}
+
+func (fb *FileBuffer) Write(p []byte) (n int, err error) {
+	if fb.reading {
+		panic("cannot write after read")
+	}
+	if fb.file != nil {
+		return fb.file.Write(p)
+	}
+	n, err = fb.buf.Write(p)
+	if err != nil {
+		return
+	}
+	if fb.buf.Len() > fb.max {
+		fb.file, err = ioutil.TempFile("", "filebuffer-")
+		if err != nil {
+			return
+		}
+		_, err = io.Copy(fb.file, &fb.buf)
+		fb.buf.Reset()
+	}
+	return
+}
+
+func (fb *FileBuffer) Len() (int64, error) {
+	if fb.file != nil {
+		return int64(fb.buf.Len()), nil
+	}
+	fi, err := fb.file.Stat()
+	if err != nil {
+		return 0, err
+	}
+
+	return fi.Size(), nil
+}
+
+func (fb *FileBuffer) Read(p []byte) (n int, err error) {
+	if fb.file != nil {
+		if !fb.reading {
+			fb.reading = true
+			_, err = fb.file.Seek(0, 0)
+			if err != nil {
+				return
+			}
+		}
+		return fb.file.Read(p)
+	}
+	fb.reading = true
+	return fb.buf.Read(p)
+}
+
+func (fb *FileBuffer) Close() error {
+	if fb.file != nil {
+		if err := fb.file.Close(); err != nil {
+			return err
+		}
+		return os.Remove(fb.file.Name())
+	}
+	return nil
+}
+
+func (fb *FileBuffer) Reset() error {
+	fb.reading = false
+	fb.buf.Reset()
+	return fb.Close()
 }
