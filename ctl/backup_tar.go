@@ -58,6 +58,8 @@ type BackupTarCommand struct { // nolint: maligned
 	TLS server.TLSConfig
 
 	AuthToken string
+	// Locatation of Tempory files needed for buffer spill over
+	TempDir string `json:"temp-dir"`
 }
 
 // Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
@@ -232,7 +234,7 @@ func (cmd *BackupTarCommand) backupTarIDAllocData(ctx context.Context, tw *tar.W
 	}
 	defer rc.Close()
 
-	return writeToTar(tw, "idalloc", rc)
+	return writeToTar(tw, "idalloc", rc, cmd.TempDir)
 }
 
 // backupTarIndex backs up all shards for a given index.
@@ -316,7 +318,7 @@ func (cmd *BackupTarCommand) backupTarShardNode(ctx context.Context, tw *tar.Wri
 		return fmt.Errorf("fetching shard reader: %w", err)
 	}
 	defer rc.Close()
-	return writeToTar(tw, filename, rc)
+	return writeToTar(tw, filename, rc, cmd.TempDir)
 }
 
 func (cmd *BackupTarCommand) backupTarShardDataframe(ctx context.Context, tw *tar.Writer, indexName string, shard uint64, node *disco.Node, buf *bytes.Buffer) error {
@@ -340,7 +342,7 @@ func (cmd *BackupTarCommand) backupTarShardDataframe(ctx context.Context, tw *ta
 	}
 
 	filename := filepath.Join("indexes", indexName, "dataframe", fmt.Sprintf("%04d", shard))
-	return writeToTar(tw, filename, resp.Body)
+	return writeToTar(tw, filename, resp.Body, cmd.TempDir)
 }
 
 func (cmd *BackupTarCommand) backupTarIndexTranslateData(ctx context.Context, tw *tar.Writer, name string, buf *bytes.Buffer) error {
@@ -367,7 +369,7 @@ func (cmd *BackupTarCommand) backupTarIndexPartitionTranslateData(ctx context.Co
 	}
 	defer rc.Close()
 
-	return writeToTar(tw, path.Join("indexes", name, "translate", fmt.Sprintf("%04d", partitionID)), rc)
+	return writeToTar(tw, path.Join("indexes", name, "translate", fmt.Sprintf("%04d", partitionID)), rc, cmd.TempDir)
 }
 
 func (cmd *BackupTarCommand) backupTarFieldTranslateData(ctx context.Context, tw *tar.Writer, indexName, fieldName string, buff *bytes.Buffer) error {
@@ -382,28 +384,20 @@ func (cmd *BackupTarCommand) backupTarFieldTranslateData(ctx context.Context, tw
 		return fmt.Errorf("fetching translate data reader: %w", err)
 	}
 	defer rc.Close()
-	return writeToTar(tw, path.Join("indexes", indexName, "fields", fieldName, "translate"), rc)
+	return writeToTar(tw, path.Join("indexes", indexName, "fields", fieldName, "translate"), rc, cmd.TempDir)
 }
 
 func (cmd *BackupTarCommand) TLSHost() string { return cmd.Host }
 
 func (cmd *BackupTarCommand) TLSConfiguration() server.TLSConfig { return cmd.TLS }
 
-func writeToTar(tw *tar.Writer, entryName string, rc io.Reader) error {
-	spillFile, err := os.CreateTemp("", "spill")
-	if err != nil {
-		return fmt.Errorf("creating temp file : %w", err)
-	}
-	defer func() {
-		spillFile.Close()
-		os.Remove(spillFile.Name())
-	}()
+func writeToTar(tw *tar.Writer, entryName string, rc io.Reader, tmpDir string) error {
 	mb512 := 2 << 29
-	buf := NewFileBuffer(mb512)
+	buf := NewFileBuffer(mb512, tmpDir)
 	defer buf.Close()
 
+	// Read to buffer to determine size. We could avoid copy if size provided
 	n, err := io.Copy(buf, rc)
-	// Read to buffer to determine size.
 	if err != nil {
 		return fmt.Errorf("copying translate data to memory: %w", err)
 	}
@@ -422,12 +416,13 @@ func writeToTar(tw *tar.Writer, entryName string, rc io.Reader) error {
 	return nil
 }
 
-func NewFileBuffer(max int) *FileBuffer {
-	return &FileBuffer{max: max}
+func NewFileBuffer(max int, dir string) *FileBuffer {
+	return &FileBuffer{max: max, dir: dir}
 }
 
 type FileBuffer struct {
 	max     int
+	dir     string
 	buf     bytes.Buffer
 	file    *os.File
 	reading bool
@@ -445,7 +440,7 @@ func (fb *FileBuffer) Write(p []byte) (n int, err error) {
 		return
 	}
 	if fb.buf.Len() > fb.max {
-		fb.file, err = ioutil.TempFile("", "filebuffer-")
+		fb.file, err = ioutil.TempFile(fb.dir, "filebuffer-")
 		if err != nil {
 			return
 		}
