@@ -28,6 +28,7 @@ Backs up a FeatureBase server to a local, tar-formatted snapshot file.
 	ctl.SetTLSConfig(flags, "", &cmd.TLS.CertificatePath, &cmd.TLS.CertificateKeyPath, &cmd.TLS.CACertPath, &cmd.TLS.SkipVerify, &cmd.TLS.EnableClientVerification)
 	flags.StringVar(&cmd.AuthToken, "auth-token", "", "Authentication token")
 	flags.StringVar(&cmd.HeaderTimeoutStr, "header-timeout", cmd.HeaderTimeoutStr, "Length of time to wait for initial HTTP response before giving up.")
+	flags.StringVar(&cmd.TempDir, "temp-dir", cmd.TempDir, "Location of tempory spillover files the default is the system's default(usually /tmp)")
 
 	return ccmd
 }
