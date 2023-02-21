@@ -2957,7 +2957,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		now := time.Now()
 		simpleParquetMaker(t, tmpfile, 1, []tb{
 			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
-			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.UnixMilli()}},
+			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.Unix()}},
 			{Name: "stringtime", Type: arrow.BinaryTypes.String, Value: []string{now.Format(time.RFC3339)}},
 		})
 
