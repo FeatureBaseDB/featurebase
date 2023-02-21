@@ -240,9 +240,7 @@ func TestCreateTableStatement_String(t *testing.T) {
 				Type: &parser.Type{Name: &parser.Ident{Name: "TIMESTAMP"}},
 				Constraints: []parser.Constraint{
 					&parser.TimeUnitConstraint{
-						Expr:      &parser.StringLit{Value: "s"},
-						Epoch:     pos(0),
-						EpochExpr: &parser.StringLit{Value: "2021-01-01T00:00:00Z"},
+						Expr: &parser.StringLit{Value: "s"},
 					},
 				},
 			},
@@ -255,7 +253,7 @@ func TestCreateTableStatement_String(t *testing.T) {
 		`intcol INTEGER MIN 100 MAX 1000, `+
 		`stringcol STRING CACHETYPE RANKED SIZE 10000, `+
 		`stringsetcol STRINGSET CACHETYPE RANKED SIZE 10000, `+
-		`timestampcol TIMESTAMP TIMEUNIT 's' EPOCH '2021-01-01T00:00:00Z'`+
+		`timestampcol TIMESTAMP TIMEUNIT 's'`+
 		`)`)
 }
 

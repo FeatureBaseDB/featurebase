@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -193,12 +192,11 @@ func TestTable(t *testing.T) {
 							Type: "timestamp",
 							Options: dax.FieldOptions{
 								TimeUnit: "s",
-								Epoch:    time.Date(2009, 11, 10, 23, 34, 56, 0, time.UTC),
 							},
 						},
 					},
 				},
-				expSQL: "CREATE TABLE all_field_types_with_options (_id string, an_id id CACHETYPE ranked SIZE 500, a_string string CACHETYPE ranked SIZE 500, an_id_set idset CACHETYPE ranked SIZE 500, a_string_set stringset CACHETYPE ranked SIZE 500, an_int int MIN -100 MAX 200, a_decimal decimal, a_timestamp timestamp TIMEUNIT 's' EPOCH '2009-11-10T23:34:56Z') KEYPARTITIONS 0",
+				expSQL: "CREATE TABLE all_field_types_with_options (_id string, an_id id CACHETYPE ranked SIZE 500, a_string string CACHETYPE ranked SIZE 500, an_id_set idset CACHETYPE ranked SIZE 500, a_string_set stringset CACHETYPE ranked SIZE 500, an_int int MIN -100 MAX 200, a_decimal decimal, a_timestamp timestamp TIMEUNIT 's') KEYPARTITIONS 0",
 			},
 		}
 		for i, test := range tests {

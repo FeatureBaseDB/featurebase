@@ -755,9 +755,6 @@ func (f *Field) constraints() string {
 	case BaseTypeTimestamp:
 		if f.Options.TimeUnit != "" {
 			sql += fmt.Sprintf(" TIMEUNIT '%s'", f.Options.TimeUnit)
-			if !f.Options.Epoch.IsZero() {
-				sql += fmt.Sprintf(" EPOCH '%s'", f.Options.Epoch.Format(time.RFC3339)) // time.RFC3339
-			}
 		}
 	}
 

@@ -402,9 +402,9 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 					case fbbatch.TimeUnitMilliseconds:
 						i64 = i64 + (v * 1000)
 					case fbbatch.TimeUnitMicroseconds, fbbatch.TimeUnitUSeconds:
-						i64 = i64 + (v * 1000 * 1000)
+						i64 = i64 + (v * 1000000)
 					case fbbatch.TimeUnitNanoseconds:
-						i64 = i64 + (v * 1000 * 1000 * 1000)
+						i64 = i64 + (v * 1000000000)
 					default:
 						return nil, errors.Wrapf(err, "unknown time unit: %s", unit)
 					}
