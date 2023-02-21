@@ -3,7 +3,6 @@ package ctl
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
@@ -38,6 +37,8 @@ type RestoreTarCommand struct {
 
 	// Host:port on which to listen for pprof.
 	Pprof string `json:"pprof"`
+
+	TempDir string
 
 	// Reusable client.
 	client *pilosa.InternalClient
@@ -134,7 +135,10 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 		return errors.New("no primary")
 	}
 	c := &gohttp.Client{}
-	buf := new(bytes.Buffer)
+	mb512 := 2 << 29
+	buf := NewFileBuffer(mb512, cmd.TempDir)
+	defer buf.Close()
+
 	for {
 		buf.Reset()
 		header, err := tarReader.Next()
@@ -188,7 +192,8 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 				node := node
 				g.Go(func() error {
 					client := &gohttp.Client{}
-					rd := bytes.NewReader(buf.Bytes())
+					// rd := bytes.NewReader(buf.Bytes())
+					rd := buf.NewReader()
 					logger.Printf("shard %v %v", shard, indexName)
 					url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
 					_, err = client.Post(url, "application/octet-stream", rd)
@@ -220,7 +225,8 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 				node := node
 				g.Go(func() error {
 					client := &gohttp.Client{}
-					rd := bytes.NewReader(buf.Bytes())
+					// rd := bytes.NewReader(buf.Bytes())
+					rd := buf.NewReader()
 					logger.Printf("dataframe shard %v %v", shard, indexName)
 					url := node.URI.Path(fmt.Sprintf("/internal/dataframe/restore/%v/%v", indexName, shard))
 					_, err = client.Post(url, "application/octet-stream", rd)
@@ -252,7 +258,8 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 				g.Go(func() error {
 					// rd := bytes.NewReader(shardBytes)
 					rd := func() (io.Reader, error) {
-						return bytes.NewReader(buf.Bytes()), nil
+						return buf.NewReader(), nil
+						// return bytes.NewReader(buf.Bytes()), nil
 					}
 
 					return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, rd)
@@ -269,20 +276,18 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			switch action := record[4]; action {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
-				bc := NewBroadcaster(tarReader, len(nodes))
+				_, err = io.Copy(buf, tarReader)
 				g, _ := errgroup.WithContext(ctx)
-				for i, node := range nodes {
-					i := i
+				for _, node := range nodes {
 					node := node
 					g.Go(func() error {
 						rd := func() (io.Reader, error) {
-							return bc.Readers[i], nil
+							return buf.NewReader(), nil
 						}
 
 						return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
 					})
 				}
-				bc.Consume()
 				if err := g.Wait(); err != nil {
 					return err
 				}

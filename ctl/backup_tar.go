@@ -3,6 +3,7 @@ package ctl
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -491,4 +492,11 @@ func (fb *FileBuffer) Reset() error {
 	fb.reading = false
 	fb.buf.Reset()
 	return fb.Close()
+}
+
+func (fb *FileBuffer) NewReader() io.Reader {
+	if fb.file != nil {
+		return bytes.NewReader(fb.buf.Bytes())
+	}
+	return bufio.NewReader(fb.file)
 }
