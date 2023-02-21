@@ -648,7 +648,8 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 				return nil, errors.Errorf("required property for RecordTimeField: layout, err:%v", err)
 			}
 			return idk.RecordTimeField{
-				Layout: layout,
+				NameVal: aField.Name,
+				Layout:  layout,
 			}, nil
 		}
 
