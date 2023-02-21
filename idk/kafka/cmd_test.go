@@ -638,6 +638,60 @@ func TestCmdSchemaChange(t *testing.T) {
 	}
 }
 
+func TestTimeQuantums(t *testing.T) {
+
+	/* 
+	  at a high level, a test here represents
+        - an avro schema
+	    - a set of records to ingest to kafka
+		- an ingest configuration
+		- query to run to confirm the data was ingest properly
+	*/
+	tests := []struct {
+		name             string
+		autoGenerateID   bool
+		primaryKeyFields string // nil when idField is not nil
+		idField 		 string // nil when primaryKeyFields is not nil
+		PilosaHosts      []string
+		RegistryURL      string
+		pathToAvroSchema string
+		pathToRecords    string
+		topic 			 string
+	}{
+		{
+			name:            "time quantums exist",
+			autoGenerateID:   false,
+			primaryKeyFields: "device",
+			idField:		nil,
+			PilosaHosts      []string
+			RegistryURL      string
+			pathToAvroSchema string
+			pathToRecords    string
+			topic 			 string // don't duplicate
+
+		},
+		{
+			name:             "3 primary keys str/str/int TLS",
+			PrimaryKeyFields: []string{"abc", "db", "user_id"},
+			PilosaHosts:      []string{pilosaTLSHost},
+			TLS: &idk.TLSConfig{
+				CertificatePath:          certPath + "/theclient.crt",
+				CertificateKeyPath:       certPath + "/theclient.key",
+				CACertPath:               certPath + "/ca.crt",
+				EnableClientVerification: true,
+			},
+			expRhinoKeys: []string{"2|1|159", "4|3|44", "123456789|q2db_1234|432"}, // "2" + "1" + uint32(159)
+
+		},
+		{
+			name:         "IDField int",
+			IDField:      "user_id",
+			expRhinoCols: []uint64{44, 159, 432},
+		},
+	}
+
+}
+
 type sortableCRI []pilosaclient.CountResultItem
 
 func (s sortableCRI) Len() int { return len(s) }
