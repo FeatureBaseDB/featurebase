@@ -111,6 +111,8 @@ cover-viz: cover
 # Compile Pilosa
 build:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
+	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/fbsql
+
 
 package:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) FLAGS="-o featurebase" $(MAKE) build
