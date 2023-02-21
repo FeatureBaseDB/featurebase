@@ -115,7 +115,7 @@ build:
 
 
 package:
-	GOOS=$(GOOS) GOARCH=$(GOARCH) FLAGS="-o featurebase" $(MAKE) build
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(MAKE) build
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager deb --target featurebase.$(VERSION).$(GOARCH).deb
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager rpm --target featurebase.$(VERSION).$(GOARCH).rpm
 
