@@ -16,9 +16,12 @@ func (b *Broadcaster) Consume() {
 		return
 	}
 	io.Copy(ioutil.Discard, b.source)
-	for _, cl := range b.Writers {
-		c := cl.(io.WriteCloser)
-		c.Close()
+	// maybe acknolwede completfe?  but it doesn't know its complete
+	for i := range b.Writers {
+		r := b.Readers[i].(*io.PipeReader)
+		w := b.Writers[i].(*io.PipeWriter)
+		r.Close()
+		w.Close()
 	}
 }
 
