@@ -643,11 +643,11 @@ func TestCmdSchemaChange(t *testing.T) {
 func TestTimeQuantums(t *testing.T) {
 	t.Parallel()
 	/*
-			  at a high level, a test here represents
-		        - an avro schema
-			    - a set of records to ingest to kafka
-				- an ingest configuration
-				- query to run to confirm the data was ingest properly
+		at a high level, a test here represents
+		  - an avro schema
+		  - a set of records to ingest to kafka
+		  - an ingest configuration
+		  - query to run to confirm the data was ingest properly
 	*/
 	tests := []struct {
 		name             string
@@ -687,11 +687,7 @@ func TestTimeQuantums(t *testing.T) {
 		},
 	}
 
-	fmt.Printf("created tests")
-
 	for _, test := range tests {
-
-		fmt.Printf("starting test")
 		// define some vars
 		now := time.Now().UnixNano()
 		index := fmt.Sprintf("%s_%d", test.index, now)
@@ -716,18 +712,6 @@ func TestTimeQuantums(t *testing.T) {
 			data = make(map[string]interface{})
 		}
 
-		/*
-			records, err := ioutil.ReadFile(test.pathToRecords)
-			if err != nil {
-				t.Errorf("issue reading records file")
-			}
-			err = json.Unmarshal(records, &data)
-			if err != nil {
-				t.Errorf("unmarshal json: %s", err)
-			}
-		*/
-		fmt.Printf("finished reading records")
-
 		// configure the consumer
 		consumer, err := NewMain()
 		if err != nil {
@@ -736,8 +720,8 @@ func TestTimeQuantums(t *testing.T) {
 		configureTestFlags(consumer)
 		consumer.Index = index
 		consumer.Topics = []string{topic}
-		//consumer.KafkaBootstrapServers = []string{test.kafkaHost}
-		//consumer.SchemaRegistryURL = test.registryURL
+		consumer.KafkaBootstrapServers = []string{test.kafkaHost}
+		consumer.SchemaRegistryURL = test.registryURL
 		switch test.idType {
 		case "id":
 			consumer.IDField = test.keyField
@@ -750,8 +734,6 @@ func TestTimeQuantums(t *testing.T) {
 			t.Errorf("incorrect idType supplied")
 		}
 		consumer.MaxMsgs = uint64(len(records))
-
-		fmt.Println("finished configuring the consumer")
 
 		// load schema registry, create produce, topic and run consumer data
 		licodec := liDecodeTestSchema(t, test.pathToAvroSchema)
