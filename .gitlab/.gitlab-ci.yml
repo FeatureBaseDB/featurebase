@@ -216,7 +216,11 @@ run go tests race:
   script:
     - echo "Running featurebase race tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - TMPDIR=/mnt/ramdisk go test -race -v -timeout=10m ${PKG_LIST//,/ }
+    - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - mkdir -p $TMPDIR
+    - go test -race -v -timeout=10m ${PKG_LIST//,/ }
+  after_script:
+    - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   tags:
     - docker
 
@@ -232,7 +236,11 @@ run go tests:
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - TMPDIR=/mnt/ramdisk go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
+    - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - mkdir -p $TMPDIR
+    - go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
+  after_script:
+    - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   artifacts:
     paths:
       - coverage.out
