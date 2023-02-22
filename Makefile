@@ -116,14 +116,18 @@ cover:
 cover-viz: cover
 	$(GO) tool cover -html=build/coverage.out
 
-# Compile Pilosa
+# Build featurebase
 build:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
+
+# Build fbsql
+build-fbsql:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/fbsql
 
 
 package:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(MAKE) build
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(MAKE) build-fbsql
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager deb --target featurebase.$(VERSION).$(GOARCH).deb
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager rpm --target featurebase.$(VERSION).$(GOARCH).rpm
 

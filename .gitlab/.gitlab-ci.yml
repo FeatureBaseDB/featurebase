@@ -161,6 +161,10 @@ build featurebase:
     - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
     - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
     - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
+    - GOOS="linux" GOARCH="amd64" make build-fbsql FLAGS="-o fbsql_linux_amd64"
+    - GOOS="linux" GOARCH="arm64" make build-fbsql FLAGS="-o fbsql_linux_arm64"
+    - GOOS="darwin" GOARCH="amd64" make build-fbsql FLAGS="-o fbsql_darwin_amd64"
+    - GOOS="darwin" GOARCH="arm64" make build-fbsql FLAGS="-o fbsql_darwin_arm64"
   artifacts:
     paths:
       - featurebase_linux_amd64
