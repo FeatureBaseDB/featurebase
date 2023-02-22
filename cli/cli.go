@@ -79,6 +79,9 @@ type Command struct {
 	// i.e. it will quit after the command is complete.
 	Files []string `json:"files"`
 
+	// variables holds the variables created with the \set meta-command.
+	variables map[string]string
+
 	// nonInteractiveMode is set to true when fbsql is running in
 	// non-ineracative mode. And example of this is when the user has provided a
 	// `-c` flag in the command line.
@@ -89,6 +92,8 @@ type Command struct {
 }
 
 func NewCommand(logdest logger.Logger) *Command {
+	variables := make(map[string]string)
+
 	return &Command{
 		Config: &Config{
 			Host: defaultHost,
@@ -107,8 +112,8 @@ func NewCommand(logdest logger.Logger) *Command {
 			HistoryPath: "",
 		},
 
-		splitter:   newSplitter(),
 		buffer:     newBuffer(),
+		splitter:   newSplitter(newReplacer(variables)),
 		workingDir: newWorkingDir(),
 
 		Stdin:  Stdin,
@@ -117,6 +122,8 @@ func NewCommand(logdest logger.Logger) *Command {
 
 		output:       Stdout,
 		writeOptions: defaultWriteOptions(),
+
+		variables: variables,
 
 		quit: make(chan struct{}),
 	}

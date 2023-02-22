@@ -8,7 +8,7 @@ import (
 )
 
 func TestSplitter(t *testing.T) {
-	s := newSplitter()
+	s := newSplitter(newReplacer(nil))
 	t.Run("Split", func(t *testing.T) {
 		tests := []struct {
 			line            string
