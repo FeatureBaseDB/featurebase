@@ -351,6 +351,11 @@ func TestHeaderToField(t *testing.T) {
 			input: "a__LookupText",
 			exp:   LookupTextField{NameVal: "a", DestNameVal: "a"},
 		},
+		{
+			name:  "theta",
+			input: "fldΘnameΘ__String",
+			exp:   StringField{NameVal: "fldΘnameΘ", DestNameVal: "fldΘnameΘ"},
+		},
 	}
 
 	for _, test := range tests {

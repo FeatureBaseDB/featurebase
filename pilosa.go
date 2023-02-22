@@ -47,7 +47,7 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName = errors.New("invalid index or field name, must match [a-z][a-z0-9_-]* and contain at most 230 characters")
+	ErrName = errors.New("invalid index or field name, must match [a-z][a-z0-9Θ_-]* and contain at most 230 characters")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
@@ -135,7 +135,7 @@ func newPreconditionFailedError(err error) PreconditionFailedError {
 }
 
 // Regular expression to validate index and field names.
-var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,229}$`)
+var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9Θ_-]{0,229}$`)
 
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"

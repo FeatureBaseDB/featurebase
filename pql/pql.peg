@@ -20,7 +20,7 @@ Call <-  "Set" {p.startCall("Set")} open col comma args (comma time)? close {p.e
        / "Sum" {p.startCall("Sum")} open posfield (comma allargs)? close {p.endCall()}
        / "Range" {p.startCall("Range")} open field eq value comma 'from='? {p.addField("from")} timefmt {p.addVal(text)} comma 'to='? sp {p.addField("to")} timefmt {p.addVal(text)} close {p.endCall()}
        / < IDENT > { p.startCall(text) } open allargs comma? close { p.endCall() }
-ivyExpr <- ( '(' / '_' / '/' / '[' / ']' /'.' / '=' / '&' / '<'/ '>' /',' / ')' / '^' /  '!' / '|' / [*+] / '-' / '?' / [[A-Z]] / [0-9] / '#' / [ \t\n] )*
+ivyExpr <- ( '(' / '_' / '/' / '[' / ']' /'.' / '=' / '&' / '<'/ '>' /',' / ')' / '^' /  '!' / '|' / [*+] / '-' / '?' / [[A-Z]] / [0-9] / '#' / [ \t\n] / 'Θ')*
 ivyprogram <- '"'? <ivyExpr> '"' { p.addPosStr("_ivy", text) }
 ivyprogram2 <- '"'? <ivyExpr> '"' { p.addPosStr("_ivyReduce", text) }
 
@@ -55,16 +55,16 @@ item <-   'null' &(comma / close) { p.addVal(nil) }
          / timestampfmt { p.addTimestampVal(text) }
          / < decimal > { p.addNumVal(text) }
          / < IDENT > { p.startCall(text) } open allargs comma? close { p.addVal(p.endCall()) }
-         / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(text) }
+         / < ([[A-Z]] / [0-9] / '-' / '_' / ':' / 'Θ')+ > { p.addVal(text) }
          / < '"'  doublequotedstring '"' > { p.addVal(text) }
          / < '\''  singlequotedstring  '\'' > { p.addVal(text) }
 
 doublequotedstring <- ( '\\"' / '\\\\' / '\\n' / '\\t' / [^"\\] )*
 singlequotedstring <- ( '\\\'' / '\\\\' / '\\n' / '\\t' /  [^'\\] )*
 
-variable <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
+variable <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' / 'Θ')*
 
-fieldExpr <- ( [[A-Z]] / '_' / '$' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
+fieldExpr <- ( [[A-Z]] / '_' / '$' ) ( [[A-Z]] / [0-9] / '_' / '-' / 'Θ')*
 field <- <fieldExpr / reserved> { p.addField(text) }
 reserved <- '_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field'
 posfield <- 'field='? <fieldExpr> { p.addPosStr("_field", text) }
@@ -79,7 +79,7 @@ eq <- sp '=' sp
 comma <- sp ',' sp
 lbrack <- '[' sp
 rbrack <- sp ']' sp
-IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
+IDENT <- [[A-Z]] ([[A-Z]] / [0-9] / 'Θ')*
 digits <- [0-9]+
 signedDigits <- '-'? digits
 decimal <- signedDigits ('.' digits?)?

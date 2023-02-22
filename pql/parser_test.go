@@ -307,6 +307,20 @@ func TestParser_Parse(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("ParseTheta", func(t *testing.T) {
+		q, err := pql.ParseString(`Row(fldΘname=fldΘval)`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{"fldΘname": "fldΘval"},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
 }
 
 func TestUnquote(t *testing.T) {

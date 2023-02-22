@@ -3,6 +3,7 @@
 package pilosa_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -39,6 +40,31 @@ func TestAddressWithDefaults(t *testing.T) {
 		} else {
 			if actual.HostPort() != test.expected {
 				t.Errorf("expected: %v, but got: %v", test.expected, actual)
+			}
+		}
+	}
+}
+
+func TestValidateName(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "a_name", err: nil},
+		{name: "a-name", err: nil},
+		{name: "a-name-10", err: nil},
+		{name: "A-name", err: fmt.Errorf("'A-name': %s", pilosa.ErrName)},
+		{name: "-a-name", err: fmt.Errorf("'-a-name': %s", pilosa.ErrName)},
+		{name: "8th_name", err: fmt.Errorf("'8th_name': %s", pilosa.ErrName)},
+		{name: "Θ_name", err: fmt.Errorf("'Θ_name': %s", pilosa.ErrName)},
+		{name: "a_NaMe", err: fmt.Errorf("'a_NaMe': %s", pilosa.ErrName)},
+		{name: "indexΘname", err: nil},
+	}
+	for _, test := range tests {
+		err := pilosa.ValidateName(test.name)
+		if !(err == nil && test.err == nil) {
+			if err.Error() != test.err.Error() {
+				t.Errorf("expected error: %v, but got: %v", test.err, err)
 			}
 		}
 	}
