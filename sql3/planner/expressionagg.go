@@ -122,6 +122,9 @@ func (n *countStarPlanExpression) Plan() map[string]interface{} {
 	result["_expr"] = fmt.Sprintf("%T", n)
 	result["description"] = n.String()
 	result["dataType"] = n.Type().TypeDescription()
+	if n.arg != nil {
+		result["arg"] = n.arg.Plan()
+	}
 	return result
 }
 
