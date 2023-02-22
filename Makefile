@@ -116,9 +116,12 @@ cover:
 cover-viz: cover
 	$(GO) tool cover -html=build/coverage.out
 
-# Compile Pilosa
+# Build featurebase
 build:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
+
+# Build fbsql
+build-fbsql:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/fbsql
 
 
