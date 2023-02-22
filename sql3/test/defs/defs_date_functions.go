@@ -177,5 +177,19 @@ var datePartTests = TableTest{
 			),
 			Compare: CompareExactUnordered,
 		},
+		{
+			SQLs: sqls(
+				"select datepart('yy', 0) as \"yy\", datepart('m', 0) as \"m\", datepart('d', 0) as \"d\"",
+			),
+			ExpHdrs: hdrs(
+				hdr("yy", fldTypeInt),
+				hdr("m", fldTypeInt),
+				hdr("d", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1970), int64(1), int64(1)),
+			),
+			Compare: CompareExactUnordered,
+		},
 	},
 }
