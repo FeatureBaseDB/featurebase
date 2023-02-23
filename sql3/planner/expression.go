@@ -1572,6 +1572,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateFormat(currentRow)
 	case "CHARINDEX":
 		return n.EvaluateCharIndex(currentRow)
+	case "TOTIMESTAMP":
+		return n.EvaluateToTimestamp(currentRow)
 	case "STR":
 		return n.EvaluateStr(currentRow)
 	default:
