@@ -23,6 +23,8 @@ The Restore command will take a tar-formatted backup archive and restore it to a
 	flags.DurationVar(&cmd.RetryPeriod, "retry-period", cmd.RetryPeriod, "Length of time after HTTP request failure to continue retrying request.")
 	flags.StringVar(&cmd.Pprof, "pprof", cmd.Pprof, "host:port to listen for profiling requests at /debug/pprof and /debug/fgprof.")
 	flags.StringVar(&cmd.AuthToken, "auth-token", "", "Authentication token")
+	flags.StringVar(&cmd.TempDir, "temp-dir", cmd.TempDir, "Location of temporary spillover files. The default is the system's default (usually /tmp)")
+
 	ctl.SetTLSConfig(
 		flags, "",
 		&cmd.TLS.CertificatePath,
