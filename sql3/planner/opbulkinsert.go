@@ -320,7 +320,8 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 				}
 			} else {
-				result[idx] = time.UnixMilli(intVal).UTC()
+				//implicit conversion of int to timestamp will treat int as seconds since unix epoch
+				result[idx] = time.Unix(intVal, 0).UTC()
 			}
 
 		case *parser.DataTypeString:
@@ -651,7 +652,8 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 					case float64:
 						// if v is a whole number then make it an int
 						if v == float64(int64(v)) {
-							result[idx] = time.UnixMilli(int64(v)).UTC()
+							//implicit conversion of int to timestamp will treat int as seconds since unix epoch
+							result[idx] = time.Unix(int64(v), 0).UTC()
 						} else {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
@@ -1153,7 +1155,8 @@ func (i *bulkInsertSourceParquetRowIter) Next(ctx context.Context) (types.Row, e
 
 		case *parser.DataTypeTimestamp:
 			if intVal, ok := evalValue.(int64); ok {
-				result[idx] = time.UnixMilli(intVal).UTC()
+				//implicit conversion of int to timestamp will treat int as seconds since unix epoch
+				result[idx] = time.Unix(intVal, 0).UTC()
 			} else if stringVal, ok := evalValue.(string); ok {
 				if tm, err := time.ParseInLocation(time.RFC3339Nano, stringVal, time.UTC); err == nil {
 					result[idx] = tm

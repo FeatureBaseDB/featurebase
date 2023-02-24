@@ -159,7 +159,7 @@ var insertTimestampTest = TableTest{
 	SQLTests: []SQLTest{
 		{
 			SQLs: sqls(
-				"CREATE TABLE insertTimestampTest (_id id, time timestamp timeunit 'ms' epoch '2022-01-01T00:00:00Z', ids idset, strings stringset);",
+				"CREATE TABLE insertTimestampTest (_id id, time timestamp timeunit 'ms', ids idset, strings stringset);",
 			),
 			ExpHdrs: hdrs(),
 			ExpRows: rows(),
@@ -175,12 +175,21 @@ var insertTimestampTest = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"INSERT INTO insertTimestampTest(_id, time, ids, strings) VALUES (2, 1672531200, [6 , 1, 9], ['red', 'blue', 'green']);",
+			),
+			ExpHdrs: hdrs(),
+			ExpRows: rows(),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
 				"select time from insertTimestampTest;",
 			),
 			ExpHdrs: hdrs(
 				hdr("time", fldTypeTimestamp),
 			),
 			ExpRows: rows(
+				row(timestampFromString("2023-01-01T00:00:00Z")),
 				row(timestampFromString("2023-01-01T00:00:00Z")),
 			),
 			Compare:        CompareExactUnordered,

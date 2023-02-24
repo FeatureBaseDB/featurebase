@@ -41,7 +41,6 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(val*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
-
 		case *parser.DataTypeTimestamp:
 			val, ok := value.(int64)
 			if !ok {
@@ -65,7 +64,6 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(int64(val)*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
-
 		case *parser.DataTypeTimestamp:
 			val, ok := value.(int64)
 			if !ok {
@@ -1574,6 +1572,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateFormat(currentRow)
 	case "CHARINDEX":
 		return n.EvaluateCharIndex(currentRow)
+	case "TOTIMESTAMP":
+		return n.EvaluateToTimestamp(currentRow)
 	case "STR":
 		return n.EvaluateStr(currentRow)
 	default:

@@ -860,15 +860,6 @@ func (p *Parser) parseTimeUnitConstraint(constraintPos Pos, name *Ident) (_ *Tim
 	} else {
 		return &cons, p.errorExpected(p.pos, p.tok, "literal")
 	}
-	if p.peek() == EPOCH {
-		cons.Epoch, _, _ = p.scan()
-
-		if isLiteralToken(p.peek()) {
-			cons.EpochExpr = p.mustParseLiteral()
-		} else {
-			return &cons, p.errorExpected(p.pos, p.tok, "literal")
-		}
-	}
 	return &cons, nil
 }
 

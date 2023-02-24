@@ -460,13 +460,13 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			{
 				name:        "timestampcol",
 				typ:         "timestamp",
-				constraints: "timeunit 'ms' epoch '2021-01-01T00:00:00Z'",
+				constraints: "timeunit 'ms'",
 				expOptions: pilosa.FieldOptions{
-					Base:     1609459200000,
+					Base:     0,
 					Type:     "timestamp",
 					TimeUnit: "ms",
-					Min:      pql.NewDecimal(-63745055999000, 0),
-					Max:      pql.NewDecimal(251792841599000, 0),
+					Min:      pql.NewDecimal(-62135596799000, 0),
+					Max:      pql.NewDecimal(253402300799000, 0),
 				},
 			},
 			{
@@ -713,7 +713,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 			_id id,
 			intcol int min 0 max 10000,
 			boolcol bool,
-			timestampcol timestamp timeunit 'ms' epoch '2010-01-01T00:00:00Z',
+			timestampcol timestamp timeunit 'ms',
 			decimalcol decimal(2),
 			stringcol string cachetype ranked size 1000,
 			stringsetcol stringset cachetype lru size 1000,
@@ -2957,7 +2957,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		now := time.Now()
 		simpleParquetMaker(t, tmpfile, 1, []tb{
 			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
-			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.UnixMilli()}},
+			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.Unix()}},
 			{Name: "stringtime", Type: arrow.BinaryTypes.String, Value: []string{now.Format(time.RFC3339)}},
 		})
 

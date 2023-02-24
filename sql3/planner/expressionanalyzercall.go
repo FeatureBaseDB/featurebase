@@ -254,6 +254,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		return p.analyseFunctionFormat(call, scope)
 	case "CHARINDEX":
 		return p.analyseFunctionCharIndex(call, scope)
+	case "TOTIMESTAMP":
+		return p.analyzeFunctionToTimestamp(call, scope)
 	case "STR":
 		return p.analyseFunctionStr(call, scope)
 	default:
