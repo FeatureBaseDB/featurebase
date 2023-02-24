@@ -346,9 +346,6 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 		switch sourceType.(type) {
 		case *parser.DataTypeTimestamp:
 			return true
-		case *parser.DataTypeInt:
-			//could be a int convertable to a date
-			return true
 		case *parser.DataTypeString:
 			//could be a string parseable as a date
 			return true

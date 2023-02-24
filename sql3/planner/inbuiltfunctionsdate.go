@@ -180,12 +180,12 @@ func (n *callPlanExpression) EvaluateToTimestamp(currentRow []interface{}) (inte
 		}
 		coercedParam2, err := coerceValue(n.args[1].Type(), parser.NewDataTypeString(), param2, parser.Pos{Line: 0, Column: 0})
 		if err != nil {
-			//raise error is param2 is not a string
+			//raise error if param2 is not a string
 			return nil, err
 		}
 		unit, ok = coercedParam2.(string)
 		if !ok {
-			//raise error is param2 is not a string
+			//raise error if param2 is not a string
 			return nil, sql3.NewErrInternalf("unable to convert value")
 		}
 		if !featurebase.IsValidTimeUnit(unit) {
