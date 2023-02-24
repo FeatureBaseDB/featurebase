@@ -50,6 +50,9 @@ type DataframeCsvLoaderCommand struct {
 	// max line length of csv file
 	MaxCapacity int
 
+	// Batch Size
+	BatchSize int
+
 	// Host:port on which to listen for pprof.
 	Pprof string `json:"pprof"`
 
@@ -234,7 +237,9 @@ func (cmd *DataframeCsvLoaderCommand) Run(ctx context.Context) (err error) {
 	fileScanner.Scan() // skip the header
 	cmd.Logger().Infof("Build the dataframe input package in memory")
 	id := uint64(0)
+	recordCounter := 0
 	for fileScanner.Scan() {
+		recordCounter++
 		records := strings.Split(fileScanner.Text(), ",")
 		if cmd.needTranslation {
 			id = lookup[records[0]]
@@ -278,13 +283,23 @@ func (cmd *DataframeCsvLoaderCommand) Run(ctx context.Context) (err error) {
 				}
 			}
 		}
+		if recordCounter > cmd.BatchSize {
+			cmd.Logger().Infof("sending package to featurebase")
+			err = sharder.Store(arrowSchema, cmd.client)
+			if err != nil {
+				return err
+			}
+			sharder.Reset()
+			recordCounter = 0
+		}
 	}
-	cmd.Logger().Infof("sending package to featurebase")
-	err = sharder.Store(arrowSchema, cmd.client)
-	if err != nil {
-		return err
+	if recordCounter > 0 {
+		err = sharder.Store(arrowSchema, cmd.client)
+		if err != nil {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 type pair struct {
@@ -376,6 +391,10 @@ type Sharder struct {
 	schema *arrow.Schema
 	// Standard input/output
 	log logger.Logger
+}
+
+func (s *Sharder) Reset() {
+	s.shards = make(map[uint64]*ShardDiff)
 }
 
 func (s *Sharder) GetShard(shard uint64) (*ShardDiff, error) {
