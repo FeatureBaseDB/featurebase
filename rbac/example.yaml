@@ -1,0 +1,19 @@
+---
+user:
+  name: fletcher
+  email: fletcher.haynes@featurebase.com
+  
+---
+group:
+  name: employees
+  members: [
+    fletcher
+  ]
+
+---
+role:
+  name: administrators
+  members: [
+    fletcher
+  ]
+
