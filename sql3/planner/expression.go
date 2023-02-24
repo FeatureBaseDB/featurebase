@@ -538,7 +538,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 				return nil, sql3.NewErrInternalf("unhandled operator %d", n.op)
 			}
 		}
-		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
+		return nil, sql3.NewErrInternalf("unexpected type conversion error '%T', '%T'", coercedLhs, coercedRhs)
 
 	case *parser.DataTypeTimestamp:
 		//if either side is nil, return nil

@@ -1,5 +1,7 @@
 package defs
 
+import "github.com/featurebasedb/featurebase/v3/pql"
+
 var selectHavingTests = TableTest{
 	name: "select-having",
 	Table: tbl(
@@ -82,6 +84,21 @@ var selectHavingTests = TableTest{
 				row(
 					int64(11),
 				),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			name: "sum-dec",
+			SQLs: sqls(
+				"select sum(a_decimal), an_int from having_test group by an_int having sum(a_decimal) < 250.00",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeDecimal2),
+				hdr("an_int", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(23456, 2), int64(22)),
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,
