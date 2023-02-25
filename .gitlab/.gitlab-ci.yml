@@ -22,7 +22,7 @@ variables:
       cd "$CI_PROJECT_DIR"
       find . -type f -exec chmod 0644 {} + 
       find . -type d -exec chmod 0755 {} + 
-      git clean -ffdx
+      # git clean -ffdx # don't do this here, let it happen automatically.
     fi
 
 stages:
