@@ -16,6 +16,14 @@ variables:
   GOVERSION: "1.19.3"
   GOFUTURE: "latest"
   CI_IMAGE: "${CI_REGISTRY_IMAGE}/ci-builder:0.0.1"
+  CI_PRE_CLONE_SCRIPT: |
+    set -x
+    if [ -d "$CI_PROJECT_DIR" ]; then
+      cd "$CI_PROJECT_DIR"
+      find . -type f -exec chmod 0644 {} + 
+      find . -type d -exec chmod 0755 {} + 
+      git clean -ffdx
+    fi
 
 stages:
   - ci_image_build
