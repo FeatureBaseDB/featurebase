@@ -1,0 +1,43 @@
+
+create_table("organizations") {
+	t.Column("id", "string", {primary: true})
+	t.Timestamps()
+}
+
+
+create_table("databases") {
+	t.Column("id", "string", {primary: true})
+	t.Column("organization_id", "string")
+	t.Column("description", "string")
+	t.Column("owner", "string")
+	t.Column("updated_by", "string")
+	t.Column("workers_min", "int")
+	t.Column("workers_max", "int")
+	t.Column("name", "string")
+	t.ForeignKey("organization_id", {"organizations": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+
+create_table("tables") {
+	t.Column("id", "string", {primary: true})
+	t.Column("name", "string", {})
+	t.Column("owner", "string", {})
+	t.Column("updated_by", "string", {})
+	t.Column("description", "string", {})
+	t.Column("partition_n", "integer", {})
+	t.Column("database_id", "string")
+	t.Column("organization_id", "string")
+	t.ForeignKey("database_id", {"databases": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+
+create_table("columns") {
+	t.Column("id", "uuid", {primary: true})
+	t.Column("name", "string", {})
+	t.Column("type", "string", {})
+	t.Column("constraints", "string", {})
+	t.Column("table_id", "string")
+	t.ForeignKey("table_id", {"tables": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+

@@ -1,0 +1,19 @@
+---
+development:
+  dialect: postgres
+  database: dax_development
+  user: postgres
+  password: testpass
+  host: 127.0.0.1
+  pool: 5
+
+test:
+  dialect: postgres
+  database: dax_test
+  user: postgres
+  password: testpass
+  host: 127.0.0.1
+  pool: 5
+
+# production:
+#   url: {{envOr "DATABASE_URL" "postgres://postgres:postgres@127.0.0.1:5432/dax_production?sslmode=disable"}}

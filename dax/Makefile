@@ -20,6 +20,17 @@ test-integration:
 testv-integration:
 	$(GO) test -v ./test/dax -count 1 -timeout 20m -run TestDAXIntegration/$(RUN)
 
+######################## Postgres Backend Stuff #########################
+
+run-postgres:
+	mkdir pgdata
+	docker run -p 5432:5432 -v $(shell pwd)/pgdata:/var/lib/postgresql/data:Z  -e POSTGRES_PASSWORD=testpass --user=$(shell id -u) postgres:13.5
+
+prep-devel:
+	soda drop -e development; soda create -e development; soda migrate -e development
+
+prep-test:
+	soda drop -e test; soda create -e test; soda migrate -e test
 
 ############################### AWS STUFF ###############################
 

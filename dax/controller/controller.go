@@ -34,7 +34,14 @@ type Controller struct {
 	// we need to be sure to close the boltDBs that are created in controller.New()
 	// whenever controller.Stop() is called. These are pointers to that DB so we can
 	// close it.
+	//
+	// TODO: this needs to become a transaction factory that can
+	// return a dax.Transaction. It will be the responsibility of
+	// whoever sets up the controller to make sure that this and the
+	// implementations of Schemar, Balancer, etc are compatible.
 	BoltDB *boltdb.DB
+
+	transactor Transactor
 
 	Snapshotter *snapshotter.Snapshotter
 	Writelogger *writelogger.Writelogger
