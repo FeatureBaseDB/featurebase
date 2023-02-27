@@ -353,12 +353,21 @@ func TestPQLDeepEquality(t *testing.T) {
 				},
 			}},
 		{
-			name: "RowWithUnicode",
+			name: "RowValWithUnicode",
 			call: `Row(unicode="Æ漢д ☮♬ ♞🜻💣")`,
 			exp: &Call{
 				Name: "Row",
 				Args: map[string]interface{}{
 					"unicode": `Æ漢д ☮♬ ♞🜻💣`,
+				},
+			}},
+		{
+			name: "RowWithUnicode",
+			call: `Row(uniΘcode="Æ漢д ☮♬ ♞🜻💣")`,
+			exp: &Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					"uniΘcode": `Æ漢д ☮♬ ♞🜻💣`,
 				},
 			}},
 		{

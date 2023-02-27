@@ -3,12 +3,13 @@ package ctl
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"net/http"
 	gohttp "net/http"
 	"os"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/authn"
+	"github.com/featurebasedb/featurebase/v3/buffer"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/server"
@@ -48,6 +50,9 @@ type RestoreTarCommand struct {
 	TLS server.TLSConfig
 
 	AuthToken string
+
+	// TempDir location of scratch files
+	TempDir string
 }
 
 // Logger returns the command's associated Logger to maintain CommandWithTLSSupport interface compatibility
@@ -134,7 +139,10 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 		return errors.New("no primary")
 	}
 	c := &gohttp.Client{}
-	buf := new(bytes.Buffer)
+	// buf := new(bytes.Buffer)
+	mb512 := 2 << 29
+	buf := buffer.NewFileBuffer(mb512, cmd.TempDir)
+	defer buf.Reset()
 	for {
 		buf.Reset()
 		header, err := tarReader.Next()
@@ -177,22 +185,21 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			} else if len(fragmentNodes) == 0 {
 				return fmt.Errorf("no fragmentNodes available")
 			}
-
 			_, err = io.Copy(buf, tarReader)
 			if err != nil {
 				return errors.Wrap(err, "copying")
 			}
-
 			g, _ := errgroup.WithContext(ctx)
 			for _, node := range fragmentNodes {
 				node := node
+				rd, err := buf.NewReader()
+				if err != nil {
+					return err
+				}
 				g.Go(func() error {
-					client := &gohttp.Client{}
-					rd := bytes.NewReader(buf.Bytes())
 					logger.Printf("shard %v %v", shard, indexName)
 					url := node.URI.Path(fmt.Sprintf("/internal/restore/%v/%v", indexName, shard))
-					_, err = client.Post(url, "application/octet-stream", rd)
-					return err
+					return Post(ctx, url, "application/octet-stream", rd, nil)
 				})
 			}
 			if err := g.Wait(); err != nil {
@@ -218,13 +225,14 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			g, _ := errgroup.WithContext(ctx)
 			for _, node := range fragmentNodes {
 				node := node
+				rd, err := buf.NewReader()
+				if err != nil {
+					return err
+				}
 				g.Go(func() error {
-					client := &gohttp.Client{}
-					rd := bytes.NewReader(buf.Bytes())
 					logger.Printf("dataframe shard %v %v", shard, indexName)
 					url := node.URI.Path(fmt.Sprintf("/internal/dataframe/restore/%v/%v", indexName, shard))
-					_, err = client.Post(url, "application/octet-stream", rd)
-					return err
+					return Post(ctx, url, "application/octet-stream", rd, nil)
 				})
 			}
 			if err := g.Wait(); err != nil {
@@ -249,13 +257,13 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			g, _ := errgroup.WithContext(ctx)
 			for _, node := range partitionNodes {
 				node := node
+				rd, err := buf.NewReader()
+				if err != nil {
+					return err
+				}
 				g.Go(func() error {
-					// rd := bytes.NewReader(shardBytes)
-					rd := func() (io.Reader, error) {
-						return bytes.NewReader(buf.Bytes()), nil
-					}
-
-					return cmd.client.ImportIndexKeys(ctx, &node.URI, indexName, partitionID, false, rd)
+					url := node.URI.Path(fmt.Sprintf("/internal/translate/index/%s/%d", indexName, partitionID))
+					return Post(ctx, url, "application/octet-stream", rd, nil)
 				})
 			}
 			if err := g.Wait(); err != nil {
@@ -269,23 +277,20 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 			switch action := record[4]; action {
 			case "translate":
 				logger.Printf("field keys %v %v", indexName, fieldName)
-				// needs to go to all nodes
-
 				_, err = io.Copy(buf, tarReader)
 				if err != nil {
 					return errors.Wrap(err, "copying")
 				}
-
 				g, _ := errgroup.WithContext(ctx)
 				for _, node := range nodes {
 					node := node
+					rd, err := buf.NewReader()
+					if err != nil {
+						return err
+					}
 					g.Go(func() error {
-						// rd := bytes.NewReader(shardBytes)
-						rd := func() (io.Reader, error) {
-							return bytes.NewReader(buf.Bytes()), nil
-						}
-
-						return cmd.client.ImportFieldKeys(ctx, &node.URI, indexName, fieldName, false, rd)
+						url := node.URI.Path(fmt.Sprintf("/internal/translate/field/%s/%s", indexName, fieldName))
+						return Post(ctx, url, "application/octet-stream", rd, nil)
 					})
 				}
 				if err := g.Wait(); err != nil {
@@ -312,3 +317,33 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 func (cmd *RestoreTarCommand) TLSHost() string { return cmd.Host }
 
 func (cmd *RestoreTarCommand) TLSConfiguration() server.TLSConfig { return cmd.TLS }
+
+func Post(ctx context.Context, url, contentType string, rd io.Reader, query map[string]string) error {
+	client := &gohttp.Client{}
+	req, err := http.NewRequest(http.MethodPost, url, rd)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Content-Type", contentType)
+	pilosa.AddAuthToken(ctx, &req.Header)
+
+	// appending to existing query args
+
+	q := req.URL.Query()
+	for k, v := range query {
+		q.Add(k, v)
+	}
+
+	// assign encoded query string to http request
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Errored when sending request to the server")
+		return err
+	}
+	defer resp.Body.Close()
+	_, err = ioutil.ReadAll(resp.Body) // drain the response
+	return err
+}

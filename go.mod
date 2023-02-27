@@ -83,6 +83,7 @@ require (
 	github.com/PaesslerAG/gval v1.0.0
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/apache/arrow/go/v10 v10.0.0-20221021053532-2f627c213fc3
+	github.com/benhoyt/goawk v1.21.0
 	github.com/gomem/gomem v0.1.0
 	github.com/google/uuid v1.3.0
 	github.com/jaffee/commandeer v0.6.0

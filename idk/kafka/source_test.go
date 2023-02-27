@@ -226,6 +226,19 @@ func TestAvroToPDKField(t *testing.T) {
 			expField: idk.IDField{NameVal: "int-ttl"},
 			expErr:   "nil",
 		},
+		{
+			name: "recordTime",
+			schemaField: &avro.SchemaField{
+				Name: "record-time",
+				Type: &avro.BytesSchema{},
+				Properties: map[string]interface{}{
+					"layout":    "2006-01-02 15:04:05",
+					"fieldType": "recordTime",
+				},
+			},
+			expField: idk.RecordTimeField{NameVal: "record-time", Layout: "2006-01-02 15:04:05"},
+			expErr:   "nil",
+		},
 	}
 
 	for _, test := range tests {

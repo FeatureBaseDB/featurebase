@@ -41,7 +41,6 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(val*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
-
 		case *parser.DataTypeTimestamp:
 			val, ok := value.(int64)
 			if !ok {
@@ -65,7 +64,6 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(int64(val)*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
-
 		case *parser.DataTypeTimestamp:
 			val, ok := value.(int64)
 			if !ok {
@@ -1574,6 +1572,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateFormat(currentRow)
 	case "CHARINDEX":
 		return n.EvaluateCharIndex(currentRow)
+	case "TOTIMESTAMP":
+		return n.EvaluateToTimestamp(currentRow)
 	case "STR":
 		return n.EvaluateStr(currentRow)
 	default:
@@ -2817,26 +2817,62 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 	}
 }
 
-func (p *ExecutionPlanner) compileOrderingTermExpr(expr parser.Expr) (index int, err error) {
+func (p *ExecutionPlanner) compileOrderingTermExpr(expr parser.Expr, projections []types.PlanExpression, source parser.Source) (types.PlanExpression, error) {
 	if expr == nil {
-		return 0, nil
+		return nil, nil
 	}
 
 	switch thisExpr := expr.(type) {
-	case *parser.QualifiedRef:
-		return thisExpr.ColumnIndex, nil
+	case *parser.Ident:
+		for _, proj := range projections {
+			switch p := proj.(type) {
+			case *qualifiedRefPlanExpression:
+				if strings.EqualFold(thisExpr.Name, p.columnName) {
+					if !typeCanBeSortedOn(p.Type()) {
+						return nil, sql3.NewErrExpectedSortableExpression(0, 0, p.Type().TypeDescription())
+					}
+					return p, nil
+				}
+			case *aliasPlanExpression:
+				if strings.EqualFold(thisExpr.Name, p.aliasName) {
+					if !typeCanBeSortedOn(p.expr.Type()) {
+						return nil, sql3.NewErrExpectedSortableExpression(0, 0, p.expr.Type().TypeDescription())
+					}
+					return p.expr, nil
+				}
+
+			}
+		}
+
+		// we didn't find in projection list so go look in the source columns
+		for _, col := range source.PossibleOutputColumns() {
+			if strings.EqualFold(thisExpr.Name, col.ColumnName) {
+				orderExpr := newQualifiedRefPlanExpression(col.TableName, col.ColumnName, col.ColumnIndex, col.Datatype)
+				if !typeCanBeSortedOn(orderExpr.Type()) {
+					return nil, sql3.NewErrExpectedSortableExpression(0, 0, orderExpr.Type().TypeDescription())
+				}
+				return orderExpr, nil
+			}
+		}
+
+		return nil, sql3.NewErrColumnNotFound(thisExpr.NamePos.Line, thisExpr.NamePos.Column, thisExpr.Name)
 
 	case *parser.IntegerLit:
 		val, err := strconv.ParseInt(thisExpr.Value, 10, 64)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		// subtract one because ordering terms are 1 based, not 0 based
-		return int(val - 1), nil
+		index := int(val - 1)
+		// get the expr from the projection
+		orderExpr := projections[index]
+		if !typeCanBeSortedOn(orderExpr.Type()) {
+			return nil, sql3.NewErrExpectedSortableExpression(0, 0, orderExpr.Type().TypeDescription())
+		}
+		return orderExpr, nil
 
 	default:
-		return 0, sql3.NewErrInternalf("unexpected ordering expression type: %T", expr)
-
+		return nil, sql3.NewErrInternalf("unexpected ordering expression type: %T", expr)
 	}
 }
 

@@ -1,0 +1,26 @@
+{
+    "doc": "Records for testing time quantums",
+    "fields": [
+      {
+        "doc": "A device ID",
+        "name": "device",
+        "type": "string"
+      },
+      {
+        "doc": "The segment the device belongs to which is related to time",
+        "name": "segment_ts",
+        "type": "string",
+        "quantum": "YMD"
+      },
+      {
+        "doc": "The timestamp associated with segment_ts",
+        "name": "time_q",
+        "type": "bytes",
+        "fieldType": "recordTime",
+        "layout": "2006-01-02 15:04:05"
+      }
+    ],
+    "name": "tq_record",
+    "namespace": "com.featurebase.tq",
+    "type": "record"
+}

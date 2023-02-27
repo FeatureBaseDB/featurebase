@@ -89,6 +89,8 @@ type Server struct { // nolint: maligned
 
 	defaultClient *InternalClient
 	dataDir       string
+	verChkAddress string
+	uuidFile      string
 
 	// Threshold for logging long-running queries
 	longQueryTime      time.Duration
@@ -163,6 +165,24 @@ func OptServerReplicaN(n int) ServerOption {
 func OptServerDataDir(dir string) ServerOption {
 	return func(s *Server) error {
 		s.dataDir = dir
+		return nil
+	}
+}
+
+// OptServerVerChkAddress is a functional option on Server
+// used to set the address to check for the current version.
+func OptServerVerChkAddress(addr string) ServerOption {
+	return func(s *Server) error {
+		s.verChkAddress = addr
+		return nil
+	}
+}
+
+// OptServerUUIDFile is a functional option on Server
+// used to set the file name for storing the checkin UUID.
+func OptServerUUIDFile(uf string) ServerOption {
+	return func(s *Server) error {
+		s.uuidFile = uf
 		return nil
 	}
 }
@@ -604,16 +624,21 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Do version check in. This is in a goroutine so that we don't block server startup if the server endpoint is down/having issues.
+	// Do version check in. This is in a goroutine so that we don't block server
+	// startup if the server endpoint is down/having issues.
 	go func() {
 		s.logger.Printf("Beginning featurebase version check-in")
-		vc := VersionChecker{URL: "https://analytics.featurebase.com/v2/featurebase/metrics"}
-		resp, err := vc.CheckIn()
+		vc := newVersionChecker(s.cluster.Path, s.verChkAddress, s.uuidFile)
+		resp, err := vc.checkIn()
 		if err != nil {
 			s.logger.Errorf("doing version checkin. Error was %s", err)
 			return
 		}
-		s.logger.Printf("Version check-in complete. Latest version is %s", resp.Version)
+		if resp.Error != "" {
+			s.logger.Printf("Version check-in failed, endpoint response was %s", resp.Error)
+		} else {
+			s.logger.Printf("Version check-in complete. Latest version is %s", resp.Version)
+		}
 	}()
 
 	// Start DisCo.

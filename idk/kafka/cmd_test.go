@@ -4,6 +4,8 @@
 package kafka
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -635,6 +637,132 @@ func TestCmdSchemaChange(t *testing.T) {
 	nineBRow := qresp.Results()[0].Row().Columns
 	if !reflect.DeepEqual(nineBRow, []uint64{2}) {
 		t.Errorf("unexpected columns for 9876543210: %v", nineBRow)
+	}
+}
+
+func TestTimeQuantums(t *testing.T) {
+	t.Parallel()
+	/*
+		at a high level, a test here represents
+		  - an avro schema
+		  - a set of records to ingest to kafka
+		  - an ingest configuration
+		  - query to run to confirm the data was ingest properly
+	*/
+	tests := []struct {
+		name             string
+		pathToAvroSchema string
+		pathToRecords    string
+		idType           string // must be "generated", "id", or "string"
+		keyField         string // field used for "id" or "string" record keys
+		pilosaHosts      string
+		kafkaHost        string
+		registryURL      string
+		topic            string
+		index            string
+		queries          []string
+		expectedResults  []string
+	}{
+		{ // confirm time quantums are being ingested
+			name:             "time quantums exist",
+			pathToAvroSchema: "timeQuantum.json",
+			pathToRecords:    "./testdata/records/timeQuantum.json",
+			idType:           "string",
+			keyField:         "device",
+			pilosaHosts:      pilosaHost,
+			registryURL:      registryHost,
+			kafkaHost:        kafkaHost,
+			topic:            "timequantums",
+			index:            "timequantums",
+			queries: []string{
+				"Row(segment_ts='7R83')",
+				"Row(segment_ts='7R83', from=\"2023-02-17T00:00\", to=\"2023-02-18T00:00\")",
+				"Row(segment_ts='7R83', from=\"2023-02-16T00:00\", to=\"2023-02-17T00:00\")",
+			},
+			expectedResults: []string{
+				"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
+				"{\"results\":[{\"columns\":[]}]}\n",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		// define some vars
+		now := time.Now().UnixNano()
+		index := fmt.Sprintf("%s_%d", test.index, now)
+		topic := fmt.Sprintf("%s_%d", test.topic, now)
+
+		// read in records
+		var records []map[string]interface{}
+		var data map[string]interface{}
+		recordsFile, err := os.Open(test.pathToRecords)
+		if err != nil {
+			t.Errorf("opening records file")
+		}
+		defer recordsFile.Close()
+
+		s := bufio.NewScanner(recordsFile)
+		for s.Scan() {
+			err := json.Unmarshal(s.Bytes(), &data)
+			if err != nil {
+				t.Errorf("unmarshal json: %s", err)
+			}
+			records = append(records, data)
+			data = make(map[string]interface{})
+		}
+
+		// configure the consumer
+		consumer, err := NewMain()
+		if err != nil {
+			t.Fatalf("creating main %v", err)
+		}
+		configureTestFlags(consumer)
+		consumer.Index = index
+		consumer.Topics = []string{topic}
+		consumer.KafkaBootstrapServers = []string{test.kafkaHost}
+		consumer.SchemaRegistryURL = test.registryURL
+		switch test.idType {
+		case "id":
+			consumer.IDField = test.keyField
+		case "string":
+			consumer.PrimaryKeyFields = []string{test.keyField}
+		case "generate":
+			consumer.AutoGenerate = true
+			consumer.ExternalGenerate = true
+		default:
+			t.Errorf("incorrect idType supplied")
+		}
+		consumer.MaxMsgs = uint64(len(records))
+
+		// load schema registry, create produce, topic and run consumer data
+		licodec := liDecodeTestSchema(t, test.pathToAvroSchema)
+		schemaID := postSchema(t, test.pathToAvroSchema, fmt.Sprintf("%s_id", topic), consumer.SchemaRegistryURL, nil)
+		p, err := confluent.NewProducer(&confluent.ConfigMap{
+			"bootstrap.servers": kafkaHost,
+		})
+		if err != nil {
+			t.Fatalf("Failed to create producer: %s", err)
+		}
+		defer p.Close()
+		tCreateTopic(t, topic, p)
+		tPutRecordsKafka(t, p, topic, schemaID, licodec, "akey", records...)
+		err = consumer.Run()
+		if err != nil {
+			t.Fatalf("running consumer: %v", err)
+		}
+
+		// now run queries and confirm the data is as expected
+		client := consumer.PilosaClient()
+		for i, q := range test.queries {
+			status, body, err := client.HTTPRequest("POST", fmt.Sprintf("/index/%s/query", index), []byte(q), nil)
+			if err != nil {
+				t.Fatalf("querying featurebase: status: %d, response: %s, error: %s", status, body, err)
+			}
+			if string(body[:]) != test.expectedResults[i] {
+				t.Fatalf("running query: %s... expected %s but got %s", q, test.expectedResults[i], body)
+			}
+		}
 	}
 }
 

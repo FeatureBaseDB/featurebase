@@ -152,6 +152,15 @@ type Config struct {
 	// Limits the total amount of memory to be used by Extract() & SELECT queries.
 	MaxQueryMemory int64 `toml:"max-query-memory"`
 
+	// On startup, featurebase server contacts a web server to check the latest version.
+	// This stores the address for that check
+	VerChkAddress string `toml:"verchk-address"`
+
+	// When checking version, server sends a UUID so that we can keep track of
+	// how many unique Featurebase installs are out there. The file is stored in
+	// the data directory; this stores the filename to use.
+	UUIDFile string `toml:"uuid-file"`
+
 	Cluster struct {
 		ReplicaN int    `toml:"replicas"`
 		Name     string `toml:"name"`
@@ -383,6 +392,8 @@ func NewConfig() *Config {
 		LongQueryTime: toml.Duration(-time.Minute),
 
 		CheckInInterval: 60 * time.Second,
+		VerChkAddress:   "https://analytics.featurebase.com/v2/featurebase/metrics",
+		UUIDFile:        ".client_id.txt",
 	}
 
 	// Cluster config.

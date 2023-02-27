@@ -16,7 +16,6 @@ import (
 
 //TODO(pok) push filter down into join condition if terms reference either side of join
 //TODO(pok) push order by down as far as possible
-//TODO(pok) handle the case of the order by expressions not being in a projection list
 //TODO(pok) you can't group by _id in PQL, so we need to not use a PQL group by operator here
 //TODO(pok) move constant folding to in here
 
@@ -1052,7 +1051,7 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 				return thisNode, false, nil
 
 			// everything else that can be a child of projection
-			case *PlanOpRelAlias, *PlanOpFilter, *PlanOpPQLTableScan, *PlanOpPQLDistinctScan, *PlanOpNestedLoops:
+			case *PlanOpRelAlias, *PlanOpFilter, *PlanOpPQLTableScan, *PlanOpPQLDistinctScan, *PlanOpNestedLoops, *PlanOpOrderBy:
 				exprs, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, childOp.Schema(), thisNode.Projections...)
 				if err != nil {
 					return thisNode, true, err
@@ -1073,6 +1072,44 @@ func fixProjectionReferences(ctx context.Context, a *ExecutionPlanner, n types.P
 func fixFieldRefs(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
 	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
 		switch thisNode := node.(type) {
+		case *PlanOpOrderBy:
+			switch childOp := thisNode.ChildOp.(type) {
+			case *PlanOpProjection:
+				expressions := thisNode.Expressions()
+
+				for _, ex := range expressions {
+					ref, ok := ex.(*qualifiedRefPlanExpression)
+					if !ok {
+						return nil, true, sql3.NewErrInternalf("unexpected expression type '%T'", ex)
+					}
+					for i, proj := range childOp.Projections {
+						if strings.EqualFold(ref.String(), proj.String()) {
+							ref.columnIndex = i
+							break
+						}
+					}
+				}
+				newNode, err := thisNode.WithUpdatedExpressions(expressions...)
+				if err != nil {
+					return nil, true, err
+				}
+				return newNode, false, nil
+
+			default:
+				// fix references for the expressions referenced in the order by list
+				schema := childOp.Schema()
+				expressions := thisNode.Expressions()
+				fixed, same, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, schema, expressions...)
+				if err != nil {
+					return nil, true, err
+				}
+				newNode, err := thisNode.WithUpdatedExpressions(fixed...)
+				if err != nil {
+					return nil, true, err
+				}
+				return newNode, same, nil
+			}
+
 		case *PlanOpFilter:
 			// fix references for the expressions referenced in the filter predicate expression
 			schema := thisNode.Schema()

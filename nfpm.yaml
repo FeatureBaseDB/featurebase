@@ -10,6 +10,8 @@ homepage: "https://molecula.com"
 contents:
   - src: ./featurebase
     dst: /usr/bin/featurebase
+  - src: ./fbsql
+    dst: /usr/bin/fbsql
   - src: ./install/featurebase.conf
     dst: /etc/featurebase/featurebase.conf
     type: config|noreplace
@@ -22,7 +24,7 @@ contents:
   - src: ./install/featurebase.debian.service
     dst: /lib/systemd/system/featurebase.service
     packager: deb
-  - dst: /var/log/molecula  # We use vendor name on log directory in case other molecula components need it.
+  - dst: /var/log/molecula # We use vendor name on log directory in case other molecula components need it.
     type: dir
     file_info:
       mode: 0755
