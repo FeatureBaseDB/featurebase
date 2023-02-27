@@ -124,6 +124,12 @@ type Main struct {
 
 	NewImporterFn func() pilosacore.Importer `flag:"-"`
 
+	Batcher pilosabatch.Batcher
+
+	// basic, when true, will only set up the things required to run a basic
+	// ingester. For example, it does not set up the pilosa client.
+	basic bool
+
 	SchemaManager SchemaManager       `flag:"-"`
 	Qtbl          *dax.QualifiedTable `flag:"-"`
 
@@ -239,6 +245,12 @@ func (m *Main) Rename() {
 		m.PilosaGRPCHosts = m.FeaturebaseGRPCHosts
 		m.AssumeEmptyPilosa = m.AssumeEmptyFeaturebase
 	}
+}
+
+// Basic sets up Main with basic functionality, excluding those things which are
+// not required for some implementations (such as the kafka runner in fbsql).
+func (m *Main) Basic() {
+	m.basic = true
 }
 
 func (m *Main) Run() (err error) {
@@ -674,6 +686,100 @@ initialFetch:
 }
 
 func (m *Main) Setup() (onFinishRun func(), err error) {
+	if m.basic {
+		return m.basicSetup()
+	}
+	return m.setup()
+}
+
+// basicSetup contains a lot of the same functionality as setup(), but it
+// exludes anything which involves interacting with a "destination" featurebase
+// installation. A basic setup is useful for something which wants to use the
+// ingest loop and its batching logic, but doesn't want to send results directly
+// to a featurebase installation. An example of this would be the CLI (i.e.
+// fbsql), which generates BULK INSERT statements and sends those to a /sql
+// endpoint.
+func (m *Main) basicSetup() (onFinishRun func(), err error) {
+	if err := m.validate(); err != nil {
+		return nil, errors.Wrap(err, "validating configuration")
+	}
+
+	// setup logging
+	var f *logger.FileWriter
+	var logOut io.Writer = os.Stderr
+	if m.LogPath != "" {
+		f, err = logger.NewFileWriter(m.LogPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "opening log file")
+		}
+		logOut = f
+	}
+	if m.Verbose {
+		m.log = logger.NewVerboseLogger(logOut)
+	} else {
+		m.log = logger.NewStandardLogger(logOut)
+	}
+
+	if m.TrackProgress {
+		m.progress = &ProgressTracker{}
+	}
+
+	// Set up progress tracking.
+	if m.progress != nil {
+		startTime := time.Now()
+		var wg sync.WaitGroup
+		defer wg.Wait()
+		doneCh := make(chan struct{})
+		defer func() { close(doneCh) }()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Set up a timer to check progress every 10 seconds.
+			tick := time.NewTicker(10 * time.Second)
+			defer tick.Stop()
+
+			prev := uint64(0)
+			stalled := true
+			for {
+				progress := m.progress.Check()
+				switch {
+				case progress != prev:
+					// Forward progress continues.
+					m.log.Printf("sourced %d records (%.2f records/minute)", progress, float64(progress)/time.Since(startTime).Minutes())
+					stalled = false
+				case stalled:
+					// We already told the user that it is stalled.
+				default:
+					// This is the start of a stall.
+					// No records have been sourced in the past 5 seconds.
+					m.log.Printf("record sourcing stalled")
+					stalled = true
+				}
+				prev = progress
+
+				select {
+				case <-tick.C:
+				case <-doneCh:
+					// Generate a final status update.
+					m.log.Printf("sourced %d records in %s", m.progress.Check(), time.Since(startTime))
+					return
+				}
+			}
+		}()
+	}
+
+	m.newNexter = func(c int) (IDAllocator, error) {
+		var nexter IDAllocator
+		return nexter, nil
+	}
+
+	onFinishRun = func() {}
+
+	return onFinishRun, nil
+}
+
+func (m *Main) setup() (onFinishRun func(), err error) {
 	if err := m.validate(); err != nil {
 		return nil, errors.Wrap(err, "validating configuration")
 	}
@@ -2045,12 +2151,35 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosabatch.Record
 	return recordizers, batch, row, lookupWriteIdxs, nil
 }
 
-func (m *Main) newBatch(fields []*pilosaclient.Field) (pilosabatch.RecordBatch, error) {
+func (m *Main) newBatch(clientFields []*pilosaclient.Field) (pilosabatch.RecordBatch, error) {
+	cfg := pilosabatch.Config{
+		Size:         m.BatchSize,
+		MaxStaleness: m.BatchMaxStaleness,
+	}
+
+	// Table.
+	ii := pilosaclient.FromClientIndex(m.index)
+	tbl := pilosacore.IndexInfoToTable(ii)
+
+	// Fields.
+	fields := pilosaclient.FromClientFields(clientFields)
+
+	// If a custom Batcher has been defined, use that. Otherwise default to
+	// using the standard featurebase batch.
+	if m.Batcher != nil {
+		return m.Batcher.NewBatch(cfg, tbl, pilosacore.FieldInfosToFields(fields))
+	}
+
+	return m.newFeaturebaseBatch(cfg, tbl, fields)
+}
+
+// newFeaturebaseBatch returns a featurebase.Batch based on the provided fields.
+func (m *Main) newFeaturebaseBatch(cfg pilosabatch.Config, tbl *dax.Table, fields []*pilosacore.FieldInfo) (pilosabatch.RecordBatch, error) {
 	opts := []pilosabatch.BatchOption{
 		pilosabatch.OptLogger(m.log),
 		pilosabatch.OptCacheMaxAge(m.CacheLength),
 		pilosabatch.OptSplitBatchMode(m.ExpSplitBatchMode),
-		pilosabatch.OptMaxStaleness(m.BatchMaxStaleness),
+		pilosabatch.OptMaxStaleness(cfg.MaxStaleness),
 		pilosabatch.OptKeyTranslateBatchSize(m.KeyTranslateBatchSize),
 		pilosabatch.OptUseShardTransactionalEndpoint(m.UseShardTransactionalEndpoint),
 	}
@@ -2063,10 +2192,7 @@ func (m *Main) newBatch(fields []*pilosaclient.Field) (pilosabatch.RecordBatch, 
 	}
 	opts = append(opts, pilosabatch.OptImporter(importer))
 
-	ii := pilosaclient.FromClientIndex(m.index)
-	tbl := pilosacore.IndexInfoToTable(ii)
-
-	return pilosabatch.NewBatch(importer, m.BatchSize, tbl, pilosaclient.FromClientFields(fields), opts...)
+	return pilosabatch.NewBatch(importer, cfg.Size, tbl, fields, opts...)
 }
 
 // validateField ensures that the field is configured correctly.

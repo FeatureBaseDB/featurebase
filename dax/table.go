@@ -707,6 +707,17 @@ func (f *Field) String() string {
 	return string(f.Name)
 }
 
+// Definition returns the field name along with its parenthetical (when
+// applicable).
+func (f *Field) Definition() string {
+	switch f.Type {
+	case BaseTypeDecimal:
+		return fmt.Sprintf("%s(%d)", f.Type, f.Options.Scale)
+	default:
+		return string(f.Type)
+	}
+}
+
 // StringKeys returns true if the field uses string keys.
 func (f *Field) StringKeys() bool {
 	switch f.Type {

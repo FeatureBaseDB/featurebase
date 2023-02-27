@@ -15,7 +15,7 @@ func newPreSortCommand(logdest logger.Logger) *cobra.Command {
 		Long: `
 Takes all input files and writes PartitionN numbered files to a directory, where each file contains only records that will go into the partition it is named for.
 `,
-		RunE: usageErrorWrapper(cmd),
+		RunE: UsageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

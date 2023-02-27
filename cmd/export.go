@@ -26,7 +26,7 @@ The format of the CSV file is:
 
 The file does not contain any headers.
 `,
-		RunE: usageErrorWrapper(Exporter),
+		RunE: UsageErrorWrapper(Exporter),
 	}
 	flags := exportCmd.Flags()
 

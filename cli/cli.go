@@ -13,9 +13,12 @@ import (
 
 	"github.com/chzyer/readline"
 	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/cli/batch"
 	"github.com/featurebasedb/featurebase/v3/cli/fbcloud"
+	"github.com/featurebasedb/featurebase/v3/cli/kafka"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -38,6 +41,7 @@ Type "\q" to quit.
 
 // Ensure type implments interfaces.
 var _ printer = (*Command)(nil)
+var _ batch.Inserter = (*Command)(nil)
 
 type Command struct {
 	host string
@@ -85,6 +89,10 @@ type Command struct {
 	// `-c` flag in the command line.
 	nonInteractiveMode bool
 
+	// kafkaRunner will be non-nil if the CLI has been configured to consume
+	// from kafka. In that case, Command will run in non-interactive mode.
+	kafkaRunner *kafka.Runner
+
 	// quit gets closed when Run should stop listening for input.
 	quit chan struct{}
 }
@@ -129,7 +137,21 @@ func NewCommand(logdest logger.Logger) *Command {
 
 // Run is the main entry-point to the CLI.
 func (cmd *Command) Run(ctx context.Context) error {
-	cmd.setupConfig()
+	if err := cmd.run(ctx); err != nil {
+		cmd.Errorf(err.Error() + "\n")
+		return err
+	}
+	return nil
+}
+
+// run is effectively wrapped by the Run() method, but it's split out this way
+// so that run() can simply return errors, rather than worrying about how errors
+// should be printed; printing errors returned by run() is left up to the Run()
+// method.
+func (cmd *Command) run(ctx context.Context) error {
+	if err := cmd.setupConfig(); err != nil {
+		return errors.Wrap(err, "setting up config")
+	}
 
 	// Check to see if Command needs to run in non-interactive mode.
 	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
@@ -140,24 +162,36 @@ func (cmd *Command) Run(ctx context.Context) error {
 		}
 		if err := cmd.connectToDatabase(cmd.database); err != nil {
 			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+			// We intentionally do not return err here.
 		}
 
 		// Run Commands.
 		for _, line := range cmd.Commands {
 			if err := cmd.handleLine(line); err != nil {
-				cmd.Errorf(err.Error())
-				return nil
+				return errors.Wrapf(err, "handling line: %s", line)
 			}
 		}
 
 		// Run Files.
 		for _, fname := range cmd.Files {
 			if _, err := executeFile(cmd, fname); err != nil {
-				cmd.Errorf(err.Error())
-				return nil
+				return errors.Wrapf(err, "executing file: %s", fname)
 			}
 		}
 
+		return nil
+	} else if cmd.kafkaRunner != nil {
+		if err := cmd.setupClient(); err != nil {
+			return errors.Wrap(err, "setting up client")
+		}
+		if err := cmd.connectToDatabase(cmd.database); err != nil {
+			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+			// We intentionally do not return err here.
+		}
+
+		if err := cmd.kafkaRunner.Main.Run(); err != nil {
+			return errors.Wrap(err, "running kafka")
+		}
 		return nil
 	}
 
@@ -170,6 +204,7 @@ func (cmd *Command) Run(ctx context.Context) error {
 	cmd.printConnInfo()
 	if err := cmd.connectToDatabase(cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+		// We intentionally do not return err here.
 	}
 
 	rl, err := readline.NewEx(&readline.Config{
@@ -308,9 +343,9 @@ func (cmd *Command) close() error {
 
 // setupConfig sets up private struct members based on values provided via the
 // configuration flags.
-func (cmd *Command) setupConfig() {
+func (cmd *Command) setupConfig() error {
 	if cmd.Config == nil {
-		return
+		return nil
 	}
 
 	cmd.host = cmd.Config.Host
@@ -320,6 +355,39 @@ func (cmd *Command) setupConfig() {
 	cmd.database = cmd.Config.Database
 
 	cmd.historyPath = cmd.Config.HistoryPath
+
+	// Kafka setup.
+	if cmd.Config.KafkaConfig != "" {
+		// read the kafka config file
+		v := viper.New()
+		v.SetConfigFile(cmd.Config.KafkaConfig)
+		v.SetConfigType("toml")
+		err := v.ReadInConfig()
+		if err != nil {
+			return fmt.Errorf("error reading configuration file '%s': %v", cmd.Config.KafkaConfig, err)
+		}
+
+		cfg := kafka.Config{}
+		if err := v.Unmarshal(&cfg); err != nil {
+			return errors.Wrap(err, "unmarshalling config")
+		}
+
+		if err := kafka.ValidateConfig(cfg); err != nil {
+			return errors.Wrap(err, "validating config")
+		}
+
+		cleanCfg, err := kafka.ConvertConfig(cfg)
+		if err != nil {
+			return errors.Wrap(err, "cleaning config")
+		}
+
+		cmd.kafkaRunner = kafka.NewRunner(
+			cleanCfg,
+			batch.NewSQLBatcher(cmd, kafka.ConfigToFields(cfg)),
+		)
+	}
+
+	return nil
 }
 
 func (cmd *Command) executeAndWriteQuery(qry query) error {
@@ -462,7 +530,7 @@ func (cmd *Command) connectionMessage() string {
 	if cmd.databaseName == "" {
 		return "You are not connected to a database.\n"
 	}
-	return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.databaseName, cmd.databaseID)
+	return fmt.Sprintf("You are now connected to database \"%s\" (%s).\n", cmd.databaseName, cmd.databaseID)
 }
 
 func (cmd *Command) setupClient() error {
@@ -694,4 +762,12 @@ func (cmd *Command) handleLineAsQueryParts(line string) error {
 		}
 	}
 	return nil
+}
+
+func (cmd *Command) Insert(sql string) error {
+	wqr, err := cmd.executeQuery(newRawQuery(sql))
+	if wqr.Error != "" {
+		return errors.Errorf(wqr.Error)
+	}
+	return err
 }

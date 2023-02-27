@@ -16,7 +16,7 @@ func newAuthTokenCommand(logdest logger.Logger) *cobra.Command {
 		Long: `
 Retrieves an auth-token for use in authenticating with FeatureBase from the configured identity provider.
 `,
-		RunE: usageErrorWrapper(cmd),
+		RunE: UsageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

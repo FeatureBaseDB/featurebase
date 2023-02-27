@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/common"
@@ -916,14 +915,14 @@ func tPutRecordsKafka(t *testing.T, p *confluent.Producer, topic string, schemaI
 
 func tPutRecordsKafkaPartition(t *testing.T, p *confluent.Producer, topic string, schemaID int, schema *liavro.Codec, key string, partition int32, records ...map[string]interface{}) {
 	t.Helper()
-	delivery_chan := make(chan kafka.Event, 10000)
+	delivery_chan := make(chan confluent.Event, 10000)
 	for _, record := range records {
 		data, err := endcodeAvro(schemaID, schema, record)
 		if err != nil {
 			t.Fatalf("encoding record: %v", err)
 		}
-		err = p.Produce(&kafka.Message{
-			TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: partition},
+		err = p.Produce(&confluent.Message{
+			TopicPartition: confluent.TopicPartition{Topic: &topic, Partition: partition},
 			Key:            []byte(key),
 			Value:          data,
 		}, delivery_chan)
@@ -931,7 +930,7 @@ func tPutRecordsKafkaPartition(t *testing.T, p *confluent.Producer, topic string
 			t.Fatalf("producing record: %v", err)
 		}
 		e := <-delivery_chan
-		m := e.(*kafka.Message)
+		m := e.(*confluent.Message)
 
 		if m.TopicPartition.Error != nil {
 			t.Fatalf("Delivery failed: %v\n", m.TopicPartition.Error)

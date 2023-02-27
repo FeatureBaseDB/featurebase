@@ -122,7 +122,7 @@ build:
 
 # Build fbsql
 build-fbsql:
-	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/fbsql
+	CGO_ENABLED=1 $(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/fbsql
 
 
 package:
@@ -167,7 +167,7 @@ install-idk:
 	$(MAKE) -C ./idk install
 
 install-fbsql:
-	$(GO) install ./cmd/fbsql
+	CGO_ENABLED=1 $(GO) install ./cmd/fbsql
 
 # Build the lattice assets
 build-lattice:
