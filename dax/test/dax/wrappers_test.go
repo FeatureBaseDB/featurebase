@@ -28,6 +28,8 @@ func newWrappedControllerClient(cli *controllerclient.Client) *wrappedController
 	}
 }
 
+// Registrar
+
 func (w *wrappedControllerClient) RegisterNode(ctx context.Context, node *dax.Node) error {
 	return w.cli.RegisterNode(ctx, node)
 }

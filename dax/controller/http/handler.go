@@ -106,7 +106,7 @@ func (s *server) postDropDatabase(w http.ResponseWriter, r *http.Request) {
 
 	err := s.controller.DropDatabase(ctx, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 }
@@ -125,7 +125,7 @@ func (s *server) postDatabaseByID(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.controller.DatabaseByID(ctx, qdbid)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 
@@ -181,7 +181,7 @@ func (s *server) postDatabases(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.controller.Databases(ctx, req.OrganizationID, ids...)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 
@@ -209,7 +209,7 @@ func (s *server) patchDatabaseOptions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.controller.SetDatabaseOption(r.Context(), req.QualifiedDatabaseID, req.Option, req.Value); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 }
@@ -238,7 +238,7 @@ func (s *server) postCreateTable(w http.ResponseWriter, r *http.Request) {
 
 	err := s.controller.CreateTable(ctx, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 
@@ -262,7 +262,7 @@ func (s *server) postTable(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.controller.TableByID(ctx, qtid)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 
@@ -287,7 +287,7 @@ func (s *server) postTableID(w http.ResponseWriter, r *http.Request) {
 
 	qtbl, err := s.controller.TableByName(ctx, req.QualifiedDatabaseID, req.Name)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 	qtid := qtbl.QualifiedID()
@@ -313,7 +313,7 @@ func (s *server) postDropTable(w http.ResponseWriter, r *http.Request) {
 
 	err := s.controller.DropTable(ctx, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 }
@@ -335,7 +335,7 @@ func (s *server) postCreateField(w http.ResponseWriter, r *http.Request) {
 
 	err := s.controller.CreateField(ctx, qtid, req.Field)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 }
@@ -362,7 +362,7 @@ func (s *server) postDropField(w http.ResponseWriter, r *http.Request) {
 
 	err := s.controller.DropField(ctx, qtid, req.Field)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 }
@@ -390,7 +390,7 @@ func (s *server) postTables(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.controller.Tables(ctx, qdbid, ids...)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
 		return
 	}
 

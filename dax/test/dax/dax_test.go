@@ -739,60 +739,106 @@ func TestDAXIntegration(t *testing.T) {
 			})
 
 			t.Run("Schemar", func(t *testing.T) {
+
+				qtid := dax.QualifiedTableID{
+					ID: "BAD",
+				}
+				qtbl := dax.QualifiedTable{}
+				qdbid := dax.QualifiedDatabaseID{}
+				tbfld := &dax.Field{}
+
 				t.Run("CreateDatabase", func(t *testing.T) {
 					err := client.CreateDatabase(ctx, nil)
-					log.Printf("ERR: %v", err)
 					if assert.Error(t, err) {
 						assert.True(t, errors.Is(err, schemar.ErrCodeDatabaseNameInvalid))
 					}
 				})
 
 				t.Run("DropDatabase", func(t *testing.T) {
-					//DropDatabase(context.Context, QualifiedDatabaseID) error
+					err := client.DropDatabase(ctx, qdbid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
+					}
 				})
 
 				t.Run("DatabaseByName", func(t *testing.T) {
-					// DatabaseByName(ctx context.Context, orgID OrganizationID, dbname DatabaseName) (*QualifiedDatabase, error)
+					_, err := client.DatabaseByName(ctx, "", "")
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseNameDoesNotExist))
+					}
 				})
 
 				t.Run("DatabaseByID", func(t *testing.T) {
-					// DatabaseByID(ctx context.Context, qdbid QualifiedDatabaseID) (*QualifiedDatabase, error)
+					_, err := client.DatabaseByID(ctx, qdbid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
+					}
 				})
 
 				t.Run("SetDatabaseOption", func(t *testing.T) {
-					// SetDatabaseOption(ctx context.Context, qdbid QualifiedDatabaseID, option string, value string) error
+					err := client.SetDatabaseOption(ctx, qdbid, "", "")
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
+					}
 				})
 
 				t.Run("Databases", func(t *testing.T) {
-					// Databases(context.Context, OrganizationID, ...DatabaseID) ([]*QualifiedDatabase, error)
+					_, err := client.Databases(ctx, "", dbID)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrOrganizationIDDoesNotExist))
+					}
 				})
 
 				t.Run("CreateTable", func(t *testing.T) {
-					// CreateTable(ctx context.Context, qtbl *QualifiedTable) error
+					err := client.CreateTable(ctx, &qtbl)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, schemar.ErrCodeTableNameInvalid))
+					}
 				})
 
 				t.Run("DropTable", func(t *testing.T) {
-					// DropTable(ctx context.Context, qtid QualifiedTableID) error
+					err := client.DropTable(ctx, qtid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
+					}
 				})
 
 				t.Run("TableByName", func(t *testing.T) {
-					// TableByName(ctx context.Context, qdbid QualifiedDatabaseID, tname TableName) (*QualifiedTable, error)
+					req := dax.QualifiedTableID{}
+					_, err := client.TableByName(ctx, qdbid, req.Name)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
+					}
 				})
 
 				t.Run("TableByID", func(t *testing.T) {
-					// TableByID(ctx context.Context, qtid QualifiedTableID) (*QualifiedTable, error)
+					_, err := client.TableByID(ctx, qtid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
+					}
 				})
 
+				//Todo: make it so "Tables" doesn't return all tables if error is present
 				t.Run("Tables", func(t *testing.T) {
-					// Tables(ctx context.Context, qdbid QualifiedDatabaseID, tids ...TableID) ([]*QualifiedTable, error)
+					// _, err := client.Tables(ctx, qdbid)
+					// //the error is also nil
+					// if err != nil {
+					// 	assert.True(t, errors.Is(err, ""))
+					// }
 				})
 
 				t.Run("CreateField", func(t *testing.T) {
-					// CreateField(ctx context.Context, qtid QualifiedTableID, fld *Field) error
+					err := client.CreateField(ctx, qtid, tbfld)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, schemar.ErrCodeFieldNameInvalid))
+					}
 				})
 
 				t.Run("DropField", func(t *testing.T) {
-					// DropField(ctx context.Context, qtid QualifiedTableID, fname FieldName) error
+					err := client.DropField(ctx, qtid, tbfld.Name)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
+					}
 				})
 			})
 		})

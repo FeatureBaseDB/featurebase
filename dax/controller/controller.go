@@ -741,6 +741,10 @@ func (c *Controller) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedD
 }
 
 func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, ids ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
+	if orgID == "" {
+		return nil, dax.NewErrOrganizationIDDoesNotExist(orgID)
+	}
+
 	tx, err := c.BoltDB.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
