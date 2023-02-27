@@ -7,6 +7,8 @@ import (
 )
 
 const (
+	ErrOrganizationIDDoesNotExist errors.Code = "OrganizationIDDoesNotExist"
+
 	ErrDatabaseIDExists         errors.Code = "DatabaseIDExists"
 	ErrDatabaseIDDoesNotExist   errors.Code = "DatabaseIDDoesNotExist"
 	ErrDatabaseNameDoesNotExist errors.Code = "DatabaseNameDoesNotExist"
@@ -28,6 +30,13 @@ const (
 
 // The following are helper functions for constructing coded errors containing
 // relevant information about the specific error.
+
+func NewErrOrganizationIDDoesNotExist(orgID OrganizationID) error {
+	return errors.New(
+		ErrOrganizationIDDoesNotExist,
+		fmt.Sprintf("Organization ID '%s' does not exist", orgID),
+	)
+}
 
 func NewErrDatabaseIDExists(qdbid QualifiedDatabaseID) error {
 	return errors.New(

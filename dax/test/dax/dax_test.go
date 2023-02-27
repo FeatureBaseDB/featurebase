@@ -13,10 +13,13 @@ import (
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/sql3/test/defs"
 	goerrors "github.com/pkg/errors"
@@ -705,6 +708,143 @@ func TestDAXIntegration(t *testing.T) {
 			assert.Equal(t, computers[computerKey2].Address(), nodes[2].Address)
 			assert.Equal(t, partitions2, nodes[2].Partitions)
 		}
+	})
+
+	// These tests are to test the traversal of CodedErrors across HTTP
+	// The client is also wrapped to maintain the integrity of the interface to prevent any
+	// additional methods added to the client without the appropriate tests for CodedErrors
+	t.Run("HTTPError", func(t *testing.T) {
+		mc := test.MustRunManagedCommand(t)
+		defer mc.Close()
+
+		svcmgr := mc.Manage()
+		ctx := context.Background()
+
+		t.Run("controller", func(t *testing.T) {
+			// Set up Controller client.
+			client := newWrappedControllerClient(controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger))
+
+			t.Run("Registrar", func(t *testing.T) {
+				t.Run("RegisterNode", func(t *testing.T) {
+					node := &dax.Node{}
+					err := client.RegisterNode(ctx, node)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, controller.ErrCodeNodeKeyInvalid))
+					}
+				})
+				t.Run("CheckInNode", func(t *testing.T) {
+					node := &dax.Node{}
+					err := client.CheckInNode(ctx, node)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, controller.ErrCodeNodeKeyInvalid))
+					}
+				})
+			})
+
+			t.Run("Schemar", func(t *testing.T) {
+
+				qtid := dax.QualifiedTableID{
+					ID: "BAD",
+				}
+				qtbl := dax.QualifiedTable{}
+				qdbid := dax.QualifiedDatabaseID{}
+				tbfld := &dax.Field{}
+
+				t.Run("CreateDatabase", func(t *testing.T) {
+					err := client.CreateDatabase(ctx, nil)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, schemar.ErrCodeDatabaseNameInvalid))
+					}
+				})
+
+				t.Run("DropDatabase", func(t *testing.T) {
+					err := client.DropDatabase(ctx, qdbid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
+					}
+				})
+
+				t.Run("DatabaseByName", func(t *testing.T) {
+					_, err := client.DatabaseByName(ctx, "", "")
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseNameDoesNotExist))
+					}
+				})
+
+				t.Run("DatabaseByID", func(t *testing.T) {
+					_, err := client.DatabaseByID(ctx, qdbid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
+					}
+				})
+
+				t.Run("SetDatabaseOption", func(t *testing.T) {
+					err := client.SetDatabaseOption(ctx, qdbid, "", "")
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
+					}
+				})
+
+				t.Run("Databases", func(t *testing.T) {
+					_, err := client.Databases(ctx, "", dbID)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrOrganizationIDDoesNotExist))
+					}
+				})
+
+				t.Run("CreateTable", func(t *testing.T) {
+					err := client.CreateTable(ctx, &qtbl)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, schemar.ErrCodeTableNameInvalid))
+					}
+				})
+
+				t.Run("DropTable", func(t *testing.T) {
+					err := client.DropTable(ctx, qtid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
+					}
+				})
+
+				t.Run("TableByName", func(t *testing.T) {
+					req := dax.QualifiedTableID{}
+					_, err := client.TableByName(ctx, qdbid, req.Name)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
+					}
+				})
+
+				t.Run("TableByID", func(t *testing.T) {
+					_, err := client.TableByID(ctx, qtid)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
+					}
+				})
+
+				//Todo: make it so "Tables" doesn't return all tables if error is present
+				t.Run("Tables", func(t *testing.T) {
+					// _, err := client.Tables(ctx, qdbid)
+					// //the error is also nil
+					// if err != nil {
+					// 	assert.True(t, errors.Is(err, ""))
+					// }
+				})
+
+				t.Run("CreateField", func(t *testing.T) {
+					err := client.CreateField(ctx, qtid, tbfld)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, schemar.ErrCodeFieldNameInvalid))
+					}
+				})
+
+				t.Run("DropField", func(t *testing.T) {
+					err := client.DropField(ctx, qtid, tbfld.Name)
+					if assert.Error(t, err) {
+						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
+					}
+				})
+			})
+		})
 	})
 }
 

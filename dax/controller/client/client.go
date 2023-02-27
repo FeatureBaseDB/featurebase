@@ -71,8 +71,7 @@ func (c *Client) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -96,8 +95,7 @@ func (c *Client) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -122,8 +120,7 @@ func (c *Client) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return nil, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	var qdb *dax.QualifiedDatabase
@@ -158,8 +155,7 @@ func (c *Client) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, n
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return nil, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	var qdb *dax.QualifiedDatabase
@@ -194,8 +190,7 @@ func (c *Client) Databases(ctx context.Context, orgID dax.OrganizationID, ids ..
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return nil, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	var qdbs []*dax.QualifiedDatabase
@@ -237,8 +232,7 @@ func (c *Client) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatab
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -277,8 +271,7 @@ func (c *Client) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.Qua
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return nil, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	var qtable *dax.QualifiedTable
@@ -314,8 +307,7 @@ func (c *Client) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID, nam
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return dflt, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return dflt, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	var qtid dax.QualifiedTableID
@@ -350,8 +342,7 @@ func (c *Client) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, ids 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return nil, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "Status code: %d", resp.StatusCode)
 	}
 
 	var qtables []*dax.QualifiedTable
@@ -380,8 +371,7 @@ func (c *Client) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) erro
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -405,8 +395,7 @@ func (c *Client) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -434,8 +423,7 @@ func (c *Client) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -464,8 +452,7 @@ func (c *Client) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldNa
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -645,8 +632,7 @@ func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("registration request to %s status code: %d: %s", url, resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "registration request to %s status code: %d", url, resp.StatusCode)
 	}
 
 	return nil
@@ -676,8 +662,7 @@ func (c *Client) CheckInNode(ctx context.Context, node *dax.Node) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	return nil
