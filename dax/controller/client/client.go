@@ -120,7 +120,6 @@ func (c *Client) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// b, _ := io.ReadAll(resp.Body)
 		return nil, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 

@@ -710,6 +710,9 @@ func TestDAXIntegration(t *testing.T) {
 		}
 	})
 
+	// These tests are to test the traversal of CodedErrors across HTTP
+	// The client is also wrapped to maintain the integrity of the interface to prevent any
+	// additional methods added to the client without the appropriate tests for CodedErrors
 	t.Run("HTTPError", func(t *testing.T) {
 		mc := test.MustRunManagedCommand(t)
 		defer mc.Close()
