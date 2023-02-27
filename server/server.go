@@ -73,6 +73,8 @@ type Command struct {
 	// done will be closed when Command.Close() is called
 	done chan struct{}
 
+	traceCloser io.Closer
+
 	logOutput      io.Writer
 	queryLogOutput io.Writer
 	logger         loggerLogger
@@ -834,7 +836,6 @@ func (m *Command) setupProfilingAndTracing() error {
 		if err != nil {
 			return errors.Wrap(err, "starting datadog")
 		}
-		defer profiler.Stop()
 	}
 
 	if m.Config.Tracing.SamplerType != "off" {
@@ -852,12 +853,10 @@ func (m *Command) setupProfilingAndTracing() error {
 		if err != nil {
 			return errors.Wrap(err, "initializing jaeger tracer")
 		}
-		defer closer.Close()
+		m.traceCloser = closer
 		tracing.GlobalTracer = opentracing.NewTracer(tracer, m.Logger())
-
 	} else if m.Config.DataDog.EnableTracing { // Give preference to legacy support of jaeger
 		t := opentracer.New(tracer.WithServiceName(m.Config.DataDog.Service))
-		defer tracer.Stop()
 		tracing.GlobalTracer = opentracing.NewTracer(t, m.Logger())
 	}
 	return nil
@@ -883,6 +882,14 @@ func (m *Command) Close() error {
 
 		err := eg.Wait()
 		_ = testhook.Closed(pilosa.NewAuditor(), m, nil)
+		if m.Config.DataDog.Enable {
+			defer profiler.Stop()
+		}
+		if m.traceCloser != nil {
+			defer m.traceCloser.Close()
+		} else if m.Config.DataDog.EnableTracing {
+			defer tracer.Stop()
+		}
 		close(m.done)
 
 		return errors.Wrap(err, "closing everything")
