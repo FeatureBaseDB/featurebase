@@ -316,10 +316,18 @@ func (r EventRecord) Data() []interface{} {
 
 func (r EventRecord) Commit(ctx context.Context) error { return nil }
 
+func (r EventRecord) Schema() interface{} {
+	return ""
+}
+
 type UserRecord Event
 
 func (r UserRecord) Data() []interface{} {
 	return []interface{}{r.Actor.Login, r.Actor.ID}
+}
+
+func (r UserRecord) Schema() interface{} {
+	return ""
 }
 
 func (r UserRecord) Commit(ctx context.Context) error { return nil }
@@ -330,12 +338,20 @@ func (r RepoRecord) Data() []interface{} {
 	return []interface{}{r.Repo.Name, r.Repo.ID}
 }
 
+func (r RepoRecord) Schema() interface{} {
+	return ""
+}
+
 func (r RepoRecord) Commit(ctx context.Context) error { return nil }
 
 type IssueRecord Event
 
 func (r IssueRecord) Valid() bool {
 	return r.Type == "IssuesEvent" || r.Type == "IssueCommentEvent"
+}
+
+func (r IssueRecord) Schema() interface{} {
+	return ""
 }
 
 func (r IssueRecord) Data() []interface{} {
