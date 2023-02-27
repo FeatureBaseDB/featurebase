@@ -7447,15 +7447,16 @@ func backupTarTest(t *testing.T, c *test.Cluster, index string) {
 
 func chkSumCluster(t *testing.T, c *test.Cluster) string {
 	t.Helper()
-	buf := &bytes.Buffer{}
-	chkSumLog := logger.NewStandardLogger(buf)
-	chkSum := ctl.NewChkSumCommand(chkSumLog)
+	errBuf := &bytes.Buffer{}
+	outBuf := &bytes.Buffer{}
+	chkSumLog := logger.NewStandardLogger(errBuf)
+	chkSum := ctl.NewChkSumCommand(chkSumLog, outBuf)
 	chkSum.Host = c.Nodes[len(c.Nodes)-1].URL()
 	if err := chkSum.Run(context.Background()); err != nil {
 		t.Fatalf("running checksum: %v", err)
 	}
 
-	return buf.String()
+	return outBuf.String()
 }
 
 func backupCluster(t *testing.T, c *test.Cluster, index string) (backupDir string) {

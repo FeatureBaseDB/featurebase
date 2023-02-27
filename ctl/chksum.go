@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/cespare/xxhash"
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -38,9 +37,9 @@ func (cmd *ChkSumCommand) Logger() logger.Logger {
 }
 
 // NewChkSumCommand returns a new instance of BackupCommand.
-func NewChkSumCommand(logdest logger.Logger) *ChkSumCommand {
+func NewChkSumCommand(logdest logger.Logger, stdout io.Writer) *ChkSumCommand {
 	return &ChkSumCommand{
-		stdout:  os.Stdout,
+		stdout:  stdout,
 		logDest: logdest,
 	}
 }
