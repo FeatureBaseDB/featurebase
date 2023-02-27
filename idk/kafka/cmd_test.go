@@ -23,7 +23,9 @@ import (
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
+	"github.com/go-avro/avro"
 	liavro "github.com/linkedin/goavro/v2"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -640,7 +642,7 @@ func TestCmdSchemaChange(t *testing.T) {
 	}
 }
 
-func TestTimeQuantums(t *testing.T) {
+func TestAddingData(t *testing.T) {
 	t.Parallel()
 	/*
 		at a high level, a test here represents
@@ -653,8 +655,8 @@ func TestTimeQuantums(t *testing.T) {
 		name             string
 		pathToAvroSchema string
 		pathToRecords    string
-		idType           string // must be "generated", "id", or "string"
-		keyField         string // field used for "id" or "string" record keys
+		idType           string   // must be "generated", "id", or "string"
+		keyFields        []string // field used for "id" or "string" record keys
 		pilosaHosts      string
 		kafkaHost        string
 		registryURL      string
@@ -668,7 +670,7 @@ func TestTimeQuantums(t *testing.T) {
 			pathToAvroSchema: "timeQuantum.json",
 			pathToRecords:    "./testdata/records/timeQuantum.json",
 			idType:           "string",
-			keyField:         "device",
+			keyFields:        []string{"device"}, //can be multiple for idType: string but a single value otherwise
 			pilosaHosts:      pilosaHost,
 			registryURL:      registryHost,
 			kafkaHost:        kafkaHost,
@@ -683,6 +685,96 @@ func TestTimeQuantums(t *testing.T) {
 				"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
 				"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
 				"{\"results\":[{\"columns\":[]}]}\n",
+			},
+		},
+		{ // confirm time quantums are being ingested
+			name:             "all values can be inserted",
+			pathToAvroSchema: "alltypes.json",
+			pathToRecords:    "./testdata/records/alltypes.json",
+			idType:           "string",
+			keyFields:        []string{"pk0", "pk1", "pk2"},
+			pilosaHosts:      pilosaHost,
+			registryURL:      registryHost,
+			kafkaHost:        kafkaHost,
+			topic:            "alltypes",
+			index:            "alltypes",
+			queries: []string{
+				"Count(All())",
+				"Count(ConstRow(columns=['u2Yr4|sHaUv|x5z8P', 'DY2Ui|kUbdU|pjxqm']))",
+				"Count(Row(stringset_string='58KIR'))",
+				"Count(Row(string_string='8MGwy'))",
+				"Count(Row(stringtq_string='ivWWb'))",
+				"Count(Row(stringtq_string='ivWWb', to=\"2023-02-03\"))",
+				"Count(Row(stringtq_string='ivWWb', from=\"2023-02-03\", to=\"2023-02-04\"))",
+				"Count(Union(Row(stringset_bytes='eNKWF'),Row(stringset_bytes='5ptDx')))",
+				"Row(string_bytes='vTwn4')",
+				"Row(stringsettq_bytes='798ka')",
+				"Row(stringsettq_bytes='798ka', from=\"2023-02-18\")",
+				"Row(stringsettq_bytes='798ka', from=\"2023-02-16\", to=\"2023-02-18\")",
+				"Intersect(Row(stringset_stringarray='u2Yr4'), Row(stringset_stringarray='PYE8V'), Row(stringset_stringarray='VBcyJ'), Row(stringset_stringarray='Chgzr'), Row(stringset_stringarray='DY2Ui'))",
+				"Row(stringtq_stringarray='oxjI0', from=\"2023-01-29\", to=\"2023-01-31\")",
+				"Intersect(Row(stringset_bytesarray='wNZ7o'), Row(stringset_bytesarray='OKNV2'),Row(stringset_bytesarray='F0uC4'),Row(stringset_bytesarray='VBcyJ'),Row(stringset_bytesarray='KMZnH'))",
+				"Count(Row(idset_long=839))",
+				"Count(Row(id_long=809))",
+				"Count(Row(idtq_long=533))",
+				"Count(Row(idtq_long=533, from=\"2020-01-01\"))",
+				"Count(Row(idset_int=533))",
+				"Count(Row(id_int=168))",
+				"Count(Row(idsettq_int=113))",
+				"Row(idsettq_int=113, to=\"2024-01-01\")",
+				"Count(Intersect(Row(idset_longarray=399),Row(idset_longarray=322), Row(idset_longarray=975), Row(idset_longarray=730), Row(idset_longarray=969)))",
+				"Count(Intersect(Row(idtq_longarray=172),Row(idtq_longarray=388), Row(idtq_longarray=731), Row(idtq_longarray=429), Row(idtq_longarray=730)))",
+				"Count(Intersect(Row(idtq_longarray=172, from=\"2022-01-01\"),Row(idtq_longarray=388, from=\"2022-01-01\"), Row(idtq_longarray=731, from=\"2022-01-01\"), Row(idtq_longarray=429, from=\"2022-01-01\"), Row(idtq_longarray=730, from=\"2022-01-01\")))",
+				"Count(Intersect(Row(idset_intarray=958),Row(idset_intarray=242), Row(idset_intarray=778), Row(idset_intarray=289), Row(idset_intarray=797)))",
+				"Count(Row(int_long > 500))",
+				"Count(Row(int_int > 500))",
+				"Count(Row(decimal_bytes > 1000.00))",
+				"Count(Row(decimal_float > 3.05))",
+				"Count(Row(decimal_double > 4.11))",
+				"Count(Row(dateint_bytes_ts > 1675163490))",
+				"Count(Row(bools=bool_bool))",
+				"Count(Not(Row(bools=bool_bool)))",
+				"Count(Row(timestamp_bytes_ts > \"2023-02-20T00:00:00Z\"))",
+				"Count(Row(timestamp_bytes_int > \"2023-02-20T00:00:00Z\"))",
+			},
+			expectedResults: []string{
+				"{\"results\":[10]}\n",
+				"{\"results\":[2]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[0]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[2]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"DY2Ui|kUbdU|pjxqm\"]}]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+				"{\"results\":[{\"columns\":[]}]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"u2Yr4|sHaUv|x5z8P\"]}]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[{\"columns\":[],\"keys\":[\"6TKzc|YKLk9|h1iqc\"]}]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[1]}\n",
+				"{\"results\":[4]}\n",
+				"{\"results\":[5]}\n",
+				"{\"results\":[4]}\n",
+				"{\"results\":[3]}\n",
+				"{\"results\":[3]}\n",
+				"{\"results\":[8]}\n",
+				"{\"results\":[4]}\n",
+				"{\"results\":[6]}\n",
+				"{\"results\":[3]}\n",
+				"{\"results\":[3]}\n",
 			},
 		},
 	}
@@ -724,9 +816,9 @@ func TestTimeQuantums(t *testing.T) {
 		consumer.SchemaRegistryURL = test.registryURL
 		switch test.idType {
 		case "id":
-			consumer.IDField = test.keyField
+			consumer.IDField = test.keyFields[0]
 		case "string":
-			consumer.PrimaryKeyFields = []string{test.keyField}
+			consumer.PrimaryKeyFields = test.keyFields
 		case "generate":
 			consumer.AutoGenerate = true
 			consumer.ExternalGenerate = true
@@ -746,6 +838,7 @@ func TestTimeQuantums(t *testing.T) {
 		}
 		defer p.Close()
 		tCreateTopic(t, topic, p)
+
 		tPutRecordsKafka(t, p, topic, schemaID, licodec, "akey", records...)
 		err = consumer.Run()
 		if err != nil {
@@ -757,13 +850,21 @@ func TestTimeQuantums(t *testing.T) {
 		for i, q := range test.queries {
 			status, body, err := client.HTTPRequest("POST", fmt.Sprintf("/index/%s/query", index), []byte(q), nil)
 			if err != nil {
-				t.Fatalf("querying featurebase: status: %d, response: %s, error: %s", status, body, err)
+				t.Fatalf("querying featurebase: status: %d, response: %s, error: %s: on query: %s", status, body, err, q)
 			}
 			if string(body[:]) != test.expectedResults[i] {
 				t.Fatalf("running query: %s... expected %s but got %s", q, test.expectedResults[i], body)
 			}
 		}
+
+		client.DeleteIndexByName(index)
 	}
+}
+
+func convertUnionTypes(schema avro.Schema, records map[string]interface{}) error {
+
+	return errors.Errorf("new error")
+
 }
 
 type sortableCRI []pilosaclient.CountResultItem

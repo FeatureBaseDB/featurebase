@@ -628,6 +628,8 @@ type record []interface{}
 
 func (r record) Commit(ctx context.Context) error { return nil }
 
+func (r record) Schema() interface{} { return nil }
+
 func (r record) Data() []interface{} {
 	return r
 }

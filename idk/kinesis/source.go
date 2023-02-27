@@ -136,6 +136,8 @@ func (r *Record) StreamOffset() (string, uint64) {
 	return fmt.Sprintf("%s:%s", r.src.StreamName, r.shardID), r.idx
 }
 
+func (r *Record) Schema() interface{} { return nil }
+
 var _ idk.OffsetStreamRecord = &Record{}
 
 func (r *Record) Commit(ctx context.Context) error {
