@@ -54,7 +54,7 @@ GOPACKAGES := $(shell $(GO) list ./... | grep -v "/idk" | grep -v "/batch")
 
 # Run test suite
 test:
-	$(GO) test $(GOPACKAGES) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT)
+	$(GO) test $(GOPACKAGES) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT) -count=1
 
 # Run test suite with race flag
 test-race:
