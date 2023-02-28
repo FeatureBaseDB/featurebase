@@ -265,7 +265,7 @@ func (m *Main) run() error {
 	l := &msgCounter{MaxMsgs: m.MaxMsgs}
 
 	if m.Delete {
-		err := m.runDeleter0(0, l)
+		err := m.runDeleter(0, l)
 		if err != nil {
 			return err
 		}
