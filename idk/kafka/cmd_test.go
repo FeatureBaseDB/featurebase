@@ -23,9 +23,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka/csrc"
 	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/go-avro/avro"
 	liavro "github.com/linkedin/goavro/v2"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -642,229 +640,507 @@ func TestCmdSchemaChange(t *testing.T) {
 	}
 }
 
+type ConsumerTestConfig struct {
+	idType    string   // must be "generated", "id", or "string"
+	keyFields []string // field used for "id" or "string" record keys
+	topic     string
+	delete    bool
+}
+
+/*
+Struct that captures data required to run a test that meets the following conditions:
+  - There is a JSON file will plain text records to write to kafka
+  - There is an Avro Schema that will be used to record records
+    above before writing them to kafka
+  - The data written above will be consumed and set to FeatureBase
+  - There is a list of PQL queries that can be used to determine if
+    above went correctly or incorrectly
+
+For test that require multiple iterations of " consumer data from kafka, write it to
+FeatureBase, and run queries against it, "
+*/
+type ConsumerTest struct {
+	name              string
+	pathsToAvroSchema []string // code currently prepends values with ./testdata/schema/
+	pathsToRecords    []string
+	consumerConfigs   []ConsumerTestConfig
+	index             string
+	queries           [][]string
+	expectedResults   [][]string
+	pilosaHosts       string
+	kafkaHost         string
+	registryURL       string
+}
+
 func TestAddingData(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	/*
 		at a high level, a test here represents
 		  - an avro schema
 		  - a set of records to ingest to kafka
 		  - an ingest configuration
 		  - query to run to confirm the data was ingest properly
+
+		see test
 	*/
-	tests := []struct {
-		name             string
-		pathToAvroSchema string
-		pathToRecords    string
-		idType           string   // must be "generated", "id", or "string"
-		keyFields        []string // field used for "id" or "string" record keys
-		pilosaHosts      string
-		kafkaHost        string
-		registryURL      string
-		topic            string
-		index            string
-		queries          []string
-		expectedResults  []string
-	}{
+	tests := []ConsumerTest{
 		{ // confirm time quantums are being ingested
-			name:             "time quantums exist",
-			pathToAvroSchema: "timeQuantum.json",
-			pathToRecords:    "./testdata/records/timeQuantum.json",
-			idType:           "string",
-			keyFields:        []string{"device"}, //can be multiple for idType: string but a single value otherwise
-			pilosaHosts:      pilosaHost,
-			registryURL:      registryHost,
-			kafkaHost:        kafkaHost,
-			topic:            "timequantums",
-			index:            "timequantums",
-			queries: []string{
-				"Row(segment_ts='7R83')",
-				"Row(segment_ts='7R83', from=\"2023-02-17T00:00\", to=\"2023-02-18T00:00\")",
-				"Row(segment_ts='7R83', from=\"2023-02-16T00:00\", to=\"2023-02-17T00:00\")",
+			name:              "time quantums exist",
+			pathsToAvroSchema: []string{"timeQuantum.json"},
+			pathsToRecords:    []string{"./testdata/records/timeQuantum.json"},
+			pilosaHosts:       pilosaHost,
+			registryURL:       registryHost,
+			kafkaHost:         kafkaHost,
+			consumerConfigs: []ConsumerTestConfig{
+				{
+					idType:    "string",
+					keyFields: []string{"device"}, //can be multiple for idType: string but a single value otherwise
+					topic:     "timequantums",
+					delete:    false,
+				},
 			},
-			expectedResults: []string{
-				"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
-				"{\"results\":[{\"columns\":[]}]}\n",
+			index: "timequantums",
+			queries: [][]string{
+				[]string{
+					"Row(segment_ts='7R83')",
+					"Row(segment_ts='7R83', from=\"2023-02-17T00:00\", to=\"2023-02-18T00:00\")",
+					"Row(segment_ts='7R83', from=\"2023-02-16T00:00\", to=\"2023-02-17T00:00\")",
+				},
+			},
+			expectedResults: [][]string{
+				[]string{
+					"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"0QKtSTqJYXMZWvVe\"]}]}\n",
+					"{\"results\":[{\"columns\":[]}]}\n",
+				},
 			},
 		},
-		{ // confirm time quantums are being ingested
-			name:             "all values can be inserted",
-			pathToAvroSchema: "alltypes.json",
-			pathToRecords:    "./testdata/records/alltypes.json",
-			idType:           "string",
-			keyFields:        []string{"pk0", "pk1", "pk2"},
-			pilosaHosts:      pilosaHost,
-			registryURL:      registryHost,
-			kafkaHost:        kafkaHost,
-			topic:            "alltypes",
-			index:            "alltypes",
-			queries: []string{
-				"Count(All())",
-				"Count(ConstRow(columns=['u2Yr4|sHaUv|x5z8P', 'DY2Ui|kUbdU|pjxqm']))",
-				"Count(Row(stringset_string='58KIR'))",
-				"Count(Row(string_string='8MGwy'))",
-				"Count(Row(stringtq_string='ivWWb'))",
-				"Count(Row(stringtq_string='ivWWb', to=\"2023-02-03\"))",
-				"Count(Row(stringtq_string='ivWWb', from=\"2023-02-03\", to=\"2023-02-04\"))",
-				"Count(Union(Row(stringset_bytes='eNKWF'),Row(stringset_bytes='5ptDx')))",
-				"Row(string_bytes='vTwn4')",
-				"Row(stringsettq_bytes='798ka')",
-				"Row(stringsettq_bytes='798ka', from=\"2023-02-18\")",
-				"Row(stringsettq_bytes='798ka', from=\"2023-02-16\", to=\"2023-02-18\")",
-				"Intersect(Row(stringset_stringarray='u2Yr4'), Row(stringset_stringarray='PYE8V'), Row(stringset_stringarray='VBcyJ'), Row(stringset_stringarray='Chgzr'), Row(stringset_stringarray='DY2Ui'))",
-				"Row(stringtq_stringarray='oxjI0', from=\"2023-01-29\", to=\"2023-01-31\")",
-				"Intersect(Row(stringset_bytesarray='wNZ7o'), Row(stringset_bytesarray='OKNV2'),Row(stringset_bytesarray='F0uC4'),Row(stringset_bytesarray='VBcyJ'),Row(stringset_bytesarray='KMZnH'))",
-				"Count(Row(idset_long=839))",
-				"Count(Row(id_long=809))",
-				"Count(Row(idtq_long=533))",
-				"Count(Row(idtq_long=533, from=\"2020-01-01\"))",
-				"Count(Row(idset_int=533))",
-				"Count(Row(id_int=168))",
-				"Count(Row(idsettq_int=113))",
-				"Row(idsettq_int=113, to=\"2024-01-01\")",
-				"Count(Intersect(Row(idset_longarray=399),Row(idset_longarray=322), Row(idset_longarray=975), Row(idset_longarray=730), Row(idset_longarray=969)))",
-				"Count(Intersect(Row(idtq_longarray=172),Row(idtq_longarray=388), Row(idtq_longarray=731), Row(idtq_longarray=429), Row(idtq_longarray=730)))",
-				"Count(Intersect(Row(idtq_longarray=172, from=\"2022-01-01\"),Row(idtq_longarray=388, from=\"2022-01-01\"), Row(idtq_longarray=731, from=\"2022-01-01\"), Row(idtq_longarray=429, from=\"2022-01-01\"), Row(idtq_longarray=730, from=\"2022-01-01\")))",
-				"Count(Intersect(Row(idset_intarray=958),Row(idset_intarray=242), Row(idset_intarray=778), Row(idset_intarray=289), Row(idset_intarray=797)))",
-				"Count(Row(int_long > 500))",
-				"Count(Row(int_int > 500))",
-				"Count(Row(decimal_bytes > 1000.00))",
-				"Count(Row(decimal_float > 3.05))",
-				"Count(Row(decimal_double > 4.11))",
-				"Count(Row(dateint_bytes_ts > 1675163490))",
-				"Count(Row(bools=bool_bool))",
-				"Count(Not(Row(bools=bool_bool)))",
-				"Count(Row(timestamp_bytes_ts > \"2023-02-20T00:00:00Z\"))",
-				"Count(Row(timestamp_bytes_int > \"2023-02-20T00:00:00Z\"))",
+		{ // confirm all types are being ingest as they should
+			name:              "all values can be inserted",
+			pathsToAvroSchema: []string{"alltypes.json"},
+			pathsToRecords:    []string{"./testdata/records/alltypes.json"},
+			pilosaHosts:       pilosaHost,
+			registryURL:       registryHost,
+			kafkaHost:         kafkaHost,
+			consumerConfigs: []ConsumerTestConfig{
+				{
+					idType:    "string",
+					keyFields: []string{"pk0", "pk1", "pk2"},
+					topic:     "alltypes",
+					delete:    false,
+				},
 			},
-			expectedResults: []string{
-				"{\"results\":[10]}\n",
-				"{\"results\":[2]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[0]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[2]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"DY2Ui|kUbdU|pjxqm\"]}]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
-				"{\"results\":[{\"columns\":[]}]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"u2Yr4|sHaUv|x5z8P\"]}]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[{\"columns\":[],\"keys\":[\"6TKzc|YKLk9|h1iqc\"]}]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[1]}\n",
-				"{\"results\":[4]}\n",
-				"{\"results\":[5]}\n",
-				"{\"results\":[4]}\n",
-				"{\"results\":[3]}\n",
-				"{\"results\":[3]}\n",
-				"{\"results\":[8]}\n",
-				"{\"results\":[4]}\n",
-				"{\"results\":[6]}\n",
-				"{\"results\":[3]}\n",
-				"{\"results\":[3]}\n",
+			index: "alltypes",
+			queries: [][]string{
+				[]string{
+					"Count(All())",
+					"Count(ConstRow(columns=['u2Yr4|sHaUv|x5z8P', 'DY2Ui|kUbdU|pjxqm']))",
+					"Count(Row(stringset_string='58KIR'))",
+					"Count(Row(string_string='8MGwy'))",
+					"Count(Row(stringtq_string='ivWWb'))",
+					"Count(Row(stringtq_string='ivWWb', to=\"2023-02-03\"))",
+					"Count(Row(stringtq_string='ivWWb', from=\"2023-02-03\", to=\"2023-02-04\"))",
+					"Count(Union(Row(stringset_bytes='eNKWF'),Row(stringset_bytes='5ptDx')))",
+					"Row(string_bytes='vTwn4')",
+					"Row(stringsettq_bytes='798ka')",
+					"Row(stringsettq_bytes='798ka', from=\"2023-02-18\")",
+					"Row(stringsettq_bytes='798ka', from=\"2023-02-16\", to=\"2023-02-18\")",
+					"Intersect(Row(stringset_stringarray='u2Yr4'), Row(stringset_stringarray='PYE8V'), Row(stringset_stringarray='VBcyJ'), Row(stringset_stringarray='Chgzr'), Row(stringset_stringarray='DY2Ui'))",
+					"Row(stringtq_stringarray='oxjI0', from=\"2023-01-29\", to=\"2023-01-31\")",
+					"Intersect(Row(stringset_bytesarray='wNZ7o'), Row(stringset_bytesarray='OKNV2'),Row(stringset_bytesarray='F0uC4'),Row(stringset_bytesarray='VBcyJ'),Row(stringset_bytesarray='KMZnH'))",
+					"Count(Row(idset_long=839))",
+					"Count(Row(id_long=809))",
+					"Count(Row(idtq_long=533))",
+					"Count(Row(idtq_long=533, from=\"2020-01-01\"))",
+					"Count(Row(idset_int=533))",
+					"Count(Row(id_int=168))",
+					"Count(Row(idsettq_int=113))",
+					"Row(idsettq_int=113, to=\"2024-01-01\")",
+					"Count(Intersect(Row(idset_longarray=399),Row(idset_longarray=322), Row(idset_longarray=975), Row(idset_longarray=730), Row(idset_longarray=969)))",
+					"Count(Intersect(Row(idtq_longarray=172),Row(idtq_longarray=388), Row(idtq_longarray=731), Row(idtq_longarray=429), Row(idtq_longarray=730)))",
+					"Count(Intersect(Row(idtq_longarray=172, from=\"2022-01-01\"),Row(idtq_longarray=388, from=\"2022-01-01\"), Row(idtq_longarray=731, from=\"2022-01-01\"), Row(idtq_longarray=429, from=\"2022-01-01\"), Row(idtq_longarray=730, from=\"2022-01-01\")))",
+					"Count(Intersect(Row(idset_intarray=958),Row(idset_intarray=242), Row(idset_intarray=778), Row(idset_intarray=289), Row(idset_intarray=797)))",
+					"Count(Row(int_long > 500))",
+					"Count(Row(int_int > 500))",
+					"Count(Row(decimal_bytes > 1000.00))",
+					"Count(Row(decimal_float > 3.05))",
+					"Count(Row(decimal_double > 4.11))",
+					"Count(Row(dateint_bytes_ts > 1675163490))",
+					"Count(Row(bools=bool_bool))",
+					"Count(Not(Row(bools=bool_bool)))",
+					"Count(Row(timestamp_bytes_ts > \"2023-02-20T00:00:00Z\"))",
+					"Count(Row(timestamp_bytes_int > \"2023-02-20T00:00:00Z\"))",
+				},
+			},
+			expectedResults: [][]string{
+				[]string{
+					"{\"results\":[10]}\n",
+					"{\"results\":[2]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[0]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[2]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"DY2Ui|kUbdU|pjxqm\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+					"{\"results\":[{\"columns\":[]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"u2Yr4|sHaUv|x5z8P\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"6TKzc|YKLk9|h1iqc\"]}]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[4]}\n",
+					"{\"results\":[5]}\n",
+					"{\"results\":[4]}\n",
+					"{\"results\":[3]}\n",
+					"{\"results\":[3]}\n",
+					"{\"results\":[8]}\n",
+					"{\"results\":[4]}\n",
+					"{\"results\":[6]}\n",
+					"{\"results\":[3]}\n",
+					"{\"results\":[3]}\n",
+				},
+			},
+		},
+		{ // confirm behavior of nulls.. when all null values passed, nothing should change
+			name:              "all values can be inserted",
+			pathsToAvroSchema: []string{"alltypes.json"},
+			pathsToRecords:    []string{"./testdata/records/alltypes_null.json"},
+			pilosaHosts:       pilosaHost,
+			registryURL:       registryHost,
+			kafkaHost:         kafkaHost,
+			consumerConfigs: []ConsumerTestConfig{
+				{
+					idType:    "string",
+					keyFields: []string{"pk0", "pk1", "pk2"},
+					topic:     "alltypes_null",
+					delete:    false,
+				},
+			},
+			index: "alltypes_null",
+			queries: [][]string{
+				[]string{
+					//"Extract(All(), Rows(stringset_string), Rows(string_string), Rows(stringtq_string), Rows(stringset_bytes), Rows(string_bytes), Rows(stringsettq_bytes), Rows(stringset_stringarray), Rows(stringtq_stringarray), Rows(stringset_bytesarray), Rows(stringtq_bytesarray), Rows(idset_long), Rows(id_long), Rows(idtq_long), Rows(idset_int), Rows(id_int), Rows(idsettq_int), Rows(idset_longarray), Rows(idtq_longarray), Rows(idset_intarray), Rows(stringtq_stringarray), Rows(stringset_bytesarray), Rows(stringtq_bytesarray), Rows(idset_long), Rows(id_long), Rows(idtq_long), Rows(idset_int), Rows(id_int), Rows(idsettq_int), Rows(idset_longarray), Rows(idtq_longarray), Rows(idset_intarray), Rows(int_long), Rows(int_int), Rows(decimal_bytes), Rows(decimal_float), Rows(decimal_double), Rows(dateint_bytes_ts), Rows(bools), Rows(timestamp_bytes_ts), Rows(timestamp_bytes_int))",
+					"Count(All())",
+					"Count(Row(stringset_string='7EYSp'))",
+					"Count(Row(string_string='uirDR'))",
+					"Count(Row(stringtq_string='Qylqq'))",
+					"Count(Row(stringset_bytes='gL2Hg'))",
+					"Count(Row(string_bytes='BmvHF'))",
+					"Count(Row(stringsettq_bytes='798ka'))",
+					"Count(Intersect(Row(stringset_stringarray='vbbuf'), Row(stringset_stringarray='VQs7y'), Row(stringset_stringarray='9z4aw'), Row(stringset_stringarray='h1iqc'), Row(stringset_stringarray='aQQxr')))",
+					"Count(Intersect(Row(stringtq_stringarray='x5z8P'), Row(stringtq_stringarray='0UGJQ'), Row(stringtq_stringarray='58KIR'), Row(stringtq_stringarray='7EYSp'), Row(stringtq_stringarray='CKs1F')))",
+					"Count(Intersect(Row(stringset_bytesarray='u2Yr4'), Row(stringset_bytesarray='tvNOB'), Row(stringset_bytesarray='iYeOV'), Row(stringset_bytesarray='ZgkOB'), Row(stringset_bytesarray='RPGAm')))",
+					"Count(Intersect(Row(stringtq_bytesarray='BwqU2'), Row(stringtq_bytesarray='6iGIm'), Row(stringtq_bytesarray='fjQK2'), Row(stringtq_bytesarray='LBTEU'), Row(stringtq_bytesarray='C6xxn')))",
+					"Count(Row(idset_long=647))",
+					"Count(Row(id_long=792))",
+					"Count(Row(idtq_long=676))",
+					"Count(Row(idset_int=898))",
+					"Count(Row(id_int=63))",
+					"Count(Row(idsettq_int=890))",
+					"Count(Intersect(Row(idset_longarray=442), Row(idset_longarray=167), Row(idset_longarray=230), Row(idset_longarray=344), Row(idset_longarray=733)))",
+					"Count(Intersect(Row(idtq_longarray=385), Row(idtq_longarray=931), Row(idtq_longarray=157), Row(idtq_longarray=865), Row(idtq_longarray=394)))",
+					"Count(Intersect(Row(idset_intarray=442), Row(idset_intarray=614), Row(idset_intarray=394), Row(idset_intarray=284), Row(idset_intarray=344)))",
+					"Count(Row(int_long=584))",
+					"Count(Row(int_int=344))",
+					"Count(Row(decimal_bytes=1155.95))",
+					"Count(Row(decimal_float=3.23))",
+					"Count(Row(decimal_double=0.95))",
+					"Count(Row(dateint_bytes_ts=1676534039))",
+					"Count(Row(bools=bool_bool))",
+					"Count(Row(timestamp_bytes_ts='2023-02-16T07:53:59Z'))",
+					"Count(Row(timestamp_bytes_int=1676555639))",
+				},
+			},
+			expectedResults: [][]string{
+				[]string{
+					//"{\"results\":[{\"fields\":[{\"name\":\"stringset_string\",\"type\":\"[]string\"},{\"name\":\"string_string\",\"type\":\"string\"},{\"name\":\"stringtq_string\",\"type\":\"[]string\"},{\"name\":\"stringset_bytes\",\"type\":\"[]string\"},{\"name\":\"string_bytes\",\"type\":\"string\"},{\"name\":\"stringsettq_bytes\",\"type\":\"[]string\"},{\"name\":\"stringset_stringarray\",\"type\":\"[]string\"},{\"name\":\"stringtq_stringarray\",\"type\":\"[]string\"},{\"name\":\"stringset_bytesarray\",\"type\":\"[]string\"},{\"name\":\"stringtq_bytesarray\",\"type\":\"[]string\"},{\"name\":\"idset_long\",\"type\":\"[]uint64\"},{\"name\":\"id_long\",\"type\":\"uint64\"},{\"name\":\"idtq_long\",\"type\":\"[]uint64\"},{\"name\":\"idset_int\",\"type\":\"[]uint64\"},{\"name\":\"id_int\",\"type\":\"uint64\"},{\"name\":\"idsettq_int\",\"type\":\"[]uint64\"},{\"name\":\"idset_longarray\",\"type\":\"[]uint64\"},{\"name\":\"idtq_longarray\",\"type\":\"[]uint64\"},{\"name\":\"idset_intarray\",\"type\":\"[]uint64\"},{\"name\":\"stringtq_stringarray\",\"type\":\"[]string\"},{\"name\":\"stringset_bytesarray\",\"type\":\"[]string\"},{\"name\":\"stringtq_bytesarray\",\"type\":\"[]string\"},{\"name\":\"idset_long\",\"type\":\"[]uint64\"},{\"name\":\"id_long\",\"type\":\"uint64\"},{\"name\":\"idtq_long\",\"type\":\"[]uint64\"},{\"name\":\"idset_int\",\"type\":\"[]uint64\"},{\"name\":\"id_int\",\"type\":\"uint64\"},{\"name\":\"idsettq_int\",\"type\":\"[]uint64\"},{\"name\":\"idset_longarray\",\"type\":\"[]uint64\"},{\"name\":\"idtq_longarray\",\"type\":\"[]uint64\"},{\"name\":\"idset_intarray\",\"type\":\"[]uint64\"}],\"columns\":[{\"column\":\"9z4aw|5ptDx|CKs1F\",\"rows\":[[\"7EYSp\"],\"uirDR\",[\"Qylqq\"],[\"gL2Hg\"],\"BmvHF\",[\"798ka\"],[\"9z4aw\",\"h1iqc\",\"aQQxr\",\"vbbuf\",\"VQs7y\"],[\"7EYSp\",\"CKs1F\",\"x5z8P\",\"0UGJQ\",\"58KIR\"],[\"u2Yr4\",\"tvNOB\",\"iYeOV\",\"ZgkOB\",\"RPGAm\"],[\"BwqU2\",\"6iGIm\",\"fjQK2\",\"LBTEU\",\"C6xxn\"],[647],792,[676],[898],63,[890],[167,230,344,442,733],[157,385,394,865,931],[284,344,394,442,614],[\"7EYSp\",\"CKs1F\",\"x5z8P\",\"0UGJQ\",\"58KIR\"],[\"u2Yr4\",\"tvNOB\",\"iYeOV\",\"ZgkOB\",\"RPGAm\"],[\"BwqU2\",\"6iGIm\",\"fjQK2\",\"LBTEU\",\"C6xxn\"],[647],792,[676],[898],63,[890],[167,230,344,442,733],[157,385,394,865,931],[284,344,394,442,614]]}]}]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+				},
+			},
+		},
+		{
+			name: "all values can be deleted",
+			pathsToAvroSchema: []string{
+				"alltypes.json",
+				"alltypes_delete_fields.json",
+			},
+			pathsToRecords: []string{
+				"./testdata/records/alltypes.json",
+				"./testdata/records/alltypes_delete_fields.json",
+			},
+			pilosaHosts: pilosaHost,
+			registryURL: registryHost,
+			kafkaHost:   kafkaHost,
+			consumerConfigs: []ConsumerTestConfig{
+				{
+					idType:    "string",
+					keyFields: []string{"pk0", "pk1", "pk2"},
+					topic:     "alltypes",
+					delete:    false,
+				},
+				{
+					idType:    "string",
+					keyFields: []string{"pk0", "pk1", "pk2"},
+					topic:     "alltypes_delete_fields",
+					delete:    true,
+				},
+			},
+			index: "alltypes_delete",
+			queries: [][]string{
+				[]string{
+					"Count(All())",
+					"Count(ConstRow(columns=['u2Yr4|sHaUv|x5z8P', 'DY2Ui|kUbdU|pjxqm']))",
+					"Count(Row(stringset_string='58KIR'))",
+					"Count(Row(string_string='8MGwy'))",
+					"Count(Row(stringtq_string='ivWWb'))",
+					"Count(Row(stringtq_string='ivWWb', to=\"2023-02-03\"))",
+					"Count(Row(stringtq_string='ivWWb', from=\"2023-02-03\", to=\"2023-02-04\"))",
+					"Count(Union(Row(stringset_bytes='eNKWF'),Row(stringset_bytes='5ptDx')))",
+					"Row(string_bytes='vTwn4')",
+					"Row(stringsettq_bytes='798ka')",
+					"Row(stringsettq_bytes='798ka', from=\"2023-02-18\")",
+					"Row(stringsettq_bytes='798ka', from=\"2023-02-16\", to=\"2023-02-18\")",
+					"Intersect(Row(stringset_stringarray='u2Yr4'), Row(stringset_stringarray='PYE8V'), Row(stringset_stringarray='VBcyJ'), Row(stringset_stringarray='Chgzr'), Row(stringset_stringarray='DY2Ui'))",
+					"Row(stringtq_stringarray='oxjI0', from=\"2023-01-29\", to=\"2023-01-31\")",
+					"Intersect(Row(stringset_bytesarray='wNZ7o'), Row(stringset_bytesarray='OKNV2'),Row(stringset_bytesarray='F0uC4'),Row(stringset_bytesarray='VBcyJ'),Row(stringset_bytesarray='KMZnH'))",
+					"Count(Row(idset_long=839))",
+					"Count(Row(id_long=809))",
+					"Count(Row(idtq_long=533))",
+					"Count(Row(idtq_long=533, from=\"2020-01-01\"))",
+					"Count(Row(idset_int=533))",
+					"Count(Row(id_int=168))",
+					"Count(Row(idsettq_int=113))",
+					"Row(idsettq_int=113, to=\"2024-01-01\")",
+					"Count(Intersect(Row(idset_longarray=399),Row(idset_longarray=322), Row(idset_longarray=975), Row(idset_longarray=730), Row(idset_longarray=969)))",
+					"Count(Intersect(Row(idtq_longarray=172),Row(idtq_longarray=388), Row(idtq_longarray=731), Row(idtq_longarray=429), Row(idtq_longarray=730)))",
+					"Count(Intersect(Row(idtq_longarray=172, from=\"2022-01-01\"),Row(idtq_longarray=388, from=\"2022-01-01\"), Row(idtq_longarray=731, from=\"2022-01-01\"), Row(idtq_longarray=429, from=\"2022-01-01\"), Row(idtq_longarray=730, from=\"2022-01-01\")))",
+					"Count(Intersect(Row(idset_intarray=958),Row(idset_intarray=242), Row(idset_intarray=778), Row(idset_intarray=289), Row(idset_intarray=797)))",
+					"Count(Row(int_long > 500))",
+					"Count(Row(int_int > 500))",
+					"Count(Row(decimal_bytes > 1000.00))",
+					"Count(Row(decimal_float > 3.05))",
+					"Count(Row(decimal_double > 4.11))",
+					"Count(Row(dateint_bytes_ts > 1675163490))",
+					"Count(Row(bools=bool_bool))",
+					"Count(Not(Row(bools=bool_bool)))",
+					"Count(Row(timestamp_bytes_ts > \"2023-02-20T00:00:00Z\"))",
+					"Count(Row(timestamp_bytes_int > \"2023-02-20T00:00:00Z\"))",
+				},
+				{
+					"Count(All())",
+					"Row(int_long=null)",
+					"Count(UnionRows(Rows(stringset_stringarray)))",
+					"Not(UnionRows(Rows(stringset_stringarray), Rows(string_string),Rows(stringset_bytes),Rows(string_bytes),Rows(stringset_stringarray),Rows(stringset_bytesarray),Rows(idset_long),Rows(id_long),Rows(idset_int),Rows(id_int),Rows(idset_longarray),Rows(idset_intarray)))",
+					"Row(int_long=null)",
+				},
+			},
+			expectedResults: [][]string{
+				[]string{
+					"{\"results\":[10]}\n",
+					"{\"results\":[2]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[0]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[2]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"DY2Ui|kUbdU|pjxqm\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+					"{\"results\":[{\"columns\":[]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"u2Yr4|sHaUv|x5z8P\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"6TKzc|YKLk9|h1iqc\"]}]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[1]}\n",
+					"{\"results\":[4]}\n",
+					"{\"results\":[5]}\n",
+					"{\"results\":[4]}\n",
+					"{\"results\":[3]}\n",
+					"{\"results\":[3]}\n",
+					"{\"results\":[8]}\n",
+					"{\"results\":[4]}\n",
+					"{\"results\":[6]}\n",
+					"{\"results\":[3]}\n",
+					"{\"results\":[3]}\n",
+				},
+				[]string{
+					"{\"results\":[10]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+					"{\"results\":[9]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"6TKzc|YKLk9|h1iqc\"]}]}\n",
+					"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
+				},
 			},
 		},
 	}
 
 	for _, test := range tests {
+
 		// define some vars
 		now := time.Now().UnixNano()
 		index := fmt.Sprintf("%s_%d", test.index, now)
-		topic := fmt.Sprintf("%s_%d", test.topic, now)
 
-		// read in records
-		var records []map[string]interface{}
-		var data map[string]interface{}
-		recordsFile, err := os.Open(test.pathToRecords)
-		if err != nil {
-			t.Errorf("opening records file")
+		// so topics of the same name end up being the same name after
+		// adding a timestamp to make sure they're unique
+		var topics map[string]string
+		for _, iteration := range test.consumerConfigs {
+			if topicName, ok := topics[iteration.topic]; ok {
+				iteration.topic = topicName
+			} else {
+				newTopicName := fmt.Sprintf("%s_%d", iteration.topic, now)
+				iteration.topic = newTopicName
+
+			}
 		}
-		defer recordsFile.Close()
 
-		s := bufio.NewScanner(recordsFile)
-		for s.Scan() {
-			err := json.Unmarshal(s.Bytes(), &data)
+		// iterate through tests (one per consumer config)
+		for i, iteration := range test.consumerConfigs {
+			// read in records
+			records, err := kafkaRecordFromFile(test.pathsToRecords[i])
 			if err != nil {
-				t.Errorf("unmarshal json: %s", err)
+				t.Errorf("%s", err)
 			}
-			records = append(records, data)
-			data = make(map[string]interface{})
-		}
 
-		// configure the consumer
-		consumer, err := NewMain()
-		if err != nil {
-			t.Fatalf("creating main %v", err)
-		}
-		configureTestFlags(consumer)
-		consumer.Index = index
-		consumer.Topics = []string{topic}
-		consumer.KafkaBootstrapServers = []string{test.kafkaHost}
-		consumer.SchemaRegistryURL = test.registryURL
-		switch test.idType {
-		case "id":
-			consumer.IDField = test.keyFields[0]
-		case "string":
-			consumer.PrimaryKeyFields = test.keyFields
-		case "generate":
-			consumer.AutoGenerate = true
-			consumer.ExternalGenerate = true
-		default:
-			t.Errorf("incorrect idType supplied")
-		}
-		consumer.MaxMsgs = uint64(len(records))
+			// load schema registry, create and produce to the topic
+			writeRecordsToKafka(t, test.pathsToAvroSchema[i], iteration.topic, test.registryURL, records)
 
-		// load schema registry, create produce, topic and run consumer data
-		licodec := liDecodeTestSchema(t, test.pathToAvroSchema)
-		schemaID := postSchema(t, test.pathToAvroSchema, fmt.Sprintf("%s_id", topic), consumer.SchemaRegistryURL, nil)
-		p, err := confluent.NewProducer(&confluent.ConfigMap{
-			"bootstrap.servers": kafkaHost,
-		})
-		if err != nil {
-			t.Fatalf("Failed to create producer: %s", err)
-		}
-		defer p.Close()
-		tCreateTopic(t, topic, p)
-
-		tPutRecordsKafka(t, p, topic, schemaID, licodec, "akey", records...)
-		err = consumer.Run()
-		if err != nil {
-			t.Fatalf("running consumer: %v", err)
-		}
-
-		// now run queries and confirm the data is as expected
-		client := consumer.PilosaClient()
-		for i, q := range test.queries {
-			status, body, err := client.HTTPRequest("POST", fmt.Sprintf("/index/%s/query", index), []byte(q), nil)
+			// configure the consumer
+			consumer, err := NewMain()
 			if err != nil {
-				t.Fatalf("querying featurebase: status: %d, response: %s, error: %s: on query: %s", status, body, err, q)
+				t.Fatalf("creating main %v", err)
 			}
-			if string(body[:]) != test.expectedResults[i] {
-				t.Fatalf("running query: %s... expected %s but got %s", q, test.expectedResults[i], body)
+			configureTestFlags(consumer)
+			consumer.Index = index
+			consumer.Topics = []string{iteration.topic}
+			consumer.KafkaBootstrapServers = []string{test.kafkaHost}
+			consumer.SchemaRegistryURL = test.registryURL
+			consumer.Delete = iteration.delete
+			switch iteration.idType {
+			case "id":
+				consumer.IDField = iteration.keyFields[0]
+			case "string":
+				consumer.PrimaryKeyFields = iteration.keyFields
+			case "generate":
+				consumer.AutoGenerate = true
+				consumer.ExternalGenerate = true
+			default:
+				t.Errorf("incorrect idType supplied")
 			}
-		}
+			consumer.MaxMsgs = uint64(len(records))
 
-		client.DeleteIndexByName(index)
+			// consumer records
+			err = consumer.Run()
+			if err != nil {
+				t.Fatalf("running consumer: %v", err)
+			}
+
+			// now run queries and confirm the data is as expected
+			client := consumer.PilosaClient()
+			runTestQueries(t, index, test.queries[i], test.expectedResults[i], client)
+		}
+		//client.DeleteIndexByName(index)
 	}
 }
 
-func convertUnionTypes(schema avro.Schema, records map[string]interface{}) error {
+func runTestQueries(t *testing.T, index string, queries, expectedResults []string, client *pilosaclient.Client) {
+	for i, q := range queries {
+		status, body, err := client.HTTPRequest("POST", fmt.Sprintf("/index/%s/query", index), []byte(q), nil)
+		if err != nil {
+			t.Fatalf("querying featurebase: status: %d, response: %s, error: %s: on query: %s", status, body, err, q)
+		}
+		fmt.Println(expectedResults)
+		if string(body[:]) != expectedResults[i] {
+			t.Fatalf("running query %s against index %s. expected %s but got %s", q, index, expectedResults[i], body)
+		}
+	}
+}
 
-	return errors.Errorf("new error")
+func kafkaRecordFromFile(pathToRecords string) (records []map[string]interface{}, err error) {
+	var data map[string]interface{}
 
+	recordsFile, err := os.Open(pathToRecords)
+	if err != nil {
+		return nil, fmt.Errorf("opening records file")
+	}
+	defer recordsFile.Close()
+
+	s := bufio.NewScanner(recordsFile)
+	for s.Scan() {
+		err := json.Unmarshal(s.Bytes(), &data)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal json: %s", err)
+		}
+		records = append(records, data)
+		data = make(map[string]interface{})
+	}
+	return records, nil
+}
+
+func writeRecordsToKafka(t *testing.T, pathToAvroSchema, topic, schemaRegistryURL string, records []map[string]interface{}) {
+	licodec := liDecodeTestSchema(t, pathToAvroSchema)
+	schemaID := postSchema(t, pathToAvroSchema, fmt.Sprintf("%s_id", topic), schemaRegistryURL, nil)
+	p, err := confluent.NewProducer(&confluent.ConfigMap{
+		"bootstrap.servers": kafkaHost,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create producer: %s", err)
+	}
+	defer p.Close()
+	tCreateTopic(t, topic, p)
+
+	tPutRecordsKafka(t, p, topic, schemaID, licodec, "akey", records...)
 }
 
 type sortableCRI []pilosaclient.CountResultItem
