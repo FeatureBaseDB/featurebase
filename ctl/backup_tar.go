@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -329,7 +328,7 @@ func (cmd *BackupTarCommand) backupTarShardDataframe(ctx context.Context, tw *ta
 	resp, err := client.GetDataframeShard(ctx, indexName, shard)
 	// no error if doesn't exist
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("getting dataframe: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 404 {
