@@ -145,6 +145,7 @@ func newExecutor(opts ...executorOption) *executor {
 	e.work = make(chan job, e.workerPoolSize)
 	_ = testhook.Opened(NewAuditor(), e, nil)
 	e.workers = task.NewPool(e.workerPoolSize, e.doOneJob, e)
+	e.frameCache = make(map[string]arrow.Table)
 	return e
 }
 
