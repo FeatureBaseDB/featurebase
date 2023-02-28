@@ -37,6 +37,7 @@ const (
 	ErrIntOrDecimalOrTimestampOrStringExpressionExpected errors.Code = "ErrIntOrDecimalOrTimestampOrStringExpressionExpected"
 	ErrStringExpressionExpected                          errors.Code = "ErrStringExpressionExpected"
 	ErrSetExpressionExpected                             errors.Code = "ErrSetExpressionExpected"
+	ErrTimeQuantumExpressionExpected                     errors.Code = "ErrTimeQuantumExpressionExpected"
 	ErrSingleRowExpected                                 errors.Code = "ErrSingleRowExpected"
 
 	// type related errors
@@ -58,7 +59,8 @@ const (
 	ErrInvalidColumnInFilterExpression  errors.Code = "ErrInvalidColumnInFilterExpression"
 	ErrInvalidTypeInFilterExpression    errors.Code = "ErrInvalidTypeInFilterExpression"
 
-	ErrTypeAssignmentIncompatible errors.Code = "ErrTypeAssignmentIncompatible"
+	ErrTypeAssignmentIncompatible              errors.Code = "ErrTypeAssignmentIncompatible"
+	ErrTypeAssignmentToTimeQuantumIncompatible errors.Code = "ErrTypeAssignmentToTimeQuantumIncompatible"
 
 	ErrInvalidUngroupedColumnReference         errors.Code = "ErrInvalidUngroupedColumnReference"
 	ErrInvalidUngroupedColumnReferenceInHaving errors.Code = "ErrInvalidUngroupedColumnReferenceInHaving"
@@ -232,6 +234,13 @@ func NewErrInvalidTypeCoercion(line, col int, from, to string) error {
 	return errors.New(
 		ErrInvalidTypeCoercion,
 		fmt.Sprintf("[%d:%d] unable to convert '%s' to type '%s'", line, col, from, to),
+	)
+}
+
+func NewErrTypeAssignmentToTimeQuantumIncompatible(line, col int, type1 string) error {
+	return errors.New(
+		ErrTypeAssignmentToTimeQuantumIncompatible,
+		fmt.Sprintf("[%d:%d] an expression of type '%s' cannot be assigned to a timequantum", line, col, type1),
 	)
 }
 
@@ -442,6 +451,13 @@ func NewErrSetExpressionExpected(line, col int) error {
 	return errors.New(
 		ErrSetExpressionExpected,
 		fmt.Sprintf("[%d:%d] set expression expected", line, col),
+	)
+}
+
+func NewErrTimeQuantumExpressionExpected(line, col int) error {
+	return errors.New(
+		ErrTimeQuantumExpressionExpected,
+		fmt.Sprintf("[%d:%d] time quantum expression expected", line, col),
 	)
 }
 

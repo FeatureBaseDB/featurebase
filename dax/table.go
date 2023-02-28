@@ -73,14 +73,16 @@ const PrefixTable = "tbl"
 
 // Base types.
 const (
-	BaseTypeBool      = "bool"      //
-	BaseTypeDecimal   = "decimal"   //
-	BaseTypeID        = "id"        // non-keyed mutex
-	BaseTypeIDSet     = "idset"     // non-keyed set
-	BaseTypeInt       = "int"       //
-	BaseTypeString    = "string"    // keyed mutex
-	BaseTypeStringSet = "stringset" // keyed set
-	BaseTypeTimestamp = "timestamp" //
+	BaseTypeBool       = "bool"       //
+	BaseTypeDecimal    = "decimal"    //
+	BaseTypeID         = "id"         // non-keyed mutex
+	BaseTypeIDSet      = "idset"      // non-keyed set
+	BaseTypeIDSetQ     = "idsetq"     // non-keyed set timequantum
+	BaseTypeInt        = "int"        //
+	BaseTypeString     = "string"     // keyed mutex
+	BaseTypeStringSet  = "stringset"  // keyed set
+	BaseTypeStringSetQ = "stringsetq" // keyed set timequantum
+	BaseTypeTimestamp  = "timestamp"  //
 
 	DefaultPartitionN = 256
 
@@ -679,9 +681,11 @@ func BaseTypeFromString(s string) (BaseType, error) {
 		BaseTypeDecimal,
 		BaseTypeID,
 		BaseTypeIDSet,
+		BaseTypeIDSetQ,
 		BaseTypeInt,
 		BaseTypeString,
 		BaseTypeStringSet,
+		BaseTypeStringSetQ,
 		BaseTypeTimestamp:
 		return BaseType(lowered), nil
 	default:
@@ -706,7 +710,7 @@ func (f *Field) String() string {
 // StringKeys returns true if the field uses string keys.
 func (f *Field) StringKeys() bool {
 	switch f.Type {
-	case BaseTypeString, BaseTypeStringSet:
+	case BaseTypeString, BaseTypeStringSet, BaseTypeStringSetQ:
 		return true
 	}
 	return false

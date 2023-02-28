@@ -243,9 +243,9 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 		fieldType = dax.BaseTypeBool
 	case FieldTypeTime:
 		if fo.Keys {
-			fieldType = dax.BaseTypeStringSet
+			fieldType = dax.BaseTypeStringSetQ
 		} else {
-			fieldType = dax.BaseTypeIDSet
+			fieldType = dax.BaseTypeIDSetQ
 		}
 		timeQuantum = dax.TimeQuantum(fo.TimeQuantum)
 	default:
@@ -397,11 +397,13 @@ func fieldToFieldType(f *dax.Field) string {
 			return string(f.Type)
 		}
 		return "mutex"
+
 	case dax.BaseTypeIDSet, dax.BaseTypeStringSet:
-		if f.Options.TimeQuantum != "" {
-			return "time"
-		}
 		return "set"
+
+	case dax.BaseTypeIDSetQ, dax.BaseTypeStringSetQ:
+		return "time"
+
 	default:
 		return string(f.Type)
 	}
@@ -449,15 +451,13 @@ func FieldOptionsFromField(fld *dax.Field) ([]FieldOption, error) {
 			OptFieldTypeMutex(cacheType, cacheSize),
 		)
 	case dax.BaseTypeIDSet:
-		if fld.Options.TimeQuantum != "" {
-			opts = append(opts,
-				OptFieldTypeTime(TimeQuantum(fld.Options.TimeQuantum), fld.Options.TTL.String()),
-			)
-		} else {
-			opts = append(opts,
-				OptFieldTypeSet(cacheType, cacheSize),
-			)
-		}
+		opts = append(opts,
+			OptFieldTypeSet(cacheType, cacheSize),
+		)
+	case dax.BaseTypeIDSetQ:
+		opts = append(opts,
+			OptFieldTypeTime(TimeQuantum(fld.Options.TimeQuantum), fld.Options.TTL.String()),
+		)
 	case dax.BaseTypeInt:
 		opts = append(opts,
 			OptFieldTypeInt(fld.Options.Min.ToInt64(0), fld.Options.Max.ToInt64(0)),
@@ -468,17 +468,15 @@ func FieldOptionsFromField(fld *dax.Field) ([]FieldOption, error) {
 			OptFieldKeys(),
 		)
 	case dax.BaseTypeStringSet:
-		if fld.Options.TimeQuantum != "" {
-			opts = append(opts,
-				OptFieldTypeTime(TimeQuantum(fld.Options.TimeQuantum), fld.Options.TTL.String()),
-				OptFieldKeys(),
-			)
-		} else {
-			opts = append(opts,
-				OptFieldTypeSet(cacheType, cacheSize),
-				OptFieldKeys(),
-			)
-		}
+		opts = append(opts,
+			OptFieldTypeSet(cacheType, cacheSize),
+			OptFieldKeys(),
+		)
+	case dax.BaseTypeStringSetQ:
+		opts = append(opts,
+			OptFieldTypeTime(TimeQuantum(fld.Options.TimeQuantum), fld.Options.TTL.String()),
+			OptFieldKeys(),
+		)
 	case dax.BaseTypeTimestamp:
 		opts = append(opts,
 			OptFieldTypeTimestamp(fld.Options.Epoch, fld.Options.TimeUnit),

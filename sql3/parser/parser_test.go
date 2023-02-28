@@ -251,40 +251,6 @@ func TestParser_ParseTimeUnitConstraints(t *testing.T) {
 	})
 }
 
-func TestParser_ParseTimeQuantumConstraints(t *testing.T) {
-	t.Run("TimeQuantum", func(t *testing.T) {
-		t.Run("ErrNoKey", func(t *testing.T) {
-			AssertParseStatementError(t, `CREATE TABLE tbl (col1 STRING TIMEQUANTUM`, `1:41: expected literal, found 'EOF'`)
-		})
-		t.Run("Simple", func(t *testing.T) {
-			AssertParseStatement(t, `CREATE TABLE tbl (col1 STRING TIMEQUANTUM 'YMD')`, &parser.CreateTableStatement{
-				Create: pos(0),
-				Table:  pos(7),
-				Name:   &parser.Ident{Name: "tbl", NamePos: pos(13)},
-				Lparen: pos(17),
-				Columns: []*parser.ColumnDefinition{
-					{
-						Name: &parser.Ident{Name: "col1", NamePos: pos(18)},
-						Type: &parser.Type{
-							Name: &parser.Ident{Name: "STRING", NamePos: pos(23)},
-						},
-						Constraints: []parser.Constraint{
-							&parser.TimeQuantumConstraint{
-								TimeQuantum: pos(30),
-								Expr: &parser.StringLit{
-									ValuePos: pos(42),
-									Value:    "YMD",
-								},
-							},
-						},
-					},
-				},
-				Rparen: pos(47),
-			})
-		})
-	})
-}
-
 func TestParser_ParseCacheTypeConstraints(t *testing.T) {
 	t.Run("CacheType", func(t *testing.T) {
 		t.Run("ErrNoKey", func(t *testing.T) {

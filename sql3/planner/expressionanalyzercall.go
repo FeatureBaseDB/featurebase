@@ -216,8 +216,6 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 
 	case "DATEPART":
 		return p.analyzeFunctionDatePart(call, scope)
-	case "SUBTABLE":
-		return p.analyzeFunctionSubtable(call, scope)
 	case "REVERSE":
 		return p.analyseFunctionReverse(call, scope)
 	case "CHAR":
@@ -258,6 +256,10 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		return p.analyzeFunctionToTimestamp(call, scope)
 	case "STR":
 		return p.analyseFunctionStr(call, scope)
+	// time quantum funtions
+	case "QRANGEGT":
+		return p.analyseFunctionQRangeGt(call, scope)
+
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

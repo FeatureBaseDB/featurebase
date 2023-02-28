@@ -17,20 +17,22 @@ import (
 
 // PlanOpPQLTableScan plan operator handles a PQL table scan
 type PlanOpPQLTableScan struct {
-	planner   *ExecutionPlanner
-	tableName string
-	columns   []string
-	filter    types.PlanExpression
-	topExpr   types.PlanExpression
-	warnings  []string
+	planner            *ExecutionPlanner
+	tableName          string
+	columns            []string
+	filter             types.PlanExpression
+	timeQuantumFilters []types.PlanExpression
+	topExpr            types.PlanExpression
+	warnings           []string
 }
 
 func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []string) *PlanOpPQLTableScan {
 	return &PlanOpPQLTableScan{
-		planner:   p,
-		tableName: tableName,
-		columns:   columns,
-		warnings:  make([]string, 0),
+		planner:            p,
+		tableName:          tableName,
+		columns:            columns,
+		timeQuantumFilters: make([]types.PlanExpression, 0),
+		warnings:           make([]string, 0),
 	}
 }
 
@@ -66,8 +68,17 @@ func (p *PlanOpPQLTableScan) Name() string {
 	return p.tableName
 }
 
+func (p *PlanOpPQLTableScan) IsFilterable() bool {
+	return true
+}
+
 func (p *PlanOpPQLTableScan) UpdateFilters(filterCondition types.PlanExpression) (types.PlanOperator, error) {
 	p.filter = filterCondition
+	return p, nil
+}
+
+func (p *PlanOpPQLTableScan) UpdateTimeQuantumFilters(filters ...types.PlanExpression) (types.PlanOperator, error) {
+	p.timeQuantumFilters = filters
 	return p, nil
 }
 
@@ -101,11 +112,12 @@ func (p *PlanOpPQLTableScan) Children() []types.PlanOperator {
 
 func (p *PlanOpPQLTableScan) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
 	return &tableScanRowIter{
-		planner:   p.planner,
-		tableName: p.tableName,
-		columns:   p.columns,
-		predicate: p.filter,
-		topExpr:   p.topExpr,
+		planner:            p.planner,
+		tableName:          p.tableName,
+		columns:            p.columns,
+		predicate:          p.filter,
+		timeQuantumFilters: p.timeQuantumFilters,
+		topExpr:            p.topExpr,
 	}, nil
 }
 
@@ -134,11 +146,12 @@ type targetColumn struct {
 }
 
 type tableScanRowIter struct {
-	planner   *ExecutionPlanner
-	tableName string
-	columns   []string
-	predicate types.PlanExpression
-	topExpr   types.PlanExpression
+	planner            *ExecutionPlanner
+	tableName          string
+	columns            []string
+	predicate          types.PlanExpression
+	timeQuantumFilters []types.PlanExpression
+	topExpr            types.PlanExpression
 
 	result    []pilosa.ExtractedTableColumn
 	rowWidth  int
@@ -215,12 +228,36 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 				continue
 			}
 
-			call.Children = append(call.Children,
-				&pql.Call{
-					Name: "Rows",
-					Args: map[string]interface{}{"field": c},
-				},
-			)
+			foundInTimeQuantumFilters := false
+			for _, tqf := range i.timeQuantumFilters {
+				f, ok := tqf.(*callPlanExpression)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unexpected time quantum filter expression type: %T", tqf)
+				}
+				// argument 0 should be a column ref
+				arg, ok := f.args[0].(*qualifiedRefPlanExpression)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unexpected time quantum filter argument expression type: %T", f.args[0])
+				}
+				if strings.EqualFold(arg.columnName, c) {
+					expr, err := i.planner.generatePQLCallFromExpr(ctx, tqf)
+					if err != nil {
+						return nil, err
+					}
+
+					call.Children = append(call.Children, expr)
+					foundInTimeQuantumFilters = true
+				}
+			}
+
+			if !foundInTimeQuantumFilters {
+				call.Children = append(call.Children,
+					&pql.Call{
+						Name: "Rows",
+						Args: map[string]interface{}{"field": c},
+					},
+				)
+			}
 		}
 
 		tbl, err := i.planner.schemaAPI.TableByName(ctx, dax.TableName(i.tableName))
@@ -228,6 +265,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
 		}
 
+		fmt.Printf("%v\n", call)
 		queryResponse, err := i.planner.executor.Execute(ctx, tbl, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err

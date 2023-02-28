@@ -50,10 +50,6 @@ var optimizerFunctions = []OptimizerFunc{
 	// one TableScanOperator,  try to use a PQL aggregate operators instead
 	tryToReplaceGroupByWithPQLAggregate,
 
-	// if we have a subtable call on a timequantum type
-	// take the join out and use the appropriate PQL operator instead
-	tryToRewriteSubtableJoins,
-
 	// update the columnIdx for all the qualified references in various operators
 	fixFieldRefs,
 
@@ -216,6 +212,8 @@ func getRelationAliases(n types.PlanOperator, scope *OptimizerScope) (RelationAl
 				inspectErr = aliases.addAlias(node, t)
 			case *PlanOpSubquery:
 				inspectErr = aliases.addAlias(node, t)
+			case *PlanOpTableValuedFunction:
+				inspectErr = aliases.addAlias(node, t)
 			default:
 				inspectErr = sql3.NewErrInternalf("unexpected alias child type '%T", node.ChildOp)
 			}
@@ -243,7 +241,7 @@ func getRelationAliases(n types.PlanOperator, scope *OptimizerScope) (RelationAl
 func filterPushdownChildSelector(c ParentContext) bool {
 	switch c.Parent.(type) {
 	case *PlanOpRelAlias:
-		//definitely don't go any further than alias
+		//definitely don't go any further than alias as parent
 		return false
 	}
 	return true
@@ -356,6 +354,16 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 
 	// only do this if it is a pql table scan
 	switch rel := tableNode.(type) {
+	case *PlanOpRelAlias:
+		switch rel.ChildOp.(type) {
+		case *PlanOpPQLTableScan:
+			table = rel
+		case *PlanOpPQLDistinctScan:
+			table = rel
+		default:
+			return tableNode, true, nil
+		}
+
 	case *PlanOpPQLTableScan:
 		table = rel
 	case *PlanOpPQLDistinctScan:
@@ -366,7 +374,7 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 
 	// is the thing filterable?
 	ft, ok := table.(types.FilteredRelation)
-	if !ok {
+	if !ok || !ft.IsFilterable() {
 		return tableNode, true, nil
 	}
 
@@ -377,30 +385,59 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 	}
 
 	tableFilters := make([]types.PlanExpression, 0)
+	timeQantumFilters := make([]types.PlanExpression, 0)
 	// can the filters be pushed down?
 	for _, tf := range availableFilters {
 		// try and generate a pql call graph, if we can't we can't push the filter down
 		_, err := a.generatePQLCallFromExpr(ctx, tf)
 		if err == nil {
-			tableFilters = append(tableFilters, tf)
+			// is this a time quantum call?
+			call, ok := tf.(*callPlanExpression)
+			if ok {
+				switch strings.ToUpper(call.name) {
+				case "QRANGEGT":
+					timeQantumFilters = append(timeQantumFilters, tf)
+				default:
+					// it's a filter
+					tableFilters = append(tableFilters, tf)
+				}
+			} else {
+				// it's a filter
+				tableFilters = append(tableFilters, tf)
+			}
 		}
 	}
 	// did we end up with any filters?
-	if len(tableFilters) == 0 {
+	if len(tableFilters)+len(timeQantumFilters) == 0 {
 		return tableNode, true, nil
 	}
 
-	filters.markFiltersHandled(tableFilters...)
-
-	// fix the field refs
-	tableFilters, _, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), tableFilters...)
-	if err != nil {
-		return nil, true, err
+	var newOp types.PlanOperator
+	if len(tableFilters) > 0 {
+		filters.markFiltersHandled(tableFilters...)
+		// fix the field refs
+		tableFilters, _, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), tableFilters...)
+		if err != nil {
+			return nil, true, err
+		}
+		newOp, err = ft.UpdateFilters(joinExprsWithAnd(tableFilters...))
+		if err != nil {
+			return nil, true, err
+		}
 	}
 
-	newOp, err := ft.UpdateFilters(joinExprsWithAnd(tableFilters...))
-	if err != nil {
-		return nil, true, err
+	if len(timeQantumFilters) > 0 {
+		filters.markFiltersHandled(timeQantumFilters...)
+
+		timeQantumFilters, _, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), timeQantumFilters...)
+		if err != nil {
+			return nil, true, err
+		}
+
+		newOp, err = ft.UpdateTimeQuantumFilters(timeQantumFilters...)
+		if err != nil {
+			return nil, true, err
+		}
 	}
 	return newOp, false, nil
 }
@@ -410,6 +447,17 @@ func pushdownFiltersToAboveRelation(ctx context.Context, a *ExecutionPlanner, ta
 
 	// only do this if it is a pql table scan
 	switch rel := tableNode.(type) {
+
+	case *PlanOpRelAlias:
+		switch rel.ChildOp.(type) {
+		case *PlanOpPQLTableScan:
+			table = rel
+		case *PlanOpPQLDistinctScan:
+			table = rel
+		default:
+			return tableNode, true, nil
+		}
+
 	case *PlanOpPQLTableScan:
 		table = rel
 	case *PlanOpPQLDistinctScan:
@@ -878,71 +926,6 @@ func tryToReplaceGroupByWithPQLGroupBy(ctx context.Context, a *ExecutionPlanner,
 		})
 	}
 	return n, true, nil
-}
-
-// the semantic for accessing a timequantum field is to use the subtable() table valued function in a join
-// rewrite queries that use this pattern to use the appropriate PQL call
-func tryToRewriteSubtableJoins(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
-	//bail if there are no joins
-	joins := getNestedLoopOperators(ctx, a, n, scope)
-	if len(joins) == 0 {
-		return n, true, nil
-	}
-
-	//get the projections, we're going to need them later
-	projections := getPlanOpProjectionOperators(ctx, a, n, scope)
-
-	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-		switch nl := node.(type) {
-		case *PlanOpNestedLoops:
-			var tvf *PlanOpTableValuedFunction
-			// bail if the join does not have a tvf as one of the operators
-			tvftop, topok := nl.top.(*PlanOpTableValuedFunction)
-			tvfbottom, bottomok := nl.bottom.(*PlanOpTableValuedFunction)
-
-			//bail if both sides of the join are a tvf
-			if topok && bottomok {
-				return nl, true, nil
-			}
-			if topok {
-				tvf = tvftop
-			}
-			if bottomok {
-				tvf = tvfbottom
-			}
-			//if tvf == nil, then neither side is a tvf
-			if tvf == nil {
-				return nl, true, nil
-			}
-
-			//check it is the subtable() tvf
-			tvfCall, ok := tvf.callExpr.(*callPlanExpression)
-			if !ok {
-				return nl, true, nil
-			}
-			if !strings.EqualFold(tvfCall.name, "subtable") {
-				return nl, true, nil
-			}
-
-			// if there is no join condition, it's an extract; replace the 'value' reference
-			// with a reference with the first argument and remove the join
-			if nl.cond == nil {
-				// get the first argument column from the tvf
-
-				// for each of the projection operators, for each of the projections
-				// transform each of the referenced values with a the first arg
-
-				a.logger.Debugf("%T", projections)
-			}
-
-			// there is a join condition, make sure it is one that is permissible (range queries only?)
-			a.logger.Debugf("%T", tvf)
-
-			return nl, true, nil
-		default:
-			return nl, true, nil
-		}
-	})
 }
 
 func pushdownPQLTop(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
