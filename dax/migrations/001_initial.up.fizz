@@ -41,3 +41,16 @@ create_table("columns") {
 	t.Timestamps()
 }
 
+create_table("nodes") {
+        t.Column("id", "uuid", {primary: true})
+	t.Column("address", "string")
+	t.Timestamps()
+}
+
+create_table("node_roles") {
+        t.Column("id", "uuid", {primary: true})
+        t.Column("node_id", "uuid")
+	t.Column("role", "string")
+	t.ForeignKey("node_id", {"nodes": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}

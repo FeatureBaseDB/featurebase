@@ -8,6 +8,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/gobuffalo/pop/v6"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -30,96 +31,75 @@ func TestSQLSchemar(t *testing.T) {
 	// TODO: currently you must start w/ a clean test database
 	// soda drop -e test; soda create -e test; soda migrate -e test
 	conn, err := pop.Connect("test")
-	if err != nil {
-		t.Fatalf("connecting: %v", err)
-	}
+	assert.NoError(t, err, "connecting")
+
 	trans := sqldb.Transactor{Connection: conn}
 
 	tx, err := trans.BeginTx(context.Background(), true)
-	if err != nil {
-		t.Fatalf("getting transaction: %v", err)
-	}
+	assert.NoError(t, err, "getting transaction")
+
 	defer func() {
 		err := tx.Rollback()
 		if err != nil {
-			t.Logf("committing: %v", err)
+			t.Logf("rolling back: %v", err)
 		}
 	}()
 
 	schemar := &sqldb.Schemar{}
 
-	if err := schemar.CreateDatabase(tx,
+	err = schemar.CreateDatabase(tx,
 		&dax.QualifiedDatabase{
 			OrganizationID: orgID,
-			Database:       dax.Database{ID: dbID, Name: dbName}}); err != nil {
-		t.Fatal(err)
-	}
+			Database:       dax.Database{ID: dbID, Name: dbName}})
+	assert.NoError(t, err)
+
 	// create 2nd db in same org
-	if err := schemar.CreateDatabase(tx,
+	err = schemar.CreateDatabase(tx,
 		&dax.QualifiedDatabase{
 			OrganizationID: orgID,
-			Database:       dax.Database{ID: dbID2, Name: dbName2}}); err != nil {
-		t.Fatal(err)
-	}
+			Database:       dax.Database{ID: dbID2, Name: dbName2}})
+	assert.NoError(t, err)
+
 	// create 3rd db in new org
-	if err := schemar.CreateDatabase(tx,
+	schemar.CreateDatabase(tx,
 		&dax.QualifiedDatabase{
 			OrganizationID: orgID2,
-			Database:       dax.Database{ID: dbID3, Name: dbName2}}); err != nil {
-		t.Fatal(err)
-	}
+			Database:       dax.Database{ID: dbID3, Name: dbName2}})
+	assert.NoError(t, err)
 
 	qdbid := dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: dbID}
 
-	if err := schemar.CreateDatabase(tx,
+	err = schemar.CreateDatabase(tx,
 		&dax.QualifiedDatabase{OrganizationID: orgID,
 			Database: dax.Database{
 				ID:   dbID,
 				Name: dbName},
-		}); err == nil {
-		t.Fatal("expected error, but got none")
-	} else if !errors.Is(err, dax.ErrDatabaseIDExists) {
+		})
+	if !errors.Is(err, dax.ErrDatabaseIDExists) {
 		t.Fatalf("got unexpected error creating DB that already exists: %v", err)
 	}
 
 	db, err := schemar.DatabaseByName(tx, orgID, dbName)
-	if err != nil {
-		t.Fatalf("getting database by name: %v", err)
-	}
-	if db.ID != dbID {
-		t.Fatalf("returned db has wrong name")
-	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, dbID, db.ID)
 
 	err = schemar.SetDatabaseOption(tx, qdbid, "workers_max", "4")
-	if err != nil {
-		t.Fatalf("setting workers max: %v", err)
-	}
+	assert.NoError(t, err)
+
 	err = schemar.SetDatabaseOption(tx, qdbid, "workers_min", "2")
-	if err != nil {
-		t.Fatalf("setting workers min: %v", err)
-	}
+	assert.NoError(t, err)
 
 	db, err = schemar.DatabaseByID(tx, qdbid)
-	if err != nil {
-		t.Fatalf("getting db by id: %v", err)
-	}
-	if db.Name != dbName {
-		t.Fatalf("returned db with wrong name")
-	}
-	if db.Options.WorkersMax != 4 || db.Options.WorkersMin != 2 {
-		t.Fatalf("unexpected values for options: %+v", db)
-	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, dbName, db.Name)
+	assert.EqualValues(t, 4, db.Options.WorkersMax)
+	assert.EqualValues(t, 2, db.Options.WorkersMin)
 
 	dbs, err := schemar.Databases(tx, orgID)
-	if err != nil {
-		t.Fatalf("getting databases: %v", err)
-	}
-	if len(dbs) != 2 {
-		t.Fatalf("unexpected number of databases returned: %+v", dbs)
-	}
-	if dbs[0].OrganizationID != orgID || dbs[1].OrganizationID != orgID {
-		t.Fatalf("unexpected orgID from a returned database: %+v", dbs)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(dbs))
+	assert.EqualValues(t, orgID, dbs[0].OrganizationID)
+	assert.EqualValues(t, orgID, dbs[1].OrganizationID)
 
 	// test create table
 	qtbl := &dax.QualifiedTable{
@@ -138,25 +118,19 @@ func TestSQLSchemar(t *testing.T) {
 		},
 	}
 
-	if _, err := qtbl.CreateID(); err != nil {
-		t.Fatalf("creating table ID: %v", err)
-	}
-	if err := schemar.CreateTable(tx, qtbl); err != nil {
-		t.Fatalf("creating table: %v", err)
-	}
+	_, err = qtbl.CreateID()
+	assert.NoError(t, err)
+	err = schemar.CreateTable(tx, qtbl)
+	assert.NoError(t, err)
 
 	// test create field
-	if err := schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "age", Type: "int"}); err != nil {
-		t.Fatalf("creating field")
-	}
-	qtbl, err = schemar.Table(tx, qtbl.QualifiedID())
-	if err != nil {
-		t.Fatalf("getting table: %v", err)
-	}
+	err = schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "age", Type: "int"})
+	assert.NoError(t, err)
 
-	if len(qtbl.Fields) != 2 {
-		t.Fatalf("unexpected fields: %+v", qtbl.Fields)
-	}
+	qtbl, err = schemar.Table(tx, qtbl.QualifiedID())
+	assert.NoError(t, err)
+
+	assert.Equal(t, 2, len(qtbl.Fields))
 
 	var ageField *dax.Field
 
@@ -166,76 +140,55 @@ func TestSQLSchemar(t *testing.T) {
 		}
 	}
 
-	if ageField == nil {
-		t.Fatalf("did not get age field: %+v", qtbl)
-	}
+	assert.NotNil(t, ageField)
 
 	// drop field
-	if err := schemar.DropField(tx, qtbl.QualifiedID(), "age"); err != nil {
-		t.Fatalf("deleting age field: %v", err)
-	}
+	err = schemar.DropField(tx, qtbl.QualifiedID(), "age")
+	assert.NoError(t, err)
 
 	// ensure field was dropped
 	qtbl, err = schemar.Table(tx, qtbl.QualifiedID())
-	if err != nil {
-		t.Fatalf("getting table: %v", err)
-	}
-	if len(qtbl.Fields) != 1 {
-		t.Fatalf("unexpected number of fields: %+v", qtbl.Fields)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(qtbl.Fields))
+
 	if qtbl.Fields[0].Name != "_id" {
 		t.Fatalf("unexpected field: %+v", qtbl.Fields[0])
 	}
 
 	tables, err := schemar.Tables(tx, qdbid)
-	if err != nil {
-		t.Fatalf("getting tables: %v", err)
-	}
-	if len(tables) != 1 {
-		t.Fatalf("getting tables: %+v", tables)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(tables))
 
-	if _, err := schemar.TableID(tx, qdbid, tblName); err != nil {
-		t.Fatalf("looking up table ID: %v", err)
-	}
+	_, err = schemar.TableID(tx, qdbid, tblName)
+	assert.NoError(t, err)
 
-	if err := schemar.DropTable(tx, qtbl.QualifiedID()); err != nil {
-		t.Fatalf("dropping table: %v", err)
-	}
+	err = schemar.DropTable(tx, qtbl.QualifiedID())
+	assert.NoError(t, err)
 
 	// make sure Table was deleted
 	_, err = schemar.Table(tx, qtbl.QualifiedID())
-	if err == nil {
-		t.Fatalf("shouldn't be able to find table")
-	} else {
-		t.Logf("INFO: from fetching nonexistent table: '%v'\n", err)
-	}
+	assert.NotNil(t, err)
 
-	if err := schemar.DropDatabase(tx, qdbid); err != nil {
-		t.Fatal(err)
-	}
+	err = schemar.DropDatabase(tx, qdbid)
+	assert.NoError(t, err)
 
 	// make sure DB was deleted
-	if dbs, err := schemar.Databases(tx, orgID); err != nil {
-		t.Fatalf("getting databases: %v", err)
-	} else if len(dbs) != 1 {
-		t.Fatalf("got len(dbs) != 1: %v", dbs)
-	} else if dbs[0].Database.ID != dbID2 {
-		t.Fatalf("unexpected database: %v", dbs[0])
-	}
+	dbs, err = schemar.Databases(tx, orgID)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(dbs))
+	assert.EqualValues(t, dbID2, dbs[0].Database.ID)
+
 }
 
 func TestCreateTableNoDBFails(t *testing.T) {
 	conn, err := pop.Connect("test")
-	if err != nil {
-		t.Fatalf("connecting: %v", err)
-	}
+	assert.NoError(t, err, "connecting")
+
 	trans := sqldb.Transactor{Connection: conn}
 
 	tx, err := trans.BeginTx(context.Background(), true)
-	if err != nil {
-		t.Fatalf("getting transaction: %v", err)
-	}
+	assert.NoError(t, err, "beginning transaction")
+
 	defer func() {
 		err := tx.Rollback()
 		if err != nil {
@@ -264,10 +217,8 @@ func TestCreateTableNoDBFails(t *testing.T) {
 	qtbl.QualifiedDatabaseID = dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: dbID4}
 	qtbl.ID = ""
 	qtbl.CreateID()
-	if err := schemar.CreateTable(tx, qtbl); err == nil {
-		t.Fatalf("should have errored creating table pointing to non-existent DB")
-	}
-
+	err = schemar.CreateTable(tx, qtbl)
+	assert.NotNil(t, err)
 }
 
 // Testing of failure cases needs to be done in separate tests because they abort the transaction.
