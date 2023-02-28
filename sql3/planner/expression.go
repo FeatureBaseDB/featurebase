@@ -1577,8 +1577,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 	case "STR":
 		return n.EvaluateStr(currentRow)
 		// time quantum functions
-	case "QRANGEGT":
-		return n.EvaluateQRangeGt(currentRow)
+	case "RANGEQ":
+		return n.EvaluateRangeQ(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}

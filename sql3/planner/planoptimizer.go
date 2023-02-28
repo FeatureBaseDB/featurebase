@@ -395,7 +395,7 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 			call, ok := tf.(*callPlanExpression)
 			if ok {
 				switch strings.ToUpper(call.name) {
-				case "QRANGEGT":
+				case "RANGEQ":
 					timeQantumFilters = append(timeQantumFilters, tf)
 				default:
 					// it's a filter
@@ -413,6 +413,7 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 	}
 
 	var newOp types.PlanOperator
+	//deal with the filters
 	if len(tableFilters) > 0 {
 		filters.markFiltersHandled(tableFilters...)
 		// fix the field refs
@@ -426,6 +427,7 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 		}
 	}
 
+	// deal with any time quantum related filters
 	if len(timeQantumFilters) > 0 {
 		filters.markFiltersHandled(timeQantumFilters...)
 

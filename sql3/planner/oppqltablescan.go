@@ -48,6 +48,11 @@ func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 	if p.filter != nil {
 		result["filter"] = p.filter.Plan()
 	}
+	tqfilters := make([]map[string]interface{}, len(p.timeQuantumFilters))
+	for i, f := range p.timeQuantumFilters {
+		tqfilters[i] = f.Plan()
+	}
+	result["tqfilters"] = tqfilters
 	result["columns"] = p.columns
 	return result
 }
@@ -265,7 +270,6 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 			return nil, sql3.NewErrTableNotFound(0, 0, i.tableName)
 		}
 
-		fmt.Printf("%v\n", call)
 		queryResponse, err := i.planner.executor.Execute(ctx, tbl, &pql.Query{Calls: []*pql.Call{call}}, nil, nil)
 		if err != nil {
 			return nil, err

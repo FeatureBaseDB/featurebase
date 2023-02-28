@@ -5,21 +5,34 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
-func (p *ExecutionPlanner) analyseFunctionQRangeGt(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
-	if len(call.Args) != 2 {
-		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+func (p *ExecutionPlanner) analyzeFunctionRangeQ(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) != 3 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 3, len(call.Args))
 	}
 
-	// first arg should be time quantum
+	// first arg should be time quantum type
 	ok, _ := typeIsTimeQuantum(call.Args[0].DataType())
 	if !ok {
 		return nil, sql3.NewErrTimeQuantumExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 	}
 
-	// second is timestamp
+	// second is 'from' timestamp, can be null
 	targetType := parser.NewDataTypeTimestamp()
 	if !typesAreAssignmentCompatible(targetType, call.Args[1].DataType()) {
 		return nil, sql3.NewErrTypeAssignmentIncompatible(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeDescription(), targetType.TypeDescription())
+	}
+
+	_, fromLiteralNull := call.Args[1].(*parser.NullLit)
+
+	// second is 'to' timestamp, can be null
+	if !typesAreAssignmentCompatible(targetType, call.Args[2].DataType()) {
+		return nil, sql3.NewErrTypeAssignmentIncompatible(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeDescription(), targetType.TypeDescription())
+	}
+	_, toLiteralNull := call.Args[2].(*parser.NullLit)
+
+	// if we have two literal nulls we have a problem
+	if fromLiteralNull && toLiteralNull {
+		return nil, sql3.NewErrQRangeFromAndToTimeCannotBeBothNull(call.Rparen.Line, call.Rparen.Column)
 	}
 
 	call.ResultDataType = parser.NewDataTypeBool()
@@ -27,50 +40,7 @@ func (p *ExecutionPlanner) analyseFunctionQRangeGt(call *parser.Call, scope pars
 	return call, nil
 }
 
-func (n *callPlanExpression) EvaluateQRangeGt(currentRow []interface{}) (interface{}, error) {
-	targetSetEval, err := n.args[0].Evaluate(currentRow)
-	if err != nil {
-		return nil, err
-	}
-
-	testSetEval, err := n.args[1].Evaluate(currentRow)
-	if err != nil {
-		return nil, err
-	}
-
-	if targetSetEval != nil {
-		switch typ := n.args[0].Type().(type) {
-		case *parser.DataTypeStringSet:
-			targetSet, ok := targetSetEval.([]string)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unable to convert value")
-			}
-
-			testSet, ok := testSetEval.([]string)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unable to convert value")
-			}
-
-			return stringSetContainsAll(targetSet, testSet), nil
-
-		case *parser.DataTypeIDSet:
-			targetSet, ok := targetSetEval.([]int64)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unable to convert value")
-			}
-
-			testSet, ok := testSetEval.([]int64)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unable to convert value")
-			}
-
-			return intSetContainsAll(targetSet, testSet), nil
-
-		default:
-			return nil, sql3.NewErrInternalf("unexpected data type '%T'", typ)
-		}
-
-	}
-
-	return nil, sql3.NewErrInternalf("unable to to find column '%s' in currentColumns", n.name)
+func (n *callPlanExpression) EvaluateRangeQ(currentRow []interface{}) (interface{}, error) {
+	// rangeq() should only ever be used as a push down filter for now - if we get to here, we should error
+	return nil, sql3.NewErrQRangeInvalidUse(0, 0)
 }

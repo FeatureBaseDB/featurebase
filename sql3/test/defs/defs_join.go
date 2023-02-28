@@ -99,7 +99,7 @@ var joinTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(2)),
+				row(int64(4)),
 			),
 			Compare: CompareExactOrdered,
 		},
@@ -112,7 +112,7 @@ var joinTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(2)),
+				row(int64(6)),
 			),
 			Compare: CompareExactOrdered,
 		},

@@ -257,8 +257,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 	case "STR":
 		return p.analyseFunctionStr(call, scope)
 	// time quantum funtions
-	case "QRANGEGT":
-		return p.analyseFunctionQRangeGt(call, scope)
+	case "RANGEQ":
+		return p.analyzeFunctionRangeQ(call, scope)
 
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)

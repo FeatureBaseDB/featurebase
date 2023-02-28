@@ -456,6 +456,10 @@ func typeIsSet(testType parser.ExprDataType) (bool, parser.ExprDataType) {
 		return true, parser.NewDataTypeID()
 	case *parser.DataTypeStringSet:
 		return true, parser.NewDataTypeString()
+	case *parser.DataTypeIDSetQuantum:
+		return true, parser.NewDataTypeID()
+	case *parser.DataTypeStringSetQuantum:
+		return true, parser.NewDataTypeString()
 	default:
 		return false, nil
 	}

@@ -134,6 +134,10 @@ const (
 	ErrValueOutOfRange          errors.Code = "ErrValueOutOfRange"
 	ErrStringLengthMismatch     errors.Code = "ErrStringLengthMismatch"
 	ErrUnexpectedTypeConversion errors.Code = "ErrUnexpectedTypeConversion"
+
+	// time quantum function eval
+	ErrQRangeFromAndToTimeCannotBeBothNull errors.Code = "ErrQRangeFromAndToTimeCannotBeBothNull"
+	ErrQRangeInvalidUse                    errors.Code = "ErrQRangeInvalidUse"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -830,5 +834,21 @@ func NewErrUnexpectedTypeConversion(line, col int, val interface{}) error {
 	return errors.New(
 		ErrUnexpectedTypeConversion,
 		NewErrInternalf("unexpected type conversion %T", val).Error(),
+	)
+}
+
+// time quantum function evaluation
+
+func NewErrQRangeFromAndToTimeCannotBeBothNull(line, col int) error {
+	return errors.New(
+		ErrQRangeFromAndToTimeCannotBeBothNull,
+		fmt.Sprintf("[%d:%d] calling ranqeq() 'from' and 'to' parameters cannot both be null", line, col),
+	)
+}
+
+func NewErrQRangeInvalidUse(line, col int) error {
+	return errors.New(
+		ErrQRangeInvalidUse,
+		fmt.Sprintf("[%d:%d] calling ranqeq() usage invalid", line, col),
 	)
 }
