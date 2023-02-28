@@ -381,9 +381,14 @@ func (cmd *Command) setupConfig() error {
 			return errors.Wrap(err, "cleaning config")
 		}
 
+		flds, err := kafka.ConfigToFields(cfg)
+		if err != nil {
+			return errors.Wrap(err, "getting fields from config")
+		}
+
 		cmd.kafkaRunner = kafka.NewRunner(
 			cleanCfg,
-			batch.NewSQLBatcher(cmd, kafka.ConfigToFields(cfg)),
+			batch.NewSQLBatcher(cmd, flds),
 			cmd.Stderr,
 		)
 	}

@@ -693,6 +693,42 @@ func BaseTypeFromString(s string) (BaseType, error) {
 	}
 }
 
+// SplitFieldType splits a string into a BaseType and, when applicable, a slice
+// of qualifiers for that type. For example, the string `decimal(2)` would be
+// split into BaseType `decimal` and []interface{}{int64(2)}.
+func SplitFieldType(s string) (BaseType, []interface{}, error) {
+	var base string
+	var paren string
+
+	parts := strings.Split(s, "(")
+	base = parts[0]
+	if len(parts) > 1 {
+		parenParts := strings.Split(parts[1], ")")
+		if len(parenParts) != 2 {
+			return "", nil, errors.Errorf("invalid type qualifier: %s", s)
+		}
+		paren = parenParts[0]
+	}
+
+	baseType, err := BaseTypeFromString(base)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Handle the string found in parenthesis.
+	args := []interface{}{}
+	switch baseType {
+	case BaseTypeDecimal:
+		scale, err := strconv.ParseInt(paren, 10, 64)
+		if err != nil {
+			return "", nil, errors.Wrapf(err, "parsing int from string: %s", paren)
+		}
+		args = append(args, scale)
+	}
+
+	return baseType, args, nil
+}
+
 // Field represents a field and its configuration.
 type Field struct {
 	Name    FieldName    `json:"name"`
@@ -707,7 +743,7 @@ func (f *Field) String() string {
 	return string(f.Name)
 }
 
-// Definition returns the field name along with its parenthetical (when
+// Definition returns the field type along with its parenthetical (when
 // applicable).
 func (f *Field) Definition() string {
 	switch f.Type {

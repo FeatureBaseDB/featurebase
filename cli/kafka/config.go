@@ -10,7 +10,7 @@ import (
 )
 
 type Config struct {
-	Hosts  []string `mapstructure:"hosts" help: "Kafka hosts."`
+	Hosts  []string `mapstructure:"hosts" help:"Kafka hosts."`
 	Group  string   `mapstructure:"group" help:"Kafka group."`
 	Topics []string `mapstructure:"topics" help:"Kafka topics to read from."`
 
@@ -38,15 +38,9 @@ type ConfigForIDK struct {
 
 type Field struct {
 	Name       string   `mapstructure:"name"`
-	Type       string   `mapstructure:"type"`
+	SourceType string   `mapstructure:"source-type"`
 	SourcePath []string `mapstructure:"source-path"`
 	PrimaryKey bool     `mapstructure:"primary-key"`
-
-	Options FieldOptions `mapstructure:"options"`
-}
-
-type FieldOptions struct {
-	Scale int64 `mapstructure:"scale"`
 }
 
 // ValidateConfig validates the config is usable.
@@ -104,7 +98,7 @@ func ConvertConfig(c Config) (ConfigForIDK, error) {
 			foundPK = true
 		}
 
-		typ, err := dax.BaseTypeFromString(fld.Type)
+		typ, quals, err := dax.SplitFieldType(fld.SourceType)
 		if err != nil {
 			return out, errors.Wrap(err, "getting base type")
 		}
@@ -123,7 +117,10 @@ func ConvertConfig(c Config) (ConfigForIDK, error) {
 		case dax.BaseTypeInt:
 			// We don't have to handle min/max because we don't create the table.
 		case dax.BaseTypeDecimal:
-			rawFld.Config = []byte(fmt.Sprintf(`{"scale":%d}`, fld.Options.Scale))
+			if len(quals) != 1 {
+				return out, errors.Errorf("expected decimal scale")
+			}
+			rawFld.Config = []byte(fmt.Sprintf(`{"scale":%d}`, quals[0]))
 		case dax.BaseTypeID:
 			rawFld.Config = []byte("{\"mutex\":true}")
 		case dax.BaseTypeIDSet:
@@ -149,7 +146,7 @@ func ConvertConfig(c Config) (ConfigForIDK, error) {
 
 // ConfigToFields returns a list of *dax.Field based on the IDField and Fields
 // in the Config.
-func ConfigToFields(c Config) []*dax.Field {
+func ConfigToFields(c Config) ([]*dax.Field, error) {
 	// We don't know if a primary key will be found, so we can't set the
 	// capacity to `len(c.Fields)-1`.
 	out := make([]*dax.Field, 0, len(c.Fields))
@@ -158,15 +155,27 @@ func ConfigToFields(c Config) []*dax.Field {
 		if fld.PrimaryKey {
 			continue
 		}
+		typ, quals, err := dax.SplitFieldType(fld.SourceType)
+		if err != nil {
+			return nil, errors.Wrap(err, "splitting field type")
+		}
 		dfld := &dax.Field{
 			Name: dax.FieldName(fld.Name),
-			Type: dax.BaseType(fld.Type),
-			Options: dax.FieldOptions{
-				Scale: fld.Options.Scale,
-			},
+			Type: typ,
+		}
+		switch typ {
+		case dax.BaseTypeDecimal:
+			if len(quals) != 1 {
+				return nil, errors.Errorf("expected decimal scale")
+			}
+			scale, ok := quals[0].(int64)
+			if !ok {
+				return nil, errors.Errorf("invalid decimal scale: %v", quals[0])
+			}
+			dfld.Options.Scale = scale
 		}
 		out = append(out, dfld)
 	}
 
-	return out
+	return out, nil
 }
