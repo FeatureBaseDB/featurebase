@@ -384,6 +384,7 @@ func (cmd *Command) setupConfig() error {
 		cmd.kafkaRunner = kafka.NewRunner(
 			cleanCfg,
 			batch.NewSQLBatcher(cmd, kafka.ConfigToFields(cfg)),
+			cmd.Stderr,
 		)
 	}
 

@@ -1,12 +1,14 @@
 package kafka
 
 import (
+	"io"
 	"time"
 
 	fbbatch "github.com/featurebasedb/featurebase/v3/batch"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/featurebasedb/featurebase/v3/idk/kafka_static"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
 type Runner struct {
@@ -18,7 +20,7 @@ type Runner struct {
 	Header     []idk.RawField `help:"Header configuration."`
 }
 
-func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher) *Runner {
+func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *Runner {
 	idkMain := idk.NewMain()
 	idkMain.IDField = cfg.IDField
 	idkMain.Index = cfg.Table
@@ -26,6 +28,7 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher) *Runner {
 	idkMain.BatchSize = cfg.BatchSize
 	idkMain.BatchMaxStaleness = cfg.BatchMaxStaleness
 	idkMain.Basic()
+	idkMain.SetLog(logger.NewStandardLogger(logWriter))
 
 	kr := &Runner{
 		Main:       *idkMain,

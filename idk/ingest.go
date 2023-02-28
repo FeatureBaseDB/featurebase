@@ -216,8 +216,6 @@ func (m *Main) Log() logger.Logger                 { return m.log }
 func (m *Main) SetLog(log logger.Logger)           { m.log = log }
 
 func NewMain() *Main {
-	fmt.Fprintf(os.Stderr, "Molecula Consumer %s, build time %s\n", Version, BuildTime)
-
 	return &Main{
 		PilosaHosts:      []string{"localhost:10101"},
 		PilosaGRPCHosts:  []string{"localhost:20101"},
@@ -254,6 +252,10 @@ func (m *Main) Basic() {
 }
 
 func (m *Main) Run() (err error) {
+	if !m.basic {
+		m.log.Printf("Molecula Consumer %s, build time %s\n", Version, BuildTime)
+	}
+
 	onFinishRun, err := m.Setup()
 	if err != nil {
 		return errors.Wrap(err, "setting up")
