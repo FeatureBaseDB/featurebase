@@ -17,6 +17,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -80,6 +81,7 @@ type executor struct {
 	// Temporary flag to be removed when stablized
 	dataframeEnabled   bool
 	datafameUseParquet bool
+	frameCache         map[string]arrow.Table
 }
 
 // executorOption is a functional option type for pilosa.executor

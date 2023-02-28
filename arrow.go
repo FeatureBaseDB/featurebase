@@ -436,11 +436,21 @@ func (e *executor) dataFrameExists(fname string) bool {
 }
 
 func (e *executor) getDataTable(ctx context.Context, fname string, mem memory.Allocator) (arrow.Table, error) {
+	table, ok := e.frameCache[fname]
+	if ok {
+		return table, nil
+	}
 	if e.typeIsParquet() {
 		table, err := readTableParquetCtx(ctx, fname, mem)
+		e.frameCache[fname] = table
 		return table, err
 	}
-	return readTableArrow(fname, mem)
+	table, err := readTableArrow(fname, mem)
+	if err != nil {
+		return nil, err
+	}
+	e.frameCache[fname] = table
+	return table, err
 }
 
 func (e *executor) typeIsParquet() bool {
