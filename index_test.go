@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -258,7 +257,23 @@ func isNotFoundError(err error) bool {
 // For details, check out https://molecula.atlassian.net/browse/CORE-919
 func TestIndex_RecreateFieldOnRestart(t *testing.T) {
 	c := test.MustRunUnsharedCluster(t, 1)
-	defer c.Close()
+	defer func() {
+		// We anticipate a deadlock, and if we hit the deadlock,
+		// closing would ALSO deadlock, so we won't want to do that.
+		//
+		// The alternative, of trying to call os.Exit, prevents us
+		// from reporting anything at all, because testing doesn't
+		// actually display messages until it's done.
+		//
+		// So, if we're bailing because of a fatal error, we don't
+		// try to close the cluster, because Something Went Wrong and
+		// it may well have been a deadlock. We leak one cluster on
+		// a failed test, but we correctly report the test as failed
+		// before also reporting the unclosed resources.
+		if !t.Failed() {
+			c.Close()
+		}
+	}()
 
 	// create index
 	indexName := fmt.Sprintf("idx_%d", rand.Uint64())
@@ -310,15 +325,7 @@ func TestIndex_RecreateFieldOnRestart(t *testing.T) {
 	}()
 	select {
 	case <-time.After(10 * time.Second):
-		// We have to use os.Exit here instead of t.Fatal or panic since
-		// on panic, deferred statements are still ran. Given that
-		// we have deferred cluster.Close(), it deadlocks on the same
-		// issue this test is, well, is testing on.
-		// With os.Exit, the process exits at that point without running the
-		// deferred actions. This is more of a work-around fix to make the
-		// test meaningful on timeout.
-		t.Logf("recreating field took too long")
-		os.Exit(1)
+		t.Fatal("recreating field took too long")
 	case err := <-errCh:
 		if err != nil {
 			t.Fatal(err)
