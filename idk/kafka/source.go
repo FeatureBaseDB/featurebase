@@ -110,6 +110,7 @@ func (s *Source) Record() (idk.Record, error) {
 	}
 
 	val, avroSchema, err := s.decodeAvroValueWithSchemaRegistry(rec.Record.Value)
+	fmt.Println(avroSchema)
 
 	if err != nil && err != idk.ErrSchemaChange {
 		return nil, errors.Wrap(err, "decoding with schema registry")

@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	pilosa "github.com/featurebasedb/featurebase/v3"
 	pilosacore "github.com/featurebasedb/featurebase/v3"
 	pilosagrpc "github.com/featurebasedb/featurebase/v3/api/client"
 	pilosabatch "github.com/featurebasedb/featurebase/v3/batch"
@@ -265,7 +266,7 @@ func (m *Main) run() error {
 	l := &msgCounter{MaxMsgs: m.MaxMsgs}
 
 	if m.Delete {
-		err := m.runDeleter(0, l)
+		err := m.runDeleter1(0, l)
 		if err != nil {
 			return err
 		}
@@ -1093,13 +1094,15 @@ func (h metricsJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (m *Main) runDeleter0(c int, limitCounter *msgCounter) error {
-	m.log.Infof("Starting the delete consumer...")
+type deleteOpperation struct {
+}
+
+func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 	m, err := m.clone()
 	if err != nil {
 		return errors.Wrap(err, "cloning *Main before delete")
 	}
-	// get a source to pull data from
+	m.log.Printf("start deleter %d", c)
 	source, err := m.NewSource()
 	if err != nil {
 		return errors.Wrap(err, "getting source")
@@ -1118,75 +1121,200 @@ func (m *Main) runDeleter0(c int, limitCounter *msgCounter) error {
 		source = m.progress.Track(source)
 	}
 
-	client := m.PilosaClient()
-	index := m.index
 	var recordizers []Recordizer
 	var row *pilosabatch.Row
-
+	//var batch pilosabatch.RecordBatch
 	rec, err := source.Record()
 	if err == nil {
 		err = ErrSchemaChange // always need to fetch the schema the first time
 	}
 
+	client := m.PilosaClient()
+	index := m.index
+
 	for ; !limitCounter.IsDone(); rec, err = source.Record() {
-		schema := rec.Schema()
-		switch schema.(type) {
+		// records converted to queries
+		bq := index.BatchQuery()
+		if err == ErrFlush {
+			continue
+		}
+
+		avroSchema := rec.Schema()
+		switch avroSchema.(type) {
 		case avro.Schema:
-			if err == ErrFlush {
-				continue
-			}
-			m.log.Debugf("deleter record: %v\n", rec)
-			if err != nil {
-				if err == ErrSchemaChange {
-					schema := source.Schema()
-					recordizers, _, row, _, err = m.batchFromSchema(schema)
-					if err != nil {
-						return errors.Wrap(err, "batchFromSchema")
-					}
-				} else {
-					break
-				}
-			}
-			data := rec.Data()
-			m.log.Debugf("deleter data: %+v %+v %+v", data, data[0], data[1])
-			for _, rdz := range recordizers {
-				err = rdz(data, row)
-				if err != nil {
-					return errors.Wrap(err, "recordizing")
-				}
-			}
 
-			var columnIDs []uint64
-			var columnKeys []string
-			switch rowIdent := row.ID.(type) {
-			case int64:
-				columnIDs = []uint64{uint64(rowIdent)}
-			case uint64:
-				columnIDs = []uint64{rowIdent}
-			case string:
-				columnKeys = []string{rowIdent}
-			case []byte:
-				columnKeys = []string{string(rowIdent)}
-			default:
-				return errors.Errorf("recordizing primary key, got type: %T", row.ID)
-			}
-
-			fmt.Println(columnIDs)
-			fmt.Println(columnKeys)
-
-			//idkFlds := source.Schema()
-			deleteType, ok := schema.(avro.Schema).Prop("delete")
+			deleteType, ok := avroSchema.(avro.Schema).Prop("delete")
 			if !ok {
 				return errors.Errorf("delete consumer must have avro Schema with a delete property")
 			}
+
+			// we accept three types of deletes
+			//   - values
+			//   - records
+			//   - fields
 			switch deleteType {
-			case "value":
-				m.log.Infof("deleting a value")
-				//err = consumerValueDelete()
-			case "record":
+			case "values":
+				_, ok := avroSchema.(*avro.RecordSchema)
+				if !ok {
+					return errors.Errorf("got data of type %T but wanted avro.RecordSchema", avroSchema)
+				}
+				avroFields := avroSchema.(*avro.RecordSchema).Fields
+
+				var recordID interface{}
+				//TODO is this always going to be correct?
+				fieldValues := make(map[string]interface{})
+				for i, value := range rec.Data() {
+					name := avroFields[i].Name
+					if name == "_id" {
+						recordID = value
+					} else {
+						fieldValues[name] = value
+					}
+
+				}
+
+				indexFields := index.Fields()
+
+				for key, value := range fieldValues {
+					field, ok := indexFields[key]
+					if !ok {
+						return errors.Errorf("unable to find field %s", key)
+					}
+					if value == nil {
+						// don't delete anything for htis field
+						continue
+					}
+					switch fType := field.Options().Type(); fType {
+					case pilosaclient.FieldTypeSet, pilosa.FieldTypeMutex:
+						if key == m.PackBools {
+							// value should be list of bools to clear
+							if arrayValue, err := toStringArray(value); err == nil {
+								boolsField := index.Field(m.PackBools)
+								boolsExists := index.Field(m.PackBools + Exists)
+								for _, v := range arrayValue {
+									m.log.Debugf("clearing %s and %s for %s bool field", m.PackBools, m.PackBools+Exists, v)
+									bq.Add(boolsField.Clear(v, recordID))
+									bq.Add(boolsExists.Clear(v, recordID))
+								}
+							} else {
+								return errors.Errorf("packed bools field %s should wasn't able to ", field.Name(), value)
+							}
+						} else {
+							// check for string or ID keys
+							switch keys := field.Options().Keys(); keys {
+							case true:
+								if singleValue, err := toString(value); err == nil {
+									bq.Add(field.Clear(singleValue, recordID))
+								} else if arrayValue, err := toString(value); err == nil {
+									for _, v := range arrayValue {
+										bq.Add(field.Clear(string(v), recordID))
+									}
+								} else {
+									return errors.Errorf("value of keyed %s field %s should be a string or array of strings but was %T", fType, field.Name(), value)
+								}
+							case false:
+								if singleValue, err := toUint64(value); err == nil {
+									bq.Add(field.Clear(singleValue, recordID))
+								} else if arrayValue, err := toUint64Array(value); err == nil {
+									for _, v := range arrayValue {
+										bq.Add(field.Clear(v, recordID))
+									}
+								} else {
+									return errors.Errorf("value of non keyed %s field %s should be an int or array of ints but was %T", fType, field.Name(), value)
+								}
+							default:
+								return errors.Errorf("set field %s should have keys true or false", field.Name())
+							}
+						}
+					case pilosa.FieldTypeInt, pilosaclient.FieldTypeDecimal, pilosaclient.FieldTypeTimestamp:
+						if boolVal, ok := value.(bool); ok {
+							if boolVal {
+								bq.Add(field.Clear(0, recordID))
+							}
+						} else {
+							return errors.Errorf("%s fields should be boolean with false if they shouldn't be deleted, true otherwise - got type %T", fType, value)
+						}
+					case pilosa.FieldTypeBool:
+						if boolVal, ok := value.(bool); ok {
+							if boolVal {
+								bq.Add(field.Clear(0, recordID))
+								bq.Add(field.Clear(1, recordID))
+							}
+						} else {
+							return errors.Errorf("BSI fields should be false if they shouldn't be deleted, true otherwise")
+						}
+					default:
+						// pilosa.FieldTypeTime
+						return errors.Errorf("unable to handle values from fields with type: %s", fType)
+					}
+				}
+				resp, err := client.Query(bq, nil)
+				if err != nil || resp.Success != true {
+					return errors.Wrap(err, "error deleting values")
+				}
+
+			case "records":
 				m.log.Infof("deleting a record")
+				if rec.Data()[0] != nil {
+					keysAsInterfaces := rec.Data()[0].([]interface{})
+					keysAsStrings := make([]string, len(keysAsInterfaces))
+					for i, v := range keysAsInterfaces {
+						keysAsStrings[i] = fmt.Sprint(v)
+					}
+
+					columnKeys := "'" + strings.Join(keysAsStrings, "','") + "'"
+					resp := index.RawQuery(fmt.Sprintf("Delete(ConstRow(columns=[%s]))", columnKeys))
+					_, err := client.Query(resp, nil)
+					if err != nil {
+						return fmt.Errorf("issue running delete query")
+					}
+
+				} else if rec.Data()[1] != nil {
+					resp := index.RawQuery(fmt.Sprintf("Delete(%s)", rec.Data()[1].(string)))
+					_, err := client.Query(resp, nil)
+					if err != nil {
+						return fmt.Errorf("issue running delete query")
+					}
+				} else {
+					return fmt.Errorf("you must supply a list of records or query to delete")
+				}
 			case "fields":
-				m.log.Infof("deleting a list of fields")
+				m.log.Debugf("deleter record: %v\n", rec)
+				if err != nil {
+					if err == ErrSchemaChange {
+						schema := source.Schema()
+						recordizers, _, row, _, err = m.batchFromSchema(schema)
+						if err != nil {
+							return errors.Wrap(err, "batchFromSchema")
+						}
+					} else {
+						break
+					}
+				}
+				data := rec.Data()
+				m.log.Debugf("deleter data: %+v %+v %+v", data, data[0], data[1])
+				for _, rdz := range recordizers {
+					err = rdz(data, row)
+					if err != nil {
+						return errors.Wrap(err, "recordizing")
+					}
+				}
+
+				var columnIDs []uint64
+				var columnKeys []string
+				switch rowIdent := row.ID.(type) {
+				case int64:
+					columnIDs = []uint64{uint64(rowIdent)}
+				case uint64:
+					columnIDs = []uint64{rowIdent}
+				case string:
+					columnKeys = []string{rowIdent}
+				case []byte:
+					columnKeys = []string{string(rowIdent)}
+				default:
+					return errors.Errorf("recordizing primary key, got type: %T", row.ID)
+				}
+
 				// TODO: sentinel value in field list to delete entire record
 				directives, ok := row.Values[len(row.Values)-1].([]string)
 				if !ok {
@@ -1198,6 +1326,7 @@ func (m *Main) runDeleter0(c int, limitCounter *msgCounter) error {
 				if len(directives) == 0 {
 					continue
 				}
+
 				// TODO: `directives` is not necessarily equivalent to a list of fieldNames
 				rr, err := inspect(m.grpcClient, m.Index, columnIDs, columnKeys, directives)
 				if err != nil {
@@ -1323,7 +1452,7 @@ func (m *Main) runDeleter0(c int, limitCounter *msgCounter) error {
 					return errors.Wrap(err, "finishing transaction")
 				}
 			default:
-				return errors.Errorf("the value for the delete property in the avro schema must be 'value', 'record', or 'field'.")
+				return errors.Errorf("the value for the delete property in the avro schema must be 'values', 'records', or 'fields'.")
 			}
 
 			err = m.commitRecord(context.Background(), rec, limitCounter, 1)
@@ -1333,15 +1462,6 @@ func (m *Main) runDeleter0(c int, limitCounter *msgCounter) error {
 			if limitCounter.IsDone() {
 				return nil
 			}
-			/*
-				for _, fld := range idkFlds {
-					err := m.checkFieldCompatibility(index.Field(fld.Name()), fld, "")
-					if err != nil {
-						return errors.Errorf("checking field compatability: %s", err)
-					}
-
-				}
-			*/
 		default:
 			return errors.Errorf("unable to delete for sources that don't have an schema which is type avro.Schema")
 		}
@@ -1353,19 +1473,6 @@ func (m *Main) runDeleter0(c int, limitCounter *msgCounter) error {
 	}
 	return nil
 }
-
-/*
-func recordToQuery(record Record, source Source) (pilosaclient.PQLQuery, error) {
-	sourceFields := source.Schema()
-
-}
-*/
-
-/*
-func (m *Main) runDeleter0(c int, limitCounter *msgCounter) error {
-	return errors.Errorf("should be here")
-}
-*/
 
 func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 	m, err := m.clone()
@@ -1567,6 +1674,12 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 					return errors.Wrap(err, "clearing decimal")
 				}
 				CounterDeleterRowsAdded.With(prom.Labels{"type": "decimal"}).Inc()
+			case pilosaclient.FieldTypeTimestamp:
+				_, err := client.Query(field.Clear(0, recordID))
+				if err != nil {
+					return errors.Wrap(err, "clearing timestamp")
+				}
+				CounterDeleterRowsAdded.With(prom.Labels{"type": "timestamp"}).Inc()
 			case pilosaclient.FieldTypeTime:
 				return errors.Errorf("deletion on time fields unimplemented")
 			default:
