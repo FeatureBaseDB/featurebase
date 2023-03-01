@@ -91,10 +91,6 @@ type Handler struct {
 	auth *authn.Auth
 
 	permissions *authz.GroupPermissions
-
-	// sqlEnabled is serving as a feature flag for turning on/off the /sql
-	// endpoint.
-	sqlEnabled bool
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -223,14 +219,6 @@ func OptHandlerListener(ln net.Listener, url string) handlerOption {
 func OptHandlerCloseTimeout(d time.Duration) handlerOption {
 	return func(h *Handler) error {
 		h.closeTimeout = d
-		return nil
-	}
-}
-
-// OptHandlerSQLEnabled enables the /sql endpoint.
-func OptHandlerSQLEnabled(v bool) handlerOption {
-	return func(h *Handler) error {
-		h.sqlEnabled = v
 		return nil
 	}
 }
@@ -544,10 +532,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/transactions", handler.chkAuthZ(handler.handleGetTransactions, authz.Read)).Methods("GET").Name("GetTransactions")
 	router.HandleFunc("/queries", handler.chkAuthZ(handler.handleGetActiveQueries, authz.Admin)).Methods("GET").Name("GetActiveQueries")
 
-	// enable this endpoint based on config
-	if handler.sqlEnabled {
-		router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
-	}
+	router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
 	// internal endpoint
 	router.HandleFunc("/sql-exec-graph", handler.chkAuthZ(handler.handlePostSQLPlanOperator, authz.Admin)).Methods("POST").Name("PostSQLPlanOperator")
 

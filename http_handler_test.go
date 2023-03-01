@@ -549,7 +549,6 @@ func TestGetViewAndDelete(t *testing.T) {
 // the expected json tags.
 func TestHandlerSQL(t *testing.T) {
 	cfg := server.NewConfig()
-	cfg.SQL.EndpointEnabled = true
 	c := test.MustRunCluster(t, 1, []server.CommandOption{
 		server.OptCommandConfig(cfg),
 	})

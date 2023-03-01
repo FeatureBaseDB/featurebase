@@ -112,8 +112,6 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
 	srv.RBFConfig.DefineFlags(flags, prefix)
 
-	flags.BoolVar(&srv.SQL.EndpointEnabled, pre("sql.endpoint-enabled"), srv.SQL.EndpointEnabled, "Enable FeatureBase SQL /sql endpoint (default false)")
-
 	flags.DurationVar(&srv.CheckInInterval, pre("check-in-interval"), srv.CheckInInterval, "Interval between check-ins to the Controller")
 
 	// Future flags.
