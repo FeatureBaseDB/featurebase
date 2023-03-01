@@ -12,18 +12,18 @@ import (
 // Database is used by pop to map your databases database table to your go code.
 type Database struct {
 	// should be DatabaseID, but pop doesn't allow ID to be a custom type
-	ID             string             `json:"id" db:"id"`
-	Name           dax.DatabaseName   `json:"name" db:"name"`
-	WorkersMin     int                `json:"workers_min" db:"workers_min"`
-	WorkersMax     int                `json:"workers_max" db:"workers_max"`
-	Description    string             `json:"description" db:"description"`
-	Owner          string             `json:"owner" db:"owner"`
-	UpdatedBy      string             `json:"updated_by" db:"updated_by"`
-	Tables         Tables             `json:"tables" has_many:"tables"`
-	Organization   *Organization      `json:"organization" belongs_to:"organization"`
-	OrganizationID dax.OrganizationID `json:"organization_id" db:"organization_id"`
-	CreatedAt      time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at" db:"updated_at"`
+	ID             string           `json:"id" db:"id"`
+	Name           dax.DatabaseName `json:"name" db:"name"`
+	WorkersMin     int              `json:"workers_min" db:"workers_min"`
+	WorkersMax     int              `json:"workers_max" db:"workers_max"`
+	Description    string           `json:"description" db:"description"`
+	Owner          string           `json:"owner" db:"owner"`
+	UpdatedBy      string           `json:"updated_by" db:"updated_by"`
+	Tables         Tables           `json:"tables" has_many:"tables"`
+	Organization   *Organization    `json:"organization" belongs_to:"organization"`
+	OrganizationID string           `json:"organization_id" db:"organization_id"`
+	CreatedAt      time.Time        `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at" db:"updated_at"`
 }
 
 // String is not required by pop and may be deleted
@@ -33,7 +33,7 @@ func (d Database) String() string {
 }
 
 // Databases is not required by pop and may be deleted
-type Databases []*Database
+type Databases []Database
 
 // String is not required by pop and may be deleted
 func (d Databases) String() string {

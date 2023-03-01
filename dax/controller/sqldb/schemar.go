@@ -63,7 +63,7 @@ func (s *Schemar) DropDatabase(tx dax.Transaction, qdb dax.QualifiedDatabaseID) 
 		return dax.NewErrInvalidTransaction()
 	}
 
-	err := dt.C.Destroy(&models.Database{ID: string(qdb.DatabaseID), OrganizationID: qdb.OrganizationID})
+	err := dt.C.Destroy(&models.Database{ID: string(qdb.DatabaseID), OrganizationID: string(qdb.OrganizationID)})
 	return errors.Wrap(err, "destroying database")
 
 }
@@ -93,7 +93,7 @@ func toModelDatabase(qdb *dax.QualifiedDatabase) *models.Database {
 		Owner:       db.Owner,
 		UpdatedBy:   db.UpdatedBy,
 		//		Tables:         []*models.Table{},
-		OrganizationID: qdb.OrganizationID,
+		OrganizationID: string(qdb.OrganizationID),
 		// CreatedAt:      time.Unix(db.CreatedAt, 0),
 		// UpdatedAt:      time.Unix(db.UpdatedAt),
 	}
@@ -138,7 +138,7 @@ func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatab
 
 	db := &models.Database{
 		ID:             string(qdbid.DatabaseID),
-		OrganizationID: qdbid.OrganizationID,
+		OrganizationID: string(qdbid.OrganizationID),
 	}
 
 	switch option {
@@ -238,7 +238,7 @@ func toModelTable(qtbl *dax.QualifiedTable) *models.Table {
 		OrganizationID: qtbl.OrganizationID,
 		Columns:        columns,
 		UpdatedBy:      qtbl.UpdatedBy,
-		DatabaseID:     qtbl.QualifiedDatabaseID.DatabaseID,
+		DatabaseID:     string(qtbl.QualifiedDatabaseID.DatabaseID),
 		Description:    qtbl.Description,
 		PartitionN:     qtbl.PartitionN,
 	}
@@ -288,7 +288,7 @@ func toQualifiedTable(mtbl *models.Table) *dax.QualifiedTable {
 	return &dax.QualifiedTable{
 		QualifiedDatabaseID: dax.QualifiedDatabaseID{
 			OrganizationID: mtbl.OrganizationID,
-			DatabaseID:     mtbl.DatabaseID,
+			DatabaseID:     dax.DatabaseID(mtbl.DatabaseID),
 		},
 		Table: dax.Table{
 			ID:          dax.TableKey(mtbl.ID).QualifiedTableID().ID,

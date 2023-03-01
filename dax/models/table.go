@@ -18,7 +18,7 @@ type Table struct {
 	Owner          string             `json:"owner" db:"owner"`
 	UpdatedBy      string             `json:"updated_by" db:"updated_by"`
 	Database       *Database          `json:"database" belongs_to:"database"`
-	DatabaseID     dax.DatabaseID     `json:"database_id" db:"database_id"`
+	DatabaseID     string             `json:"database_id" db:"database_id"`
 	OrganizationID dax.OrganizationID `json:"organization_id" db:"organization_id"`
 	Description    string             `json:"description" db:"description"`
 	PartitionN     int                `json:"partition_n" db:"partition_n"`

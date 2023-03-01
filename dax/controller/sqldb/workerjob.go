@@ -241,5 +241,5 @@ func (w *WorkerJobService) DatabaseForWorker(tx dax.Transaction, addr dax.Addres
 		panic(err)
 	}
 
-	return dax.QualifiedDatabase{OrganizationID: db.OrganizationID, Database: dax.Database{ID: dax.DatabaseID(db.ID)}}.Key()
+	return dax.QualifiedDatabase{OrganizationID: dax.OrganizationID(db.OrganizationID), Database: dax.Database{ID: dax.DatabaseID(db.ID)}}.Key()
 }

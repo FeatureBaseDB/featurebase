@@ -84,6 +84,7 @@ require (
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/apache/arrow/go/v10 v10.0.0-20221021053532-2f627c213fc3
 	github.com/benhoyt/goawk v1.21.0
+	github.com/gobuffalo/nulls v0.4.2
 	github.com/gobuffalo/pop/v6 v6.1.1
 	github.com/gobuffalo/validate/v3 v3.3.3
 	github.com/gofrs/uuid v4.3.1+incompatible
@@ -109,7 +110,6 @@ require (
 	github.com/gobuffalo/flect v1.0.0 // indirect
 	github.com/gobuffalo/github_flavored_markdown v1.1.3 // indirect
 	github.com/gobuffalo/helpers v0.6.7 // indirect
-	github.com/gobuffalo/nulls v0.4.2 // indirect
 	github.com/gobuffalo/plush/v4 v4.1.18 // indirect
 	github.com/gobuffalo/tags/v3 v3.1.4 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
