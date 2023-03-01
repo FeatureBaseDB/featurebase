@@ -102,7 +102,7 @@ func (p *PlanOpPQLTableScan) Schema() types.Schema {
 				result = append(result, &types.PlannerColumn{
 					ColumnName:   string(fld.Name),
 					RelationName: p.tableName,
-					Type:         fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
+					Type:         FieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 				})
 				break
 			}
@@ -191,7 +191,7 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 						columnIdx:    idx,
 						srcColumnIdx: -1,
 						columnName:   string(fld.Name),
-						dataType:     fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
+						dataType:     FieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 					}
 					break
 				}

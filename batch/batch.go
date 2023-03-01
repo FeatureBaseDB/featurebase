@@ -16,6 +16,9 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/wireprotocol"
 	"github.com/pkg/errors"
 )
 
@@ -130,6 +133,9 @@ type Batch struct {
 	// values holds the values for each record of an int field
 	values map[string][]int64
 
+	// values holds the values for each record of an varchar field
+	tupleValues map[string][]interface{}
+
 	// boolValues is a map[fieldName][idsIndex]bool, which holds the values for
 	// each record of a bool field. It is a map of maps in order to accomodate
 	// nil values (they just aren't recorded in the map[int]).
@@ -183,6 +189,8 @@ type Batch struct {
 	splitBatchMode bool
 	frags          fragments
 	clearFrags     fragments
+
+	tuplefrags tuplefragments
 
 	useShardTransactionalEndpoint bool
 }
@@ -257,6 +265,7 @@ func NewBatch(importer featurebase.Importer, size int, tbl *dax.Table, fields []
 	headerMap := make(map[string]*featurebase.FieldInfo, len(fields))
 	rowIDs := make(map[int][]uint64, len(fields))
 	values := make(map[string][]int64)
+	tupleValues := make(map[string][]interface{})
 	boolValues := make(map[string]map[int]bool)
 	boolNulls := make(map[string][]uint64)
 	tt := make(map[int]map[string][]int, len(fields))
@@ -293,6 +302,8 @@ func NewBatch(importer featurebase.Importer, size int, tbl *dax.Table, fields []
 			rowIDs[i] = make([]uint64, 0, size)
 		case featurebase.FieldTypeBool:
 			boolValues[field.Name] = make(map[int]bool)
+		case featurebase.FieldTypeVarchar:
+			tupleValues[field.Name] = make([]interface{}, 0, size)
 		default:
 			return nil, errors.Errorf("field type '%s' is not currently supported through Batch", typ)
 		}
@@ -309,6 +320,7 @@ func NewBatch(importer featurebase.Importer, size int, tbl *dax.Table, fields []
 		clearRowIDs:           make(map[int]map[int]uint64),
 		rowIDSets:             make(map[string][][]uint64),
 		values:                values,
+		tupleValues:           tupleValues,
 		boolValues:            boolValues,
 		boolNulls:             boolNulls,
 		nullIndices:           make(map[string][]uint64),
@@ -325,6 +337,7 @@ func NewBatch(importer featurebase.Importer, size int, tbl *dax.Table, fields []
 
 		frags:      make(fragments),
 		clearFrags: make(fragments),
+		tuplefrags: make(tuplefragments),
 	}
 	if hasTime {
 		b.times = make([]QuantizedTime, 0, size)
@@ -544,6 +557,9 @@ func (b *Batch) Add(rec Row) error {
 			case featurebase.FieldTypeBool:
 				// If we want to support bools as string values, we would do
 				// that here.
+			case featurebase.FieldTypeVarchar:
+				b.tupleValues[field.Name] = append(b.tupleValues[field.Name], val)
+
 			default:
 				// nil-extend
 				for len(b.rowIDs[i]) < curPos {
@@ -646,6 +662,9 @@ func (b *Batch) Add(rec Row) error {
 				}
 				boolNulls = append(boolNulls, uint64(curPos))
 				b.boolNulls[field.Name] = boolNulls
+
+			case featurebase.FieldTypeVarchar:
+				b.tupleValues[field.Name] = append(b.tupleValues[field.Name], nil)
 
 			default:
 				// only append nil to rowIDs if this field already has
@@ -780,14 +799,21 @@ func (b *Batch) Import() error {
 	transTime := time.Now()
 	b.log.Printf("translating batch of %d took: %v", size, transTime.Sub(transStart))
 
+	var tuplefrags tuplefragments
 	frags, clearFrags, err := b.makeFragments(b.frags, b.clearFrags)
 	if err != nil {
 		return errors.Wrap(err, "making fragments (flush)")
 	}
+
 	if b.useShardTransactionalEndpoint {
 		frags, clearFrags, err = b.makeSingleValFragments(frags, clearFrags)
 		if err != nil {
 			return errors.Wrap(err, "making single val fragments")
+		}
+
+		tuplefrags, err = b.makeTupleStoreFragments((b.tuplefrags))
+		if err != nil {
+			return errors.Wrap(err, "making pvl fragments")
 		}
 	}
 
@@ -797,19 +823,24 @@ func (b *Batch) Import() error {
 	if b.splitBatchMode {
 		b.frags = frags
 		b.clearFrags = clearFrags
+		b.tuplefrags = tuplefrags
 	} else {
 		b.frags = make(fragments)
 		b.clearFrags = make(fragments)
+		b.tuplefrags = make(tuplefragments)
 		// create bitmaps out of each field in b.rowIDs and import. Also
 		// import int data.
 		if !b.useShardTransactionalEndpoint {
+			if len(tuplefrags) > 0 {
+				return errors.Wrap(errors.Errorf("t-store values are not supported in non-transactional imports"), "doing import")
+			}
 			err = b.doImport(frags, clearFrags)
 			if err != nil {
 				return errors.Wrap(err, "doing import")
 			}
 			b.log.Printf("importing fragments took %v", time.Since(makeTime))
 		} else {
-			err = b.doImportShardTransactional(frags, clearFrags)
+			err = b.doImportShardTransactional(frags, clearFrags, tuplefrags)
 			if err != nil {
 				return errors.Wrap(err, "doing shard transactional import")
 			}
@@ -1143,7 +1174,7 @@ func (b *Batch) createFieldKeys(field *featurebase.FieldInfo, keys ...string) (m
 	return results, nil
 }
 
-func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
+func (b *Batch) doImportShardTransactional(frags, clearFrags fragments, tuplefrags tuplefragments) error {
 	ctx := context.Background()
 
 	start := time.Now()
@@ -1198,6 +1229,68 @@ func (b *Batch) doImportShardTransactional(frags, clearFrags fragments) error {
 			}
 			request.Views = append(request.Views, featurebase.RoaringUpdate{Field: fragKey.field, View: view, Clear: buf.Bytes()})
 		}
+	}
+
+	// handle tuple frags
+	for fragKey, tupleFrag := range tuplefrags {
+		request := getOrCreate(requests, fragKey)
+
+		// make a buffer for the tuple data
+		buf := new(bytes.Buffer)
+
+		// get the bytes for the schema
+		b, err := wireprotocol.WriteSchema(tupleFrag.schema)
+		if err != nil {
+			return errors.Wrap(err, "serializing tuple schema")
+		}
+		_, err = buf.Write(b)
+		if err != nil {
+			return errors.Wrap(err, "serializing tuple schema")
+		}
+
+		// now write each of the tuples
+
+		// make a row, we're going to reuse this
+		rrow := make(types.Row, len(tupleFrag.schema))
+
+		// build a map of columnNames to column indexes in the schema
+		colMap := make(map[string]int)
+		for i, sc := range tupleFrag.schema {
+			colMap[sc.ColumnName] = i
+		}
+
+		// iterate the tupleData - outside loop is rows
+		for id, trow := range tupleFrag.tupleData {
+			// write the _id column
+			rrow[0] = int64(id)
+			// now iterate the rest of the columns
+			for colName, tval := range trow {
+				j, ok := colMap[colName]
+				if !ok {
+					errors.Errorf("unexpected missing column '%s'", colName)
+				}
+				rrow[j] = tval
+			}
+
+			// write the row to the buffer
+			rb, err := wireprotocol.WriteRow(rrow, tupleFrag.schema)
+			if err != nil {
+				return errors.Wrap(err, "serializing tuple row")
+			}
+			_, err = buf.Write(rb)
+			if err != nil {
+				return errors.Wrap(err, "serializing tuple row")
+			}
+		}
+
+		// write done to the buffer
+		b = wireprotocol.WriteDone()
+		_, err = buf.Write(b)
+		if err != nil {
+			return errors.Wrap(err, "serializing tuples")
+		}
+
+		request.Tuples = buf.Bytes()
 	}
 
 	featurebase.SummaryBatchShardImportBuildRequestsSeconds.Observe(time.Since(start).Seconds())
@@ -1695,6 +1788,69 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 	return frags, clearFrags, nil
 }
 
+func (b *Batch) makeTupleStoreFragments(pvlfrags tuplefragments) (tuplefragments, error) {
+	shardWidth := b.shardWidth()
+
+	// -------------------------
+	// tuplestore fields
+	// -------------------------
+
+	// build a schema
+	tupleSchema := make(types.Schema, 0)
+
+	var idType parser.ExprDataType = parser.NewDataTypeID()
+	if b.tbl.StringKeys() {
+		idType = parser.NewDataTypeString()
+	}
+
+	tupleSchema = append(tupleSchema, &types.PlannerColumn{
+		ColumnName:   "_id",
+		RelationName: string(b.tbl.Name),
+		AliasName:    "",
+		Type:         idType,
+	})
+
+	for fieldname := range b.tupleValues {
+		field := b.headerMap[fieldname]
+		switch field.Options.Type {
+		case featurebase.FieldTypeVarchar:
+			tupleSchema = append(tupleSchema, &types.PlannerColumn{
+				ColumnName:   fieldname,
+				RelationName: string(b.tbl.Name),
+				AliasName:    "",
+				Type:         parser.NewDataTypeVarchar(field.Options.Length),
+			})
+		default:
+			continue
+		}
+	}
+
+	// for each of the varcharValues mapped, this is a column
+	for fieldname, varcharMap := range b.tupleValues {
+		field := b.headerMap[fieldname]
+		if field.Options.Type != featurebase.FieldTypeVarchar {
+			continue
+		}
+
+		// for each of the row values for this column
+		for pos, varcharVal := range varcharMap {
+			recID := b.ids[pos]
+
+			shard := recID / shardWidth
+			tf := pvlfrags.GetOrCreate(shard, tupleSchema)
+
+			_, ok := tf.tupleData[recID]
+			if !ok {
+				tf.tupleData[recID] = make(map[string]interface{})
+			}
+			tf.tupleData[recID][fieldname] = varcharVal
+
+		}
+	}
+
+	return pvlfrags, nil
+}
+
 type valsByIDsSortable struct {
 	ids  []uint64
 	vals []int64
@@ -1949,6 +2105,28 @@ func (b *Batch) reset() {
 			delete(b.rowTranslations, field)
 		}
 	}
+}
+
+type tupleFragment struct {
+	// the schema of the fragment
+	schema types.Schema
+	// tupleData by id, by column name
+	tupleData map[uint64]map[string]interface{}
+}
+
+// map[shard]tupleFragment
+type tuplefragments map[uint64]*tupleFragment
+
+func (f tuplefragments) GetOrCreate(shard uint64, schema types.Schema) *tupleFragment {
+	tf, ok := f[shard]
+	if !ok {
+		tf = &tupleFragment{
+			schema:    schema,
+			tupleData: make(map[uint64]map[string]interface{}),
+		}
+		f[shard] = tf
+	}
+	return tf
 }
 
 // map[shard][field][view]fragmentData

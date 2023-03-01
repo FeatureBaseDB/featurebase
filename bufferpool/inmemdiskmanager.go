@@ -1,3 +1,4 @@
+// Copyright 2023 Molecula Corp. All rights reserved.
 package bufferpool
 
 import (
@@ -12,12 +13,12 @@ import (
 // that can spill to disk when a threshold is reached
 type InMemDiskSpillingDiskManager struct {
 	// tracks the number of pages
-	numPages int
+	numPages int64
 
-	onDiskPages int
+	onDiskPages int64
 
 	// tracks the number of pages we can consume before spilling
-	thresholdPages int
+	thresholdPages int64
 	hasSpilled     *struct{}
 	fd             *os.File
 
@@ -26,7 +27,7 @@ type InMemDiskSpillingDiskManager struct {
 }
 
 // NewInMemDiskSpillingDiskManager returns a in-memory version of disk manager
-func NewInMemDiskSpillingDiskManager(thresholdPages int) *InMemDiskSpillingDiskManager {
+func NewInMemDiskSpillingDiskManager(thresholdPages int64) *InMemDiskSpillingDiskManager {
 	dm := &InMemDiskSpillingDiskManager{
 		numPages:       0,
 		thresholdPages: thresholdPages,
@@ -38,11 +39,11 @@ func NewInMemDiskSpillingDiskManager(thresholdPages int) *InMemDiskSpillingDiskM
 // ReadPage reads a page from pages
 func (d *InMemDiskSpillingDiskManager) ReadPage(pageID PageID) (*Page, error) {
 	// check we're not asking for page out of range
-	if pageID < 0 || int(pageID) >= d.numPages {
+	if pageID.Page < 0 || pageID.Page >= d.numPages {
 		return nil, errors.New("page not found")
 	}
 	// check that the offset is within range
-	offset := int(pageID) * PAGE_SIZE
+	offset := pageID.Page * PAGE_SIZE
 
 	var page = pageSyncPool.Get().(*Page)
 	// we have to do this stupid check because if -cpuprofile is set for go test, this
@@ -54,7 +55,7 @@ func (d *InMemDiskSpillingDiskManager) ReadPage(pageID PageID) (*Page, error) {
 
 	// do the read
 	if d.hasSpilled == nil {
-		if offset+PAGE_SIZE > len(d.data) {
+		if offset+PAGE_SIZE > int64(len(d.data)) {
 			return nil, errors.New("offset out of range")
 		}
 		b := copy(page.data[:], d.data[offset:offset+PAGE_SIZE])
@@ -75,10 +76,10 @@ func (d *InMemDiskSpillingDiskManager) ReadPage(pageID PageID) (*Page, error) {
 // WritePage writes a page in memory to pages
 func (d *InMemDiskSpillingDiskManager) WritePage(page *Page) error {
 	// make sure the offset is sensible
-	offset := int(page.ID()) * PAGE_SIZE
+	offset := page.ID().Page * PAGE_SIZE
 	// do the write
 	if d.hasSpilled == nil {
-		if offset+PAGE_SIZE > len(d.data) {
+		if offset+PAGE_SIZE > int64(len(d.data)) {
 			return errors.New("offset out of range")
 		}
 		copy(d.data[offset:], page.data[:])
@@ -100,9 +101,9 @@ func (d *InMemDiskSpillingDiskManager) WritePage(page *Page) error {
 }
 
 // AllocatePage allocates a page and returns the page number
-func (d *InMemDiskSpillingDiskManager) AllocatePage() (PageID, error) {
+func (d *InMemDiskSpillingDiskManager) AllocatePage(objectID int32, shard int32) (PageID, error) {
 	d.numPages = d.numPages + 1
-	pageID := PageID(d.numPages - 1)
+	pageID := PageID{objectID, shard, int64(d.numPages - 1)}
 
 	if d.hasSpilled == nil {
 		// we have not spilled (yet), so make storage bigger
@@ -113,16 +114,16 @@ func (d *InMemDiskSpillingDiskManager) AllocatePage() (PageID, error) {
 		if d.numPages > d.thresholdPages {
 			fileUUID, err := uuid.NewV4()
 			if err != nil {
-				return PageID(INVALID_PAGE), err
+				return PageID{objectID, shard, INVALID_PAGE}, err
 			}
 			// TODO(pok) we should try to tell the OS not to cache this file
 			d.fd, err = os.CreateTemp("", fmt.Sprintf("fb-ehash-%s", fileUUID.String()))
 			if err != nil {
-				return PageID(INVALID_PAGE), err
+				return PageID{objectID, shard, INVALID_PAGE}, err
 			}
 			_, err = d.fd.WriteAt(d.data, 0)
 			if err != nil {
-				return PageID(INVALID_PAGE), err
+				return PageID{objectID, shard, INVALID_PAGE}, err
 			}
 			d.data = []byte{}
 			d.hasSpilled = &struct{}{}
@@ -135,7 +136,7 @@ func (d *InMemDiskSpillingDiskManager) AllocatePage() (PageID, error) {
 			size := int64(d.onDiskPages * PAGE_SIZE)
 			_, err = d.fd.WriteAt([]byte{0}, size-1)
 			if err != nil {
-				return PageID(INVALID_PAGE), err
+				return PageID{objectID, shard, INVALID_PAGE}, err
 			}
 		}
 	}
@@ -149,7 +150,7 @@ func (d *InMemDiskSpillingDiskManager) DeallocatePage(pageID PageID) error {
 	return nil
 }
 
-func (d *InMemDiskSpillingDiskManager) FileSize() int64 {
+func (d *InMemDiskSpillingDiskManager) FileSize(fileID int32, shard int32) int64 {
 	return int64(len(d.data))
 }
 

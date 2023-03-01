@@ -421,6 +421,14 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 					return nil, sql3.NewErrInternalf("unsupported timestamp type: %T", eval)
 				}
 
+			case pilosa.FieldTypeVarchar:
+				switch v := eval.(type) {
+				case string:
+					row.Values[posVals[idx]] = v
+				default:
+					return nil, sql3.NewErrInternalf("unexpected varchar type '%T'", v)
+				}
+
 			default:
 				row.Values[posVals[idx]] = eval
 			}

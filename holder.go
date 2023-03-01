@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/featurebasedb/featurebase/v3/bufferpool"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -43,6 +45,9 @@ const (
 
 	// DataframesDir is the directory where we store the dataframe files (currently Apache Arrow)
 	DataframesDir = "dataframes"
+
+	// TStoreDir is the directory where we store the t-store files
+	TStoreDir = "tstore"
 )
 
 func init() {
@@ -143,6 +148,10 @@ type Holder struct {
 	// snapshotter/writelogger; then the Controller should only start directing
 	// queries to that computer once it has completed applying the snapshot.
 	directiveApplied bool
+
+	// t-store
+	tstorepool *bufferpool.BufferPool
+	tstoredisk *bufferpool.OnDiskDiskManager
 }
 
 // HolderOpts holds information about the holder which other things might want
@@ -254,6 +263,8 @@ type HolderConfig struct {
 	Sharder              disco.Sharder
 	CacheFlushInterval   time.Duration
 	Logger               logger.Logger
+	TStoreBufferPool     *bufferpool.BufferPool
+	TStoreDiskManager    *bufferpool.OnDiskDiskManager
 
 	StorageConfig *storage.Config
 	RBFConfig     *rbfcfg.Config
@@ -266,6 +277,7 @@ type HolderConfig struct {
 // need to override these; that's usually handled by server options
 // such as OptServerOpenTranslateStore.
 func DefaultHolderConfig() *HolderConfig {
+	dm := bufferpool.NewOnDiskDiskManager()
 	return &HolderConfig{
 		PartitionN:           disco.DefaultPartitionN,
 		OpenTranslateStore:   OpenInMemTranslateStore,
@@ -280,6 +292,8 @@ func DefaultHolderConfig() *HolderConfig {
 		Logger:               logger.NopLogger,
 		StorageConfig:        storage.NewDefaultConfig(),
 		RBFConfig:            rbfcfg.NewDefaultConfig(),
+		TStoreDiskManager:    dm,
+		TStoreBufferPool:     bufferpool.NewBufferPool(1024, dm),
 	}
 }
 
@@ -328,6 +342,8 @@ func NewHolder(path string, cfg *HolderConfig) *Holder {
 		sharder:              cfg.Sharder,
 		Schemator:            cfg.Schemator,
 		Logger:               cfg.Logger,
+		tstorepool:           cfg.TStoreBufferPool,
+		tstoredisk:           cfg.TStoreDiskManager,
 		Opts:                 HolderOpts{StorageBackend: cfg.StorageConfig.Backend},
 
 		Auditor: NewAuditor(),
@@ -494,6 +510,7 @@ func (h *Holder) Open() error {
 		// from the API, which already comes from etcd. In that case, this logic
 		// could be removed, and the createdAt on the index struct could be
 		// removed.
+		index.ID = cim.IndexID
 		index.createdAt = cim.CreatedAt
 		index.owner = cim.Owner
 		index.description = cim.Meta.Description
@@ -724,6 +741,7 @@ func (h *Holder) schema(ctx context.Context, includeViews bool) ([]*IndexInfo, e
 		}
 
 		di := &IndexInfo{
+			ID:         cim.IndexID,
 			Name:       cim.Index,
 			CreatedAt:  cim.CreatedAt,
 			Owner:      cim.Owner,
@@ -992,6 +1010,7 @@ func (h *Holder) createIndex(cim *CreateIndexMessage, broadcast bool) (*Index, e
 
 	index.keys = cim.Meta.Keys
 	index.trackExistence = cim.Meta.TrackExistence
+	index.ID = cim.IndexID
 	index.createdAt = cim.CreatedAt
 	index.owner = cim.Owner
 	index.description = cim.Meta.Description
@@ -1035,6 +1054,7 @@ func (h *Holder) createIndexWithPartitions(cim *CreateIndexMessage, translatePar
 
 	index.keys = cim.Meta.Keys
 	index.trackExistence = cim.Meta.TrackExistence
+	index.ID = cim.IndexID
 	index.createdAt = cim.CreatedAt
 	index.translatePartitions = translatePartitions
 
@@ -1475,7 +1495,9 @@ func (s *holderSyncer) setTranslateReadOnlyFlags(snap *disco.ClusterSnapshot) {
 		}
 
 		for _, field := range index.Fields() {
-			field.TranslateStore().SetReadOnly(!isPrimaryFieldTranslator)
+			if !strings.EqualFold(field.options.Type, FieldTypeVarchar) {
+				field.TranslateStore().SetReadOnly(!isPrimaryFieldTranslator)
+			}
 		}
 	}
 	s.Cluster.mu.RUnlock()

@@ -46,6 +46,9 @@ const (
 	// decimal
 	ErrDecimalScaleExpected errors.Code = "ErrDecimalScaleExpected"
 
+	// varchar
+	ErrVarcharLengthExpected errors.Code = "ErrVarcharLengthExpected"
+
 	ErrInvalidCast         errors.Code = "ErrInvalidCast"
 	ErrInvalidTypeCoercion errors.Code = "ErrInvalidTypeCoercion"
 
@@ -497,6 +500,13 @@ func NewErrDecimalScaleExpected(line, col int) error {
 	return errors.New(
 		ErrDecimalScaleExpected,
 		fmt.Sprintf("[%d:%d] decimal scale expected", line, col),
+	)
+}
+
+func NewErrVarcharLengthExpected(line, col int) error {
+	return errors.New(
+		ErrVarcharLengthExpected,
+		fmt.Sprintf("[%d:%d] varchar length expected", line, col),
 	)
 }
 

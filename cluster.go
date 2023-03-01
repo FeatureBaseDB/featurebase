@@ -914,6 +914,7 @@ type CreateShardMessage struct {
 
 // CreateIndexMessage is an internal message indicating index creation.
 type CreateIndexMessage struct {
+	IndexID   int32
 	Index     string
 	CreatedAt int64
 	Owner     string

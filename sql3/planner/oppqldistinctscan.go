@@ -98,7 +98,7 @@ func (p *PlanOpPQLDistinctScan) Schema() types.Schema {
 			result = append(result, &types.PlannerColumn{
 				ColumnName:   string(fld.Name),
 				RelationName: p.tableName,
-				Type:         fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
+				Type:         FieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 			})
 			break
 		}
@@ -158,7 +158,7 @@ func (i *distinctScanRowIter) Next(ctx context.Context) (types.Row, error) {
 
 		for _, fld := range table.Fields {
 			if strings.EqualFold(i.column, string(fld.Name)) {
-				i.columnDataType = fieldSQLDataType(pilosa.FieldToFieldInfo(fld))
+				i.columnDataType = FieldSQLDataType(pilosa.FieldToFieldInfo(fld))
 				break
 			}
 		}

@@ -40,7 +40,7 @@ func (p *ExecutionPlanner) compileInsertStatement(ctx context.Context, stmt *par
 
 			for idx, field := range tbl.Fields {
 				if strings.EqualFold(colName, string(field.Name)) {
-					targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, colName, idx, fieldSQLDataType(pilosa.FieldToFieldInfo(field))))
+					targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, colName, idx, FieldSQLDataType(pilosa.FieldToFieldInfo(field))))
 					break
 				}
 			}
@@ -50,7 +50,7 @@ func (p *ExecutionPlanner) compileInsertStatement(ctx context.Context, stmt *par
 			if strings.EqualFold("_exists", string(field.Name)) {
 				continue
 			}
-			targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, string(field.Name), idx, fieldSQLDataType(pilosa.FieldToFieldInfo(field))))
+			targetColumns = append(targetColumns, newQualifiedRefPlanExpression(tableName, string(field.Name), idx, FieldSQLDataType(pilosa.FieldToFieldInfo(field))))
 		}
 	}
 
@@ -94,7 +94,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(ctx context.Context, stmt *par
 			if strings.EqualFold("_exists", string(field.Name)) {
 				continue
 			}
-			typeNames = append(typeNames, fieldSQLDataType(pilosa.FieldToFieldInfo(field)))
+			typeNames = append(typeNames, FieldSQLDataType(pilosa.FieldToFieldInfo(field)))
 		}
 		// Make sure (implicit) insert list and expression list have the same
 		// number of items.
@@ -131,7 +131,7 @@ func (p *ExecutionPlanner) analyzeInsertStatement(ctx context.Context, stmt *par
 			columnFound := false
 			for _, field := range tbl.Fields {
 				if strings.EqualFold(colName, string(field.Name)) {
-					typeName = fieldSQLDataType(pilosa.FieldToFieldInfo(field))
+					typeName = FieldSQLDataType(pilosa.FieldToFieldInfo(field))
 					columnFound = true
 					break
 				}

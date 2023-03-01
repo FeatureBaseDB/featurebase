@@ -4,17 +4,20 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync"
 )
 
-const PAGE_SIZE int = 8192
+const PAGE_SIZE int64 = 8192
 
-const INVALID_PAGE int = -1
+const INVALID_PAGE int64 = -1
 
+const PAGE_TYPE_BTREE_OVERFLOW = 8
+const PAGE_TYPE_BTREE_HEADER = 9
 const PAGE_TYPE_BTREE_INTERNAL = 10
 const PAGE_TYPE_BTREE_LEAF = 11
 const PAGE_TYPE_HASH_TABLE = 12
 
-// PAGE
+// SLOTTED PAGE
 // page size 8192 bytes
 // byte aligned, big endian
 
@@ -23,111 +26,146 @@ const PAGE_TYPE_HASH_TABLE = 12
 // |----------------------------------------------------|
 // | header                                             |
 // |====================================================|
-// | 0      | 4             |  pageNumber (int32)       |
-// | 4      | 2             |  pageType (int16)         |
-// | 6      | 2             |  slotCount (int16)        |
-// | 8      | 2             |  localDepth (int16)       |
-// | 10     | 2             |  freeSpaceOffset (int16)  |
-// | 12     | 4             |  prevPointer (int32)      |
-// | 16     | 4             |  nextPointer (int32)      |
+// | 0      | 8             |  pageNumber (int64)       |
+// | 8      | 2             |  pageType (int16)         |
+// | 10     | 2             |  slotCount (int16)        |
+// | 12     | 2             |  localDepth (int16)       | // used only for hash tables
+// | 14     | 2             |  freeSpaceOffset (int16)  |
+// | 16     | 8             |  prevPointer (int64)      |
+// | 24     | 8             |  nextPointer (int64)      |
+// | 32	    | 4             |  checksum (int32)			|
+// | 36     | 16            |  pageLSN (int64)			|
 // |====================================================|
 // | <start of slot array 1..slotCount>                 |
 // |----------------------------------------------------|
-// | 20     | slotcount     |  slot entry is 2 int16    |
+// | 52     | slotcount     |  slot entry is int16      |
 // |        |  * slotwidth  |   values (payloadOffset,  |
 // |        |  * #slots     |   payloadLength)          |
 // |----------------------------------------------------|
 // | <free space>                                       |
 // |----------------------------------------------------|
 // | <payload starting at freeSpaceOffset>              |
-// |  payload entries are keylength (int16), key bytes, |
-// |  payload length (int32), payload bytes             |
+// | see below...                                       |
 // |====================================================|
 
-const PAGE_NUMBER_OFFSET = 0        // offset 0, length 4, end 4
-const PAGE_TYPE_OFFSET = 4          // offset 4, length 2, end 6
-const PAGE_SLOT_COUNT_OFFSET = 6    // offset 6, length 2, end 8
-const PAGE_LOCAL_DEPTH_OFFSET = 8   // offset 8, length 2, end 10
-const PAGE_FREE_SPACE_OFFSET = 10   // offset 10, length 2, end 12
-const PAGE_PREV_POINTER_OFFSET = 12 // offset 12, length 4, end 16
-const PAGE_NEXT_POINTER_OFFSET = 16 // offset 16, length 4, end 20
-const PAGE_SLOTS_START_OFFSET = 20  // offset 20
+// == internal payload chunk ==
+// keyLength (int16)
+// keyBytes
+// ptrValue (int64) (page number)
 
-// PAGE_SLOT_LENGTH is the size of the page slot key/value.
-//
-// key offset int16    	//offset 0, length 2, end 2
-// value offset int16	    //offset 2, length 2, end 4
-const PAGE_SLOT_LENGTH = 4
+// == tuple payload chunk ==
+// keyLength (int16)
+// keyBytes
+// flags int8
+// overflowPtr (int64) [optional]
+// rowPayloadTotalLen (int32) [optional]
+// rowPayloadChunkLen (int16)
+// rowPayloadChunkBytes
 
-// Page represents a page on disk
+// == row payload bytes ==
+// writeTID (int64)
+// schemaVersion (int16)
+// redoPtr (int64)
+// fieldOffsets (one for each field, int16, FF is null)
+//   offsets point to:
+// *fieldData (one for each field)
+//   	valueLen (int32) only used for variable length types
+//		valueBytes
+
+const PAGE_NUMBER_OFFSET = 0        // offset 0, length 8, end 8
+const PAGE_TYPE_OFFSET = 8          // offset 8, length 2, end 10
+const PAGE_SLOT_COUNT_OFFSET = 10   // offset 10, length 2, end 12
+const PAGE_LOCAL_DEPTH_OFFSET = 12  // offset 12, length 2, end 14
+const PAGE_FREE_SPACE_OFFSET = 14   // offset 14, length 2, end 16
+const PAGE_PREV_POINTER_OFFSET = 16 // offset 16, length 8, end 24
+const PAGE_NEXT_POINTER_OFFSET = 24 // offset 24, length 8, end 32
+const PAGE_CHECKSUM = 32            // offset 32, length 4, end 36
+const PAGE_LSN = 36                 // offset 36, length 16, end 52
+const PAGE_SLOTS_START_OFFSET = 52  // offset 52
+
+// PAGE_SLOT_LENGTH is the size of the page slot offset value.
+const PAGE_SLOT_LENGTH = 2
+
+// 1k is the max key size for now
+// we can make this bigger later with overflow
+const MAX_KEY_ON_PAGE_SIZE = 1024
+
+// 768 bytes is the max payload on a page before we overflow
+// this gives us 1792 bytes for key and payload
+// available space on a page after header is 8144 ish
+// this gives us room for 4 key/value @ 2036 bytes per page, so
+// there is a little bit of wiggle room
+const MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE = 768
+
+type PageLatchState int
+
+const (
+	None PageLatchState = iota
+	Read
+	Write
+)
+
+// Page represents various types of data page on disk and in memory
 type Page struct {
-	id       PageID
-	pinCount int
-	isDirty  bool
-	data     [PAGE_SIZE]byte
+	mu         sync.RWMutex
+	latchState PageLatchState
+	id         PageID
+	pinCount   int
+	isDirty    bool
+	data       [PAGE_SIZE]byte
 }
 
-type PageSlot struct {
-	KeyOffset   int16
-	ValueOffset int16
+func NewPage(pageID PageID, pinCount int) *Page {
+	return &Page{
+		id:         pageID,
+		latchState: None,
+		pinCount:   pinCount,
+		isDirty:    false,
+		data:       [PAGE_SIZE]byte{},
+	}
 }
 
-func (s *PageSlot) KeyBytes(page *Page) []byte {
-	offset := s.KeyOffset
-	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
-	offset += 2
-	result := make([]byte, keyLen)
-	copy(result, page.data[offset:offset+keyLen])
-	return result
+func (p *Page) TakeReadLatch() {
+	p.mu.RLock()
+	p.latchState = Read
 }
 
-func (s *PageSlot) KeyAsInt(page *Page) int32 {
-	return int32(binary.BigEndian.Uint32(page.data[s.KeyOffset+2:]))
+func (p *Page) ReleaseReadLatch() {
+	p.mu.RUnlock()
+	p.latchState = None
 }
 
-func (s *PageSlot) ValueBytes(page *Page) []byte {
-	offset := s.ValueOffset
-	valueLen := int32(binary.BigEndian.Uint32(page.data[offset:]))
-	offset += 4
-	result := make([]byte, valueLen)
-	copy(result, page.data[offset:int32(offset)+valueLen])
-	return result
+func (p *Page) TakeWriteLatch() {
+	p.mu.Lock()
+	p.latchState = Write
 }
 
-func (s *PageSlot) ValueAsPagePointer(page *Page) int32 {
-	return int32(binary.BigEndian.Uint32(page.data[s.ValueOffset+4:]))
+func (p *Page) ReleaseWriteLatch() {
+	p.mu.Unlock()
+	p.latchState = None
 }
 
-type PageChunk struct {
-	KeyLength int16
-	KeyBytes  []byte
-	// TODO(pok) ValueBytes can be up to int32 long
-	// this requires an overflow page mechanism, that is not implemented
-	// yet, so be aware of this when storing stuff...
-	ValueLength int32
-	ValueBytes  []byte
+func (p *Page) ReleaseAnyLatch() {
+	if p.latchState == Read {
+		p.ReleaseReadLatch()
+	} else if p.latchState == Write {
+		p.ReleaseWriteLatch()
+	}
 }
 
-func (pc *PageChunk) Length() int {
-	return 2 + len(pc.KeyBytes) + 4 + len(pc.ValueBytes)
+func (p *Page) LatchState() PageLatchState {
+	return p.latchState
 }
 
-func (pc *PageChunk) ComputeKeyOffset(pageOffset int) int {
-	return pageOffset
-}
-
-func (pc *PageChunk) ComputeValueOffset(pageOffset int) int {
-	return pageOffset + 2 + len(pc.KeyBytes)
-}
-
-func (p *Page) WritePageNumber(pageNumber int32) {
-	p.id = PageID(pageNumber)
-	binary.BigEndian.PutUint32(p.data[PAGE_NUMBER_OFFSET:], uint32(pageNumber))
+// routines to read and write from page header information
+func (p *Page) WritePageNumber(pageNumber int64) {
+	p.id.Page = pageNumber
+	binary.BigEndian.PutUint64(p.data[PAGE_NUMBER_OFFSET:], uint64(pageNumber))
 	p.isDirty = true
 }
 
-func (p *Page) ReadPageNumber() int {
-	return int(binary.BigEndian.Uint32(p.data[PAGE_NUMBER_OFFSET:]))
+func (p *Page) ReadPageNumber() int64 {
+	return int64(binary.BigEndian.Uint32(p.data[PAGE_NUMBER_OFFSET:]))
 }
 
 func (p *Page) WritePageType(pageType int16) {
@@ -157,24 +195,6 @@ func (p *Page) ReadLocalDepth() int16 {
 	return int16(binary.BigEndian.Uint16(p.data[PAGE_LOCAL_DEPTH_OFFSET:]))
 }
 
-func (p *Page) ReadSlot(slot int16) PageSlot {
-	offset := PAGE_SLOTS_START_OFFSET + PAGE_SLOT_LENGTH*slot
-	keyOffset := int16(binary.BigEndian.Uint16(p.data[offset:]))
-	offset += 2
-	valueOffset := int16(binary.BigEndian.Uint16(p.data[offset:]))
-	return PageSlot{
-		KeyOffset:   keyOffset,
-		ValueOffset: valueOffset,
-	}
-}
-
-func (p *Page) WriteSlot(slot int16, value PageSlot) {
-	offset := PAGE_SLOTS_START_OFFSET + PAGE_SLOT_LENGTH*slot
-	binary.BigEndian.PutUint16(p.data[offset:], uint16(value.KeyOffset))
-	offset += 2
-	binary.BigEndian.PutUint16(p.data[offset:], uint16(value.ValueOffset))
-}
-
 func (p *Page) WriteFreeSpaceOffset(offset int16) {
 	binary.BigEndian.PutUint16(p.data[PAGE_FREE_SPACE_OFFSET:], uint16(offset))
 	p.isDirty = true
@@ -184,106 +204,152 @@ func (p *Page) ReadFreeSpaceOffset() int16 {
 	return int16(binary.BigEndian.Uint16(p.data[PAGE_FREE_SPACE_OFFSET:]))
 }
 
-func (p *Page) WritePrevPointer(prevPointer int32) {
-	binary.BigEndian.PutUint32(p.data[PAGE_PREV_POINTER_OFFSET:], uint32(prevPointer))
+func (p *Page) WritePrevPointer(prevPointer PageID) {
+	binary.BigEndian.PutUint64(p.data[PAGE_PREV_POINTER_OFFSET:], uint64(prevPointer.Page))
 	p.isDirty = true
 }
 
-func (p *Page) ReadPrevPointer() int {
-	return int(binary.BigEndian.Uint32(p.data[PAGE_PREV_POINTER_OFFSET:]))
+func (p *Page) ReadPrevPointer() PageID {
+	page := int64(binary.BigEndian.Uint64(p.data[PAGE_PREV_POINTER_OFFSET:]))
+	return PageID{ObjectID: p.id.ObjectID, Shard: p.id.Shard, Page: page}
 }
 
-func (p *Page) WriteNextPointer(nextPointer int32) {
-	binary.BigEndian.PutUint32(p.data[PAGE_NEXT_POINTER_OFFSET:], uint32(nextPointer))
+func (p *Page) WriteNextPointer(nextPointer PageID) {
+	binary.BigEndian.PutUint64(p.data[PAGE_NEXT_POINTER_OFFSET:], uint64(nextPointer.Page))
 	p.isDirty = true
 }
 
-func (p *Page) ReadNextPointer() int {
-	return int(binary.BigEndian.Uint32(p.data[PAGE_NEXT_POINTER_OFFSET:]))
+func (p *Page) ReadNextPointer() PageID {
+	page := int64(binary.BigEndian.Uint64(p.data[PAGE_NEXT_POINTER_OFFSET:]))
+	return PageID{ObjectID: p.id.ObjectID, Shard: p.id.Shard, Page: page}
 }
 
-func (p *Page) WriteChunk(offset int16, chunk PageChunk) {
-	binary.BigEndian.PutUint16(p.data[offset:], uint16(chunk.KeyLength))
+// read slots from pages
+func (p *Page) ReadPageSlot(slot int16) PageSlot {
+	offset := PAGE_SLOTS_START_OFFSET + PAGE_SLOT_LENGTH*slot
+	keyOffset := int16(binary.BigEndian.Uint16(p.data[offset:]))
 	offset += 2
-	copy(p.data[offset:], chunk.KeyBytes)
-	offset += int16(len(chunk.KeyBytes))
-	binary.BigEndian.PutUint32(p.data[offset:], uint32(chunk.ValueLength))
-	offset += 4
-	copy(p.data[offset:], chunk.ValueBytes)
-	p.isDirty = true
-}
-
-func (p *Page) ReadChunk(offset int16) PageChunk {
-	keyLen := int16(binary.BigEndian.Uint16(p.data[offset:]))
-	offset += 2
-	keyBytes := make([]byte, keyLen)
-	copy(keyBytes, p.data[offset:offset+keyLen])
-	offset += keyLen
-	valueLen := int32(binary.BigEndian.Uint32(p.data[offset:]))
-	offset += 4
-	valueBytes := make([]byte, valueLen)
-	copy(valueBytes, p.data[offset:int32(offset)+valueLen])
-	return PageChunk{
-		KeyLength:   keyLen,
-		KeyBytes:    keyBytes,
-		ValueLength: valueLen,
-		ValueBytes:  valueBytes,
+	return PageSlot{
+		PayloadOffset: keyOffset,
 	}
 }
 
-func (p *Page) FreeSpace() int16 {
-	freeSpaceOffset := p.ReadFreeSpaceOffset()
-	freespace := freeSpaceOffset - (p.ReadSlotCount()*PAGE_SLOT_LENGTH + PAGE_SLOT_LENGTH + PAGE_SLOTS_START_OFFSET)
-	return freespace
+func (p *Page) WritePageSlot(slot int16, value PageSlot) {
+	offset := PAGE_SLOTS_START_OFFSET + PAGE_SLOT_LENGTH*slot
+	binary.BigEndian.PutUint16(p.data[offset:], uint16(value.PayloadOffset))
 }
 
-func (p *Page) WriteKeyValueInSlot(slotNumber int16, key []byte, value []byte) error {
+// TODO(pok) deprecate this once we get b+tree working, this
+// is just used in hash table right now
+func (p *Page) PutKeyValueInPageSlot(slotNumber int16, keyBytes []byte, payloadBytes []byte) error {
 	freeSpaceOffset := p.ReadFreeSpaceOffset()
 
-	// build a chunk
-	chunk := PageChunk{
-		KeyLength:   int16(len(key)),
-		KeyBytes:    key,
-		ValueLength: int32(len(value)),
-		ValueBytes:  value,
+	keyLength := len(keyBytes)
+	payloadChunkLength := len(payloadBytes)
+
+	// check for overflow
+	if payloadChunkLength > MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE {
+		return errors.New("overflow")
 	}
 
-	// compute the new free space offset
-	freeSpaceOffset -= int16(chunk.Length())
+	totalPayloadSize := p.ComputeLeafPayloadTotalLength(keyLength, payloadChunkLength)
 
-	// check we won't blow free space on page
-	slotCount := p.ReadSlotCount()
-	slotEndOffset := slotCount*PAGE_SLOT_LENGTH + PAGE_SLOT_LENGTH + PAGE_SLOTS_START_OFFSET
-
-	// DEBUG!!
-	//fmt.Printf("freeSpaceOffset: %d, slotCount: %d, slotCount*4 + 4 + 20: %d, freeSpace: %d\n", freeSpaceOffset, slotCount, slotEndOffset, freeSpaceOffset-slotEndOffset)
-
-	if freeSpaceOffset-slotEndOffset <= 0 {
+	// check to make sure we don't blow free space
+	if p.FreeSpaceOnPage() < int16(totalPayloadSize) {
 		return errors.New("page is full")
 	}
 
-	keyOffset := chunk.ComputeKeyOffset(int(freeSpaceOffset))
-	valueOffset := chunk.ComputeValueOffset(int(freeSpaceOffset))
+	// compute the new free space offset
+	freeSpaceOffset -= int16(totalPayloadSize)
+	offset := freeSpaceOffset
 
-	p.WriteChunk(freeSpaceOffset, chunk)
+	// write the header
+	offset = p.WriteLeafPagePayloadHeader(offset, int16(keyLength), keyBytes, 0, 0, int32(payloadChunkLength))
+
+	// write the payload
+	p.WriteLeafPagePayloadBytes(offset, int16(payloadChunkLength), payloadBytes)
 
 	// update the free space offset
 	p.WriteFreeSpaceOffset(int16(freeSpaceOffset))
 
 	// make a slot
 	slot := PageSlot{
-		KeyOffset:   int16(keyOffset),
-		ValueOffset: int16(valueOffset),
+		PayloadOffset: freeSpaceOffset,
 	}
 	// write the slot
-	p.WriteSlot(slotNumber, slot)
+	p.WritePageSlot(slotNumber, slot)
 
 	return nil
 }
 
-func (p *Page) WritePage(page *Page) {
+func (p *Page) ComputeInternalPayloadTotalLength(keyLength int) int32 {
+	l := /*keyLength*/ 2 + keyLength + /*ptrValue*/ 8
+	return int32(l)
+}
+
+func (p *Page) WriteInternalPagePayload(offset int16, keyLen int16, keyBytes []byte, ptrValue int64) {
+	binary.BigEndian.PutUint16(p.data[offset:], uint16(keyLen))
+	offset += 2
+	copy(p.data[offset:], keyBytes)
+	offset += keyLen
+	binary.BigEndian.PutUint64(p.data[offset:], uint64(ptrValue))
+	p.isDirty = true
+}
+
+func (p *Page) ComputeLeafPayloadTotalLength(keyLength int, payloadLength int) int32 {
+	l := /*keyLength*/ 2 + keyLength + /*flags*/ 1 + /*payLoadLength*/ 2 + payloadLength
+	if l > MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE {
+		l += 8 + 4 // add overflow ptr and total payload size
+	}
+	return int32(l)
+}
+
+func (p *Page) WriteLeafPagePayloadHeader(offset int16, keyLen int16, keyBytes []byte, flags int8, overflowPtr int64, payloadTotalLen int32) int16 {
+	binary.BigEndian.PutUint16(p.data[offset:], uint16(keyLen))
+	offset += 2
+	copy(p.data[offset:], keyBytes)
+	offset += keyLen
+	p.data[offset] = byte(flags)
+	offset += 1
+	// if we are overflowing write the overflow ptr
+	if flags == 1 {
+		binary.BigEndian.PutUint64(p.data[offset:], uint64(overflowPtr))
+		offset += 8
+		// total length
+		binary.BigEndian.PutUint32(p.data[offset:], uint32(payloadTotalLen))
+		offset += 4
+	}
+	p.isDirty = true
+	return offset
+}
+
+func (p *Page) WriteLeafPagePayloadBytes(offset int16, payloadChunkLength int16, payloadChunkBytes []byte) {
+	// chunk length
+	binary.BigEndian.PutUint16(p.data[offset:], uint16(payloadChunkLength))
+	offset += 2
+	// now copy the payload bytes
+	copy(p.data[offset:], payloadChunkBytes)
+	p.isDirty = true
+}
+
+func (p *Page) WriteInternalPageChunk(offset int16, chunk InternalPageChunk) {
+	binary.BigEndian.PutUint16(p.data[offset:], uint16(chunk.KeyLength))
+	offset += 2
+	copy(p.data[offset:], chunk.KeyBytes)
+	offset += int16(len(chunk.KeyBytes))
+	binary.BigEndian.PutUint64(p.data[offset:], uint64(chunk.PtrValue))
+	p.isDirty = true
+}
+
+func (p *Page) FreeSpaceOnPage() int16 {
+	freeSpaceOffset := p.ReadFreeSpaceOffset()
+	freespace := freeSpaceOffset - (p.ReadSlotCount()*PAGE_SLOT_LENGTH + PAGE_SLOT_LENGTH + PAGE_SLOTS_START_OFFSET)
+	return freespace
+}
+
+func (p *Page) CopyPageTo(page *Page) {
 	// copy everything but pageNumber & pageType
-	offset := PAGE_SLOT_COUNT_OFFSET
+	offset := int64(PAGE_SLOT_COUNT_OFFSET)
 	copy(page.data[offset:], p.data[offset:offset+PAGE_SIZE-offset])
 }
 
@@ -299,6 +365,211 @@ func (p *Page) DecPinCount() {
 	if p.pinCount > 0 {
 		p.pinCount--
 	}
+}
+
+func (pg *Page) Dump(label string) {
+	indent := 0
+	if len(label) > 0 {
+		fmt.Printf("%s%s:\n", fmt.Sprintf("%*s", indent, ""), label)
+		indent += 4
+	}
+	pageType := pg.ReadPageType()
+	fmt.Printf("%sPAGE(%d) pageType: %d slotCount: %d, prevPtr: %d, nextPtr: %d\n", fmt.Sprintf("%*s", indent, ""), pg.ID(), pageType, pg.ReadSlotCount(), pg.ReadPrevPointer(), pg.ReadNextPointer())
+	fmt.Printf("%sKEYS: -->\n", fmt.Sprintf("%*s", indent, ""))
+	indent += 4
+
+	// get the keys off the page
+	keys := make([]int, 0)
+	pointers := make([]PageID, 0)
+	iter := NewPageSlotIterator(pg, 0)
+	for {
+		ps := iter.Next()
+		if ps == nil {
+			break
+		}
+		pl := ps.KeyPayload(pg)
+		keys = append(keys, int(pl.KeyAsInt(pg)))
+		if pageType == PAGE_TYPE_BTREE_INTERNAL {
+			ipl := ps.InternalPayload(pg)
+			pointers = append(pointers, ipl.ValueAsPagePointer(pg))
+		}
+	}
+
+	if pageType == PAGE_TYPE_BTREE_LEAF {
+		for _, key := range keys {
+			fmt.Printf("%s(%d)\n", fmt.Sprintf("%*s", indent, ""), key)
+		}
+	} else {
+		for idx, key := range keys {
+			ptr := pointers[idx]
+			fmt.Printf("%s(%d, %d)\n", fmt.Sprintf("%*s", indent, ""), key, ptr)
+		}
+		ptr := pg.ReadNextPointer()
+		fmt.Printf("%s(-->, %d)\n", fmt.Sprintf("%*s", indent, ""), ptr)
+	}
+
+}
+
+type KeyPayload struct {
+	BaseOffset int16
+}
+
+func (p *KeyPayload) KeyAsInt(page *Page) int32 {
+	return int32(binary.BigEndian.Uint32(page.data[p.BaseOffset+2:]))
+}
+
+func (p *KeyPayload) KeyBytes(page *Page) []byte {
+	offset := p.BaseOffset
+	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2
+	result := make([]byte, keyLen)
+	copy(result, page.data[offset:offset+keyLen])
+	return result
+}
+
+type InternalPayload struct {
+	BaseOffset int16
+}
+
+func (p *InternalPayload) ptrOffset(page *Page) int16 {
+	offset := p.BaseOffset
+	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2 + keyLen
+	return offset
+}
+
+func (p *InternalPayload) ValueAsPagePointer(page *Page) PageID {
+	offset := p.ptrOffset(page)
+	pageid := int64(binary.BigEndian.Uint64(page.data[offset:]))
+	return PageID{ObjectID: page.id.ObjectID, Shard: page.id.Shard, Page: pageid}
+}
+
+func (p *InternalPayload) PutPagePointer(page *Page, pagePtr PageID) error {
+	offset := p.ptrOffset(page)
+	binary.BigEndian.PutUint64(page.data[offset:], uint64(pagePtr.Page))
+	page.isDirty = true
+	return nil
+}
+
+func (l *InternalPayload) InternalPageChunk(page *Page) InternalPageChunk {
+	offset := l.BaseOffset
+	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2
+	keyBytes := make([]byte, keyLen)
+	copy(keyBytes, page.data[offset:offset+keyLen])
+	offset += keyLen
+	ptrValue := int64(binary.BigEndian.Uint64(page.data[offset:]))
+	return InternalPageChunk{
+		KeyLength: keyLen,
+		KeyBytes:  keyBytes,
+		PtrValue:  ptrValue,
+	}
+}
+
+type LeafPayload struct {
+	BaseOffset int16
+}
+
+func (l *LeafPayload) valueOffset(page *Page) int16 {
+	offset := l.BaseOffset
+	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2 + keyLen
+	return offset
+}
+
+func (l *LeafPayload) ValueLength(page *Page) int32 {
+	offset := l.valueOffset(page)
+	valueLen := int32(binary.BigEndian.Uint32(page.data[offset:]))
+	return valueLen
+}
+
+// this wil fail in overflow
+func (l *LeafPayload) ValueAsBytes(page *Page) []byte {
+	offset := l.valueOffset(page)
+	valueLen := int32(binary.BigEndian.Uint32(page.data[offset:]))
+	offset += 4
+	result := make([]byte, valueLen)
+	copy(result, page.data[offset:int32(offset)+valueLen])
+	return result
+}
+
+func (l *LeafPayload) GetPayloadReader(page *Page) LeafPagePayLoadReader {
+	offset := l.BaseOffset
+	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2
+	keyBytes := make([]byte, keyLen)
+	copy(keyBytes, page.data[offset:offset+keyLen])
+	offset += keyLen
+	flags := int8(page.data[offset])
+	offset += 1
+	overflowPtr := int64(0)
+	payloadTotalLength := int32(0)
+	if flags == 1 {
+		overflowPtr = int64(binary.BigEndian.Uint64(page.data[offset:]))
+		offset += 8
+		payloadTotalLength = int32(binary.BigEndian.Uint32(page.data[offset:]))
+		offset += 4
+	}
+	valueLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2
+	if payloadTotalLength == 0 {
+		payloadTotalLength = int32(valueLen)
+	}
+	valueBytes := make([]byte, valueLen)
+	copy(valueBytes, page.data[offset:int16(offset)+valueLen])
+	return LeafPagePayLoadReader{
+		KeyLength:          keyLen,
+		KeyBytes:           keyBytes,
+		Flags:              flags,
+		OverflowPtr:        overflowPtr,
+		PayloadTotalLength: payloadTotalLength,
+		PayloadChunkLength: valueLen,
+		PayloadChunkBytes:  valueBytes,
+	}
+}
+
+type PageSlot struct {
+	PayloadOffset int16
+}
+
+func (s *PageSlot) KeyPayload(page *Page) KeyPayload {
+	return KeyPayload{BaseOffset: s.PayloadOffset}
+}
+
+func (s *PageSlot) InternalPayload(page *Page) InternalPayload {
+	return InternalPayload{BaseOffset: s.PayloadOffset}
+}
+
+func (s *PageSlot) LeafPayload(page *Page) LeafPayload {
+	return LeafPayload{BaseOffset: s.PayloadOffset}
+}
+
+type LeafPagePayLoadReader struct {
+	KeyLength          int16
+	KeyBytes           []byte
+	Flags              int8
+	OverflowPtr        int64
+	PayloadTotalLength int32
+	PayloadChunkLength int16
+	PayloadChunkBytes  []byte
+}
+
+func (pc *LeafPagePayLoadReader) Length() int32 {
+	l := /*keyLength*/ 2 + pc.KeyLength + /*flags*/ 1 + /*payLoadLength*/ 2 + pc.PayloadChunkLength
+	if pc.Flags == 1 {
+		l += 8 + 4 // add overflow ptr and total payload size
+	}
+	return int32(l)
+}
+
+type InternalPageChunk struct {
+	KeyLength int16
+	KeyBytes  []byte
+	PtrValue  int64
+}
+
+func (pc *InternalPageChunk) Length() int {
+	return 2 + len(pc.KeyBytes) + 8
 }
 
 type PageSlotIterator struct {
@@ -318,7 +589,7 @@ func NewPageSlotIterator(page *Page, fromSlot int16) *PageSlotIterator {
 
 func (i *PageSlotIterator) Next() *PageSlot {
 	if i.cursor < i.slotCount {
-		s := i.page.ReadSlot(i.cursor)
+		s := i.page.ReadPageSlot(i.cursor)
 		i.cursor++
 		return &s
 	}
@@ -327,45 +598,4 @@ func (i *PageSlotIterator) Next() *PageSlot {
 
 func (i *PageSlotIterator) Cursor() int16 {
 	return i.cursor
-}
-
-func (pg *Page) Dump(label string) {
-	indent := 0
-	if len(label) > 0 {
-		fmt.Printf("%s%s:\n", fmt.Sprintf("%*s", indent, ""), label)
-		indent += 4
-	}
-	pageType := pg.ReadPageType()
-	fmt.Printf("%sPAGE(%d) pageType: %d slotCount: %d, prevPtr: %d, nextPtr: %d\n", fmt.Sprintf("%*s", indent, ""), pg.ID(), pageType, pg.ReadSlotCount(), pg.ReadPrevPointer(), pg.ReadNextPointer())
-	fmt.Printf("%sKEYS: -->\n", fmt.Sprintf("%*s", indent, ""))
-	indent += 4
-
-	// get the keys off the page
-	keys := make([]int, 0)
-	pointers := make([]int, 0)
-	iter := NewPageSlotIterator(pg, 0)
-	for {
-		ps := iter.Next()
-		if ps == nil {
-			break
-		}
-		keys = append(keys, int(ps.KeyAsInt(pg)))
-		if pageType == /*nodeTypeInternal*/ 10 {
-			pointers = append(pointers, int(ps.ValueAsPagePointer(pg)))
-		}
-	}
-
-	if pageType == /*nodeTypeLeaf*/ 11 {
-		for _, key := range keys {
-			fmt.Printf("%s(%d)\n", fmt.Sprintf("%*s", indent, ""), key)
-		}
-	} else {
-		for idx, key := range keys {
-			ptr := pointers[idx]
-			fmt.Printf("%s(%d, %d)\n", fmt.Sprintf("%*s", indent, ""), key, ptr)
-		}
-		ptr := pg.ReadNextPointer()
-		fmt.Printf("%s(-->, %d)\n", fmt.Sprintf("%*s", indent, ""), ptr)
-	}
-
 }
