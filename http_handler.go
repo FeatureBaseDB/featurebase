@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"mime"
 	"net"
@@ -4318,4 +4319,8 @@ func (h *Handler) handlePostDataframe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+}
+
+func (h *Handler) DiscardHTTPServerLogs() {
+	h.server.ErrorLog = log.New(io.Discard, "", 0)
 }
