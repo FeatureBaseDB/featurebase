@@ -28,6 +28,7 @@ type OptimizerFunc func(context.Context, *ExecutionPlanner, types.PlanOperator, 
 
 // a list of optimzer rules; order can be important important
 var optimizerFunctions = []OptimizerFunc{
+
 	// fix expression references for having
 	removeUnusedExtractColumnReferences,
 
@@ -1391,7 +1392,7 @@ func fixFieldRefIndexesForHaving(ctx context.Context, scope *OptimizerScope, a *
 			*percentilePlanExpression:
 			for i, col := range schema {
 				if strings.EqualFold(typedExpr.String(), col.ColumnName) {
-					e := newQualifiedRefPlanExpression("", "", i, typedExpr.Type())
+					e := newQualifiedRefPlanExpression("", col.ColumnName, i, typedExpr.Type())
 					return e, false, nil
 				}
 			}

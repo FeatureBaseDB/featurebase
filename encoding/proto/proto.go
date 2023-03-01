@@ -589,6 +589,7 @@ func (s Serializer) encodeIndexInfos(idxs []*pilosa.IndexInfo) []*pb.Index {
 
 func (s Serializer) encodeIndexInfo(idx *pilosa.IndexInfo) *pb.Index {
 	return &pb.Index{
+		IndexID:   idx.ID,
 		Name:      idx.Name,
 		CreatedAt: idx.CreatedAt,
 		Options:   s.encodeIndexMeta(&idx.Options),
@@ -638,6 +639,7 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions 
 		ForeignIndex:   o.ForeignIndex,
 		NoStandardView: o.NoStandardView,
 		TrackExistence: o.TrackExistence,
+		Length:         o.Length,
 	}
 }
 
@@ -688,6 +690,7 @@ func (s Serializer) encodeCreateShardMessage(m *pilosa.CreateShardMessage) *pb.C
 
 func (s Serializer) encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *pb.CreateIndexMessage {
 	return &pb.CreateIndexMessage{
+		IndexID:   m.IndexID,
 		Index:     m.Index,
 		CreatedAt: m.CreatedAt,
 		Owner:     m.Owner,
@@ -929,6 +932,7 @@ func (s Serializer) decodeIndexes(idxs []*pb.Index, m []*pilosa.IndexInfo) {
 }
 
 func (s Serializer) decodeIndex(idx *pb.Index, m *pilosa.IndexInfo) {
+	m.ID = idx.IndexID
 	m.Name = idx.Name
 	m.CreatedAt = idx.CreatedAt
 	m.Options = pilosa.IndexOptions{}
@@ -963,6 +967,7 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 	s.decodeDecimal(options.Max, &m.Max)
 	m.Base = options.Base
 	m.Scale = options.Scale
+	m.Length = options.Length
 	m.BitDepth = uint64(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
 	ttlValue, err := time.ParseDuration(options.TTL)
@@ -1032,6 +1037,7 @@ func (s Serializer) decodeCreateShardMessage(pb *pb.CreateShardMessage, m *pilos
 }
 
 func (s Serializer) decodeCreateIndexMessage(pb *pb.CreateIndexMessage, m *pilosa.CreateIndexMessage) {
+	m.IndexID = pb.IndexID
 	m.Index = pb.Index
 	m.CreatedAt = pb.CreatedAt
 	m.Owner = pb.Owner

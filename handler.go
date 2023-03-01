@@ -464,6 +464,8 @@ type ImportRoaringShardRequest struct {
 	Remote bool
 	Views  []RoaringUpdate
 
+	Tuples []byte
+
 	// SuppressLog requests we not write to the write log. Typically
 	// that would be because this request is being replayed from a
 	// write log.

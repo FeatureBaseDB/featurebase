@@ -94,9 +94,9 @@ func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt 
 	columns := []types.PlanExpression{
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
-			columnName:  string(dax.PrimaryKeyFieldName),
+			columnName:  "onject_id",
 			columnIndex: 0,
-			dataType:    parser.NewDataTypeString(),
+			dataType:    parser.NewDataTypeInt(),
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
@@ -203,33 +203,38 @@ func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
-		columnName:  "min",
+		columnName:  "length",
 		columnIndex: 8,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
-		columnName:  "max",
+		columnName:  "min",
 		columnIndex: 9,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
-		columnName:  "timeunit",
+		columnName:  "max",
 		columnIndex: 10,
+		dataType:    parser.NewDataTypeInt(),
+	}, &qualifiedRefPlanExpression{
+		tableName:   "fb_table_columns",
+		columnName:  "timeunit",
+		columnIndex: 11,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "epoch",
-		columnIndex: 11,
+		columnIndex: 12,
 		dataType:    parser.NewDataTypeInt(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "timequantum",
-		columnIndex: 12,
+		columnIndex: 13,
 		dataType:    parser.NewDataTypeString(),
 	}, &qualifiedRefPlanExpression{
 		tableName:   "fb_table_columns",
 		columnName:  "ttl",
-		columnIndex: 13,
+		columnIndex: 14,
 		dataType:    parser.NewDataTypeString(),
 	}}
 

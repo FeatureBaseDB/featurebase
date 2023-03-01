@@ -202,6 +202,7 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 	var epoch time.Time
 	var foreignIndex string
 	var timeQuantum dax.TimeQuantum
+	var length int64
 
 	fo := &fi.Options
 
@@ -245,6 +246,9 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 			fieldType = dax.BaseTypeIDSetQ
 		}
 		timeQuantum = dax.TimeQuantum(fo.TimeQuantum)
+	case FieldTypeVarchar:
+		fieldType = dax.BaseTypeVarchar
+		length = fo.Length
 	default:
 		panic(fmt.Sprintf("unhandled featurebase field type: %s", fo.Type))
 	}
@@ -265,6 +269,7 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 			TTL:            fo.TTL,
 			ForeignIndex:   foreignIndex,
 			TrackExistence: fo.TrackExistence,
+			Length:         length,
 		},
 	}
 }
@@ -360,6 +365,7 @@ func FieldToFieldInfo(fld *dax.Field) *FieldInfo {
 			Min:            min,
 			Max:            max,
 			Scale:          fld.Options.Scale,
+			Length:         fld.Options.Length,
 			Keys:           fld.StringKeys(),
 			NoStandardView: fld.Options.NoStandardView,
 			CacheType:      fld.Options.CacheType,
@@ -491,6 +497,11 @@ func FieldOptionsFromField(fld *dax.Field) ([]FieldOption, error) {
 		opts = append(opts,
 			OptFieldTypeTimestamp(fld.Options.Epoch, fld.Options.TimeUnit),
 		)
+	case dax.BaseTypeVarchar:
+		opts = append(opts,
+			OptFieldTypeVarchar(fld.Options.Length),
+		)
+
 	default:
 		return nil, errors.Errorf("unsupport field type: %s", fld.Type)
 	}

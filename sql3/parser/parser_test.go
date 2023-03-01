@@ -997,10 +997,10 @@ func TestParser_ParseStatement(t *testing.T) {
 				{
 					Name: &parser.Ident{NamePos: pos(29), Name: "col2"},
 					Type: &parser.Type{
-						Name:   &parser.Ident{NamePos: pos(34), Name: "DECIMAL"},
-						Lparen: pos(41),
-						Scale:  &parser.IntegerLit{ValuePos: pos(42), Value: "2"},
-						Rparen: pos(43),
+						Name:     &parser.Ident{NamePos: pos(34), Name: "DECIMAL"},
+						Lparen:   pos(41),
+						Modifier: &parser.IntegerLit{ValuePos: pos(42), Value: "2"},
+						Rparen:   pos(43),
 					},
 				},
 			},

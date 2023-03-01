@@ -89,6 +89,11 @@ func (p *PlanOpFeatureBaseColumns) Schema() types.Schema {
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_table_columns",
+			ColumnName:   "length",
+			Type:         parser.NewDataTypeInt(),
+		},
+		&types.PlannerColumn{
+			RelationName: "fb_table_columns",
 			ColumnName:   "min",
 			Type:         parser.NewDataTypeInt(),
 		},
@@ -156,6 +161,7 @@ func (i *showColumnsRowIter) Next(ctx context.Context) (types.Row, error) {
 			fields[i.rowIndex].Options.CacheType,
 			fields[i.rowIndex].Options.CacheSize,
 			fields[i.rowIndex].Options.Scale,
+			fields[i.rowIndex].Options.Length,
 			fields[i.rowIndex].Options.Min.ToInt64(0),
 			fields[i.rowIndex].Options.Max.ToInt64(0),
 			fields[i.rowIndex].Options.TimeUnit,

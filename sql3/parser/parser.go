@@ -1769,10 +1769,10 @@ func (p *Parser) parseType() (_ *Type, err error) {
 		return &typ, err
 	}
 
-	// Optionally parse scale.
+	// Optionally parse modifier.
 	if p.peek() == LP {
 		typ.Lparen, _, _ = p.scan()
-		if typ.Scale, err = p.parseIntegerLiteral("scale"); err != nil {
+		if typ.Modifier, err = p.parseIntegerLiteral("scale"); err != nil {
 			return &typ, err
 		}
 

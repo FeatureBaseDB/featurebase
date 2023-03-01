@@ -716,22 +716,13 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 		if err := walkIdent(v, &n.Name); err != nil {
 			return node, err
 		}
-		if n.Precision != nil {
-			if p, err := walk(v, n.Precision); err != nil {
-				return node, err
-			} else if p != nil {
-				n.Precision = p.(*IntegerLit)
-			} else {
-				n.Precision = nil
-			}
-		}
-		if n.Scale != nil {
-			if scale, err := walk(v, n.Scale); err != nil {
+		if n.Modifier != nil {
+			if scale, err := walk(v, n.Modifier); err != nil {
 				return node, err
 			} else if scale != nil {
-				n.Scale = scale.(*IntegerLit)
+				n.Modifier = scale.(*IntegerLit)
 			} else {
-				n.Scale = nil
+				n.Modifier = nil
 			}
 		}
 	}

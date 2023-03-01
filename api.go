@@ -15,6 +15,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -29,11 +30,13 @@ import (
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/featurebasedb/featurebase/v3/rbf"
+	"github.com/featurebasedb/featurebase/v3/tstore"
+	"github.com/featurebasedb/featurebase/v3/wireprotocol"
 	"github.com/prometheus/client_golang/prometheus"
 
-	//"github.com/featurebasedb/featurebase/v3/pg"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
@@ -263,9 +266,13 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
+	// get the next indexID number
+	indexID := int32(len(api.holder.indexes) + 1)
+
 	// Populate the create index message.
 	ts := timestamp()
 	cim := &CreateIndexMessage{
+		IndexID:   indexID,
 		Index:     indexName,
 		CreatedAt: ts,
 		Owner:     requestUserID,
@@ -1727,6 +1734,14 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		}
 	}
 
+	// handle the tuple data
+	if len(req.Tuples) > 0 {
+		err := api.importTuples(ctx, tx, shard, indexName, req.Tuples)
+		if err != nil {
+			return err
+		}
+	}
+
 	if api.isComputeNode && !req.SuppressLog {
 		partition := disco.ShardToShardPartition(indexName, shard, disco.DefaultPartitionN)
 		msg := &computer.ImportRoaringShardMessage{
@@ -1734,6 +1749,7 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 			Partition: partition,
 			Shard:     shard,
 			Views:     make([]computer.RoaringUpdate, len(req.Views)),
+			Tuples:    req.Tuples,
 		}
 		for i, view := range req.Views {
 			msg.Views[i] = computer.RoaringUpdate{
@@ -1763,6 +1779,122 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		}
 	}
 
+	return nil
+}
+
+func cleanupView(fieldType string, viewUpdate *RoaringUpdate) error {
+	// TODO wouldn't hurt to have consolidated logic somewhere for validating view names.
+	switch fieldType {
+	case FieldTypeSet, FieldTypeTime:
+		if viewUpdate.View == "" {
+			viewUpdate.View = "standard"
+		}
+		// add 'standard_' if we just have a time... this is how IDK works by default
+		if fieldType == FieldTypeTime && !strings.HasPrefix(viewUpdate.View, viewStandard) {
+			viewUpdate.View = fmt.Sprintf("%s_%s", viewStandard, viewUpdate.View)
+		}
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		if viewUpdate.View == "" {
+			viewUpdate.View = "bsig_" + viewUpdate.Field
+		} else if viewUpdate.View != "bsig_"+viewUpdate.Field {
+			return NewBadRequestError(errors.Errorf("invalid view name (%s) for field %s of type %s", viewUpdate.View, viewUpdate.Field, fieldType))
+		}
+	}
+	return nil
+}
+
+func (api *API) importTuples(ctx context.Context, tx Tx, shard uint64, tableName string, tupleData []byte) error {
+
+	// get the table
+	index, err := api.Index(ctx, tableName)
+	if err != nil {
+		return err
+	}
+
+	// if the index id is 0 then we can't do an insert into the t-store
+	if index.ID == 0 {
+		return errors.Errorf("cannot insert into table '%s' because it does not have a non-zero object id", tableName)
+	}
+	basePath := index.TStorePath()
+
+	// open or create btreefile for this shard
+	dataFile := filepath.Join(basePath, fmt.Sprintf("ts-shard.%04d", shard))
+	api.holder.tstoredisk.CreateOrOpenShard(index.ID, int32(shard), dataFile)
+
+	// get the schema from the FeatureBase table in the form of a planner_types.Schema
+	// we just want the t-store types
+
+	fieldList := make([]*Field, 0)
+	for _, f := range index.fields {
+		if strings.EqualFold(f.options.Type, FieldTypeVarchar) {
+			fieldList = append(fieldList, f)
+		}
+	}
+
+	sort.Slice(fieldList, func(i, j int) bool {
+		return fieldList[i].CreatedAt() < fieldList[j].CreatedAt()
+	})
+
+	indexSchema := make(planner_types.Schema, len(fieldList))
+	for i, f := range fieldList {
+		indexSchema[i] = &planner_types.PlannerColumn{
+			ColumnName: f.name,
+			Type:       parser.NewDataTypeVarchar(f.options.Length),
+		}
+	}
+
+	// create the b-tree we're going to use
+	b, err := tstore.NewBTree(tstore.KEY_SIZE_INT64, index.ID, int32(shard), indexSchema, api.holder.tstorepool)
+	if err != nil {
+		return err
+	}
+
+	// start to read the data for the import
+	rdr := bytes.NewReader(tupleData)
+	_, err = wireprotocol.ExpectToken(rdr, wireprotocol.TOKEN_SCHEMA_INFO)
+	if err != nil {
+		return err
+	}
+
+	// get the row schema from the import data
+	rowSchema, err := wireprotocol.ReadSchema(rdr)
+	if err != nil {
+		return err
+	}
+
+	// read rows until we get to the end
+	tk, err := wireprotocol.ReadToken(rdr)
+	if err != nil {
+		return err
+	}
+	for tk == wireprotocol.TOKEN_ROW {
+		rr, err := wireprotocol.ReadRow(rdr, rowSchema)
+		if err != nil {
+			return err
+		}
+
+		// make sure the key is at offset 0
+		s := rowSchema[0]
+		if !strings.EqualFold(s.ColumnName, "_id") {
+			return errors.Errorf("unexpected key column position ")
+		}
+
+		err = b.Insert(&tstore.BTreeTuple{
+			TupleSchema: rowSchema,
+			Tuple:       rr,
+		})
+		if err != nil {
+			return err
+		}
+
+		tk, err = wireprotocol.ReadToken(rdr)
+		if err != nil {
+			return err
+		}
+	}
+	if tk != wireprotocol.TOKEN_DONE {
+		return errors.Errorf("unexpected token '%d'", tk)
+	}
 	return nil
 }
 
