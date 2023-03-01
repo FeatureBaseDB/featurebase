@@ -19,10 +19,10 @@ type ExtendibleHashTable struct {
 // NewExtendibleHashTable creates a new ExtendibleHashTable
 func NewExtendibleHashTable(keyLength int, valueLength int, bufferPool *bufferpool.BufferPool) (*ExtendibleHashTable, error) {
 	bytesPerKV := keyLength + valueLength + bufferpool.PAGE_SLOT_LENGTH
-	keysPerPage := (bufferpool.PAGE_SIZE - bufferpool.PAGE_SLOTS_START_OFFSET) / bytesPerKV
+	keysPerPage := int(bufferpool.PAGE_SIZE-bufferpool.PAGE_SLOTS_START_OFFSET) / bytesPerKV
 
 	//create the root page
-	page, err := bufferPool.NewPage()
+	page, err := bufferPool.NewPage(0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -53,8 +53,9 @@ func (e *ExtendibleHashTable) Get(key []byte) ([]byte, bool, error) {
 
 	index, found := e.findKey(page, key)
 	if found {
-		slot := page.ReadSlot(int16(index))
-		return slot.ValueBytes(page), true, nil
+		slot := page.ReadPageSlot(int16(index))
+		lpl := slot.LeafPayload(page)
+		return lpl.ValueAsBytes(page), true, nil
 	}
 	return []byte{}, false, nil
 }
@@ -99,7 +100,7 @@ func (e *ExtendibleHashTable) hashFunction(k Hashable) int {
 func (e *ExtendibleHashTable) getPageID(key []byte) (bufferpool.PageID, error) {
 	hash := e.hashFunction(Key(key))
 	if hash > len(e.directory)-1 {
-		return 0, fmt.Errorf("hash (%d) out of the directory array bounds (%d)", hash, len(e.directory))
+		return bufferpool.PageID{ObjectID: 0, Shard: 0, Page: bufferpool.INVALID_PAGE}, fmt.Errorf("hash (%d) out of the directory array bounds (%d)", hash, len(e.directory))
 	}
 	id := e.directory[hash]
 	return bufferpool.PageID(id), nil
@@ -111,8 +112,9 @@ func (e *ExtendibleHashTable) findKey(page *bufferpool.Page, key []byte) (int, b
 
 	for onePastMaxIndex != minIndex {
 		index := (minIndex + onePastMaxIndex) / 2
-		s := page.ReadSlot(int16(index))
-		keyAtIndex := s.KeyBytes(page)
+		s := page.ReadPageSlot(int16(index))
+		pl := s.KeyPayload(page)
+		keyAtIndex := pl.KeyBytes(page)
 
 		if bytes.Equal(keyAtIndex, key) {
 			return index, true
@@ -135,11 +137,11 @@ func (e *ExtendibleHashTable) splitOnKey(page *bufferpool.Page, key []byte) erro
 
 	// scratch page for left
 	p0 := e.bufferPool.ScratchPage()
-	p0.WritePageNumber(int32(page.ID()))
+	p0.WritePageNumber(page.ID().Page)
 	p0.WritePageType(bufferpool.PAGE_TYPE_HASH_TABLE)
 
 	// allocate new page for split
-	p1, err := e.bufferPool.NewPage()
+	p1, err := e.bufferPool.NewPage(0, 0)
 	if err != nil {
 		return err
 	}
@@ -160,19 +162,21 @@ func (e *ExtendibleHashTable) splitOnKey(page *bufferpool.Page, key []byte) erro
 		if slot == nil {
 			break
 		}
-		keyBytes := slot.KeyBytes(page)
+		pl := slot.KeyPayload(page)
+		lpl := slot.LeafPayload(page)
+		keyBytes := pl.KeyBytes(page)
 		k := string(keyBytes)
 		h := Key(k).Hash()
 
 		if h&hiBit > 0 {
 			sc := p1.ReadSlotCount()
-			p1.WriteKeyValueInSlot(sc, keyBytes, slot.ValueBytes(page))
+			p1.PutKeyValueInPageSlot(sc, keyBytes, lpl.ValueAsBytes(page))
 			// update the slot count
 			p1.WriteSlotCount(int16(sc + 1))
 
 		} else {
 			sc := p0.ReadSlotCount()
-			p0.WriteKeyValueInSlot(sc, keyBytes, slot.ValueBytes(page))
+			p0.PutKeyValueInPageSlot(sc, keyBytes, lpl.ValueAsBytes(page))
 			// update the slot count
 			p0.WriteSlotCount(int16(sc + 1))
 		}
@@ -186,7 +190,7 @@ func (e *ExtendibleHashTable) splitOnKey(page *bufferpool.Page, key []byte) erro
 	}
 
 	// copy p1 back into page
-	p0.WritePage(page)
+	p0.CopyPageTo(page)
 
 	return nil
 }
@@ -194,7 +198,7 @@ func (e *ExtendibleHashTable) splitOnKey(page *bufferpool.Page, key []byte) erro
 func (e *ExtendibleHashTable) cleanPage(page *bufferpool.Page) error {
 	scratch := e.bufferPool.ScratchPage()
 	// copy page number
-	scratch.WritePageNumber(int32(page.ID()))
+	scratch.WritePageNumber(page.ID().Page)
 	// set the page type
 	scratch.WritePageType(bufferpool.PAGE_TYPE_HASH_TABLE)
 	// copy local depth
@@ -207,14 +211,16 @@ func (e *ExtendibleHashTable) cleanPage(page *bufferpool.Page) error {
 		if slot == nil {
 			break
 		}
-		scratch.WriteKeyValueInSlot(si.Cursor(), slot.KeyBytes(page), slot.ValueBytes(page))
+		pl := slot.KeyPayload(page)
+		lpl := slot.LeafPayload(page)
+		scratch.PutKeyValueInPageSlot(si.Cursor(), pl.KeyBytes(page), lpl.ValueAsBytes(page))
 	}
 
 	// update the slot count
 	scratch.WriteSlotCount(page.ReadSlotCount())
 
 	// write scratch back to page
-	scratch.WritePage(page)
+	scratch.CopyPageTo(page)
 	return nil
 }
 
@@ -222,7 +228,7 @@ func (e *ExtendibleHashTable) keyValueWillFit(page *bufferpool.Page, key, value 
 	// will this k/v fit on the page?
 	slotLen := 4                          // we need 2 len words for the slot
 	chunkLen := 6 + len(key) + len(value) // int16 len + int32 len + len of respective []byte
-	fs := page.FreeSpace()
+	fs := page.FreeSpaceOnPage()
 	return fs > (int16(slotLen) + int16(chunkLen))
 }
 
@@ -242,7 +248,7 @@ func (e *ExtendibleHashTable) putKeyValue(page *bufferpool.Page, key, value []by
 	slotCount := int(page.ReadSlotCount())
 	if found {
 		// we found the key, so we will update the value
-		err := page.WriteKeyValueInSlot(int16(newIndex), []byte(key), []byte(value))
+		err := page.PutKeyValueInPageSlot(int16(newIndex), []byte(key), []byte(value))
 		if err != nil {
 			return err
 		}
@@ -252,10 +258,10 @@ func (e *ExtendibleHashTable) putKeyValue(page *bufferpool.Page, key, value []by
 		// TODO(pok) we should move all the slots in one fell swoop, because,... performance
 		// move all the slots after where we are going to insert
 		for j := slotCount; j > newIndex; j-- {
-			sl := page.ReadSlot(int16(j - 1))
-			page.WriteSlot(int16(j), sl)
+			sl := page.ReadPageSlot(int16(j - 1))
+			page.WritePageSlot(int16(j), sl)
 		}
-		err := page.WriteKeyValueInSlot(int16(newIndex), []byte(key), []byte(value))
+		err := page.PutKeyValueInPageSlot(int16(newIndex), []byte(key), []byte(value))
 		if err != nil {
 			return err
 		}

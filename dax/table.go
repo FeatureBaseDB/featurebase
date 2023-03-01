@@ -83,6 +83,7 @@ const (
 	BaseTypeStringSet  = "stringset"  // keyed set
 	BaseTypeStringSetQ = "stringsetq" // keyed set timequantum
 	BaseTypeTimestamp  = "timestamp"  //
+	BaseTypeVarchar    = "varchar"    //
 
 	DefaultPartitionN = 256
 
@@ -684,7 +685,8 @@ func BaseTypeFromString(s string) (BaseType, error) {
 		BaseTypeString,
 		BaseTypeStringSet,
 		BaseTypeStringSetQ,
-		BaseTypeTimestamp:
+		BaseTypeTimestamp,
+		BaseTypeVarchar:
 		return BaseType(lowered), nil
 	default:
 		return "", errors.Errorf("invalid field type: %s", s)
@@ -824,4 +826,5 @@ type FieldOptions struct {
 	TTL            time.Duration `json:"ttl,omitempty"`
 	ForeignIndex   string        `json:"foreign-index,omitempty"`
 	TrackExistence bool          `json:"track-existence"`
+	Length         int64         `json:"length,omitempty"`
 }

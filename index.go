@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 // Index represents a container for fields.
 type Index struct {
 	mu          sync.RWMutex
+	ID          int32
 	createdAt   int64
 	owner       string
 	description string
@@ -112,6 +114,11 @@ func (i *Index) DataframesPath() string {
 	return filepath.Join(i.path, DataframesDir)
 }
 
+// TStorePath returns the path of the t-store files specific to an index
+func (i *Index) TStorePath() string {
+	return filepath.Join(i.path, TStoreDir)
+}
+
 // Name returns name of the index.
 func (i *Index) Name() string { return i.name }
 
@@ -180,6 +187,7 @@ func (i *Index) OpenWithSchema(idx *disco.Index) error {
 		return errors.Wrap(err, "decoding create index message")
 	}
 	i.createdAt = cim.CreatedAt
+	i.ID = cim.IndexID
 	i.trackExistence = cim.Meta.TrackExistence
 	i.keys = cim.Meta.Keys
 
@@ -204,6 +212,12 @@ func (i *Index) open(idx *disco.Index) (err error) {
 	i.holder.Logger.Debugf("ensure dataframes path exists: %s", i.DataframesPath())
 	if err := os.MkdirAll(i.DataframesPath(), 0o750); err != nil {
 		return errors.Wrap(err, "creating dataframes directory")
+	}
+
+	// Ensure the t-store path exists
+	i.holder.Logger.Debugf("ensure t-store path exists: %s", i.TStorePath())
+	if err := os.MkdirAll(i.TStorePath(), 0o750); err != nil {
+		return errors.Wrap(err, "creating tstore directory")
 	}
 
 	i.closing = make(chan struct{})
@@ -238,6 +252,12 @@ func (i *Index) open(idx *disco.Index) (err error) {
 	// don't know.
 	if err := i.setFieldBitDepths(); err != nil {
 		return errors.Wrap(err, "setting field bitDepths")
+	}
+
+	// if the table has store fields then open the b-tree files
+	if i.hasTStoreFields() {
+		// TODO (pok) kick off recovery here
+		i.holder.Logger.Debugf("open t-store index: %s", i.name)
 	}
 
 	if i.trackExistence {
@@ -353,13 +373,18 @@ fileLoop:
 // openField opens the field directory, initializes the field, and adds it to
 // the in-memory map of fields maintained by Index.
 func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) (*Field, error) {
+	var err error
+	var fld *Field
 	mu.Lock()
-	fld, err := i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
+	if strings.EqualFold(cfm.Meta.Type, FieldTypeVarchar) {
+		fld, err = i.newNonRBFField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
+	} else {
+		fld, err = i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
+	}
 	mu.Unlock()
 	if err != nil {
 		return nil, errors.Wrapf(ErrName, "'%s'", file)
 	}
-
 	// Pass holder through to the field for use in looking
 	// up a foreign index.
 	fld.holder = i.holder
@@ -430,6 +455,16 @@ func (i *Index) setFieldBitDepths() error {
 		}
 	}
 	return nil
+}
+
+func (i *Index) hasTStoreFields() bool {
+	for _, f := range i.fields {
+		switch f.Type() {
+		case FieldTypeVarchar:
+			return true
+		}
+	}
+	return false
 }
 
 // Close closes the index and its fields.
@@ -933,11 +968,22 @@ func (i *Index) createField(cfm *CreateFieldMessage) (*Field, error) {
 		return nil, ErrInvalidCacheType
 	}
 
-	// Initialize field.
-	f, err := i.newField(i.fieldPath(cfm.Field), cfm.Field)
-	if err != nil {
-		return nil, errors.Wrap(err, "initializing")
+	var err error
+	var f *Field
+	// initialize non-rbf field
+	if strings.EqualFold(cfm.Meta.Type, FieldTypeVarchar) {
+		f, err = i.newNonRBFField(i.fieldPath(cfm.Field), cfm.Field)
+		if err != nil {
+			return nil, errors.Wrap(err, "initializing")
+		}
+	} else {
+		// initialize rbf field
+		f, err = i.newField(i.fieldPath(cfm.Field), cfm.Field)
+		if err != nil {
+			return nil, errors.Wrap(err, "initializing")
+		}
 	}
+
 	f.createdAt = cfm.CreatedAt
 	f.owner = cfm.Owner
 
@@ -975,6 +1021,17 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.broadcaster = i.broadcaster
 	f.serializer = i.serializer
 	f.OpenTranslateStore = i.OpenTranslateStore
+	return f, nil
+}
+
+func (i *Index) newNonRBFField(path, name string) (*Field, error) {
+	f, err := newField(i.holder, path, i.name, name, OptFieldTypeNonRBFDefault())
+	if err != nil {
+		return nil, err
+	}
+	f.idx = i
+	f.broadcaster = i.broadcaster
+	f.serializer = i.serializer
 	return f, nil
 }
 
@@ -1047,6 +1104,7 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
+	ID             int32        `json:"id"`
 	Name           string       `json:"name"`
 	CreatedAt      int64        `json:"createdAt,omitempty"`
 	UpdatedAt      int64        `json:"updatedAt"`

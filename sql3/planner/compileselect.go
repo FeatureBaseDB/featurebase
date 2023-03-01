@@ -565,7 +565,7 @@ func (p *ExecutionPlanner) analyzeSource(ctx context.Context, source parser.Sour
 				TableName:   objectName,
 				ColumnName:  string(fld.Name),
 				ColumnIndex: i,
-				Datatype:    fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
+				Datatype:    FieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 			}
 			source.OutputColumns = append(source.OutputColumns, soc)
 		}

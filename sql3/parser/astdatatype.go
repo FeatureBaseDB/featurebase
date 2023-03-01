@@ -18,7 +18,8 @@ func IsValidTypeName(typeName string) bool {
 		dax.BaseTypeString,
 		dax.BaseTypeStringSet,
 		dax.BaseTypeStringSetQ,
-		dax.BaseTypeTimestamp:
+		dax.BaseTypeTimestamp,
+		dax.BaseTypeVarchar:
 		return true
 	default:
 		return false
@@ -54,6 +55,7 @@ func (*DataTypeString) exprDataType()           {}
 func (*DataTypeStringSet) exprDataType()        {}
 func (*DataTypeStringSetQuantum) exprDataType() {}
 func (*DataTypeTimestamp) exprDataType()        {}
+func (*DataTypeVarchar) exprDataType()          {}
 
 type DataTypeVoid struct {
 }
@@ -199,6 +201,30 @@ func (d *DataTypeDecimal) TypeDescription() string {
 func (d *DataTypeDecimal) TypeInfo() map[string]interface{} {
 	return map[string]interface{}{
 		"scale": d.Scale,
+	}
+}
+
+type DataTypeVarchar struct {
+	Length int64
+}
+
+func NewDataTypeVarchar(length int64) *DataTypeVarchar {
+	return &DataTypeVarchar{
+		Length: length,
+	}
+}
+
+func (d *DataTypeVarchar) BaseTypeName() string {
+	return dax.BaseTypeVarchar
+}
+
+func (d *DataTypeVarchar) TypeDescription() string {
+	return fmt.Sprintf("%s(%d)", dax.BaseTypeVarchar, d.Length)
+}
+
+func (d *DataTypeVarchar) TypeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		"length": d.Length,
 	}
 }
 

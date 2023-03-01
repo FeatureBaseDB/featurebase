@@ -33,6 +33,8 @@ const (
 	// Default ranked field cache
 	DefaultCacheSize = 50000
 
+	DefaultVarcharLength = 50
+
 	bitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
 	maxInt      = 1<<(bitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
 
@@ -47,6 +49,7 @@ const (
 	FieldTypeBool      = "bool"
 	FieldTypeDecimal   = "decimal"
 	FieldTypeTimestamp = "timestamp"
+	FieldTypeVarchar   = "varchar"
 )
 
 type protected struct {
@@ -137,6 +140,19 @@ func OptFieldKeys() FieldOption {
 func OptFieldForeignIndex(index string) FieldOption {
 	return func(fo *FieldOptions) error {
 		fo.ForeignIndex = index
+		return nil
+	}
+}
+
+// OptFieldTypeNonRBFDefault is a functional option on FieldOptions
+// used to set the field type and cache setting to the default values.
+func OptFieldTypeNonRBFDefault() FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeVarchar
+		fo.Length = DefaultVarcharLength
 		return nil
 	}
 }
@@ -389,6 +405,20 @@ func OptFieldTrackExistence() FieldOption {
 	}
 }
 
+// OptFieldTypeVarchar is a functional option on FieldOptions
+// used to specify the field as being type `varchar` and to
+// provide any respective configuration values.
+func OptFieldTypeVarchar(length int64) FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeVarchar
+		fo.Length = length
+		return nil
+	}
+}
+
 // newField returns a new instance of field (without name validation).
 func newField(holder *Holder, path, index, name string, opts ...FieldOption) (*Field, error) {
 	// Apply functional option.
@@ -582,39 +612,50 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "creating field dir")
 		}
 
-		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
+		if strings.EqualFold(f.options.Type, FieldTypeVarchar) {
+			f.holder.Logger.Debugf("opening b-tree for index/field: %s/%s", f.index, f.name)
 
-		if err := f.loadAvailableShards(); err != nil {
-			return errors.Wrap(err, "loading available shards")
-		}
-
-		// Apply the field options loaded from etcd (or set via setOptions()).
-		f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
-		if err := f.applyOptions(f.options); err != nil {
-			return errors.Wrap(err, "applying options")
-		}
-
-		f.holder.Logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
-		if err := f.openViews(); err != nil {
-			return errors.Wrap(err, "opening views")
-		}
-
-		// Apply the field-specific translateStore.
-		if err := f.applyTranslateStore(); err != nil {
-			return errors.Wrap(err, "applying translate store")
-		}
-
-		// If the field has a foreign index, make sure the index
-		// exists.
-		if f.options.ForeignIndex != "" {
-			if err := f.holder.checkForeignIndex(f); err != nil {
-				return errors.Wrap(err, "checking foreign index")
+			// Apply the field options loaded from etcd (or set via setOptions()).
+			f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
+			if err := f.applyOptions(f.options); err != nil {
+				return errors.Wrap(err, "applying options")
 			}
-		}
 
-		f.availableShardChan = make(chan struct{}, 1)
-		f.wg.Add(1)
-		go f.writeAvailableShards()
+		} else {
+			f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
+
+			if err := f.loadAvailableShards(); err != nil {
+				return errors.Wrap(err, "loading available shards")
+			}
+
+			// Apply the field options loaded from etcd (or set via setOptions()).
+			f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
+			if err := f.applyOptions(f.options); err != nil {
+				return errors.Wrap(err, "applying options")
+			}
+
+			f.holder.Logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
+			if err := f.openViews(); err != nil {
+				return errors.Wrap(err, "opening views")
+			}
+
+			// Apply the field-specific translateStore.
+			if err := f.applyTranslateStore(); err != nil {
+				return errors.Wrap(err, "applying translate store")
+			}
+
+			// If the field has a foreign index, make sure the index
+			// exists.
+			if f.options.ForeignIndex != "" {
+				if err := f.holder.checkForeignIndex(f); err != nil {
+					return errors.Wrap(err, "checking foreign index")
+				}
+			}
+
+			f.availableShardChan = make(chan struct{}, 1)
+			f.wg.Add(1)
+			go f.writeAvailableShards()
+		}
 		return nil
 	}(); err != nil {
 		f.unprotectedClose()
@@ -883,6 +924,9 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.TTL = 0
 		f.options.Keys = false
 		f.options.ForeignIndex = ""
+	case FieldTypeVarchar:
+		f.options.Type = FieldTypeVarchar
+		f.options.Length = opt.Length
 	default:
 		return errors.New("invalid field type")
 	}
@@ -2190,6 +2234,7 @@ type FieldOptions struct {
 	TimeQuantum    TimeQuantum   `json:"timeQuantum,omitempty"`
 	ForeignIndex   string        `json:"foreignIndex"`
 	TTL            time.Duration `json:"ttl,omitempty"`
+	Length         int64         `json:"length,omitempty"`
 }
 
 // newFieldOptions returns a new instance of FieldOptions
@@ -2354,6 +2399,14 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			Type string `json:"type"`
 		}{
 			o.Type,
+		})
+	case FieldTypeVarchar:
+		return json.Marshal(struct {
+			Type   string `json:"type"`
+			Length int64  `json:"length"`
+		}{
+			o.Type,
+			o.Length,
 		})
 	}
 	return nil, errors.Errorf("invalid field type: '%s'", o.Type)

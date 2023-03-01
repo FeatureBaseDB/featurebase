@@ -9,7 +9,6 @@ import (
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
@@ -53,8 +52,8 @@ func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 	return types.Schema{
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
-			ColumnName:   string(dax.PrimaryKeyFieldName),
-			Type:         parser.NewDataTypeString(),
+			ColumnName:   "object_id",
+			Type:         parser.NewDataTypeInt(),
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
@@ -153,7 +152,7 @@ func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
 		createdAt := time.Unix(0, i.indexInfo[i.rowIndex].CreatedAt)
 		updatedAt := time.Unix(0, i.indexInfo[i.rowIndex].UpdatedAt)
 		row := []interface{}{
-			indexName,
+			i.indexInfo[i.rowIndex].ID,
 			indexName,
 			i.indexInfo[i.rowIndex].Owner,
 			i.indexInfo[i.rowIndex].LastUpdateUser,

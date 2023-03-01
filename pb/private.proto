@@ -28,6 +28,7 @@ message FieldOptions {
 	string TimeUnit = 19;
 	string TTL = 20;
 	bool TrackExistence = 21;
+	int64 Length = 22;
 }
 
 message ImportResponse {
@@ -70,6 +71,7 @@ message CreateIndexMessage {
 	IndexMeta Meta = 2;
 	int64 CreatedAt  = 3;
 	string Owner = 5;
+	int32 IndexID = 6;
 }
 
 message CreateFieldMessage {
@@ -117,6 +119,7 @@ message Index {
 	int64 CreatedAt = 2;
 	IndexMeta Options = 5;
 	repeated Field Fields = 4;
+	int32 IndexID = 6;
 }
 
 message URI {

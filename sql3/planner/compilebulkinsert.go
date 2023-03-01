@@ -114,7 +114,7 @@ func (p *ExecutionPlanner) compileBulkInsertStatement(ctx context.Context, stmt 
 	for _, m := range stmt.Columns {
 		for idx, fld := range tbl.Fields {
 			if strings.EqualFold(string(fld.Name), m.Name) {
-				options.targetColumns = append(options.targetColumns, newQualifiedRefPlanExpression(tableName, strings.ToLower(m.Name), idx, fieldSQLDataType(pilosa.FieldToFieldInfo(fld))))
+				options.targetColumns = append(options.targetColumns, newQualifiedRefPlanExpression(tableName, strings.ToLower(m.Name), idx, FieldSQLDataType(pilosa.FieldToFieldInfo(fld))))
 				break
 			}
 		}
@@ -348,7 +348,7 @@ func (p *ExecutionPlanner) analyzeBulkInsertStatement(ctx context.Context, stmt 
 		for _, fld := range tbl.Fields {
 			if strings.EqualFold(cm.Name, string(fld.Name)) {
 				found = true
-				colDataType := fieldSQLDataType(pilosa.FieldToFieldInfo(fld))
+				colDataType := FieldSQLDataType(pilosa.FieldToFieldInfo(fld))
 
 				// if we have transforms check that type and target colum ref are assignment compatible
 				// else check that the map expressions type and target column ref are assignment compatible

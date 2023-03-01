@@ -2072,6 +2072,8 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 		fos = append(fos, OptFieldTypeMutex(*opt.CacheType, *opt.CacheSize))
 	case FieldTypeBool:
 		fos = append(fos, OptFieldTypeBool())
+	case FieldTypeVarchar:
+		fos = append(fos, OptFieldTypeVarchar(*opt.Length))
 	}
 	if opt.Keys != nil {
 		if *opt.Keys {
@@ -2193,6 +2195,7 @@ type fieldOptions struct {
 	ForeignIndex   *string      `json:"foreignIndex,omitempty"`
 	TTL            *string      `json:"ttl,omitempty"`
 	Base           *int64       `json:"base,omitempty"`
+	Length         *int64       `json:"length,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -2308,6 +2311,10 @@ func (o *fieldOptions) validate() error {
 			return NewBadRequestError(errors.New("ttl does not apply to field type bool"))
 		} else if o.ForeignIndex != nil {
 			return NewBadRequestError(errors.New("bool field cannot be a foreign key"))
+		}
+	case FieldTypeVarchar:
+		if o.Length == nil {
+			return NewBadRequestError(errors.New("varchar field requires a length argument"))
 		}
 	default:
 		return errors.Errorf("invalid field type: %s", o.Type)

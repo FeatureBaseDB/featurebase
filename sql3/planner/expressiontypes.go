@@ -13,7 +13,7 @@ import (
 )
 
 // takes a *pilosa.FieldInfo and returns a sql data type
-func fieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
+func FieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
 	// This is special handling for the primary key (_id) field. The normal
 	// handling below was not well suited to this field because there isn't a
 	// `pilosa.FieldTypeID` to compare against. One option would have been to
@@ -68,6 +68,9 @@ func fieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
 	case pilosa.FieldTypeTimestamp:
 		return parser.NewDataTypeTimestamp()
 
+	case pilosa.FieldTypeVarchar:
+		return parser.NewDataTypeVarchar(f.Options.Length)
+
 	default:
 		return parser.NewDataTypeVoid()
 	}
@@ -81,10 +84,10 @@ func dataTypeFromParserType(typ *parser.Type) (parser.ExprDataType, error) {
 		return parser.NewDataTypeBool(), nil
 
 	case dax.BaseTypeDecimal:
-		if typ.Scale == nil {
+		if typ.Modifier == nil {
 			return nil, sql3.NewErrDecimalScaleExpected(typ.Name.NamePos.Line, typ.Name.NamePos.Column)
 		}
-		scale, err := strconv.Atoi(typ.Scale.Value)
+		scale, err := strconv.Atoi(typ.Modifier.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -358,6 +361,19 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 
 	case *parser.DataTypeString:
 		switch sourceType.(type) {
+		case *parser.DataTypeString:
+			return true
+		case *parser.DataTypeVarchar:
+			return true
+		default:
+			return false
+		}
+
+	case *parser.DataTypeVarchar:
+		switch rhs := sourceType.(type) {
+		case *parser.DataTypeVarchar:
+			//if lhs length is >= rhs length, we're good
+			return lhs.Length >= rhs.Length
 		case *parser.DataTypeString:
 			return true
 		default:

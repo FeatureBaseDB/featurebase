@@ -93,6 +93,7 @@ func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.Column
 	var cacheType string = pilosa.DefaultCacheType
 	var cacheSize uint32 = pilosa.DefaultCacheSize
 	var scale int64
+	var length int64
 	min, max := pql.MinMax(0)
 	var epoch = pilosa.DefaultEpoch
 	var timeUnit string = pilosa.TimeUnitSeconds
@@ -199,11 +200,11 @@ func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.Column
 
 	case dax.BaseTypeDecimal:
 		// if we don't have a scale, it's an error
-		if col.Type.Scale == nil {
+		if col.Type.Modifier == nil {
 			return nil, sql3.NewErrDecimalScaleExpected(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column)
 		}
 		// get the scale value
-		scale, err = strconv.ParseInt(col.Type.Scale.Value, 10, 64)
+		scale, err = strconv.ParseInt(col.Type.Modifier.Value, 10, 64)
 		if err != nil {
 			return nil, err
 		}
@@ -244,6 +245,19 @@ func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.Column
 	case dax.BaseTypeTimestamp:
 		column.fos = append(column.fos, pilosa.OptFieldTypeTimestamp(epoch, timeUnit))
 
+	case dax.BaseTypeVarchar:
+		// if we don't have a length, it's an error
+		if col.Type.Modifier == nil {
+			return nil, sql3.NewErrVarcharLengthExpected(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column)
+		}
+
+		// get the modifier value
+		length, err = strconv.ParseInt(col.Type.Modifier.Value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		column.fos = append(column.fos, pilosa.OptFieldTypeVarchar(length))
 	}
 	return column, nil
 }

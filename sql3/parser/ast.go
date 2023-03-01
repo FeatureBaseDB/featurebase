@@ -1762,11 +1762,10 @@ func (i *Variable) VarName() string {
 }
 
 type Type struct {
-	Name      *Ident      // type name
-	Lparen    Pos         // position of left paren (optional)
-	Precision *IntegerLit // precision (optional)
-	Scale     *IntegerLit // scale (optional)
-	Rparen    Pos         // position of right paren (optional)
+	Name     *Ident      // type name
+	Lparen   Pos         // position of left paren (optional)
+	Modifier *IntegerLit // scale, length etc. (optional)
+	Rparen   Pos         // position of right paren (optional)
 }
 
 // Clone returns a deep copy of t.
@@ -1776,20 +1775,14 @@ func (t *Type) Clone() *Type {
 	}
 	other := *t
 	other.Name = t.Name.Clone()
-	other.Precision = t.Precision.Clone()
-	other.Scale = t.Scale.Clone()
+	other.Modifier = t.Modifier.Clone()
 	return &other
 }
 
 // String returns the string representation of the type.
 func (t *Type) String() string {
-	if t.Precision != nil && t.Scale != nil {
-		return fmt.Sprintf("%s(%s,%s)", t.Name.Name, t.Precision.String(), t.Scale.String())
-	} else if t.Precision != nil {
-		return fmt.Sprintf("%s(%s)", t.Name.Name, t.Precision.String())
-	} else if t.Scale != nil {
-		// I'm not sure how you're supposed to tell this from the t.Precision case.
-		return fmt.Sprintf("%s(%s)", t.Name.Name, t.Scale.String())
+	if t.Modifier != nil {
+		return fmt.Sprintf("%s(%s)", t.Name.Name, t.Modifier.String())
 	}
 	return t.Name.Name
 }

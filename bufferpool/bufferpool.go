@@ -1,6 +1,8 @@
 package bufferpool
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
@@ -10,12 +12,30 @@ import (
 type FrameID int
 
 // PageID is the type for page id
-type PageID int
+type PageID struct {
+	ObjectID int32
+	Shard    int32
+	Page     int64
+}
+
+func (p PageID) Bytes() []byte {
+	var valueBuf bytes.Buffer
+	v := make([]byte, 4)
+	binary.BigEndian.PutUint32(v, uint32(p.ObjectID))
+	valueBuf.Write(v)
+	binary.BigEndian.PutUint32(v, uint32(p.Shard))
+	valueBuf.Write(v)
+	vp := make([]byte, 8)
+	binary.BigEndian.PutUint64(vp, uint64(p.Page))
+	valueBuf.Write(vp)
+	return valueBuf.Bytes()
+}
 
 var pageSyncPool = sync.Pool{
 	New: func() any {
 		pg := new(Page)
-		pg.id = PageID(INVALID_PAGE)
+		pg.latchState = None
+		pg.id = PageID{0, 0, INVALID_PAGE}
 		pg.isDirty = false
 		pg.pinCount = 0
 		return pg
@@ -24,28 +44,32 @@ var pageSyncPool = sync.Pool{
 
 // BufferPool represents a buffer pool of pages
 type BufferPool struct {
+
 	// the underlying storage
 	diskManager DiskManager
-	// the actual pages in the buffer pool
-	pages []*Page
-	// the replacer that will elect replacements when buffer pool is full
-	replacer *ClockReplacer
+
+	// the actual frames in the buffer pool
+	frames []*Page
 	// the list of free frames
 	freeList []FrameID
+
+	framesMu sync.RWMutex
+
+	// the replacer that will elect replacements when buffer pool is full
+	replacer *ClockReplacer
+
 	// the map of frames to page ids to frame ids
-	// frame ids are the offset into pages
-	// if you ask the pool for page 673, this will know at
-	// what offset in pages page 673 will exist
-	pageTable map[PageID]FrameID
+	// frame ids are the offset into frames (above)
+	// if you ask the pool for page 1:1:673, this will know at
+	// what offset in pages page 1:1:673 will exist (or not)
+	pageTable   map[PageID]FrameID
+	pageTableMu sync.RWMutex
 }
 
 // TODO(pok) implement a lazy writer
 //  * if free list is 'low' then
 //		* increase size of cache if there is physical memory available
 //		* write out old pages and boot them from the cache to increase free list
-
-// TODO(pok) implement a checkpoint that scans the pool and writes out dirty pages every
-// minute or so
 
 // NewBufferPool returns a buffer pool
 func NewBufferPool(maxSize int, diskManager DiskManager) *BufferPool {
@@ -58,7 +82,7 @@ func NewBufferPool(maxSize int, diskManager DiskManager) *BufferPool {
 	clockReplacer := NewClockReplacer(maxSize)
 	return &BufferPool{
 		diskManager: diskManager,
-		pages:       pages,
+		frames:      pages,
 		replacer:    clockReplacer,
 		freeList:    freeList,
 		pageTable:   make(map[PageID]FrameID),
@@ -70,7 +94,7 @@ func (b *BufferPool) Dump() {
 	fmt.Println()
 	fmt.Printf("------------------------------------------------------------------------------------------\n")
 	fmt.Printf("BUFFER POOL\n")
-	for _, p := range b.pages {
+	for _, p := range b.frames {
 		if p != nil {
 			p.Dump("")
 		}
@@ -81,30 +105,40 @@ func (b *BufferPool) Dump() {
 
 // FetchPage fetches the requested page from the buffer pool.
 func (b *BufferPool) FetchPage(pageID PageID) (*Page, error) {
+	b.pageTableMu.Lock()
+	defer b.pageTableMu.Unlock()
+
+	b.framesMu.RLock()
 	// if it is in buffer pool already then just return it
 	if frameID, ok := b.pageTable[pageID]; ok {
-		page := b.pages[frameID]
+		page := b.frames[frameID]
 		page.pinCount++
 		b.replacer.Pin(frameID)
+		b.framesMu.RUnlock()
 		return page, nil
 	}
+
+	// we will need to write to frames, so unlock and take write lock
+	b.framesMu.RUnlock()
+	b.framesMu.Lock()
+	defer b.framesMu.Unlock()
 
 	// not in the buffer pool so try the free list or
 	// the replacer will vote a page off the island
 	frameID, isFromFreeList, err := b.getFrameID()
 	if err != nil {
+		b.framesMu.RUnlock()
 		return nil, err
 	}
 
 	if !isFromFreeList {
 		// if it didn't come from the freelist then
 		// remove page from current frame, writing it out if dirty
-		currentPage := b.pages[frameID]
+		currentPage := b.frames[frameID]
 		if currentPage != nil {
 			if currentPage.isDirty {
 				b.diskManager.WritePage(currentPage)
 			}
-
 			delete(b.pageTable, currentPage.id)
 		}
 	}
@@ -116,8 +150,8 @@ func (b *BufferPool) FetchPage(pageID PageID) (*Page, error) {
 	}
 	page.pinCount = 1
 	b.pageTable[pageID] = frameID
-	pageSyncPool.Put(b.pages[frameID])
-	b.pages[frameID] = page
+	pageSyncPool.Put(b.frames[frameID])
+	b.frames[frameID] = page
 	b.replacer.Pin(frameID)
 
 	return page, nil
@@ -125,8 +159,13 @@ func (b *BufferPool) FetchPage(pageID PageID) (*Page, error) {
 
 // UnpinPage unpins the target page from the buffer pool
 func (b *BufferPool) UnpinPage(pageID PageID) error {
+	b.framesMu.RLock()
+	b.pageTableMu.RLock()
+	defer b.framesMu.RUnlock()
+	defer b.pageTableMu.RUnlock()
+
 	if frameID, ok := b.pageTable[pageID]; ok {
-		page := b.pages[frameID]
+		page := b.frames[frameID]
 		page.DecPinCount()
 
 		if page.pinCount <= 0 {
@@ -139,9 +178,15 @@ func (b *BufferPool) UnpinPage(pageID PageID) error {
 }
 
 // FlushPage Flushes the target page to disk
+// This shold not be called during normal operation
 func (b *BufferPool) FlushPage(pageID PageID) bool {
+	b.framesMu.RLock()
+	b.pageTableMu.RLock()
+	defer b.framesMu.RUnlock()
+	defer b.pageTableMu.RUnlock()
+
 	if frameID, ok := b.pageTable[pageID]; ok {
-		page := b.pages[frameID]
+		page := b.frames[frameID]
 		page.DecPinCount()
 
 		b.diskManager.WritePage(page)
@@ -153,7 +198,12 @@ func (b *BufferPool) FlushPage(pageID PageID) bool {
 }
 
 // NewPage allocates a new page in the buffer pool with the disk manager help
-func (b *BufferPool) NewPage() (*Page, error) {
+func (b *BufferPool) NewPage(fileID int32, shard int32) (*Page, error) {
+	b.framesMu.Lock()
+	b.pageTableMu.Lock()
+	defer b.framesMu.Unlock()
+	defer b.pageTableMu.Unlock()
+
 	// get a free frame
 	frameID, isFromFreeList, err := b.getFrameID()
 	if err != nil {
@@ -162,7 +212,7 @@ func (b *BufferPool) NewPage() (*Page, error) {
 
 	if !isFromFreeList {
 		// remove page from current frame
-		currentPage := b.pages[frameID]
+		currentPage := b.frames[frameID]
 		if currentPage != nil {
 			if currentPage.isDirty {
 				b.diskManager.WritePage(currentPage)
@@ -173,20 +223,20 @@ func (b *BufferPool) NewPage() (*Page, error) {
 	}
 
 	// allocates new page
-	pageID, err := b.diskManager.AllocatePage()
+	pageID, err := b.diskManager.AllocatePage(fileID, shard)
 	if err != nil {
 		return nil, err
 	}
-	page := &Page{pageID, 1, false, [PAGE_SIZE]byte{}}
-	page.WritePageNumber(int32(pageID))
+	page := NewPage(pageID, 1)
+	page.WritePageNumber(pageID.Page)
 	page.WriteFreeSpaceOffset(int16(PAGE_SIZE))
-	page.WriteNextPointer(int32(INVALID_PAGE))
-	page.WritePrevPointer(int32(INVALID_PAGE))
+	page.WriteNextPointer(PageID{0, 0, INVALID_PAGE})
+	page.WritePrevPointer(PageID{0, 0, INVALID_PAGE})
 
 	// update the frame table
 	b.pageTable[pageID] = frameID
-	pageSyncPool.Put(b.pages[frameID])
-	b.pages[frameID] = page
+	pageSyncPool.Put(b.frames[frameID])
+	b.frames[frameID] = page
 
 	return page, nil
 }
@@ -197,27 +247,32 @@ func (b *BufferPool) NewPage() (*Page, error) {
 // and will copy the scratch page back over a real page later
 func (b *BufferPool) ScratchPage() *Page {
 	page := &Page{
-		id:       PageID(INVALID_PAGE),
+		id:       PageID{0, 0, INVALID_PAGE},
 		pinCount: 0,
 		isDirty:  false,
 		data:     [PAGE_SIZE]byte{},
 	}
-	page.WritePageNumber(int32(INVALID_PAGE))
+	page.WritePageNumber(INVALID_PAGE)
 	page.WriteFreeSpaceOffset(int16(PAGE_SIZE))
-	page.WriteNextPointer(int32(INVALID_PAGE))
-	page.WritePrevPointer(int32(INVALID_PAGE))
+	page.WriteNextPointer(PageID{0, 0, INVALID_PAGE})
+	page.WritePrevPointer(PageID{0, 0, INVALID_PAGE})
 	return page
 }
 
 // DeletePage deletes a page from the buffer pool
 func (b *BufferPool) DeletePage(pageID PageID) error {
+	b.framesMu.Lock()
+	b.pageTableMu.Lock()
+	defer b.framesMu.Unlock()
+	defer b.pageTableMu.Unlock()
+
 	var frameID FrameID
 	var ok bool
 	if frameID, ok = b.pageTable[pageID]; !ok {
 		return nil
 	}
 
-	page := b.pages[frameID]
+	page := b.frames[frameID]
 
 	if page.pinCount > 0 {
 		return errors.New("pin count greater than 0")
@@ -231,14 +286,6 @@ func (b *BufferPool) DeletePage(pageID PageID) error {
 	return nil
 }
 
-// FlushAllpages flushes all the pages in the buffer pool to disk
-// Yeah, never call this unless you know what you are doing
-func (b *BufferPool) FlushAllpages() {
-	for pageID := range b.pageTable {
-		b.FlushPage(pageID)
-	}
-}
-
 func (b *BufferPool) getFrameID() (FrameID, bool, error) {
 	if len(b.freeList) > 0 {
 		frameID, newFreeList := b.freeList[0], b.freeList[1:]
@@ -248,12 +295,6 @@ func (b *BufferPool) getFrameID() (FrameID, bool, error) {
 
 	victim, err := b.replacer.Victim()
 	return victim, false, err
-}
-
-// OnDiskSize exposes the on disk size of the backing store
-// behind this buffer pool
-func (b *BufferPool) OnDiskSize() int64 {
-	return b.diskManager.FileSize()
 }
 
 // Close closes the buffer pool

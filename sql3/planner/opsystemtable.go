@@ -522,7 +522,7 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 					buf.WriteString(", ")
 				}
 				fmt.Fprintf(&buf, "%s", col.Name)
-				dataType := fieldSQLDataType(pilosa.FieldToFieldInfo(col))
+				dataType := FieldSQLDataType(pilosa.FieldToFieldInfo(col))
 				fmt.Fprintf(&buf, " %s", dataType.TypeDescription())
 
 				switch dt := dataType.(type) {

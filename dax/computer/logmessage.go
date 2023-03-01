@@ -231,6 +231,7 @@ type ImportRoaringShardMessage struct {
 	Partition int             `json:"partition"`
 	Shard     uint64          `json:"shard"`
 	Views     []RoaringUpdate `json:"views"`
+	Tuples    []byte          `json:"tuples"`
 }
 
 // RoaringUpdate is identical to featurebase.RoaringUpdate, but we

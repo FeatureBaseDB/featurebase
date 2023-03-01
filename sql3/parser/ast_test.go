@@ -346,7 +346,7 @@ func OLDTestCreateTableStatement_String(t *testing.T) {
 		Name: &parser.Ident{Name: "foo"},
 		Columns: []*parser.ColumnDefinition{{
 			Name: &parser.Ident{Name: "bar"},
-			Type: &parser.Type{Name: &parser.Ident{Name: "DECIMAL"}, Precision: &parser.IntegerLit{Value: "100"}},
+			Type: &parser.Type{Name: &parser.Ident{Name: "DECIMAL"}, Modifier: &parser.IntegerLit{Value: "100"}},
 		}},
 		Constraints: []parser.Constraint{
 			&parser.PrimaryKeyConstraint{
@@ -374,7 +374,7 @@ func OLDTestCreateTableStatement_String(t *testing.T) {
 		Name: &parser.Ident{Name: "foo"},
 		Columns: []*parser.ColumnDefinition{{
 			Name: &parser.Ident{Name: "bar"},
-			Type: &parser.Type{Name: &parser.Ident{Name: "DECIMAL"}, Precision: &parser.IntegerLit{Value: "100"}, Scale: &parser.IntegerLit{Value: "200"}},
+			Type: &parser.Type{Name: &parser.Ident{Name: "DECIMAL"}, Modifier: &parser.IntegerLit{Value: "200"}},
 		}},
 		Constraints: []parser.Constraint{
 			&parser.ForeignKeyConstraint{
@@ -384,7 +384,7 @@ func OLDTestCreateTableStatement_String(t *testing.T) {
 				ForeignColumns: []*parser.Ident{{Name: "y"}, {Name: "z"}},
 			},
 		},
-	}, `CREATE TABLE "foo" ("bar" DECIMAL(100,200), CONSTRAINT "fk" FOREIGN KEY ("a", "b") REFERENCES "x" ("y", "z"))`)
+	}, `CREATE TABLE "foo" ("bar" DECIMAL(200), CONSTRAINT "fk" FOREIGN KEY ("a", "b") REFERENCES "x" ("y", "z"))`)
 
 	AssertStatementStringer(t, &parser.CreateTableStatement{
 		Name: &parser.Ident{Name: "foo"},
