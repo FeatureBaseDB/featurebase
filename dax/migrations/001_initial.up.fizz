@@ -73,3 +73,11 @@ create_table("jobs") {
 	t.ForeignKey("database_id", {"databases": ["id"]}, {"on_delete": "cascade"})
 	t.Timestamps()
 }
+
+create_table("directive_versions") {
+        t.Column("id", "int", {primary: true})
+	t.Column("version", "int")
+	t.Timestamps()
+}
+
+sql("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00');")
