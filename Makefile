@@ -1,4 +1,4 @@
-.PHONY: build clean build-lattice cover cover-viz default docker docker-build docker-tag-push generate generate-protoc generate-pql generate-statik generate-stringer install install-protoc-gen-gofast install-protoc install-statik install-peg test docker-login
+.PHONY: build clean build-lattice cover cover-viz default docker docker-build docker-build-fbsql docker-tag-push generate generate-protoc generate-pql generate-statik generate-stringer install install-protoc-gen-gofast install-protoc install-statik install-peg test docker-login
 
 SHELL := /bin/bash
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -19,6 +19,7 @@ SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
 LDFLAGS="-X github.com/featurebasedb/featurebase/v3.Version=$(VERSION) -X github.com/featurebasedb/featurebase/v3.BuildTime=$(BUILD_TIME) -X github.com/featurebasedb/featurebase/v3.Variant=$(VARIANT) -X github.com/featurebasedb/featurebase/v3.Commit=$(COMMIT) -X github.com/featurebasedb/featurebase/v3.TrialDeadline=$(TRIAL_DEADLINE)"
 GO_VERSION=1.19
+GO_BUILD_FLAGS=
 DOCKER_BUILD= # set to 1 to use `docker-build` instead of `build` when creating a release
 BUILD_TAGS += 
 TEST_TAGS = roaringparanoia
@@ -119,11 +120,6 @@ cover-viz: cover
 # Build featurebase
 build:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
-
-# Build fbsql
-build-fbsql:
-	CGO_ENABLED=1 $(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/fbsql
-
 
 package:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(MAKE) build
@@ -345,3 +341,53 @@ test-external-lookup:
 
 bnf:
 	ebnf2railroad --no-overview-diagram  --no-optimizations ./sql3/sql3.ebnf
+
+#################################
+# fbsql builds in docker
+#################################
+
+# This allows multiple concurrent builds to happen in CI without
+# creating container name conflicts and such. (different BUILD_NAMEs
+# are passed in from gitlab-ci.yml)
+BUILD_NAME ?= fbsql-build
+
+LDFLAGS_STATIC="-linkmode external -extldflags \"-static\" -X 'github.com/featurebasedb/featurebase/v3/fbsql.Version=$(VERSION)' -X 'github.com/featurebasedb/featurebase/v3/fbsql.BuildTime=$(BUILD_TIME)' "
+
+UNAME_P := $(shell uname -p)
+BUILD_CGO ?= 0
+
+# Build fbsql
+build-fbsql:
+	@echo GOOS=$(GOOS) GOARCH=$(GOARCH) uname -p=$(UNAME_P) build_cgo=$(BUILD_CGO)
+ifeq ($(BUILD_CGO), 0)
+	make build-fbsql-non-cgo
+endif
+ifeq ($(BUILD_CGO), 1)
+	make build-fbsql-cgo
+endif
+
+build-fbsql-non-cgo:
+	CGO_ENABLED=0 $(GO) build -ldflags $(LDFLAGS) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+
+build-fbsql-cgo:
+ifeq ($(GOARCH), arm64)
+	CGO_ENABLED=1 $(GO) build -tags dynamic $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+endif
+ifeq ($(GOARCH), amd64)
+	CC=/usr/bin/musl-gcc CGO_ENABLED=1 $(GO) build -tags "musl static" -ldflags $(LDFLAGS_STATIC) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+endif
+
+docker-build-fbsql: vendor
+	DOCKER_BUILDKIT=0 docker build \
+		--file Dockerfile-fbsql \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+	    --build-arg MAKE_FLAGS="GOOS=$(GOOS) GOARCH=$(GOARCH) BUILD_CGO=$(BUILD_CGO)" \
+	    --build-arg GO_BUILD_FLAGS=$(GO_BUILD_FLAGS) \
+		--build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
+	    --target builder \
+	    --tag fbsql:$(BUILD_NAME) .
+	mkdir -p build
+	docker create --name $(BUILD_NAME) fbsql:$(BUILD_NAME)
+	docker cp $(BUILD_NAME):/featurebase/fbsql ./build/fbsql_$(GOOS)_$(GOARCH)
+	docker rm $(BUILD_NAME)
+

@@ -124,7 +124,7 @@ type Main struct {
 
 	NewImporterFn func() pilosacore.Importer `flag:"-"`
 
-	Batcher pilosabatch.Batcher
+	Batcher pilosabatch.Batcher `flag:"-"`
 
 	// basic, when true, will only set up the things required to run a basic
 	// ingester. For example, it does not set up the pilosa client.
