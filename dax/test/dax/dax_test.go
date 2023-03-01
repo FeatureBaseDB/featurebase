@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -911,13 +912,10 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 			if cfg.skipQuery {
 				return
 			}
-
 			for j, sqltest := range cfg.test.SQLTests {
 				t.Run(sqltest.Name(j), func(t *testing.T) {
 					for _, sql := range sqltest.SQLs {
 						t.Run(fmt.Sprintf("sql-%s", sql), func(t *testing.T) {
-							log.Printf("SQL: %s", sql)
-
 							var expRows [][]interface{}
 							if cfg.querySet == 0 {
 								expRows = sqltest.ExpRows
@@ -928,7 +926,6 @@ func runTableTests(t *testing.T, queryerAddr dax.Address, cfgs ...tableTestConfi
 								}
 								expRows = sqltest.ExpRowsPlus1[cfg.querySet-1]
 							}
-
 							resp := runSQL(t, queryerAddr, cfg.qdbid, sql)
 							headers := resp.Schema.Fields
 							rows := resp.Data
@@ -1116,12 +1113,25 @@ func (c *wireResponseComparer) Equal() bool {
 	return assert.Equal(c.tb, c.exp, c.got)
 }
 
+var sharedClients = map[dax.Address]*queryerclient.Client{}
+var clientMu sync.Mutex
+
+func getClient(addr dax.Address) *queryerclient.Client {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	client := sharedClients[addr]
+	if client != nil {
+		return client
+	}
+	client = queryerclient.New(addr, logger.StderrLogger)
+	sharedClients[addr] = client
+	return client
+}
+
 func runSQL(tb testing.TB, queryerAddr dax.Address, qdbid dax.QualifiedDatabaseID, sql string) *featurebase.WireQueryResponse {
 	tb.Helper()
 
-	client := queryerclient.New(queryerAddr, logger.StderrLogger)
-
-	resp, err := client.QuerySQL(context.Background(), qdbid, strings.NewReader(sql))
+	resp, err := getClient(queryerAddr).QuerySQL(context.Background(), qdbid, strings.NewReader(sql))
 	assert.NoError(tb, err)
 
 	return resp
@@ -1130,10 +1140,8 @@ func runSQL(tb testing.TB, queryerAddr dax.Address, qdbid dax.QualifiedDatabaseI
 func runPQL(tb testing.TB, queryerAddr dax.Address, qdbid dax.QualifiedDatabaseID, table string, pql string) *featurebase.WireQueryResponse {
 	tb.Helper()
 
-	client := queryerclient.New(queryerAddr, logger.StderrLogger)
-
 	sqlPQL := fmt.Sprintf("[%s]%s", table, pql)
-	resp, err := client.QuerySQL(context.Background(), qdbid, strings.NewReader(sqlPQL))
+	resp, err := getClient(queryerAddr).QuerySQL(context.Background(), qdbid, strings.NewReader(sqlPQL))
 	assert.NoError(tb, err)
 
 	return resp
