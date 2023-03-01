@@ -142,7 +142,7 @@ func (p *ExecutionPlanner) generatePQLCallFromExpr(ctx context.Context, expr typ
 			}
 
 			if fromValue == nil && toValue == nil {
-				return nil, sql3.NewErrInternalf("replace me")
+				return nil, sql3.NewErrQRangeFromAndToTimeCannotBeBothNull(0, 0)
 			}
 
 			var call *pql.Call
