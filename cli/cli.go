@@ -32,11 +32,9 @@ var (
 	Stderr io.Writer     = os.Stderr
 )
 
-var (
-	splash string = fmt.Sprintf(`FeatureBase CLI (%s)
+var splash string = fmt.Sprintf(`FeatureBase CLI (%s)
 Type "\q" to quit.
 `, featurebase.Version)
-)
 
 // Ensure type implments interfaces.
 var _ printer = (*Command)(nil)
@@ -297,7 +295,7 @@ func (cmd *Command) Run(ctx context.Context) error {
 			}
 			return nil
 		default:
-			//pass
+			// pass
 		}
 	}
 }
@@ -329,7 +327,6 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 	if err != nil {
 		return errors.Wrap(err, "making query")
 	}
-
 	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
