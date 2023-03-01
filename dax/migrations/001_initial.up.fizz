@@ -54,3 +54,22 @@ create_table("node_roles") {
 	t.ForeignKey("node_id", {"nodes": ["id"]}, {"on_delete": "cascade"})
 	t.Timestamps()
 }
+
+create_table("workers") {
+        t.Column("id", "uuid", {primary: true})
+	t.Column("address", "string")
+	t.Column("role", "string")
+        t.Column("database_id", "string")
+	t.ForeignKey("database_id", {"databases": ["id"]}, {"null": true})
+}
+
+create_table("jobs") {
+        t.Column("id", "uuid", {primary: true})
+	t.Column("name", "string")
+	t.Column("role", "string")
+        t.Column("worker_id", "uuid")
+	t.ForeignKey("worker_id", {"workers": ["id"]}, {"null": "true"})
+        t.Column("database_id", "string")
+	t.ForeignKey("database_id", {"databases": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
