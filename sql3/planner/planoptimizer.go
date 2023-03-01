@@ -412,12 +412,13 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 		return tableNode, true, nil
 	}
 
+	var err error
 	var newOp types.PlanOperator
 	//deal with the filters
 	if len(tableFilters) > 0 {
 		filters.markFiltersHandled(tableFilters...)
 		// fix the field refs
-		tableFilters, _, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), tableFilters...)
+		tableFilters, _, err = fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), tableFilters...)
 		if err != nil {
 			return nil, true, err
 		}
@@ -431,7 +432,7 @@ func pushdownFiltersToFilterableRelations(ctx context.Context, a *ExecutionPlann
 	if len(timeQantumFilters) > 0 {
 		filters.markFiltersHandled(timeQantumFilters...)
 
-		timeQantumFilters, _, err := fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), timeQantumFilters...)
+		timeQantumFilters, _, err = fixFieldRefIndexesOnExpressions(ctx, scope, a, tableNode.Schema(), timeQantumFilters...)
 		if err != nil {
 			return nil, true, err
 		}
