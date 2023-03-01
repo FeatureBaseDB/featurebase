@@ -132,7 +132,6 @@ func OptCommandConfig(config *Config) CommandOption {
 			c.Config.Auth = config.Auth
 			c.Config.TLS = config.TLS
 			c.Config.ControllerAddress = config.ControllerAddress
-			c.Config.SQL.EndpointEnabled = config.SQL.EndpointEnabled
 			return nil
 		}
 		c.Config = config
@@ -717,7 +716,6 @@ func (m *Command) setupServer() error {
 		pilosa.OptHandlerAuthZ(&p),
 		pilosa.OptHandlerSerializer(proto.Serializer{}),
 		pilosa.OptHandlerRoaringSerializer(proto.RoaringSerializer),
-		pilosa.OptHandlerSQLEnabled(m.Config.SQL.EndpointEnabled),
 	)
 	if err != nil {
 		return errors.Wrap(err, "new handler")

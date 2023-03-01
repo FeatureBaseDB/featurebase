@@ -213,11 +213,6 @@ type Config struct {
 		MutexFraction int `toml:"mutex-fraction"`
 	} `toml:"profile"`
 
-	SQL struct {
-		// EndpointEnabled enables the /sql endpoint.
-		EndpointEnabled bool `toml:"endpoint-enabled"`
-	} `toml:"sql"`
-
 	// CheckInTimeout is the amount of time between compute node check-ins to
 	// Controller.
 	CheckInInterval time.Duration `toml:"check-in-interval"`
@@ -416,8 +411,6 @@ func NewConfig() *Config {
 
 	c.Profile.BlockRate = 10000000 // 1 sample per 10 ms
 	c.Profile.MutexFraction = 100  // 1% sampling
-
-	c.SQL.EndpointEnabled = false
 
 	c.Etcd.AClientURL = ""
 	c.Etcd.LClientURL = "http://localhost:10301"
