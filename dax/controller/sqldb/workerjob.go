@@ -6,6 +6,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/balancer"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
+	"github.com/gobuffalo/nulls"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 )
@@ -113,7 +114,7 @@ func (w *WorkerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType,
 			Name:       j,
 			Role:       roleType,
 			DatabaseID: qdbid.DatabaseID,
-			WorkerID:   worker.ID,
+			WorkerID:   nulls.NewUUID(worker.ID),
 		}
 	}
 

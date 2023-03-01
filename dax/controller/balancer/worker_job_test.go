@@ -57,7 +57,7 @@ func TestWorkerJobService(t *testing.T) {
 	// the Delete method? Why yes, yes it is... thank you for asking. #TODO
 	qtid := dax.QualifiedTableID{
 		QualifiedDatabaseID: qdbid,
-		Name:                "tbl",
+		Name:                tableName,
 		ID:                  tableID,
 	}
 	job1 := dax.Job(qtid.Key() + "job1")

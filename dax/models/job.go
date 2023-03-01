@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/gobuffalo/nulls"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gobuffalo/validate/v3"
 	"github.com/gobuffalo/validate/v3/validators"
@@ -17,7 +18,7 @@ type Job struct {
 	Name       dax.Job        `json:"name" db:"name"`
 	Role       dax.RoleType   `json:"role" db:"role"`
 	DatabaseID dax.DatabaseID `json:"database_id" db:"database_id"`
-	WorkerID   uuid.UUID      `json:"-" db:"worker_id"`
+	WorkerID   nulls.UUID     `json:"-" db:"worker_id"`
 	Worker     *Worker        `json:"worker" db:"-" belongs_to:"worker"`
 	CreatedAt  time.Time      `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at" db:"updated_at"`
