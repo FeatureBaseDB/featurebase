@@ -431,7 +431,8 @@ upload_artifacts_to_nexus:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
-    - find . -maxdepth 1 -name '*.rpm' -exec curl -v --user "$NEXUS_YUM_CREDS" --upload-file {} https://nexus.molecula.com/repository/molecula-yum/release/ \;
+    - curl -v --user "$NEXUS_YUM_CREDS" --upload-file *.arm64.rpm https://nexus.molecula.com/repository/molecula-yum/release/
+    - curl -v --user "$NEXUS_YUM_CREDS" --upload-file *.amd64.rpm https://nexus.molecula.com/repository/molecula-yum/release/
   dependencies:
     - package for linux amd64
     - package for linux arm64
