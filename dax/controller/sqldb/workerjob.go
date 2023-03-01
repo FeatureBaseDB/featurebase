@@ -75,7 +75,7 @@ func (w *WorkerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleTyp
 
 	err := dt.C.Create(&models.Worker{
 		Address:    addr,
-		DatabaseID: qdbid.DatabaseID,
+		DatabaseID: nulls.NewString(string(qdbid.DatabaseID)),
 		Role:       roleType,
 	})
 

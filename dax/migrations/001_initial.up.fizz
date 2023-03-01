@@ -59,7 +59,7 @@ create_table("workers") {
         t.Column("id", "uuid", {primary: true})
 	t.Column("address", "string")
 	t.Column("role", "string")
-        t.Column("database_id", "string")
+        t.Column("database_id", "string", {"null": true})
 	t.ForeignKey("database_id", {"databases": ["id"]}, {"null": true})
 }
 

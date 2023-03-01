@@ -14,6 +14,8 @@ const (
 	nodeAddr  = "myaddress"
 	nodeAddr2 = "myaddress2"
 	nodeAddr3 = "myaddress3"
+	nodeAddr4 = "myaddress4"
+	nodeAddr5 = "myaddress5"
 )
 
 func TestNodeService(t *testing.T) {
