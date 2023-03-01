@@ -193,6 +193,12 @@ var TableTests []TableTest = []TableTest{
 
 	// time quantums
 	timeQuantumInsertTest,
+
+	// forward-ported SQL1 tests
+	sql1TestsGrouper,
+	sql1TestsJoiner,
+	sql1TestsDelete,
+	sql1TestsQueries,
 }
 
 func knownTimestamp() time.Time {
