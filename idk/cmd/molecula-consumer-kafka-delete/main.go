@@ -8,22 +8,22 @@ import (
 )
 
 func main() {
-	delete_consumer, err := kafka.NewMain()
+	dm, err := kafka.NewMain()
 	if err != nil {
 		log.Fatal(err)
 	}
-	delete_consumer.Delete = true
+	dm.Delete = true
 
-	if err := pflag.LoadEnv(delete_consumer, "CONSUMER_DEL_", nil); err != nil {
+	if err := pflag.LoadEnv(dm, "CONSUMER_DEL_", nil); err != nil {
 		log.Fatal(err)
 	}
-	delete_consumer.Rename()
-	if delete_consumer.DryRun {
-		log.Printf("%+v\n", delete_consumer)
+	dm.Rename()
+	if dm.DryRun {
+		log.Printf("%+v\n", dm)
 		return
 	}
-	if err := delete_consumer.Run(); err != nil {
-		logger := delete_consumer.Log()
+	if err := dm.Run(); err != nil {
+		logger := dm.Log()
 		if logger != nil {
 			logger.Printf("Error running command: %v", err)
 		}

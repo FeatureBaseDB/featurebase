@@ -1081,7 +1081,7 @@ func TestAddingData(t *testing.T) {
 			},
 			index: "alltypes_delete",
 			queries: [][]string{
-				[]string{
+				{
 					"Count(All())",
 					"Count(ConstRow(columns=['u2Yr4|sHaUv|x5z8P', 'DY2Ui|kUbdU|pjxqm']))",
 					"Count(Row(stringset_string='58KIR'))",
@@ -1120,7 +1120,7 @@ func TestAddingData(t *testing.T) {
 					"Count(Row(timestamp_bytes_ts > \"2023-02-20T00:00:00Z\"))",
 					"Count(Row(timestamp_bytes_int > \"2023-02-20T00:00:00Z\"))",
 				},
-				[]string{
+				{
 					// TODO: missing tests for timestamps and time fields, they don't see supported
 					"Count(All())",
 					"Row(int_long=null)",
@@ -1133,10 +1133,10 @@ func TestAddingData(t *testing.T) {
 					"Count(Not(Row(bools-exists=bool_bool)))",
 					"Count(Row(dateint_bytes_ts=null))",
 				},
-				[]string{
+				{
 					"Count(All())",
 				},
-				[]string{
+				{
 					"Row(string_string=\"ZgkOB\")",
 					"Row(stringset_string =\"7EYSp\")",
 					"Count(Not(UnionRows(Rows(stringset_string))))",
@@ -1151,7 +1151,7 @@ func TestAddingData(t *testing.T) {
 				},
 			},
 			expectedResults: [][]string{
-				[]string{
+				{
 					"{\"results\":[10]}\n",
 					"{\"results\":[2]}\n",
 					"{\"results\":[1]}\n",
@@ -1190,7 +1190,7 @@ func TestAddingData(t *testing.T) {
 					"{\"results\":[3]}\n",
 					"{\"results\":[3]}\n",
 				},
-				[]string{
+				{
 					"{\"results\":[10]}\n",
 					"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
 					"{\"results\":[9]}\n",
@@ -1202,10 +1202,10 @@ func TestAddingData(t *testing.T) {
 					"{\"results\":[1]}\n",
 					"{\"results\":[1]}\n",
 				},
-				[]string{
+				{
 					"{\"results\":[7]}\n",
 				},
-				[]string{
+				{
 					"{\"results\":[{\"columns\":[]}]}\n",
 					"{\"results\":[{\"columns\":[],\"keys\":[\"u2Yr4|sHaUv|x5z8P\"]}]}\n",
 					"{\"results\":[1]}\n",
