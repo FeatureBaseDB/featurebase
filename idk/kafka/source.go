@@ -110,7 +110,6 @@ func (s *Source) Record() (idk.Record, error) {
 	}
 
 	val, avroSchema, err := s.decodeAvroValueWithSchemaRegistry(rec.Record.Value)
-	fmt.Println(avroSchema)
 
 	if err != nil && err != idk.ErrSchemaChange {
 		return nil, errors.Wrap(err, "decoding with schema registry")
@@ -572,15 +571,10 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 
 		switch ft {
 		case "decimal":
-			/*
-				precision, _ := intProp(aField, "precision")
-				if precision > 18 || precision < 1 {
-					return nil, errors.Errorf("need precision for decimal in 1-18, but got:%d", precision)
-				}
-			*/
+
 			scale, err := intProp(aField, "scale")
 			if scale > 18 || err == wrongType {
-				return nil, errors.Errorf("0<=scale<=precision, got:%d err:%v", scale, err)
+				return nil, errors.Errorf("0<=scale<=18, got:%d err:%v", scale, err)
 			}
 
 			return idk.DecimalField{
@@ -589,11 +583,6 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 			}, nil
 
 		case "dateInt":
-
-			unit, err := stringProp(aField, "unit")
-			if err != nil {
-				return nil, errors.Errorf("required property for DateIntField: unit, err:%v", err)
-			}
 
 			layout, err := stringProp(aField, "layout")
 			if err != nil {
@@ -607,6 +596,11 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 			epoch, err := time.Parse(layout, strEpoch)
 			if err != nil {
 				return nil, errors.Wrapf(err, "parsing epoch: %s", strEpoch)
+			}
+
+			unit, err := stringProp(aField, "unit")
+			if err != nil {
+				return nil, errors.Errorf("required property for DateIntField: unit, err:%v", err)
 			}
 
 			customUnit, _ := stringProp(aField, "customUnit")

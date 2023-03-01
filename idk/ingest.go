@@ -23,7 +23,6 @@ import (
 	"syscall"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
 	pilosacore "github.com/featurebasedb/featurebase/v3"
 	pilosagrpc "github.com/featurebasedb/featurebase/v3/api/client"
 	pilosabatch "github.com/featurebasedb/featurebase/v3/batch"
@@ -1185,7 +1184,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 						continue
 					}
 					switch fType := field.Options().Type(); fType {
-					case pilosaclient.FieldTypeSet, pilosa.FieldTypeMutex:
+					case pilosaclient.FieldTypeSet, pilosaclient.FieldTypeMutex:
 						if key == m.PackBools {
 							// value should be list of bools to clear
 							if arrayValue, err := toStringArray(value); err == nil {
@@ -1197,7 +1196,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 									bq.Add(boolsExists.Clear(v, recordID))
 								}
 							} else {
-								return errors.Errorf("packed bools field %s should wasn't able to ", field.Name(), value)
+								return errors.Errorf("couldn't  bools field %s should wasn't able to ", field.Name(), value)
 							}
 						} else {
 							// check for string or ID keys
@@ -1226,7 +1225,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 								return errors.Errorf("set field %s should have keys true or false", field.Name())
 							}
 						}
-					case pilosa.FieldTypeInt, pilosaclient.FieldTypeDecimal, pilosaclient.FieldTypeTimestamp:
+					case pilosaclient.FieldTypeInt, pilosaclient.FieldTypeDecimal, pilosaclient.FieldTypeTimestamp:
 						if boolVal, ok := value.(bool); ok {
 							if boolVal {
 								bq.Add(field.Clear(0, recordID))
@@ -1234,7 +1233,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 						} else {
 							return errors.Errorf("%s fields should be boolean with false if they shouldn't be deleted, true otherwise - got type %T", fType, value)
 						}
-					case pilosa.FieldTypeBool:
+					case pilosaclient.FieldTypeBool:
 						if boolVal, ok := value.(bool); ok {
 							if boolVal {
 								bq.Add(field.Clear(0, recordID))
