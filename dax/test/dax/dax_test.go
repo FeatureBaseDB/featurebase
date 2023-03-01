@@ -557,28 +557,19 @@ func TestDAXIntegration(t *testing.T) {
 		// Make sure the database and tables no longer exist.
 		db, err = controllerClient.DatabaseByName(ctx, orgID, dbname)
 		if assert.Error(t, err) {
-			assert.Contains(t, err.Error(), "database name 'dbname1' does not exist")
-			// TODO(tlt): replace the previous line with the following once we
-			// have threaded error codes through the http calls.
-			// assert.True(t, errors.Is(err, dax.ErrDatabaseNameDoesNotExist))
+			assert.True(t, errors.Is(err, dax.ErrDatabaseNameDoesNotExist))
 		}
 		assert.Nil(t, db)
 
 		tbl1, err = controllerClient.TableByName(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
 		if assert.Error(t, err) {
-			assert.Contains(t, err.Error(), "table name 'keyed' does not exist")
-			// TODO(tlt): replace the previous line with the following once we
-			// have threaded error codes through the http calls.
-			// assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
+			assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
 		}
 		assert.Nil(t, tbl1)
 
 		tbl2, err = controllerClient.TableByName(ctx, qdbid, dax.TableName(defs.Unkeyed.Name(0)))
 		if assert.Error(t, err) {
-			assert.Contains(t, err.Error(), "table name 'unkeyed' does not exist")
-			// TODO(tlt): replace the previous line with the following once we
-			// have threaded error codes through the http calls.
-			// assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
+			assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
 		}
 		assert.Nil(t, tbl2)
 	})
