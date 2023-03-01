@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -22,13 +21,11 @@ import (
 )
 
 func isDatabaseNotFoundError(err error) bool {
-	// TODO (pok) take out the second part of this check once we return correct error types across network boundaries
-	return errors.Is(err, dax.ErrDatabaseNameDoesNotExist) || strings.Contains(err.Error(), "does not exist")
+	return errors.Is(err, dax.ErrDatabaseNameDoesNotExist)
 }
 
 func isTableNotFoundError(err error) bool {
-	// TODO (pok) take out the second part of this check once we return correct error types across network boundaries
-	return errors.Is(err, dax.ErrTableNameDoesNotExist) || strings.Contains(err.Error(), "does not exist")
+	return errors.Is(err, dax.ErrTableNameDoesNotExist)
 }
 
 // ExecutionPlanner compiles SQL text into a query plan
