@@ -13,9 +13,11 @@ func IsValidTypeName(typeName string) bool {
 		dax.BaseTypeDecimal,
 		dax.BaseTypeID,
 		dax.BaseTypeIDSet,
+		dax.BaseTypeIDSetQ,
 		dax.BaseTypeInt,
 		dax.BaseTypeString,
 		dax.BaseTypeStringSet,
+		dax.BaseTypeStringSetQ,
 		dax.BaseTypeTimestamp:
 		return true
 	default:
@@ -238,7 +240,6 @@ func (*DataTypeIDSet) TypeInfo() map[string]interface{} {
 	return nil
 }
 
-// TODO (pok) should time quantum be it's own type and not a constraint?
 type DataTypeIDSetQuantum struct {
 }
 
@@ -247,7 +248,7 @@ func NewDataTypeIDSetQuantum() *DataTypeIDSetQuantum {
 }
 
 func (*DataTypeIDSetQuantum) BaseTypeName() string {
-	return dax.BaseTypeIDSet
+	return dax.BaseTypeIDSetQ
 }
 
 func (dt *DataTypeIDSetQuantum) TypeDescription() string {
@@ -323,7 +324,7 @@ func NewDataTypeStringSetQuantum() *DataTypeStringSetQuantum {
 }
 
 func (*DataTypeStringSetQuantum) BaseTypeName() string {
-	return dax.BaseTypeStringSet
+	return dax.BaseTypeStringSetQ
 }
 
 func (dt *DataTypeStringSetQuantum) TypeDescription() string {

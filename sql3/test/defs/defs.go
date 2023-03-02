@@ -192,7 +192,8 @@ var TableTests []TableTest = []TableTest{
 	boolTests,
 
 	// time quantums
-	timeQuantumInsertTest,
+	timeQuantumTest,
+	timeQuantumQueryTest,
 
 	// forward-ported SQL1 tests
 	sql1TestsGrouper,

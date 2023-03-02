@@ -37,7 +37,7 @@ var systemTables = map[string]*systemTable{
 		schema: types.Schema{
 			&types.PlannerColumn{
 				RelationName: fbClusterInfo,
-				ColumnName:   "name",
+				ColumnName:   "id",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{

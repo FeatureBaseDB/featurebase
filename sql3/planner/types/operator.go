@@ -61,7 +61,9 @@ type Relation interface {
 // FilteredRelation is an interface to something that can be treated as a relation that can be filtered
 type FilteredRelation interface {
 	Relation
+	IsFilterable() bool
 	UpdateFilters(filterCondition PlanExpression) (PlanOperator, error)
+	UpdateTimeQuantumFilters(filters ...PlanExpression) (PlanOperator, error)
 }
 
 // Schema is the definition a set of columns from each operator

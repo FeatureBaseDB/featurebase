@@ -1576,6 +1576,9 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateToTimestamp(currentRow)
 	case "STR":
 		return n.EvaluateStr(currentRow)
+		// time quantum functions
+	case "RANGEQ":
+		return n.EvaluateRangeQ(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}
@@ -2061,6 +2064,19 @@ func (n *stringLiteralPlanExpression) Children() []types.PlanExpression {
 
 func (n *stringLiteralPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
 	return n, nil
+}
+
+func (expr *stringLiteralPlanExpression) ConvertToTimestamp() *time.Time {
+	//try to coerce to a date
+	if tm, err := time.ParseInLocation(time.RFC3339Nano, expr.value, time.UTC); err == nil {
+		return &tm
+	} else if tm, err := time.ParseInLocation(time.RFC3339, expr.value, time.UTC); err == nil {
+		return &tm
+	} else if tm, err := time.ParseInLocation("2006-01-02", expr.value, time.UTC); err == nil {
+		return &tm
+	} else {
+		return nil
+	}
 }
 
 // castPlanExpressionis a cast op

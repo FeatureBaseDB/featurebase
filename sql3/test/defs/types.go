@@ -27,6 +27,10 @@ var (
 		Type:     dax.BaseTypeIDSet,
 		BaseType: dax.BaseTypeIDSet,
 	}
+	fldTypeIDSetQ featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeIDSetQ,
+		BaseType: dax.BaseTypeIDSetQ,
+	}
 	fldTypeInt featurebase.WireQueryField = featurebase.WireQueryField{
 		Type:     dax.BaseTypeInt,
 		BaseType: dax.BaseTypeInt,
@@ -43,6 +47,10 @@ var (
 	fldTypeStringSet featurebase.WireQueryField = featurebase.WireQueryField{
 		Type:     dax.BaseTypeStringSet,
 		BaseType: dax.BaseTypeStringSet,
+	}
+	fldTypeStringSetQ featurebase.WireQueryField = featurebase.WireQueryField{
+		Type:     dax.BaseTypeStringSetQ,
+		BaseType: dax.BaseTypeStringSetQ,
 	}
 	fldTypeTimestamp featurebase.WireQueryField = featurebase.WireQueryField{
 		Type:     dax.BaseTypeTimestamp,

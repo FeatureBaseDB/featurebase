@@ -573,35 +573,7 @@ func (p *ExecutionPlanner) analyzeSource(ctx context.Context, source parser.Sour
 		return source, nil
 
 	case *parser.TableValuedFunction:
-		// check it actually is a table valued function - we only support one right now; subtable()
-		switch strings.ToUpper(source.Name.Name) {
-		case "SUBTABLE":
-			_, err := p.analyzeCallExpression(ctx, source.Call, scope)
-			if err != nil {
-				return nil, err
-			}
-
-			tvfResultType, ok := source.Call.ResultDataType.(*parser.DataTypeSubtable)
-			if !ok {
-				return nil, sql3.NewErrInternalf("unexepected tvf return type")
-			}
-
-			// populate the output columns from the source
-			for idx, member := range tvfResultType.Columns {
-				soc := &parser.SourceOutputColumn{
-					TableName:   "", // TODO (pok) use the tq column actually referenced as the table name
-					ColumnName:  member.Name,
-					ColumnIndex: idx,
-					Datatype:    member.DataType,
-				}
-				source.OutputColumns = append(source.OutputColumns, soc)
-			}
-
-		default:
-			return nil, sql3.NewErrInternalf("table valued function expected")
-		}
-
-		return source, nil
+		return nil, sql3.NewErrInternalf("table valued function expected")
 
 	case *parser.SelectStatement:
 		expr, err := p.analyzeSelectStatement(ctx, source)

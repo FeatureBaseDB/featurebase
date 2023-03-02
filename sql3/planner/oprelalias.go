@@ -77,3 +77,37 @@ func (p *PlanOpRelAlias) Warnings() []string {
 func (p *PlanOpRelAlias) Name() string {
 	return p.alias
 }
+
+func (p *PlanOpRelAlias) IsFilterable() bool {
+	ch, ok := p.ChildOp.(types.FilteredRelation)
+	if !ok {
+		return false
+	}
+	return ch.IsFilterable()
+}
+
+func (p *PlanOpRelAlias) UpdateFilters(filterCondition types.PlanExpression) (types.PlanOperator, error) {
+	ch, ok := p.ChildOp.(types.FilteredRelation)
+	if !ok {
+		return nil, sql3.NewErrInternalf("childop is not filterable")
+	}
+	newChild, err := ch.UpdateFilters(filterCondition)
+	if err != nil {
+		return nil, err
+	}
+	p.ChildOp = newChild
+	return p, nil
+}
+
+func (p *PlanOpRelAlias) UpdateTimeQuantumFilters(filters ...types.PlanExpression) (types.PlanOperator, error) {
+	ch, ok := p.ChildOp.(types.FilteredRelation)
+	if !ok {
+		return nil, sql3.NewErrInternalf("childop is not filterable")
+	}
+	newChild, err := ch.UpdateTimeQuantumFilters(filters...)
+	if err != nil {
+		return nil, err
+	}
+	p.ChildOp = newChild
+	return p, nil
+}

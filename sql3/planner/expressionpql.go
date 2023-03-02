@@ -96,6 +96,85 @@ func (p *ExecutionPlanner) generatePQLCallFromExpr(ctx context.Context, expr typ
 			}
 			return call, nil
 
+		case "RANGEQ":
+			col := expr.args[0].(*qualifiedRefPlanExpression)
+
+			var fromValue interface{}
+			switch fromExpr := expr.args[1].(type) {
+			case *stringLiteralPlanExpression:
+				// parse timestamp from string and use the int value
+				ts := fromExpr.ConvertToTimestamp()
+				if ts == nil {
+					return nil, sql3.NewErrInvalidTypeCoercion(0, 0, fromExpr.value, parser.NewDataTypeTimestamp().TypeDescription())
+				}
+				fromValue = ts.Unix()
+
+			case *intLiteralPlanExpression:
+				// use the int value
+				fromValue = fromExpr.value
+
+			case *nullLiteralPlanExpression:
+				fromValue = nil
+
+			default:
+				return nil, sql3.NewErrInternalf("unexpected argument type '%T'", expr.args[1])
+			}
+
+			var toValue interface{}
+			switch toExpr := expr.args[2].(type) {
+			case *stringLiteralPlanExpression:
+				// parse timestamp from string and use the int value
+				ts := toExpr.ConvertToTimestamp()
+				if ts == nil {
+					return nil, sql3.NewErrInvalidTypeCoercion(0, 0, toExpr.value, parser.NewDataTypeTimestamp().TypeDescription())
+				}
+				toValue = ts.Unix()
+
+			case *intLiteralPlanExpression:
+				// use the int value
+				toValue = toExpr.value
+
+			case *nullLiteralPlanExpression:
+				toValue = nil
+
+			default:
+				return nil, sql3.NewErrInternalf("unexpected argument type '%T'", expr.args[1])
+			}
+
+			if fromValue == nil && toValue == nil {
+				return nil, sql3.NewErrQRangeFromAndToTimeCannotBeBothNull(0, 0)
+			}
+
+			var call *pql.Call
+			if fromValue == nil && toValue != nil {
+				call = &pql.Call{
+					Name: "Rows",
+					Args: map[string]interface{}{
+						"field": strings.ToLower(col.columnName),
+						"to":    toValue,
+					},
+				}
+			} else if fromValue != nil && toValue == nil {
+				call = &pql.Call{
+					Name: "Rows",
+					Args: map[string]interface{}{
+						"field": strings.ToLower(col.columnName),
+						"from":  fromValue,
+					},
+				}
+			} else {
+				call = &pql.Call{
+					Name: "Rows",
+					Args: map[string]interface{}{
+						"field": strings.ToLower(col.columnName),
+						"from":  fromValue,
+						"to":    toValue,
+					},
+				}
+			}
+
+			return call, nil
+
 		default:
 			return nil, sql3.NewErrInternalf("unsupported scalar function '%s'", expr.name)
 		}

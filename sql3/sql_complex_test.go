@@ -276,8 +276,8 @@ func TestPlanner_Show(t *testing.T) {
 			species string cachetype ranked size 1000
 			speciesids idset cachetype ranked size 1000
 			speciess stringset cachetype ranked size 1000
-			speciesidsq idset timequantum 'YMD'
-			speciessq stringset timequantum 'YMD'
+			speciesidsq idsetq timequantum 'YMD'
+			speciessq stringsetq timequantum 'YMD'
 			specieslen decimal(4) min 0 max 270
 			) keypartitions 12
 		`)
@@ -294,7 +294,7 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([][]interface{}{
-			{string("create table iris1 (_id id, speciesid id cachetype ranked size 1000, species string cachetype ranked size 1000, speciesids idset cachetype ranked size 1000, speciess stringset cachetype ranked size 1000, speciesidsq idset timequantum 'YMD', speciessq stringset timequantum 'YMD', specieslen decimal(4) min 0 max 270);")},
+			{string("create table iris1 (_id id, speciesid id cachetype ranked size 1000, species string cachetype ranked size 1000, speciesids idset cachetype ranked size 1000, speciess stringset cachetype ranked size 1000, speciesidsq idsetq timequantum 'YMD', speciessq stringsetq timequantum 'YMD', specieslen decimal(4) min 0 max 270);")},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
@@ -393,13 +393,13 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 				name:        "stringsetcolq",
 				typ:         "stringset",
 				constraints: "cachetype lru size 1000 timequantum 'YMD' ttl '24h'",
-				expErr:      "[1:60] 'CACHETYPE' constraint conflicts with 'TIMEQUANTUM'",
+				expErr:      "[1:60] 'TIMEQUANTUM' constraint cannot be applied to a column of type 'stringset'",
 			},
 			{
 				name:        "stringsetcolq",
 				typ:         "stringset",
 				constraints: "timequantum 'YMD' ttl '24h' cachetype ranked",
-				expErr:      "[1:60] 'CACHETYPE' constraint conflicts with 'TIMEQUANTUM'",
+				expErr:      "[1:60] 'TIMEQUANTUM' constraint cannot be applied to a column of type 'stringset'",
 			},
 		}
 
@@ -504,7 +504,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			},
 			{
 				name:        "stringsetcolq",
-				typ:         "stringset",
+				typ:         "stringsetq",
 				constraints: "timequantum 'YMD' ttl '24h'",
 				expOptions: pilosa.FieldOptions{
 					Type:        "time",
@@ -550,7 +550,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			},
 			{
 				name:        "idsetcolq",
-				typ:         "idset",
+				typ:         "idsetq",
 				constraints: "timequantum 'YMD' ttl '24h'",
 				expOptions: pilosa.FieldOptions{
 					Type:        "time",
@@ -717,11 +717,11 @@ func TestPlanner_CreateTable(t *testing.T) {
 			decimalcol decimal(2),
 			stringcol string cachetype ranked size 1000,
 			stringsetcol stringset cachetype lru size 1000,
-			stringsetcolq stringset timequantum 'YMD' ttl '24h',
+			stringsetcolq stringsetq timequantum 'YMD' ttl '24h',
 			idcol id cachetype ranked size 1000,
 			idsetcol idset cachetype lru,
 			idsetcolsz idset cachetype lru size 1000,
-			idsetcolq idset timequantum 'YMD' ttl '24h') keypartitions 12`)
+			idsetcolq idsetq timequantum 'YMD' ttl '24h') keypartitions 12`)
 		if err != nil {
 			t.Fatal(err)
 		}

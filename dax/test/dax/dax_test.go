@@ -143,6 +143,7 @@ func TestDAXIntegration(t *testing.T) {
 			"viewtests/drop-view", // drop view does a delete
 			"viewtests/drop-view-if-exists-after-drop",
 			"viewtests/select-view-after-drop",
+			"time_quantum_insert/test-12", // orchestrator currently does not support to,from args on Rows()
 		}
 
 		doSkip := func(name string) bool {
