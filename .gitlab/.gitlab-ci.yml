@@ -30,6 +30,7 @@ variables:
     set -x
     if [ -d "$CI_PROJECT_DIR" ]; then
       cd "$CI_PROJECT_DIR"
+      sudo chown -R gitlab-runner:gitlab-runner .
       find . -type f -exec chmod 0644 {} + 
       find . -type d -exec chmod 0755 {} + 
     fi
