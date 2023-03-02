@@ -47,6 +47,9 @@ func newServeCmd(stderr io.Writer) *cobra.Command {
 	serveCmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run FeatureBase.",
+		FParseErrWhitelist: cobra.FParseErrWhitelist{
+			UnknownFlags: true,
+		},
 		Long: `featurebase server runs FeatureBase.
 
 It will load existing data from the configured
