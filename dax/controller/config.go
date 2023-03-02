@@ -15,7 +15,7 @@ type Config struct {
 	PollInterval time.Duration `toml:"poll-interval"`
 
 	// Storage
-	StorageMethod string `toml:"-"`
+	StorageMethod string `toml:"storage-method"`
 	DataDir       string `toml:"-"`
 
 	SnapshotterDir string `toml:"snapshotter-dir"`
