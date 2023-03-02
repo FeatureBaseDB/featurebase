@@ -12,6 +12,16 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
+default:
+  retry:
+    max: 2 # This is confusing but this means "3 runs at max".
+    when:
+      - unknown_failure
+      - api_failure
+      - runner_system_failure
+      - job_execution_timeout
+      - stuck_or_timeout_failure
+
 variables:
   GOVERSION: "1.19.3"
   GOFUTURE: "latest"
@@ -22,7 +32,6 @@ variables:
       cd "$CI_PROJECT_DIR"
       find . -type f -exec chmod 0644 {} + 
       find . -type d -exec chmod 0755 {} + 
-      # git clean -ffdx # don't do this here, let it happen automatically.
     fi
 
 stages:
