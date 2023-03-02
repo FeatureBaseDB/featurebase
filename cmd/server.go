@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/featurebasedb/featurebase/v3/ctl"
@@ -54,10 +53,8 @@ directory and start listening for client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Start & run the server.
-
 			if err := Server.Start(); err != nil {
-				fmt.Println("Test!!")
-				// return considerUsageError(cmd, errors.Wrap(err, "running server"))
+				return considerUsageError(cmd, errors.Wrap(err, "running server"))
 			}
 
 			return errors.Wrap(Server.Wait(), "waiting on Server")
