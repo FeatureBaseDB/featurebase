@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/featurebasedb/featurebase/v3/ctl"
@@ -47,18 +48,16 @@ func newServeCmd(stderr io.Writer) *cobra.Command {
 	serveCmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run FeatureBase.",
-		FParseErrWhitelist: cobra.FParseErrWhitelist{
-			UnknownFlags: true,
-		},
 		Long: `featurebase server runs FeatureBase.
-
 It will load existing data from the configured
 directory and start listening for client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Start & run the server.
+
 			if err := Server.Start(); err != nil {
-				return considerUsageError(cmd, errors.Wrap(err, "running server"))
+				fmt.Println("Test!!")
+				// return considerUsageError(cmd, errors.Wrap(err, "running server"))
 			}
 
 			return errors.Wrap(Server.Wait(), "waiting on Server")
