@@ -16,7 +16,7 @@ type FreeJobService struct{}
 func (fj *FreeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job ...dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 	jobs := make(models.Jobs, len(job))
 	for i, j := range job {
@@ -33,7 +33,7 @@ func (fj *FreeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, 
 func (fj *FreeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	err := dt.C.RawQuery("DELETE from jobs where role = ? and database_id = ? and name = ? and worker_id is NULL", roleType, qdbid.DatabaseID, job).Exec()
@@ -43,7 +43,7 @@ func (fj *FreeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, q
 func (fj *FreeJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	err := dt.C.RawQuery("DELETE from jobs where role = ? and database_id = ? and name LIKE ? and worker_id is NULL",
@@ -54,7 +54,7 @@ func (fj *FreeJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.Ro
 func (fj *FreeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.Jobs, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	jobs := make(models.Jobs, 0)
@@ -74,7 +74,7 @@ func (fj *FreeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qd
 func (fj *FreeJobService) MergeJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs dax.Jobs) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	err := dt.C.RawQuery("UPDATE jobs SET worker_id = NULL WHERE role = ? and database_id = ?", roleType, qdbid.DatabaseID).Exec()

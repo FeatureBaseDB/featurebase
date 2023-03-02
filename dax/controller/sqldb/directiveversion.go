@@ -14,7 +14,7 @@ type DirectiveVersion struct{}
 func (d *DirectiveVersion) Increment(tx dax.Transaction, delta uint64) (uint64, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return 0, dax.NewErrInvalidTransaction()
+		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 	// table is pre-populated w/ a single record w/ ID=1 during schema migration
 	dv := &models.DirectiveVersion{}

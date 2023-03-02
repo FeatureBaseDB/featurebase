@@ -34,7 +34,7 @@ func (c *Controller) snapAll(log logger.Logger) {
 	}()
 	ctx := context.Background()
 
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		log.Printf("Error getting transaction for snapping turtle: %v", err)
 		return

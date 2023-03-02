@@ -18,7 +18,7 @@ type WorkerJobService struct{}
 func (w *WorkerJobService) WorkersJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerInfo, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	workers := models.Workers{}
@@ -42,7 +42,7 @@ func (w *WorkerJobService) WorkersJobs(tx dax.Transaction, roleType dax.RoleType
 func (w *WorkerJobService) WorkerCount(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (int, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return 0, dax.NewErrInvalidTransaction()
+		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 	worker := &models.Worker{}
 	cnt, err := dt.C.Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).Count(worker)
@@ -51,7 +51,7 @@ func (w *WorkerJobService) WorkerCount(tx dax.Transaction, roleType dax.RoleType
 func (w *WorkerJobService) ListWorkers(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.Addresses, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	workers := models.Workers{}
@@ -70,7 +70,7 @@ func (w *WorkerJobService) ListWorkers(tx dax.Transaction, roleType dax.RoleType
 func (w *WorkerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	err := dt.C.Create(&models.Worker{
@@ -84,7 +84,7 @@ func (w *WorkerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleTyp
 func (w *WorkerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	worker := &models.Worker{}
@@ -99,7 +99,7 @@ func (w *WorkerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleTyp
 func (w *WorkerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job ...dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	worker := &models.Worker{}
@@ -125,7 +125,7 @@ func (w *WorkerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType,
 func (w *WorkerJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	worker := &models.Worker{}
@@ -151,7 +151,7 @@ func (w *WorkerJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, 
 func (w *WorkerJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) (balancer.InternalDiffs, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	results := []struct {
@@ -179,7 +179,7 @@ func (w *WorkerJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.R
 func (w *WorkerJobService) JobCounts(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr ...dax.Address) (map[dax.Address]int, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	results := []struct {
@@ -213,7 +213,7 @@ func (w *WorkerJobService) JobCounts(tx dax.Transaction, roleType dax.RoleType, 
 func (w *WorkerJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) (dax.Jobs, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	worker := &models.Worker{}

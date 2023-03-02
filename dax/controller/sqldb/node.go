@@ -15,7 +15,7 @@ type NodeService struct {
 func (n *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax.Node) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	mnode := &models.Node{Address: node.Address}
@@ -43,7 +43,7 @@ func (n *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax
 func (n *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	node := &models.Node{}
@@ -66,7 +66,7 @@ func (n *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node,
 func (n *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	node := &models.Node{}
@@ -81,7 +81,7 @@ func (n *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 func (n *NodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	nodes := []*models.Node{}

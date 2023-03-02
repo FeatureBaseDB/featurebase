@@ -30,7 +30,7 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	if exists, err := dt.C.Where("id = ?", qdb.Database.ID).Exists(&models.Database{}); err != nil {
@@ -60,7 +60,7 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 func (s *Schemar) DropDatabase(tx dax.Transaction, qdb dax.QualifiedDatabaseID) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	err := dt.C.Destroy(&models.Database{ID: string(qdb.DatabaseID), OrganizationID: string(qdb.OrganizationID)})
@@ -70,7 +70,7 @@ func (s *Schemar) DropDatabase(tx dax.Transaction, qdb dax.QualifiedDatabaseID) 
 func (s *Schemar) DatabaseByName(tx dax.Transaction, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	db := &models.Database{}
@@ -120,7 +120,7 @@ func toQualifiedDatabase(db *models.Database) *dax.QualifiedDatabase {
 func (s *Schemar) DatabaseByID(tx dax.Transaction, qdb dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	db := &models.Database{}
@@ -133,7 +133,7 @@ func (s *Schemar) DatabaseByID(tx dax.Transaction, qdb dax.QualifiedDatabaseID) 
 func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, option string, value string) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	db := &models.Database{
@@ -167,7 +167,7 @@ func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatab
 func (s *Schemar) Databases(tx dax.Transaction, orgID dax.OrganizationID, dbIDs ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	dbs := []*models.Database{}
@@ -214,7 +214,7 @@ func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) erro
 
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	tbl := toModelTable(qtbl)
@@ -307,7 +307,7 @@ func toQualifiedTable(mtbl *models.Table) *dax.QualifiedTable {
 func (s *Schemar) DropTable(tx dax.Transaction, qtid dax.QualifiedTableID) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	err := dt.C.Destroy(&models.Table{ID: string(qtid.Key())})
@@ -317,7 +317,7 @@ func (s *Schemar) DropTable(tx dax.Transaction, qtid dax.QualifiedTableID) error
 func (s *Schemar) CreateField(tx dax.Transaction, qtid dax.QualifiedTableID, field *dax.Field) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	col := toModelColumn(qtid.Key(), field)
@@ -329,7 +329,7 @@ func (s *Schemar) CreateField(tx dax.Transaction, qtid dax.QualifiedTableID, fie
 func (s *Schemar) DropField(tx dax.Transaction, qtid dax.QualifiedTableID, fieldName dax.FieldName) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	col := &models.Column{}
@@ -348,7 +348,7 @@ func (s *Schemar) DropField(tx dax.Transaction, qtid dax.QualifiedTableID, field
 func (s *Schemar) Table(tx dax.Transaction, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	tbl := &models.Table{}
@@ -370,7 +370,7 @@ func (s *Schemar) Table(tx dax.Transaction, qtid dax.QualifiedTableID) (*dax.Qua
 func (s *Schemar) Tables(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, tableIDs ...dax.TableID) ([]*dax.QualifiedTable, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	query := dt.C.Where("database_id = ?", qdbid.DatabaseID)
@@ -400,7 +400,7 @@ func (s *Schemar) Tables(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, tabl
 func (s *Schemar) TableID(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, tableName dax.TableName) (dax.QualifiedTableID, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.QualifiedTableID{}, dax.NewErrInvalidTransaction()
+		return dax.QualifiedTableID{}, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	tbl := &models.Table{}

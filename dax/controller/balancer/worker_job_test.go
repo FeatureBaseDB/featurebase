@@ -7,7 +7,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/gobuffalo/pop/v6"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -23,12 +23,12 @@ func TestWorkerJobService(t *testing.T) {
 	// TODO: currently you must start w/ a clean test database
 	// soda drop -e test; soda create -e test; soda migrate -e test
 	conn, err := pop.Connect("test")
-	assert.NoError(t, err, "connecting")
+	require.NoError(t, err, "connecting")
 
 	trans := sqldb.Transactor{Connection: conn}
 
 	tx, err := trans.BeginTx(context.Background(), true)
-	assert.NoError(t, err, "getting transaction")
+	require.NoError(t, err, "getting transaction")
 
 	defer func() {
 		err := tx.Rollback()
@@ -43,13 +43,13 @@ func TestWorkerJobService(t *testing.T) {
 		&dax.QualifiedDatabase{
 			OrganizationID: orgID,
 			Database:       dax.Database{ID: dbID, Name: dbName}})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	wjSvc := &sqldb.WorkerJobService{}
 	qdbid := dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: dbID}
 
 	err = wjSvc.CreateWorker(tx, role, qdbid, nodeAddr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// we create a qtid to prefix jobs so that we can then test the
 	// "DeleteJobsForTable" method. Is it strange that a table is not
@@ -64,55 +64,55 @@ func TestWorkerJobService(t *testing.T) {
 	job2 := dax.Job(qtid.Key() + "job2")
 
 	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job1, job2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	jobs, err := wjSvc.ListJobs(tx, role, qdbid, nodeAddr)
-	assert.NoError(t, err)
-	assert.ElementsMatch(t, dax.Jobs{job1, job2}, jobs)
+	require.NoError(t, err)
+	require.ElementsMatch(t, dax.Jobs{job1, job2}, jobs)
 
 	workerInfos, err := wjSvc.WorkersJobs(tx, role, qdbid)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(workerInfos))
-	assert.ElementsMatch(t, []dax.Job{job1, job2}, workerInfos[0].Jobs)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(workerInfos))
+	require.ElementsMatch(t, []dax.Job{job1, job2}, workerInfos[0].Jobs)
 
 	cnt, err := wjSvc.WorkerCount(tx, role, qdbid)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, cnt)
+	require.NoError(t, err)
+	require.Equal(t, 1, cnt)
 
 	addrs, err := wjSvc.ListWorkers(tx, role, qdbid)
-	assert.NoError(t, err)
-	assert.ElementsMatch(t, dax.Addresses{nodeAddr}, addrs)
+	require.NoError(t, err)
+	require.ElementsMatch(t, dax.Addresses{nodeAddr}, addrs)
 
 	job3 := dax.Job(qtid.Key() + "job3")
 	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job3)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	jcs, err := wjSvc.JobCounts(tx, role, qdbid, nodeAddr)
-	assert.NoError(t, err)
-	assert.Equal(t, 3, jcs[nodeAddr])
+	require.NoError(t, err)
+	require.Equal(t, 3, jcs[nodeAddr])
 
 	err = wjSvc.DeleteJob(tx, role, qdbid, nodeAddr, job3)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	idiffs, err := wjSvc.DeleteJobsForTable(tx, role, qtid)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	workerDiffs := idiffs.Output()
-	assert.Equal(t, 1, len(workerDiffs))
-	assert.EqualValues(t, nodeAddr, workerDiffs[0].Address)
-	assert.Empty(t, workerDiffs[0].AddedJobs)
-	assert.ElementsMatch(t, []dax.Job{job1, job2}, workerDiffs[0].RemovedJobs)
+	require.Equal(t, 1, len(workerDiffs))
+	require.EqualValues(t, nodeAddr, workerDiffs[0].Address)
+	require.Empty(t, workerDiffs[0].AddedJobs)
+	require.ElementsMatch(t, []dax.Job{job1, job2}, workerDiffs[0].RemovedJobs)
 
 	jobs, err = wjSvc.ListJobs(tx, role, qdbid, nodeAddr)
-	assert.NoError(t, err)
-	assert.Empty(t, jobs)
+	require.NoError(t, err)
+	require.Empty(t, jobs)
 
 	dk := wjSvc.DatabaseForWorker(tx, nodeAddr)
-	assert.EqualValues(t, "db__orgid__blah", dk)
+	require.EqualValues(t, "db__orgid__blah", dk)
 
 	err = wjSvc.DeleteWorker(tx, role, qdbid, nodeAddr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	addrs, err = wjSvc.ListWorkers(tx, role, qdbid)
-	assert.NoError(t, err)
-	assert.Empty(t, addrs)
+	require.NoError(t, err)
+	require.Empty(t, addrs)
 }

@@ -39,7 +39,7 @@ func TestController(t *testing.T) {
 		cfg := controller.Config{}
 		con := controller.New(cfg)
 		con.Schemar = schemar
-		con.BoltDB = db
+		con.Transactor = db
 		con.Director = director
 
 		// Register a node with an invalid role type.
@@ -85,7 +85,7 @@ func TestController(t *testing.T) {
 		con.Balancer = balancerdb.NewBalancer(db, schemar, logger.StderrLogger)
 		con.DirectiveVersion = directivedb.NewDirectiveVersion(db)
 		con.Director = director
-		con.BoltDB = db
+		con.Transactor = db
 
 		var exp []*dax.Directive
 
@@ -599,7 +599,7 @@ func TestController(t *testing.T) {
 		con.Schemar = schemar
 		con.Balancer = balancerdb.NewBalancer(db, schemar, logger.StderrLogger)
 		con.DirectiveVersion = directivedb.NewDirectiveVersion(db)
-		con.BoltDB = db
+		con.Transactor = db
 		con.Director = director
 
 		var exp []*dax.Directive
@@ -913,7 +913,7 @@ func TestController(t *testing.T) {
 		con.Schemar = schemar
 		con.Balancer = balancerdb.NewBalancer(db, schemar, logger.StderrLogger)
 		con.DirectiveVersion = directivedb.NewDirectiveVersion(db)
-		con.BoltDB = db
+		con.Transactor = db
 
 		// Register two nodes.
 		node0 := &dax.Node{

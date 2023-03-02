@@ -115,9 +115,9 @@ func NewErrFieldExists(fieldName FieldName) error {
 	)
 }
 
-func NewErrInvalidTransaction() error {
+func NewErrInvalidTransaction(txType string) error {
 	return errors.New(
 		ErrInvalidTransaction,
-		"tx is not a *boltdb.Tx",
+		fmt.Sprintf("tx is not expected type: '%s'", txType),
 	)
 }

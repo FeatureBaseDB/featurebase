@@ -68,7 +68,7 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	// Ensure a database with that ID doesn't already exist.
@@ -92,7 +92,7 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 func (s *Schemar) DatabaseByID(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	return s.databaseByID(txx, qdbid.OrganizationID, qdbid.DatabaseID)
@@ -120,7 +120,7 @@ func (s *Schemar) databaseByID(tx *boltdb.Tx, orgID dax.OrganizationID, id dax.D
 func (s *Schemar) DatabaseByName(tx dax.Transaction, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	return s.databaseByName(txx, orgID, dbname)
@@ -177,7 +177,7 @@ func (s *Schemar) putDatabaseName(tx *boltdb.Tx, qdb *dax.QualifiedDatabase) err
 func (s *Schemar) DropDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	// Ensure the database exists.
@@ -209,7 +209,7 @@ func (s *Schemar) DropDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID
 func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, option string, value string) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	// Get the database.
@@ -234,7 +234,7 @@ func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatab
 func (s *Schemar) Databases(tx dax.Transaction, orgID dax.OrganizationID, ids ...dax.DatabaseID) ([]*dax.QualifiedDatabase, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	return s.getDatabases(txx, orgID, ids...)
@@ -326,7 +326,7 @@ func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) erro
 
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	// Ensure the database, defined in the table's QualifiedDatabaseID, exists.
@@ -364,7 +364,7 @@ func (s *Schemar) CreateField(tx dax.Transaction, qtid dax.QualifiedTableID, fld
 
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	// Get the table.
@@ -392,7 +392,7 @@ func (s *Schemar) CreateField(tx dax.Transaction, qtid dax.QualifiedTableID, fld
 func (s *Schemar) DropField(tx dax.Transaction, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	// Get the table.
@@ -444,7 +444,7 @@ func (s *Schemar) putTableName(tx *boltdb.Tx, qtbl *dax.QualifiedTable) error {
 func (s *Schemar) Table(tx dax.Transaction, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	return s.tableByQTID(txx, qtid)
@@ -507,7 +507,7 @@ func (s *Schemar) tableIDByName(tx *boltdb.Tx, qdbid dax.QualifiedDatabaseID, na
 func (s *Schemar) Tables(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	return s.getTables(txx, qdbid, ids...)
@@ -572,7 +572,7 @@ func containsTableID(s []dax.TableID, e dax.TableID) bool {
 func (s *Schemar) DropTable(tx dax.Transaction, qtid dax.QualifiedTableID) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	// Ensure the table exists.
@@ -602,7 +602,7 @@ func (s *Schemar) DropTable(tx dax.Transaction, qtid dax.QualifiedTableID) error
 func (s *Schemar) TableID(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.QualifiedTableID{}, dax.NewErrInvalidTransaction()
+		return dax.QualifiedTableID{}, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	return s.tableIDByName(txx, qdbid, name)

@@ -14,7 +14,7 @@ type FreeWorkerService struct{}
 func (fw *FreeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleType, addrs ...dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	workers := make(models.Workers, len(addrs))
@@ -32,7 +32,7 @@ func (fw *FreeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleTyp
 func (fw *FreeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	err := dt.C.RawQuery("DELETE from workers where database_id is null and role = ? and address = ?", roleType, addr).Exec()
@@ -42,7 +42,7 @@ func (fw *FreeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleT
 func (fw *FreeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleType, num int) ([]dax.Address, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	results := make([]struct {
@@ -67,7 +67,7 @@ func (fw *FreeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleTyp
 func (fw *FreeWorkerService) ListWorkers(tx dax.Transaction, roleType dax.RoleType) (dax.Addresses, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	workers := make(models.Workers, 0)

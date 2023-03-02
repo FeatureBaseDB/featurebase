@@ -255,6 +255,13 @@ run go tests race:
   stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
   image: golang:$GOVERSION
   extends: .go-cache
+  variables:
+    POSTGRES_DB: $POSTGRES_DB
+    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_HOST_AUTH_METHOD: trust
+  services:
+    - postgres:13.5
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
@@ -276,6 +283,13 @@ run go tests:
   stage: test
   image: golang:$GOVERSION
   extends: .go-cache
+  variables:
+    POSTGRES_DB: $POSTGRES_DB
+    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_HOST_AUTH_METHOD: trust
+  services:
+    - postgres:13.5
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -297,6 +311,13 @@ run go tests dax/test/dax:
   image: golang:$GOVERSION
   tags:
     - aws
+  variables:
+    POSTGRES_DB: $POSTGRES_DB
+    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_HOST_AUTH_METHOD: trust
+  services:
+    - postgres:13.5
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
