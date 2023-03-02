@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"time"
 
+	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/pkg/errors"
 )
 
+// Config is the user-facing configuration for kafka support in the CLI. This is
+// unmarshalled from the the toml config file supplied by the user.
 type Config struct {
 	Hosts  []string `mapstructure:"hosts" help:"Kafka hosts."`
 	Group  string   `mapstructure:"group" help:"Kafka group."`
@@ -22,6 +25,16 @@ type Config struct {
 	Fields []Field `mapstructure:"fields"`
 }
 
+// Field is a user-facing configuration field.
+type Field struct {
+	Name       string   `mapstructure:"name"`
+	SourceType string   `mapstructure:"source-type"`
+	SourcePath []string `mapstructure:"source-path"`
+	PrimaryKey bool     `mapstructure:"primary-key"`
+}
+
+// ConfigForIDK represents Config converted to values suitable for IDK. In
+// particular, the idk.RawField is used in parsing the schema in IDK.
 type ConfigForIDK struct {
 	Hosts  []string
 	Group  string
@@ -36,30 +49,28 @@ type ConfigForIDK struct {
 	Fields  []idk.RawField
 }
 
-type Field struct {
-	Name       string   `mapstructure:"name"`
-	SourceType string   `mapstructure:"source-type"`
-	SourcePath []string `mapstructure:"source-path"`
-	PrimaryKey bool     `mapstructure:"primary-key"`
-}
-
 // ValidateConfig validates the config is usable.
 func ValidateConfig(c Config) error {
 	if c.Table == "" {
 		return errors.Errorf("table is required")
 	} else if len(c.Topics) == 0 {
 		return errors.Errorf("at least one topic is required")
-	} else if len(c.Fields) < 2 {
-		return errors.Errorf("at least two fields are required (one should be a primary key)")
-	} else {
-		var found int
-		for i := range c.Fields {
-			if c.Fields[i].PrimaryKey {
-				found++
+	} else if len(c.Fields) > 0 {
+		// We only need to do these checks if any fields are specified at all.
+		// If no fields are specified, that's ok because then we default to
+		// using fields based off the existing table.
+		if len(c.Fields) < 2 {
+			return errors.Errorf("at least two fields are required (one should be a primary key)")
+		} else {
+			var found int
+			for i := range c.Fields {
+				if c.Fields[i].PrimaryKey {
+					found++
+				}
 			}
-		}
-		if found != 1 {
-			return errors.Errorf("exactly one primary key field is required")
+			if found != 1 {
+				return errors.Errorf("exactly one primary key field is required")
+			}
 		}
 	}
 	return nil
@@ -177,5 +188,61 @@ func ConfigToFields(c Config) ([]*dax.Field, error) {
 		out = append(out, dfld)
 	}
 
+	return out, nil
+}
+
+// FieldsToConfig returns a Config.Fields based on a list of *dax.Field.
+func FieldsToConfig(flds []*dax.Field) []Field {
+	out := make([]Field, 0, len(flds))
+	for _, fld := range flds {
+		out = append(out, Field{
+			Name:       string(fld.Name),
+			SourceType: fld.FullType(),
+			PrimaryKey: fld.IsPrimaryKey(),
+		})
+	}
+	return out
+}
+
+// CheckFieldCompatibility ensures that the fields provided in the kafka config
+// are compatible with the fields in the existing table. It returns a copy of
+// the kafka config fields with empty values defaulted to the table field
+// configuration.
+func CheckFieldCompatibility(cflds []Field, scr *featurebase.ShowColumnsResponse) ([]Field, error) {
+	out := make([]Field, len(cflds))
+	for i, cfld := range cflds {
+		out[i] = cfld
+		cfldName := dax.FieldName(cfld.Name)
+
+		// Primary key field.
+		if cfld.PrimaryKey {
+			f := scr.Field(dax.PrimaryKeyFieldName)
+			if f == nil {
+				return nil, dax.NewErrFieldDoesNotExist(dax.PrimaryKeyFieldName) // It should be impossible to hit this.
+			}
+			if out[i].SourceType == "" {
+				if f.StringKeys() {
+					out[i].SourceType = dax.BaseTypeString
+				} else {
+					out[i].SourceType = dax.BaseTypeID
+				}
+			}
+			continue
+		}
+
+		// Non primary key fields.
+		if cfldName == dax.PrimaryKeyFieldName {
+			return nil, errors.Errorf("field named '%s' must be a primary key", dax.PrimaryKeyFieldName)
+		}
+
+		f := scr.Field(cfldName)
+		if f == nil {
+			return nil, dax.NewErrFieldDoesNotExist(cfldName)
+		}
+
+		if out[i].SourceType == "" {
+			out[i].SourceType = f.FullType()
+		}
+	}
 	return out, nil
 }

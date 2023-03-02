@@ -169,7 +169,7 @@ func buildBulkInsert(tbl *dax.Table, fields []*dax.Field, ids []interface{}, row
 	maps := make([]string, 0, len(fields))
 	for i := range fields {
 		flds = append(flds, string(fields[i].Name))
-		maps = append(maps, fmt.Sprintf("'$.col_%d' %s", i, fields[i].Definition()))
+		maps = append(maps, fmt.Sprintf("'$.col_%d' %s", i, fields[i].FullType()))
 	}
 	// Fields
 	sb.WriteString(strings.Join(flds, ","))

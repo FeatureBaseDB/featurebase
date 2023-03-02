@@ -743,9 +743,9 @@ func (f *Field) String() string {
 	return string(f.Name)
 }
 
-// Definition returns the field type along with its parenthetical (when
+// FullType returns the field type along with its parenthetical (when
 // applicable).
-func (f *Field) Definition() string {
+func (f *Field) FullType() string {
 	switch f.Type {
 	case BaseTypeDecimal:
 		return fmt.Sprintf("%s(%d)", f.Type, f.Options.Scale)

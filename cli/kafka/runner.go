@@ -11,6 +11,9 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
+// Runner is a CLI-specific kafka consumer. It's similar to
+// idk.kafka_static.Main in that it embeds idk.Main and contains additional
+// functionality specific to its use case.
 type Runner struct {
 	idk.Main   `flag:"!embed"`
 	KafkaHosts []string       `help:"Comma separated list of host:port pairs for Kafka."`

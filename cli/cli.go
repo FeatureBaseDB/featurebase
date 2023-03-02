@@ -18,7 +18,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/cli/kafka"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -154,17 +153,30 @@ func (cmd *Command) run(ctx context.Context) error {
 	}
 
 	// Check to see if Command needs to run in non-interactive mode.
-	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
+	if len(cmd.Commands) > 0 ||
+		len(cmd.Files) > 0 ||
+		cmd.Config.KafkaConfig != "" {
 		cmd.nonInteractiveMode = true
+	}
 
-		if err := cmd.setupClient(); err != nil {
-			return errors.Wrap(err, "setting up client")
-		}
-		if err := cmd.connectToDatabase(cmd.database); err != nil {
-			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
-			// We intentionally do not return err here.
-		}
+	// Print the splash message.
+	if !cmd.nonInteractiveMode {
+		cmd.Printf(splash)
+	}
 
+	if err := cmd.setupClient(); err != nil {
+		return errors.Wrap(err, "setting up client")
+	}
+	cmd.printConnInfo()
+	if err := cmd.connectToDatabase(cmd.database); err != nil {
+		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+		// We intentionally do not return err here.
+	}
+
+	// Run in non-interactive mode based on flags and configuration.
+	// This includes either handling `-c` and/or `-f` flags, or handling a
+	// `--kafka-config` flag.
+	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
 		// Run Commands.
 		for _, line := range cmd.Commands {
 			if err := cmd.handleLine(line); err != nil {
@@ -180,32 +192,21 @@ func (cmd *Command) run(ctx context.Context) error {
 		}
 
 		return nil
-	} else if cmd.kafkaRunner != nil {
-		if err := cmd.setupClient(); err != nil {
-			return errors.Wrap(err, "setting up client")
+	} else if cmd.Config.KafkaConfig != "" {
+		runner, err := cmd.newKafkaRunner(cmd.Config.KafkaConfig)
+		if err != nil {
+			return errors.Wrap(err, "getting new kafka runner")
 		}
-		if err := cmd.connectToDatabase(cmd.database); err != nil {
-			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
-			// We intentionally do not return err here.
-		}
-
-		if err := cmd.kafkaRunner.Main.Run(); err != nil {
+		if err := runner.Main.Run(); err != nil {
 			return errors.Wrap(err, "running kafka")
 		}
 		return nil
 	}
 
-	// Print the splash message.
-	cmd.Printf(splash)
+	// From this point on, we should be in interactive mode.
+
+	// Set up history for saving user input.
 	cmd.setupHistory()
-	if err := cmd.setupClient(); err != nil {
-		return errors.Wrap(err, "setting up client")
-	}
-	cmd.printConnInfo()
-	if err := cmd.connectToDatabase(cmd.database); err != nil {
-		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
-		// We intentionally do not return err here.
-	}
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:                 promptBegin,
@@ -356,43 +357,6 @@ func (cmd *Command) setupConfig() error {
 
 	cmd.historyPath = cmd.Config.HistoryPath
 
-	// Kafka setup.
-	if cmd.Config.KafkaConfig != "" {
-		// read the kafka config file
-		v := viper.New()
-		v.SetConfigFile(cmd.Config.KafkaConfig)
-		v.SetConfigType("toml")
-		err := v.ReadInConfig()
-		if err != nil {
-			return fmt.Errorf("error reading configuration file '%s': %v", cmd.Config.KafkaConfig, err)
-		}
-
-		cfg := kafka.Config{}
-		if err := v.Unmarshal(&cfg); err != nil {
-			return errors.Wrap(err, "unmarshalling config")
-		}
-
-		if err := kafka.ValidateConfig(cfg); err != nil {
-			return errors.Wrap(err, "validating config")
-		}
-
-		cleanCfg, err := kafka.ConvertConfig(cfg)
-		if err != nil {
-			return errors.Wrap(err, "cleaning config")
-		}
-
-		flds, err := kafka.ConfigToFields(cfg)
-		if err != nil {
-			return errors.Wrap(err, "getting fields from config")
-		}
-
-		cmd.kafkaRunner = kafka.NewRunner(
-			cleanCfg,
-			batch.NewSQLBatcher(cmd, flds),
-			cmd.Stderr,
-		)
-	}
-
 	return nil
 }
 
@@ -503,16 +467,12 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 	}
 
 	// Look up dbID based on dbName.
-	qry := []queryPart{
-		newPartRaw("SHOW DATABASES"),
-	}
-
-	qr, err := cmd.executeQuery(qry)
+	wqr, err := cmd.executeQuery(newRawQuery("SHOW DATABASES"))
 	if err != nil {
 		return errors.Wrap(err, "executing query")
 	}
 
-	for _, db := range qr.Data {
+	for _, db := range wqr.Data {
 		// 0: _id
 		// 1: name
 		if db[1] == dbName {
