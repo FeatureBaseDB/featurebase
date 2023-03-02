@@ -4,9 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"time"
-
 	"io"
+	"time"
 
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -344,7 +343,6 @@ func WriteRow(row types.Row, schema types.Schema) ([]byte, error) {
 }
 
 func ReadRow(reader io.Reader, schema types.Schema) (types.Row, error) {
-
 	row := make(types.Row, len(schema))
 
 	for idx, s := range schema {
@@ -427,7 +425,7 @@ func ReadRow(reader io.Reader, schema types.Schema) (types.Row, error) {
 				row[idx] = nil
 			} else {
 				set := make([]int64, len)
-				for j, _ := range set {
+				for j := range set {
 					var value int64
 					err := binary.Read(reader, binary.BigEndian, &value)
 					if err != nil {
@@ -465,7 +463,7 @@ func ReadRow(reader io.Reader, schema types.Schema) (types.Row, error) {
 				row[idx] = nil
 			} else {
 				set := make([]string, len)
-				for j, _ := range set {
+				for j := range set {
 					var vlen int16
 					err = binary.Read(reader, binary.BigEndian, &vlen)
 					if err != nil {

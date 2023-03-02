@@ -1384,7 +1384,6 @@ func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, err er
 // we do not track these requests as user requests
 // TODO(pok) - thus is there anything we need here to align with how we do this for other nodes
 func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Request) {
-
 	writeError := func(err error) {
 		if err != nil {
 			w.Write(wireprotocol.WriteError(err))
@@ -1439,7 +1438,6 @@ func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Reque
 // supports a ?plan=true|false parameter to send back the plan in the
 // query response
 func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
-
 	includePlan := false
 	includePlanValue := r.URL.Query().Get("plan")
 	if len(includePlanValue) > 0 {

@@ -2978,3 +2978,63 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		assert.Equal(t, row[1], row[2])
 	})
 }
+
+func TestPlanner_BulkInsert_FP1916(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
+	node := c.GetNode(0).Server
+	_, _, _, err := sql_test.MustQueryRows(t, node, `create table greg-test (
+		_id STRING,
+		id_col ID,
+		string_col STRING cachetype ranked size 1000,
+		int_col int,
+		decimal_col DECIMAL(2),
+		bool_col BOOL
+		time_col TIMESTAMP,
+		stringset_col STRINGSET,
+		ideset_col IDSET
+	);`)
+	assert.NoError(t, err)
+
+	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO greg-test (
+		_id,
+		id_col,
+		string_col,
+		int_col,
+		decimal_col,
+		bool_col,
+		time_col,
+		stringset_col,
+		ideset_col)
+		map (
+		0 ID,
+		1 STRING,
+		2 INT,
+		3 DECIMAL(2),
+		4 BOOL,
+		5 TIMESTAMP,
+		6 STRINGSET,
+		7 IDSET)
+		transform(
+		@1,
+		@0,
+		@1,
+		@2,
+		@3,
+		@4,
+		@5,
+		@6,
+		@7)
+		FROM x'1,TEST2,8924809397503602651,31.2,1,"2014-07-15T01:18:46Z",stringset1, 1'
+		with
+			BATCHSIZE 10000
+			format 'CSV'
+			input 'STREAM';`)
+	assert.NoError(t, err)
+	results, _, _, err := sql_test.MustQueryRows(t, node, `select int_col from greg-test`)
+	assert.NoError(t, err)
+	got := results[0][0].(int64)
+	expected := int64(8924809397503602651)
+	assert.Equal(t, got, expected)
+}

@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -44,6 +45,24 @@ func (s *WireQueryResponse) UnmarshalJSON(in []byte) error {
 	return s.UnmarshalJSONTyped(in, false)
 }
 
+// decodeDataWithNumber allows access to integers larger than 2^53 which is normally
+// not supported in JSON, this extra parse is inefficient and should be re-examined
+// once all the typing is settled
+func (s *WireQueryResponse) decodeDataWithNumber(in []byte) ([]interface{}, error) {
+	dat := make(map[string]interface{})
+	d := json.NewDecoder(bytes.NewBuffer(in))
+	d.UseNumber()
+	if err := d.Decode(&dat); err != nil {
+		return nil, err
+	}
+	if a, ok := dat["data"].([]interface{}); ok {
+		return a, nil
+	}
+	return nil, noArrayPresent
+}
+
+var noArrayPresent = errors.New("no data in response")
+
 // UnmarshalJSONTyped is a temporary until we send typed values back in sql
 // responses. At that point, we can get rid of the typed=false path. In order to
 // do that, we need sql3 to return typed values, and we need the sql3/test/defs
@@ -55,6 +74,12 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 
 	if err := json.Unmarshal(in, &aux); err != nil {
 		return err
+	}
+	bypass, err := s.decodeDataWithNumber(in)
+	if err != nil {
+		if err != noArrayPresent { // no data is not an error but just allows the compiler
+			return err
+		}
 	}
 
 	*s = WireQueryResponse(aux)
@@ -85,22 +110,38 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 		for j, hdr := range s.Schema.Fields {
 			switch hdr.BaseType {
 			case dax.BaseTypeID, dax.BaseTypeInt:
-				if _, ok := s.Data[i][j].(float64); ok {
-					s.Data[i][j] = int64(s.Data[i][j].(float64))
+				jn := bypass[i].([]interface{})[j] // forced to do this to handle ints bigger than 2^53
+				if v, ok := jn.(json.Number); ok {
+					if x, err := v.Int64(); err == nil {
+						s.Data[i][j] = x
+					} else {
+						return errors.Wrap(err, "can't be decoded as int64")
+					}
 				}
 
 			case dax.BaseTypeIDSet:
-				if src, ok := s.Data[i][j].([]interface{}); ok {
+				if _, ok := s.Data[i][j].([]interface{}); ok {
+					src := bypass[i].([]interface{})[j].([]interface{})
 					if typed {
 						val := make(IDSet, len(src))
 						for k := range src {
-							val[k] = int64(src[k].(float64))
+							v := src[k].(json.Number)
+							if x, err := v.Int64(); err == nil {
+								val[k] = x
+							} else {
+								return errors.Wrap(err, "can't be decoded as int64")
+							}
 						}
 						s.Data[i][j] = val
 					} else {
 						val := make([]int64, len(src))
 						for k := range src {
-							val[k] = int64(src[k].(float64))
+							v := src[k].(json.Number)
+							if x, err := v.Int64(); err == nil {
+								val[k] = x
+							} else {
+								return errors.Wrap(err, "can't be decoded as int64")
+							}
 						}
 						s.Data[i][j] = val
 					}
