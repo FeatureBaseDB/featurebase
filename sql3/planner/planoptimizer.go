@@ -1355,7 +1355,7 @@ func fixFieldRefIndexesForHaving(ctx context.Context, scope *OptimizerScope, a *
 	return TransformExpr(exp, func(e types.PlanExpression) (types.PlanExpression, bool, error) {
 		switch typedExpr := e.(type) {
 		case *sumPlanExpression, *countPlanExpression, *countDistinctPlanExpression,
-			*avgPlanExpression, *minPlanExpression, *maxPlanExpression,
+			*avgPlanExpression, *minPlanExpression, *maxPlanExpression, *countStarPlanExpression,
 			*percentilePlanExpression:
 			for i, col := range schema {
 				if strings.EqualFold(typedExpr.String(), col.ColumnName) {
