@@ -39,6 +39,7 @@ func (*CreateDatabaseStatement) node()  {}
 func (*CreateIndexStatement) node()     {}
 func (*CreateTableStatement) node()     {}
 func (*CreateFunctionStatement) node()  {}
+func (*CreateUserStatement) node()      {}
 func (*CreateViewStatement) node()      {}
 func (*DateLit) node()                  {}
 func (*DefaultConstraint) node()        {}
@@ -120,6 +121,7 @@ func (*CreateDatabaseStatement) stmt()  {}
 func (*CreateIndexStatement) stmt()     {}
 func (*CreateTableStatement) stmt()     {}
 func (*CreateFunctionStatement) stmt()  {}
+func (*CreateUserStatement) stmt()      {}
 func (*CreateViewStatement) stmt()      {}
 func (*DeleteStatement) stmt()          {}
 func (*DropDatabaseStatement) stmt()    {}
@@ -161,6 +163,8 @@ func CloneStatement(stmt Statement) Statement {
 	case *CreateTableStatement:
 		return stmt.Clone()
 	case *CreateFunctionStatement:
+		return stmt.Clone()
+	case *CreateUserStatement:
 		return stmt.Clone()
 	case *CreateViewStatement:
 		return stmt.Clone()
@@ -2731,6 +2735,29 @@ func (s *DropTableStatement) String() string {
 	if s.IfExists.IsValid() {
 		buf.WriteString(" IF EXISTS")
 	}
+	fmt.Fprintf(&buf, " %s", s.Name.String())
+	return buf.String()
+}
+
+type CreateUserStatement struct {
+	Create Pos
+	User   Pos
+	Name   *Ident
+}
+
+func (s *CreateUserStatement) Clone() *CreateUserStatement {
+	if s == nil {
+		return nil
+	}
+
+	other := *s
+	other.Name = s.Name.Clone()
+	return &other
+}
+
+func (s *CreateUserStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("CREATE USER")
 	fmt.Fprintf(&buf, " %s", s.Name.String())
 	return buf.String()
 }

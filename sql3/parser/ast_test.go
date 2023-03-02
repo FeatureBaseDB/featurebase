@@ -427,6 +427,11 @@ func TestCreateFunctionStatement_String(t *testing.T) {
 	}, `CREATE FUNCTION IF NOT EXISTS func (@param1 int) RETURNS @scalar int AS BEGIN END`)
 }
 
+func TestCreateUserStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.CreateUserStatement{
+		Name: &parser.Ident{Name: "tuser"},
+	}, `CREATE USER tuser`)
+}
 func TestCreateViewStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateViewStatement{
 		Name: &parser.Ident{Name: "vw"},

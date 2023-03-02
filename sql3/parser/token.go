@@ -240,6 +240,7 @@ const (
 	UNIQUE
 	UNITS
 	UPDATE
+	USER
 	USING
 	VACUUM
 	VALUES
@@ -466,6 +467,7 @@ var tokens = [...]string{
 	UNIQUE:            "UNIQUE",
 	UNITS:             "UNITS",
 	UPDATE:            "UPDATE",
+	USER:              "USER",
 	USING:             "USING",
 	VACUUM:            "VACUUM",
 	VALUES:            "VALUES",
