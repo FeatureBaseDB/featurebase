@@ -57,6 +57,10 @@ func TestDeleteConsumerCompoundStringKey(t *testing.T) {
 	m.PrimaryKeyFields = []string{"abc", "db", "user_id"}
 	m.Topics = []string{topic}
 	m.PackBools = "bools"
+	//m.KafkaBootstrapServers = []string{"localhost:9092"}
+	//m.PilosaHosts = []string{"localhost:10101"}
+	//m.PilosaGRPCHosts = []string{"localhost:20101"}
+	//m.SchemaRegistryURL = "localhost:8081"
 
 	defer func() {
 		// TODO: for some reason (which I didn't dig into),
@@ -196,6 +200,10 @@ func TestDeleteConsumer(t *testing.T) {
 	m.Index = fmt.Sprintf("cmd_del_index239ij%s", topic)
 	m.IDField = "pk"
 	m.Topics = []string{topic}
+	//m.KafkaBootstrapServers = []string{"localhost:9092"}
+	//m.PilosaHosts = []string{"localhost:10101"}
+	//m.PilosaGRPCHosts = []string{"localhost:20101"}
+	//m.SchemaRegistryURL = "localhost:8081"
 	defer func() {
 		client := m.PilosaClient()
 		if client == nil {

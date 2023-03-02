@@ -84,7 +84,7 @@ func TestAvroToPDKSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading directory: %v", err)
 	}
-	if len(files) != len(tests)+4 { // +4 because we aren't testing bigschema.json, the two delete ones, or the ID allocation one here.
+	if len(files) != len(tests)+9 { // +9 because we aren't testing bigschema.json, the five delete ones, alltypes. timeQuantums or the ID allocation one here.
 		t.Errorf("have different number of schemas and tests: %d and %d\n%+v", len(files), len(tests), files)
 	}
 
