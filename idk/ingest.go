@@ -1274,7 +1274,6 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 
 				switch field.Options().Type() {
 				case pilosaclient.FieldTypeDefault, pilosaclient.FieldTypeSet:
-					bq := index.BatchQuery()
 					if field.Options().Keys() {
 						valStrs, ok := val.([]string)
 						if !ok {
