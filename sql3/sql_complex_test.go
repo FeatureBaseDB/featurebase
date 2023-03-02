@@ -2982,6 +2982,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 func TestPlanner_BulkInsert_FP1916(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
 	node := c.GetNode(0).Server
 	_, _, _, err := sql_test.MustQueryRows(t, node, `create table greg-test (
 		_id STRING,

@@ -58,8 +58,10 @@ func (s *WireQueryResponse) decodeDataWithNumber(in []byte) ([]interface{}, erro
 	if a, ok := dat["data"].([]interface{}); ok {
 		return a, nil
 	}
-	return nil, errors.New("no data in response")
+	return nil, noArrayPresent
 }
+
+var noArrayPresent = errors.New("no data in response")
 
 // UnmarshalJSONTyped is a temporary until we send typed values back in sql
 // responses. At that point, we can get rid of the typed=false path. In order to
@@ -73,7 +75,12 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 	if err := json.Unmarshal(in, &aux); err != nil {
 		return err
 	}
-	bypass, _ := s.decodeDataWithNumber(in)
+	bypass, err := s.decodeDataWithNumber(in)
+	if err != nil {
+		if err != noArrayPresent { // no data is not an error but just allows the compiler
+			return err
+		}
+	}
 
 	*s = WireQueryResponse(aux)
 
@@ -108,7 +115,7 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 					if x, err := v.Int64(); err == nil {
 						s.Data[i][j] = x
 					} else {
-						return errors.Wrap(err, " can't be decoded as int64")
+						return errors.Wrap(err, "can't be decoded as int64")
 					}
 				}
 
@@ -122,7 +129,7 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 							if x, err := v.Int64(); err == nil {
 								val[k] = x
 							} else {
-								return errors.Wrap(err, " can't be decoded as int64")
+								return errors.Wrap(err, "can't be decoded as int64")
 							}
 						}
 						s.Data[i][j] = val
@@ -133,7 +140,7 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 							if x, err := v.Int64(); err == nil {
 								val[k] = x
 							} else {
-								return errors.Wrap(err, " can't be decoded as int64")
+								return errors.Wrap(err, "can't be decoded as int64")
 							}
 						}
 						s.Data[i][j] = val
