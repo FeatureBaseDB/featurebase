@@ -112,6 +112,10 @@ func serverFlagSet(srv *server.Config, prefix string) *pflag.FlagSet {
 	// RBF specific flags. See pilosa/rbf/cfg/cfg.go for definitions.
 	srv.RBFConfig.DefineFlags(flags, prefix)
 
+	pfalse := false
+	flags.BoolVar(&pfalse, pre("sql.endpoint-enabled"), false, "Enable FeatureBase SQL /sql endpoint (default false)")
+	flags.MarkDeprecated("sql.endpoint-enabled", "sql.endpoint-enabled is deprecated")
+
 	flags.DurationVar(&srv.CheckInInterval, pre("check-in-interval"), srv.CheckInInterval, "Interval between check-ins to the Controller")
 
 	// Future flags.
