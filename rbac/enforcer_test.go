@@ -24,7 +24,7 @@ func TestCreateABACPolicyEnforcer(t *testing.T) {
 		t.Errorf("Result was not false!")
 	}
 
-	result, err = enf.S.Decision(enf.CTX, sdk.DecisionOptions{Path: "/featurebase/authz/allow", Input: map[string]interface{}{"method": "SELECT", "path": "index_a", "user": "fletcher"}})
+	result, err = enf.S.Decision(enf.CTX, sdk.DecisionOptions{Path: "/featurebase/authz/allow", Input: map[string]interface{}{"method": "SELECT", "index": "index_a", "user": "fletcher"}})
 
 	if err != nil {
 		t.Errorf("Error testing OPA decision: %s", err)
