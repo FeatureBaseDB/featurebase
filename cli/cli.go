@@ -15,7 +15,6 @@ import (
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/cli/batch"
 	"github.com/featurebasedb/featurebase/v3/cli/fbcloud"
-	"github.com/featurebasedb/featurebase/v3/cli/kafka"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
@@ -87,10 +86,6 @@ type Command struct {
 	// non-ineracative mode. And example of this is when the user has provided a
 	// `-c` flag in the command line.
 	nonInteractiveMode bool
-
-	// kafkaRunner will be non-nil if the CLI has been configured to consume
-	// from kafka. In that case, Command will run in non-interactive mode.
-	kafkaRunner *kafka.Runner
 
 	// quit gets closed when Run should stop listening for input.
 	quit chan struct{}
