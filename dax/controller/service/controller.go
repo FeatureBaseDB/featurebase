@@ -24,12 +24,6 @@ type controllerService struct {
 	uri        *fbnet.URI
 	controller *controller.Controller
 
-	// Because we stopped using a storage method interface, and always use bolt,
-	// we need to be sure to close the boltDBs that are created in controller.New()
-	// whenever controller.Stop() is called. These are pointers to that DB so we can
-	// close it.
-	boltDB *boltdb.DB
-
 	logger logger.Logger
 }
 
@@ -76,17 +70,28 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 		controller.DirectiveVersion = directiveVersion
 
 		controller.Transactor = controllerDB
-
-		controllerSvc.boltDB = controllerDB
-
-		// transactor = new transactor
 	case "sqldb":
 		controller.Schemar = sqldb.NewSchemar(logr)
 		controller.Balancer = sqldb.NewBalancer(logr)
 		controller.DirectiveVersion = sqldb.NewDirectiveVersion(logr)
-		conn, err := pop.Connect("development")
+
+		if cfg.StorageConfigFile != "" {
+			f, err := os.Open(cfg.StorageConfigFile)
+			if err != nil {
+				logr.Printf("opening storage config file '%s': %v", cfg.StorageConfigFile, err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			err = pop.LoadFrom(f)
+			if err != nil {
+				logr.Printf("loading sqldb config from file '%s': %v", cfg.StorageConfigFile, err)
+				os.Exit(1)
+			}
+		}
+
+		conn, err := pop.Connect(cfg.StorageEnv)
 		if err != nil {
-			logr.Printf("Connecting to development database: %v", err)
+			logr.Printf("Connecting to database: %v", err)
 			os.Exit(1)
 		}
 		controller.Transactor = sqldb.Transactor{Connection: conn}
@@ -114,10 +119,6 @@ func (m *controllerService) Stop() error {
 	err := m.controller.Stop()
 	if err != nil {
 		m.logger.Warnf("error stopping controller: %v", err)
-	}
-
-	if m.boltDB != nil {
-		m.boltDB.Close()
 	}
 
 	return err

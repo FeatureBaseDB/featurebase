@@ -19,25 +19,31 @@ import (
 // node at a time) multiple directives being sent out serially as each node
 // joins, and instead tries to handle all new nodes simultaneously.
 func (c *Controller) nodeRegistrationRoutine(nodes chan *dax.Node, timeout time.Duration) error {
+	defer c.logger.Printf("Node registration routine complete")
 	if timeout > 0 {
+		c.logger.Printf("Node registration delayed timeout: %v", timeout)
 		return c.nodeRegistrationDelayed(nodes, timeout)
 	}
+	c.logger.Printf("Node registration instant")
 	return c.nodeRegistrationInstant(nodes)
 }
 
 func (c *Controller) nodeRegistrationInstant(nodes chan *dax.Node) error {
-	for node := range nodes {
-		err := c.RegisterNodes(context.Background(), node)
-		if err != nil {
-			c.logger.Errorf("Registering node: %v, encountered error: %v", node, err)
+	for {
+		select {
+		case <-c.stopping:
+			return nil
+		case node := <-nodes:
+			err := c.RegisterNodes(context.Background(), node)
+			if err != nil {
+				c.logger.Errorf("Registering node: %v, encountered error: %v", node, err)
+			}
 		}
 	}
-	return nil
 }
 
 func (c *Controller) nodeRegistrationDelayed(nodes chan *dax.Node, timeout time.Duration) error {
 	batch := []*dax.Node{}
-	c.logger.Printf("Running with batch registration timeout: %v", timeout)
 	for {
 		select {
 		case <-c.stopping:
@@ -51,7 +57,7 @@ func (c *Controller) nodeRegistrationDelayed(nodes chan *dax.Node, timeout time.
 				if err != nil {
 					c.logger.Errorf("Registering nodes: %v, encountered error: %v", batch, err)
 				}
-
+				c.logger.Printf("Completed registering nodes")
 				batch = batch[:0] // reset batch
 			}
 		}

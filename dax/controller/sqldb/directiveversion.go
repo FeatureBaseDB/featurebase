@@ -1,10 +1,9 @@
 package sqldb
 
 import (
-	"fmt"
-
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
@@ -30,7 +29,7 @@ func (d *directiveVersion) Increment(tx dax.Transaction, delta uint64) (uint64, 
 	dv := &models.DirectiveVersion{}
 	err := dt.C.RawQuery("UPDATE directive_versions SET version = version + ? WHERE id = ? RETURNING id, version", delta, 1).First(dv)
 	if err != nil {
-		fmt.Println(err)
+		return 0, errors.Wrap(err, "updating directive_version")
 	}
 	return uint64(dv.Version), nil
 }

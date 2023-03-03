@@ -8,9 +8,9 @@ import (
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
-func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan struct{}, log logger.Logger) {
+func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan struct{}, log logger.Logger) error {
 	if period == 0 {
-		return // disable automatic snapshotting
+		return nil
 	}
 	ticker := time.NewTicker(period)
 	for {
@@ -18,7 +18,7 @@ func (c *Controller) snappingTurtleRoutine(period time.Duration, control chan st
 		case <-c.stopping:
 			ticker.Stop()
 			log.Debugf("Stopping Snapping Turtle")
-			return
+			return nil
 		case <-ticker.C:
 			c.snapAll(log)
 		case <-control:

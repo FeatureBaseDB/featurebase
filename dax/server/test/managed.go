@@ -20,6 +20,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	fbtest "github.com/featurebasedb/featurebase/v3/test"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,6 +29,7 @@ type ManagedCommand struct {
 	*server.Command
 
 	svcmgr *dax.ServiceManager
+	conn   *pop.Connection
 
 	started bool
 }
@@ -201,6 +203,8 @@ func DefaultConfig() *server.Config {
 	cfg := server.NewConfig()
 	cfg.Verbose = true
 	cfg.Controller.Run = true
+	cfg.Controller.Config.StorageMethod = "sqldb"
+	cfg.Controller.Config.StorageEnv = "test"
 	cfg.Controller.Config.RegistrationBatchTimeout = 0
 	cfg.Queryer.Run = true
 	cfg.Computer.Run = true
@@ -225,6 +229,25 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 	}
 
 	mc := NewManagedCommand(tb, opts...)
+
+	var err error
+	mc.conn, err = pop.Connect("test")
+	if err != nil {
+		tb.Fatalf("couldn't connect: %v", err)
+	}
+	err = mc.conn.TruncateAll()
+	if err != nil {
+		tb.Fatalf("truncating DB: %v", err)
+	}
+	err = mc.conn.RawQuery("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00')").Exec()
+	if err != nil {
+		tb.Fatalf("reinserting directive_version record after truncation: %v", err)
+	}
+
+	err = mc.conn.Close()
+	if err != nil {
+		tb.Fatalf("Closing conn after truncating all tables: %v", err)
+	}
 
 	if err := mc.Start(); err != nil {
 		tb.Fatalf("starting managed command: %v", err)

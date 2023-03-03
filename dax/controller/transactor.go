@@ -8,4 +8,5 @@ import (
 
 type Transactor interface {
 	BeginTx(ctx context.Context, writable bool) (dax.Transaction, error)
+	Close() error
 }

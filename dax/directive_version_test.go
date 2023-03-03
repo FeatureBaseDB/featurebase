@@ -27,7 +27,7 @@ func TestDirectiveVersion(t *testing.T) {
 		}
 	}()
 
-	dvSvc := &sqldb.DirectiveVersion{}
+	dvSvc := sqldb.NewDirectiveVersion(nil)
 
 	n, err := dvSvc.Increment(tx, 1)
 	assert.NoError(t, err)

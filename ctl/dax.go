@@ -19,6 +19,8 @@ func BuildDAXFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.DurationVar(&srv.Config.Controller.Config.RegistrationBatchTimeout, "controller.config.registration-batch-timeout", srv.Config.Controller.Config.RegistrationBatchTimeout, "Timeout for node registration batches.")
 	flags.StringVar(&srv.Config.Controller.Config.DataDir, "controller.config.data-dir", srv.Config.Controller.Config.DataDir, "Controller directory to use in process.")
 	flags.StringVar(&srv.Config.Controller.Config.StorageMethod, "controller.config.storage-method", srv.Config.Controller.Config.StorageMethod, "Backing store. boltdb or sqldb.")
+	flags.StringVar(&srv.Config.Controller.Config.StorageEnv, "controller.config.storage-env", srv.Config.Controller.Config.StorageEnv, "One of the connections defined in database.yml for sqldb storage method.")
+	flags.StringVar(&srv.Config.Controller.Config.StorageConfigFile, "controller.config.storage-config-file", srv.Config.Controller.Config.StorageConfigFile, "database.yml file for sqldb storage method.")
 	flags.DurationVar(&srv.Config.Controller.Config.SnappingTurtleTimeout, "controller.config.snapping-turtle-timeout", srv.Config.Controller.Config.SnappingTurtleTimeout, "Period for running automatic snapshotting routine.")
 
 	// Queryer

@@ -265,7 +265,6 @@ func (q *Queryer) parseAndQueryPQL(ctx context.Context, qdbid dax.QualifiedDatab
 	}
 	table := sql[1:i]
 	query := sql[i+1:]
-	fmt.Println("got table/query", table, query)
 
 	return q.queryPQL(ctx, qdbid, dax.TableName(table), query)
 }

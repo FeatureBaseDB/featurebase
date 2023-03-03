@@ -24,6 +24,10 @@ func (t Transactor) BeginTx(ctx context.Context, writable bool) (dax.Transaction
 	return &DaxTransaction{C: cn}, nil
 }
 
+func (t Transactor) Close() error {
+	return t.Connection.Close()
+}
+
 // sqldb.DaxTransaction is a thin wrapper to create a dax.Transaction
 // from a pop Transaction/Connection.
 type DaxTransaction struct {

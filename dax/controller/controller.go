@@ -47,6 +47,8 @@ type Controller struct {
 	snapControl              chan struct{}
 	stopping                 chan struct{}
 
+	backgroundGroup errgroup.Group
+
 	logger logger.Logger
 }
 
@@ -102,8 +104,13 @@ func New(cfg Config) *Controller {
 func (c *Controller) Start() error {
 	c.poller.Run()
 
-	go c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
-	go c.snappingTurtleRoutine(c.snappingTurtleTimeout, c.snapControl, c.logger.WithPrefix("Snapping Turtle: "))
+	c.backgroundGroup.Go(func() error {
+		return c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
+
+	})
+	c.backgroundGroup.Go(func() error {
+		return c.snappingTurtleRoutine(c.snappingTurtleTimeout, c.snapControl, c.logger.WithPrefix("Snapping Turtle: "))
+	})
 
 	return nil
 }
@@ -112,9 +119,16 @@ func (c *Controller) Start() error {
 func (c *Controller) Stop() error {
 	c.poller.Stop()
 
+	err := c.Transactor.Close()
+
 	close(c.stopping)
 
-	return nil
+	err2 := c.backgroundGroup.Wait()
+	if err != nil {
+		return errors.Wrap(err, "closing transactor")
+	}
+
+	return errors.Wrap(err2, "waiting for background goroutines")
 }
 
 // RegisterNodes adds nodes to the controller's list of registered
