@@ -53,10 +53,6 @@ const (
 	ErrCommittingIDs = "committing IDs for batch"
 )
 
-var (
-	ErrNoDirective = fmt.Errorf("no delete directive in this record")
-)
-
 // TODO Jaeger
 
 // Main holds all config for general ingest
@@ -269,7 +265,7 @@ func (m *Main) run() error {
 	l := &msgCounter{MaxMsgs: m.MaxMsgs}
 
 	if m.Delete {
-		err := m.runDeleter1(0, l)
+		err := m.runDeleter(l)
 		if err != nil {
 			return err
 		}
@@ -806,7 +802,7 @@ func (m *Main) Setup() (onFinishRun func(), err error) {
 		}
 		m.grpcClient = grpcClient
 		if m.Concurrency > 1 {
-			return nil, errors.New("unable to set concurrency greater than 1 will the delete consumer")
+			return nil, errors.New("delete consumers do not support concurrency > 1")
 		}
 	}
 
@@ -1097,15 +1093,16 @@ func (h metricsJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type deleteOpperation struct {
-}
-
-func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
+// runDeleter pulls records from the source associated with a consumer
+// and deletes data from featurebase based on the format of that record
+// it is currently mainly used with and tested on the kafka / avro consumer
+// built on IDK
+func (m *Main) runDeleter(limitCounter *msgCounter) error {
 	m, err := m.clone()
 	if err != nil {
 		return errors.Wrap(err, "cloning *Main before delete")
 	}
-	m.log.Printf("start deleter %d", c)
+	m.log.Printf("starting the delete consumer...")
 	source, err := m.NewSource()
 	if err != nil {
 		return errors.Wrap(err, "getting source")
@@ -1134,6 +1131,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 	client := m.PilosaClient()
 	index := m.index
 
+	// Pull records one by one from kafka
 	for ; !limitCounter.IsDone(); rec, err = source.Record() {
 		if err == ErrFlush {
 			continue
@@ -1148,7 +1146,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 		switch recSchema.(type) {
 		case avro.Schema:
 			// record was encoded using avro
-			// in runDeleter, that record should have a delete property now
+			// in runDeleter, that avro.RecordSchema should have a delete property
 			// if it doesn't, it defaults to "fields" which runs older logic
 			// (i.e. this new code won't break old integrations)
 			deleteProp, ok := recSchema.(avro.Schema).Prop("delete")
@@ -1165,7 +1163,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 
 		if !avroRecord || deleteType == "fields" {
 			// records without avro schemas or records with avro schemas
-			// with deletes property of "fields" use historical logic
+			// with deletes property of "fields" uses historical logic
 			m.log.Debugf("deleter record: %v\n", rec)
 			if err != nil {
 				if err == ErrSchemaChange {
@@ -1339,45 +1337,43 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 				return errors.Wrap(err, "finishing transaction")
 			}
 		} else {
-			// here we have an record encoded by avro it's delete type is "values", "records",
-			// or some unacceptable input
+			// here we have an record encoded by avro and it's delete type is
+			// "values", "records", or some unacceptable input
 			_, ok := recSchema.(*avro.RecordSchema)
 			if !ok {
 				return errors.Errorf("got data of type %T but wanted avro.RecordSchema", recSchema)
 			}
+
+			// map values to fields or _id
+			avroFields := recSchema.(*avro.RecordSchema).Fields
+			var recordID interface{}
+			fieldValues := make(map[string]interface{})
+			for i, value := range rec.Data() {
+				name := avroFields[i].Name
+				if name == "_id" {
+					recordID = value
+				} else {
+					fieldValues[name] = value
+				}
+			}
 			switch deleteType {
 			case "values":
-
-				avroFields := recSchema.(*avro.RecordSchema).Fields
-
-				var recordID interface{}
-				//TODO is this always going to be correct?
-				fieldValues := make(map[string]interface{})
-				for i, value := range rec.Data() {
-					name := avroFields[i].Name
-					if name == "_id" {
-						recordID = value
-					} else {
-						fieldValues[name] = value
-					}
-
-				}
-
+				// find featurebase field based on avro / record field name
 				indexFields := index.Fields()
-
 				for key, value := range fieldValues {
 					field, ok := indexFields[key]
 					if !ok {
-						return errors.Errorf("unable to find field %s", key)
+						return errors.Errorf("unable to find field %s in index %s", key, index.Name())
 					}
 					if value == nil {
-						// don't delete anything for htis field
+						// don't delete anything for this field if value is null
 						continue
 					}
 					switch fType := field.Options().Type(); fType {
 					case pilosaclient.FieldTypeSet, pilosaclient.FieldTypeMutex:
 						if key == m.PackBools {
-							// value should be list of bools to clear
+							// value should be list of bools to clear if avro field name
+							// is equal the name of the packed bools field
 							if arrayValue, err := toStringArray(value); err == nil {
 								boolsField := index.Field(m.PackBools)
 								boolsExists := index.Field(m.PackBools + Exists)
@@ -1390,7 +1386,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 								return errors.Errorf("packed bools field %s should be a list of boolean values to delete", field.Name())
 							}
 						} else {
-							// check for string or ID keys
+							// not packed bools, check for string vs ID field keys
 							switch keys := field.Options().Keys(); keys {
 							case true:
 								if singleValue, err := toString(value); err == nil {
@@ -1422,7 +1418,7 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 								bq.Add(field.Clear(0, recordID))
 							}
 						} else {
-							return errors.Errorf("%s fields should be boolean with false if they shouldn't be deleted, true otherwise - got type %T", fType, value)
+							return errors.Errorf("%s fields should have a boolean value set to rue if value is to be deleted, false otherwise", fType)
 						}
 					case pilosaclient.FieldTypeBool:
 						if boolVal, ok := value.(bool); ok {
@@ -1431,10 +1427,10 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 								bq.Add(field.Clear(1, recordID))
 							}
 						} else {
-							return errors.Errorf("BSI fields should be false if they shouldn't be deleted, true otherwise")
+							return errors.Errorf("%s fields should have a boolean value set to rue if value is to be deleted, false otherwise", fType)
 						}
 					default:
-						// pilosa.FieldTypeTime
+						// pilosa.FieldTypeTime is the only other field type at time of coding
 						return errors.Errorf("unable to handle values from fields with type: %s", fType)
 					}
 				}
@@ -1443,29 +1439,50 @@ func (m *Main) runDeleter1(c int, limitCounter *msgCounter) error {
 					return errors.Wrap(err, "error deleting values")
 				}
 			case "records":
-				m.log.Infof("deleting a record")
-				if rec.Data()[0] != nil {
-					keysAsInterfaces := rec.Data()[0].([]interface{})
-					keysAsStrings := make([]string, len(keysAsInterfaces))
-					for i, v := range keysAsInterfaces {
+				// deleting a record
+				var rawQueries []string
+				if fieldValues["keys"] != nil {
+					// if keys set, delete list of record keys
+					keysAsStrings, err := toStringArray(fieldValues["keys"])
+					if err != nil {
+						return errors.Errorf("unable to convert 'keys' value to an array of strings")
+					}
+					columnKeys := "'" + strings.Join(keysAsStrings, "','") + "'"
+					rawQueries = append(rawQueries, fmt.Sprintf("Delete(ConstRow(columns=[%s]))", columnKeys))
+
+				}
+				if fieldValues["ids"] != nil {
+					// if ids set, delete list of record IDs
+					idsAsInts, err := toUint64Array(fieldValues["ids"])
+					if err != nil {
+						return errors.Errorf("unable to convert 'ids' value to an array of int64s")
+					}
+					keysAsStrings := make([]string, len(idsAsInts))
+					for i, v := range idsAsInts {
 						keysAsStrings[i] = fmt.Sprint(v)
 					}
-
-					columnKeys := "'" + strings.Join(keysAsStrings, "','") + "'"
-					resp := index.RawQuery(fmt.Sprintf("Delete(ConstRow(columns=[%s]))", columnKeys))
-					_, err := client.Query(resp, nil)
-					if err != nil {
-						return fmt.Errorf("issue running delete query")
+					columnKeys := strings.Join(keysAsStrings, ",")
+					rawQueries = append(rawQueries, fmt.Sprintf("Delete(ConstRow(columns=[%s]))", columnKeys))
+				}
+				if fieldValues["filter"] != nil {
+					// if filter set, use it as filter in delete query
+					filter, ok := fieldValues["filter"].(string)
+					if !ok {
+						return errors.Errorf("unable to convert fitler into string")
 					}
+					rawQueries = append(rawQueries, fmt.Sprintf("Delete(%s)", filter))
+				}
+				if len(rawQueries) == 0 {
+					m.log.Infof("delete record doesn't contain any delete queries: confirm 'keys', 'ids', or 'filter' key has a value")
+				}
+				for _, query := range rawQueries {
+					baseQuery := index.RawQuery(query)
+					bq.Add(baseQuery)
+				}
 
-				} else if rec.Data()[1] != nil {
-					resp := index.RawQuery(fmt.Sprintf("Delete(%s)", rec.Data()[1].(string)))
-					_, err := client.Query(resp, nil)
-					if err != nil {
-						return fmt.Errorf("issue running delete query")
-					}
-				} else {
-					return fmt.Errorf("you must supply a list of records or query to delete")
+				_, err := client.Query(bq, nil)
+				if err != nil {
+					return errors.Errorf("running delete query: %s", err)
 				}
 			default:
 				return errors.Errorf("unable to process delete where record is avro encoded & the delete property is not empty, 'records', 'fields', or 'values'")
