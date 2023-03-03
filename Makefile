@@ -24,6 +24,9 @@ BUILD_TAGS +=
 TEST_TAGS = roaringparanoia
 TEST_TIMEOUT=10m
 RACE_TEST_TIMEOUT=10m
+# size in GB to use for ramdisk, ?= so you can override it with env
+# 4GB is not enough for `make test`, 8GB usually is.
+RAMDISK_SIZE ?= 8
 
 export GO111MODULE=on
 export GOPRIVATE=github.com/molecula
@@ -51,7 +54,7 @@ GOPACKAGES := $(shell $(GO) list ./... | grep -v "/idk" | grep -v "/batch")
 
 # Run test suite
 test:
-	$(GO) test $(GOPACKAGES) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT)
+	$(GO) test $(GOPACKAGES) -tags='$(BUILD_TAGS) $(TEST_TAGS)' $(TESTFLAGS) -v -timeout $(TEST_TIMEOUT) -count=1
 
 # Run test suite with race flag
 test-race:
@@ -77,13 +80,18 @@ testvsub:
 			echo; echo "999 done testing subpkg $$pkg"; \
 		done
 
-# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/mnt/ramdisk
+# make a $(RAMDISK_SIZE)GB RAMDisk. Speed up tests by running
+# them with TMPDIR=/mnt/ramdisk.
 ramdisk-linux:
-	mount -o size=2G -t tmpfs none /mnt/ramdisk
+	mount -o size=$(RAMDISK__SIZE)G -t tmpfs none /mnt/ramdisk
 
-# make a 2GB RAMDisk. Speed up tests by running them with RAMDISK=/Volumes/RAMDisk
+# make a $(RAMDISK_SIZE)GB RAMDisk. Speed up tests by running
+# them with TMPDIR=/Volumes/RAMDisk. This is more important on
+# OS X than it is on Linux, because there's performance issues
+# with fsync on OS X that can make the SSD slow down to moving-platters
+# drive speeds. Oops.
 ramdisk-osx:
-	diskutil erasevolume HFS+ 'RAMDisk' `hdiutil attach -nobrowse -nomount ram://4194304`
+	diskutil erasevolume HFS+ 'RAMDisk' $$(hdiutil attach -nobrowse -nomount ram://$$(expr 2097152 \* $(RAMDISK_SIZE)))
 
 detach-ramdisk-osx:
 	hdiutil detach /Volumes/RAMDisk
@@ -108,14 +116,18 @@ cover:
 cover-viz: cover
 	$(GO) tool cover -html=build/coverage.out
 
-# Compile Pilosa
+# Build featurebase
 build:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/featurebase
+
+# Build fbsql
+build-fbsql:
 	$(GO) build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/fbsql
 
 
 package:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(MAKE) build
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(MAKE) build-fbsql
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager deb --target featurebase.$(VERSION).$(GOARCH).deb
 	GOARCH=$(GOARCH) VERSION=$(VERSION) nfpm package --packager rpm --target featurebase.$(VERSION).$(GOARCH).rpm
 

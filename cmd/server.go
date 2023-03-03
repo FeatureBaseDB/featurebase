@@ -48,7 +48,6 @@ func newServeCmd(stderr io.Writer) *cobra.Command {
 		Use:   "server",
 		Short: "Run FeatureBase.",
 		Long: `featurebase server runs FeatureBase.
-
 It will load existing data from the configured
 directory and start listening for client connections
 on the configured port.`,

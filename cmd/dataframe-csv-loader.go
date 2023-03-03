@@ -24,6 +24,7 @@ func newDataframeCsvLoaderCommand(logdest logger.Logger) *cobra.Command {
 	flags.StringVar(&cmd.AuthToken, "auth-token", "", "Authentication token")
 	flags.StringVar(&cmd.Index, "index", "", "Destination Index. ")
 	flags.IntVar(&cmd.MaxCapacity, "buffer", 0, "Maximum size of of the line buffer defaults to go bufio default ")
+	flags.IntVar(&cmd.BatchSize, "batch-size", 1048576, "Maximum number of records to send in a single batch ")
 	ctl.SetTLSConfig(
 		flags, "",
 		&cmd.TLS.CertificatePath,

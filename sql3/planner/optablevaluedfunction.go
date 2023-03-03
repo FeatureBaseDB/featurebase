@@ -73,5 +73,8 @@ func (p *PlanOpTableValuedFunction) Warnings() []string {
 	var w []string
 	w = append(w, p.warnings...)
 	return w
+}
 
+func (p *PlanOpTableValuedFunction) Name() string {
+	return ""
 }

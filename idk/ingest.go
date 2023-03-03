@@ -53,6 +53,10 @@ const (
 	ErrCommittingIDs = "committing IDs for batch"
 )
 
+var (
+	ErrNoDirective = fmt.Errorf("no delete directive in this record")
+)
+
 // TODO Jaeger
 
 // Main holds all config for general ingest
@@ -265,7 +269,11 @@ func (m *Main) run() error {
 	l := &msgCounter{MaxMsgs: m.MaxMsgs}
 
 	if m.Delete {
+<<<<<<< HEAD
 		err := m.runDeleter(l)
+=======
+		err := m.runDeleter1(0, l)
+>>>>>>> 37f38476be6e1727a74114cabb40295893b5373d
 		if err != nil {
 			return err
 		}
@@ -802,7 +810,7 @@ func (m *Main) Setup() (onFinishRun func(), err error) {
 		}
 		m.grpcClient = grpcClient
 		if m.Concurrency > 1 {
-			return nil, errors.New("delete consumers do not support concurrency > 1")
+			return nil, errors.New("delete consumers does not support concurrency > 1")
 		}
 	}
 
@@ -1331,6 +1339,10 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 				default:
 					return errors.Errorf("unhandled field type %s", field.Options().Type())
 				}
+				return errors.Errorf("directives should be a string slice but got: %+v of %[1]T", row.Values[len(row.Values)-1])
+			}
+			if len(directives) == 0 {
+				continue
 			}
 			_, err = m.SchemaManager.FinishTransaction(trns.ID)
 			if err != nil {

@@ -41,7 +41,6 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(val*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
-
 		case *parser.DataTypeTimestamp:
 			val, ok := value.(int64)
 			if !ok {
@@ -65,7 +64,6 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
 			return pql.NewDecimal(int64(val)*int64(math.Pow(10, float64(t.Scale))), t.Scale), nil
-
 		case *parser.DataTypeTimestamp:
 			val, ok := value.(int64)
 			if !ok {
@@ -540,7 +538,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 				return nil, sql3.NewErrInternalf("unhandled operator %d", n.op)
 			}
 		}
-		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
+		return nil, sql3.NewErrInternalf("unexpected type conversion error '%T', '%T'", coercedLhs, coercedRhs)
 
 	case *parser.DataTypeTimestamp:
 		//if either side is nil, return nil
@@ -1574,8 +1572,13 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateFormat(currentRow)
 	case "CHARINDEX":
 		return n.EvaluateCharIndex(currentRow)
+	case "TOTIMESTAMP":
+		return n.EvaluateToTimestamp(currentRow)
 	case "STR":
 		return n.EvaluateStr(currentRow)
+		// time quantum functions
+	case "RANGEQ":
+		return n.EvaluateRangeQ(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}
@@ -2061,6 +2064,19 @@ func (n *stringLiteralPlanExpression) Children() []types.PlanExpression {
 
 func (n *stringLiteralPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
 	return n, nil
+}
+
+func (expr *stringLiteralPlanExpression) ConvertToTimestamp() *time.Time {
+	//try to coerce to a date
+	if tm, err := time.ParseInLocation(time.RFC3339Nano, expr.value, time.UTC); err == nil {
+		return &tm
+	} else if tm, err := time.ParseInLocation(time.RFC3339, expr.value, time.UTC); err == nil {
+		return &tm
+	} else if tm, err := time.ParseInLocation("2006-01-02", expr.value, time.UTC); err == nil {
+		return &tm
+	} else {
+		return nil
+	}
 }
 
 // castPlanExpressionis a cast op

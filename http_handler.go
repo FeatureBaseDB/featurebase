@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"mime"
 	"net"
@@ -91,10 +92,6 @@ type Handler struct {
 	auth *authn.Auth
 
 	permissions *authz.GroupPermissions
-
-	// sqlEnabled is serving as a feature flag for turning on/off the /sql
-	// endpoint.
-	sqlEnabled bool
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -223,14 +220,6 @@ func OptHandlerListener(ln net.Listener, url string) handlerOption {
 func OptHandlerCloseTimeout(d time.Duration) handlerOption {
 	return func(h *Handler) error {
 		h.closeTimeout = d
-		return nil
-	}
-}
-
-// OptHandlerSQLEnabled enables the /sql endpoint.
-func OptHandlerSQLEnabled(v bool) handlerOption {
-	return func(h *Handler) error {
-		h.sqlEnabled = v
 		return nil
 	}
 }
@@ -544,10 +533,7 @@ func newRouter(handler *Handler) http.Handler {
 	router.HandleFunc("/transactions", handler.chkAuthZ(handler.handleGetTransactions, authz.Read)).Methods("GET").Name("GetTransactions")
 	router.HandleFunc("/queries", handler.chkAuthZ(handler.handleGetActiveQueries, authz.Admin)).Methods("GET").Name("GetActiveQueries")
 
-	// enable this endpoint based on config
-	if handler.sqlEnabled {
-		router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
-	}
+	router.HandleFunc("/sql", handler.chkAuthZ(handler.handlePostSQL, authz.Admin)).Methods("POST").Name("PostSQL")
 	// internal endpoint
 	router.HandleFunc("/sql-exec-graph", handler.chkAuthZ(handler.handlePostSQLPlanOperator, authz.Admin)).Methods("POST").Name("PostSQLPlanOperator")
 
@@ -1398,7 +1384,6 @@ func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, err er
 // we do not track these requests as user requests
 // TODO(pok) - thus is there anything we need here to align with how we do this for other nodes
 func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Request) {
-
 	writeError := func(err error) {
 		if err != nil {
 			w.Write(wireprotocol.WriteError(err))
@@ -1453,7 +1438,6 @@ func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Reque
 // supports a ?plan=true|false parameter to send back the plan in the
 // query response
 func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
-
 	includePlan := false
 	includePlanValue := r.URL.Query().Get("plan")
 	if len(includePlanValue) > 0 {
@@ -4318,4 +4302,8 @@ func (h *Handler) handlePostDataframe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+}
+
+func (h *Handler) DiscardHTTPServerLogs() {
+	h.server.ErrorLog = log.New(io.Discard, "", 0)
 }

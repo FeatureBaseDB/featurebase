@@ -32,11 +32,9 @@ var (
 	Stderr io.Writer     = os.Stderr
 )
 
-var (
-	splash string = fmt.Sprintf(`FeatureBase CLI (%s)
+var splash string = fmt.Sprintf(`FeatureBase CLI (%s)
 Type "\q" to quit.
 `, featurebase.Version)
-)
 
 // Ensure type implments interfaces.
 var _ printer = (*Command)(nil)
@@ -79,6 +77,9 @@ type Command struct {
 	// i.e. it will quit after the command is complete.
 	Files []string `json:"files"`
 
+	// variables holds the variables created with the \set meta-command.
+	variables map[string]string
+
 	// nonInteractiveMode is set to true when fbsql is running in
 	// non-ineracative mode. And example of this is when the user has provided a
 	// `-c` flag in the command line.
@@ -89,6 +90,8 @@ type Command struct {
 }
 
 func NewCommand(logdest logger.Logger) *Command {
+	variables := make(map[string]string)
+
 	return &Command{
 		Config: &Config{
 			Host: defaultHost,
@@ -107,8 +110,8 @@ func NewCommand(logdest logger.Logger) *Command {
 			HistoryPath: "",
 		},
 
-		splitter:   newSplitter(),
 		buffer:     newBuffer(),
+		splitter:   newSplitter(newReplacer(variables)),
 		workingDir: newWorkingDir(),
 
 		Stdin:  Stdin,
@@ -117,6 +120,8 @@ func NewCommand(logdest logger.Logger) *Command {
 
 		output:       Stdout,
 		writeOptions: defaultWriteOptions(),
+
+		variables: variables,
 
 		quit: make(chan struct{}),
 	}
@@ -290,7 +295,7 @@ func (cmd *Command) Run(ctx context.Context) error {
 			}
 			return nil
 		default:
-			//pass
+			// pass
 		}
 	}
 }
@@ -322,7 +327,6 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 	if err != nil {
 		return errors.Wrap(err, "making query")
 	}
-
 	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}

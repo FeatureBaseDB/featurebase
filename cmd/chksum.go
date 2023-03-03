@@ -3,13 +3,15 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/featurebasedb/featurebase/v3/ctl"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/spf13/cobra"
 )
 
 func newChkSumCommand(logdest logger.Logger) *cobra.Command {
-	cmd := ctl.NewChkSumCommand(logdest)
+	cmd := ctl.NewChkSumCommand(logdest, os.Stdout)
 	ccmd := &cobra.Command{
 		Use:   "chksum",
 		Short: "Digital signature of FeatureBase data",

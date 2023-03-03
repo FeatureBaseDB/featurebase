@@ -244,12 +244,26 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 		}
 		//now populate the aggregate value
 		aggIdx := len(i.groupByColumns)
-		switch i.aggregate.(type) {
+		switch agg := i.aggregate.(type) {
 		case *countPlanExpression, *countStarPlanExpression:
 			row[aggIdx] = int64(group.Count)
 
-		case *countDistinctPlanExpression, *sumPlanExpression:
+		case *countDistinctPlanExpression:
 			row[aggIdx] = int64(group.Agg)
+
+		case *sumPlanExpression:
+			switch ty := agg.Type().(type) {
+			case *parser.DataTypeDecimal:
+				if group.DecimalAgg == nil {
+					row[aggIdx] = pql.NewDecimal(int64(group.Agg), ty.Scale)
+				} else {
+					row[aggIdx] = *group.DecimalAgg
+				}
+			case *parser.DataTypeInt:
+				row[aggIdx] = int64(group.Agg)
+			default:
+				return nil, sql3.NewErrInternalf("unhandled sum return type '%T'", ty)
+			}
 
 		case *avgPlanExpression:
 			if group.DecimalAgg == nil {

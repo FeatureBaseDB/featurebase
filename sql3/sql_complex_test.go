@@ -276,8 +276,8 @@ func TestPlanner_Show(t *testing.T) {
 			species string cachetype ranked size 1000
 			speciesids idset cachetype ranked size 1000
 			speciess stringset cachetype ranked size 1000
-			speciesidsq idset timequantum 'YMD'
-			speciessq stringset timequantum 'YMD'
+			speciesidsq idsetq timequantum 'YMD'
+			speciessq stringsetq timequantum 'YMD'
 			specieslen decimal(4) min 0 max 270
 			) keypartitions 12
 		`)
@@ -294,7 +294,7 @@ func TestPlanner_Show(t *testing.T) {
 		}
 
 		if diff := cmp.Diff([][]interface{}{
-			{string("create table iris1 (_id id, speciesid id cachetype ranked size 1000, species string cachetype ranked size 1000, speciesids idset cachetype ranked size 1000, speciess stringset cachetype ranked size 1000, speciesidsq idset timequantum 'YMD', speciessq stringset timequantum 'YMD', specieslen decimal(4) min 0 max 270);")},
+			{string("create table iris1 (_id id, speciesid id cachetype ranked size 1000, species string cachetype ranked size 1000, speciesids idset cachetype ranked size 1000, speciess stringset cachetype ranked size 1000, speciesidsq idsetq timequantum 'YMD', speciessq stringsetq timequantum 'YMD', specieslen decimal(4) min 0 max 270);")},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
@@ -393,13 +393,13 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 				name:        "stringsetcolq",
 				typ:         "stringset",
 				constraints: "cachetype lru size 1000 timequantum 'YMD' ttl '24h'",
-				expErr:      "[1:60] 'CACHETYPE' constraint conflicts with 'TIMEQUANTUM'",
+				expErr:      "[1:60] 'TIMEQUANTUM' constraint cannot be applied to a column of type 'stringset'",
 			},
 			{
 				name:        "stringsetcolq",
 				typ:         "stringset",
 				constraints: "timequantum 'YMD' ttl '24h' cachetype ranked",
-				expErr:      "[1:60] 'CACHETYPE' constraint conflicts with 'TIMEQUANTUM'",
+				expErr:      "[1:60] 'TIMEQUANTUM' constraint cannot be applied to a column of type 'stringset'",
 			},
 		}
 
@@ -460,13 +460,13 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			{
 				name:        "timestampcol",
 				typ:         "timestamp",
-				constraints: "timeunit 'ms' epoch '2021-01-01T00:00:00Z'",
+				constraints: "timeunit 'ms'",
 				expOptions: pilosa.FieldOptions{
-					Base:     1609459200000,
+					Base:     0,
 					Type:     "timestamp",
 					TimeUnit: "ms",
-					Min:      pql.NewDecimal(-63745055999000, 0),
-					Max:      pql.NewDecimal(251792841599000, 0),
+					Min:      pql.NewDecimal(-62135596799000, 0),
+					Max:      pql.NewDecimal(253402300799000, 0),
 				},
 			},
 			{
@@ -504,7 +504,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			},
 			{
 				name:        "stringsetcolq",
-				typ:         "stringset",
+				typ:         "stringsetq",
 				constraints: "timequantum 'YMD' ttl '24h'",
 				expOptions: pilosa.FieldOptions{
 					Type:        "time",
@@ -550,7 +550,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			},
 			{
 				name:        "idsetcolq",
-				typ:         "idset",
+				typ:         "idsetq",
 				constraints: "timequantum 'YMD' ttl '24h'",
 				expOptions: pilosa.FieldOptions{
 					Type:        "time",
@@ -713,15 +713,15 @@ func TestPlanner_CreateTable(t *testing.T) {
 			_id id,
 			intcol int min 0 max 10000,
 			boolcol bool,
-			timestampcol timestamp timeunit 'ms' epoch '2010-01-01T00:00:00Z',
+			timestampcol timestamp timeunit 'ms',
 			decimalcol decimal(2),
 			stringcol string cachetype ranked size 1000,
 			stringsetcol stringset cachetype lru size 1000,
-			stringsetcolq stringset timequantum 'YMD' ttl '24h',
+			stringsetcolq stringsetq timequantum 'YMD' ttl '24h',
 			idcol id cachetype ranked size 1000,
 			idsetcol idset cachetype lru,
 			idsetcolsz idset cachetype lru size 1000,
-			idsetcolq idset timequantum 'YMD' ttl '24h') keypartitions 12`)
+			idsetcolq idsetq timequantum 'YMD' ttl '24h') keypartitions 12`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2957,7 +2957,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		now := time.Now()
 		simpleParquetMaker(t, tmpfile, 1, []tb{
 			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1}},
-			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.UnixMilli()}},
+			{Name: "unixtime", Type: arrow.PrimitiveTypes.Int64, Value: []int64{now.Unix()}},
 			{Name: "stringtime", Type: arrow.BinaryTypes.String, Value: []string{now.Format(time.RFC3339)}},
 		})
 
@@ -2977,4 +2977,64 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		row := results[0]
 		assert.Equal(t, row[1], row[2])
 	})
+}
+
+func TestPlanner_BulkInsert_FP1916(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
+	node := c.GetNode(0).Server
+	_, _, _, err := sql_test.MustQueryRows(t, node, `create table greg-test (
+		_id STRING,
+		id_col ID,
+		string_col STRING cachetype ranked size 1000,
+		int_col int,
+		decimal_col DECIMAL(2),
+		bool_col BOOL
+		time_col TIMESTAMP,
+		stringset_col STRINGSET,
+		ideset_col IDSET
+	);`)
+	assert.NoError(t, err)
+
+	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO greg-test (
+		_id,
+		id_col,
+		string_col,
+		int_col,
+		decimal_col,
+		bool_col,
+		time_col,
+		stringset_col,
+		ideset_col)
+		map (
+		0 ID,
+		1 STRING,
+		2 INT,
+		3 DECIMAL(2),
+		4 BOOL,
+		5 TIMESTAMP,
+		6 STRINGSET,
+		7 IDSET)
+		transform(
+		@1,
+		@0,
+		@1,
+		@2,
+		@3,
+		@4,
+		@5,
+		@6,
+		@7)
+		FROM x'1,TEST2,8924809397503602651,31.2,1,"2014-07-15T01:18:46Z",stringset1, 1'
+		with
+			BATCHSIZE 10000
+			format 'CSV'
+			input 'STREAM';`)
+	assert.NoError(t, err)
+	results, _, _, err := sql_test.MustQueryRows(t, node, `select int_col from greg-test`)
+	assert.NoError(t, err)
+	got := results[0][0].(int64)
+	expected := int64(8924809397503602651)
+	assert.Equal(t, got, expected)
 }

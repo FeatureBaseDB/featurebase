@@ -376,6 +376,18 @@ var filterPredicatesTimestamp = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"select _id from filter_predicates where ts1 < '2002-11-01T22:08:41Z'",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
 				"select _id from filter_predicates where ts1 <= '2002-11-01T22:08:41+00:00'",
 			),
 			ExpHdrs: hdrs(

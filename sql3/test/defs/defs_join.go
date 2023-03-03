@@ -78,6 +78,19 @@ var joinTests = TableTest{
 			Compare: CompareExactOrdered,
 		},
 		{
+			name: "innerjoin-aggregate-groupby-sum-double-filter",
+			SQLs: sqls(
+				"select sum(price) from orders o inner join users u on o.userid = u._id where u.age > 20 and o.price < 10.00;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(1197, 2)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "innerjoin-aggregate-groupby-count-distinct-filter",
 			SQLs: sqls(
 				"SELECT COUNT(DISTINCT u.name) FROM orders o JOIN users u ON o.userid = u._id WHERE o.price > 10;",
@@ -86,7 +99,7 @@ var joinTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(2)),
+				row(int64(4)),
 			),
 			Compare: CompareExactOrdered,
 		},
@@ -99,7 +112,7 @@ var joinTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(2)),
+				row(int64(6)),
 			),
 			Compare: CompareExactOrdered,
 		},

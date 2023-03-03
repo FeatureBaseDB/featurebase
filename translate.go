@@ -289,7 +289,7 @@ func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partition
 		fname = fname[:10]
 	}
 
-	tf, err := os.CreateTemp(os.Getenv("RAMDISK"), fmt.Sprintf("bolt-i%s-f%s-%d-%d-", iname, fname, partitionID, partitionN))
+	tf, err := os.CreateTemp("", fmt.Sprintf("bolt-i%s-f%s-%d-%d-", iname, fname, partitionID, partitionN))
 	if err != nil {
 		return nil, errors.Wrap(err, "making temp file for boltdb key translation")
 	}

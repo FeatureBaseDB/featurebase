@@ -13,9 +13,8 @@ import (
 
 func TestChkSumCommand_Run(t *testing.T) {
 	cmLog := logger.NewStandardLogger(os.Stderr)
-	cm := NewChkSumCommand(cmLog)
 	buf := &bytes.Buffer{}
-	cm.stdout = buf
+	cm := NewChkSumCommand(cmLog, buf)
 
 	cluster := test.MustRunCluster(t, 1)
 	defer cluster.Close()

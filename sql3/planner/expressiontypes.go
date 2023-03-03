@@ -346,11 +346,11 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 		switch sourceType.(type) {
 		case *parser.DataTypeTimestamp:
 			return true
-		case *parser.DataTypeInt:
-			//could be a int convertable to a date
-			return true
 		case *parser.DataTypeString:
 			//could be a string parseable as a date
+			return true
+		case *parser.DataTypeInt:
+			//integers coerced to timestamp will be treated as time represented in number of seconds since unix epoch
 			return true
 		default:
 			return false
@@ -455,6 +455,10 @@ func typeIsSet(testType parser.ExprDataType) (bool, parser.ExprDataType) {
 	case *parser.DataTypeIDSet:
 		return true, parser.NewDataTypeID()
 	case *parser.DataTypeStringSet:
+		return true, parser.NewDataTypeString()
+	case *parser.DataTypeIDSetQuantum:
+		return true, parser.NewDataTypeID()
+	case *parser.DataTypeStringSetQuantum:
 		return true, parser.NewDataTypeString()
 	default:
 		return false, nil

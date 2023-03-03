@@ -196,19 +196,17 @@ func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.Column
 	switch strings.ToLower(typeName) {
 	case dax.BaseTypeBool:
 		column.fos = append(column.fos, pilosa.OptFieldTypeBool())
-	case dax.BaseTypeDecimal:
 
+	case dax.BaseTypeDecimal:
 		// if we don't have a scale, it's an error
 		if col.Type.Scale == nil {
 			return nil, sql3.NewErrDecimalScaleExpected(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column)
 		}
-
 		// get the scale value
 		scale, err = strconv.ParseInt(col.Type.Scale.Value, 10, 64)
 		if err != nil {
 			return nil, err
 		}
-
 		// Adjust min/max to fit within the scaled min/max.
 		scaledMin, scaledMax := pql.MinMax(scale)
 		if scaledMax.LessThan(max) {
@@ -217,30 +215,35 @@ func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.Column
 		if scaledMin.GreaterThan(min) {
 			min = scaledMin
 		}
-
 		column.fos = append(column.fos, pilosa.OptFieldTypeDecimal(scale, min, max))
+
 	case dax.BaseTypeID:
 		column.fos = append(column.fos, pilosa.OptFieldTypeMutex(cacheType, cacheSize))
+
 	case dax.BaseTypeIDSet:
-		if timeQuantum != "" {
-			column.fos = append(column.fos, pilosa.OptFieldTypeTime(timeQuantum, ttl))
-		} else {
-			column.fos = append(column.fos, pilosa.OptFieldTypeSet(cacheType, cacheSize))
-		}
+		column.fos = append(column.fos, pilosa.OptFieldTypeSet(cacheType, cacheSize))
+
+	case dax.BaseTypeIDSetQ:
+		column.fos = append(column.fos, pilosa.OptFieldTypeTime(timeQuantum, ttl))
+
 	case dax.BaseTypeInt:
 		column.fos = append(column.fos, pilosa.OptFieldTypeInt(min.ToInt64(0), max.ToInt64(0)))
+
 	case dax.BaseTypeString:
 		column.fos = append(column.fos, pilosa.OptFieldTypeMutex(cacheType, cacheSize))
 		column.fos = append(column.fos, pilosa.OptFieldKeys())
+
 	case dax.BaseTypeStringSet:
-		if timeQuantum != "" {
-			column.fos = append(column.fos, pilosa.OptFieldTypeTime(timeQuantum, ttl))
-		} else {
-			column.fos = append(column.fos, pilosa.OptFieldTypeSet(cacheType, cacheSize))
-		}
+		column.fos = append(column.fos, pilosa.OptFieldTypeSet(cacheType, cacheSize))
 		column.fos = append(column.fos, pilosa.OptFieldKeys())
+
+	case dax.BaseTypeStringSetQ:
+		column.fos = append(column.fos, pilosa.OptFieldTypeTime(timeQuantum, ttl))
+		column.fos = append(column.fos, pilosa.OptFieldKeys())
+
 	case dax.BaseTypeTimestamp:
 		column.fos = append(column.fos, pilosa.OptFieldTypeTimestamp(epoch, timeUnit))
+
 	}
 	return column, nil
 }
@@ -392,8 +395,8 @@ func (p *ExecutionPlanner) analyzeColumn(typeName string, col *parser.ColumnDefi
 			handledConstraints[parser.TIMEUNIT] = struct{}{}
 
 		case *parser.TimeQuantumConstraint:
-			//make sure we have a set type
-			if !(strings.EqualFold(typeName, dax.BaseTypeStringSet) || strings.EqualFold(typeName, dax.BaseTypeIDSet)) {
+			//make sure we have one of the time quantum types
+			if !(strings.EqualFold(typeName, dax.BaseTypeStringSetQ) || strings.EqualFold(typeName, dax.BaseTypeIDSetQ)) {
 				return sql3.NewErrBadColumnConstraint(col.Name.NamePos.Line, col.Name.NamePos.Column, "TIMEQUANTUM", typeName)
 			}
 			//check the type of the expression

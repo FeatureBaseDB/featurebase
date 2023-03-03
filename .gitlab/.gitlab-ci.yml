@@ -12,10 +12,22 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
+default:
+  retry:
+    max: 2 # This is confusing but this means "3 runs at max".
+    when:
+      - unknown_failure
+      - api_failure
+      - runner_system_failure
+      - job_execution_timeout
+      - stuck_or_timeout_failure
+
 variables:
   GOVERSION: "1.19.3"
   GOFUTURE: "latest"
   CI_IMAGE: "${CI_REGISTRY_IMAGE}/ci-builder:0.0.1"
+  CI_PRE_CLONE_SCRIPT: |
+    set -x
 
 stages:
   - ci_image_build
@@ -157,16 +169,17 @@ build featurebase:
     - go install github.com/rakyll/statik@v0.1.7
     - $GOPATH/bin/statik -src=lattice
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
-    - GOOS="linux" GOARCH="amd64" make build FLAGS="-o featurebase_linux_amd64"
-    - GOOS="linux" GOARCH="arm64" make build FLAGS="-o featurebase_linux_arm64"
-    - GOOS="darwin" GOARCH="amd64" make build FLAGS="-o featurebase_darwin_amd64"
-    - GOOS="darwin" GOARCH="arm64" make build FLAGS="-o featurebase_darwin_arm64"
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          GOOS="${goos}" GOARCH="${goarch}" make build FLAGS="-o featurebase_${goos}_${goarch}"
+          GOOS="${goos}" GOARCH="${goarch}" make build-fbsql FLAGS="-o fbsql_${goos}_${goarch}"
+        done
+      done
   artifacts:
     paths:
-      - featurebase_linux_amd64
-      - featurebase_linux_arm64
-      - featurebase_darwin_amd64
-      - featurebase_darwin_arm64
+      - featurebase_*
+      - fbsql_*
   needs:
     - job: build lattice
 
@@ -216,7 +229,11 @@ run go tests race:
   script:
     - echo "Running featurebase race tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - RAMDISK=/mnt/ramdisk go test -race -v -timeout=10m ${PKG_LIST//,/ }
+    - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - mkdir -p $TMPDIR
+    - go test -race -v -timeout=10m ${PKG_LIST//,/ }
+  after_script:
+    - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   tags:
     - docker
 
@@ -232,7 +249,11 @@ run go tests:
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - RAMDISK=/mnt/ramdisk go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
+    - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - mkdir -p $TMPDIR
+    - go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
+  after_script:
+    - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   artifacts:
     paths:
       - coverage.out
@@ -422,7 +443,8 @@ upload_artifacts_to_nexus:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
-    - find . -maxdepth 1 -name '*.rpm' -exec curl -v --user "$NEXUS_YUM_CREDS" --upload-file {} https://nexus.molecula.com/repository/molecula-yum/release/ \;
+    - curl -v --user "$NEXUS_YUM_CREDS" --upload-file *.arm64.rpm https://nexus.molecula.com/repository/molecula-yum/release/
+    - curl -v --user "$NEXUS_YUM_CREDS" --upload-file *.amd64.rpm https://nexus.molecula.com/repository/molecula-yum/release/
   dependencies:
     - package for linux amd64
     - package for linux arm64
@@ -624,14 +646,15 @@ s3 dump:
     - aws configure set aws_secret_access_key $AWS_FBCI_SECRET_ACCESS_KEY
     - aws configure set region "us-east-2"
     - aws configure set aws_profile $PROFILE
-    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_amd64
-    - aws s3 cp featurebase_linux_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_amd64
-    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_linux_arm64
-    - aws s3 cp featurebase_linux_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_linux_arm64
-    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_amd64
-    - aws s3 cp featurebase_darwin_amd64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_amd64
-    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_darwin_arm64
-    - aws s3 cp featurebase_darwin_arm64 s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_darwin_arm64
+    - |
+      for goos in "darwin" "linux"; do
+        for goarch in "amd64" "arm64"; do
+          for binary in "featurebase" "fbsql"; do
+            aws s3 cp ${binary}_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/${binary}_${goos}_${goarch}
+            aws s3 cp ${binary}_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/${binary}_${goos}_${goarch}
+          done
+        done
+      done
   needs:
     - job: build featurebase
 

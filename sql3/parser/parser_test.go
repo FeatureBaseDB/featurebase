@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/go-test/deep"
 )
@@ -2273,7 +2274,1034 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 			},
 		})*/
+		AssertParseStatement(t, `SELECT _id FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(16), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld"}},
+			},
+			From: pos(11),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(16), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld1, fld2 FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld1"}},
+				{Expr: &parser.Ident{NamePos: pos(13), Name: "fld2"}},
+			},
+			From: pos(18),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(23), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT min(fld) FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "min"},
+						Lparen: pos(10),
+						Args: []parser.Expr{
+							&parser.Ident{NamePos: pos(11), Name: "fld"},
+						},
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT max(fld) FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "max"},
+						Lparen: pos(10),
+						Args: []parser.Expr{
+							&parser.Ident{NamePos: pos(11), Name: "fld"},
+						},
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT sum(fld) FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "sum"},
+						Lparen: pos(10),
+						Args: []parser.Expr{
+							&parser.Ident{NamePos: pos(11), Name: "fld"},
+						},
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT avg(fld) FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "avg"},
+						Lparen: pos(10),
+						Args: []parser.Expr{
+							&parser.Ident{NamePos: pos(11), Name: "fld"},
+						},
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id, COUNT(*) FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(12), Name: "COUNT"},
+						Lparen: pos(17),
+						Star:   pos(18),
+						Rparen: pos(19),
+					},
+				},
+			},
+			From: pos(21),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(26), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id FROM tbl1, tbl2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(16), Name: "tbl1"},
+				},
+				Operator: &parser.JoinOperator{
+					Comma: pos(20),
+				},
+				Y: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(22), Name: "tbl2"},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id FROM tbl1 INNER JOIN tbl2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(16), Name: "tbl1"},
+				},
+				Operator: &parser.JoinOperator{
+					Inner: pos(21),
+					Join:  pos(27),
+				},
+				Y: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(32), Name: "tbl2"},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT * FROM tbl where _id = 1`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Star: pos(7),
+				},
+			},
+			From: pos(9),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(14), Name: "tbl"},
+			},
+			Where: pos(18),
+			WhereExpr: &parser.BinaryExpr{
+				X:     &parser.Ident{NamePos: pos(24), Name: "_id"},
+				OpPos: pos(28),
+				Op:    parser.EQ,
+				Y: &parser.IntegerLit{
+					ValuePos: pos(30),
+					Value:    "1",
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT * FROM tbl where fld = 1`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Star: pos(7),
+				},
+			},
+			From: pos(9),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(14), Name: "tbl"},
+			},
+			Where: pos(18),
+			WhereExpr: &parser.BinaryExpr{
+				X:     &parser.Ident{NamePos: pos(24), Name: "fld"},
+				OpPos: pos(28),
+				Op:    parser.EQ,
+				Y: &parser.IntegerLit{
+					ValuePos: pos(30),
+					Value:    "1",
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT * FROM tbl group by fld`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Star: pos(7),
+				},
+			},
+			From: pos(9),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(14), Name: "tbl"},
+			},
+			Group:   pos(18),
+			GroupBy: pos(24),
+			GroupByExprs: []parser.Expr{
+				&parser.Ident{NamePos: pos(27), Name: "fld"},
+			},
+		})
+		AssertParseStatement(t, `SELECT * FROM tbl group by fld1, fld2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Star: pos(7),
+				},
+			},
+			From: pos(9),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(14), Name: "tbl"},
+			},
+			Group:   pos(18),
+			GroupBy: pos(24),
+			GroupByExprs: []parser.Expr{
+				&parser.Ident{NamePos: pos(27), Name: "fld1"},
+				&parser.Ident{NamePos: pos(33), Name: "fld2"},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld, sum(fld) FROM tbl group by fld`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld"}},
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(12), Name: "sum"},
+						Lparen: pos(15),
+						Args: []parser.Expr{
+							&parser.Ident{NamePos: pos(16), Name: "fld"},
+						},
+						Rparen: pos(19),
+					},
+				},
+			},
+			From: pos(21),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(26), Name: "tbl"},
+			},
+			Group:   pos(30),
+			GroupBy: pos(36),
+			GroupByExprs: []parser.Expr{
+				&parser.Ident{NamePos: pos(39), Name: "fld"},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld, sum(fld) FROM tbl group by fld having sum > 10`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld"}},
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(12), Name: "sum"},
+						Lparen: pos(15),
+						Args: []parser.Expr{
+							&parser.Ident{NamePos: pos(16), Name: "fld"},
+						},
+						Rparen: pos(19),
+					},
+				},
+			},
+			From: pos(21),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(26), Name: "tbl"},
+			},
+			Group:   pos(30),
+			GroupBy: pos(36),
+			GroupByExprs: []parser.Expr{
+				&parser.Ident{NamePos: pos(39), Name: "fld"},
+			},
+			Having: pos(43),
+			HavingExpr: &parser.BinaryExpr{
+				X:     &parser.Ident{NamePos: pos(50), Name: "sum"},
+				OpPos: pos(54),
+				Op:    parser.GT,
+				Y: &parser.IntegerLit{
+					ValuePos: pos(56),
+					Value:    "10",
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld FROM tbl order by fld`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld"}},
+			},
+			From: pos(11),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(16), Name: "tbl"},
+			},
+			Order:   pos(20),
+			OrderBy: pos(26),
+			OrderingTerms: []*parser.OrderingTerm{
+				{
+					X: &parser.Ident{NamePos: pos(29), Name: "fld"},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld FROM tbl order by fld1, fld2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld"}},
+			},
+			From: pos(11),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(16), Name: "tbl"},
+			},
+			Order:   pos(20),
+			OrderBy: pos(26),
+			OrderingTerms: []*parser.OrderingTerm{
+				{
+					X: &parser.Ident{NamePos: pos(29), Name: "fld1"},
+				},
+				{
+					X: &parser.Ident{NamePos: pos(35), Name: "fld2"},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT DISTINCT fld FROM tbl`, &parser.SelectStatement{
+			Select:   pos(0),
+			Distinct: pos(7),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(16), Name: "fld"}},
+			},
+			From: pos(20),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(25), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM tbl where fld = 1`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+			Where: pos(25),
+			WhereExpr: &parser.BinaryExpr{
+				X:     &parser.Ident{NamePos: pos(31), Name: "fld"},
+				OpPos: pos(35),
+				Op:    parser.EQ,
+				Y: &parser.IntegerLit{
+					ValuePos: pos(37),
+					Value:    "1",
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM tbl where fld1 = 1 and fld2 = 2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+			Where: pos(25),
+			WhereExpr: &parser.BinaryExpr{
+				X: &parser.BinaryExpr{
+					X:     &parser.Ident{NamePos: pos(31), Name: "fld1"},
+					OpPos: pos(36),
+					Op:    parser.EQ,
+					Y: &parser.IntegerLit{
+						ValuePos: pos(38),
+						Value:    "1",
+					},
+				},
+				OpPos: pos(40),
+				Op:    parser.AND,
+				Y: &parser.BinaryExpr{
+					X:     &parser.Ident{NamePos: pos(44), Name: "fld2"},
+					OpPos: pos(49),
+					Op:    parser.EQ,
+					Y: &parser.IntegerLit{
+						ValuePos: pos(51),
+						Value:    "2",
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM tbl where fld1 = 1 or fld2 = 2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+			Where: pos(25),
+			WhereExpr: &parser.BinaryExpr{
+				X: &parser.BinaryExpr{
+					X:     &parser.Ident{NamePos: pos(31), Name: "fld1"},
+					OpPos: pos(36),
+					Op:    parser.EQ,
+					Y: &parser.IntegerLit{
+						ValuePos: pos(38),
+						Value:    "1",
+					},
+				},
+				OpPos: pos(40),
+				Op:    parser.OR,
+				Y: &parser.BinaryExpr{
+					X:     &parser.Ident{NamePos: pos(43), Name: "fld2"},
+					OpPos: pos(48),
+					Op:    parser.EQ,
+					Y: &parser.IntegerLit{
+						ValuePos: pos(50),
+						Value:    "2",
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id FROM tbl where fld between 1 and 3`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(16), Name: "tbl"},
+			},
+			Where: pos(20),
+			WhereExpr: &parser.BinaryExpr{
+				X:     &parser.Ident{NamePos: pos(26), Name: "fld"},
+				OpPos: pos(30),
+				Op:    parser.BETWEEN,
+				Y: &parser.Range{
+					X: &parser.IntegerLit{
+						ValuePos: pos(38),
+						Value:    "1",
+					},
+					And: pos(40),
+					Y: &parser.IntegerLit{
+						ValuePos: pos(44),
+						Value:    "3",
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id FROM tbl where (fld1 between 1 and 3) and (fld2 = 2)`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(16), Name: "tbl"},
+			},
+			Where: pos(20),
+			WhereExpr: &parser.BinaryExpr{
+				X: &parser.ParenExpr{
+					Lparen: pos(26),
+					X: &parser.BinaryExpr{
+						X:     &parser.Ident{NamePos: pos(27), Name: "fld1"},
+						Op:    parser.BETWEEN,
+						OpPos: pos(32),
+						Y: &parser.Range{
+							X: &parser.IntegerLit{
+								ValuePos: pos(40),
+								Value:    "1",
+							},
+							And: pos(42),
+							Y: &parser.IntegerLit{
+								ValuePos: pos(46),
+								Value:    "3",
+							},
+						},
+					},
+					Rparen: pos(47),
+				},
+				OpPos: pos(49),
+				Op:    parser.AND,
+				Y: &parser.ParenExpr{
+					Lparen: pos(53),
+					X: &parser.BinaryExpr{
+						X:     &parser.Ident{NamePos: pos(54), Name: "fld2"},
+						OpPos: pos(59),
+						Op:    parser.EQ,
+						Y: &parser.IntegerLit{
+							ValuePos: pos(61),
+							Value:    "2",
+						},
+					},
+					Rparen: pos(62),
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM tbl where fld is not null`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(21), Name: "tbl"},
+			},
+			Where: pos(25),
+			WhereExpr: &parser.BinaryExpr{
+				X:     &parser.Ident{NamePos: pos(31), Name: "fld"},
+				OpPos: pos(35),
+				Op:    parser.ISNOT,
+				Y: &parser.NullLit{
+					ValuePos: pos(42),
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld, COUNT(*) FROM tbl group by fld`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld"}},
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(12), Name: "COUNT"},
+						Lparen: pos(17),
+						Star:   pos(18),
+						Rparen: pos(19),
+					},
+				},
+			},
+			From: pos(21),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(26), Name: "tbl"},
+			},
+			Group:   pos(30),
+			GroupBy: pos(36),
+			GroupByExprs: []parser.Expr{
+				&parser.Ident{NamePos: pos(39), Name: "fld"},
+			},
+		})
+		AssertParseStatement(t, `SELECT fld1, fld2, COUNT(*) FROM grouper group by fld1, fld2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld1"}},
+				{Expr: &parser.Ident{NamePos: pos(13), Name: "fld2"}},
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(19), Name: "COUNT"},
+						Lparen: pos(24),
+						Star:   pos(25),
+						Rparen: pos(26),
+					},
+				},
+			},
+			From: pos(28),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(33), Name: "grouper"},
+			},
+			Group:   pos(41),
+			GroupBy: pos(47),
+			GroupByExprs: []parser.Expr{
+				&parser.Ident{NamePos: pos(50), Name: "fld1"},
+				&parser.Ident{NamePos: pos(56), Name: "fld2"},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(DISTINCT fld) FROM tbl`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:     &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen:   pos(12),
+						Distinct: pos(13),
+						Args: []parser.Expr{
+							&parser.Ident{NamePos: pos(22), Name: "fld"},
+						},
+						Rparen: pos(25),
+					},
+				},
+			},
+			From: pos(27),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(32), Name: "tbl"},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(21), Name: "tbl1"},
+				},
+				Operator: &parser.JoinOperator{
+					Inner: pos(26),
+					Join:  pos(32),
+				},
+				Y: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(37), Name: "tbl2"},
+				},
+				Constraint: &parser.OnConstraint{
+					On: pos(42),
+					X: &parser.BinaryExpr{
+						X: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(45), Name: "tbl1"},
+							Dot:         pos(49),
+							Column:      &parser.Ident{NamePos: pos(50), Name: "_id"},
+							ColumnIndex: 0,
+						},
+						OpPos: pos(54),
+						Op:    parser.EQ,
+						Y: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(56), Name: "tbl2"},
+							Dot:         pos(60),
+							Column:      &parser.Ident{NamePos: pos(61), Name: "bsi"},
+							ColumnIndex: 0,
+						},
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM tbl1 INNER JOIN tbl2 ON tbl1._id = tbl2.bsi where tbl1.fld1 = 1 and tbl2.fld2 = 2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(21), Name: "tbl1"},
+				},
+				Operator: &parser.JoinOperator{
+					Inner: pos(26),
+					Join:  pos(32),
+				},
+				Y: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(37), Name: "tbl2"},
+				},
+				Constraint: &parser.OnConstraint{
+					On: pos(42),
+					X: &parser.BinaryExpr{
+						X: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(45), Name: "tbl1"},
+							Dot:         pos(49),
+							Column:      &parser.Ident{NamePos: pos(50), Name: "_id"},
+							ColumnIndex: 0,
+						},
+						OpPos: pos(54),
+						Op:    parser.EQ,
+						Y: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(56), Name: "tbl2"},
+							Dot:         pos(60),
+							Column:      &parser.Ident{NamePos: pos(61), Name: "bsi"},
+							ColumnIndex: 0,
+						},
+					},
+				},
+			},
+			Where: pos(65),
+			WhereExpr: &parser.BinaryExpr{
+				X: &parser.BinaryExpr{
+					X: &parser.QualifiedRef{
+						Table:       &parser.Ident{NamePos: pos(71), Name: "tbl1"},
+						Dot:         pos(75),
+						Column:      &parser.Ident{NamePos: pos(76), Name: "fld1"},
+						ColumnIndex: 0,
+					},
+					OpPos: pos(81),
+					Op:    parser.EQ,
+					Y: &parser.IntegerLit{
+						ValuePos: pos(83),
+						Value:    "1",
+					},
+				},
+				OpPos: pos(85),
+				Op:    parser.AND,
+				Y: &parser.BinaryExpr{
+					X: &parser.QualifiedRef{
+						Table:       &parser.Ident{NamePos: pos(89), Name: "tbl2"},
+						Dot:         pos(93),
+						Column:      &parser.Ident{NamePos: pos(94), Name: "fld2"},
+						ColumnIndex: 0,
+					},
+					OpPos: pos(99),
+					Op:    parser.EQ,
+					Y: &parser.IntegerLit{
+						ValuePos: pos(101),
+						Value:    "2",
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT COUNT(*) FROM grouper g INNER JOIN joiner j ON g._id = j.grouperid`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(7), Name: "COUNT"},
+						Lparen: pos(12),
+						Star:   pos(13),
+						Rparen: pos(14),
+					},
+				},
+			},
+			From: pos(16),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(21), Name: "grouper"},
+					Alias: &parser.Ident{NamePos: pos(29), Name: "g"},
+				},
+				Operator: &parser.JoinOperator{
+					Inner: pos(31),
+					Join:  pos(37),
+				},
+				Y: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(42), Name: "joiner"},
+					Alias: &parser.Ident{NamePos: pos(49), Name: "j"},
+				},
+				Constraint: &parser.OnConstraint{
+					On: pos(51),
+					X: &parser.BinaryExpr{
+						X: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(54), Name: "g"},
+							Dot:         pos(55),
+							Column:      &parser.Ident{NamePos: pos(56), Name: "_id"},
+							ColumnIndex: 0,
+						},
+						OpPos: pos(60),
+						Op:    parser.EQ,
+						Y: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(62), Name: "j"},
+							Dot:         pos(63),
+							Column:      &parser.Ident{NamePos: pos(64), Name: "grouperid"},
+							ColumnIndex: 0,
+						},
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id FROM grouper g INNER JOIN joiner j ON g._id = j.grouperid`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(16), Name: "grouper"},
+					Alias: &parser.Ident{NamePos: pos(24), Name: "g"},
+				},
+				Operator: &parser.JoinOperator{
+					Inner: pos(26),
+					Join:  pos(32),
+				},
+				Y: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(37), Name: "joiner"},
+					Alias: &parser.Ident{NamePos: pos(44), Name: "j"},
+				},
+				Constraint: &parser.OnConstraint{
+					On: pos(46),
+					X: &parser.BinaryExpr{
+						X: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(49), Name: "g"},
+							Dot:         pos(50),
+							Column:      &parser.Ident{NamePos: pos(51), Name: "_id"},
+							ColumnIndex: 0,
+						},
+						OpPos: pos(55),
+						Op:    parser.EQ,
+						Y: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(57), Name: "j"},
+							Dot:         pos(58),
+							Column:      &parser.Ident{NamePos: pos(59), Name: "grouperid"},
+							ColumnIndex: 0,
+						},
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id FROM grouper g INNER JOIN joiner j ON g._id = j.grouperid where g.color = 'red'`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(16), Name: "grouper"},
+					Alias: &parser.Ident{NamePos: pos(24), Name: "g"},
+				},
+				Operator: &parser.JoinOperator{
+					Inner: pos(26),
+					Join:  pos(32),
+				},
+				Y: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(37), Name: "joiner"},
+					Alias: &parser.Ident{NamePos: pos(44), Name: "j"},
+				},
+				Constraint: &parser.OnConstraint{
+					On: pos(46),
+					X: &parser.BinaryExpr{
+						X: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(49), Name: "g"},
+							Dot:         pos(50),
+							Column:      &parser.Ident{NamePos: pos(51), Name: "_id"},
+							ColumnIndex: 0,
+						},
+						OpPos: pos(55),
+						Op:    parser.EQ,
+						Y: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(57), Name: "j"},
+							Dot:         pos(58),
+							Column:      &parser.Ident{NamePos: pos(59), Name: "grouperid"},
+							ColumnIndex: 0,
+						},
+					},
+				},
+			},
+			Where: pos(69),
+			WhereExpr: &parser.BinaryExpr{
+				X: &parser.QualifiedRef{
+					Table:       &parser.Ident{NamePos: pos(75), Name: "g"},
+					Dot:         pos(76),
+					Column:      &parser.Ident{NamePos: pos(77), Name: "color"},
+					ColumnIndex: 0,
+				},
+				OpPos: pos(83),
+				Op:    parser.EQ,
+				Y: &parser.StringLit{
+					ValuePos: pos(85),
+					Value:    "red",
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT _id FROM grouper g INNER JOIN joiner j ON g._id = j.grouperid where g.color = 'red' and j.jointype = 2`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "_id"}},
+			},
+			From: pos(11),
+			Source: &parser.JoinClause{
+				X: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(16), Name: "grouper"},
+					Alias: &parser.Ident{NamePos: pos(24), Name: "g"},
+				},
+				Operator: &parser.JoinOperator{
+					Inner: pos(26),
+					Join:  pos(32),
+				},
+				Y: &parser.QualifiedTableName{
+					Name:  &parser.Ident{NamePos: pos(37), Name: "joiner"},
+					Alias: &parser.Ident{NamePos: pos(44), Name: "j"},
+				},
+				Constraint: &parser.OnConstraint{
+					On: pos(46),
+					X: &parser.BinaryExpr{
+						X: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(49), Name: "g"},
+							Dot:         pos(50),
+							Column:      &parser.Ident{NamePos: pos(51), Name: "_id"},
+							ColumnIndex: 0,
+						},
+						OpPos: pos(55),
+						Op:    parser.EQ,
+						Y: &parser.QualifiedRef{
+							Table:       &parser.Ident{NamePos: pos(57), Name: "j"},
+							Dot:         pos(58),
+							Column:      &parser.Ident{NamePos: pos(59), Name: "grouperid"},
+							ColumnIndex: 0,
+						},
+					},
+				},
+			},
+			Where: pos(69),
+			WhereExpr: &parser.BinaryExpr{
+				X: &parser.BinaryExpr{
+					X: &parser.QualifiedRef{
+						Table:       &parser.Ident{NamePos: pos(75), Name: "g"},
+						Dot:         pos(76),
+						Column:      &parser.Ident{NamePos: pos(77), Name: "color"},
+						ColumnIndex: 0,
+					},
+					OpPos: pos(83),
+					Op:    parser.EQ,
+					Y: &parser.StringLit{
+						ValuePos: pos(85),
+						Value:    "red",
+					},
+				},
+				OpPos: pos(91),
+				Op:    parser.AND,
+				Y: &parser.BinaryExpr{
+					X: &parser.QualifiedRef{
+						Table:       &parser.Ident{NamePos: pos(95), Name: "j"},
+						Dot:         pos(96),
+						Column:      &parser.Ident{NamePos: pos(97), Name: "jointype"},
+						ColumnIndex: 0,
+					},
+					OpPos: pos(106),
+					Op:    parser.EQ,
+					Y: &parser.IntegerLit{
+						ValuePos: pos(108),
+						Value:    "2",
+					},
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score asc`, &parser.SelectStatement{
+			Select:   pos(0),
+			Distinct: pos(7),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(16), Name: "score"}},
+			},
+			From: pos(22),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(27), Name: "grouper"},
+			},
+			Order:   pos(35),
+			OrderBy: pos(41),
+			OrderingTerms: []*parser.OrderingTerm{
+				{
+					X:   &parser.Ident{NamePos: pos(44), Name: "score"},
+					Asc: pos(50),
+				},
+			},
+		})
+		AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score desc`, &parser.SelectStatement{
+			Select:   pos(0),
+			Distinct: pos(7),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(16), Name: "score"}},
+			},
+			From: pos(22),
+			Source: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(27), Name: "grouper"},
+			},
+			Order:   pos(35),
+			OrderBy: pos(41),
+			OrderingTerms: []*parser.OrderingTerm{
+				{
+					X:    &parser.Ident{NamePos: pos(44), Name: "score"},
+					Desc: pos(50),
+				},
+			},
+		})
 
+		if false {
+			// not working because we don't support limit(x), we support top(x), i think?
+			AssertParseStatement(t, `SELECT fld1, fld2, COUNT(*) FROM tbl where fld1 = 1 group by fld1, fld2 limit 1`, nil) // 1:73: expected semicolon or EOF, found limit
+			AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score asc limit 5`, nil)                   // 1:55: expected semicolon or EOF, found limit
+			AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score desc limit 5`, nil)                  // 1:56: expected semicolon or EOF, found limit
+			AssertParseStatement(t, `SELECT fld FROM tbl limit 10`, nil)                                                    // 1:27: expected semicolon or EOF, found 10
+			AssertParseStatement(t, `SELECT fld FROM tbl limit 10, 5`, nil)                                                 // 1:27: expected semicolon or EOF, found 10
+			AssertParseStatement(t, `SELECT _id FROM tbl where not fld = 1 limit 10`, nil)                                  // 1:31: expected EXISTS, found fld
+		}
 		/*AssertParseStatementError(t, `WITH `, `1:5: expected table name, found 'EOF'`)
 		AssertParseStatementError(t, `WITH cte`, `1:8: expected AS, found 'EOF'`)
 		AssertParseStatementError(t, `WITH cte (`, `1:10: expected column name, found 'EOF'`)
@@ -3683,12 +4711,18 @@ func AssertParseStatement(tb testing.TB, s string, want parser.Statement) {
 	tb.Helper()
 	stmt, err := parser.NewParser(strings.NewReader(s)).ParseStatement()
 	if err != nil {
-		tb.Fatal(err)
+		tb.Error(err)
 	} else if diff := deep.Equal(stmt, want); diff != nil {
-		tb.Fatalf("mismatch:\n%s", strings.Join(diff, "\n"))
+		tb.Errorf("mismatch:\n%s", strings.Join(diff, "\n"))
 	} else {
 		AssertStatementSanity(tb, stmt, s)
 	}
+}
+
+func init() {
+	spew.Config.DisableMethods = true
+	spew.Config.DisablePointerAddresses = true
+	spew.Config.DisableCapacities = true
 }
 
 // AssertParseStatementError asserts s parses to a given error string.

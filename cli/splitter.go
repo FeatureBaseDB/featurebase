@@ -10,10 +10,14 @@ import (
 // metaCommands. It may not be necessary to have this be a separate struct since
 // it contains no members and just has the one `split()` method, but here we
 // are.
-type splitter struct{}
+type splitter struct {
+	replacer *replacer
+}
 
-func newSplitter() *splitter {
-	return &splitter{}
+func newSplitter(r *replacer) *splitter {
+	return &splitter{
+		replacer: r,
+	}
 }
 
 // split splits the given line into queryParts and metaCommands.
@@ -65,6 +69,11 @@ func (s *splitter) splitQueryParts(line string) ([]queryPart, error) {
 	// Look for a termination character;
 	parts := strings.Split(line, terminationChar)
 
+	// Do variable replacement.
+	for i := range parts {
+		parts[i] = s.replacer.replace(parts[i])
+	}
+
 	if len(parts) == 1 {
 		part0 := strings.TrimSpace(parts[0])
 		return []queryPart{
@@ -95,7 +104,7 @@ func (s *splitter) splitQueryParts(line string) ([]queryPart, error) {
 func (s *splitter) splitMetaCommands(in string) ([]metaCommand, error) {
 	parts := strings.Split(in, `\`)
 	if len(parts) == 1 {
-		mc, err := splitMetaCommand(parts[0])
+		mc, err := splitMetaCommand(parts[0], s.replacer)
 		if err != nil {
 			return nil, errors.Wrapf(err, "splitting meta command: %s", parts[0])
 		}
@@ -108,7 +117,7 @@ func (s *splitter) splitMetaCommands(in string) ([]metaCommand, error) {
 		if part == "" {
 			continue
 		}
-		mc, err := splitMetaCommand(part)
+		mc, err := splitMetaCommand(part, s.replacer)
 		if err != nil {
 			return nil, errors.Wrapf(err, "splitting meta command: %s", part)
 		}

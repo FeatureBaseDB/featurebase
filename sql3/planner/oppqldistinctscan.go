@@ -71,8 +71,16 @@ func (p *PlanOpPQLDistinctScan) Name() string {
 	return p.tableName
 }
 
+func (p *PlanOpPQLDistinctScan) IsFilterable() bool {
+	return true
+}
+
 func (p *PlanOpPQLDistinctScan) UpdateFilters(filterCondition types.PlanExpression) (types.PlanOperator, error) {
 	p.filter = filterCondition
+	return p, nil
+}
+
+func (p *PlanOpPQLDistinctScan) UpdateTimeQuantumFilters(filters ...types.PlanExpression) (types.PlanOperator, error) {
 	return p, nil
 }
 

@@ -25,7 +25,7 @@ func (n *callPlanExpression) EvaluateSetContains(currentRow []interface{}) (inte
 
 	if targetSetEval != nil {
 		switch typ := n.args[0].Type().(type) {
-		case *parser.DataTypeStringSet:
+		case *parser.DataTypeStringSet, *parser.DataTypeStringSetQuantum:
 			targetSet, ok := targetSetEval.([]string)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unable to convert value")
@@ -38,7 +38,7 @@ func (n *callPlanExpression) EvaluateSetContains(currentRow []interface{}) (inte
 
 			return stringSetContains(targetSet, testValue), nil
 
-		case *parser.DataTypeIDSet:
+		case *parser.DataTypeIDSet, *parser.DataTypeIDSetQuantum:
 			targetSet, ok := targetSetEval.([]int64)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unable to convert value")
