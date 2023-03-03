@@ -616,7 +616,7 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 				case *parser.DataTypeStringSet:
 					switch v := evalValue.(type) {
 					case json.Number:
-						result[idx] = v.String()
+						result[idx] = []string{v.String()}
 					case []interface{}:
 						setValue := make([]string, 0)
 						for _, i := range v {
