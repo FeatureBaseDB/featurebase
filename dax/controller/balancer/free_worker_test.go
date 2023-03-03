@@ -28,7 +28,7 @@ func TestFreeWorkerService(t *testing.T) {
 		}
 	}()
 
-	fwSvc := &sqldb.FreeWorkerService{}
+	fwSvc := sqldb.NewFreeWorkerService(nil)
 	err = fwSvc.AddWorkers(tx, role, nodeAddr, nodeAddr2, nodeAddr3, nodeAddr4, nodeAddr5)
 	require.NoError(t, err)
 

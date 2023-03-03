@@ -81,9 +81,9 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 
 		// transactor = new transactor
 	case "sqldb":
-		controller.Schemar = &sqldb.Schemar{}
+		controller.Schemar = sqldb.NewSchemar(logr)
 		controller.Balancer = sqldb.NewBalancer(logr)
-		controller.DirectiveVersion = &sqldb.DirectiveVersion{}
+		controller.DirectiveVersion = sqldb.NewDirectiveVersion(logr)
 		conn, err := pop.Connect("development")
 		if err != nil {
 			logr.Printf("Connecting to development database: %v", err)

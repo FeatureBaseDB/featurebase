@@ -1920,3 +1920,7 @@ func (c *Controller) Nodes(ctx context.Context) ([]*dax.Node, error) {
 
 	return c.Balancer.Nodes(tx)
 }
+
+func (c *Controller) Logger() logger.Logger {
+	return c.logger
+}

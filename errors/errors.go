@@ -74,6 +74,9 @@ type codedError struct {
 }
 
 func (ce codedError) Error() string {
+	if ce.Wrapped != "" {
+		return ce.Wrapped
+	}
 	return ce.Message
 }
 

@@ -1,20 +1,29 @@
 package sqldb
 
 import (
+	"encoding/json"
 	"strconv"
-	"time"
 
 	"github.com/pkg/errors"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
-	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
-var _ schemar.Schemar = (*Schemar)(nil)
+func NewSchemar(log logger.Logger) schemar.Schemar {
+	if log == nil {
+		log = logger.NopLogger
+	}
+	return &Schemar{
+		log: log,
+	}
+}
 
+// TODO rename to "schemar" once we get rid of that pesky schemar package
 type Schemar struct {
+	log logger.Logger
 }
 
 func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase) error {
@@ -169,29 +178,30 @@ func (s *Schemar) Databases(tx dax.Transaction, orgID dax.OrganizationID, dbIDs 
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
+	s.log.Debugf("Schemar: Databases: orgID: %s dbIDs: %v", orgID, dbIDs)
 
 	dbs := []*models.Database{}
-	if len(dbIDs) == 0 {
-		err := dt.C.Where("organization_id = ?", orgID).All(&dbs)
-		if err != nil {
-			return nil, errors.Wrap(err, "finding databases")
-		}
-	} else {
-		// this is annoying, but can't pass a []DatabaseID to something that wants []interface{}
+	q := dt.C.Where("1 = 1")
+	if orgID != "" {
+		q = q.Where("organization_id = ?", orgID)
+	}
+	if len(dbIDs) > 0 {
 		ifaceIDs := make([]interface{}, len(dbIDs))
 		for i, dbID := range ifaceIDs {
 			ifaceIDs[i] = dbID
 		}
-		err := dt.C.Where("organization_id = ?", orgID).Where("id in (?)", ifaceIDs...).All(&dbs)
-		if err != nil {
-			return nil, errors.Wrap(err, "finding databases in list of IDs")
-		}
+		q = q.Where("id in (?)", ifaceIDs...)
+	}
+	err := q.All(&dbs)
+	if err != nil {
+		return nil, errors.Wrap(err, "finding databases")
 	}
 
 	ret := make([]*dax.QualifiedDatabase, len(dbs))
 	for i, db := range dbs {
 		ret[i] = toQualifiedDatabase(db)
 	}
+	s.log.Debugf("Schemar: Databases: returning %+v", ret)
 
 	return ret, nil
 }
@@ -245,37 +255,29 @@ func toModelTable(qtbl *dax.QualifiedTable) *models.Table {
 }
 
 func toModelColumn(tk dax.TableKey, fld *dax.Field) models.Column {
+	optBytes, err := json.Marshal(fld.Options)
+	if err != nil {
+		panic(err)
+	}
 	return models.Column{
 		Name:        fld.Name,
 		Type:        fld.Type,
 		TableID:     string(tk),
 		Constraints: "TODO: unimplemented",
+		Options:     string(optBytes),
 	}
 }
 
 func toField(col models.Column) *dax.Field {
+	opts := dax.FieldOptions{}
+	err := json.Unmarshal([]byte(col.Options), &opts)
+	if err != nil {
+		panic(err)
+	}
 	return &dax.Field{
-		Name: col.Name,
-		Type: col.Type,
-		// TODO implement field options. For now stub out with values
-		// that will break things loudly if they are used.
-		Options: dax.FieldOptions{
-			Min: pql.Decimal{
-				Scale: 999,
-			},
-			Max: pql.Decimal{
-				Scale: 999,
-			},
-			Scale:          999,
-			NoStandardView: true,
-			CacheType:      "!!obviouslyWrong",
-			CacheSize:      999999999,
-			TimeUnit:       "!!obviouslyWrong",
-			Epoch:          time.Time{},
-			TimeQuantum:    "!!obviouslyWrong",
-			TTL:            999999999999999999,
-			ForeignIndex:   "!!obviouslyWrong",
-		},
+		Name:      col.Name,
+		Type:      col.Type,
+		Options:   opts,
 		CreatedAt: col.CreatedAt.Unix(),
 	}
 }
@@ -337,6 +339,10 @@ func (s *Schemar) DropField(tx dax.Transaction, qtid dax.QualifiedTableID, field
 	// TODO if simply not found
 	// return dax.NewErrFieldDoesNotExist(fldName)
 	if err != nil {
+		if isNoRowsError(err) {
+			return dax.NewErrFieldDoesNotExist(fieldName)
+		}
+
 		return errors.Wrap(err, "querying for field")
 	}
 
@@ -354,10 +360,16 @@ func (s *Schemar) Table(tx dax.Transaction, qtid dax.QualifiedTableID) (*dax.Qua
 	tbl := &models.Table{}
 	if qtid.ID != "" {
 		if err := dt.C.Eager().Find(tbl, qtid.Key()); err != nil {
+			if isNoRowsError(err) {
+				return nil, dax.NewErrTableIDDoesNotExist(qtid)
+			}
 			return nil, errors.Wrap(err, "finding table by ID")
 		}
 	} else {
 		if err := dt.C.Eager().Where("database_id = ? and name = ?", qtid.DatabaseID, qtid.Name).First(tbl); err != nil {
+			if isNoRowsError(err) {
+				return nil, dax.NewErrTableNameDoesNotExist(qtid.Name)
+			}
 			return nil, errors.Wrap(err, "finding table by name")
 		}
 	}
@@ -376,10 +388,10 @@ func (s *Schemar) Tables(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, tabl
 	query := dt.C.Where("database_id = ?", qdbid.DatabaseID)
 	if len(tableIDs) > 0 {
 		ifaceIDs := make([]interface{}, len(tableIDs))
-		for i, tableID := range ifaceIDs {
-			ifaceIDs[i] = tableID
+		for i, tableID := range tableIDs {
+			ifaceIDs[i] = dax.QualifiedTableID{QualifiedDatabaseID: qdbid, ID: tableID}.Key()
 		}
-		query = query.Where("table_id in (?)", ifaceIDs)
+		query = query.Where("id in (?)", ifaceIDs)
 	}
 	tables := []*models.Table{}
 	err := query.Eager().All(&tables)
@@ -405,7 +417,10 @@ func (s *Schemar) TableID(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, tab
 
 	tbl := &models.Table{}
 	if err := dt.C.Where("database_id = ? and name = ?", qdbid.DatabaseID, tableName).First(tbl); err != nil {
-		return dax.QualifiedTableID{}, errors.Wrap(err, "finding table by name")
+		if isNoRowsError(err) {
+			return dax.QualifiedTableID{}, dax.NewErrTableNameDoesNotExist(tableName)
+		}
+		return dax.QualifiedTableID{}, errors.Wrapf(err, "looking up table by name '%s', dbid: '%s'", tableName, qdbid.DatabaseID)
 	}
 
 	return dax.TableKey(tbl.ID).QualifiedTableID(), nil

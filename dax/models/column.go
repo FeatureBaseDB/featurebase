@@ -18,6 +18,7 @@ type Column struct {
 	Type        dax.BaseType  `json:"type" db:"type"`
 	TableID     string        `json:"table_id" db:"table_id"`
 	Constraints string        `json:"constraints" db:"constraints"`
+	Options     string        `json:"options" db:"options"`
 	CreatedAt   time.Time     `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time     `json:"updated_at" db:"updated_at"`
 }

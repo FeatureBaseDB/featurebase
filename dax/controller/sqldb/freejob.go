@@ -6,14 +6,24 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/balancer"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
-var _ balancer.FreeJobService = (*FreeJobService)(nil)
+func NewFreeJobService(log logger.Logger) balancer.FreeJobService {
+	if log == nil {
+		log = logger.NopLogger
+	}
+	return &freeJobService{
+		log: log,
+	}
+}
 
-type FreeJobService struct{}
+type freeJobService struct {
+	log logger.Logger
+}
 
-func (fj *FreeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job ...dax.Job) error {
+func (fj *freeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job ...dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -30,7 +40,7 @@ func (fj *FreeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, 
 	return errors.Wrap(err, "creating jobs")
 }
 
-func (fj *FreeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job dax.Job) error {
+func (fj *freeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -40,7 +50,7 @@ func (fj *FreeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, q
 	return errors.Wrap(err, "deleting")
 }
 
-func (fj *FreeJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) error {
+func (fj *freeJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -51,7 +61,7 @@ func (fj *FreeJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.Ro
 	return errors.Wrap(err, "deleting")
 }
 
-func (fj *FreeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.Jobs, error) {
+func (fj *freeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.Jobs, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -71,7 +81,7 @@ func (fj *FreeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qd
 }
 
 // MergeJobs - AFAICT this means "mark these jobs as free"
-func (fj *FreeJobService) MergeJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs dax.Jobs) error {
+func (fj *freeJobService) MergeJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs dax.Jobs) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")

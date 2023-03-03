@@ -36,7 +36,7 @@ func TestNodeService(t *testing.T) {
 		}
 	}()
 
-	nodeSvc := &sqldb.NodeService{}
+	nodeSvc := sqldb.NewNodeService(nil)
 
 	err = nodeSvc.CreateNode(tx, dax.Address(""), &dax.Node{Address: nodeAddr, RoleTypes: []dax.RoleType{"compute"}})
 	require.NoError(t, err)

@@ -38,15 +38,20 @@ func TestWorkerJobService(t *testing.T) {
 	}()
 
 	// must have a database to do workerjob stuff
-	schemar := &sqldb.Schemar{}
+	schemar := sqldb.NewSchemar(nil)
 	err = schemar.CreateDatabase(tx,
 		&dax.QualifiedDatabase{
 			OrganizationID: orgID,
 			Database:       dax.Database{ID: dbID, Name: dbName}})
 	require.NoError(t, err)
 
-	wjSvc := &sqldb.WorkerJobService{}
+	wjSvc := sqldb.NewWorkerJobService(nil)
 	qdbid := dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: dbID}
+
+	// have to create a free worker before you can create a worker job worker
+	fwSvc := sqldb.NewFreeWorkerService(nil)
+	err = fwSvc.AddWorkers(tx, role, nodeAddr)
+	require.NoError(t, err)
 
 	err = wjSvc.CreateWorker(tx, role, qdbid, nodeAddr)
 	require.NoError(t, err)

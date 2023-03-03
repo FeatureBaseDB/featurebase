@@ -5,13 +5,23 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
+	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
-var _ dax.DirectiveVersion = (*DirectiveVersion)(nil)
+func NewDirectiveVersion(log logger.Logger) dax.DirectiveVersion {
+	if log == nil {
+		log = logger.NopLogger
+	}
+	return &directiveVersion{
+		log: log,
+	}
+}
 
-type DirectiveVersion struct{}
+type directiveVersion struct {
+	log logger.Logger
+}
 
-func (d *DirectiveVersion) Increment(tx dax.Transaction, delta uint64) (uint64, error) {
+func (d *directiveVersion) Increment(tx dax.Transaction, delta uint64) (uint64, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")

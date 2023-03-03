@@ -4,15 +4,26 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
-var _ controller.NodeService = (*NodeService)(nil)
+var _ controller.NodeService = (*nodeService)(nil)
 
-type NodeService struct {
+func NewNodeService(log logger.Logger) *nodeService {
+	if log == nil {
+		log = logger.NopLogger
+	}
+	return &nodeService{
+		log: log,
+	}
 }
 
-func (n *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax.Node) error {
+type nodeService struct {
+	log logger.Logger
+}
+
+func (n *nodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax.Node) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -40,7 +51,7 @@ func (n *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax
 	return nil
 }
 
-func (n *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
+func (n *nodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -63,7 +74,7 @@ func (n *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node,
 	}, nil
 }
 
-func (n *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
+func (n *nodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -78,7 +89,7 @@ func (n *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 	return errors.Wrap(err, "destroying node")
 }
 
-func (n *NodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
+func (n *nodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")

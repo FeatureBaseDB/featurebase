@@ -4,14 +4,24 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/balancer"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
 
-var _ balancer.FreeWorkerService = (*FreeWorkerService)(nil)
+func NewFreeWorkerService(log logger.Logger) balancer.FreeWorkerService {
+	if log == nil {
+		log = logger.NopLogger
+	}
+	return &freeWorkerService{
+		log: log,
+	}
+}
 
-type FreeWorkerService struct{}
+type freeWorkerService struct {
+	log logger.Logger
+}
 
-func (fw *FreeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleType, addrs ...dax.Address) error {
+func (fw *freeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleType, addrs ...dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -29,7 +39,7 @@ func (fw *FreeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleTyp
 	return errors.Wrap(err, "creating workers")
 }
 
-func (fw *FreeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) error {
+func (fw *freeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -39,7 +49,7 @@ func (fw *FreeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleT
 	return errors.Wrap(err, "deleting")
 }
 
-func (fw *FreeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleType, num int) ([]dax.Address, error) {
+func (fw *freeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleType, num int) ([]dax.Address, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -64,7 +74,7 @@ func (fw *FreeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleTyp
 	return ret, nil
 }
 
-func (fw *FreeWorkerService) ListWorkers(tx dax.Transaction, roleType dax.RoleType) (dax.Addresses, error) {
+func (fw *freeWorkerService) ListWorkers(tx dax.Transaction, roleType dax.RoleType) (dax.Addresses, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")

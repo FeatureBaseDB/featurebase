@@ -29,14 +29,14 @@ func TestFreeJobService(t *testing.T) {
 	}()
 
 	// must have a database to do job stuff
-	schemar := &sqldb.Schemar{}
+	schemar := sqldb.NewSchemar(nil)
 	err = schemar.CreateDatabase(tx,
 		&dax.QualifiedDatabase{
 			OrganizationID: orgID,
 			Database:       dax.Database{ID: dbID, Name: dbName}})
 	require.NoError(t, err)
 
-	fjSvc := &sqldb.FreeJobService{}
+	fjSvc := sqldb.NewFreeJobService(nil)
 	qdbid := dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: dbID}
 	qtid := dax.QualifiedTableID{
 		QualifiedDatabaseID: qdbid,
@@ -57,7 +57,7 @@ func TestFreeJobService(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, dax.Jobs{job1, job3}, jobs)
 
-	wjSvc := &sqldb.WorkerJobService{}
+	wjSvc := sqldb.NewWorkerJobService(nil)
 	err = wjSvc.CreateWorker(tx, role, qdbid, nodeAddr)
 	require.NoError(t, err)
 

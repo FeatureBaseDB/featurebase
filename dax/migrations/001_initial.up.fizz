@@ -36,6 +36,7 @@ create_table("columns") {
 	t.Column("name", "string", {})
 	t.Column("type", "string", {})
 	t.Column("constraints", "string", {})
+	t.Column("options", "string", {})
 	t.Column("table_id", "string")
 	t.ForeignKey("table_id", {"tables": ["id"]}, {"on_delete": "cascade"})
 	t.Timestamps()

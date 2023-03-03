@@ -108,6 +108,7 @@ func (b *Balancer) addWorker(tx dax.Transaction, roleType dax.RoleType, addr dax
 }
 
 func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType) (InternalDiffs, error) {
+	b.logger.Debugf("assigning min workers for '%s'", roleType)
 	// Find out how many free workers we have.
 	freeWorkers, err := b.freeWorkers.ListWorkers(tx, roleType)
 	if err != nil {
@@ -117,6 +118,7 @@ func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType) (
 
 	// If there are no free workers, return early.
 	if freeWorkerCount == 0 {
+		b.logger.Debugf("No free workers for '%s'", roleType)
 		return InternalDiffs{}, nil
 	}
 
@@ -533,6 +535,7 @@ func (b *Balancer) balanceDatabase(tx dax.Transaction, qdbid dax.QualifiedDataba
 }
 
 func (b *Balancer) balanceDatabaseForRole(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (InternalDiffs, error) {
+	b.logger.Debugf("balancing database %s for role: %s\n", qdbid, roleType)
 	diffs := NewInternalDiffs()
 
 	// Before balancing, make sure the database has its minimum number of
