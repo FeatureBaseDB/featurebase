@@ -1576,6 +1576,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateToTimestamp(currentRow)
 	case "STR":
 		return n.EvaluateStr(currentRow)
+	case "DATETIMENAME":
+		return n.EvaluateDateTimeName(currentRow)
 		// time quantum functions
 	case "RANGEQ":
 		return n.EvaluateRangeQ(currentRow)

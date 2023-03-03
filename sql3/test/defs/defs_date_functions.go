@@ -243,3 +243,63 @@ var datePartTests = TableTest{
 		},
 	},
 }
+
+var dateTimeNameTests = TableTest{
+
+	Table: tbl(
+		"datetimenametests",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("ts", fldTypeTimestamp),
+		),
+		srcRows(
+			srcRow(int64(1), knownTimestamp()),
+		),
+	),
+	SQLTests: []SQLTest{
+		// dateTimeName tests
+		// make sure returning a string as the year still works
+		// if this works then the other parts converted to strings of digits should also work
+		{
+			SQLs: sqls(
+				"select _id, datetimename('yy', ts) from dateparttests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		//check to make sure it gets a month name correctly
+		{
+			SQLs: sqls(
+				"select _id, datetimename('m', ts) from dateparttests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "November"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		// check to make sure it gets a day of the week correctly
+		{
+			SQLs: sqls(
+				"select _id, datetimename('w', ts) from dateparttests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "Thursday"),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}
