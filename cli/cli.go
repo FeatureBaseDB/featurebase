@@ -21,8 +21,6 @@ import (
 
 const (
 	defaultHost     string = "localhost"
-	promptBegin     string = "fbsql> "
-	promptMid       string = "    -> "
 	terminationChar string = ";"
 	nullValue       string = "NULL"
 )
@@ -204,7 +202,7 @@ func (cmd *Command) run(ctx context.Context) error {
 	cmd.setupHistory()
 
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:                 promptBegin,
+		Prompt:                 cmd.prompt(false),
 		HistoryFile:            cmd.historyPath,
 		HistoryLimit:           100000,
 		DisableAutoSaveHistory: true,
@@ -223,11 +221,7 @@ func (cmd *Command) run(ctx context.Context) error {
 	var inMidCommand bool
 
 	for {
-		if inMidCommand {
-			rl.SetPrompt(promptMid)
-		} else {
-			rl.SetPrompt(promptBegin)
-		}
+		rl.SetPrompt(cmd.prompt(inMidCommand))
 
 		// Read user provided input.
 		line, err := rl.Readline()
@@ -329,6 +323,20 @@ func (cmd *Command) run(ctx context.Context) error {
 			// pass
 		}
 	}
+}
+
+// prompt constructs the prompt that the user sees based on the currently
+// connected database and whether the user is in the middle of a sql statement.
+func (cmd *Command) prompt(mid bool) string {
+	db := "fbsql" // default prompt when a database is not set.
+	if cmd.databaseName != "" {
+		db = cmd.databaseName
+	}
+
+	if mid {
+		return strings.Repeat(" ", len(db)) + "-# "
+	}
+	return db + "=# "
 }
 
 // close is called upon quitting. It should close any remaining open file
