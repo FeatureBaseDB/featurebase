@@ -10,14 +10,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"sync"
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
-
-	"runtime/pprof"
 )
 
 var _ = pprof.StartCPUProfile
@@ -102,7 +101,6 @@ func NewBoltTranslateStore(index, field string, partitionID, partitionN int, fsy
 
 // Open opens the translate file.
 func (s *BoltTranslateStore) Open() (err error) {
-
 	// add the path to the problem database if we panic handling it.
 	defer func() {
 		r := recover()
@@ -111,9 +109,9 @@ func (s *BoltTranslateStore) Open() (err error) {
 		}
 	}()
 
-	if err := os.MkdirAll(filepath.Dir(s.Path), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o750); err != nil {
 		return errors.Wrapf(err, "mkdir %s", filepath.Dir(s.Path))
-	} else if s.db, err = bolt.Open(s.Path, 0600, &bolt.Options{Timeout: 1 * time.Second, NoSync: !s.fsyncEnabled, InitialMmapSize: 0}); err != nil {
+	} else if s.db, err = bolt.Open(s.Path, 0o600, &bolt.Options{Timeout: 1 * time.Second, NoSync: !s.fsyncEnabled, InitialMmapSize: 0}); err != nil {
 		return errors.Wrapf(err, "open file: %s", err)
 	}
 
@@ -513,7 +511,6 @@ func (r *BoltTranslateEntryReader) ReadEntry(entry *TranslateEntry) error {
 
 type boltWrapper struct {
 	tx *bolt.Tx
-	db *bolt.DB
 }
 
 func (w *boltWrapper) Commit() error {
@@ -528,6 +525,7 @@ func (w *boltWrapper) Rollback() {
 		w.tx.Rollback()
 	}
 }
+
 func (s *BoltTranslateStore) FreeIDs() (*roaring.Bitmap, error) {
 	result := roaring.NewBitmap()
 	err := s.db.View(func(tx *bolt.Tx) error {
@@ -544,11 +542,12 @@ func (s *BoltTranslateStore) FreeIDs() (*roaring.Bitmap, error) {
 	})
 	return result, err
 }
+
 func (s *BoltTranslateStore) MergeFree(tx *bolt.Tx, newIDs *roaring.Bitmap) error {
 	bkt := tx.Bucket(bucketFree)
 	b := bkt.Get(freeKey)
 	buf := new(bytes.Buffer)
-	if b != nil { //if existing combine with newIDs
+	if b != nil { // if existing combine with newIDs
 		before := roaring.NewBitmap()
 		err := before.UnmarshalBinary(b)
 		if err != nil {
