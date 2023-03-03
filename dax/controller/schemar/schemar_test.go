@@ -2,11 +2,11 @@ package schemar_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
+	cschemar "github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/gobuffalo/pop/v6"
@@ -251,7 +251,7 @@ func setupSQLDBTx(t *testing.T) (trans controller.Transactor, tx dax.Transaction
 	return trans, tx, finish
 }
 
-func TestDropNonexistentField(t *testing.T) {
+func TestSchemarErrors(t *testing.T) {
 	trans, tx, _ := setupSQLDBTx(t)
 
 	schemar := sqldb.NewSchemar(nil)
@@ -285,8 +285,6 @@ func TestDropNonexistentField(t *testing.T) {
 		},
 	}
 
-	fmt.Println("here")
-
 	_, err = qtbl.CreateID()
 	require.NoError(t, err)
 	err = schemar.CreateTable(tx, qtbl)
@@ -304,56 +302,88 @@ func TestDropNonexistentField(t *testing.T) {
 		if err != nil {
 			t.Logf("dropping database: %v", err)
 		}
+		err = tx.Commit()
+		if err != nil {
+			t.Logf("committing drop database")
+		}
 	}()
 
-	fmt.Println("here2")
-	// Test Drop non-existent field fails with correct error
-	tx, err = trans.BeginTx(context.Background(), true)
-	require.NoError(t, err)
-	err = schemar.DropField(tx, qtbl.QualifiedID(), "unknownField")
-	require.True(t, errors.Is(err, dax.ErrFieldDoesNotExist))
-	tx.Rollback()
+	t.Run("Drop non-existent field fails with correct error", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		err = schemar.DropField(tx, qtbl.QualifiedID(), "unknownField")
+		requireCode(t, err, dax.ErrFieldDoesNotExist)
+	})
 
-	// Test Lookup non-existent table fails with correct error (by name)
-	tx, err = trans.BeginTx(context.Background(), true)
-	require.NoError(t, err)
-	_, err = schemar.Table(tx, dax.QualifiedTableID{QualifiedDatabaseID: qdbid, Name: "humbug"})
-	require.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
-	tx.Rollback()
-	fmt.Println("here4")
+	t.Run("Test Lookup non-existent table fails with correct error (by name)", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		_, err = schemar.Table(tx, dax.QualifiedTableID{QualifiedDatabaseID: qdbid, Name: "humbug"})
+		requireCode(t, err, dax.ErrTableNameDoesNotExist)
+	})
 
-	// Test Lookup non-existent table fails with correct error (by name)
-	tx, err = trans.BeginTx(context.Background(), true)
-	require.NoError(t, err)
-	_, err = schemar.Table(tx, dax.QualifiedTableID{QualifiedDatabaseID: qdbid, ID: "bumhug", Name: "humbug"})
-	require.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-	tx.Rollback()
+	t.Run("Test Lookup non-existent table fails with correct error (by name)", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		_, err = schemar.Table(tx, dax.QualifiedTableID{QualifiedDatabaseID: qdbid, ID: "bumhug", Name: "humbug"})
+		requireCode(t, err, dax.ErrTableIDDoesNotExist)
+	})
 
-	// Test Lookup non-existent tableID fails with correct error (by name)
-	tx, err = trans.BeginTx(context.Background(), true)
-	require.NoError(t, err)
-	_, err = schemar.TableID(tx, qdbid, "humbug")
-	require.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
-	tx.Rollback()
+	t.Run("Test Lookup non-existent tableID fails with correct error (by name)", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		_, err = schemar.TableID(tx, qdbid, "humbug")
+		requireCode(t, err, dax.ErrTableNameDoesNotExist)
+	})
 
-	fmt.Println("here5")
-	// Test Create existing field fails
-	// tx, err = trans.BeginTx(context.Background(), true)
-	// require.NoError(t, err)
-	// err = schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "age", Type: "int", Options: dax.FieldOptions{}})
-	// fmt.Println("isING")
-	// val := errors.Is(err, dax.ErrFieldExists)
-	// fmt.Println("requireING")
-	// require.True(t, val)
-	// fmt.Println("uh require complete?")
-	// tx.Rollback()
+	t.Run("Test Create existing field fails", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		err = schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "age", Type: "int", Options: dax.FieldOptions{}})
+		requireCode(t, err, dax.ErrFieldExists)
+	})
 
-	// fmt.Println("here6")
-	// // Test Create field empty name fails
-	// tx, err = trans.BeginTx(context.Background(), true)
-	// require.NoError(t, err)
-	// err = schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "", Type: "int", Options: dax.FieldOptions{}})
-	// require.True(t, errors.Is(err, cschemar.ErrCodeFieldNameInvalid))
-	// tx.Rollback()
+	t.Run("Test Create field empty name fails", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		err = schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "", Type: "int", Options: dax.FieldOptions{}})
+		requireCode(t, err, cschemar.ErrCodeFieldNameInvalid)
+	})
 
+	t.Run("Test create table that already exists", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		err = schemar.CreateTable(tx, qtbl)
+		requireCode(t, err, dax.ErrTableIDExists)
+	})
+
+	t.Run("Find database by name that doesn't exist", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		_, err = schemar.DatabaseByName(tx, orgID, "blooooooo")
+		requireCode(t, err, dax.ErrDatabaseNameDoesNotExist)
+	})
+
+	t.Run("Find database by ID that doesn't exist", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		defer tx.Rollback()
+		require.NoError(t, err)
+		_, err = schemar.DatabaseByID(tx, dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: "zeeeeeeeeeeeeep"})
+		requireCode(t, err, dax.ErrDatabaseIDDoesNotExist)
+	})
+
+}
+
+func requireCode(t *testing.T, err error, code errors.Code) {
+	if !errors.Is(err, code) {
+		t.Fatalf("Error '%v' does not have code %s.", err, code)
+	}
 }

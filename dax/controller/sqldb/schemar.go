@@ -84,7 +84,9 @@ func (s *Schemar) DatabaseByName(tx dax.Transaction, orgID dax.OrganizationID, d
 
 	db := &models.Database{}
 	err := dt.C.Where("organization_id = ? and name = ?", orgID, dbname).First(db)
-	if err != nil {
+	if isNoRowsError(err) {
+		return nil, dax.NewErrDatabaseNameDoesNotExist(dbname)
+	} else if err != nil {
 		return nil, errors.Wrap(err, "finding database")
 	}
 
@@ -133,7 +135,10 @@ func (s *Schemar) DatabaseByID(tx dax.Transaction, qdb dax.QualifiedDatabaseID) 
 	}
 
 	db := &models.Database{}
-	if err := dt.C.Find(db, string(qdb.DatabaseID)); err != nil {
+	err := dt.C.Find(db, string(qdb.DatabaseID))
+	if isNoRowsError(err) {
+		return nil, dax.NewErrDatabaseIDDoesNotExist(qdb)
+	} else if err != nil {
 		return nil, errors.Wrap(err, "finding DB")
 	}
 	return toQualifiedDatabase(db), nil
@@ -181,7 +186,7 @@ func (s *Schemar) Databases(tx dax.Transaction, orgID dax.OrganizationID, dbIDs 
 	s.log.Debugf("Schemar: Databases: orgID: %s dbIDs: %v", orgID, dbIDs)
 
 	dbs := []*models.Database{}
-	q := dt.C.Where("1 = 1")
+	q := dt.C.Q()
 	if orgID != "" {
 		q = q.Where("organization_id = ?", orgID)
 	}
@@ -229,11 +234,12 @@ func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) erro
 
 	tbl := toModelTable(qtbl)
 
-	if err := dt.C.Eager().Create(tbl); err != nil {
-		return errors.Wrap(err, "creating database object")
+	err := dt.C.Eager().Create(tbl)
+	if isViolatesUniqueConstraint(err) {
+		return dax.NewErrTableIDExists(qtbl.QualifiedID())
 	}
 
-	return nil
+	return errors.Wrap(err, "creating database object")
 }
 
 func toModelTable(qtbl *dax.QualifiedTable) *models.Table {
@@ -321,10 +327,25 @@ func (s *Schemar) CreateField(tx dax.Transaction, qtid dax.QualifiedTableID, fie
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
+	if field.Name == "" {
+		return schemar.NewErrFieldNameInvalid(field.Name)
+	}
+
+	// we could probably make this a single query with an INSERT WHERE
+	// (subselect), but then would have to construct the whole insert
+	// by hand which would be annoying and error prone to keep up to
+	// date
+	cols := &models.Columns{}
+	err := dt.C.Where("name = ? and table_id = ?", field.Name, qtid.Key()).All(cols)
+	if err != nil {
+		return errors.Wrap(err, "looking up field")
+	}
+	if len(*cols) > 0 {
+		return dax.NewErrFieldExists(field.Name)
+	}
 
 	col := toModelColumn(qtid.Key(), field)
-	err := dt.C.Create(&col)
-
+	err = dt.C.Create(&col)
 	return errors.Wrap(err, "creating column")
 }
 
