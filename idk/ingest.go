@@ -269,11 +269,7 @@ func (m *Main) run() error {
 	l := &msgCounter{MaxMsgs: m.MaxMsgs}
 
 	if m.Delete {
-<<<<<<< HEAD
 		err := m.runDeleter(l)
-=======
-		err := m.runDeleter1(0, l)
->>>>>>> 37f38476be6e1727a74114cabb40295893b5373d
 		if err != nil {
 			return err
 		}
@@ -1339,7 +1335,6 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 				default:
 					return errors.Errorf("unhandled field type %s", field.Options().Type())
 				}
-				return errors.Errorf("directives should be a string slice but got: %+v of %[1]T", row.Values[len(row.Values)-1])
 			}
 			if len(directives) == 0 {
 				continue

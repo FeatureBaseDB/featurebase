@@ -916,145 +916,9 @@ func TestAddingRemovingData(t *testing.T) {
 					"{\"results\":[1]}\n",
 				},
 			},
-		}, /*
-			{
-				name: "all values can be deleted",
-				pathsToAvroSchema: []string{
-					"alltypes.json",
-					"alltypes_delete_fields.json",
-				},
-				pathsToRecords: []string{
-					"./testdata/records/alltypes.json",
-					"./testdata/records/alltypes_delete_fields.json",
-				},
-				pilosaHosts: pilosaHost,
-				registryURL: registryHost,
-				kafkaHost:   kafkaHost,
-				consumerConfigs: []ConsumerTestConfig{
-					{
-						idType:    "string",
-						keyFields: []string{"pk0", "pk1", "pk2"},
-						topic:     "alltypes",
-						delete:    false,
-					},
-					{
-						idType:    "string",
-						keyFields: []string{"pk0", "pk1", "pk2"},
-						topic:     "alltypes_delete_fields",
-						delete:    true,
-					},
-				},
-				index: "alltypes_delete",
-				queries: [][]string{
-					[]string{
-						"Count(All())",
-						"Count(ConstRow(columns=['u2Yr4|sHaUv|x5z8P', 'DY2Ui|kUbdU|pjxqm']))",
-						"Count(Row(stringset_string='58KIR'))",
-						"Count(Row(string_string='8MGwy'))",
-						"Count(Row(stringtq_string='ivWWb'))",
-						"Count(Row(stringtq_string='ivWWb', to=\"2023-02-03\"))",
-						"Count(Row(stringtq_string='ivWWb', from=\"2023-02-03\", to=\"2023-02-04\"))",
-						"Count(Union(Row(stringset_bytes='eNKWF'),Row(stringset_bytes='5ptDx')))",
-						"Row(string_bytes='vTwn4')",
-						"Row(stringsettq_bytes='798ka')",
-						"Row(stringsettq_bytes='798ka', from=\"2023-02-18\")",
-						"Row(stringsettq_bytes='798ka', from=\"2023-02-16\", to=\"2023-02-18\")",
-						"Intersect(Row(stringset_stringarray='u2Yr4'), Row(stringset_stringarray='PYE8V'), Row(stringset_stringarray='VBcyJ'), Row(stringset_stringarray='Chgzr'), Row(stringset_stringarray='DY2Ui'))",
-						"Row(stringtq_stringarray='oxjI0', from=\"2023-01-29\", to=\"2023-01-31\")",
-						"Intersect(Row(stringset_bytesarray='wNZ7o'), Row(stringset_bytesarray='OKNV2'),Row(stringset_bytesarray='F0uC4'),Row(stringset_bytesarray='VBcyJ'),Row(stringset_bytesarray='KMZnH'))",
-						"Count(Row(idset_long=839))",
-						"Count(Row(id_long=809))",
-						"Count(Row(idtq_long=533))",
-						"Count(Row(idtq_long=533, from=\"2020-01-01\"))",
-						"Count(Row(idset_int=533))",
-						"Count(Row(id_int=168))",
-						"Count(Row(idsettq_int=113))",
-						"Row(idsettq_int=113, to=\"2024-01-01\")",
-						"Count(Intersect(Row(idset_longarray=399),Row(idset_longarray=322), Row(idset_longarray=975), Row(idset_longarray=730), Row(idset_longarray=969)))",
-						"Count(Intersect(Row(idtq_longarray=172),Row(idtq_longarray=388), Row(idtq_longarray=731), Row(idtq_longarray=429), Row(idtq_longarray=730)))",
-						"Count(Intersect(Row(idtq_longarray=172, from=\"2022-01-01\"),Row(idtq_longarray=388, from=\"2022-01-01\"), Row(idtq_longarray=731, from=\"2022-01-01\"), Row(idtq_longarray=429, from=\"2022-01-01\"), Row(idtq_longarray=730, from=\"2022-01-01\")))",
-						"Count(Intersect(Row(idset_intarray=958),Row(idset_intarray=242), Row(idset_intarray=778), Row(idset_intarray=289), Row(idset_intarray=797)))",
-						"Count(Row(int_long > 500))",
-						"Count(Row(int_int > 500))",
-						"Count(Row(decimal_bytes > 1000.00))",
-						"Count(Row(decimal_float > 3.05))",
-						"Count(Row(decimal_double > 4.11))",
-						"Count(Row(dateint_bytes_ts > 1675163490))",
-						"Count(Row(bools=bool_bool))",
-						"Count(Not(Row(bools=bool_bool)))",
-						"Count(Row(timestamp_bytes_ts > \"2023-02-20T00:00:00Z\"))",
-						"Count(Row(timestamp_bytes_int > \"2023-02-20T00:00:00Z\"))",
-					},
-					{
-						// TODO: missing tests for timestamps and time fields, they don't see supported
-						"Count(All())",
-						"Row(int_long=null)",
-						"Count(UnionRows(Rows(stringset_stringarray)))",
-						"Not(UnionRows(Rows(stringset_stringarray), Rows(string_string),Rows(stringset_bytes),Rows(string_bytes),Rows(stringset_stringarray),Rows(stringset_bytesarray),Rows(idset_long),Rows(id_long),Rows(idset_int),Rows(id_int),Rows(idset_longarray),Rows(idset_intarray)))",
-						"Row(int_int=null)",
-						"Row(decimal_bytes=null)",
-						"Row(decimal_float=null)",
-						"Count(Row(bools=bool_bool))",
-						"Count(Not(Row(bools-exists=bool_bool)))",
-						"Count(Row(dateint_bytes_ts=null))",
-					},
-				},
-				expectedResults: [][]string{
-					[]string{
-						"{\"results\":[10]}\n",
-						"{\"results\":[2]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[0]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[2]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"DY2Ui|kUbdU|pjxqm\"]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
-						"{\"results\":[{\"columns\":[]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"u2Yr4|sHaUv|x5z8P\"]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"yg8hY|tvNOB|byHh9\"]}]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"6TKzc|YKLk9|h1iqc\"]}]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[4]}\n",
-						"{\"results\":[5]}\n",
-						"{\"results\":[4]}\n",
-						"{\"results\":[3]}\n",
-						"{\"results\":[3]}\n",
-						"{\"results\":[8]}\n",
-						"{\"results\":[4]}\n",
-						"{\"results\":[6]}\n",
-						"{\"results\":[3]}\n",
-						"{\"results\":[3]}\n",
-					},
-					[]string{
-						"{\"results\":[10]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
-						"{\"results\":[9]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"6TKzc|YKLk9|h1iqc\"]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"9z4aw|5ptDx|CKs1F\"]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"RKE3c|6TKzc|RKE3c\"]}]}\n",
-						"{\"results\":[{\"columns\":[],\"keys\":[\"RKE3c|6TKzc|RKE3c\"]}]}\n",
-						"{\"results\":[3]}\n",
-						"{\"results\":[1]}\n",
-						"{\"results\":[1]}\n",
-					},
-				},
-			},*/
-		{
-			name: "all values can be deleted",
+		},
+		{ // confirm delete behavior when index is keyed
+			name: "all values can be deleted with keys",
 			pathsToAvroSchema: []string{
 				"alltypes.json",
 				"alltypes_delete_fields.json",
@@ -1141,7 +1005,6 @@ func TestAddingRemovingData(t *testing.T) {
 					"Count(Row(timestamp_bytes_int > \"2023-02-20T00:00:00Z\"))",
 				},
 				{
-					// TODO: missing tests for timestamps and time fields, they don't see supported
 					"Count(All())",
 					"Row(int_long=null)",
 					"Count(UnionRows(Rows(stringset_stringarray)))",
@@ -1246,8 +1109,8 @@ func TestAddingRemovingData(t *testing.T) {
 
 		// define some vars
 		now := time.Now().UnixNano()
-		//index := fmt.Sprintf("%s_%d", test.index, now)
-		index := test.index
+		index := fmt.Sprintf("%s_%d", test.index, now)
+		//index := test.index
 
 		// so topics of the same name end up being the same name after
 		// adding a timestamp to make sure they're unique
@@ -1312,7 +1175,6 @@ func TestAddingRemovingData(t *testing.T) {
 			client := consumer.PilosaClient()
 			runTestQueries(t, index, test.queries[i], test.expectedResults[i], client)
 		}
-
 	}
 }
 
