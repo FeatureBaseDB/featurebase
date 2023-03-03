@@ -94,7 +94,6 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 			switch hdr.BaseType {
 			case dax.BaseTypeID, dax.BaseTypeInt:
 				jn := s.Data[i][j]
-				// jn := bypass[i].([]interface{})[j] // forced to do this to handle ints bigger than 2^53
 				if v, ok := jn.(json.Number); ok {
 					if x, err := v.Int64(); err == nil {
 						s.Data[i][j] = x
