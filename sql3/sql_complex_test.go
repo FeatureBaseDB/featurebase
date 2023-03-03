@@ -23,6 +23,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 )
@@ -3037,4 +3038,40 @@ func TestPlanner_BulkInsert_FP1916(t *testing.T) {
 	got := results[0][0].(int64)
 	expected := int64(8924809397503602651)
 	assert.Equal(t, got, expected)
+}
+
+func TestPlanner_BulkInsert_FP1915(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
+	node := c.GetNode(0).Server
+	_, _, _, err := sql_test.MustQueryRows(t, node, `create table ids (
+		_id id,
+		a int,
+		b int);`)
+	assert.NoError(t, err)
+	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO ids (_id, a, b) 
+map ('$._id' id, '$.a' int, '$.b' int)
+from x'{ "_id":8924809397503602651 , "a": 10, "b": 20 }
+       { "_id":"8924809397503602652" , "a": 10, "b": 20 }'
+WITH
+    FORMAT 'NDJSON'
+    INPUT 'STREAM';`)
+	assert.NoError(t, err)
+	results, _, _, err := sql_test.MustQueryRows(t, node, `select _id from ids`)
+	assert.NoError(t, err)
+	got := make([]int64, 0)
+	for i := range results {
+		got = append(got, results[i][0].(int64))
+	}
+	sort.Slice(got, func(i, j int) bool {
+		return got[i] < got[j]
+	})
+	vprint.VV("results %#v", results)
+	if diff := cmp.Diff([]int64{
+		8924809397503602651,
+		8924809397503602652,
+	}, got); diff != "" {
+		t.Fatal(diff)
+	}
 }

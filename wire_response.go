@@ -45,24 +45,6 @@ func (s *WireQueryResponse) UnmarshalJSON(in []byte) error {
 	return s.UnmarshalJSONTyped(in, false)
 }
 
-// decodeDataWithNumber allows access to integers larger than 2^53 which is normally
-// not supported in JSON, this extra parse is inefficient and should be re-examined
-// once all the typing is settled
-func (s *WireQueryResponse) decodeDataWithNumber(in []byte) ([]interface{}, error) {
-	dat := make(map[string]interface{})
-	d := json.NewDecoder(bytes.NewBuffer(in))
-	d.UseNumber()
-	if err := d.Decode(&dat); err != nil {
-		return nil, err
-	}
-	if a, ok := dat["data"].([]interface{}); ok {
-		return a, nil
-	}
-	return nil, noArrayPresent
-}
-
-var noArrayPresent = errors.New("no data in response")
-
 // UnmarshalJSONTyped is a temporary until we send typed values back in sql
 // responses. At that point, we can get rid of the typed=false path. In order to
 // do that, we need sql3 to return typed values, and we need the sql3/test/defs
@@ -72,16 +54,12 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 	type Alias WireQueryResponse
 	var aux Alias
 
-	if err := json.Unmarshal(in, &aux); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(in))
+	dec.UseNumber()
+	err := dec.Decode(&aux)
+	if err != nil {
 		return err
 	}
-	bypass, err := s.decodeDataWithNumber(in)
-	if err != nil {
-		if err != noArrayPresent { // no data is not an error but just allows the compiler
-			return err
-		}
-	}
-
 	*s = WireQueryResponse(aux)
 
 	// If the SQLResponse contains an error, don't bother doing any conversions
@@ -100,7 +78,12 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 		for k, v := range fld.TypeInfo {
 			switch k {
 			case "scale":
-				fld.TypeInfo[k] = int64(v.(float64))
+				switch n := v.(type) {
+				case float64:
+					fld.TypeInfo[k] = int64(n)
+				case json.Number:
+					fld.TypeInfo[k], _ = n.Int64()
+				}
 			}
 		}
 	}
@@ -110,7 +93,7 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 		for j, hdr := range s.Schema.Fields {
 			switch hdr.BaseType {
 			case dax.BaseTypeID, dax.BaseTypeInt:
-				jn := bypass[i].([]interface{})[j] // forced to do this to handle ints bigger than 2^53
+				jn := s.Data[i][j]
 				if v, ok := jn.(json.Number); ok {
 					if x, err := v.Int64(); err == nil {
 						s.Data[i][j] = x
@@ -120,8 +103,7 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 				}
 
 			case dax.BaseTypeIDSet:
-				if _, ok := s.Data[i][j].([]interface{}); ok {
-					src := bypass[i].([]interface{})[j].([]interface{})
+				if src, ok := s.Data[i][j].([]interface{}); ok {
 					if typed {
 						val := make(IDSet, len(src))
 						for k := range src {
@@ -148,7 +130,7 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 				}
 
 			case dax.BaseTypeDecimal:
-				if _, ok := s.Data[i][j].(float64); ok {
+				if jn, ok := s.Data[i][j].(json.Number); ok {
 					var scale int64
 					if scaleVal, ok := hdr.TypeInfo["scale"]; !ok {
 						return errors.New("decimal does not have a scale")
@@ -159,7 +141,11 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 					}
 
 					format := fmt.Sprintf("%%.%df", scale)
-					dec, err := pql.ParseDecimal(fmt.Sprintf(format, s.Data[i][j]))
+					f, err := jn.Float64()
+					if err != nil {
+						return errors.Wrap(err, "parsing decimal")
+					}
+					dec, err := pql.ParseDecimal(fmt.Sprintf(format, f))
 					if err != nil {
 						return errors.Wrap(err, "parsing decimal")
 					}
