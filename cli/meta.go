@@ -305,7 +305,7 @@ Help
 Query Buffer
   \p[rint]               show the contents of the query buffer
   \r[eset]               reset (clear) the query buffer
-  \w FILE                write query buffer to file
+  \w[rite] FILE          write query buffer to file
 
 Input/Output
   \echo [-n] [STRING]    write string to standard output (-n for no newline)
@@ -591,10 +591,10 @@ func (m *metaPSet) execute(cmd *Command) (action, error) {
 		case "border":
 			sub := newMetaBorder(m.args[1:])
 			return sub.execute(cmd)
-		case "expanded":
+		case "expanded", "x":
 			sub := newMetaExpanded(m.args[1:])
 			return sub.execute(cmd)
-		case "tuples_only":
+		case "tuples_only", "t":
 			sub := newMetaTuplesOnly(m.args[1:])
 			return sub.execute(cmd)
 		default:
@@ -994,7 +994,7 @@ func splitMetaCommand(in string, replacer *replacer) (metaCommand, error) {
 		return newMetaWarn(args), nil
 	case "watch":
 		return newMetaWatch(args), nil
-	case "w":
+	case "w", "write":
 		return newMetaWrite(args), nil
 	case "x":
 		return newMetaExpanded(args), nil
