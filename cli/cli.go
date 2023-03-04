@@ -450,7 +450,7 @@ func (cmd *Command) setupHistory() {
 		if err != nil {
 			cmd.Errorf("Creating directory for history: %v\n", err)
 		} else {
-			historyPath = filepath.Join(historyDir, "cli_history")
+			historyPath = filepath.Join(historyDir, "fbsql_history")
 		}
 	}
 	cmd.historyPath = historyPath
