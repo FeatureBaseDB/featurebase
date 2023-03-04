@@ -48,7 +48,7 @@ func buildFlags(cmd *cobra.Command, cliCmd *cli.Command) {
 
 	// Config flags.
 	flags.StringVarP(&cliCmd.Config.Host, "host", "", cliCmd.Config.Host, "hostname of FeatureBase.")
-	flags.StringVarP(&cliCmd.Config.Port, "port", "", cliCmd.Config.Port, "port of FeatureBase.")
+	flags.StringVarP(&cliCmd.Config.Port, "port", "p", cliCmd.Config.Port, "port of FeatureBase.")
 	flags.StringVar(&cliCmd.Config.HistoryPath, "history-path", cliCmd.Config.HistoryPath, "path for history files.")
 	flags.StringVar(&cliCmd.Config.OrganizationID, "org-id", cliCmd.Config.OrganizationID, "OrganizationID.")
 	flags.StringVarP(&cliCmd.Config.Database, "dbname", "d", cliCmd.Config.Database, "Name of the database to connect to.")
