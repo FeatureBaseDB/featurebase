@@ -385,8 +385,6 @@ func executeFile(cmd *Command, fileName string) (action, error) {
 		qps, mcs, err := splitter.split(line)
 		if err != nil {
 			return actionNone, errors.Wrapf(err, "splitting lines")
-		} else if len(mcs) > 0 {
-			return actionNone, errors.Errorf("include does not support meta-commands")
 		}
 
 		for i := range qps {
@@ -396,6 +394,18 @@ func executeFile(cmd *Command, fileName string) (action, error) {
 				if err := cmd.executeAndWriteQuery(qry); err != nil {
 					return actionNone, errors.Wrap(err, "executing query")
 				}
+			}
+		}
+
+		for i := range mcs {
+			action, err := mcs[i].execute(cmd)
+			if err != nil {
+				return actionNone, errors.Wrap(err, "executing meta command")
+			}
+			switch action {
+			case actionQuit:
+				close(cmd.quit)
+				return action, nil
 			}
 		}
 	}
