@@ -7,7 +7,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/controller/balancer"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
 	"github.com/featurebasedb/featurebase/v3/logger"
-	"github.com/gobuffalo/nulls"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 )
@@ -85,7 +84,8 @@ func (w *workerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleTyp
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
-	err := dt.C.RawQuery("UPDATE workers SET database_id = ? WHERE role = ? and address = ?", qdbid.DatabaseID, roleType, addr).Exec()
+	worker := &models.Worker{}
+	err := dt.C.RawQuery("UPDATE workers SET database_id = ? WHERE role = ? and address = ? RETURNING workers.ID", qdbid.DatabaseID, roleType, addr).First(worker)
 
 	return errors.Wrap(err, "associating worker to database")
 }
@@ -117,17 +117,12 @@ func (w *workerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType,
 		return errors.Wrap(err, "getting worker")
 	}
 
-	jobs := make(models.Jobs, len(job))
-	for i, j := range job {
-		jobs[i] = models.Job{
-			Name:       j,
-			Role:       roleType,
-			DatabaseID: qdbid.DatabaseID,
-			WorkerID:   nulls.NewUUID(worker.ID),
-		}
-	}
+	jobs := models.Jobs{}
+	err = dt.C.RawQuery("UPDATE jobs SET worker_id = ? WHERE role = ? and name in (?) RETURNING jobs.ID, jobs.Name", worker.ID, roleType, job).All(&jobs)
 
-	err = dt.C.Create(jobs)
+	if len(jobs) != len(job) {
+		return errors.Errorf("incorrect update updated: %v, given %v", jobs, job)
+	}
 
 	return errors.Wrap(err, "creating jobs")
 }

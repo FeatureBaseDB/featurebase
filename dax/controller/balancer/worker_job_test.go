@@ -67,6 +67,11 @@ func TestWorkerJobService(t *testing.T) {
 	}
 	job1 := dax.Job(qtid.Key() + "job1")
 	job2 := dax.Job(qtid.Key() + "job2")
+	job3 := dax.Job(qtid.Key() + "job3")
+
+	fjSvc := sqldb.NewFreeJobService(nil)
+	err = fjSvc.CreateJobs(tx, role, qdbid, job1, job2, job3)
+	require.NoError(t, err)
 
 	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job1, job2)
 	require.NoError(t, err)
@@ -88,7 +93,6 @@ func TestWorkerJobService(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, dax.Addresses{nodeAddr}, addrs)
 
-	job3 := dax.Job(qtid.Key() + "job3")
 	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job3)
 	require.NoError(t, err)
 

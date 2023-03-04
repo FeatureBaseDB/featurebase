@@ -57,23 +57,27 @@ func TestFreeJobService(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, dax.Jobs{job1, job3}, jobs)
 
+	fwSvc := sqldb.NewFreeWorkerService(nil)
+	err = fwSvc.AddWorkers(tx, role, nodeAddr)
+	require.NoError(t, err)
+
 	wjSvc := sqldb.NewWorkerJobService(nil)
 	err = wjSvc.CreateWorker(tx, role, qdbid, nodeAddr)
 	require.NoError(t, err)
 
-	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job2)
+	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job1)
+	require.NoError(t, err)
+
+	jobs, err = fjSvc.ListJobs(tx, role, qdbid)
+	require.NoError(t, err)
+	require.ElementsMatch(t, dax.Jobs{job3}, jobs)
+
+	err = fjSvc.MergeJobs(tx, role, qdbid, dax.Jobs{job1})
 	require.NoError(t, err)
 
 	jobs, err = fjSvc.ListJobs(tx, role, qdbid)
 	require.NoError(t, err)
 	require.ElementsMatch(t, dax.Jobs{job1, job3}, jobs)
-
-	err = fjSvc.MergeJobs(tx, role, qdbid, dax.Jobs{job2})
-	require.NoError(t, err)
-
-	jobs, err = fjSvc.ListJobs(tx, role, qdbid)
-	require.NoError(t, err)
-	require.ElementsMatch(t, dax.Jobs{job1, job2, job3}, jobs)
 
 	err = fjSvc.DeleteJobsForTable(tx, role, qtid)
 	require.NoError(t, err)
