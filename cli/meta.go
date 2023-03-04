@@ -45,6 +45,7 @@ var _ metaCommand = (*metaHelp)(nil)
 var _ metaCommand = (*metaInclude)(nil)
 var _ metaCommand = (*metaListDatabases)(nil)
 var _ metaCommand = (*metaListTables)(nil)
+var _ metaCommand = (*metaListViews)(nil)
 var _ metaCommand = (*metaOrg)(nil)
 var _ metaCommand = (*metaOutput)(nil)
 var _ metaCommand = (*metaPrint)(nil)
@@ -132,11 +133,22 @@ func newMetaChangeDirectory(args []string) *metaChangeDirectory {
 }
 
 func (m *metaChangeDirectory) execute(cmd *Command) (action, error) {
-	if len(m.args) != 1 {
-		return actionNone, errors.Errorf("meta command 'cd' requires exactly one argument")
+	var dir string
+	switch len(m.args) {
+	case 0:
+		if d, err := os.UserHomeDir(); err != nil {
+			return actionNone, errors.Wrapf(err, "getting home directory")
+		} else {
+			dir = d
+		}
+	case 1:
+		dir = m.args[0]
+	default:
+		return actionNone, errors.Errorf("meta command 'cd' takes zero or one argument")
 	}
-	err := cmd.workingDir.cd(m.args[0])
-	return actionNone, errors.Wrap(err, "running cd command")
+
+	err := cmd.workingDir.cd(dir)
+	return actionNone, errors.Wrapf(err, "changing directory to: %s", dir)
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -160,7 +172,6 @@ func (m *metaConnect) execute(cmd *Command) (action, error) {
 	case 1:
 		err := cmd.connectToDatabase(m.args[0])
 		return actionNone, err
-
 	default:
 		return actionNone, errors.Errorf("meta command 'connect' takes zero or one argument")
 	}
@@ -316,7 +327,7 @@ Input/Output
   \warn [-n] [STRING]    write string to standard error (-n for no newline)
 
 Informational
-  \d                     list tables and views
+  \d                     list tables
   \dt                    list tables
   \dv                    list views
   \l[ist]                list databases
@@ -449,6 +460,27 @@ func newMetaListTables() *metaListTables {
 func (m *metaListTables) execute(cmd *Command) (action, error) {
 	qry := []queryPart{
 		newPartRaw("SHOW TABLES"),
+	}
+
+	if err := cmd.executeAndWriteQuery(qry); err != nil {
+		return actionNone, errors.Wrap(err, "executing query")
+	}
+
+	return actionReset, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// list views (dv)
+// ////////////////////////////////////////////////////////////////////////////
+type metaListViews struct{}
+
+func newMetaListViews() *metaListViews {
+	return &metaListViews{}
+}
+
+func (m *metaListViews) execute(cmd *Command) (action, error) {
+	qry := []queryPart{
+		newPartRaw("SELECT * FROM fb_views"),
 	}
 
 	if err := cmd.executeAndWriteQuery(qry); err != nil {
@@ -958,6 +990,8 @@ func splitMetaCommand(in string, replacer *replacer) (metaCommand, error) {
 		return newMetaConnect(args), nil
 	case "d", "dt":
 		return newMetaListTables(), nil
+	case "dv":
+		return newMetaListViews(), nil
 	case "echo":
 		return newMetaEcho(args), nil
 	case "file":
