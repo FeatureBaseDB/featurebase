@@ -366,6 +366,12 @@ func (cmd *Command) setupConfig() error {
 func (cmd *Command) executeAndWriteQuery(qry query) error {
 	queryResponse, err := cmd.executeQuery(qry)
 	if err != nil {
+		if errors.Is(err, ErrOrganizationRequired) {
+			// Print an error message and return nil, effectively aborting any
+			// further writes for this query.
+			cmd.Errorf("Organization required. Use \\org to set an organization.\n")
+			return nil
+		}
 		return errors.Wrap(err, "making query")
 	}
 	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
