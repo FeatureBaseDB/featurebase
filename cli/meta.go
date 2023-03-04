@@ -311,7 +311,7 @@ Input/Output
   \echo [-n] [STRING]    write string to standard output (-n for no newline)
   \file ...              reference a local file to stream to the server
   \i[nclude] FILE        execute commands from file
-  \o [FILE]              send all query results to file
+  \o[ut] [FILE]          send all query results to file
   \qecho [-n] [STRING]   write string to \o output stream (-n for no newline)
   \warn [-n] [STRING]    write string to standard error (-n for no newline)
 
@@ -319,7 +319,7 @@ Informational
   \d                     list tables and views
   \dt                    list tables
   \dv                    list views
-  \l                     list databases
+  \l[ist]                list databases
 
 Formatting
   \pset [NAME [VALUE]]   set table output option
@@ -966,9 +966,9 @@ func splitMetaCommand(in string, replacer *replacer) (metaCommand, error) {
 		return newMetaHelp(args), nil
 	case "i", "include":
 		return newMetaInclude(args), nil
-	case "l":
+	case "l", "list":
 		return newMetaListDatabases(), nil
-	case "o":
+	case "o", "out":
 		return newMetaOutput(args), nil
 	case "org":
 		return newMetaOrg(args), nil
