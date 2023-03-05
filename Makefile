@@ -51,7 +51,7 @@ version:
 
 # We build a list of packages that omits the IDK and batch packages because
 # those packages require fancy environment setup.
-GOPACKAGES := $(shell $(GO) list ./... | grep -v "/idk" | grep -v "/batch")
+GOPACKAGES := $(shell $(GO) list ./... | grep -v "/v3/idk" | grep -v "/v3/batch")
 
 # Run test suite
 test:

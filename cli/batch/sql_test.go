@@ -39,9 +39,9 @@ func TestBatchSQL(t *testing.T) {
 	s, err := buildBulkInsert(tbl, fields, ids, rows)
 	assert.NoError(t, err)
 
-	exp := `BULK INSERT INTO foo (_id,name,age) MAP (0 int,1 string,2 int) FROM x'0,Alice,11
-1,Bob,22
-2,"Carl,Comma",33
-' WITH BATCHSIZE 3 FORMAT 'CSV' INPUT 'STREAM'`
+	exp := `BULK INSERT INTO foo (_id,name,age) MAP ('$._id' id,'$.col_0' string,'$.col_1' int) FROM x'{"_id":0,"col_0":["Alice",11]}
+{"_id":1,"col_0":["Bob",22]}
+{"_id":2,"col_0":["Carl,Comma",33]}
+' WITH BATCHSIZE 3 FORMAT 'NDJSON' INPUT 'STREAM'`
 	assert.Equal(t, exp, s)
 }
