@@ -1346,23 +1346,35 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 		} else {
 			// here we have an record encoded by avro and it's delete type is
 			// "values", "records", or some unacceptable input
-			_, ok := recSchema.(*avro.RecordSchema)
+			recRecordSchema, ok := recSchema.(*avro.RecordSchema)
 			if !ok {
 				return errors.Errorf("got data of type %T but wanted avro.RecordSchema", recSchema)
 			}
 
 			// map values to fields or _id
-			avroFields := recSchema.(*avro.RecordSchema).Fields
+			avroFields := recRecordSchema.Fields
 			var recordID interface{}
 			fieldValues := make(map[string]interface{})
 			for i, value := range rec.Data() {
 				name := avroFields[i].Name
 				if name == "_id" {
-					recordID = value
+					if m.index.Opts().Keys() == false {
+						recordID, err = toUint64(value)
+						if err != nil {
+							return errors.Errorf("unable convert _id to uint64 for index %s which is has keys set to false", m.index.Name())
+						}
+					} else {
+						recordID, err = toString(value)
+						if err != nil {
+							return errors.Errorf("unable convert _id to string for index %s which is has keys set to true", m.index.Name())
+						}
+					}
+
 				} else {
 					fieldValues[name] = value
 				}
 			}
+
 			switch deleteType {
 			case "values":
 				// find featurebase field based on avro / record field name
@@ -1396,11 +1408,9 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 							// not packed bools, check for string vs ID field keys
 							switch keys := field.Options().Keys(); keys {
 							case true:
-								if singleValue, err := toString(value); err == nil {
-									bq.Add(field.Clear(singleValue, recordID))
-								} else if arrayValue, err := toString(value); err == nil {
+								if arrayValue, err := toStringArray(value); err == nil {
 									for _, v := range arrayValue {
-										bq.Add(field.Clear(string(v), recordID))
+										bq.Add(field.Clear(v, recordID))
 									}
 								} else {
 									return errors.Errorf("value of keyed %s field %s should be a string or array of strings but was %T", fType, field.Name(), value)
@@ -1441,6 +1451,8 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 						return errors.Errorf("unable to handle values from fields with type: %s", fType)
 					}
 				}
+				m.log.Debugf("Delete consumer running the follow delete queries: %s", bq.Serialize())
+
 				resp, err := client.Query(bq, nil)
 				if err != nil || resp.Success != true {
 					return errors.Wrap(err, "error deleting values")

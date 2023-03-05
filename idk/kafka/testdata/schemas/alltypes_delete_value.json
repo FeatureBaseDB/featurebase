@@ -5,7 +5,7 @@
     "doc": "All supported avro types and property variations",
     "delete": "values",
     "fields": [
-        {"name": "_id", "type": "string"},
+        {"name": "_id", "type": ["string", "int"]},
         {"name": "stringset_string", "type": ["string", "null"]},
         {"name": "string_string", "type": ["string", "null"]},
         {"name": "stringset_stringarray", "type": [{"type": "array", "items": "string"}, "null"]},
