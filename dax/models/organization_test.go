@@ -25,7 +25,7 @@ func TestOrganization(t *testing.T) {
 	}()
 
 	o := &models.Organization{
-		ID: "orgid",
+		ID: "orgtest-orgid",
 	}
 	if err := tx.Create(o); err != nil {
 		t.Fatal(err)

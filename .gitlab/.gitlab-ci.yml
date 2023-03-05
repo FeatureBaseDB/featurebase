@@ -330,7 +330,11 @@ run go tests dax/test/dax:
   script:
     - echo "Building FB and Datagen docker images for DAX tests"
     - ./.gitlab/install-soda.sh
-    - cd dax; soda drop -e test; soda create -e test; soda migrate -e test; cd ..;
+    - echo $GOBIN
+    - echo $GOPATH
+    - ls ~/go/bin
+    - echo $HOME
+    - cd dax; $HOME/go/bin/soda drop -e test; $HOME/go/bin/soda create -e test; $HOME/go/bin/soda migrate -e test; cd ..;
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | paste -s -d, -)
     - go test -coverprofile=coverage-dax-integration.out -covermode=atomic -coverpkg=${PKG_LIST} -timeout=20m ./dax/test/dax
   artifacts:
