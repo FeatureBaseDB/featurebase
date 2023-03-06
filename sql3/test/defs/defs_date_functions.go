@@ -175,7 +175,7 @@ var datePartTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(100)),
+				row(int64(1), int64(200)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -188,7 +188,7 @@ var datePartTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(100)),
+				row(int64(1), int64(300)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -420,7 +420,7 @@ var datetimeAddTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(101)),
+				row(int64(1), int64(201)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -433,7 +433,7 @@ var datetimeAddTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(101)),
+				row(int64(1), int64(301)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -454,7 +454,7 @@ var datetimeAddTests = TableTest{
 		//test datetimeadd() for transition
 		{
 			SQLs: sqls(
-				"select _id, datepart('NS',datetimeadd('NS', 900, ts)) as a, datepart('US',datetimeadd('NS', 900, ts)) as b from datetimeadd",
+				"select _id, datepart('NS',datetimeadd('NS', 700, ts)) as a, datepart('US',datetimeadd('NS', 700, ts)) as b from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -462,7 +462,7 @@ var datetimeAddTests = TableTest{
 				hdr("b", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(0), int64(101)),
+				row(int64(1), int64(0), int64(201)),
 			),
 			Compare: CompareExactUnordered,
 		},

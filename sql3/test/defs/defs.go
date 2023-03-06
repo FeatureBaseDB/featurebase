@@ -214,7 +214,7 @@ func knownTimestamp() time.Time {
 
 func knownSubSecondTimestamp() time.Time {
 	tm := knownTimestamp()
-	duration, err := time.ParseDuration("100100100ns")
+	duration, err := time.ParseDuration("100200300ns")
 	if err != nil {
 		panic(err.Error())
 	}
