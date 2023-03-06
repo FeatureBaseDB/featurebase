@@ -120,12 +120,37 @@ func (w *workerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType,
 	jobs := models.Jobs{}
 	err = dt.C.RawQuery("UPDATE jobs SET worker_id = ? WHERE role = ? and name in (?) RETURNING jobs.ID, jobs.Name", worker.ID, roleType, job).All(&jobs)
 
-	if len(jobs) != len(job) {
-		return errors.Errorf("incorrect update updated: %v, given %v", jobs, job)
+	// create jobs not in "jobs"
+	toCreate := jobsNotUpdated(job, jobs, worker)
+
+	err = dt.C.Create(toCreate)
+	if err != nil {
+		return errors.Wrap(err, "creating jobs")
 	}
 
 	return errors.Wrap(err, "creating jobs")
 }
+
+func jobsNotUpdated(incomingJobs []dax.Job, created models.Jobs, worker *models.Worker) (toCreate models.Jobs) {
+	for _, incJob := range incomingJobs {
+		for j, createdJob := range created {
+			if createdJob.Name == incJob {
+				break
+			} else if j == len(created) {
+				toCreate = append(toCreate,
+					models.Job{
+						Name:       incJob,
+						Role:       worker.Role,
+						DatabaseID: dax.DatabaseID(worker.DatabaseID.String),
+						Worker:     worker,
+					},
+				)
+			}
+		}
+	}
+	return toCreate
+}
+
 func (w *workerJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
