@@ -1131,7 +1131,7 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 	client := m.PilosaClient()
 	index := m.index
 
-	// Pull records one by one from kafka
+	// Pull records one by one from source (e.g. kafka)
 	for ; !limitCounter.IsDone(); rec, err = source.Record() {
 		if err == ErrFlush {
 			continue
@@ -1489,15 +1489,16 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 				}
 				if len(rawQueries) == 0 {
 					m.log.Infof("delete record doesn't contain any delete queries: confirm 'keys', 'ids', or 'filter' key has a value")
-				}
-				for _, query := range rawQueries {
-					baseQuery := index.RawQuery(query)
-					bq.Add(baseQuery)
-				}
+				} else {
+					for _, query := range rawQueries {
+						baseQuery := index.RawQuery(query)
+						bq.Add(baseQuery)
+					}
 
-				_, err := client.Query(bq, nil)
-				if err != nil {
-					return errors.Errorf("running delete query: %s", err)
+					_, err := client.Query(bq, nil)
+					if err != nil {
+						return errors.Errorf("running delete query: %s", err)
+					}
 				}
 			default:
 				return errors.Errorf("unable to process delete where record is avro encoded & the delete property is not empty, 'records', 'fields', or 'values'")
