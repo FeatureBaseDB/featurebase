@@ -37,7 +37,7 @@ RUN make build FLAGS="-o build/featurebase" ${MAKE_FLAGS}
 ### Pilosa runner ###
 #####################
 
-FROM alpine:3.13.2 as runner
+FROM alpine:3.17.2 as runner
 
 LABEL maintainer "dev@molecula.com"
 
