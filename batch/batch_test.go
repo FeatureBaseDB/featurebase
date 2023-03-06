@@ -103,6 +103,12 @@ func testStringSliceCombos(t *testing.T, importer featurebase.Importer, sapi fea
 		Index: idx.Name,
 		Query: "TopN(a1, n=10)",
 	})
+	if resp.Err != nil {
+		t.Fatalf("unexpected error from TopN query: %v", resp.Err)
+	}
+	if len(resp.Results) < 1 {
+		t.Fatalf("expected non-empty result set, got empty results")
+	}
 	pairsField, ok := resp.Results[0].(*featurebase.PairsField)
 	assert.True(t, ok, "wrong return type: %T", resp.Results[0])
 
@@ -508,10 +514,11 @@ func testStringSliceEmptyAndNil(t *testing.T, importer featurebase.Importer, sap
 			{
 				Name: "strslice",
 				Options: featurebase.FieldOptions{
-					Type:      featurebase.FieldTypeSet,
-					Keys:      true,
-					CacheType: featurebase.CacheTypeRanked,
-					CacheSize: 100,
+					Type:           featurebase.FieldTypeSet,
+					Keys:           true,
+					CacheType:      featurebase.CacheTypeRanked,
+					CacheSize:      100,
+					TrackExistence: true,
 				},
 			},
 		},
@@ -610,6 +617,14 @@ func testStringSliceEmptyAndNil(t *testing.T, importer featurebase.Importer, sap
 		{
 			pql: "Row(strslice='z')",
 			exp: []uint64{2},
+		},
+		{
+			pql: "Row(strslice==null)",
+			exp: []uint64{1},
+		},
+		{
+			pql: "Row(strslice!=null)",
+			exp: []uint64{0, 2, 3, 4},
 		},
 	}
 	for i, test := range tests {

@@ -264,6 +264,7 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 			TimeQuantum:    timeQuantum,
 			TTL:            fo.TTL,
 			ForeignIndex:   foreignIndex,
+			TrackExistence: fo.TrackExistence,
 		},
 	}
 }
@@ -367,6 +368,7 @@ func FieldToFieldInfo(fld *dax.Field) *FieldInfo {
 			TimeQuantum:    TimeQuantum(fld.Options.TimeQuantum),
 			TTL:            fld.Options.TTL,
 			ForeignIndex:   fld.Options.ForeignIndex,
+			TrackExistence: fld.Options.TrackExistence,
 		},
 		Views: nil, // TODO(tlt): do we need views populated?
 	}
@@ -410,6 +412,13 @@ func fieldToFieldType(f *dax.Field) string {
 	}
 }
 
+// FieldFromFieldOptions creates a dax.Field given a set of existing
+// field options. It should possibly be unconditionally setting
+// TrackExistence, because it's called in two places in SQL3 both
+// of which are creating new tables, but for now I'm trying to keep
+// its behavior transparent, and handle the enabling of TrackExistence
+// in the code that knows it is creating a field, thus, in sql's
+// create/alter table, or in api.CreateField.
 func FieldFromFieldOptions(fname dax.FieldName, opts ...FieldOption) (*dax.Field, error) {
 	fo, err := newFieldOptions(opts...)
 	if err != nil {
@@ -484,6 +493,9 @@ func FieldOptionsFromField(fld *dax.Field) ([]FieldOption, error) {
 		)
 	default:
 		return nil, errors.Errorf("unsupport field type: %s", fld.Type)
+	}
+	if fld.Options.TrackExistence {
+		opts = append(opts, OptFieldTrackExistence())
 	}
 
 	return opts, nil

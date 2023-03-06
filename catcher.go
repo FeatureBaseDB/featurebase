@@ -124,6 +124,17 @@ func (c *catcherTx) Remove(index, field, view string, shard uint64, a ...uint64)
 	return c.b.Remove(index, field, view, shard, a...)
 }
 
+func (c *catcherTx) Removed(index, field, view string, shard uint64, a ...uint64) (changed []uint64, err error) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			vprint.AlwaysPrintf("see Removed() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
+		}
+	}()
+	return c.b.Removed(index, field, view, shard, a...)
+}
+
 func (c *catcherTx) Contains(index, field, view string, shard uint64, key uint64) (exists bool, err error) {
 
 	defer func() {

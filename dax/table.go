@@ -823,4 +823,5 @@ type FieldOptions struct {
 	TimeQuantum    TimeQuantum   `json:"time-quantum,omitempty"`
 	TTL            time.Duration `json:"ttl,omitempty"`
 	ForeignIndex   string        `json:"foreign-index,omitempty"`
+	TrackExistence bool          `json:"track-existence"`
 }

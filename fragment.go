@@ -1507,32 +1507,60 @@ func (f *fragment) bulkImport(tx Tx, rowIDs, columnIDs []uint64, options *Import
 	return f.bulkImportStandard(tx, rowIDs, columnIDs, options)
 }
 
-// rowColumnSet is a sortable set of row and column IDs which
-// correspond, allowing us to ensure that we produce values in
-// a predictable order
-type rowColumnSet struct {
-	r []uint64
-	c []uint64
-}
-
-func (r rowColumnSet) Len() int {
-	return len(r.r)
-}
-
-func (r rowColumnSet) Swap(i, j int) {
-	r.r[i], r.r[j] = r.r[j], r.r[i]
-	r.c[i], r.c[j] = r.c[j], r.c[i]
-}
-
-// Sort by row ID first, column second, to sort by fragment position
-func (r rowColumnSet) Less(i, j int) bool {
-	if r.r[i] < r.r[j] {
-		return true
+// clearBitsReportingChanges is a special fancy case. For existence-tracking,
+// if we're clearing bits in a mutex, *successfully* cleared bits become null
+// records, so we have to report, not how many records we cleared, but which
+// records specifically became clear. The returned set of bits is the column
+// IDs that actually got a bit cleared from them.
+//
+// This is basically following the logic of bulkImportStandard and
+// importPositions, except that it combines them and drops some of the
+// no longer needed branches.
+func (f *fragment) clearBitsReportingChanges(tx Tx, rowIDs, columnIDs []uint64) ([]uint64, error) {
+	// Verify that there are an equal number of row ids and column ids.
+	if len(rowIDs) != len(columnIDs) {
+		return nil, fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
 	}
-	if r.r[i] > r.r[j] {
-		return false
+
+	// rowSet maintains the set of rowIDs present in this import. It allows the
+	// cache to be updated once per row, instead of once per bit. TODO: consider
+	// sorting by rowID/columnID first and avoiding the map allocation here. (we
+	// could reuse rowIDs to store the list of unique row IDs)
+	rowSet := make(map[uint64]struct{})
+	lastRowID := uint64(1 << 63)
+
+	// replace columnIDs with calculated positions to avoid allocation.
+	prevRow, prevCol := ^uint64(0), ^uint64(0)
+	next := 0
+	for i := 0; i < len(columnIDs); i++ {
+		rowID, columnID := rowIDs[i], columnIDs[i]
+		if rowID == prevRow && columnID == prevCol {
+			continue
+		}
+		prevRow, prevCol = rowID, columnID
+		pos, err := f.pos(rowID, columnID)
+		if err != nil {
+			return nil, err
+		}
+		columnIDs[next] = pos
+		next++
+
+		// Add row to rowSet.
+		if rowID != lastRowID {
+			lastRowID = rowID
+			rowSet[rowID] = struct{}{}
+		}
 	}
-	return r.c[i] < r.c[j]
+	clear := columnIDs[:next]
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	CounterClearingingN.Add(float64(len(clear)))
+	changed, err := tx.Removed(f.index(), f.field(), f.view(), f.shard, clear...)
+	if err != nil {
+		return nil, errors.Wrap(err, "clearing positions")
+	}
+	CounterClearedN.Add(float64(len(changed)))
+	return changed, f.updateCaching(tx, rowSet)
 }
 
 // bulkImportStandard performs a bulk import on a standard fragment. May mutate
@@ -1545,11 +1573,6 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 	rowSet := make(map[uint64]struct{})
 	lastRowID := uint64(1 << 63)
 
-	// It's possible for the ingest API to have already sorted things in
-	// the row-first order we want for this import.
-	if !options.fullySorted {
-		sort.Sort(rowColumnSet{r: rowIDs, c: columnIDs})
-	}
 	// replace columnIDs with calculated positions to avoid allocation.
 	prevRow, prevCol := ^uint64(0), ^uint64(0)
 	next := 0
@@ -1757,35 +1780,6 @@ func (f *fragment) updateCaching(tx Tx, rowSet map[uint64]struct{}) error {
 	return nil
 }
 
-// sliceDifference removes everything from original that's found in remove,
-// updating the slice in place, and returns the compacted slice. The input
-// sets should be sorted.
-func sliceDifference(original, remove []uint64) []uint64 {
-	if len(remove) == 0 {
-		return original
-	}
-	rn := 0
-	rv := remove[rn]
-	on := 0
-	ov := uint64(0)
-	n := 0
-
-	for on, ov = range original {
-		for rv < ov {
-			rn++
-			if rn >= len(remove) {
-				return append(original[:n], original[on:]...)
-			}
-			rv = remove[rn]
-		}
-		if rv != ov {
-			original[n] = ov
-			n++
-		}
-	}
-	return original[:n]
-}
-
 // bulkImportMutex performs a bulk import on a fragment while ensuring
 // mutex restrictions. Because the mutex requirements must be checked
 // against storage, this method must acquire a write lock on the fragment
@@ -1794,16 +1788,10 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64, options *I
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// if ingest promises that this is "fully sorted", then we have been
-	// promised that (1) there's no duplicate entries that need to be
-	// pruned, (2) the input is sorted by row IDs and then column IDs,
-	// meaning that we will generate positions in strictly sequential order.
-	if !options.fullySorted {
-		p := parallelSlices{cols: columnIDs, rows: rowIDs}
-		p.fullPrune()
-		columnIDs = p.cols
-		rowIDs = p.rows
-	}
+	p := parallelSlices{cols: columnIDs, rows: rowIDs}
+	p.fullPrune()
+	columnIDs = p.cols
+	rowIDs = p.rows
 
 	// create a mask of columns we care about
 	columns := roaring.NewSliceBitmap(columnIDs...)
@@ -1822,10 +1810,6 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64, options *I
 		// positions are sorted by columns, but not by absolute
 		// position. we might want them sorted, though.
 		if pos < prev {
-			if options.fullySorted {
-				fmt.Printf("HELP! was promised fully sorted input, but previous position was %d, now generated %d\n",
-					prev, pos)
-			}
 			unsorted = true
 		}
 		prev = pos

@@ -226,14 +226,18 @@ func (sr sourceRows) insertTuples(t *testing.T) string {
 			case float64:
 				sb.WriteString(fmt.Sprintf("%.2f", v))
 			case []int64:
-				strs := make([]string, len(v))
-				for i := range v {
-					strs[i] = fmt.Sprintf("%d", v[i])
+				if v == nil {
+					sb.WriteString("NULL")
+				} else {
+					strs := make([]string, len(v))
+					for i := range v {
+						strs[i] = fmt.Sprintf("%d", v[i])
+					}
+					sb.WriteString("[" + strings.Join(strs, ",") + "]")
 				}
-				sb.WriteString("[" + strings.Join(strs, ",") + "]")
 			case []string:
-				if len(v) == 0 {
-					sb.WriteString("[]")
+				if v == nil {
+					sb.WriteString("NULL")
 				} else {
 					sb.WriteString("['" + strings.Join(v, "','") + "']")
 				}

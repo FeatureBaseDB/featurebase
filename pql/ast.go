@@ -1009,6 +1009,67 @@ func (c *Call) HasConditionArg() bool {
 	return false
 }
 
+// FieldEquality returns an equality test suitable for a non-BSI field.
+// Given a field name, it returns an equality test from the corresponding
+// argument. An equality test indicates whether the test is actually
+// against null, or if not what specific uint64 value it's against, and
+// whether it's an equal or non-equal test. This exists mostly to be able
+// to extract `== null` and `!= null` tests consistently even for non-BSI
+// fields.
+func (c *Call) FieldEquality(k string) (isNull bool, value uint64, equal bool, err error) {
+	v := c.Args[k]
+	equal = true
+	if cond, ok := v.(*Condition); ok {
+		// only exactly EQ and NEQ are equality tests.
+		if cond.Op == EQ || cond.Op == NEQ {
+			equal = cond.Op == EQ
+			if cond.Value == nil {
+				return true, 0, equal, nil
+			}
+			// pick either cond.Value, or cond.Value[0] if it's
+			// a slice of interface{}, to be our new "v" and then
+			// fall through to handling we would have done for
+			// a non-condition.
+			if values, ok := cond.Value.([]interface{}); ok {
+				if len(values) != 1 {
+					return false, 0, false, fmt.Errorf("expected exactly one value for EQ/NEQ, got %d", len(values))
+				}
+				v = values[0]
+			} else {
+				v = cond.Value
+			}
+		} else {
+			return false, 0, false, fmt.Errorf("only support == or != conditions, got %s", cond.Op)
+		}
+		//
+	}
+	if u, ok := v.(uint64); ok {
+		return false, u, equal, nil
+	}
+	if i, ok := v.(int64); ok {
+		return false, uint64(i), equal, nil
+	}
+	return false, 0, false, fmt.Errorf("expected integer or nil value, got %T", v)
+}
+
+// FieldRange yields the range test corresponding to the given key,
+// which means either it's a Condition, or it's just a raw equality
+// to a value, which we treat as {EQ, []any{value}}. This is suitable
+// for use with BSI fields, which generally get their operations as
+// Conditions, and simplifies the caller side of this.
+func (c *Call) FieldRange(k string) (op Token, value interface{}, err error) {
+	v := c.Args[k]
+	if cond, ok := v.(*Condition); ok {
+		return cond.Op, cond.Value, nil
+	}
+	// this shows up if someone wrote `foo=3`, which was
+	// how we spelled it for non-BSI fields. we want to handle that
+	// gracefully. If it had been a condition, we'd have written
+	// it as {Op: EQ, Value: []interface{}{v}}, so we return what
+	// the above would have produced in that case. Sneaky, huh.
+	return EQ, []interface{}{v}, nil
+}
+
 // TranslateInfo returns the relevant translation fields.
 func (c *Call) TranslateInfo(columnLabel, rowLabel string) (colKey, rowKey, fieldName string) {
 	switch c.Name {

@@ -149,6 +149,7 @@ const (
 	kRemoveContainer
 	kAdd
 	kRemove
+	kRemoved
 	kContains
 	kContainerIterator
 	kCount
@@ -182,6 +183,8 @@ func (k kall) String() string {
 		return "kAdd"
 	case kRemove:
 		return "kRemove"
+	case kRemoved:
+		return "kRemoved"
 	case kContains:
 		return "kContains"
 	case kContainerIterator:
@@ -356,6 +359,23 @@ func (c *statTx) Remove(index, field, view string, shard uint64, a ...uint64) (c
 		}
 	}()
 	return c.b.Remove(index, field, view, shard, a...)
+}
+
+func (c *statTx) Removed(index, field, view string, shard uint64, a ...uint64) (changed []uint64, err error) {
+	me := kRemoved
+
+	t0 := time.Now()
+	defer func() {
+		c.stats.add(me, time.Since(t0))
+	}()
+
+	defer func() {
+		if r := recover(); r != nil {
+			vprint.AlwaysPrintf("see Removed() PanicOn '%v' at '%v'", r, vprint.Stack())
+			vprint.PanicOn(r)
+		}
+	}()
+	return c.b.Removed(index, field, view, shard, a...)
 }
 
 func (c *statTx) Contains(index, field, view string, shard uint64, key uint64) (exists bool, err error) {
