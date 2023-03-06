@@ -30,7 +30,7 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	idkMain.Batcher = batcher
 	idkMain.BatchSize = cfg.BatchSize
 	idkMain.BatchMaxStaleness = cfg.BatchMaxStaleness
-	idkMain.Basic()
+	idkMain.SetBasic()
 	idkMain.SetLog(logger.NewStandardLogger(logWriter))
 
 	kr := &Runner{

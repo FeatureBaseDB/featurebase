@@ -245,9 +245,10 @@ func (m *Main) Rename() {
 	}
 }
 
-// Basic sets up Main with basic functionality, excluding those things which are
-// not required for some implementations (such as the kafka runner in fbsql).
-func (m *Main) Basic() {
+// SetBasic sets up Main with basic functionality, excluding those things which
+// are not required for some implementations (such as the kafka runner in
+// fbsql).
+func (m *Main) SetBasic() {
 	m.basic = true
 }
 
