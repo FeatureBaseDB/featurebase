@@ -27,6 +27,7 @@ message FieldOptions {
 	Decimal Max = 18;
 	string TimeUnit = 19;
 	string TTL = 20;
+	bool TrackExistence = 21;
 }
 
 message ImportResponse {

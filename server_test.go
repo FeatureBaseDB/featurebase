@@ -42,7 +42,7 @@ func TestViewsRemovalTTL(t *testing.T) {
 		{
 			name:     "date_old",
 			date:     "2001-02-03T04:05",
-			expViews: []string{"standard"},
+			expViews: []string{"existence", "standard"},
 			/* date_old (2001-02-03T04:05), this will create these views:
 			- standard
 			- standard_2001
@@ -56,6 +56,7 @@ func TestViewsRemovalTTL(t *testing.T) {
 			name: "date_now",
 			date: fmt.Sprintf("%d-%02d-%02dT%02d:%02d", dateNow.Year(), dateNow.Month(), dateNow.Day(), dateNow.Hour(), dateNow.Minute()),
 			expViews: []string{
+				"existence",
 				"standard",
 				"standard_" + fmt.Sprintf("%d", dateNow.Year()),
 				"standard_" + fmt.Sprintf("%d%02d", dateNow.Year(), dateNow.Month()),
@@ -73,6 +74,7 @@ func TestViewsRemovalTTL(t *testing.T) {
 			name: "date_yesterday",
 			date: fmt.Sprintf("%d-%02d-%02dT%02d:%02d", dateYesterday.Year(), dateYesterday.Month(), dateYesterday.Day(), dateYesterday.Hour(), dateYesterday.Minute()),
 			expViews: []string{
+				"existence",
 				"standard",
 				"standard_" + fmt.Sprintf("%d", dateYesterday.Year()),
 				"standard_" + fmt.Sprintf("%d%02d", dateYesterday.Year(), dateYesterday.Month()),
@@ -107,6 +109,7 @@ func TestViewsRemovalTTL(t *testing.T) {
 			name: "date_last_of_month",
 			date: fmt.Sprintf("%d-%02d-%02dT%02d:%02d", dateLastDayOfMonth.Year(), dateLastDayOfMonth.Month(), dateLastDayOfMonth.Day(), dateLastDayOfMonth.Hour(), dateLastDayOfMonth.Minute()),
 			expViews: []string{
+				"existence",
 				"standard",
 				"standard_" + fmt.Sprintf("%d", dateLastDayOfMonth.Year()),
 				"standard_" + fmt.Sprintf("%d%02d", dateLastDayOfMonth.Year(), dateLastDayOfMonth.Month()),
@@ -124,6 +127,7 @@ func TestViewsRemovalTTL(t *testing.T) {
 			name: "date_first_hour_day",
 			date: fmt.Sprintf("%d-%02d-%02dT%02d:%02d", dateNow.Year(), dateNow.Month(), dateNow.Day(), 0, 0),
 			expViews: []string{
+				"existence",
 				"standard",
 				"standard_" + fmt.Sprintf("%d", dateNow.Year()),
 				"standard_" + fmt.Sprintf("%d%02d", dateNow.Year(), dateNow.Month()),
@@ -141,6 +145,7 @@ func TestViewsRemovalTTL(t *testing.T) {
 			name: "date_last_hour_day",
 			date: fmt.Sprintf("%d-%02d-%02dT%02d:%02d", dateNow.Year(), dateNow.Month(), dateNow.Day(), 23, 59),
 			expViews: []string{
+				"existence",
 				"standard",
 				"standard_" + fmt.Sprintf("%d", dateNow.Year()),
 				"standard_" + fmt.Sprintf("%d%02d", dateNow.Year(), dateNow.Month()),
@@ -228,7 +233,7 @@ func TestViewsRemovalStandard(t *testing.T) {
 			name:           "t2_keep_standard",
 			date:           "2001-02-03T04:05",
 			noStandardView: "false",
-			expViews:       []string{"standard"},
+			expViews:       []string{"existence", "standard"},
 			/* date 2001-02-03T04:05, this will create these views:
 			- standard
 			- standard_2001

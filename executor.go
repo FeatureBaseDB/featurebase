@@ -1525,7 +1525,22 @@ func (e *executor) executeBitmapCall(ctx context.Context, qcx *Qcx, index string
 	if !opt.Remote {
 		switch c.Name {
 		case "Row":
-			if c.HasConditionArg() {
+			// We used to do this by checking for "Condition", but if we allow
+			// checks against null for non-BSI fields, that's not accurate. We
+			// can't do this check down in the per-shard stuff, because if we
+			// did it there, we'd be incrementing the stats once per shard.
+			// This is redundant with what we do there but shouldn't change
+			// its behavior, except for possibly the spelling of the diagnostic.
+			fieldName, err := c.FieldArg()
+			if err != nil {
+				return nil, err
+			}
+			field := e.Holder.Field(index, fieldName)
+			if field == nil {
+				return nil, fmt.Errorf("row call with unknown field %s:%s", index, fieldName)
+			}
+			bsig := field.bsiGroup(fieldName)
+			if bsig != nil {
 				statFn(CounterQueryRowBSITotal)
 			} else {
 				statFn(CounterQueryRowTotal)
@@ -4624,6 +4639,27 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 			return ExtractedIDMatrix{}, newNotFoundError(ErrFieldNotFound, name)
 		}
 
+		if field.options.TrackExistence {
+			existenceRow, err := field.Existing(tx, shard)
+			if err != nil {
+				return ExtractedIDMatrix{}, fmt.Errorf("trying to find existence bit: %w", err)
+			}
+			// filter out any rows which exist, but aren't in this data...
+			if existenceRow != nil {
+				existenceRow = existenceRow.Intersect(colsBitmap)
+				existing := existenceRow.Columns()
+				for _, col := range existing {
+					m[mLookup[col]].Rows[i] = []uint64{}
+				}
+			}
+		} else if field.options.Type == FieldTypeSet || field.options.Type == FieldTypeTime {
+			// time quantums and sets which don't have track-existence should treat every
+			// column as a non-null empty set if it has no bits, rather than as a null.
+			for _, col := range cols {
+				m[mLookup[col]].Rows[i] = []uint64{}
+			}
+		}
+
 		switch field.Type() {
 		case FieldTypeSet, FieldTypeMutex:
 			// Handle a set field by listing the rows and then intersecting them with the filter.
@@ -4828,14 +4864,81 @@ func (e *executor) executeExtractShard(ctx context.Context, qcx *Qcx, index stri
 	return matrix, nil
 }
 
+// getNullRowShard requests a row representing the elements of this shard
+// which are null, that is to say, the elements that exist for the index,
+// but not for this particular field. This is computed as row 0 of the
+// index's existence field, minus the bsiExistsBit of the existenceView.
+// We're using bsiExistsBit for consistency between BSI fields and non-BSI
+// fields. In an ideal world, we'd have done this sooner and BSI fields
+// would also be using a separate existenceView, perhaps? But we are not
+// in that world.
+func (e *executor) getNullRowShard(ctx context.Context, tx Tx, idx *Index, fld *Field, existenceView string, shard uint64) (*Row, error) {
+	// Make sure the index supports existence tracking.
+	if idx.existenceField() == nil {
+		return nil, errors.Errorf("index does not support existence tracking: %s", idx.name)
+	}
+	// existenceView: the view we've been asked to look in for existence data
+	// viewExistence: the string "existence", similar to the name "viewStandard",
+	// denoting the existence view we use for non-BSI fields. BSI fields always
+	// track existence.
+	if !fld.options.TrackExistence && existenceView == viewExistence {
+		return nil, fmt.Errorf("field does not support existence tracking: %s", fld.name)
+	}
+
+	var existenceRow *Row
+	existenceFrag := e.Holder.fragment(idx.name, existenceFieldName, viewStandard, shard)
+	if existenceFrag == nil {
+		// no existence frag -> no existence bits are set -> there are no
+		// records in this shard. therefore no records in this shard are
+		// null. more simply, we don't have to compute the things we want
+		// to subtract from an empty row to figure out that the result
+		// will stay empty.
+		return NewRow(), nil
+	} else {
+		var err error
+		if existenceRow, err = existenceFrag.row(tx, 0); err != nil {
+			return nil, err
+		}
+	}
+
+	var notNull *Row
+	var err error
+
+	// Retrieve notNull from fragment if it exists.
+	if frag := e.Holder.fragment(idx.name, fld.name, existenceView, shard); frag != nil {
+		if notNull, err = frag.notNull(tx); err != nil {
+			return nil, errors.Wrap(err, "getting fragment not null")
+		}
+	} else {
+		return existenceRow, nil
+	}
+
+	return existenceRow.Difference(notNull), nil
+}
+
+// getNonNullRowShard requests a row representing the existence of this shard
+// which are not null. We trust the existenceView for this field to be
+// correct, and not contain bits which don't exist at the index level, so we
+// are not checking against the index's existence field.
+func (e *executor) getNonNullRowShard(ctx context.Context, tx Tx, idx *Index, fld *Field, existenceView string, shard uint64) (*Row, error) {
+	// existenceView: the view we've been asked to look in for existence data
+	// viewExistence: the string "existence", similar to the name "viewStandard",
+	// denoting the existence view we use for non-BSI fields. BSI fields always
+	// track existence.
+	if !fld.options.TrackExistence && existenceView == viewExistence {
+		return nil, fmt.Errorf("field does not support existence tracking: %s", fld.name)
+	}
+	// Retrieve fragment.
+	frag := e.Holder.fragment(idx.name, fld.name, existenceView, shard)
+	if frag == nil {
+		return NewRow(), nil
+	}
+	return frag.notNull(tx)
+}
+
 func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (_ *Row, err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "executor.executeRowShard")
 	defer span.Finish()
-
-	// Handle bsiGroup ranges differently.
-	if c.HasConditionArg() {
-		return e.executeRowBSIGroupShard(ctx, qcx, index, c, shard)
-	}
 
 	// Fetch index.
 	idx := e.Holder.Index(index)
@@ -4851,6 +4954,11 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 	f := idx.Field(fieldName)
 	if f == nil {
 		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
+	}
+
+	bsig := f.bsiGroup(fieldName)
+	if bsig != nil {
+		return e.executeRowBSIGroupShard(ctx, qcx, f, bsig, c, shard)
 	}
 
 	err = e.validateTimeCallArgs(c, index)
@@ -4874,15 +4982,31 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 		}
 	}
 
-	rowID, rowOK, rowErr := c.UintArg(fieldName)
-	if rowErr != nil {
-		return nil, fmt.Errorf("Row() error with arg for row: %v", rowErr)
-	} else if !rowOK {
-		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
+	isNull, rowID, isEQ, err := c.FieldEquality(fieldName)
+	if err != nil {
+		return nil, fmt.Errorf("row call: %v", err)
 	}
 
 	// Return row if times are not set and standard view exists.
 	timeNotSet := fromTime.IsZero() && toTime.IsZero()
+	if isNull {
+		if !timeNotSet {
+			return nil, errors.New("can't use a time range with a check for/against null")
+		}
+		tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: idx, Shard: shard})
+		if err != nil {
+			return nil, err
+		}
+		defer finisher(&err0)
+		if isEQ {
+			return e.getNullRowShard(ctx, tx, f.idx, f, viewExistence, shard)
+		} else {
+			return e.getNonNullRowShard(ctx, tx, f.idx, f, viewExistence, shard)
+		}
+	}
+	if !isEQ {
+		return nil, errors.New("only support != for null, not for other values, on set/mutex fields")
+	}
 	if c.Name == "Row" && timeNotSet && !f.options.NoStandardView {
 		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil {
@@ -4941,7 +5065,7 @@ func (e *executor) executeRowShard(ctx context.Context, qcx *Qcx, index string, 
 }
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
-func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64) (cloneable *Row, err0 error) {
+func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, fld *Field, bsig *bsiGroup, c *pql.Call, shard uint64) (cloneable *Row, err0 error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
@@ -4952,23 +5076,13 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 		return nil, errors.New("Row(): too many arguments")
 	}
 
-	// Extract conditional.
-	var fieldName string
-	var cond *pql.Condition
-	for k, v := range c.Args {
-		vv, ok := v.(*pql.Condition)
-		if !ok {
-			return nil, fmt.Errorf("Row(): %q: expected condition argument, got %v", k, v)
-		}
-		fieldName, cond = k, vv
+	op, value, err := c.FieldRange(fld.name)
+	if err != nil {
+		return nil, err
 	}
+	viewName := viewBSIGroupPrefix + fld.name
 
-	f := e.Holder.Field(index, fieldName)
-	if f == nil {
-		return nil, newNotFoundError(ErrFieldNotFound, fieldName)
-	}
-
-	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: f.idx, Shard: shard})
+	tx, finisher, err := qcx.GetTx(Txo{Write: !writable, Index: fld.idx, Shard: shard})
 	if err != nil {
 		return nil, err
 	}
@@ -4987,50 +5101,13 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 	// NEQ <int>         frag.RangeOp
 
 	// Handle `!= null` and `== null`.
-	if cond.Op == pql.NEQ && cond.Value == nil {
-		// Retrieve fragment.
-		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
-		if frag == nil {
-			return NewRow(), nil
-		}
-		return frag.notNull(tx)
-
-	} else if cond.Op == pql.EQ && cond.Value == nil {
-		// Make sure the index supports existence tracking.
-		idx := e.Holder.Index(index)
-		if idx == nil {
-			return nil, newNotFoundError(ErrIndexNotFound, index)
-		} else if idx.existenceField() == nil {
-			return nil, errors.Errorf("index does not support existence tracking: %s", index)
-		}
-
-		var existenceRow *Row
-		existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
-		if existenceFrag == nil {
-			existenceRow = NewRow()
-		} else {
-			if existenceRow, err0 = existenceFrag.row(tx, 0); err0 != nil {
-				return nil, err0
-			}
-		}
-
-		var notNull *Row
-		var err error
-
-		// Retrieve notNull from fragment if it exists.
-		if frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard); frag != nil {
-			if notNull, err = frag.notNull(tx); err != nil {
-				return nil, errors.Wrap(err, "getting fragment not null")
-			}
-		} else {
-			notNull = NewRow()
-		}
-
-		return existenceRow.Difference(notNull), nil
-
-	} else if cond.Op == pql.BETWEEN || cond.Op == pql.BTWN_LT_LT ||
-		cond.Op == pql.BTWN_LTE_LT || cond.Op == pql.BTWN_LT_LTE {
-		predicates, err := getCondIntSlice(f, cond)
+	if op == pql.NEQ && value == nil {
+		return e.getNonNullRowShard(ctx, tx, fld.idx, fld, viewName, shard)
+	} else if op == pql.EQ && value == nil {
+		return e.getNullRowShard(ctx, tx, fld.idx, fld, viewName, shard)
+	} else if op == pql.BETWEEN || op == pql.BTWN_LT_LT ||
+		op == pql.BTWN_LTE_LT || op == pql.BTWN_LT_LTE {
+		predicates, err := getCondIntSlice(fld, op, value)
 		if err != nil {
 			return nil, errors.Wrap(err, "getting condition value")
 		}
@@ -5044,19 +5121,13 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 		//     return f.RowBetween(fieldName, predicates[0], predicates[1])
 		// here is because we need the call to be shard-specific.
 
-		// Find bsiGroup.
-		bsig := f.bsiGroup(fieldName)
-		if bsig == nil {
-			return nil, ErrBSIGroupNotFound
-		}
-
 		baseValueMin, baseValueMax, outOfRange := bsig.baseValueBetween(predicates[0], predicates[1])
 		if outOfRange {
 			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+		frag := e.Holder.fragment(fld.idx.name, fld.name, viewName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -5070,40 +5141,34 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, qcx *Qcx, index 
 		return frag.rangeBetween(tx, bsig.BitDepth, baseValueMin, baseValueMax)
 
 	} else {
-		value, err := getScaledInt(f, cond.Value)
+		value, err := getScaledInt(fld, value)
 		if err != nil {
 			return nil, errors.Wrap(err, "getting scaled integer")
 		}
 
-		// Find bsiGroup.
-		bsig := f.bsiGroup(fieldName)
-		if bsig == nil {
-			return nil, ErrBSIGroupNotFound
-		}
-
-		baseValue, outOfRange := bsig.baseValue(cond.Op, value)
-		if outOfRange && cond.Op != pql.NEQ {
+		baseValue, outOfRange := bsig.baseValue(op, value)
+		if outOfRange && op != pql.NEQ {
 			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+		frag := e.Holder.fragment(fld.idx.name, fld.name, viewName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}
 
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid bsiGroup range.
-		if (cond.Op == pql.LT && value > bsig.Max) || (cond.Op == pql.LTE && value >= bsig.Max) ||
-			(cond.Op == pql.GT && value < bsig.Min) || (cond.Op == pql.GTE && value <= bsig.Min) {
+		if (op == pql.LT && value > bsig.Max) || (op == pql.LTE && value >= bsig.Max) ||
+			(op == pql.GT && value < bsig.Min) || (op == pql.GTE && value <= bsig.Min) {
 			return frag.notNull(tx)
 		}
 
 		// outOfRange for NEQ should return all not-null.
-		if outOfRange && cond.Op == pql.NEQ {
+		if outOfRange && op == pql.NEQ {
 			return frag.notNull(tx)
 		}
 
-		return frag.rangeOp(tx, cond.Op, bsig.BitDepth, baseValue)
+		return frag.rangeOp(tx, op, bsig.BitDepth, baseValue)
 	}
 }
 
@@ -7689,6 +7754,9 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 						return nil, errors.Wrapf(err, "translating IDs of field %q", v)
 					}
 					mapper = func(ids []uint64) (interface{}, error) {
+						if ids == nil {
+							return []string(nil), nil
+						}
 						keys := make([]string, len(ids))
 						for i, id := range ids {
 							keys[i] = translations[id]
@@ -7698,9 +7766,6 @@ func (e *executor) translateResult(ctx context.Context, index string, idx *Index
 				} else {
 					datatype = "[]uint64"
 					mapper = func(ids []uint64) (interface{}, error) {
-						if ids == nil {
-							ids = []uint64{}
-						}
 						return ids, nil
 					}
 				}
@@ -8687,15 +8752,15 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 	return ret, false, err
 }
 
-// getCondIntSlice looks at the field, the cond op type (which is
+// getCondIntSlice looks at the field, the op type (which is
 // expected to be one of the BETWEEN ops types), and the values in the
 // conditional and returns a slice of int64 which is scaled for
 // decimal fields and has the values modulated such that the BETWEEN
 // op can be treated as being of the form a<=x<=b.
-func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
-	val, ok := cond.Value.([]interface{})
+func getCondIntSlice(f *Field, op pql.Token, value interface{}) ([]int64, error) {
+	val, ok := value.([]interface{})
 	if !ok {
-		return nil, errors.Errorf("expected conditional to have []interface{} Value, but got %v of %[1]T", cond.Value)
+		return nil, errors.Errorf("expected conditional to have []interface{} Value, but got %v of %[1]T", value)
 	}
 
 	ret := make([]int64, len(val))
@@ -8714,7 +8779,7 @@ func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
 		return ret, nil
 	}
 
-	switch cond.Op {
+	switch op {
 	case pql.BTWN_LT_LTE: // a < x <= b
 		ret[0]++
 	case pql.BTWN_LTE_LT: // a <= x < b
@@ -8988,7 +9053,6 @@ func DeleteRowsWithOutKeysFlow(ctx context.Context, columns *roaring.Bitmap, idx
 	}()
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
-
 			frag := view.Fragment(shard)
 			if frag == nil {
 				continue

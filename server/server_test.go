@@ -694,7 +694,7 @@ func TestMain_ImportTimestamp(t *testing.T) {
 	}
 
 	exp := []string{
-		"standard", "standard_2018", "standard_201801", "standard_20180101",
+		"existence", "standard", "standard_2018", "standard_201801", "standard_20180101",
 		"standard_2019", "standard_201912", "standard_20191231",
 	}
 	got := []string{}

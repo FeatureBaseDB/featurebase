@@ -97,8 +97,8 @@ var setFunctionTests = TableTest{
 		),
 		srcRows(
 			srcRow(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
-			srcRow(int64(2), int64(20), int64(200), []string{"GET"}, nil),
-			srcRow(int64(3), int64(30), int64(300), []string{"GET", "POST"}, nil),
+			srcRow(int64(2), int64(20), int64(200), []string{"GET"}, []int64(nil)),
+			srcRow(int64(3), int64(30), int64(300), []string{"GET", "POST"}, []int64(nil)),
 		),
 	),
 	SQLTests: []SQLTest{

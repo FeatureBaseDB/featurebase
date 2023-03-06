@@ -24,9 +24,12 @@ import (
 
 // View layout modes.
 const (
+	// standard view holds regular set/mutex data
 	viewStandard = "standard"
-
+	// bsig_X view holds BSI data for X
 	viewBSIGroupPrefix = "bsig_"
+	// existence view holds existence bits for a specific field
+	viewExistence = "existence"
 )
 
 // view represents a container for field data.

@@ -112,6 +112,8 @@ func (i *createTableRowIter) Next(ctx context.Context) (types.Row, error) {
 
 	for _, f := range i.columns {
 		fld, err := pilosa.FieldFromFieldOptions(dax.FieldName(f.name), f.fos...)
+		// We unconditionally turn on TrackExistence for all newly-created fields.
+		fld.Options.TrackExistence = true
 		if err != nil {
 			return nil, errors.Wrapf(err, "creating field from field options: %s", f.name)
 		}

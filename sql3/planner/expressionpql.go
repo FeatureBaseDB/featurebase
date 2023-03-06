@@ -541,12 +541,19 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			pqlOp = pql.NEQ
 		}
 		switch typ := expr.lhs.Type().(type) {
-		case *parser.DataTypeID:
+		case *parser.DataTypeID, *parser.DataTypeString, *parser.DataTypeIDSet, *parser.DataTypeStringSet:
 			if strings.EqualFold(lhs.columnName, string(dax.PrimaryKeyFieldName)) {
 				return nil, sql3.NewErrInvalidColumnInFilterExpression(0, 0, string(dax.PrimaryKeyFieldName), "is/is not null")
 			}
-			return nil, sql3.NewErrInvalidTypeInFilterExpression(0, 0, typ.TypeDescription(), "is/is not null")
-
+			return &pql.Call{
+				Name: "Row",
+				Args: map[string]interface{}{
+					lhs.columnName: &pql.Condition{
+						Op:    pqlOp,
+						Value: nil,
+					},
+				},
+			}, nil
 		case *parser.DataTypeInt, *parser.DataTypeDecimal, *parser.DataTypeTimestamp:
 			return &pql.Call{
 				Name: "Row",

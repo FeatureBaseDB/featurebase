@@ -954,20 +954,37 @@ func (s *Server) ViewsRemoval(ctx context.Context) {
 						}
 					}
 				}
-				if field.Options().NoStandardView && field.view(viewStandard) != nil {
-					// delete view "standard" if NoStandardView is true and view "standard" exists
-					for _, shard := range field.AvailableShards(true).Slice() {
-						err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), viewStandard, shard, nil)
-						if err != nil {
-							s.logger.Errorf("delete view %s from shard %d: %s", viewStandard, shard, err)
+				if field.Options().NoStandardView {
+					if field.view(viewStandard) != nil {
+						// delete view "standard" if NoStandardView is true and view "standard" exists
+						for _, shard := range field.AvailableShards(true).Slice() {
+							err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), viewStandard, shard, nil)
+							if err != nil {
+								s.logger.Errorf("delete view %s from shard %d: %s", viewStandard, shard, err)
+							}
 						}
-					}
 
-					err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), viewStandard)
-					if err != nil {
-						s.logger.Errorf("view: %s, delete view: %s", viewStandard, err)
+						err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), viewStandard)
+						if err != nil {
+							s.logger.Errorf("view: %s, delete view: %s", viewStandard, err)
+						}
+						s.logger.Infof("view %s deleted - index: %s, field: %s ", viewStandard, index.name, field.name)
 					}
-					s.logger.Infof("view %s deleted - index: %s, field: %s ", viewStandard, index.name, field.name)
+					if field.view(viewExistence) != nil {
+						// delete view "existence" if NoStandardView is true and view "existence" exists
+						for _, shard := range field.AvailableShards(true).Slice() {
+							err := s.holder.txf.DeleteFragmentFromStore(index.Name(), field.Name(), viewExistence, shard, nil)
+							if err != nil {
+								s.logger.Errorf("delete view %s from shard %d: %s", viewExistence, shard, err)
+							}
+						}
+
+						err := s.defaultClient.api.DeleteView(ctx, index.Name(), field.Name(), viewExistence)
+						if err != nil {
+							s.logger.Errorf("view: %s, delete view: %s", viewExistence, err)
+						}
+						s.logger.Infof("view %s deleted - index: %s, field: %s ", viewExistence, index.name, field.name)
+					}
 				}
 			}
 		}

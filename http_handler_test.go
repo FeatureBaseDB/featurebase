@@ -475,6 +475,7 @@ func TestGetViewAndDelete(t *testing.T) {
 
 	// The above sample data should create these views:
 	expectedViewNames := []string{
+		"existence",
 		"standard",
 		"standard_2001",
 		"standard_200102",

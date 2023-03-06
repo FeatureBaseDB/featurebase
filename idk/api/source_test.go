@@ -143,7 +143,7 @@ func TestIngest(t *testing.T) {
 					"columns": [
 						{"column":0,"rows":[[5,7],4,["a"],"h",-13,1.01]},
 						{"column":1,"rows":[[6],8,["b"],null,null,1.02]},
-						{"column":2,"rows":[[],null,[],null,null,null]}
+						{"column":2,"rows":[null,null,null,null,null,null]}
 					]
 				}
 			]
@@ -214,7 +214,7 @@ func TestIngest(t *testing.T) {
 					"columns": [
 						{"column":"a","rows":[[5,7],4,["a"],"h",-13,1.01]},
 						{"column":"b","rows":[[6],8,["b"],null,null,1.02]},
-						{"column":"c","rows":[[],null,[],null,null,null]}
+						{"column":"c","rows":[null,null,null,null,null,null]}
 					]
 				}
 			]
