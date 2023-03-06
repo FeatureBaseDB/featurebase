@@ -632,6 +632,8 @@ func (r record) Data() []interface{} {
 	return r
 }
 
+func (r record) Schema() interface{} { return nil }
+
 type startEnd struct {
 	start uint64
 	end   uint64

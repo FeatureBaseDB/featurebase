@@ -475,3 +475,7 @@ func (r idkRec) Commit(ctx context.Context) error {
 func (r idkRec) Data() []interface{} {
 	return r
 }
+
+func (r idkRec) Schema() interface{} (
+	return nil
+)

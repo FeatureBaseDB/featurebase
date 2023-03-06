@@ -1,0 +1,12 @@
+{
+    "namespace": "org.test",
+    "type": "record",
+    "name": "alltypes_delete_records",
+    "docs": "supply list of keys or a PQL filter",
+    "delete": "records",
+    "fields": [
+        {"name": "ids", "type": [{"type": "array", "items": "int"}, "null"]},
+        {"name": "keys", "type": [{"type": "array", "items": "string"}, "null"]},
+        {"name": "filter", "type": ["string", "null"]}
+    ]
+}

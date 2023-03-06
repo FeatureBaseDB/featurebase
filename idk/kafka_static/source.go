@@ -136,6 +136,8 @@ func (r *Record) StreamOffset() (string, uint64) {
 
 var _ idk.OffsetStreamRecord = &Record{}
 
+func (r *Record) Schema() interface{} { return nil }
+
 func (r *Record) Commit(ctx context.Context) error {
 	idx, base := r.idx, r.src.spoolBase
 	if idx < base {
