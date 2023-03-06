@@ -102,7 +102,8 @@ func New(cfg Config) *Controller {
 
 // Start starts long running subroutines.
 func (c *Controller) Start() error {
-	c.poller.Run()
+
+	c.backgroundGroup.Go(c.poller.Run) // TODO: this could just use c.stopping as well?
 
 	c.backgroundGroup.Go(func() error {
 		return c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
@@ -119,16 +120,15 @@ func (c *Controller) Start() error {
 func (c *Controller) Stop() error {
 	c.poller.Stop()
 
-	err := c.Transactor.Close()
-
 	close(c.stopping)
 
-	err2 := c.backgroundGroup.Wait()
+	err := c.backgroundGroup.Wait()
+	err2 := c.Transactor.Close()
 	if err != nil {
-		return errors.Wrap(err, "closing transactor")
+		return errors.Wrap(err, "waiting on background routines")
 	}
 
-	return errors.Wrap(err2, "waiting for background goroutines")
+	return errors.Wrap(err2, "closing transactor")
 }
 
 // RegisterNodes adds nodes to the controller's list of registered

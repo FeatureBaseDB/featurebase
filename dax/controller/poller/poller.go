@@ -21,7 +21,6 @@ type Poller struct {
 	nodePoller   NodePoller
 	pollInterval time.Duration
 
-	running  bool
 	stopping chan struct{}
 
 	logger logger.Logger
@@ -73,17 +72,9 @@ func (p *Poller) Addresses() []dax.Address {
 }
 
 // Run starts the polling goroutine.
-func (p *Poller) Run() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.running {
-		p.logger.Printf("poller is already running")
-		return
-	}
-	p.running = true
-
-	go func() { p.run() }()
+func (p *Poller) Run() error {
+	p.run()
+	return nil
 }
 
 func (p *Poller) run() {
