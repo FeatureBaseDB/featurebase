@@ -7,7 +7,8 @@ import (
 	fbbatch "github.com/featurebasedb/featurebase/v3/batch"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/idk"
-	"github.com/featurebasedb/featurebase/v3/idk/kafka_static"
+	"github.com/featurebasedb/featurebase/v3/idk/common"
+	"github.com/featurebasedb/featurebase/v3/idk/kafka_sasl"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
 
@@ -44,9 +45,9 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	kr.OffsetMode = true
 	kr.Main.Namespace = "cli_kafka_runner"
 	kr.Main.Pprof = "" // don't initialize pprof until we actually use it in tests
+
 	kr.NewSource = func() (idk.Source, error) {
-		source := kafka_static.NewSource()
-		source.Hosts = kr.KafkaHosts
+		source := kafka_sasl.NewSource()
 		source.Group = kr.Group
 		source.Topics = kr.Topics
 		source.Log = kr.Main.Log()
@@ -57,10 +58,20 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 		// source.S3Region = m.S3Region
 		// source.AllowMissingFields = m.AllowMissingFields
 
-		err := source.Open()
-		if err != nil {
+		// Set up ConfluentCommand configuration.
+		confluentCommand := &idk.ConfluentCommand{
+			KafkaBootstrapServers: kr.KafkaHosts,
+		}
+		if cfg, err := common.SetupConfluent(confluentCommand); err != nil {
+			return nil, errors.Wrap(err, "setting up confluent command")
+		} else {
+			source.ConfigMap = cfg
+		}
+
+		if err := source.Open(); err != nil {
 			return nil, errors.Wrap(err, "opening source")
 		}
+
 		return source, nil
 	}
 	return kr

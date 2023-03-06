@@ -21,12 +21,20 @@ import (
 // achieve concurrency, create multiple Sources.
 type Source struct {
 	idk.ConfluentCommand
-	Topics             []string
-	Group              string
-	Log                logger.Logger
-	Timeout            time.Duration
-	SkipOld            bool
-	Header             string
+	Topics  []string
+	Group   string
+	Log     logger.Logger
+	Timeout time.Duration
+	SkipOld bool
+
+	// Header is a file referencing a file containing JSON header configuration.
+	Header string
+
+	// HeaderFields can be provided instead of Header. It is a slice of
+	// RawFields which will be marshalled and parsed the same way a JSON object
+	// in Header would be. It is used only if a Header is not provided.
+	HeaderFields []idk.RawField
+
 	AllowMissingFields bool
 
 	schema []idk.Field
@@ -108,7 +116,21 @@ type recordWithError struct {
 }
 
 func (s *Source) fetch() recordWithError {
-	return <-s.recordChannel
+	ctx := context.Background()
+	if s.Timeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.Timeout)
+		defer cancel()
+	}
+
+	var rec recordWithError
+	select {
+	case rec = <-s.recordChannel:
+	case <-ctx.Done():
+		rec.Err = ctx.Err()
+	}
+
+	return rec
 }
 
 func (s *Source) decodeMessage(buf []byte) ([]interface{}, error) {
@@ -193,14 +215,24 @@ func (r *Record) Data() []interface{} {
 
 // Open initializes the kafka source.
 func (s *Source) Open() error {
-	if len(s.Header) == 0 {
-		return errors.New("needs header specification file")
+	if len(s.Header) == 0 && len(s.HeaderFields) == 0 {
+		return errors.New("needs header specification (file or fields)")
 	}
 
-	headerData, err := os.ReadFile(s.Header)
-	if err != nil {
-		return errors.Wrap(err, "reading header file")
+	var headerData []byte
+	var err error
+	if s.Header != "" {
+		headerData, err = os.ReadFile(s.Header)
+		if err != nil {
+			return errors.Wrap(err, "reading header file")
+		}
+	} else {
+		headerData, err = json.Marshal(s.HeaderFields)
+		if err != nil {
+			return errors.Wrap(err, "marshalling header fields")
+		}
 	}
+
 	schema, paths, err := idk.ParseHeader(headerData)
 	if err != nil {
 		return errors.Wrap(err, "processing header")

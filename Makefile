@@ -358,18 +358,22 @@ BUILD_CGO ?= 0
 
 # Build fbsql
 build-fbsql:
-	@echo GOOS=$(GOOS) GOARCH=$(GOARCH) uname -p=$(UNAME_P) build_cgo=$(BUILD_CGO)
-ifeq ($(BUILD_CGO), 0)
-	make build-fbsql-non-cgo
-endif
-ifeq ($(BUILD_CGO), 1)
-	make build-fbsql-cgo
-endif
+	CGO_ENABLED=1 $(GO) build -ldflags $(LDFLAGS) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
 
-build-fbsql-non-cgo:
-	CGO_ENABLED=0 $(GO) build -ldflags $(LDFLAGS) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
-
+# build-fbsql-cgo target is used in the Dockerfile-fbsql to build fbsql in CI.
 build-fbsql-cgo:
+ifeq ($(GOOS), linux)
+	$(MAKE) build-fbsql-cgo-linux
+endif
+ifeq ($(GOOS), darwin)
+	$(MAKE) build-fbsql-cgo-darwin
+endif
+
+build-fbsql-cgo-darwin:
+	@echo GOOS=$(GOOS) GOARCH=$(GOARCH) uname -p=$(UNAME_P) build_cgo=$(BUILD_CGO)
+	CGO_ENABLED=1 $(GO) build -ldflags $(LDFLAGS_STATIC) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+
+build-fbsql-cgo-linux:
 ifeq ($(GOARCH), arm64)
 	CGO_ENABLED=1 $(GO) build -tags dynamic $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
 endif

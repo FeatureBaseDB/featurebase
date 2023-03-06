@@ -193,7 +193,7 @@ build fbsql amd64:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
     - GOOS="linux" GOARCH="amd64" make docker-build-fbsql BUILD_CGO=1
-    - GOOS="darwin" GOARCH="amd64" make docker-build-fbsql
+    - GOOS="darwin" GOARCH="amd64" make docker-build-fbsql BUILD_CGO=1
   artifacts:
     paths:
       - ./build/fbsql_*
@@ -210,7 +210,7 @@ build fbsql arm64:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
     - GOOS="linux" GOARCH="arm64" make docker-build-fbsql BUILD_CGO=1
-    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
+    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql BUILD_CGO=1
   artifacts:
     paths:
       - ./build/fbsql_*

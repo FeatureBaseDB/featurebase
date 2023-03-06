@@ -28,7 +28,7 @@ ARG SOURCE_DATE_EPOCH
 WORKDIR /featurebase/
 
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
-RUN make build-fbsql GO_BUILD_FLAGS="-mod=vendor ${GO_BUILD_FLAGS}" ${MAKE_FLAGS}
+RUN make build-fbsql-cgo GO_BUILD_FLAGS="-mod=vendor ${GO_BUILD_FLAGS}" ${MAKE_FLAGS}
 
 FROM ubuntu:20.04 as runner
 
