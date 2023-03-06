@@ -813,13 +813,6 @@ func TimestampToVal(unit Unit, ts time.Time) int64 {
 
 }
 
-/*
-// PilosafyVal for TimestampField always returns an int or nil.
-func (t TimestampField) PilosafyVal(val interface{}) (interface{}, error) {
-
-}
-*/
-
 // PilosafyVal for TimestampField always returns an int or nil.
 func (t TimestampField) PilosafyVal(val interface{}) (interface{}, error) {
 	if val == nil {
@@ -849,8 +842,8 @@ func (t TimestampField) PilosafyVal(val interface{}) (interface{}, error) {
 		tsAsVal := TimestampToVal(t.granularity(), ts)
 
 		dur = tsAsVal - epochAsVal
-	} else if _, ok := val.([]uint8); ok {
-		valAsString := string(val.([]uint8)[:])
+	} else if _, ok := val.([]byte); ok {
+		valAsString := string(val.([]byte)[:])
 		// try to convert as time string
 		ts, err := timeFromTimestring(valAsString, t.layout())
 		if err != nil {
@@ -1223,7 +1216,7 @@ func toInt64(val interface{}) (int64, error) {
 			return 0, err
 		}
 		return v, nil
-	case []uint8:
+	case []byte:
 		return toInt64(string(vt[:]))
 	default:
 		return 0, errors.Errorf("couldn't convert %v of %[1]T to int64", vt)
@@ -1259,8 +1252,8 @@ func toStringArray(val interface{}) ([]string, error) {
 		ret := make([]string, len(vt))
 		for i, v := range vt {
 			switch v.(type) {
-			case []uint8: // byte slice
-				ret[i] = string(v.([]uint8)[:])
+			case []byte:
+				ret[i] = string(v.([]byte)[:])
 			default:
 				vs, ok := v.(string)
 				if !ok {
