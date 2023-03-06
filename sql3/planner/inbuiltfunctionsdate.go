@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ const intervalHour = "HH"
 const intervalMinute = "MI"
 const intervalSecond = "S"
 const intervalMillisecond = "MS"
+const intervalMicrosecond = "US"
 const intervalNanosecond = "NS"
 
 func (p *ExecutionPlanner) analyzeFunctionDatePart(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
@@ -67,6 +69,37 @@ func (p *ExecutionPlanner) analyzeFunctionToTimestamp(call *parser.Call, scope p
 		}
 	}
 	//ToTimestamp returns a timestamp calculated from param1 using time unit passed in param 2
+	call.ResultDataType = parser.NewDataTypeTimestamp()
+	return call, nil
+}
+
+func (p *ExecutionPlanner) analyzeFunctionDatetimeAdd(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	//param1 is the time unit of duration to be added to the target timestamp.
+	//param2 is the time duration to be added to the target timestamp.
+	//param3 is the target timestamp to which the time duration to be added.
+	if len(call.Args) != 3 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 3, len(call.Args))
+	}
+
+	//param1- time unit is a string and it should be one of 'yy','m','d','hh','mi','s', 'ms', 'us', 'ns'.
+	param1Type := parser.NewDataTypeString()
+	if !typesAreAssignmentCompatible(param1Type, call.Args[0].DataType()) {
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeDescription(), param1Type.TypeDescription())
+	}
+
+	//param2- time duration is a int
+	param2Type := parser.NewDataTypeInt()
+	if !typesAreAssignmentCompatible(param2Type, call.Args[1].DataType()) {
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[1].DataType().TypeDescription(), param2Type.TypeDescription())
+	}
+
+	//param3- target datetime to which the duration to be added to
+	param3Type := parser.NewDataTypeTimestamp()
+	if !typesAreAssignmentCompatible(param3Type, call.Args[2].DataType()) {
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[2].Pos().Line, call.Args[2].Pos().Column, call.Args[2].DataType().TypeDescription(), param3Type.TypeDescription())
+	}
+
+	//DatetimeAdd returns a timestamp calculated by adding param2 to param3 using time unit passed in param 1
 	call.ResultDataType = parser.NewDataTypeTimestamp()
 	return call, nil
 }
@@ -139,10 +172,13 @@ func (n *callPlanExpression) EvaluateDatepart(currentRow []interface{}) (interfa
 		return int64(date.Second()), nil
 
 	case intervalMillisecond:
-		return int64(date.Nanosecond() * 1000 * 1000), nil
+		return int64(date.Nanosecond() / 1000000), nil
+
+	case intervalMicrosecond:
+		return int64((date.Nanosecond() % 1000000) / 1000), nil
 
 	case intervalNanosecond:
-		return int64(date.Nanosecond()), nil
+		return int64(date.Nanosecond() % 1000), nil
 
 	default:
 		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, interval, "interval")
@@ -195,4 +231,106 @@ func (n *callPlanExpression) EvaluateToTimestamp(currentRow []interface{}) (inte
 	}
 	//should we throw error or return nil if the conversion fails? what is the desired behaviour when ToTimestamp errors for one bad record in a batch of thousands?
 	return featurebase.ValToTimestamp(unit, num)
+}
+
+func (n *callPlanExpression) EvaluateDatetimeAdd(currentRow []interface{}) (interface{}, error) {
+	//retrieve param1, timeunit of the value to be added to the target timestamp
+	param1, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+	coercedParam1, err := coerceValue(n.args[0].Type(), parser.NewDataTypeString(), param1, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		//raise error if param 1 is not string.
+		return nil, err
+	}
+	timeunit, ok := coercedParam1.(string)
+	if !ok {
+		//raise error if param 1 is not string.
+		return nil, sql3.NewErrInternalf("unable to convert value")
+	}
+
+	//retrieve param2, timeduration to be added to the target timestamp.
+	param2, err := n.args[1].Evaluate(currentRow)
+	if err != nil {
+		//raise error if unable to retieve the argument for param2
+		return nil, err
+	}
+	//retrieve param3, target timestamp to which the timeduration to be added to.
+	param3, err := n.args[2].Evaluate(currentRow)
+	if err != nil {
+		//raise error if unable to retieve the argument for param3
+		return nil, err
+	}
+	if param2 == nil || param3 == nil {
+		//if either of timeduration or target datetime is null then return null
+		return nil, nil
+	}
+	coercedParam2, err := coerceValue(n.args[1].Type(), parser.NewDataTypeInt(), param2, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		//raise error if param2 is not a string
+		return nil, err
+	}
+	timeduration, ok := coercedParam2.(int64)
+	if !ok {
+		//raise error if param2 is not a integer
+		return nil, sql3.NewErrInternalf("unable to convert value")
+	}
+	coercedParam3, err := coerceValue(n.args[2].Type(), parser.NewDataTypeTimestamp(), param3, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		//raise error if param3 is not a timestamp
+		return nil, err
+	}
+	target, ok := coercedParam3.(time.Time)
+	if !ok {
+		//raise error if param3 is not a datetime
+		return nil, sql3.NewErrInternalf("unable to convert value")
+	}
+	if !isValidTimeInterval(strings.ToUpper(timeunit)) {
+		//raise error if timeunit value is invalid
+		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, timeunit, "timeunit")
+	} else if target.IsZero() {
+		//return nil if target is nil
+		return nil, nil
+	} else if timeduration == 0 {
+		//return target if duration to add is 0
+		return target, nil
+	}
+	switch strings.ToUpper(timeunit) {
+	case intervalYear:
+		return target.AddDate(int(timeduration), 0, 0), nil
+	case intervalMonth:
+		return target.AddDate(0, int(timeduration), 0), nil
+	case intervalDay:
+		return target.AddDate(0, 0, int(timeduration)), nil
+	case intervalHour:
+		return parseAndAdd(timeduration, "h", target)
+	case intervalMinute:
+		return parseAndAdd(timeduration, "m", target)
+	case intervalSecond, intervalMillisecond, intervalMicrosecond, intervalNanosecond:
+		return parseAndAdd(timeduration, timeunit, target)
+	default:
+		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, timeunit, "timeunit")
+	}
+}
+
+// parses timeduration and timeunit into a Duration instance and adds it to target datetime
+func parseAndAdd(timeduration int64, timeunit string, target time.Time) (interface{}, error) {
+	parseduration, err := time.ParseDuration(strconv.FormatInt(timeduration, 10) + strings.ToLower(timeunit))
+	if err != nil {
+		return nil, err
+	}
+	return target.Add(parseduration), nil
+}
+
+// isValidTimeInterval returns true if part is valid.
+func isValidTimeInterval(unit string) bool {
+	switch unit {
+	case intervalYear, intervalYearDay, intervalMonth, intervalDay, intervalWeeKDay,
+		intervalWeek, intervalHour, intervalMinute, intervalSecond, intervalMillisecond,
+		intervalMicrosecond, intervalNanosecond:
+		return true
+	default:
+		return false
+	}
 }

@@ -46,6 +46,8 @@ var TableTests []TableTest = []TableTest{
 	setFunctionTests,
 	setParameterTests,
 	datePartTests,
+	toTimestampTests,
+	datetimeAddTests,
 	stringScalarFunctionsTests,
 
 	insertTest,
@@ -207,6 +209,16 @@ func knownTimestamp() time.Time {
 	if err != nil {
 		panic(err.Error())
 	}
+	return tm
+}
+
+func knownSubSecondTimestamp() time.Time {
+	tm := knownTimestamp()
+	duration, err := time.ParseDuration("100100100ns")
+	if err != nil {
+		panic(err.Error())
+	}
+	tm = tm.Add(duration)
 	return tm
 }
 

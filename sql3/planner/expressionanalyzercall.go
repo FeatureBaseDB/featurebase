@@ -260,6 +260,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 	case "RANGEQ":
 		return p.analyzeFunctionRangeQ(call, scope)
 
+	case "DATETIMEADD":
+		return p.analyzeFunctionDatetimeAdd(call, scope)
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}
