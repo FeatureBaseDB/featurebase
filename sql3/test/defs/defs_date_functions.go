@@ -278,6 +278,13 @@ var datePartTests = TableTest{
 			ExpErr: "an expression of type 'string' cannot be passed to a parameter of type 'int'",
 		},
 		{
+			name: "DateTimeFromPartsYearOutOfRange",
+			SQLs: sqls(
+				"select datetimefromparts(10000,1,1,1,1,1,1)",
+			),
+			ExpErr: "[0:0] year '10000' out of range [0,9999]",
+		},
+		{
 			name: "DateTimeFromPartsKnownTimestamp",
 			SQLs: sqls(
 				fmt.Sprintf("select datetimefromparts(%d,%d,%d,%d,%d,%d,%d) as datetime", knownTimestamp().Year(),
@@ -295,14 +302,15 @@ var datePartTests = TableTest{
 		{
 			name: "DateTimeFromPartsAllZeros",
 			SQLs: sqls(
-				fmt.Sprintf("select datetimefromparts(%d,%d,%d,%d,%d,%d,%d) as datetime", 0, 0, 0, 0, 0, 0, 0),
+				fmt.Sprintf("select datetimefromparts(%d,%d,%d,%d,%d,%d,%d) as datetime", 0, 1, 1, 0, 0, 0, 0),
 			),
 			ExpHdrs: hdrs(
 				hdr("datetime", fldTypeTimestamp),
 			),
 			ExpRows: rows(
-				row(time.Date(0, 0, 0, 0, 0, 0, 0, time.UTC)),
+				row(time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC)),
 			),
+			Compare: CompareExactUnordered,
 		},
 	},
 }

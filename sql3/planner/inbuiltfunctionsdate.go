@@ -186,7 +186,12 @@ func (n *callPlanExpression) EvaluateDateTimeFromParts(currentRow []interface{})
 		}
 		timestamps[i] = int(val)
 	}
-	return time.Date(timestamps[0], time.Month(timestamps[1]), timestamps[2], timestamps[3], timestamps[4], timestamps[5], timestamps[6]*1000*1000, time.UTC), nil
+
+	dt := time.Date(timestamps[0], time.Month(timestamps[1]), timestamps[2], timestamps[3], timestamps[4], timestamps[5], timestamps[6]*1000*1000, time.UTC)
+	if dt.Year() < 0 || dt.Year() > 9999 {
+		return nil, sql3.NewErrYearOutOfRange(0, 0, dt.Year())
+	}
+	return dt, nil
 }
 
 func (n *callPlanExpression) EvaluateToTimestamp(currentRow []interface{}) (interface{}, error) {
