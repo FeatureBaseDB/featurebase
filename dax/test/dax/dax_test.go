@@ -246,18 +246,18 @@ func TestDAXIntegration(t *testing.T) {
 		// ensure partitions are covered
 		partitions0 := dax.PartitionNums{0, 2, 4, 6, 8, 10}
 		partitions1 := dax.PartitionNums{1, 3, 5, 7, 9, 11}
-		allPartitions := append(partitions0, partitions1...)
-		sort.Sort(allPartitions)
+		allPartitionsExp := append(partitions0, partitions1...)
 
-		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
+		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitionsExp...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 2) {
+
+			allParts := append(nodes[0].Partitions, nodes[1].Partitions...)
+			assert.ElementsMatch(t, allPartitionsExp, allParts)
 			// computer0 (node0)
 			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
-			assert.Equal(t, partitions0, nodes[0].Partitions)
 			// computer1 (node1)
 			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
-			assert.Equal(t, partitions1, nodes[1].Partitions)
 		}
 
 		// stop computer 0 (may need to sleep)
@@ -273,7 +273,7 @@ func TestDAXIntegration(t *testing.T) {
 		if assert.Len(t, nodes, 1) {
 			// computer1 (node0)
 			assert.Equal(t, computers[computerKey1].Address(), nodes[0].Address)
-			assert.Equal(t, allPartitions, nodes[0].Partitions)
+			assert.ElementsMatch(t, allPartitionsExp, nodes[0].Partitions)
 		}
 	})
 

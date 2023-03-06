@@ -244,18 +244,6 @@ func (b *Balancer) databaseHasJobs(tx dax.Transaction, roleType dax.RoleType, qd
 func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error) {
 	diffs := NewInternalDiffs()
 
-	// Remove the worker from the free worker list (if it's there).
-	for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
-		if err := b.freeWorkers.RemoveWorker(tx, rt, addr); err != nil {
-			return nil, errors.Wrapf(err, "removing worker from free list: (%s) %s", rt, addr)
-		}
-	}
-
-	// Remove the worker (i.e. Node) from the node service.
-	if err := b.nodeService.DeleteNode(tx, addr); err != nil {
-		return nil, errors.Wrapf(err, "deleting node from node service: %s", addr)
-	}
-
 	////// The rest is database specific. ////////////
 
 	// See if the worker is assigned to a database. If it's not, return early.
@@ -272,6 +260,18 @@ func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.Wor
 		} else {
 			diffs.Merge(diff)
 		}
+	}
+
+	// Remove the worker from the free worker list (if it's there).
+	for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
+		if err := b.freeWorkers.RemoveWorker(tx, rt, addr); err != nil {
+			return nil, errors.Wrapf(err, "removing worker from free list: (%s) %s", rt, addr)
+		}
+	}
+
+	// Remove the worker (i.e. Node) from the node service.
+	if err := b.nodeService.DeleteNode(tx, addr); err != nil {
+		return nil, errors.Wrapf(err, "deleting node from node service: %s", addr)
 	}
 
 	// Balance the affected database.
@@ -779,16 +779,13 @@ func (b *Balancer) processFreeJobs(tx dax.Transaction, roleType dax.RoleType, qd
 	if err != nil {
 		return nil, errors.Wrapf(err, "listing free jobs: %s", roleType)
 	}
-	for _, job := range jobs {
-		if aj, err := b.addDatabaseJobs(tx, roleType, qdbid, job); err != nil {
-			return nil, errors.Wrapf(err, "adding job: %s", job)
-		} else {
-			diffs.Merge(aj)
-		}
-		if err := b.freeJobs.DeleteJob(tx, roleType, qdbid, job); err != nil {
-			return nil, errors.Wrapf(err, "deleting free job: %s", job)
-		}
+
+	if aj, err := b.addDatabaseJobs(tx, roleType, qdbid, jobs...); err != nil {
+		return nil, errors.Wrapf(err, "adding jobs: %s", jobs)
+	} else {
+		diffs.Merge(aj)
 	}
+
 	return diffs, nil
 }
 
