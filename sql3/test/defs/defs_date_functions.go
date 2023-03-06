@@ -1,6 +1,9 @@
 package defs
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // datepart tests
 var datePartTests = TableTest{
@@ -19,48 +22,56 @@ var datePartTests = TableTest{
 	),
 	SQLTests: []SQLTest{
 		{
+			name: "DatePartIncorrectParamsCount",
 			SQLs: sqls(
 				"select datepart()",
 			),
 			ExpErr: "count of formal parameters (2) does not match count of actual parameters (0)",
 		},
 		{
+			name: "DatePartIntError",
 			SQLs: sqls(
 				"select datepart(1, 2)",
 			),
 			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'string'",
 		},
 		{
+			name: "DatePartInvalidParam",
 			SQLs: sqls(
 				"select datepart('1', current_timestamp)",
 			),
 			ExpErr: "invalid value '1' for parameter 'interval'",
 		},
 		{
+			name: "ToTimestampWrongParamsCount",
 			SQLs: sqls(
 				"select totimestamp()",
 			),
 			ExpErr: "count of formal parameters (2) does not match count of actual parameters (0)",
 		},
 		{
+			name: "ToTimestampStringError",
 			SQLs: sqls(
 				"select totimestamp('a')",
 			),
 			ExpErr: "an expression of type 'string' cannot be passed to a parameter of type 'int'",
 		},
 		{
+			name: "ToTimestampIntError",
 			SQLs: sqls(
 				"select totimestamp(1, 2)",
 			),
 			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'string'",
 		},
 		{
+			name: "ToTimestampInvalid",
 			SQLs: sqls(
 				"select totimestamp(1, 'x')",
 			),
 			ExpErr: "invalid value 'x' for parameter 'timeunit'",
 		},
 		{
+			name: "DATEPARTYY",
 			SQLs: sqls(
 				"select _id, datepart('yy', ts) from dateparttests",
 			),
@@ -74,6 +85,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DATEPARTYD",
 			SQLs: sqls(
 				"select _id, datepart('yd', ts) from dateparttests",
 			),
@@ -87,6 +99,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DATEPARTM",
 			SQLs: sqls(
 				"select _id, datepart('m', ts) from dateparttests",
 			),
@@ -100,6 +113,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DATEPARTD",
 			SQLs: sqls(
 				"select _id, datepart('d', ts) from dateparttests",
 			),
@@ -113,6 +127,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DATEPARTW",
 			SQLs: sqls(
 				"select _id, datepart('w', ts) from dateparttests",
 			),
@@ -126,6 +141,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DATEPARTWK",
 			SQLs: sqls(
 				"select _id, datepart('wk', ts) from dateparttests",
 			),
@@ -139,6 +155,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DATEPARTHH",
 			SQLs: sqls(
 				"select _id, datepart('hh', ts) from dateparttests",
 			),
@@ -152,6 +169,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DatePartMI",
 			SQLs: sqls(
 				"select _id, datepart('mi', ts) from dateparttests",
 			),
@@ -165,6 +183,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DatePartS",
 			SQLs: sqls(
 				"select _id, datepart('s', ts) from dateparttests",
 			),
@@ -178,6 +197,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DatePartMS",
 			SQLs: sqls(
 				"select _id, datepart('ms', ts) from dateparttests",
 			),
@@ -191,6 +211,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DatePartNS",
 			SQLs: sqls(
 				"select _id, datepart('ns', ts) from dateparttests",
 			),
@@ -205,6 +226,7 @@ var datePartTests = TableTest{
 		},
 		{
 			//test datepart(timestamp, part) for implicit conversion of integer value passed as argument to timestamp param
+			name: "DatePartImplicitIntConversion",
 			SQLs: sqls(
 				"select datepart('yy', 0) as \"yy\", datepart('m', 0) as \"m\", datepart('d', 0) as \"d\"",
 			),
@@ -219,7 +241,7 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			//test ToTimestamp(num, timeunit) for all possible time unit values
+			name: "ToTimestampAllPossibleValues",
 			SQLs: sqls(
 				"select totimestamp(1000) as \"default\", totimestamp(1000, 's') as \"s\", totimestamp(1000000, 'ms') as \"ms\", totimestamp(1000000000, 'us') as \"us\", totimestamp(1000000000, 'µs') as \"µs\", totimestamp(1000000000000, 'ns') as \"ns\"",
 			),
@@ -240,6 +262,47 @@ var datePartTests = TableTest{
 					time.Unix(0, 1000000000000).UTC()),
 			),
 			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTimeFromPartsParamsCountMismatch",
+			SQLs: sqls(
+				"select datetimefromparts(12,32,43,34,34,34)",
+			),
+			ExpErr: "count of formal parameters (7) does not match count of actual parameters (6)",
+		},
+		{
+			name: "DateTimeFromPartsParamsTypeMismatch",
+			SQLs: sqls(
+				"select datetimefromparts(12,32,43,34,34,34,'foo')",
+			),
+			ExpErr: "an expression of type 'string' cannot be passed to a parameter of type 'int'",
+		},
+		{
+			name: "DateTimeFromPartsKnownTimestamp",
+			SQLs: sqls(
+				fmt.Sprintf("select datetimefromparts(%d,%d,%d,%d,%d,%d,%d) as datetime", knownTimestamp().Year(),
+					knownTimestamp().Month(), knownTimestamp().Day(), knownTimestamp().Hour(), knownTimestamp().Minute(),
+					knownTimestamp().Second(), knownTimestamp().Nanosecond()/(1000*1000)),
+			),
+			ExpHdrs: hdrs(
+				hdr("datetime", fldTypeTimestamp),
+			),
+			ExpRows: rows(
+				row(knownTimestamp()),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTimeFromPartsAllZeros",
+			SQLs: sqls(
+				fmt.Sprintf("select datetimefromparts(%d,%d,%d,%d,%d,%d,%d) as datetime", 0, 0, 0, 0, 0, 0, 0),
+			),
+			ExpHdrs: hdrs(
+				hdr("datetime", fldTypeTimestamp),
+			),
+			ExpRows: rows(
+				row(time.Date(0, 0, 0, 0, 0, 0, 0, time.UTC)),
+			),
 		},
 	},
 }

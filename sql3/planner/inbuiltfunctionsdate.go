@@ -71,6 +71,22 @@ func (p *ExecutionPlanner) analyzeFunctionToTimestamp(call *parser.Call, scope p
 	return call, nil
 }
 
+func (p *ExecutionPlanner) analyzeFunctionDateTimeFromParts(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+	if len(call.Args) != 7 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 7, len(call.Args))
+	}
+
+	intType := parser.NewDataTypeInt()
+	for _, part := range call.Args {
+		if !typesAreAssignmentCompatible(intType, part.DataType()) {
+			return nil, sql3.NewErrParameterTypeMistmatch(part.Pos().Line, part.Pos().Column, part.DataType().TypeDescription(), intType.TypeDescription())
+		}
+	}
+
+	call.ResultDataType = parser.NewDataTypeTimestamp()
+	return call, nil
+}
+
 func (n *callPlanExpression) EvaluateDatepart(currentRow []interface{}) (interface{}, error) {
 	intervalEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
@@ -148,6 +164,29 @@ func (n *callPlanExpression) EvaluateDatepart(currentRow []interface{}) (interfa
 		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, interval, "interval")
 	}
 
+}
+
+// EvaluateDateTimeFromParts evaluates the call to date_time_from_parts. This uses the base time.Date() function.
+func (n *callPlanExpression) EvaluateDateTimeFromParts(currentRow []interface{}) (interface{}, error) {
+	timestamps := make([]int, len(n.args))
+	for i, arg := range n.args {
+		param, err := arg.Evaluate(currentRow)
+		if err != nil {
+			return nil, err
+		} else if param == nil {
+			return nil, nil
+		}
+		coercedValue, err := coerceValue(arg.Type(), parser.NewDataTypeInt(), param, parser.Pos{Line: 0, Column: 0})
+		if err != nil {
+			return nil, err
+		}
+		val, ok := coercedValue.(int64)
+		if !ok {
+			return nil, sql3.NewErrInternalf("unable to convert value")
+		}
+		timestamps[i] = int(val)
+	}
+	return time.Date(timestamps[0], time.Month(timestamps[1]), timestamps[2], timestamps[3], timestamps[4], timestamps[5], timestamps[6]*1000*1000, time.UTC), nil
 }
 
 func (n *callPlanExpression) EvaluateToTimestamp(currentRow []interface{}) (interface{}, error) {
