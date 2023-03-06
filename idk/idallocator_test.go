@@ -198,6 +198,10 @@ func (r *offsetRecord) Commit(ctx context.Context) error {
 	return nil
 }
 
+func (r *offsetRecord) Schema() interface{} {
+	return nil
+}
+
 func (r *offsetRecord) StreamOffset() (string, uint64) {
 	return r.groupKey, uint64(r.offset)
 }
