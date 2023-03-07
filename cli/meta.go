@@ -81,7 +81,7 @@ func (m *metaBang) execute(cmd *Command) (responseAction, error) {
 	}
 	c := exec.Command(m.args[0])
 	c.Args = m.args
-	c.Stdout = cmd.Stdout
+	c.Stdout = cmd.stdout
 	err := c.Run()
 	return actionNone, errors.Wrap(err, "running bang command")
 }
@@ -192,7 +192,7 @@ func newMetaEcho(args []string) *metaEcho {
 }
 
 func (m *metaEcho) execute(cmd *Command) (responseAction, error) {
-	return echo(m.args, cmd.Stdout)
+	return echo(m.args, cmd.stdout)
 }
 
 func echo(args []string, w io.Writer) (responseAction, error) {
@@ -542,7 +542,7 @@ func (m *metaOutput) execute(cmd *Command) (responseAction, error) {
 		}
 
 		// Set cmd.output to cmd.Stdout.
-		cmd.output = cmd.Stdout
+		cmd.output = cmd.stdout
 
 		return actionNone, nil
 

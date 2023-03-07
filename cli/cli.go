@@ -57,7 +57,7 @@ type Command struct {
 	Queryer Queryer `json:"-"`
 
 	Stdin  io.ReadCloser `json:"-"`
-	Stdout io.Writer     `json:"-"`
+	stdout io.Writer     `json:"-"`
 	Stderr io.Writer     `json:"-"`
 
 	// output is where actual results are written. This might point to stdout,
@@ -117,7 +117,7 @@ func NewCommand(logdest logger.Logger) *Command {
 		workingDir: newWorkingDir(),
 
 		Stdin:  Stdin,
-		Stdout: Stdout,
+		stdout: Stdout,
 		Stderr: Stderr,
 
 		output:       Stdout,
@@ -127,6 +127,13 @@ func NewCommand(logdest logger.Logger) *Command {
 
 		quit: make(chan struct{}),
 	}
+}
+
+// SetStdout sets both Stdout and output to the value provided. This is useful
+// for initial configuration in tests.
+func (cmd *Command) SetStdout(out io.Writer) {
+	cmd.stdout = out
+	cmd.output = out
 }
 
 // Run is the main entry-point to the CLI.
@@ -210,7 +217,7 @@ func (cmd *Command) run(ctx context.Context) error {
 		DisableAutoSaveHistory: true,
 
 		Stdin:  cmd.Stdin,
-		Stdout: cmd.Stdout,
+		Stdout: cmd.stdout,
 		Stderr: cmd.Stderr,
 	})
 	if err != nil {
@@ -376,7 +383,7 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 		}
 		return errors.Wrap(err, "making query")
 	}
-	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
+	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.stdout, cmd.Stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
 
@@ -421,7 +428,7 @@ func (n *nopPrinter) Errorf(format string, a ...any)  {}
 // Printf is a helper method which sends the given payload to stdout.
 func (cmd *Command) Printf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
-	cmd.Stdout.Write([]byte(out))
+	cmd.stdout.Write([]byte(out))
 }
 
 // Outputf is a helper method which sends the given payload to output.
