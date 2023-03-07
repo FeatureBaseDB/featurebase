@@ -26,14 +26,23 @@ import (
 // source. It is not threadsafe! Due to the way Kafka clients work, to
 // achieve concurrency, create multiple Sources.
 type Source struct {
-	Hosts    []string
-	Topics   []string
-	Group    string
-	TLS      idk.TLSConfig
-	Log      logger.Logger
-	Timeout  time.Duration
-	SkipOld  bool
-	Header   string
+	Hosts   []string
+	Topics  []string
+	Group   string
+	TLS     idk.TLSConfig
+	Log     logger.Logger
+	Timeout time.Duration
+	SkipOld bool
+
+	// Header is a file or url referencing a file containing JSON header
+	// configuration.
+	Header string
+
+	// HeaderFields can be provided instead of Header. It is a slice of
+	// RawFields which will be marshalled and parsed the same way a JSON object
+	// in Header would be. It is used only if a Header is not provided.
+	HeaderFields []idk.RawField
+
 	S3Region string
 
 	AllowMissingFields bool
@@ -162,23 +171,30 @@ func (r *Record) Data() []interface{} {
 
 // Open initializes the kafka source.
 func (s *Source) Open() error {
-	if len(s.Header) == 0 {
-		return errors.New("needs header specification file")
+	if len(s.Header) == 0 && len(s.HeaderFields) == 0 {
+		return errors.New("needs header specification (file or fields)")
 	}
 
-	{
-		headerData, err := s.readFileOrURL(s.Header)
+	var headerData []byte
+	var err error
+	if s.Header != "" {
+		headerData, err = s.readFileOrURL(s.Header)
 		if err != nil {
 			return errors.Wrap(err, "reading header file")
 		}
-
-		schema, paths, err := idk.ParseHeader(headerData)
+	} else {
+		headerData, err = json.Marshal(s.HeaderFields)
 		if err != nil {
-			return errors.Wrap(err, "processing header")
+			return errors.Wrap(err, "marshalling header fields")
 		}
-		s.schema = schema
-		s.paths = paths
 	}
+
+	schema, paths, err := idk.ParseHeader(headerData)
+	if err != nil {
+		return errors.Wrap(err, "processing header")
+	}
+	s.schema = schema
+	s.paths = paths
 
 	// init (custom) config, enable errors and notifications
 	config := segmentio.ReaderConfig{

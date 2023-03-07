@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"time"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/jedib0t/go-pretty/table"
@@ -87,11 +88,20 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 			t.AppendHeader(schemaToRow(r.Schema))
 		}
 		for _, row := range r.Data {
-			// If the value is nil, replace it with a null string; go-pretty doesn't
-			// expect nil pointers in the data values.
+			// Loop through all the colums of each row and modify any based on
+			// type.
+			//
+			// If the value is nil, replace it with a null string; go-pretty
+			// doesn't expect nil pointers in the data values.
+			//
+			// If the value is a time.Time, we want to print it using
+			// RFC3339Nano to be consistent with everything else.
 			for i := range row {
-				if row[i] == nil {
+				switch v := row[i].(type) {
+				case nil:
 					row[i] = nullValue
+				case time.Time:
+					row[i] = v.Format(time.RFC3339Nano)
 				}
 			}
 			t.AppendRow(table.Row(row))

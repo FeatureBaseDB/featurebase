@@ -15,7 +15,7 @@ func newDataframeCsvLoaderCommand(logdest logger.Logger) *cobra.Command {
 		Short: "load dataframe integer and floating point values into featurebase",
 		Long: `
 `,
-		RunE: usageErrorWrapper(cmd),
+		RunE: UsageErrorWrapper(cmd),
 	}
 	flags := loaderCmd.Flags()
 	flags.StringVar(&cmd.Path, "csv", "", "path to csv input file")

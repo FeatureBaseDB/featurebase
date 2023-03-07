@@ -226,3 +226,70 @@ func (ss StringSet) String() string {
 
 	return sb.String()
 }
+
+// ShowColumnsResponse returns a structure which is specific to a `SHOW COLUMNS`
+// statement, derived from the results in the WireQueryResponse. This is kind of
+// a crude way to unmarshal a WireQueryResponse into a type which is specific to
+// the sql operation.
+// TODO(tlt): see if we can standardize on this logic, because it would be useful to
+// have the same thing for SHOW DATABASES and SHOW TABLES.
+// TODO(tlt): the fields unmarshalled in this method are a subset of the actual
+// columns available; at the moment, we only handled the ones we need in the
+// CLI.
+func (s *WireQueryResponse) ShowColumnsResponse() (*ShowColumnsResponse, error) {
+	// Make a map of header names to index position. We do this to avoid
+	// breaking things if for some reason the format of the SHOW COLUMNS
+	// response defined in the sql3 package changes.
+	m := make(map[string]int)
+	for i, fld := range s.Schema.Fields {
+		m[string(fld.Name)] = i
+	}
+
+	flds := make([]*dax.Field, 0, len(s.Data))
+	for _, row := range s.Data {
+		// name
+		var name dax.FieldName
+		if val, ok := row[m["name"]].(string); ok {
+			name = dax.FieldName(val)
+		}
+
+		// type
+		var typ dax.BaseType
+		if val, ok := row[m["type"]].(string); ok {
+			typ = dax.BaseType(val)
+		}
+
+		// scale
+		var scale int64
+		if val, ok := row[m["scale"]].(int64); ok {
+			scale = val
+		}
+
+		flds = append(flds, &dax.Field{
+			Name: name,
+			Type: typ,
+			Options: dax.FieldOptions{
+				Scale: scale,
+			},
+		})
+	}
+	return &ShowColumnsResponse{
+		Fields: flds,
+	}, nil
+}
+
+// ShowColumnsResponse is a type used to marshal the results of a `SHOW COLUMNS`
+// statement.
+type ShowColumnsResponse struct {
+	Fields []*dax.Field
+}
+
+// Field returns the field by name. If the field is not found, nil is returned.
+func (s *ShowColumnsResponse) Field(name dax.FieldName) *dax.Field {
+	for i := range s.Fields {
+		if s.Fields[i].Name == name {
+			return s.Fields[i]
+		}
+	}
+	return nil
+}

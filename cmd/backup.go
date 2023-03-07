@@ -16,7 +16,7 @@ func newBackupCommand(logdest logger.Logger) *cobra.Command {
 		Long: `
 Backs up a FeatureBase server to a local, tar-formatted snapshot file.
 `,
-		RunE: usageErrorWrapper(cmd),
+		RunE: UsageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

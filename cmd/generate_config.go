@@ -18,7 +18,7 @@ func newGenerateConfigCommand(logdest logger.Logger) *cobra.Command {
 		Short: "Print the default configuration.",
 		Long: `generate-config prints the default configuration to stdout
 `,
-		RunE: usageErrorWrapper(generateConf),
+		RunE: UsageErrorWrapper(generateConf),
 	}
 
 	return confCmd

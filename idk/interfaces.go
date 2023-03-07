@@ -1374,7 +1374,7 @@ func (n *nopSchemaManager) FinishTransaction(id string) (*pilosacore.Transaction
 	return nil, nil
 }
 func (n *nopSchemaManager) Schema() (*pilosaclient.Schema, error) {
-	return nil, nil
+	return pilosaclient.NewSchema(), nil
 }
 func (n *nopSchemaManager) SyncIndex(index *pilosaclient.Index) error {
 	return nil

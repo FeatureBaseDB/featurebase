@@ -27,7 +27,7 @@ Displays schema and sample data from the specified file
 			c.Path = args[0]
 			return nil
 		},
-		RunE: usageErrorWrapper(c),
+		RunE: UsageErrorWrapper(c),
 	}
 	return cmd
 }
