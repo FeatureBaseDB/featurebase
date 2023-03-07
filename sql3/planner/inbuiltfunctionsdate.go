@@ -101,7 +101,7 @@ func (p *ExecutionPlanner) analyzeFunctionDatetimeAdd(call *parser.Call, scope p
 
 	// DatetimeAdd returns a timestamp calculated by adding param2 to param3 using time unit passed in param 1
 	call.ResultDataType = parser.NewDataTypeTimestamp()
-  
+
 	return call, nil
 }
 
@@ -118,7 +118,8 @@ func (p *ExecutionPlanner) analyzeFunctionDateTimeFromParts(call *parser.Call, s
 	}
 
 	call.ResultDataType = parser.NewDataTypeTimestamp()
-  return call, nil
+
+	return call, nil
 }
 
 func (p *ExecutionPlanner) analyzeFunctionDateTimeName(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
