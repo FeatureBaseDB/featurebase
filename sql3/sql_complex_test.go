@@ -3074,4 +3074,25 @@ WITH
 	}, got); diff != "" {
 		t.Fatal(diff)
 	}
+
+	// FB_2062
+	_, _, _, err = sql_test.MustQueryRows(t, node, `create table sup305-fails (_id id, bucket string, value int);`)
+	assert.NoError(t, err)
+	_, _, _, err = sql_test.MustQueryRows(t, node, `
+	insert into sup305-fails values (1, 'a', 1000), (2, 'b', 1000), (3, 'c', 1000), (4, 'c', 1000), (5, 'c', 1000), (6, 'c', 1000), (7, 'c', 1000), 
+(8, 'a', 1000), (9, 'b', 1000), (10, 'c', 1000), (11, 'c', 1000), (12, 'c', 1000), (13, 'c', 1000), (14, 'c', 1000), 
+(15, 'a', 1000), (16, 'b', 1000), (17, 'c', 1000), (18, 'c', 1000), (19, 'c', 1000), (20, 'c', 1000), (21, 'c', 1000);`)
+	assert.NoError(t, err)
+	results, _, _, err = sql_test.MustQueryRows(t, node, `select bucket, count(*) as cnt from sup305-fails group by bucket having count(*) > 1 order by cnt;`)
+	assert.NoError(t, err)
+	got = make([]int64, 0)
+	for i := range results {
+		got = append(got, results[i][1].(int64))
+	}
+	sort.Slice(got, func(i, j int) bool {
+		return got[i] < got[j]
+	})
+	if diff := cmp.Diff([]int64{3, 3, 15}, got); diff != "" {
+		t.Fatal(diff)
+	}
 }
