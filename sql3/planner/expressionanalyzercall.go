@@ -214,8 +214,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 
 		call.ResultDataType = parser.NewDataTypeBool()
 
-	case "DATEPART":
-		return p.analyzeFunctionDatePart(call, scope)
+	case "DATETIMEPART":
+		return p.analyzeFunctionDateTimePart(call, scope)
 	case "REVERSE":
 		return p.analyseFunctionReverse(call, scope)
 	case "CHAR":
