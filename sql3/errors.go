@@ -138,6 +138,7 @@ const (
 	// time quantum function eval
 	ErrQRangeFromAndToTimeCannotBeBothNull errors.Code = "ErrQRangeFromAndToTimeCannotBeBothNull"
 	ErrQRangeInvalidUse                    errors.Code = "ErrQRangeInvalidUse"
+	ErrYearOutOfRange                      errors.Code = "ErrYearOutOfRange"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -850,5 +851,12 @@ func NewErrQRangeInvalidUse(line, col int) error {
 	return errors.New(
 		ErrQRangeInvalidUse,
 		fmt.Sprintf("[%d:%d] calling ranqeq() usage invalid", line, col),
+	)
+}
+
+func NewErrYearOutOfRange(line, col int, year int) error {
+	return errors.New(
+		ErrYearOutOfRange,
+		fmt.Sprintf("[%d:%d] year '%d' out of range [0,9999]", line, col, year),
 	)
 }

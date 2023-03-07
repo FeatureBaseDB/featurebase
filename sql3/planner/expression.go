@@ -1580,6 +1580,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		// time quantum functions
 	case "RANGEQ":
 		return n.EvaluateRangeQ(currentRow)
+	case "DATETIMEFROMPARTS":
+		return n.EvaluateDateTimeFromParts(currentRow)
 	case "DATETIMEADD":
 		return n.EvaluateDatetimeAdd(currentRow)
 	default:
