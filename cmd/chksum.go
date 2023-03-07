@@ -19,7 +19,7 @@ func newChkSumCommand(logdest logger.Logger) *cobra.Command {
 			Generates a digital signature of all the data associated with a provided FeatureBase server
 			WARNING: could be slow if high cardinality fields exist
 `,
-		RunE: usageErrorWrapper(cmd),
+		RunE: UsageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

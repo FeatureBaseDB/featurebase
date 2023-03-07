@@ -1,0 +1,5 @@
+{"pk0": "9z4aw", "pk1": "5ptDx", "pk2": "CKs1F", "fields": ["int_long","int_int"]}
+{"pk0": "6TKzc", "pk1": "YKLk9", "pk2": "h1iqc", "fields": ["stringset_string","string_string","stringset_bytes","string_bytes","stringset_stringarray","stringset_bytesarray","idset_long","id_long","idset_int","id_int","idset_longarray","idset_intarray"]}
+{"pk0": "RKE3c", "pk1": "6TKzc", "pk2": "RKE3c", "fields": ["decimal_bytes","decimal_float","decimal_double"]}
+{"pk0": "ASSAw", "pk1": "kauLy", "pk2": "oxjI0", "fields": ["bools","bools-exists"]}
+{"pk0": "yg8hY", "pk1": "tvNOB", "pk2": "byHh9", "fields": ["dateint_bytes_ts"]}

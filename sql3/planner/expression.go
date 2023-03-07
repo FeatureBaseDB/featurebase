@@ -1581,6 +1581,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		// time quantum functions
 	case "RANGEQ":
 		return n.EvaluateRangeQ(currentRow)
+	case "DATETIMEADD":
+		return n.EvaluateDatetimeAdd(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}

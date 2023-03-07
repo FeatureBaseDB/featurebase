@@ -280,6 +280,15 @@ func featurebaseFieldOptionsToEpoch(fo *FieldOptions) time.Time {
 	return time.Unix(0, epochNano)
 }
 
+// FieldInfosToFields converts a []*featurebase.FieldInfo to a []*dax.Field.
+func FieldInfosToFields(fis []*FieldInfo) []*dax.Field {
+	fs := make([]*dax.Field, 0, len(fis))
+	for i := range fis {
+		fs = append(fs, FieldInfoToField(fis[i]))
+	}
+	return fs
+}
+
 //
 // Functions to convert from dax to featurebase.
 //

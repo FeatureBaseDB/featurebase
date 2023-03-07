@@ -242,7 +242,7 @@ func (sr sourceRows) insertTuples(t *testing.T) string {
 			case nil:
 				sb.WriteString("null")
 			case time.Time:
-				sb.WriteString("'" + v.Format(time.RFC3339) + "'")
+				sb.WriteString("'" + v.Format(time.RFC3339Nano) + "'")
 
 			default:
 				t.Fatalf("unsupported cell type: %T", cell)

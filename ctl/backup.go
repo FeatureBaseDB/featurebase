@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -549,7 +548,7 @@ func (cmd *BackupCommand) backupShardDataframe(ctx context.Context, indexName st
 	resp, err := client.GetDataframeShard(ctx, indexName, shard)
 	// no error if doesn't exist
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("getting dataframe: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 404 {

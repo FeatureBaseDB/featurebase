@@ -149,6 +149,8 @@ func (r *Record) StreamOffset() (string, uint64) {
 
 var _ idk.OffsetStreamRecord = &Record{}
 
+func (r *Record) Schema() interface{} { return nil }
+
 func (r *Record) Commit(ctx context.Context) error {
 	r.src.mu.Lock()
 	defer r.src.mu.Unlock()

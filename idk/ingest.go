@@ -35,6 +35,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	proto "github.com/featurebasedb/featurebase/v3/proto"
 	"github.com/felixge/fgprof"
+	"github.com/go-avro/avro"
 	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -123,6 +124,12 @@ type Main struct {
 
 	NewImporterFn func() pilosacore.Importer `flag:"-"`
 
+	Batcher pilosabatch.Batcher `flag:"-"`
+
+	// basic, when true, will only set up the things required to run a basic
+	// ingester. For example, it does not set up the pilosa client.
+	basic bool
+
 	SchemaManager SchemaManager       `flag:"-"`
 	Qtbl          *dax.QualifiedTable `flag:"-"`
 
@@ -209,8 +216,6 @@ func (m *Main) Log() logger.Logger                 { return m.log }
 func (m *Main) SetLog(log logger.Logger)           { m.log = log }
 
 func NewMain() *Main {
-	fmt.Fprintf(os.Stderr, "Molecula Consumer %s, build time %s\n", Version, BuildTime)
-
 	return &Main{
 		PilosaHosts:      []string{"localhost:10101"},
 		PilosaGRPCHosts:  []string{"localhost:20101"},
@@ -240,7 +245,18 @@ func (m *Main) Rename() {
 	}
 }
 
+// SetBasic sets up Main with basic functionality, excluding those things which
+// are not required for some implementations (such as the kafka runner in
+// fbsql).
+func (m *Main) SetBasic() {
+	m.basic = true
+}
+
 func (m *Main) Run() (err error) {
+	if !m.basic {
+		m.log.Printf("Molecula Consumer %s, build time %s\n", Version, BuildTime)
+	}
+
 	onFinishRun, err := m.Setup()
 	if err != nil {
 		return errors.Wrap(err, "setting up")
@@ -263,20 +279,22 @@ func (m *Main) run() error {
 	}
 	l := &msgCounter{MaxMsgs: m.MaxMsgs}
 
-	for c := 0; c < m.Concurrency; c++ {
-		c := c
-		eg.Go(func() error {
-			var err error
-			if m.Delete {
-				err = m.runDeleter(c, l)
-			} else {
-				err = m.runIngester(c, l)
-			}
-			if err != nil && err != io.EOF {
-				return err
-			}
-			return nil
-		})
+	if m.Delete {
+		err := m.runDeleter(l)
+		if err != nil {
+			return err
+		}
+	} else {
+		for c := 0; c < m.Concurrency; c++ {
+			c := c
+			eg.Go(func() error {
+				err := m.runIngester(c, l)
+				if err != nil && err != io.EOF {
+					return err
+				}
+				return nil
+			})
+		}
 	}
 	return errors.Wrap(eg.Wait(), "idk.Main.Run")
 }
@@ -671,6 +689,100 @@ initialFetch:
 }
 
 func (m *Main) Setup() (onFinishRun func(), err error) {
+	if m.basic {
+		return m.basicSetup()
+	}
+	return m.setup()
+}
+
+// basicSetup contains a lot of the same functionality as setup(), but it
+// exludes anything which involves interacting with a "destination" featurebase
+// installation. A basic setup is useful for something which wants to use the
+// ingest loop and its batching logic, but doesn't want to send results directly
+// to a featurebase installation. An example of this would be the CLI (i.e.
+// fbsql), which generates BULK INSERT statements and sends those to a /sql
+// endpoint.
+func (m *Main) basicSetup() (onFinishRun func(), err error) {
+	if err := m.validate(); err != nil {
+		return nil, errors.Wrap(err, "validating configuration")
+	}
+
+	// setup logging
+	var f *logger.FileWriter
+	var logOut io.Writer = os.Stderr
+	if m.LogPath != "" {
+		f, err = logger.NewFileWriter(m.LogPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "opening log file")
+		}
+		logOut = f
+	}
+	if m.Verbose {
+		m.log = logger.NewVerboseLogger(logOut)
+	} else {
+		m.log = logger.NewStandardLogger(logOut)
+	}
+
+	if m.TrackProgress {
+		m.progress = &ProgressTracker{}
+	}
+
+	// Set up progress tracking.
+	if m.progress != nil {
+		startTime := time.Now()
+		var wg sync.WaitGroup
+		defer wg.Wait()
+		doneCh := make(chan struct{})
+		defer func() { close(doneCh) }()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Set up a timer to check progress every 10 seconds.
+			tick := time.NewTicker(10 * time.Second)
+			defer tick.Stop()
+
+			prev := uint64(0)
+			stalled := true
+			for {
+				progress := m.progress.Check()
+				switch {
+				case progress != prev:
+					// Forward progress continues.
+					m.log.Printf("sourced %d records (%.2f records/minute)", progress, float64(progress)/time.Since(startTime).Minutes())
+					stalled = false
+				case stalled:
+					// We already told the user that it is stalled.
+				default:
+					// This is the start of a stall.
+					// No records have been sourced in the past 5 seconds.
+					m.log.Printf("record sourcing stalled")
+					stalled = true
+				}
+				prev = progress
+
+				select {
+				case <-tick.C:
+				case <-doneCh:
+					// Generate a final status update.
+					m.log.Printf("sourced %d records in %s", m.progress.Check(), time.Since(startTime))
+					return
+				}
+			}
+		}()
+	}
+
+	m.newNexter = func(c int) (IDAllocator, error) {
+		var nexter IDAllocator
+		return nexter, nil
+	}
+
+	onFinishRun = func() {}
+
+	return onFinishRun, nil
+}
+
+func (m *Main) setup() (onFinishRun func(), err error) {
 	if err := m.validate(); err != nil {
 		return nil, errors.Wrap(err, "validating configuration")
 	}
@@ -798,6 +910,9 @@ func (m *Main) Setup() (onFinishRun func(), err error) {
 			return nil, errors.Wrap(err, "creating featurebase client")
 		}
 		m.grpcClient = grpcClient
+		if m.Concurrency > 1 {
+			return nil, errors.New("delete consumers does not support concurrency > 1")
+		}
 	}
 
 	if m.LookupDBDSN != "" {
@@ -1087,12 +1202,16 @@ func (h metricsJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
+// runDeleter pulls records from the source associated with a consumer
+// and deletes data from featurebase based on the format of that record
+// it is currently mainly used with and tested on the kafka / avro consumer
+// built on IDK
+func (m *Main) runDeleter(limitCounter *msgCounter) error {
 	m, err := m.clone()
 	if err != nil {
 		return errors.Wrap(err, "cloning *Main before delete")
 	}
-	m.log.Printf("start deleter %d", c)
+	m.log.Printf("starting the delete consumer...")
 	source, err := m.NewSource()
 	if err != nil {
 		return errors.Wrap(err, "getting source")
@@ -1121,181 +1240,378 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 	client := m.PilosaClient()
 	index := m.index
 
+	// Pull records one by one from source (e.g. kafka)
 	for ; !limitCounter.IsDone(); rec, err = source.Record() {
 		if err == ErrFlush {
 			continue
+		} else if err != nil && err != ErrSchemaChange {
+			return errors.Wrap(err, "getting record")
 		}
-		m.log.Debugf("deleter record: %v\n", rec)
-		if err != nil {
-			if err == ErrSchemaChange {
-				schema := source.Schema()
-				recordizers, _, row, _, err = m.batchFromSchema(schema)
-				if err != nil {
-					return errors.Wrap(err, "batchFromSchema")
-				}
+
+		bq := index.BatchQuery()
+		recSchema := rec.Schema()
+		avroRecord := false
+		deleteType := ""
+		switch recSchema.(type) {
+		case avro.Schema:
+			// record was encoded using avro
+			// in runDeleter, that avro.RecordSchema should have a delete property
+			// if it doesn't, it defaults to "fields" which runs older logic
+			// (i.e. this new code won't break old integrations)
+			deleteProp, ok := recSchema.(avro.Schema).Prop("delete")
+			if !ok || deleteProp == nil {
+				deleteType = "fields"
 			} else {
-				break
-			}
-		}
-		data := rec.Data()
-		m.log.Debugf("deleter data: %+v %+v %+v", data, data[0], data[1])
-		for _, rdz := range recordizers {
-			err = rdz(data, row)
-			if err != nil {
-				return errors.Wrap(err, "recordizing")
-			}
-		}
-
-		var columnIDs []uint64
-		var columnKeys []string
-		switch rowIdent := row.ID.(type) {
-		case int64:
-			columnIDs = []uint64{uint64(rowIdent)}
-		case uint64:
-			columnIDs = []uint64{rowIdent}
-		case string:
-			columnKeys = []string{rowIdent}
-		case []byte:
-			columnKeys = []string{string(rowIdent)}
-		default:
-			return errors.Errorf("recordizing primary key, got type: %T", row.ID)
-		}
-
-		// TODO: sentinel value in field list to delete entire record
-		directives, ok := row.Values[len(row.Values)-1].([]string)
-		if !ok {
-			if row.Values[len(row.Values)-1] == nil {
-				continue
-			}
-			return errors.Errorf("directives should be a string slice but got: %+v of %[1]T", row.Values[len(row.Values)-1])
-		}
-		if len(directives) == 0 {
-			continue
-		}
-
-		// TODO: `directives` is not necessarily equivalent to a list of fieldNames
-		rr, err := inspect(m.grpcClient, m.Index, columnIDs, columnKeys, directives)
-		if err != nil {
-			return errors.Wrap(err, "retrieving values for delete")
-		}
-
-		trns, err := m.SchemaManager.StartTransaction("", time.Minute, false, time.Hour)
-		if err != nil {
-			return errors.Wrap(err, "starting transaction")
-		}
-		for _, directive := range directives {
-			var recordID interface{} = row.ID
-			if idbytes, ok := recordID.([]byte); ok {
-				recordID = string(idbytes)
-			}
-			var fieldName string
-			if nameval := strings.SplitN(directive, "|", 2); len(nameval) == 2 {
-				// special handling for packed bools — may generalize this in future
-				fieldName = nameval[0]
-				value := nameval[1]
-				if m.PackBools == "" || fieldName != m.PackBools {
-					return errors.Errorf("unsupported directive '%s' field name must be equal to packed bools field: '%s'", directive, m.PackBools)
-				}
-				boolsField := index.Field(m.PackBools)
-				boolsExists := index.Field(m.PackBools + Exists)
-				_, err := client.Query(index.BatchQuery(
-					boolsField.Clear(value, recordID),
-					boolsExists.Clear(value, recordID),
-				))
-				if err != nil {
-					return errors.Wrap(err, "clearing bools")
-				}
-				CounterDeleterRowsAdded.With(prom.Labels{"type": "packed-bool"}).Inc()
-				continue
-			} else {
-				fieldName = directive
-			}
-
-			// get field, refreshing schema if needed
-			field, ok := index.Fields()[fieldName]
-			if !ok {
-				schema, err := m.SchemaManager.Schema()
-				if err != nil {
-					return errors.Wrap(err, "unknown field, getting new schema")
-				}
-				index = schema.Index(m.Index)
-				field, ok = index.Fields()[fieldName]
+				deleteType, ok = deleteProp.(string)
 				if !ok {
-					return errors.Errorf("field '%s' not found", fieldName)
+					return errors.Errorf("delete property of avro delete record should be a string")
 				}
 			}
+			avroRecord = true
+		}
 
-			val, err := rr.Val(fieldName)
+		if !avroRecord || deleteType == "fields" {
+			// records without avro schemas or records with avro schemas
+			// with deletes property of "fields" uses historical logic
+			m.log.Debugf("deleter record: %v\n", rec)
 			if err != nil {
-				return errors.Wrap(err, "getting value from inspect")
-			}
-
-			switch field.Options().Type() {
-			case pilosaclient.FieldTypeDefault, pilosaclient.FieldTypeSet:
-				bq := index.BatchQuery()
-				if field.Options().Keys() {
-					valStrs, ok := val.([]string)
-					if !ok {
-						return errors.Errorf("unexpected value type for set field with keys, not []string but %T", val)
-					}
-					for _, valS := range valStrs {
-						bq.Add(field.Clear(valS, recordID))
+				if err == ErrSchemaChange {
+					schema := source.Schema()
+					recordizers, _, row, _, err = m.batchFromSchema(schema)
+					if err != nil {
+						return errors.Wrap(err, "batchFromSchema")
 					}
 				} else {
-					valIDs, ok := val.([]uint64)
-					if !ok {
-						return errors.Errorf("unexpected value type for set field, not []uint64 but %T", val)
-					}
-					for _, valID := range valIDs {
-						bq.Add(field.Clear(valID, recordID))
-					}
+					// shouldn't be able to get here
+					break
 				}
-				_, err := client.Query(bq)
+			}
+			data := rec.Data()
+			m.log.Debugf("deleter data: %+v %+v %+v", data, data[0], data[1])
+			for _, rdz := range recordizers {
+				err = rdz(data, row)
 				if err != nil {
-					return errors.Wrap(err, "clearing set")
+					return errors.Wrap(err, "recordizing")
 				}
-				CounterDeleterRowsAdded.With(prom.Labels{"type": "set"}).Inc()
-			case pilosaclient.FieldTypeMutex:
-				if val == "" {
+			}
+
+			var columnIDs []uint64
+			var columnKeys []string
+			switch rowIdent := row.ID.(type) {
+			case int64:
+				columnIDs = []uint64{uint64(rowIdent)}
+			case uint64:
+				columnIDs = []uint64{rowIdent}
+			case string:
+				columnKeys = []string{rowIdent}
+			case []byte:
+				columnKeys = []string{string(rowIdent)}
+			default:
+				return errors.Errorf("recordizing primary key, got type: %T", row.ID)
+			}
+
+			// TODO: sentinel value in field list to delete entire record
+			directives, ok := row.Values[len(row.Values)-1].([]string)
+			if !ok {
+				if row.Values[len(row.Values)-1] == nil {
 					continue
 				}
-				_, err := client.Query(index.BatchQuery(
-					field.Clear(val, recordID),
-				))
-				if err != nil {
-					return errors.Wrap(err, "clearing mutex")
-				}
-				CounterDeleterRowsAdded.With(prom.Labels{"type": "mutex"}).Inc()
-			case pilosaclient.FieldTypeBool:
-				_, err := client.Query(index.BatchQuery(
-					field.Clear(0, recordID),
-					field.Clear(1, recordID),
-				))
-				if err != nil {
-					return errors.Wrap(err, "clearing bool")
-				}
-				CounterDeleterRowsAdded.With(prom.Labels{"type": "bool"}).Inc()
-			case pilosaclient.FieldTypeInt:
-				_, err := client.Query(field.Clear(0, recordID))
-				if err != nil {
-					return errors.Wrap(err, "clearing int")
-				}
-				CounterDeleterRowsAdded.With(prom.Labels{"type": "int"}).Inc()
-			case pilosaclient.FieldTypeDecimal:
-				_, err := client.Query(field.Clear(0, recordID))
-				if err != nil {
-					return errors.Wrap(err, "clearing decimal")
-				}
-				CounterDeleterRowsAdded.With(prom.Labels{"type": "decimal"}).Inc()
-			case pilosaclient.FieldTypeTime:
-				return errors.Errorf("deletion on time fields unimplemented")
-			default:
-				return errors.Errorf("unhandled field type %s", field.Options().Type())
+				return errors.Errorf("directives should be a string slice but got: %+v of %[1]T", row.Values[len(row.Values)-1])
 			}
-		}
-		_, err = m.SchemaManager.FinishTransaction(trns.ID)
-		if err != nil {
-			return errors.Wrap(err, "finishing transaction")
+			if len(directives) == 0 {
+				continue
+			}
+
+			// TODO: `directives` is not necessarily equivalent to a list of fieldNames
+			rr, err := inspect(m.grpcClient, m.Index, columnIDs, columnKeys, directives)
+			if err != nil {
+				return errors.Wrap(err, "retrieving values for delete")
+			}
+
+			trns, err := m.SchemaManager.StartTransaction("", time.Minute, false, time.Hour)
+			if err != nil {
+				return errors.Wrap(err, "starting transaction")
+			}
+			for _, directive := range directives {
+				var recordID interface{} = row.ID
+				if idbytes, ok := recordID.([]byte); ok {
+					recordID = string(idbytes)
+				}
+				var fieldName string
+				if nameval := strings.SplitN(directive, "|", 2); len(nameval) == 2 {
+					// special handling for packed bools — may generalize this in future
+					fieldName = nameval[0]
+					value := nameval[1]
+					if m.PackBools == "" || fieldName != m.PackBools {
+						return errors.Errorf("unsupported directive '%s' field name must be equal to packed bools field: '%s'", directive, m.PackBools)
+					}
+					boolsField := index.Field(m.PackBools)
+					boolsExists := index.Field(m.PackBools + Exists)
+					_, err := client.Query(index.BatchQuery(
+						boolsField.Clear(value, recordID),
+						boolsExists.Clear(value, recordID),
+					))
+					if err != nil {
+						return errors.Wrap(err, "clearing bools")
+					}
+					CounterDeleterRowsAdded.With(prom.Labels{"type": "packed-bool"}).Inc()
+					continue
+				} else {
+					fieldName = directive
+				}
+
+				// get field, refreshing schema if needed
+				field, ok := index.Fields()[fieldName]
+				if !ok {
+					schema, err := m.SchemaManager.Schema()
+					if err != nil {
+						return errors.Wrap(err, "unknown field, getting new schema")
+					}
+					index = schema.Index(m.Index)
+					field, ok = index.Fields()[fieldName]
+					if !ok {
+						return errors.Errorf("field '%s' not found", fieldName)
+					}
+				}
+
+				val, err := rr.Val(fieldName)
+				if err != nil {
+					return errors.Wrap(err, "getting value from inspect")
+				}
+
+				switch field.Options().Type() {
+				case pilosaclient.FieldTypeDefault, pilosaclient.FieldTypeSet:
+					if field.Options().Keys() {
+						valStrs, ok := val.([]string)
+						if !ok {
+							return errors.Errorf("unexpected value type for set field with keys, not []string but %T", val)
+						}
+						for _, valS := range valStrs {
+							bq.Add(field.Clear(valS, recordID))
+						}
+					} else {
+						valIDs, ok := val.([]uint64)
+						if !ok {
+							return errors.Errorf("unexpected value type for set field, not []uint64 but %T", val)
+						}
+						for _, valID := range valIDs {
+							bq.Add(field.Clear(valID, recordID))
+						}
+					}
+					_, err := client.Query(bq)
+					if err != nil {
+						return errors.Wrap(err, "clearing set")
+					}
+					CounterDeleterRowsAdded.With(prom.Labels{"type": "set"}).Inc()
+				case pilosaclient.FieldTypeMutex:
+					if val == "" {
+						continue
+					}
+					_, err := client.Query(index.BatchQuery(
+						field.Clear(val, recordID),
+					))
+					if err != nil {
+						return errors.Wrap(err, "clearing mutex")
+					}
+					CounterDeleterRowsAdded.With(prom.Labels{"type": "mutex"}).Inc()
+				case pilosaclient.FieldTypeBool:
+					_, err := client.Query(index.BatchQuery(
+						field.Clear(0, recordID),
+						field.Clear(1, recordID),
+					))
+					if err != nil {
+						return errors.Wrap(err, "clearing bool")
+					}
+					CounterDeleterRowsAdded.With(prom.Labels{"type": "bool"}).Inc()
+				case pilosaclient.FieldTypeInt:
+					_, err := client.Query(field.Clear(0, recordID))
+					if err != nil {
+						return errors.Wrap(err, "clearing int")
+					}
+					CounterDeleterRowsAdded.With(prom.Labels{"type": "int"}).Inc()
+				case pilosaclient.FieldTypeDecimal:
+					_, err := client.Query(field.Clear(0, recordID))
+					if err != nil {
+						return errors.Wrap(err, "clearing decimal")
+					}
+					CounterDeleterRowsAdded.With(prom.Labels{"type": "decimal"}).Inc()
+				case pilosaclient.FieldTypeTime:
+					return errors.Errorf("deletion on time fields unimplemented")
+				default:
+					return errors.Errorf("unhandled field type %s", field.Options().Type())
+				}
+			}
+			if len(directives) == 0 {
+				continue
+			}
+			_, err = m.SchemaManager.FinishTransaction(trns.ID)
+			if err != nil {
+				return errors.Wrap(err, "finishing transaction")
+			}
+		} else {
+			// here we have an record encoded by avro and it's delete type is
+			// "values", "records", or some unacceptable input
+			recRecordSchema, ok := recSchema.(*avro.RecordSchema)
+			if !ok {
+				return errors.Errorf("got data of type %T but wanted avro.RecordSchema", recSchema)
+			}
+
+			// map values to fields or _id
+			avroFields := recRecordSchema.Fields
+			var recordID interface{}
+			fieldValues := make(map[string]interface{})
+			for i, value := range rec.Data() {
+				name := avroFields[i].Name
+				if name == "_id" {
+					if m.index.Opts().Keys() == false {
+						recordID, err = toUint64(value)
+						if err != nil {
+							return errors.Errorf("unable convert _id to uint64 for index %s which is has keys set to false", m.index.Name())
+						}
+					} else {
+						recordID, err = toString(value)
+						if err != nil {
+							return errors.Errorf("unable convert _id to string for index %s which is has keys set to true", m.index.Name())
+						}
+					}
+
+				} else {
+					fieldValues[name] = value
+				}
+			}
+
+			switch deleteType {
+			case "values":
+				// find featurebase field based on avro / record field name
+				indexFields := index.Fields()
+				for key, value := range fieldValues {
+					field, ok := indexFields[key]
+					if !ok {
+						return errors.Errorf("unable to find field %s in index %s", key, index.Name())
+					}
+					if value == nil {
+						// don't delete anything for this field if value is null
+						continue
+					}
+					switch fType := field.Options().Type(); fType {
+					case pilosaclient.FieldTypeSet, pilosaclient.FieldTypeMutex:
+						if key == m.PackBools {
+							// value should be list of bools to clear if avro field name
+							// is equal the name of the packed bools field
+							if arrayValue, err := toStringArray(value); err == nil {
+								boolsField := index.Field(m.PackBools)
+								boolsExists := index.Field(m.PackBools + Exists)
+								for _, v := range arrayValue {
+									m.log.Debugf("clearing %s and %s for %s bool field", m.PackBools, m.PackBools+Exists, v)
+									bq.Add(boolsField.Clear(v, recordID))
+									bq.Add(boolsExists.Clear(v, recordID))
+								}
+							} else {
+								return errors.Errorf("packed bools field %s should be a list of boolean values to delete", field.Name())
+							}
+						} else {
+							// not packed bools, check for string vs ID field keys
+							switch keys := field.Options().Keys(); keys {
+							case true:
+								if arrayValue, err := toStringArray(value); err == nil {
+									for _, v := range arrayValue {
+										bq.Add(field.Clear(v, recordID))
+									}
+								} else {
+									return errors.Errorf("value of keyed %s field %s should be a string or array of strings but was %T", fType, field.Name(), value)
+								}
+							case false:
+								if singleValue, err := toUint64(value); err == nil {
+									bq.Add(field.Clear(singleValue, recordID))
+								} else if arrayValue, err := toUint64Array(value); err == nil {
+									for _, v := range arrayValue {
+										bq.Add(field.Clear(v, recordID))
+									}
+								} else {
+									return errors.Errorf("value of non keyed %s field %s should be an int or array of ints but was %T", fType, field.Name(), value)
+								}
+							default:
+								return errors.Errorf("set field %s should have keys true or false", field.Name())
+							}
+						}
+					case pilosaclient.FieldTypeInt, pilosaclient.FieldTypeDecimal, pilosaclient.FieldTypeTimestamp:
+						if boolVal, ok := value.(bool); ok {
+							if boolVal {
+								bq.Add(field.Clear(0, recordID))
+							}
+						} else {
+							return errors.Errorf("%s fields should have a boolean value set to rue if value is to be deleted, false otherwise", fType)
+						}
+					case pilosaclient.FieldTypeBool:
+						if boolVal, ok := value.(bool); ok {
+							if boolVal {
+								bq.Add(field.Clear(0, recordID))
+								bq.Add(field.Clear(1, recordID))
+							}
+						} else {
+							return errors.Errorf("%s fields should have a boolean value set to rue if value is to be deleted, false otherwise", fType)
+						}
+					default:
+						// pilosa.FieldTypeTime is the only other field type at time of coding
+						return errors.Errorf("unable to handle values from fields with type: %s", fType)
+					}
+				}
+				m.log.Debugf("Delete consumer running the follow delete queries: %s", bq.Serialize())
+
+				resp, err := client.Query(bq, nil)
+				if err != nil || resp.Success != true {
+					return errors.Wrap(err, "error deleting values")
+				}
+			case "records":
+				// deleting a record
+				var rawQueries []string
+				if fieldValues["keys"] != nil {
+					// if keys set, delete list of record keys
+					keysAsStrings, err := toStringArray(fieldValues["keys"])
+					if err != nil {
+						return errors.Errorf("unable to convert 'keys' value to an array of strings")
+					}
+					columnKeys := "'" + strings.Join(keysAsStrings, "','") + "'"
+					rawQueries = append(rawQueries, fmt.Sprintf("Delete(ConstRow(columns=[%s]))", columnKeys))
+
+				}
+				if fieldValues["ids"] != nil {
+					// if ids set, delete list of record IDs
+					idsAsInts, err := toUint64Array(fieldValues["ids"])
+					if err != nil {
+						return errors.Errorf("unable to convert 'ids' value to an array of int64s")
+					}
+					keysAsStrings := make([]string, len(idsAsInts))
+					for i, v := range idsAsInts {
+						keysAsStrings[i] = fmt.Sprint(v)
+					}
+					columnKeys := strings.Join(keysAsStrings, ",")
+					rawQueries = append(rawQueries, fmt.Sprintf("Delete(ConstRow(columns=[%s]))", columnKeys))
+				}
+				if fieldValues["filter"] != nil {
+					// if filter set, use it as filter in delete query
+					filter, ok := fieldValues["filter"].(string)
+					if !ok {
+						return errors.Errorf("unable to convert fitler into string")
+					}
+					rawQueries = append(rawQueries, fmt.Sprintf("Delete(%s)", filter))
+				}
+				if len(rawQueries) == 0 {
+					m.log.Infof("delete record doesn't contain any delete queries: confirm 'keys', 'ids', or 'filter' key has a value")
+				} else {
+					for _, query := range rawQueries {
+						baseQuery := index.RawQuery(query)
+						bq.Add(baseQuery)
+					}
+
+					_, err := client.Query(bq, nil)
+					if err != nil {
+						return errors.Errorf("running delete query: %s", err)
+					}
+				}
+			default:
+				return errors.Errorf("unable to process delete where record is avro encoded & the delete property is not empty, 'records', 'fields', or 'values'")
+			}
 		}
 		err = m.commitRecord(context.Background(), rec, limitCounter, 1)
 		if err != nil {
@@ -1304,6 +1620,7 @@ func (m *Main) runDeleter(c int, limitCounter *msgCounter) error {
 		if limitCounter.IsDone() {
 			return nil
 		}
+
 	}
 
 	if !errors.Is(err, io.EOF) {
@@ -1837,12 +2154,35 @@ func (m *Main) batchFromSchema(schema []Field) ([]Recordizer, pilosabatch.Record
 	return recordizers, batch, row, lookupWriteIdxs, nil
 }
 
-func (m *Main) newBatch(fields []*pilosaclient.Field) (pilosabatch.RecordBatch, error) {
+func (m *Main) newBatch(clientFields []*pilosaclient.Field) (pilosabatch.RecordBatch, error) {
+	cfg := pilosabatch.Config{
+		Size:         m.BatchSize,
+		MaxStaleness: m.BatchMaxStaleness,
+	}
+
+	// Table.
+	ii := pilosaclient.FromClientIndex(m.index)
+	tbl := pilosacore.IndexInfoToTable(ii)
+
+	// Fields.
+	fields := pilosaclient.FromClientFields(clientFields)
+
+	// If a custom Batcher has been defined, use that. Otherwise default to
+	// using the standard featurebase batch.
+	if m.Batcher != nil {
+		return m.Batcher.NewBatch(cfg, tbl, pilosacore.FieldInfosToFields(fields))
+	}
+
+	return m.newFeaturebaseBatch(cfg, tbl, fields)
+}
+
+// newFeaturebaseBatch returns a featurebase.Batch based on the provided fields.
+func (m *Main) newFeaturebaseBatch(cfg pilosabatch.Config, tbl *dax.Table, fields []*pilosacore.FieldInfo) (pilosabatch.RecordBatch, error) {
 	opts := []pilosabatch.BatchOption{
 		pilosabatch.OptLogger(m.log),
 		pilosabatch.OptCacheMaxAge(m.CacheLength),
 		pilosabatch.OptSplitBatchMode(m.ExpSplitBatchMode),
-		pilosabatch.OptMaxStaleness(m.BatchMaxStaleness),
+		pilosabatch.OptMaxStaleness(cfg.MaxStaleness),
 		pilosabatch.OptKeyTranslateBatchSize(m.KeyTranslateBatchSize),
 		pilosabatch.OptUseShardTransactionalEndpoint(m.UseShardTransactionalEndpoint),
 	}
@@ -1855,10 +2195,7 @@ func (m *Main) newBatch(fields []*pilosaclient.Field) (pilosabatch.RecordBatch, 
 	}
 	opts = append(opts, pilosabatch.OptImporter(importer))
 
-	ii := pilosaclient.FromClientIndex(m.index)
-	tbl := pilosacore.IndexInfoToTable(ii)
-
-	return pilosabatch.NewBatch(importer, m.BatchSize, tbl, pilosaclient.FromClientFields(fields), opts...)
+	return pilosabatch.NewBatch(importer, cfg.Size, tbl, fields, opts...)
 }
 
 // validateField ensures that the field is configured correctly.

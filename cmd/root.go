@@ -25,11 +25,11 @@ type runner interface {
 	Run(context.Context) error
 }
 
-// usageErrorWrapper takes a thing with a Run(context) error, and produces
+// UsageErrorWrapper takes a thing with a Run(context) error, and produces
 // a func(*cobra.Command, []string) error from it which will run that
 // command, and then set Cobra's SilenceUsage flag unless the returned
 // error errors.Is() a ctl.UsageError.
-func usageErrorWrapper(inner runner) func(*cobra.Command, []string) error {
+func UsageErrorWrapper(inner runner) func(*cobra.Command, []string) error {
 	return func(c *cobra.Command, args []string) error {
 		return considerUsageError(c, inner.Run(context.Background()))
 	}
@@ -68,7 +68,7 @@ at https://docs.featurebase.com/.
 			case "dax":
 				v.Set("future.rename", true) // always use FEATUREBASE env for dax
 			}
-			if err := setAllConfig(v, cmd.Flags(), ""); err != nil {
+			if err := SetAllConfig(v, cmd.Flags(), ""); err != nil {
 				return err
 			}
 
@@ -114,17 +114,17 @@ at https://docs.featurebase.com/.
 	return rc
 }
 
-// setAllConfig takes a FlagSet to be the definition of all configuration
+// SetAllConfig takes a FlagSet to be the definition of all configuration
 // options, as well as their defaults. It then reads from the command line, the
 // environment, and a config file (if specified), and applies the configuration
 // in that priority order. Since each flag in the set contains a pointer to
-// where its value should be stored, setAllConfig can directly modify the value
+// where its value should be stored, SetAllConfig can directly modify the value
 // of each config variable.
 //
-// setAllConfig looks for environment variables which are capitalized versions
+// SetAllConfig looks for environment variables which are capitalized versions
 // of the flag names with dashes replaced by underscores, and prefixed with
 // envPrefix plus an underscore.
-func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error { // nolint: unparam
+func SetAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error { // nolint: unparam
 	// add cmd line flag def to viper
 	err := v.BindPFlags(flags)
 	if err != nil {

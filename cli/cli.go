@@ -13,6 +13,7 @@ import (
 
 	"github.com/chzyer/readline"
 	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/cli/batch"
 	"github.com/featurebasedb/featurebase/v3/cli/fbcloud"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -38,6 +39,7 @@ Type "\q" to quit.
 
 // Ensure type implments interfaces.
 var _ printer = (*Command)(nil)
+var _ batch.Inserter = (*Command)(nil)
 
 type Command struct {
 	host string
@@ -129,48 +131,77 @@ func NewCommand(logdest logger.Logger) *Command {
 
 // Run is the main entry-point to the CLI.
 func (cmd *Command) Run(ctx context.Context) error {
-	cmd.setupConfig()
+	if err := cmd.run(ctx); err != nil {
+		cmd.Errorf(err.Error() + "\n")
+		return err
+	}
+	return nil
+}
+
+// run is effectively wrapped by the Run() method, but it's split out this way
+// so that run() can simply return errors, rather than worrying about how errors
+// should be printed; printing errors returned by run() is left up to the Run()
+// method.
+func (cmd *Command) run(ctx context.Context) error {
+	if err := cmd.setupConfig(); err != nil {
+		return errors.Wrap(err, "setting up config")
+	}
 
 	// Check to see if Command needs to run in non-interactive mode.
-	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
+	if len(cmd.Commands) > 0 ||
+		len(cmd.Files) > 0 ||
+		cmd.Config.KafkaConfig != "" {
 		cmd.nonInteractiveMode = true
-
-		if err := cmd.setupClient(); err != nil {
-			return errors.Wrap(err, "setting up client")
-		}
-		if err := cmd.connectToDatabase(cmd.database); err != nil {
-			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
-		}
-
-		// Run Commands.
-		for _, line := range cmd.Commands {
-			if err := cmd.handleLine(line); err != nil {
-				cmd.Errorf(err.Error())
-				return nil
-			}
-		}
-
-		// Run Files.
-		for _, fname := range cmd.Files {
-			if _, err := executeFile(cmd, fname); err != nil {
-				cmd.Errorf(err.Error())
-				return nil
-			}
-		}
-
-		return nil
 	}
 
 	// Print the splash message.
-	cmd.Printf(splash)
-	cmd.setupHistory()
+	if !cmd.nonInteractiveMode {
+		cmd.Printf(splash)
+	}
+
 	if err := cmd.setupClient(); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
 	cmd.printConnInfo()
 	if err := cmd.connectToDatabase(cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+		// We intentionally do not return err here.
 	}
+
+	// Run in non-interactive mode based on flags and configuration.
+	// This includes either handling `-c` and/or `-f` flags, or handling a
+	// `--kafka-config` flag.
+	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
+		// Run Commands.
+		for _, line := range cmd.Commands {
+			if err := cmd.handleLine(line); err != nil {
+				return errors.Wrapf(err, "handling line: %s", line)
+			}
+		}
+
+		// Run Files.
+		for _, fname := range cmd.Files {
+			if _, err := executeFile(cmd, fname); err != nil {
+				return errors.Wrapf(err, "executing file: %s", fname)
+			}
+		}
+
+		return nil
+	} else if cmd.Config.KafkaConfig != "" {
+		runner, err := cmd.newKafkaRunner(cmd.Config.KafkaConfig)
+		if err != nil {
+			return errors.Wrap(err, "getting new kafka runner")
+		}
+		if err := runner.Main.Run(); err != nil {
+			return errors.Wrap(err, "running kafka")
+		}
+		return nil
+	}
+
+	// From this point on, we should be in interactive mode.
+
+	// Set up history for saving user input.
+	cmd.setupHistory()
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:                 promptBegin,
@@ -308,9 +339,9 @@ func (cmd *Command) close() error {
 
 // setupConfig sets up private struct members based on values provided via the
 // configuration flags.
-func (cmd *Command) setupConfig() {
+func (cmd *Command) setupConfig() error {
 	if cmd.Config == nil {
-		return
+		return nil
 	}
 
 	cmd.host = cmd.Config.Host
@@ -320,6 +351,8 @@ func (cmd *Command) setupConfig() {
 	cmd.database = cmd.Config.Database
 
 	cmd.historyPath = cmd.Config.HistoryPath
+
+	return nil
 }
 
 func (cmd *Command) executeAndWriteQuery(qry query) error {
@@ -429,16 +462,12 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 	}
 
 	// Look up dbID based on dbName.
-	qry := []queryPart{
-		newPartRaw("SHOW DATABASES"),
-	}
-
-	qr, err := cmd.executeQuery(qry)
+	wqr, err := cmd.executeQuery(newRawQuery("SHOW DATABASES"))
 	if err != nil {
 		return errors.Wrap(err, "executing query")
 	}
 
-	for _, db := range qr.Data {
+	for _, db := range wqr.Data {
 		// 0: _id
 		// 1: name
 		if db[1] == dbName {
@@ -462,7 +491,7 @@ func (cmd *Command) connectionMessage() string {
 	if cmd.databaseName == "" {
 		return "You are not connected to a database.\n"
 	}
-	return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.databaseName, cmd.databaseID)
+	return fmt.Sprintf("You are now connected to database \"%s\" (%s).\n", cmd.databaseName, cmd.databaseID)
 }
 
 func (cmd *Command) setupClient() error {
@@ -694,4 +723,12 @@ func (cmd *Command) handleLineAsQueryParts(line string) error {
 		}
 	}
 	return nil
+}
+
+func (cmd *Command) Insert(sql string) error {
+	wqr, err := cmd.executeQuery(newRawQuery(sql))
+	if wqr.Error != "" {
+		return errors.Errorf(wqr.Error)
+	}
+	return err
 }
