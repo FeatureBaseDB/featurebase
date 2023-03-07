@@ -21,6 +21,8 @@ import (
 
 const (
 	defaultHost     string = "localhost"
+	defaultClientID string = "6i2gs7mu215ab23cnvmshdoq6t" // production Cognito client ID
+	defaultRegion   string = "us-east-2"
 	terminationChar string = ";"
 	nullValue       string = "NULL"
 )
@@ -101,8 +103,8 @@ func NewCommand(logdest logger.Logger) *Command {
 			Database:       "",
 
 			CloudAuth: CloudAuthConfig{
-				ClientID: "",
-				Region:   "",
+				ClientID: defaultClientID,
+				Region:   defaultRegion,
 				Email:    "",
 				Password: "",
 			},
