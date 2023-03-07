@@ -69,6 +69,8 @@ type (
 		Commit(ctx context.Context) error
 
 		Data() []interface{}
+
+		Schema() interface{}
 	}
 
 	// OffsetStreamRecord is an extension of the record type which also tracks offsets within streams.
@@ -841,6 +843,26 @@ func (t TimestampField) PilosafyVal(val interface{}) (interface{}, error) {
 		tsAsVal := TimestampToVal(t.granularity(), ts)
 
 		dur = tsAsVal - epochAsVal
+	} else if _, ok := val.([]byte); ok {
+		valAsString := string(val.([]byte)[:])
+		// try to convert as time string
+		ts, err := timeFromTimestring(valAsString, t.layout())
+		if err != nil {
+			// if that doesn't work, maybe it's an int represented as a string
+			valAsInt, err := strconv.ParseInt(valAsString, 0, 64)
+			if err == nil {
+				return valAsInt - epochAsVal, nil
+			} else {
+				return nil, errors.Wrap(err, "converting TimestampField")
+			}
+		}
+		if err := validateTimestamp(t.granularity(), ts); err != nil {
+			return nil, errors.Wrap(ErrTimestampOutOfRange, "validating timestamp")
+		}
+
+		tsAsVal := TimestampToVal(t.granularity(), ts)
+
+		dur = tsAsVal - epochAsVal
 	} else {
 		valAsInt, err := toInt64(val)
 		if err != nil {
@@ -1195,6 +1217,8 @@ func toInt64(val interface{}) (int64, error) {
 			return 0, err
 		}
 		return v, nil
+	case []byte:
+		return toInt64(string(vt[:]))
 	default:
 		return 0, errors.Errorf("couldn't convert %v of %[1]T to int64", vt)
 	}
@@ -1228,11 +1252,16 @@ func toStringArray(val interface{}) ([]string, error) {
 	case []interface{}:
 		ret := make([]string, len(vt))
 		for i, v := range vt {
-			vs, ok := v.(string)
-			if !ok {
-				return nil, errors.Errorf("couldn't convert []interface{} to []string, value %v of type %[1]T at %d", v, i)
+			switch v.(type) {
+			case []byte:
+				ret[i] = string(v.([]byte)[:])
+			default:
+				vs, ok := v.(string)
+				if !ok {
+					return nil, errors.Errorf("couldn't convert []interface{} to []string, value %v of type %[1]T at %d", v, i)
+				}
+				ret[i] = vs
 			}
-			ret[i] = vs
 		}
 		return ret, nil
 	default:

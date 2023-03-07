@@ -1,0 +1,12 @@
+{
+    "namespace": "org.test",
+    "type": "record",
+    "name": "alltypes_delete_fields",
+    "delete": "fields",
+    "fields": [
+        {"name": "pk0", "type": "string"},
+        {"name": "pk1", "type": "string"},
+        {"name": "pk2", "type": "string"},
+        {"name": "fields", "type": {"type": "array", "items": "string"}}
+    ]
+}

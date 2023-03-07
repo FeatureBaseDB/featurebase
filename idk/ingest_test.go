@@ -1325,6 +1325,10 @@ func (s *sliceRecord) Data() []interface{} {
 	return s.data
 }
 
+func (s *sliceRecord) Schema() interface{} {
+	return nil
+}
+
 func (s *testSource) Record() (Record, error) {
 	s.i++
 	if s.i <= len(s.records) {

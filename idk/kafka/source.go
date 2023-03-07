@@ -109,7 +109,7 @@ func (s *Source) Record() (idk.Record, error) {
 		return nil, idk.ErrFlush
 	}
 
-	val, err := s.decodeAvroValueWithSchemaRegistry(rec.Record.Value)
+	val, avroSchema, err := s.decodeAvroValueWithSchemaRegistry(rec.Record.Value)
 	if err != nil && err != idk.ErrSchemaChange {
 		return nil, errors.Wrap(err, "decoding with schema registry")
 	}
@@ -124,12 +124,13 @@ func (s *Source) Record() (idk.Record, error) {
 	defer s.mu.Unlock()
 	s.spool = append(s.spool, msg.TopicPartition)
 	return &Record{
-		src:       s,
-		topic:     *msg.TopicPartition.Topic,
-		partition: int(msg.TopicPartition.Partition),
-		offset:    int64(msg.TopicPartition.Offset),
-		idx:       s.spoolBase + uint64(len(s.spool)),
-		data:      data,
+		src:        s,
+		topic:      *msg.TopicPartition.Topic,
+		partition:  int(msg.TopicPartition.Partition),
+		offset:     int64(msg.TopicPartition.Offset),
+		idx:        s.spoolBase + uint64(len(s.spool)),
+		data:       data,
+		avroSchema: avroSchema,
 	}, err
 }
 
@@ -189,12 +190,13 @@ func (s *Source) toPDKRecord(vals map[string]interface{}) []interface{} {
 }
 
 type Record struct {
-	src       *Source
-	topic     string
-	partition int
-	offset    int64
-	idx       uint64
-	data      []interface{}
+	src        *Source
+	topic      string
+	partition  int
+	offset     int64
+	idx        uint64
+	data       []interface{}
+	avroSchema avro.Schema
 }
 
 func (r *Record) StreamOffset() (string, uint64) {
@@ -252,6 +254,10 @@ func (r *Record) Commit(ctx context.Context) error {
 
 func (r *Record) Data() []interface{} {
 	return r.data
+}
+
+func (r *Record) Schema() interface{} {
+	return r.avroSchema
 }
 
 func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.TopicPartition, error) {
@@ -469,29 +475,29 @@ func (s *Source) Close() error {
 }
 
 // TODO change name
-func (s *Source) decodeAvroValueWithSchemaRegistry(val []byte) (interface{}, error) {
+func (s *Source) decodeAvroValueWithSchemaRegistry(val []byte) (interface{}, avro.Schema, error) {
 	if len(val) < 6 || val[0] != 0 {
-		return nil, errors.Errorf("unexpected magic byte or length in avro kafka value, should be 0x00, but got %x", val)
+		return nil, nil, errors.Errorf("unexpected magic byte or length in avro kafka value, should be 0x00, but got %x", val)
 	}
 	id := int32(binary.BigEndian.Uint32(val[1:]))
 	codec, err := s.getCodec(id)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting avro codec")
+		return nil, nil, errors.Wrap(err, "getting avro codec")
 	}
 	ret, err := avroDecode(codec, val[5:])
 	if err != nil {
-		return nil, errors.Wrap(err, "decoding avro record")
+		return nil, codec, errors.Wrap(err, "decoding avro record")
 	}
 	if id != s.lastSchemaID {
 		s.lastSchema, err = avroToPDKSchema(codec)
 		if err != nil {
-			return nil, errors.Wrap(err, "converting to FeatureBase schema")
+			return nil, codec, errors.Wrap(err, "converting to FeatureBase schema")
 		}
 		s.lastSchemaID = id
-		return ret, idk.ErrSchemaChange
+		return ret, codec, idk.ErrSchemaChange
 	}
 
-	return ret, nil
+	return ret, codec, nil
 }
 
 // avroToPDKSchema converts a full avro schema to the much more
@@ -564,13 +570,9 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 
 		switch ft {
 		case "decimal":
-			precision, _ := intProp(aField, "precision")
-			if precision > 18 || precision < 1 {
-				return nil, errors.Errorf("need precision for decimal in 1-18, but got:%d", precision)
-			}
 			scale, err := intProp(aField, "scale")
-			if scale > precision || err == wrongType {
-				return nil, errors.Errorf("0<=scale<=precision, got:%d err:%v", scale, err)
+			if scale > 18 || err == wrongType {
+				return nil, errors.Errorf("0<=scale<=18, got:%d err:%v", scale, err)
 			}
 			return idk.DecimalField{
 				NameVal: aField.Name,
@@ -697,7 +699,7 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 				CacheConfig: cacheConfig,
 			}, nil
 
-		case avro.Long:
+		case avro.Long, avro.Int:
 			if ft, _ := stringProp(itemSchema, "fieldType"); ft == "decimal" {
 				return nil, errors.New("arrays of decimal are not supported")
 			}

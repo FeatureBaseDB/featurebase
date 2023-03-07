@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
@@ -27,8 +28,9 @@ var _ dax.Schemar = (*Client)(nil)
 // Client is an HTTP client that operates on the Controller endpoints exposed by
 // the main Controller service.
 type Client struct {
-	address dax.Address
-	logger  logger.Logger
+	address    dax.Address
+	httpClient *http.Client
+	logger     logger.Logger
 }
 
 // New returns a new instance of Client.
@@ -36,6 +38,9 @@ func New(address dax.Address, logger logger.Logger) *Client {
 	return &Client{
 		address: address,
 		logger:  logger,
+		httpClient: &http.Client{
+			Timeout: time.Second * 30,
+		},
 	}
 }
 
@@ -44,9 +49,10 @@ func New(address dax.Address, logger logger.Logger) *Client {
 func (c *Client) Health() bool {
 	url := fmt.Sprintf("%s/health", c.address.WithScheme(defaultScheme))
 
-	if resp, err := http.Get(url); err != nil {
+	if resp, err := c.httpClient.Get(url); err != nil {
 		return false
 	} else if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
 		return false
 	}
 
@@ -64,7 +70,7 @@ func (c *Client) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase)
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting create database request")
 	}
@@ -88,7 +94,7 @@ func (c *Client) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting drop database request")
 	}
@@ -113,7 +119,7 @@ func (c *Client) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID
 
 	// Post the request.
 	c.logger.Debugf("POST database-by-id request: url: %s", url)
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "posting database-by-id request")
 	}
@@ -148,7 +154,7 @@ func (c *Client) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, n
 
 	// Post the request.
 	c.logger.Debugf("POST database-by-name request: url: %s", url)
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "posting database-by-name request")
 	}
@@ -183,7 +189,7 @@ func (c *Client) Databases(ctx context.Context, orgID dax.OrganizationID, ids ..
 
 	// Post the request.
 	c.logger.Debugf("POST databases request: url: %s", url)
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "posting databases request")
 	}
@@ -225,7 +231,7 @@ func (c *Client) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatab
 
 	// Post the request as PATCH.
 	c.logger.Debugf("PATCH database/option request: url: %s", url)
-	resp, err := http.DefaultClient.Do(request)
+	resp, err := c.httpClient.Do(request)
 	if err != nil {
 		return errors.Wrap(err, "posting database/option request")
 	}
@@ -264,7 +270,7 @@ func (c *Client) Table(ctx context.Context, qtid dax.QualifiedTableID) (*dax.Qua
 
 	// Post the request.
 	c.logger.Debugf("POST table request: url: %s", url)
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "posting table request")
 	}
@@ -300,7 +306,7 @@ func (c *Client) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID, nam
 	requestBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", requestBody)
+	resp, err := c.httpClient.Post(url, "application/json", requestBody)
 	if err != nil {
 		return dflt, errors.Wrap(err, "posting table-id request")
 	}
@@ -335,7 +341,7 @@ func (c *Client) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, ids 
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "posting tables request")
 	}
@@ -364,7 +370,7 @@ func (c *Client) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) erro
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting create table request")
 	}
@@ -388,7 +394,7 @@ func (c *Client) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting drop table request")
 	}
@@ -416,7 +422,7 @@ func (c *Client) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting create field request")
 	}
@@ -445,7 +451,7 @@ func (c *Client) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldNa
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting drop field request")
 	}
@@ -476,7 +482,7 @@ func (c *Client) IngestShard(ctx context.Context, qtid dax.QualifiedTableID, sha
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return host, errors.Wrap(err, "posting ingest-shard request")
 	}
@@ -513,7 +519,7 @@ func (c *Client) IngestPartition(ctx context.Context, qtid dax.QualifiedTableID,
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return host, errors.Wrap(err, "posting ingest-partition request")
 	}
@@ -551,7 +557,7 @@ func (c *Client) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID, sh
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nodes, errors.Wrap(err, "posting compute-nodes request")
 	}
@@ -589,7 +595,7 @@ func (c *Client) TranslateNodes(ctx context.Context, qtid dax.QualifiedTableID, 
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return nodes, errors.Wrap(err, "posting translate-nodes request")
 	}
@@ -625,7 +631,7 @@ func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting translate-nodes request")
 	}
@@ -655,7 +661,7 @@ func (c *Client) CheckInNode(ctx context.Context, node *dax.Node) error {
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting translate-nodes request")
 	}
@@ -680,7 +686,7 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 	responseBody := bytes.NewBuffer(postBody)
 
 	// Post the request.
-	resp, err := http.Post(url, "application/json", responseBody)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
 	if err != nil {
 		return errors.Wrap(err, "posting translate-nodes request")
 	}

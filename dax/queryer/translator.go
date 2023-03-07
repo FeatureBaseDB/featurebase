@@ -3,9 +3,10 @@ package queryer
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
-	featurebase_client "github.com/featurebasedb/featurebase/v3/client"
+	fbclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/partitioner"
 	"github.com/featurebasedb/featurebase/v3/disco"
@@ -26,15 +27,28 @@ func NewServerlessTranslator(controller dax.Controller) *serverlessTranslator {
 	}
 }
 
-func fbClient(address dax.Address) (*featurebase_client.Client, error) {
-	// Set up a FeatureBase client with address.
-	return featurebase_client.NewClient(address.HostPort(),
-		featurebase_client.OptClientRetries(2),
-		featurebase_client.OptClientTotalPoolSize(1000),
-		featurebase_client.OptClientPoolSizePerRoute(400),
-		featurebase_client.OptClientPathPrefix(address.Path()),
-		//featurebase_client.OptClientStatsClient(m.stats),
+var fbClientCache = map[dax.Address]*fbclient.Client{}
+var fbClientCacheMu sync.Mutex
+
+func fbClient(address dax.Address) (*fbclient.Client, error) {
+	fbClientCacheMu.Lock()
+	defer fbClientCacheMu.Unlock()
+	client := fbClientCache[address]
+	if client != nil {
+		return client, nil
+	}
+	client, err := fbclient.NewClient(address.HostPort(),
+		fbclient.OptClientRetries(2),
+		fbclient.OptClientTotalPoolSize(1000),
+		fbclient.OptClientPoolSizePerRoute(400),
+		fbclient.OptClientPathPrefix(address.Path()),
+		//fbclient.OptClientStatsClient(m.stats),
 	)
+	if err != nil {
+		return nil, err
+	}
+	fbClientCache[address] = client
+	return client, nil
 }
 
 func (m *serverlessTranslator) CreateIndexKeys(ctx context.Context, table string, keys []string) (map[string]uint64, error) {
@@ -63,7 +77,7 @@ func (m *serverlessTranslator) CreateIndexKeys(ctx context.Context, table string
 			return nil, errors.Wrap(err, "getting featurebase client")
 		}
 
-		idx := featurebase_client.NewIndex(table)
+		idx := fbclient.NewIndex(table)
 
 		m, err := fbClient.CreateIndexKeys(idx, pMap[pNum]...)
 		if err != nil {
@@ -90,7 +104,7 @@ func (m *serverlessTranslator) CreateFieldKeys(ctx context.Context, table string
 		return nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	idx := featurebase_client.NewIndex(table)
+	idx := fbclient.NewIndex(table)
 	fld := idx.Field(field)
 
 	return fbClient.CreateFieldKeys(fld, keys...)
@@ -129,7 +143,7 @@ func (m *serverlessTranslator) FindIndexKeys(ctx context.Context, table string, 
 			return nil, errors.Wrap(err, "getting featurebase client")
 		}
 
-		idx := featurebase_client.NewIndex(table)
+		idx := fbclient.NewIndex(table)
 
 		nodeKeys := []string{}
 		for _, pNum := range tnode.Partitions {
@@ -161,7 +175,7 @@ func (m *serverlessTranslator) FindFieldKeys(ctx context.Context, table, field s
 		return nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	idx := featurebase_client.NewIndex(table)
+	idx := fbclient.NewIndex(table)
 	fld := idx.Field(field)
 
 	return fbClient.FindFieldKeys(fld, keys...)
@@ -263,7 +277,7 @@ func (m *serverlessTranslator) TranslateFieldListIDs(ctx context.Context, index,
 	return makeTranslateIDsRequest(fbClient, index, field, ids)
 }
 
-func makeTranslateIDsRequest(fbClient *featurebase_client.Client, table, field string, ids []uint64) ([]string, error) {
+func makeTranslateIDsRequest(fbClient *fbclient.Client, table, field string, ids []uint64) ([]string, error) {
 	method := "POST"
 	path := "/internal/translate/ids"
 	headers := map[string]string{

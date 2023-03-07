@@ -6,7 +6,7 @@ import (
 	"time"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
-	featurebaseclient "github.com/featurebasedb/featurebase/v3/client"
+	fbclient "github.com/featurebasedb/featurebase/v3/client"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/partitioner"
 	"github.com/featurebasedb/featurebase/v3/roaring"
@@ -33,19 +33,28 @@ func NewImporter(controller dax.Controller, qdbid dax.QualifiedDatabaseID, tbl *
 	}
 }
 
-// fbClient currently returns a new FeatureBase client (for the address) for
-// every call to this method. We could cache these connections in a map (keyed
-// on address) to avoid creating a new client for an address that we already
-// have a client for.
-func (m *importer) fbClient(address dax.Address) (*featurebaseclient.Client, error) {
-	// Set up a FeatureBase client with address.
-	return featurebaseclient.NewClient(address.HostPort(),
-		featurebaseclient.OptClientRetries(2),
-		featurebaseclient.OptClientTotalPoolSize(1000),
-		featurebaseclient.OptClientPoolSizePerRoute(400),
-		featurebaseclient.OptClientPathPrefix(address.Path()),
-		//featurebaseclient.OptClientStatsClient(m.stats),
+var fbClientCache = map[dax.Address]*fbclient.Client{}
+var fbClientCacheMu sync.Mutex
+
+func (m *importer) fbClient(address dax.Address) (*fbclient.Client, error) {
+	fbClientCacheMu.Lock()
+	defer fbClientCacheMu.Unlock()
+	client := fbClientCache[address]
+	if client != nil {
+		return client, nil
+	}
+	client, err := fbclient.NewClient(address.HostPort(),
+		fbclient.OptClientRetries(2),
+		fbclient.OptClientTotalPoolSize(1000),
+		fbclient.OptClientPoolSizePerRoute(400),
+		fbclient.OptClientPathPrefix(address.Path()),
+		//fbclient.OptClientStatsClient(m.stats),
 	)
+	if err != nil {
+		return nil, err
+	}
+	fbClientCache[address] = client
+	return client, nil
 }
 
 func (m *importer) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, requestTimeout time.Duration) (*featurebase.Transaction, error) {
@@ -85,7 +94,7 @@ func (m *importer) CreateTableKeys(ctx context.Context, tid dax.TableID, keys ..
 			return nil, errors.Wrap(err, "getting featurebase client")
 		}
 
-		cidx := featurebaseclient.QTableToClientIndex(qtbl)
+		cidx := fbclient.QTableToClientIndex(qtbl)
 		stringToIDMap, err := fbClient.CreateIndexKeys(cidx, ks...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "creating index keys for partition: %d", partition)
@@ -123,7 +132,7 @@ func (m *importer) CreateFieldKeys(ctx context.Context, tid dax.TableID, fname d
 		return nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fname)
+	cfld, err := fbclient.TableFieldToClientField(qtbl, fname)
 	if err != nil {
 		return nil, errors.Wrap(err, "converting fieldinfo to client field")
 	}
@@ -148,7 +157,7 @@ func (m *importer) ImportRoaringBitmap(ctx context.Context, tid dax.TableID, fld
 		return errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fld.Name)
+	cfld, err := fbclient.TableFieldToClientField(qtbl, fld.Name)
 	if err != nil {
 		return errors.Wrap(err, "converting fieldinfo to client field")
 	}
@@ -193,7 +202,7 @@ func (m *importer) EncodeImportValues(ctx context.Context, tid dax.TableID, fld 
 		return "", nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fld.Name)
+	cfld, err := fbclient.TableFieldToClientField(qtbl, fld.Name)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "converting fieldinfo to client field")
 	}
@@ -218,7 +227,7 @@ func (m *importer) EncodeImport(ctx context.Context, tid dax.TableID, fld *dax.F
 		return "", nil, errors.Wrap(err, "getting featurebase client")
 	}
 
-	cfld, err := featurebaseclient.TableFieldToClientField(qtbl, fld.Name)
+	cfld, err := fbclient.TableFieldToClientField(qtbl, fld.Name)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "converting fieldinfo to client field")
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 )
@@ -2977,4 +2978,100 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		row := results[0]
 		assert.Equal(t, row[1], row[2])
 	})
+}
+
+func TestPlanner_BulkInsert_FP1916(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
+	node := c.GetNode(0).Server
+	_, _, _, err := sql_test.MustQueryRows(t, node, `create table greg-test (
+		_id STRING,
+		id_col ID,
+		string_col STRING cachetype ranked size 1000,
+		int_col int,
+		decimal_col DECIMAL(2),
+		bool_col BOOL
+		time_col TIMESTAMP,
+		stringset_col STRINGSET,
+		ideset_col IDSET
+	);`)
+	assert.NoError(t, err)
+
+	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO greg-test (
+		_id,
+		id_col,
+		string_col,
+		int_col,
+		decimal_col,
+		bool_col,
+		time_col,
+		stringset_col,
+		ideset_col)
+		map (
+		0 ID,
+		1 STRING,
+		2 INT,
+		3 DECIMAL(2),
+		4 BOOL,
+		5 TIMESTAMP,
+		6 STRINGSET,
+		7 IDSET)
+		transform(
+		@1,
+		@0,
+		@1,
+		@2,
+		@3,
+		@4,
+		@5,
+		@6,
+		@7)
+		FROM x'1,TEST2,8924809397503602651,31.2,1,"2014-07-15T01:18:46Z",stringset1, 1'
+		with
+			BATCHSIZE 10000
+			format 'CSV'
+			input 'STREAM';`)
+	assert.NoError(t, err)
+	results, _, _, err := sql_test.MustQueryRows(t, node, `select int_col from greg-test`)
+	assert.NoError(t, err)
+	got := results[0][0].(int64)
+	expected := int64(8924809397503602651)
+	assert.Equal(t, got, expected)
+}
+
+func TestPlanner_BulkInsert_FP1915(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
+	node := c.GetNode(0).Server
+	_, _, _, err := sql_test.MustQueryRows(t, node, `create table ids (
+		_id id,
+		a int,
+		b int);`)
+	assert.NoError(t, err)
+	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO ids (_id, a, b) 
+map ('$._id' id, '$.a' int, '$.b' int)
+from x'{ "_id":8924809397503602651 , "a": 10, "b": 20 }
+       { "_id":"8924809397503602652" , "a": 10, "b": 20 }'
+WITH
+    FORMAT 'NDJSON'
+    INPUT 'STREAM';`)
+	assert.NoError(t, err)
+	results, _, _, err := sql_test.MustQueryRows(t, node, `select _id from ids`)
+	assert.NoError(t, err)
+	got := make([]int64, 0)
+	for i := range results {
+		got = append(got, results[i][0].(int64))
+	}
+	sort.Slice(got, func(i, j int) bool {
+		return got[i] < got[j]
+	})
+	vprint.VV("results %#v", results)
+	if diff := cmp.Diff([]int64{
+		8924809397503602651,
+		8924809397503602652,
+	}, got); diff != "" {
+		t.Fatal(diff)
+	}
 }
