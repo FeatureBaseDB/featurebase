@@ -17,10 +17,11 @@ import (
 	"github.com/featurebasedb/featurebase/v3/errors"
 )
 
-// action is used to indicate how CLICommand should respond after execution a
-// given metaCommand. For example, an action of type "reset" tells CLICommand
-// that the buffer has been reset and it needs to change its user prompt.
-type action string
+// responseAction is used to indicate how CLICommand should respond after
+// executing a given metaCommand. For example, a responseAction of type "reset"
+// tells CLICommand that the buffer has been reset and it needs to change its
+// user prompt.
+type responseAction string
 
 const (
 	actionNone  = ""
@@ -30,7 +31,7 @@ const (
 
 // metaCommand is the interface for any type responding to a "\" meta-command.
 type metaCommand interface {
-	execute(cmd *Command) (action, error)
+	execute(cmd *Command) (responseAction, error)
 }
 
 // Ensure type implements interface.
@@ -45,6 +46,7 @@ var _ metaCommand = (*metaHelp)(nil)
 var _ metaCommand = (*metaInclude)(nil)
 var _ metaCommand = (*metaListDatabases)(nil)
 var _ metaCommand = (*metaListTables)(nil)
+var _ metaCommand = (*metaListViews)(nil)
 var _ metaCommand = (*metaOrg)(nil)
 var _ metaCommand = (*metaOutput)(nil)
 var _ metaCommand = (*metaPrint)(nil)
@@ -73,7 +75,7 @@ func newMetaBang(args []string) *metaBang {
 	}
 }
 
-func (m *metaBang) execute(cmd *Command) (action, error) {
+func (m *metaBang) execute(cmd *Command) (responseAction, error) {
 	if len(m.args) == 0 {
 		return actionNone, errors.Errorf("meta command '!' requires at least one argument")
 	}
@@ -97,7 +99,7 @@ func newMetaBorder(args []string) *metaBorder {
 	}
 }
 
-func (m *metaBorder) execute(cmd *Command) (action, error) {
+func (m *metaBorder) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		// pass
@@ -131,12 +133,23 @@ func newMetaChangeDirectory(args []string) *metaChangeDirectory {
 	}
 }
 
-func (m *metaChangeDirectory) execute(cmd *Command) (action, error) {
-	if len(m.args) != 1 {
-		return actionNone, errors.Errorf("meta command 'cd' requires exactly one argument")
+func (m *metaChangeDirectory) execute(cmd *Command) (responseAction, error) {
+	var dir string
+	switch len(m.args) {
+	case 0:
+		if d, err := os.UserHomeDir(); err != nil {
+			return actionNone, errors.Wrapf(err, "getting home directory")
+		} else {
+			dir = d
+		}
+	case 1:
+		dir = m.args[0]
+	default:
+		return actionNone, errors.Errorf("meta command 'cd' takes zero or one argument")
 	}
-	err := cmd.workingDir.cd(m.args[0])
-	return actionNone, errors.Wrap(err, "running cd command")
+
+	err := cmd.workingDir.cd(dir)
+	return actionNone, errors.Wrapf(err, "changing directory to: %s", dir)
 }
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -152,7 +165,7 @@ func newMetaConnect(args []string) *metaConnect {
 	}
 }
 
-func (m *metaConnect) execute(cmd *Command) (action, error) {
+func (m *metaConnect) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		cmd.Printf(cmd.connectionMessage())
@@ -160,7 +173,6 @@ func (m *metaConnect) execute(cmd *Command) (action, error) {
 	case 1:
 		err := cmd.connectToDatabase(m.args[0])
 		return actionNone, err
-
 	default:
 		return actionNone, errors.Errorf("meta command 'connect' takes zero or one argument")
 	}
@@ -179,11 +191,11 @@ func newMetaEcho(args []string) *metaEcho {
 	}
 }
 
-func (m *metaEcho) execute(cmd *Command) (action, error) {
+func (m *metaEcho) execute(cmd *Command) (responseAction, error) {
 	return echo(m.args, cmd.Stdout)
 }
 
-func echo(args []string, w io.Writer) (action, error) {
+func echo(args []string, w io.Writer) (responseAction, error) {
 	switch len(args) {
 	case 0:
 		w.Write([]byte("\n"))
@@ -220,7 +232,7 @@ func newMetaExpanded(args []string) *metaExpanded {
 	}
 }
 
-func (m *metaExpanded) execute(cmd *Command) (action, error) {
+func (m *metaExpanded) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		cmd.writeOptions.expanded = !cmd.writeOptions.expanded
@@ -259,7 +271,7 @@ func newMetaFile(args []string) *metaFile {
 	}
 }
 
-func (m *metaFile) execute(cmd *Command) (action, error) {
+func (m *metaFile) execute(cmd *Command) (responseAction, error) {
 	if len(m.args) != 1 {
 		return actionNone, errors.Errorf("meta command 'file' requires exactly one argument")
 	}
@@ -294,7 +306,7 @@ func newMetaHelp(args []string) *metaHelp {
 	}
 }
 
-func (m *metaHelp) execute(cmd *Command) (action, error) {
+func (m *metaHelp) execute(cmd *Command) (responseAction, error) {
 	helpText := `General
   \q[uit]                quit psql
   \watch [SEC]           execute query every SEC seconds
@@ -305,21 +317,21 @@ Help
 Query Buffer
   \p[rint]               show the contents of the query buffer
   \r[eset]               reset (clear) the query buffer
-  \w FILE                write query buffer to file
+  \w[rite] FILE          write query buffer to file
 
 Input/Output
   \echo [-n] [STRING]    write string to standard output (-n for no newline)
   \file ...              reference a local file to stream to the server
   \i[nclude] FILE        execute commands from file
-  \o [FILE]              send all query results to file
+  \o[ut] [FILE]          send all query results to file
   \qecho [-n] [STRING]   write string to \o output stream (-n for no newline)
   \warn [-n] [STRING]    write string to standard error (-n for no newline)
 
 Informational
-  \d                     list tables and views
+  \d                     list tables
   \dt                    list tables
   \dv                    list views
-  \l                     list databases
+  \l[ist]                list databases
 
 Formatting
   \pset [NAME [VALUE]]   set table output option
@@ -358,7 +370,7 @@ func newMetaInclude(args []string) *metaInclude {
 	}
 }
 
-func (m *metaInclude) execute(cmd *Command) (action, error) {
+func (m *metaInclude) execute(cmd *Command) (responseAction, error) {
 	if len(m.args) != 1 {
 		return actionNone, errors.Errorf("meta command 'include' requires exactly one argument")
 	}
@@ -366,7 +378,7 @@ func (m *metaInclude) execute(cmd *Command) (action, error) {
 	return executeFile(cmd, m.args[0])
 }
 
-func executeFile(cmd *Command, fileName string) (action, error) {
+func executeFile(cmd *Command, fileName string) (responseAction, error) {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return actionNone, errors.Wrapf(err, "opening file: %s", fileName)
@@ -385,8 +397,6 @@ func executeFile(cmd *Command, fileName string) (action, error) {
 		qps, mcs, err := splitter.split(line)
 		if err != nil {
 			return actionNone, errors.Wrapf(err, "splitting lines")
-		} else if len(mcs) > 0 {
-			return actionNone, errors.Errorf("include does not support meta-commands")
 		}
 
 		for i := range qps {
@@ -396,6 +406,18 @@ func executeFile(cmd *Command, fileName string) (action, error) {
 				if err := cmd.executeAndWriteQuery(qry); err != nil {
 					return actionNone, errors.Wrap(err, "executing query")
 				}
+			}
+		}
+
+		for i := range mcs {
+			action, err := mcs[i].execute(cmd)
+			if err != nil {
+				return actionNone, errors.Wrap(err, "executing meta command")
+			}
+			switch action {
+			case actionQuit:
+				close(cmd.quit)
+				return action, nil
 			}
 		}
 	}
@@ -415,7 +437,7 @@ func newMetaListDatabases() *metaListDatabases {
 	return &metaListDatabases{}
 }
 
-func (m *metaListDatabases) execute(cmd *Command) (action, error) {
+func (m *metaListDatabases) execute(cmd *Command) (responseAction, error) {
 	qry := []queryPart{
 		newPartRaw("SHOW DATABASES"),
 	}
@@ -436,9 +458,30 @@ func newMetaListTables() *metaListTables {
 	return &metaListTables{}
 }
 
-func (m *metaListTables) execute(cmd *Command) (action, error) {
+func (m *metaListTables) execute(cmd *Command) (responseAction, error) {
 	qry := []queryPart{
 		newPartRaw("SHOW TABLES"),
+	}
+
+	if err := cmd.executeAndWriteQuery(qry); err != nil {
+		return actionNone, errors.Wrap(err, "executing query")
+	}
+
+	return actionReset, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// list views (dv)
+// ////////////////////////////////////////////////////////////////////////////
+type metaListViews struct{}
+
+func newMetaListViews() *metaListViews {
+	return &metaListViews{}
+}
+
+func (m *metaListViews) execute(cmd *Command) (responseAction, error) {
+	qry := []queryPart{
+		newPartRaw("SELECT * FROM fb_views"),
 	}
 
 	if err := cmd.executeAndWriteQuery(qry); err != nil {
@@ -461,7 +504,7 @@ func newMetaOrg(args []string) *metaOrg {
 	}
 }
 
-func (m *metaOrg) execute(cmd *Command) (action, error) {
+func (m *metaOrg) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 
 	case 0:
@@ -490,7 +533,7 @@ func newMetaOutput(args []string) *metaOutput {
 	}
 }
 
-func (m *metaOutput) execute(cmd *Command) (action, error) {
+func (m *metaOutput) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		// Close cmd.output (if closable).
@@ -532,7 +575,7 @@ func newMetaPrint() *metaPrint {
 	return &metaPrint{}
 }
 
-func (m *metaPrint) execute(cmd *Command) (action, error) {
+func (m *metaPrint) execute(cmd *Command) (responseAction, error) {
 	cmd.Printf(cmd.buffer.print() + "\n")
 	return actionNone, nil
 }
@@ -571,7 +614,7 @@ tuples_only %s
 
 }
 
-func (m *metaPSet) execute(cmd *Command) (action, error) {
+func (m *metaPSet) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		m.print(cmd)
@@ -581,10 +624,10 @@ func (m *metaPSet) execute(cmd *Command) (action, error) {
 		case "border":
 			sub := newMetaBorder(m.args[1:])
 			return sub.execute(cmd)
-		case "expanded":
+		case "expanded", "x":
 			sub := newMetaExpanded(m.args[1:])
 			return sub.execute(cmd)
-		case "tuples_only":
+		case "tuples_only", "t":
 			sub := newMetaTuplesOnly(m.args[1:])
 			return sub.execute(cmd)
 		default:
@@ -608,7 +651,7 @@ func newMetaQEcho(args []string) *metaQEcho {
 	}
 }
 
-func (m *metaQEcho) execute(cmd *Command) (action, error) {
+func (m *metaQEcho) execute(cmd *Command) (responseAction, error) {
 	return echo(m.args, cmd.output)
 }
 
@@ -621,7 +664,7 @@ func newMetaQuit() *metaQuit {
 	return &metaQuit{}
 }
 
-func (m *metaQuit) execute(cmd *Command) (action, error) {
+func (m *metaQuit) execute(cmd *Command) (responseAction, error) {
 	return actionQuit, nil
 }
 
@@ -634,7 +677,7 @@ func newMetaReset() *metaReset {
 	return &metaReset{}
 }
 
-func (m *metaReset) execute(cmd *Command) (action, error) {
+func (m *metaReset) execute(cmd *Command) (responseAction, error) {
 	cmd.Printf(cmd.buffer.reset())
 	return actionReset, nil
 }
@@ -652,7 +695,7 @@ func newMetaSet(args []string) *metaSet {
 	}
 }
 
-func (m *metaSet) execute(cmd *Command) (action, error) {
+func (m *metaSet) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		// Sort the variables before printing them.
@@ -692,7 +735,7 @@ func newMetaTiming(args []string) *metaTiming {
 	}
 }
 
-func (m *metaTiming) execute(cmd *Command) (action, error) {
+func (m *metaTiming) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		cmd.writeOptions.timing = !cmd.writeOptions.timing
@@ -731,7 +774,7 @@ func newMetaTuplesOnly(args []string) *metaTuplesOnly {
 	}
 }
 
-func (m *metaTuplesOnly) execute(cmd *Command) (action, error) {
+func (m *metaTuplesOnly) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		cmd.writeOptions.tuplesOnly = !cmd.writeOptions.tuplesOnly
@@ -770,7 +813,7 @@ func newMetaUnset(args []string) *metaUnset {
 	}
 }
 
-func (m *metaUnset) execute(cmd *Command) (action, error) {
+func (m *metaUnset) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		cmd.Printf("\\unset: missing required argument\n")
@@ -799,7 +842,7 @@ func newMetaWarn(args []string) *metaWarn {
 	}
 }
 
-func (m *metaWarn) execute(cmd *Command) (action, error) {
+func (m *metaWarn) execute(cmd *Command) (responseAction, error) {
 	return echo(m.args, cmd.Stderr)
 }
 
@@ -816,7 +859,7 @@ func newMetaWatch(args []string) *metaWatch {
 	}
 }
 
-func (m *metaWatch) execute(cmd *Command) (action, error) {
+func (m *metaWatch) execute(cmd *Command) (responseAction, error) {
 	period := 2 * time.Second
 
 	qry := cmd.buffer.lastQuery
@@ -870,7 +913,7 @@ func newMetaWrite(args []string) *metaWrite {
 	}
 }
 
-func (m *metaWrite) execute(cmd *Command) (action, error) {
+func (m *metaWrite) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		cmd.Errorf(`\w: missing required argument` + "\n")
@@ -948,6 +991,8 @@ func splitMetaCommand(in string, replacer *replacer) (metaCommand, error) {
 		return newMetaConnect(args), nil
 	case "d", "dt":
 		return newMetaListTables(), nil
+	case "dv":
+		return newMetaListViews(), nil
 	case "echo":
 		return newMetaEcho(args), nil
 	case "file":
@@ -956,9 +1001,9 @@ func splitMetaCommand(in string, replacer *replacer) (metaCommand, error) {
 		return newMetaHelp(args), nil
 	case "i", "include":
 		return newMetaInclude(args), nil
-	case "l":
+	case "l", "list":
 		return newMetaListDatabases(), nil
-	case "o":
+	case "o", "out":
 		return newMetaOutput(args), nil
 	case "org":
 		return newMetaOrg(args), nil
@@ -984,7 +1029,7 @@ func splitMetaCommand(in string, replacer *replacer) (metaCommand, error) {
 		return newMetaWarn(args), nil
 	case "watch":
 		return newMetaWatch(args), nil
-	case "w":
+	case "w", "write":
 		return newMetaWrite(args), nil
 	case "x":
 		return newMetaExpanded(args), nil
