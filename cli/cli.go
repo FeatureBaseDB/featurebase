@@ -21,8 +21,6 @@ import (
 
 const (
 	defaultHost     string = "localhost"
-	promptBegin     string = "fbsql> "
-	promptMid       string = "    -> "
 	terminationChar string = ";"
 	nullValue       string = "NULL"
 )
@@ -204,7 +202,7 @@ func (cmd *Command) run(ctx context.Context) error {
 	cmd.setupHistory()
 
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:                 promptBegin,
+		Prompt:                 cmd.prompt(false),
 		HistoryFile:            cmd.historyPath,
 		HistoryLimit:           100000,
 		DisableAutoSaveHistory: true,
@@ -223,11 +221,7 @@ func (cmd *Command) run(ctx context.Context) error {
 	var inMidCommand bool
 
 	for {
-		if inMidCommand {
-			rl.SetPrompt(promptMid)
-		} else {
-			rl.SetPrompt(promptBegin)
-		}
+		rl.SetPrompt(cmd.prompt(inMidCommand))
 
 		// Read user provided input.
 		line, err := rl.Readline()
@@ -331,6 +325,20 @@ func (cmd *Command) run(ctx context.Context) error {
 	}
 }
 
+// prompt constructs the prompt that the user sees based on the currently
+// connected database and whether the user is in the middle of a sql statement.
+func (cmd *Command) prompt(mid bool) string {
+	db := "fbsql" // default prompt when a database is not set.
+	if cmd.databaseName != "" {
+		db = cmd.databaseName
+	}
+
+	if mid {
+		return strings.Repeat(" ", len(db)) + "-# "
+	}
+	return db + "=# "
+}
+
 // close is called upon quitting. It should close any remaining open file
 // handles used by the CLICommand.
 func (cmd *Command) close() error {
@@ -358,6 +366,12 @@ func (cmd *Command) setupConfig() error {
 func (cmd *Command) executeAndWriteQuery(qry query) error {
 	queryResponse, err := cmd.executeQuery(qry)
 	if err != nil {
+		if errors.Is(err, ErrOrganizationRequired) {
+			// Print an error message and return nil, effectively aborting any
+			// further writes for this query.
+			cmd.Errorf("Organization required. Use \\org to set an organization.\n")
+			return nil
+		}
 		return errors.Wrap(err, "making query")
 	}
 	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
@@ -436,7 +450,7 @@ func (cmd *Command) setupHistory() {
 		if err != nil {
 			cmd.Errorf("Creating directory for history: %v\n", err)
 		} else {
-			historyPath = filepath.Join(historyDir, "cli_history")
+			historyPath = filepath.Join(historyDir, "fbsql_history")
 		}
 	}
 	cmd.historyPath = historyPath
