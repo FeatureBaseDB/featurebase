@@ -183,8 +183,8 @@ func TestConfigOptions(t *testing.T) {
 	clientID := "blah"
 	autoOffsetReset := true
 	groupInstanceID := "instId"
-	maxPollIntervalMs := "30"
-	sessionTimeoutMs := "20"
+	maxPollIntervalMs := 30000
+	sessionTimeoutMs := 20000
 	socketKeepaliveEnable := "true"
 
 	m.KafkaDebug = debug
@@ -1448,7 +1448,7 @@ This test:
 
 It could be possible this test fails even though there isn't necessarily an issue. This
 would be the case if a fix comes along to the kafka-go lib that prevents the consumer
-from hanging during the call it's consumer.Close() func.
+from hanging during the call its consumer.Close() func.
 */
 func TestCloseTimeout(t *testing.T) {
 
@@ -1460,7 +1460,7 @@ func TestCloseTimeout(t *testing.T) {
 	topic := fmt.Sprintf("close_timeout_%d", now)
 	subject := fmt.Sprintf("close_timeout_%d_subject", now)
 	log_path := fmt.Sprintf("./consumer_%d.log", now)
-	genNumRecords := 5000
+	genNumRecords := 500 // keep this a factor of 5
 
 	// configure the consumer
 	consumer, err := NewMain()
@@ -1469,15 +1469,16 @@ func TestCloseTimeout(t *testing.T) {
 	}
 	configureTestFlags(consumer)
 	consumer.Topics = []string{topic}
-	consumer.BatchSize = 1000
+	consumer.BatchSize = int(genNumRecords / 5)
 	consumer.IDField = "user_id"
 	consumer.KafkaGroupInstanceId = "some_id"
 	consumer.ConsumerCloseTimeout = 3
-	consumer.KafkaMaxPollInterval = "15000"
-	consumer.MaxMsgs = 10000
+	consumer.KafkaMaxPollInterval = 6500
+	consumer.MaxMsgs = 2 * uint64(genNumRecords)
 	consumer.Index = index
-	consumer.KafkaSessionTimeout = "10000"
+	consumer.KafkaSessionTimeout = 6000
 	consumer.LogPath = log_path
+	consumer.KafkaDebug = "consumer"
 
 	// run datagen and capture stdout and stderr in case of error
 	var datagen_0_stdout, datagen_0_stderr bytes.Buffer
@@ -1499,26 +1500,29 @@ func TestCloseTimeout(t *testing.T) {
 		consumerError <- consumerErr
 	}()
 
-	// wait until all 5000 messages to be consumed
+	// wait until all genNumRecords messages to be consumed
 	complete := false
 	start := time.Now()
 
 	for !complete {
 		buf, _ := os.ReadFile(log_path)
 		s := string(buf)
-		if strings.Contains(s, "records processed 0-> (5000)") {
+		//fmt.Println(s)
+		waitStr := fmt.Sprintf("records processed 0-> (%d)", genNumRecords)
+		//fmt.Println(waitStr)
+		if strings.Contains(s, waitStr) {
 			complete = true
 		}
 		elapsed := time.Since(start)
-		if elapsed > 15*1000*1000*1000 { //15 seconds
-			t.Fatalf("unable to read from consumer log file")
+		if elapsed > 15*time.Second {
+			t.Fatalf("unable to process initial batch of messages: logs: %s", s)
 		}
 	}
 
 	// take a transaction lock on the database which drives
 	// max.poll.interval.ms timeout to occur
 	client := consumer.PilosaClient()
-	status, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 20, \"exclusive\": true, \"active\": true}"), nil)
+	status, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 9, \"exclusive\": true, \"active\": true}"), nil)
 	if err != nil {
 		t.Fatalf("error taking transaction lock")
 	}
@@ -1540,7 +1544,7 @@ func TestCloseTimeout(t *testing.T) {
 		t.Fatalf("issue generating records for kafka: %s", err)
 	}
 
-	// wait for the consumer to exit or 30 seconds to pass
+	// wait for the consumer to exit or 15 seconds to pass
 	select {
 	case <-consumerError:
 		buf, err := os.ReadFile(log_path)
@@ -1548,10 +1552,11 @@ func TestCloseTimeout(t *testing.T) {
 			t.Errorf("issue reading consumer log: %s", err)
 		}
 		s := string(buf)
-		if !strings.Contains(s, "Application maximum poll interval") && !strings.Contains(s, "Unable to properly close consumer") {
+		if !(strings.Contains(s, "Application maximum poll interval") && strings.Contains(s, "Unable to properly close consumer")) {
+			fmt.Println(s)
 			t.Errorf("the consumer did not exceed max.poll.interval.ms or the consumer was closed properly when it shouldn't have")
 		}
-	case <-time.After(30 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Errorf("the consumer is living longer than it should")
 	}
 }

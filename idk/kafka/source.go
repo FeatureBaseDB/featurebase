@@ -41,7 +41,7 @@ type Source struct {
 	Verbose              bool
 	schema               Schema
 	TLS                  idk.TLSConfig
-	consumerCloseTimeout int
+	consumerCloseTimeout time.Duration
 
 	spoolBase     uint64
 	spool         []confluent.TopicPartition

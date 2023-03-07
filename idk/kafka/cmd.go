@@ -14,7 +14,7 @@ type Main struct {
 	Topics               []string      `help:"Kafka topics to read from."`
 	Timeout              time.Duration `help:"Time to wait for more records from Kafka before flushing a batch. 0 to disable."`
 	SkipOld              bool          `short:"" help:"False sets kafka consumer configuration auto.offset.reset to earliest, True sets it to latest."`
-	ConsumerCloseTimeout int           `help:"The amount of time in seconds to wait for the consumer to close properly."`
+	ConsumerCloseTimeout time.Duration `help:"The amount of time in seconds to wait for the consumer to close properly."`
 }
 
 func NewMain() (*Main, error) {

@@ -192,8 +192,8 @@ type ConfluentCommand struct {
 
 	KafkaClientId        string `help:"(client.id)"`
 	KafkaDebug           string `help:"The (debug) kafka consumer configuration. A comma-separated list of debug contexts to enable. Detailed Consumer: consumer,cgrp,topic,fetch. Set to 'all' for most verbose option."`
-	KafkaMaxPollInterval string `help:"The (max.poll.interval.ms) kafka consumer configuration. The max time the consumer can go without polling the broker. Consumer exits after this timeout."`
-	KafkaSessionTimeout  string `help:"The (session.timeout.ms) kafka consumer configuration. The max time the consumer can go without sending a heartbeat to the broker"`
+	KafkaMaxPollInterval int    `help:"The (max.poll.interval.ms) kafka consumer configuration. The max time the consumer can go without polling the broker. Consumer exits after this timeout."`
+	KafkaSessionTimeout  int    `help:"The (session.timeout.ms) kafka consumer configuration. The max time the consumer can go without sending a heartbeat to the broker"`
 	KafkaGroupInstanceId string `help:"The (group.instance.id) kafka consumer configuration."`
 
 	KafkaSaslUsername  string `help:"SASL authentication username (sasl.username)"`
