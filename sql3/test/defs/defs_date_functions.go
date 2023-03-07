@@ -14,10 +14,10 @@ var datePartTests = TableTest{
 			srcHdr("_id", fldTypeID),
 			srcHdr("a", fldTypeInt, "min 0", "max 1000"),
 			srcHdr("b", fldTypeInt, "min 0", "max 1000"),
-			srcHdr("ts", fldTypeTimestamp),
+			srcHdr("ts", fldTypeTimestamp, "timeunit 'ns'"),
 		),
 		srcRows(
-			srcRow(int64(1), int64(10), int64(100), knownTimestamp()),
+			srcRow(int64(1), int64(10), int64(100), knownSubSecondTimestamp()),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -206,7 +206,20 @@ var datePartTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(0)),
+				row(int64(1), int64(100)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('us', ts) from dateparttests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(200)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -220,7 +233,7 @@ var datePartTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(0)),
+				row(int64(1), int64(300)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -239,6 +252,42 @@ var datePartTests = TableTest{
 				row(int64(1970), int64(1), int64(1)),
 			),
 			Compare: CompareExactUnordered,
+		},
+	},
+}
+
+// toTimestamp tests
+var toTimestampTests = TableTest{
+
+	Table: tbl(
+		"",
+		nil,
+		nil,
+	),
+	SQLTests: []SQLTest{
+		{
+			SQLs: sqls(
+				"select totimestamp()",
+			),
+			ExpErr: "count of formal parameters (2) does not match count of actual parameters (0)",
+		},
+		{
+			SQLs: sqls(
+				"select totimestamp('a')",
+			),
+			ExpErr: "an expression of type 'string' cannot be passed to a parameter of type 'int'",
+		},
+		{
+			SQLs: sqls(
+				"select totimestamp(1, 2)",
+			),
+			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'string'",
+		},
+		{
+			SQLs: sqls(
+				"select totimestamp(1, 'x')",
+			),
+			ExpErr: "invalid value 'x' for parameter 'timeunit'",
 		},
 		{
 			name: "ToTimestampAllPossibleValues",
@@ -309,6 +358,233 @@ var datePartTests = TableTest{
 			),
 			ExpRows: rows(
 				row(time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC)),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}
+
+// datetimeAdd tests
+var datetimeAddTests = TableTest{
+
+	Table: tbl(
+		"datetimeadd",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("ts", fldTypeTimestamp, "timeunit 'ns'"),
+		),
+		srcRows(
+			srcRow(int64(1), knownSubSecondTimestamp()),
+		),
+	),
+	SQLTests: []SQLTest{
+		{
+			SQLs: sqls(
+				"select datetimeadd()",
+			),
+			ExpErr: "count of formal parameters (3) does not match count of actual parameters (0)",
+		},
+		{
+			SQLs: sqls(
+				"select datetimeadd(1,1,current_timestamp)",
+			),
+			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'string'",
+		},
+		{
+			SQLs: sqls(
+				"select datetimeadd('yy', '2',current_timestamp)",
+			),
+			ExpErr: "an expression of type 'string' cannot be passed to a parameter of type 'int'",
+		},
+		{
+			SQLs: sqls(
+				"select datetimeadd('yy', 2, true)",
+			),
+			ExpErr: "an expression of type 'bool' cannot be passed to a parameter of type 'timestamp'",
+		},
+		{
+			SQLs: sqls(
+				"select datetimeadd('x',1,current_timestamp)",
+			),
+			ExpErr: "invalid value 'x' for parameter 'timeunit'",
+		},
+		{
+			SQLs: sqls(
+				"select datetimeadd('ms',7000,'YYYY-MM-DDTHH:MM:SS')",
+			),
+			ExpErr: "unable to convert 'YYYY-MM-DDTHH:MM:SS' to type 'timestamp'",
+		},
+		//Test datetimeadd() for all possible time units
+		{
+			SQLs: sqls(
+				"select _id, datepart('YY',datetimeadd('YY', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(2013)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('M',datetimeadd('M', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(12)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('D',datetimeadd('D', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(2)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('HH',datetimeadd('HH', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(23)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('MI',datetimeadd('MI', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(9)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('S',datetimeadd('S', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(42)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('MS',datetimeadd('MS', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(101)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('US',datetimeadd('US', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(201)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('NS',datetimeadd('NS', 1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(301)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		//test datetimeadd() for subtraction
+		{
+			SQLs: sqls(
+				"select _id, datepart('YY',datetimeadd('YY', -1, ts)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(2011)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		//test datetimeadd() for transition
+		{
+			SQLs: sqls(
+				"select _id, datepart('NS',datetimeadd('NS', 700, ts)) as a, datepart('US',datetimeadd('NS', 700, ts)) as b from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("a", fldTypeInt),
+				hdr("b", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(0), int64(201)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		//test datetimeadd() for literals
+		{
+			SQLs: sqls(
+				"select _id, datepart('YY',datetimeadd('YY', 1, 0)) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(1971)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id, datepart('YY',datetimeadd('YY', 1, '2023-03-03T00:00:00Z')) from datetimeadd",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1), int64(2024)),
 			),
 			Compare: CompareExactUnordered,
 		},
