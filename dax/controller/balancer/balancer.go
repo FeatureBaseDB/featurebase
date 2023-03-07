@@ -311,6 +311,10 @@ func (b *Balancer) removeDatabaseWorker(tx dax.Transaction, roleType dax.RoleTyp
 	return diff, nil
 }
 
+func (b *Balancer) FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error {
+	return errors.Wrap(b.current.FreeWorkers(tx, addrs...), "freeing workers")
+}
+
 func (b *Balancer) AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error) {
 	start := time.Now()
 	defer func() {
@@ -820,6 +824,7 @@ type WorkerJobService interface {
 
 	CreateWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error
 	DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error
+	FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error
 
 	CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job ...dax.Job) error
 	DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job dax.Job) error

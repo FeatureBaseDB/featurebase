@@ -653,6 +653,14 @@ func (c *Controller) DropDatabase(ctx context.Context, qdbid dax.QualifiedDataba
 		workerSet.Merge(addrs)
 	}
 
+	addrs := make([]dax.Address, 0, len(workerSet))
+	for worker := range workerSet {
+		addrs = append(addrs, worker)
+	}
+	if err := c.Balancer.FreeWorkers(tx, addrs...); err != nil {
+		return errors.Wrap(err, "freeing workers")
+	}
+
 	// Drop the database record from the schema.
 	if err := c.Schemar.DropDatabase(tx, qdbid); err != nil {
 		return errors.Wrap(err, "dropping database from schemar")
@@ -925,7 +933,7 @@ func (c *Controller) dropTable(tx dax.Transaction, qtid dax.QualifiedTableID) (A
 		return nil, errors.Wrapf(err, "dropping table from schemar: %s", qtid)
 	}
 
-	// Delete relavent table files from snapshotter and writelogger.
+	// Delete relevant table files from snapshotter and writelogger.
 	if err := c.Snapshotter.DeleteTable(qtid); err != nil {
 		return nil, errors.Wrap(err, "deleting from snapshotter")
 	}

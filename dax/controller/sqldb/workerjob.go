@@ -90,6 +90,20 @@ func (w *workerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleTyp
 	return errors.Wrap(err, "associating worker to database")
 }
 
+func (w *workerJobService) FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error {
+	dt, ok := tx.(*DaxTransaction)
+	if !ok {
+		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
+	}
+
+	if len(addrs) == 0 {
+		return nil
+	}
+
+	err := dt.C.RawQuery("UPDATE workers set database_id = NULL where address in (?)", addrs).Exec()
+	return errors.Wrap(err, "updating workers")
+}
+
 func (w *workerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {

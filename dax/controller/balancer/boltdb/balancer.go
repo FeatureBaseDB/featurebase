@@ -195,6 +195,10 @@ func (w *workerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleTyp
 	return nil
 }
 
+func (w *workerJobService) FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error {
+	return nil
+}
+
 func (w *workerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, jobs ...dax.Job) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
