@@ -219,7 +219,7 @@ var datePartTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(200)),
+				row(int64(1), int64(100200)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -233,7 +233,7 @@ var datePartTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(300)),
+				row(int64(1), int64(100200300)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -358,6 +358,66 @@ var toTimestampTests = TableTest{
 			),
 			ExpRows: rows(
 				row(time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC)),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}
+
+var dateTimeNameTests = TableTest{
+
+	Table: tbl(
+		"datetimenametests",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("ts", fldTypeTimestamp),
+		),
+		srcRows(
+			srcRow(int64(1), knownTimestamp()),
+		),
+	),
+	SQLTests: []SQLTest{
+		// dateTimeName tests
+		// make sure returning a string as the year still works
+		// if this works then the other parts converted to strings of digits should also work
+		{
+			SQLs: sqls(
+				"select _id, datetimename('yy', ts) from dateparttests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		//check to make sure it gets a month name correctly
+		{
+			SQLs: sqls(
+				"select _id, datetimename('m', ts) from dateparttests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "November"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		// check to make sure it gets a day of the week correctly
+		{
+			SQLs: sqls(
+				"select _id, datetimename('w', ts) from dateparttests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "Thursday"),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -515,7 +575,7 @@ var datetimeAddTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(201)),
+				row(int64(1), int64(100201)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -528,7 +588,7 @@ var datetimeAddTests = TableTest{
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(301)),
+				row(int64(1), int64(100200301)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -557,7 +617,7 @@ var datetimeAddTests = TableTest{
 				hdr("b", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(1), int64(0), int64(201)),
+				row(int64(1), int64(100201000), int64(100201)),
 			),
 			Compare: CompareExactUnordered,
 		},

@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -100,6 +101,7 @@ func (p *ExecutionPlanner) analyzeFunctionDatetimeAdd(call *parser.Call, scope p
 
 	// DatetimeAdd returns a timestamp calculated by adding param2 to param3 using time unit passed in param 1
 	call.ResultDataType = parser.NewDataTypeTimestamp()
+  
 	return call, nil
 }
 
@@ -116,6 +118,28 @@ func (p *ExecutionPlanner) analyzeFunctionDateTimeFromParts(call *parser.Call, s
 	}
 
 	call.ResultDataType = parser.NewDataTypeTimestamp()
+  return call, nil
+}
+
+func (p *ExecutionPlanner) analyzeFunctionDateTimeName(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+
+	if len(call.Args) != 2 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
+	}
+	// interval
+	intervalType := parser.NewDataTypeString()
+	if !typesAreAssignmentCompatible(intervalType, call.Args[0].DataType()) {
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeDescription(), intervalType.TypeDescription())
+	}
+
+	// date
+	dateType := parser.NewDataTypeTimestamp()
+	if !typesAreAssignmentCompatible(dateType, call.Args[1].DataType()) {
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[1].DataType().TypeDescription(), dateType.TypeDescription())
+	}
+
+	//return int
+	call.ResultDataType = parser.NewDataTypeString()
 	return call, nil
 }
 
@@ -190,10 +214,10 @@ func (n *callPlanExpression) EvaluateDatepart(currentRow []interface{}) (interfa
 		return int64(date.Nanosecond() / 1000000), nil
 
 	case intervalMicrosecond:
-		return int64((date.Nanosecond() % 1000000) / 1000), nil
+		return int64(date.Nanosecond() / 1000), nil
 
 	case intervalNanosecond:
-		return int64(date.Nanosecond() % 1000), nil
+		return int64(date.Nanosecond()), nil
 
 	default:
 		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, interval, "interval")
@@ -274,6 +298,85 @@ func (n *callPlanExpression) EvaluateToTimestamp(currentRow []interface{}) (inte
 	}
 	// should we throw error or return nil if the conversion fails? what is the desired behaviour when ToTimestamp errors for one bad record in a batch of thousands?
 	return featurebase.ValToTimestamp(unit, num)
+}
+
+func (n *callPlanExpression) EvaluateDateTimeName(currentRow []interface{}) (interface{}, error) {
+	intervalEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	dateEval, err := n.args[1].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// nil if anything is nil
+	if intervalEval == nil || dateEval == nil {
+		return nil, nil
+	}
+
+	//get the date value
+	coercedDate, err := coerceValue(n.args[1].Type(), parser.NewDataTypeTimestamp(), dateEval, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	date, dateOk := coercedDate.(time.Time)
+	if !dateOk {
+		return nil, sql3.NewErrInternalf("unable to convert value")
+	}
+
+	//get the interval value
+	coercedInterval, err := coerceValue(n.args[0].Type(), parser.NewDataTypeString(), intervalEval, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	interval, intervalOk := coercedInterval.(string)
+	if !intervalOk {
+		return nil, sql3.NewErrInternalf("unable to convert value")
+	}
+
+	switch strings.ToUpper(interval) {
+	case intervalYear:
+		return fmt.Sprint(date.Year()), nil
+
+	case intervalYearDay:
+		return fmt.Sprint(date.YearDay()), nil
+
+	case intervalMonth:
+		return fmt.Sprint(date.Month()), nil
+
+	case intervalDay:
+		return fmt.Sprint(date.Day()), nil
+
+	case intervalWeeKDay:
+		return fmt.Sprint(date.Weekday()), nil
+
+	case intervalWeek:
+		_, isoWeek := date.ISOWeek()
+		return fmt.Sprint(isoWeek), nil
+
+	case intervalHour:
+		return fmt.Sprint(date.Hour()), nil
+
+	case intervalMinute:
+		return fmt.Sprint(date.Minute()), nil
+
+	case intervalSecond:
+		return fmt.Sprint(date.Second()), nil
+
+	case intervalMillisecond:
+		return fmt.Sprint(date.Nanosecond() / 1000000), nil
+	case intervalMicrosecond:
+		return fmt.Sprint(date.Nanosecond() / 1000), nil
+	case intervalNanosecond:
+		return fmt.Sprint(date.Nanosecond()), nil
+
+	default:
+		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, interval, "interval")
+	}
 }
 
 func (n *callPlanExpression) EvaluateDatetimeAdd(currentRow []interface{}) (interface{}, error) {
