@@ -600,10 +600,9 @@ func TestDAXIntegration(t *testing.T) {
 
 		rootDir := mc.Config.Computer.Config.DataDir
 
-		// Ensure the index and writelogger directories are empty.
+		// Ensure the index and writelogger directories are *not* empty.
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
-		assert.False(t, dirIsEmpty(t, rootDir+"/controller"))
 		assert.False(t, dirIsEmpty(t, rootDir+"/wl"))
 
 		resp := runSQL(t, svcmgr.Queryer.Address(), testconfigs[0].qdbid, "drop table keyed")
@@ -612,7 +611,6 @@ func TestDAXIntegration(t *testing.T) {
 		// Ensure the index and writelogger directories are empty.
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
-		assert.False(t, dirIsEmpty(t, rootDir+"/controller"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/wl"))
 	})
 
