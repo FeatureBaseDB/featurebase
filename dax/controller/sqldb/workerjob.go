@@ -203,7 +203,9 @@ func (w *workerJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.R
 		ids = append(ids, job.ID)
 	}
 
-	err = dt.C.RawQuery("DELETE FROM jobs WHERE id in (?)", ids).Exec()
+	if len(ids) > 0 {
+		err = dt.C.RawQuery("DELETE FROM jobs WHERE id in (?)", ids).Exec()
+	}
 
 	return idiffs, errors.Wrap(err, "deleting jobs")
 }
