@@ -81,7 +81,7 @@ func (fw *freeWorkerService) ListWorkers(tx dax.Transaction, roleType dax.RoleTy
 	}
 
 	workers := make(models.Workers, 0)
-	err := dt.C.Select("address").Where("role = ? and database_id is NULL", roleType).All(&workers)
+	err := dt.C.Select("address").Where("role = ? and database_id is NULL", roleType).Order("address asc").All(&workers)
 	if err != nil {
 		return nil, errors.Wrap(err, "querying for workers")
 	}

@@ -31,7 +31,7 @@ func (w *workerJobService) WorkersJobs(tx dax.Transaction, roleType dax.RoleType
 	}
 
 	workers := models.Workers{}
-	err := dt.C.Eager().Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).All(&workers)
+	err := dt.C.Eager().Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).Order("address asc").All(&workers)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting workers")
 	}
@@ -65,7 +65,7 @@ func (w *workerJobService) ListWorkers(tx dax.Transaction, roleType dax.RoleType
 	}
 
 	workers := models.Workers{}
-	err := dt.C.Select("address").Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).All(&workers)
+	err := dt.C.Select("address").Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).Order("address asc").All(&workers)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting workers")
 	}
@@ -274,6 +274,7 @@ func (w *workerJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, q
 	}
 
 	ret := make(dax.Jobs, len(worker.Jobs))
+	// jobs are ordered by "name asc" defined on the worker model.
 	for i, job := range worker.Jobs {
 		ret[i] = job.Name
 	}

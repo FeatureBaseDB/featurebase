@@ -20,7 +20,7 @@ type Worker struct {
 	DatabaseID nulls.String `json:"database_id" db:"database_id"` // this can be empty which means the worker is unassigned
 	CreatedAt  time.Time    `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time    `json:"updated_at" db:"updated_at"`
-	Jobs       Jobs         `json:"jobs" has_many:"jobs"`
+	Jobs       Jobs         `json:"jobs" has_many:"jobs" order_by:"name asc"`
 }
 
 // String is not required by pop and may be deleted

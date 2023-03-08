@@ -178,7 +178,7 @@ func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType) (
 
 	// For each database, if there are enough free workers to
 	// satisfy its min, then pop that number of workers from the free list. If
-	// not, contine to the next database until either reaching the end of the
+	// not, continue to the next database until either reaching the end of the
 	// database list or until there are no more free workers in the list,
 	// whichever comes first.
 	for _, qdbid := range qdbids {

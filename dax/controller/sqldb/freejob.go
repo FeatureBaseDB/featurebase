@@ -68,7 +68,7 @@ func (fj *freeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qd
 	}
 
 	jobs := make(models.Jobs, 0)
-	err := dt.C.Where("role = ? and database_id = ? and worker_id is NULL", roleType, qdbid.DatabaseID).All(&jobs)
+	err := dt.C.Where("role = ? and database_id = ? and worker_id is NULL", roleType, qdbid.DatabaseID).Order("name asc").All(&jobs)
 	if err != nil {
 		return nil, errors.Wrap(err, "querying for jobs")
 	}

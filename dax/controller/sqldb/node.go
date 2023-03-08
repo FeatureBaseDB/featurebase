@@ -96,7 +96,7 @@ func (n *nodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	}
 
 	nodes := []*models.Node{}
-	dt.C.Eager().All(&nodes)
+	dt.C.Eager().Order("address asc").All(&nodes)
 
 	ret := make([]*dax.Node, len(nodes))
 	for i, node := range nodes {

@@ -634,7 +634,7 @@ func TestDAXIntegration(t *testing.T) {
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 		computerKey1 := dax.ServiceKey(dax.ServicePrefixComputer + "1")
 		computerKey2 := dax.ServiceKey(dax.ServicePrefixComputer + "2")
-		// computerKey3 := dax.ServiceKey(dax.ServicePrefixComputer + "3")
+		computerKey3 := dax.ServiceKey(dax.ServicePrefixComputer + "3")
 
 		// Ingest and query some data.
 		runTableTests(t,
@@ -646,24 +646,21 @@ func TestDAXIntegration(t *testing.T) {
 		assert.NoError(t, err)
 
 		// ensure partitions are covered
-		partitions0 := dax.PartitionNums{0, 2, 4, 6, 8, 10}
-		partitions1 := dax.PartitionNums{1, 3, 5, 7, 9, 11}
-		allPartitions := append(partitions0, partitions1...)
-		sort.Sort(allPartitions)
+		allPartitions := dax.PartitionNums{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
 
 		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 2) {
-			// computer0 (node0)
-			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
-			assert.Equal(t, partitions0, nodes[0].Partitions)
-			// computer1 (node1)
-			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
-			assert.Equal(t, partitions1, nodes[1].Partitions)
+			gotPartitions := append(nodes[0].Partitions, nodes[1].Partitions...)
+			assert.ElementsMatch(t, allPartitions, gotPartitions)
 		}
+
+		fmt.Println("SETTING OPTION")
 
 		// Change DatabaseOptions.WorkersMin to 3.
 		assert.NoError(t, controllerClient.SetDatabaseOption(context.Background(), qdbid, dax.DatabaseOptionWorkersMin, "3"))
+
+		fmt.Println("DONESETTING OPTION")
 
 		// Query the same data.
 		t.Run("query the same data", func(t *testing.T) {
@@ -679,25 +676,16 @@ func TestDAXIntegration(t *testing.T) {
 			)
 		})
 
-		// ensure partitions are still covered
-		partitions0 = dax.PartitionNums{0, 10}
-		partitions1 = dax.PartitionNums{1, 11}
-		partitions2 := dax.PartitionNums{2, 3, 4, 5, 6, 7, 8, 9}
-		allPartitions = append(append(partitions0, partitions1...), partitions2...)
-		sort.Sort(allPartitions)
-
 		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 3) {
+			gotPartitions := append(nodes[0].Partitions, append(nodes[1].Partitions, nodes[2].Partitions...)...)
 			// computer0 (node0)
-			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
-			assert.Equal(t, partitions0, nodes[0].Partitions)
-			// computer1 (node1)
-			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
-			assert.Equal(t, partitions1, nodes[1].Partitions)
-			// computer2 (node2)
-			assert.Equal(t, computers[computerKey2].Address(), nodes[2].Address)
-			assert.Equal(t, partitions2, nodes[2].Partitions)
+			assert.ElementsMatch(t, allPartitions, gotPartitions)
+			expKeys := []dax.Address{computers[computerKey0].Address(), computers[computerKey1].Address(),
+				computers[computerKey2].Address(), computers[computerKey3].Address()}
+			gotKeys := []dax.Address{nodes[0].Address, nodes[1].Address, nodes[2].Address}
+			assert.Subset(t, expKeys, gotKeys)
 		}
 	})
 

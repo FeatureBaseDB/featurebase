@@ -156,22 +156,26 @@ func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatab
 	}
 
 	switch option {
-	case "workers_min":
+	case dax.DatabaseOptionWorkersMin:
+		option = "workers_min" // convert to table column name
 		val, err := strconv.ParseInt(value, 0, 64)
 		if err != nil {
-			return errors.Wrap(err, "parsing workers_min value")
+			return errors.Wrap(err, "parsing workers min value")
 		}
 		db.WorkersMin = int(val)
-	case "workers_max":
+	case dax.DatabaseOptionWorkersMax:
 		val, err := strconv.ParseInt(value, 0, 64)
+		option = "workers_max" // convert to table column name
 		if err != nil {
-			return errors.Wrap(err, "parsing workers_max value")
+			return errors.Wrap(err, "parsing workers max value")
 		}
 		db.WorkersMax = int(val)
+	default:
+		return errors.Errorf("unsupported database option: %s", option)
 	}
-	dt.C.UpdateColumns(db, option)
+	err := dt.C.UpdateColumns(db, option)
 
-	return nil
+	return errors.Wrap(err, "updating database option")
 }
 
 // Databases returns a list of databases. If the list of DatabaseIDs is
@@ -197,7 +201,7 @@ func (s *Schemar) Databases(tx dax.Transaction, orgID dax.OrganizationID, dbIDs 
 		}
 		q = q.Where("id in (?)", ifaceIDs...)
 	}
-	err := q.All(&dbs)
+	err := q.Order("created_at asc").All(&dbs)
 	if err != nil {
 		return nil, errors.Wrap(err, "finding databases")
 	}
@@ -415,7 +419,7 @@ func (s *Schemar) Tables(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, tabl
 		query = query.Where("id in (?)", ifaceIDs)
 	}
 	tables := []*models.Table{}
-	err := query.Eager().All(&tables)
+	err := query.Eager().Order("created_at asc").All(&tables)
 	if err != nil {
 		return nil, errors.Wrap(err, "querying all tables")
 	}

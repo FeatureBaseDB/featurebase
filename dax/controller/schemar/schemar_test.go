@@ -92,10 +92,10 @@ func TestSQLSchemar(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, dbID, db.ID)
 
-	err = schemar.SetDatabaseOption(tx, qdbid, "workers_max", "4")
+	err = schemar.SetDatabaseOption(tx, qdbid, dax.DatabaseOptionWorkersMax, "4")
 	require.NoError(t, err)
 
-	err = schemar.SetDatabaseOption(tx, qdbid, "workers_min", "2")
+	err = schemar.SetDatabaseOption(tx, qdbid, dax.DatabaseOptionWorkersMin, "2")
 	require.NoError(t, err)
 
 	db, err = schemar.DatabaseByID(tx, qdbid)
