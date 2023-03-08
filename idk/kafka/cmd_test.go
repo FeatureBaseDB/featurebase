@@ -1522,7 +1522,7 @@ func TestCloseTimeout(t *testing.T) {
 	// take a transaction lock on the database which drives
 	// max.poll.interval.ms timeout to occur
 	client := consumer.PilosaClient()
-	status, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 9, \"exclusive\": true, \"active\": true}"), nil)
+	status, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 12, \"exclusive\": true, \"active\": true}"), nil)
 	if err != nil {
 		t.Fatalf("error taking transaction lock")
 	}
