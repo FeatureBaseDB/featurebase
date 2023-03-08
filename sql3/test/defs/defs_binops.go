@@ -21,6 +21,34 @@ var binOpExprWithIntInt = TableTest{
 	),
 	SQLTests: []SQLTest{
 		{
+			name: "DivisionDivideByZeroLiteral",
+			SQLs: sqls(
+				"select 1/0",
+			),
+			ExpErr: "divisor is equal to zero",
+		},
+		{
+			name: "DivisionDivideByZeroRow",
+			SQLs: sqls(
+				"select a/0 from binoptesti_i;",
+			),
+			ExpErr: "divisor is equal to zero",
+		},
+		{
+			name: "ModuloDivideByZeroLiteral",
+			SQLs: sqls(
+				"select 1%0",
+			),
+			ExpErr: "divisor is equal to zero",
+		},
+		{
+			name: "ModuloDivideByZeroRow",
+			SQLs: sqls(
+				"select a%0 from binoptesti_i;",
+			),
+			ExpErr: "divisor is equal to zero",
+		},
+		{
 			SQLs: sqls(
 				"select a != b from binoptesti_i;",
 			),
