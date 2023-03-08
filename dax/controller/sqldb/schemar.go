@@ -2,6 +2,7 @@ package sqldb
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -72,10 +73,15 @@ func (s *Schemar) DropDatabase(tx dax.Transaction, qdb dax.QualifiedDatabaseID) 
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
-	err := dt.C.Destroy(&models.Database{ID: string(qdb.DatabaseID), OrganizationID: string(qdb.OrganizationID)})
-	return errors.Wrap(err, "destroying database")
+	db := &models.Database{}
+	err := dt.C.RawQuery("DELETE from databases where id = ? RETURNING id", qdb.DatabaseID).First(db)
+	if isNoRowsError(err) {
+		return dax.NewErrDatabaseIDDoesNotExist(qdb)
+	}
 
+	return errors.Wrap(err, "deleting database")
 }
+
 func (s *Schemar) DatabaseByName(tx dax.Transaction, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
@@ -150,30 +156,31 @@ func (s *Schemar) SetDatabaseOption(tx dax.Transaction, qdbid dax.QualifiedDatab
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
-	db := &models.Database{
-		ID:             string(qdbid.DatabaseID),
-		OrganizationID: string(qdbid.OrganizationID),
-	}
-
+	var val int64
+	var err error
 	switch option {
 	case dax.DatabaseOptionWorkersMin:
 		option = "workers_min" // convert to table column name
-		val, err := strconv.ParseInt(value, 0, 64)
+		val, err = strconv.ParseInt(value, 0, 64)
 		if err != nil {
 			return errors.Wrap(err, "parsing workers min value")
 		}
-		db.WorkersMin = int(val)
 	case dax.DatabaseOptionWorkersMax:
-		val, err := strconv.ParseInt(value, 0, 64)
+		val, err = strconv.ParseInt(value, 0, 64)
 		option = "workers_max" // convert to table column name
 		if err != nil {
 			return errors.Wrap(err, "parsing workers max value")
 		}
-		db.WorkersMax = int(val)
 	default:
 		return errors.Errorf("unsupported database option: %s", option)
 	}
-	err := dt.C.UpdateColumns(db, option)
+	db := &models.Database{}
+	err = dt.C.RawQuery(fmt.Sprintf("UPDATE databases set %s = ? WHERE id = ? RETURNING id", option), val, qdbid.DatabaseID).First(db)
+	if isNoRowsError(err) {
+		return dax.NewErrDatabaseIDDoesNotExist(qdbid)
+	} else if err != nil {
+		return errors.Wrap(err, "updating option")
+	}
 
 	return errors.Wrap(err, "updating database option")
 }

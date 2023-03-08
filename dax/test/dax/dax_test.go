@@ -758,10 +758,8 @@ func TestDAXIntegration(t *testing.T) {
 				})
 
 				t.Run("SetDatabaseOption", func(t *testing.T) {
-					err := client.SetDatabaseOption(ctx, qdbid, "", "")
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
-					}
+					err := client.SetDatabaseOption(ctx, qdbid, dax.DatabaseOptionWorkersMin, "9")
+					assertCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 				})
 
 				t.Run("Databases", func(t *testing.T) {
@@ -819,7 +817,7 @@ func TestDAXIntegration(t *testing.T) {
 				t.Run("DropField", func(t *testing.T) {
 					err := client.DropField(ctx, qtid, tbfld.Name)
 					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
+						assert.True(t, errors.Is(err, dax.ErrFieldDoesNotExist))
 					}
 				})
 			})
@@ -1148,5 +1146,11 @@ func sortStringKeys(in [][]interface{}) {
 				sort.Strings(v)
 			}
 		}
+	}
+}
+
+func assertCode(t *testing.T, err error, code errors.Code) {
+	if !errors.Is(err, code) {
+		t.Errorf("Error '%v' does not have code %s.", err, code)
 	}
 }

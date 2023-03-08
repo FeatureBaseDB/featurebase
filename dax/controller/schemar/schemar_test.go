@@ -310,73 +310,89 @@ func TestSchemarErrors(t *testing.T) {
 
 	t.Run("Drop non-existent field fails with correct error", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		err = schemar.DropField(tx, qtbl.QualifiedID(), "unknownField")
+		requireCode(t, err, dax.ErrFieldDoesNotExist)
+	})
+
+	t.Run("Drop field from non-existent table", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		require.NoError(t, err)
+		defer tx.Rollback()
+		err = schemar.DropField(tx, dax.QualifiedTableID{QualifiedDatabaseID: qdbid, ID: "blah", Name: "blah"}, "age")
 		requireCode(t, err, dax.ErrFieldDoesNotExist)
 	})
 
 	t.Run("Test Lookup non-existent table fails with correct error (by name)", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		_, err = schemar.Table(tx, dax.QualifiedTableID{QualifiedDatabaseID: qdbid, Name: "humbug"})
 		requireCode(t, err, dax.ErrTableNameDoesNotExist)
 	})
 
 	t.Run("Test Lookup non-existent table fails with correct error (by name)", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		_, err = schemar.Table(tx, dax.QualifiedTableID{QualifiedDatabaseID: qdbid, ID: "bumhug", Name: "humbug"})
 		requireCode(t, err, dax.ErrTableIDDoesNotExist)
 	})
 
 	t.Run("Test Lookup non-existent tableID fails with correct error (by name)", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		_, err = schemar.TableID(tx, qdbid, "humbug")
 		requireCode(t, err, dax.ErrTableNameDoesNotExist)
 	})
 
 	t.Run("Test Create existing field fails", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		err = schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "age", Type: "int", Options: dax.FieldOptions{}})
 		requireCode(t, err, dax.ErrFieldExists)
 	})
 
 	t.Run("Test Create field empty name fails", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		err = schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "", Type: "int", Options: dax.FieldOptions{}})
 		requireCode(t, err, cschemar.ErrCodeFieldNameInvalid)
 	})
 
 	t.Run("Test create table that already exists", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		err = schemar.CreateTable(tx, qtbl)
 		requireCode(t, err, dax.ErrTableIDExists)
 	})
 
 	t.Run("Find database by name that doesn't exist", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		_, err = schemar.DatabaseByName(tx, orgID, "blooooooo")
 		requireCode(t, err, dax.ErrDatabaseNameDoesNotExist)
 	})
 
 	t.Run("Find database by ID that doesn't exist", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
-		defer tx.Rollback()
 		require.NoError(t, err)
+		defer tx.Rollback()
 		_, err = schemar.DatabaseByID(tx, dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: "zeeeeeeeeeeeeep"})
+		requireCode(t, err, dax.ErrDatabaseIDDoesNotExist)
+	})
+
+	t.Run("Drop non-existent database", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		require.NoError(t, err)
+		defer tx.Rollback()
+		err = schemar.DropDatabase(tx, dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: "yoooo"})
 		requireCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 	})
 
