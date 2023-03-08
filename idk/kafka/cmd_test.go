@@ -218,7 +218,7 @@ func TestConfigOptions(t *testing.T) {
 	cfg := src.(*Source).ConfigMap
 
 	for _, pair := range tests {
-		if val, err := cfg.Get(pair[0].(string), nil); err != nil || val.(string) != fmt.Sprintf("%v", pair[1]) {
+		if val, err := cfg.Get(pair[0].(string), nil); err != nil || fmt.Sprintf("%v", val) != fmt.Sprintf("%v", pair[1]) {
 			t.Fatalf("unexpected val for %s val: %v, err: %v", pair[0].(string), val, err)
 		}
 	}
