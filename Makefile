@@ -229,6 +229,12 @@ docker-image: vendor
 
 docker-image-featurebase: vendor
 	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+		--file Dockerfile-dax \
+		--tag dax/featurebase .
+
+docker-image-featurebase-linux-adm64: vendor
+	docker build \
 		--platform linux/amd64 \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 		--file Dockerfile-dax \
@@ -236,7 +242,6 @@ docker-image-featurebase: vendor
 
 docker-image-featurebase-test: vendor
 	docker build \
-		--platform linux/amd64 \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 		--file Dockerfile-clustertests \
 		--tag dax/featurebase-test .
@@ -253,7 +258,6 @@ build-for-quick:
 # context of the featurebase top level directory.
 docker-image-featurebase-quick: build-for-quick
 	docker build \
-		--platform linux/amd64 \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
 	    --file Dockerfile-dax-quick \
 	    --tag dax/featurebase ./.quick/
