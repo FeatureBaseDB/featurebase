@@ -233,6 +233,13 @@ docker-image-featurebase: vendor
 		--file Dockerfile-dax \
 		--tag dax/featurebase .
 
+docker-image-featurebase-linux-amd64: vendor
+	docker build \
+	    --build-arg GO_VERSION=$(GO_VERSION) \
+	    --platform linux/amd64 \
+	    --file Dockerfile-dax \
+	    --tag dax/featurebase .
+
 docker-image-featurebase-test: vendor
 	docker build \
 	    --build-arg GO_VERSION=$(GO_VERSION) \
