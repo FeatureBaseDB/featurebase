@@ -650,3 +650,135 @@ var datetimeAddTests = TableTest{
 		},
 	},
 }
+
+var datetimedifftests = TableTest{
+	name: "DatetimeDiff",
+	Table: tbl("dttable",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("startTime", fldTypeTimestamp, "timeunit 'ns'"),
+			srcHdr("endTime", fldTypeTimestamp, "timeunit 'ns'"),
+		),
+		srcRows(
+			srcRow(int64(1), knownSubSecondTimestamp(), knownSubSecondTimestamp2()),
+		)),
+	SQLTests: []SQLTest{
+		{
+			name: "DatetimeDiffYY",
+			SQLs: sqls(
+				"select datetimediff('yy', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(10)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffM",
+			SQLs: sqls(
+				"select datetimediff('m', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(121)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffD",
+			SQLs: sqls(
+				"select datetimediff('d', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(3689)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffHH",
+			SQLs: sqls(
+				"select datetimediff('hh', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(88555)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffMI",
+			SQLs: sqls(
+				"select datetimediff('mi', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(5313356)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffS",
+			SQLs: sqls(
+				"select datetimediff('s', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(318801373)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffMS",
+			SQLs: sqls(
+				"select datetimediff('ms', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(318801373200)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffUS",
+			SQLs: sqls(
+				"select datetimediff('us', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(318801373200300)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DatetimeDiffNS",
+			SQLs: sqls(
+				"select datetimediff('ns', startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(318801373200300500)),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}
