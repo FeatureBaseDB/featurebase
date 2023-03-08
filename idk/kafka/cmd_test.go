@@ -1460,7 +1460,7 @@ func TestCloseTimeout(t *testing.T) {
 	topic := fmt.Sprintf("close_timeout_%d", now)
 	subject := fmt.Sprintf("close_timeout_%d_subject", now)
 	log_path := fmt.Sprintf("./consumer_%d.log", now)
-	genNumRecords := 500 // keep this a factor of 5
+	genNumRecords := 5000 // keep this a factor of 5
 
 	// configure the consumer
 	consumer, err := NewMain()
@@ -1479,6 +1479,7 @@ func TestCloseTimeout(t *testing.T) {
 	consumer.KafkaSessionTimeout = 6000
 	consumer.LogPath = log_path
 	consumer.KafkaDebug = "consumer"
+	consumer.UseShardTransactionalEndpoint = false
 
 	// run datagen and capture stdout and stderr in case of error
 	var datagen_0_stdout, datagen_0_stderr bytes.Buffer
@@ -1522,7 +1523,7 @@ func TestCloseTimeout(t *testing.T) {
 	// take a transaction lock on the database which drives
 	// max.poll.interval.ms timeout to occur
 	client := consumer.PilosaClient()
-	status, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 12, \"exclusive\": true, \"active\": true}"), nil)
+	status, body, err := client.HTTPRequest("POST", "/transaction", []byte("{\"timeout\": 9, \"exclusive\": true, \"active\": true}"), nil)
 	if err != nil {
 		t.Fatalf("error taking transaction lock")
 	}
