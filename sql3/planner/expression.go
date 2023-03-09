@@ -419,11 +419,15 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 			case parser.STAR:
 				return nl * nr, nil
 			case parser.SLASH:
+				if nr == 0 {
+					return nil, sql3.NewErrDivideByZero(0, 0)
+				}
 				return nl / nr, nil
-
 			case parser.REM:
+				if nr == 0 {
+					return nil, sql3.NewErrDivideByZero(0, 0)
+				}
 				return nl % nr, nil
-
 			default:
 				return nil, sql3.NewErrInternalf("unhandled operator %d", n.op)
 			}
@@ -2747,10 +2751,16 @@ func (p *ExecutionPlanner) compileBinaryExpr(expr *parser.BinaryExpr) (_ types.P
 				return newIntLiteralPlanExpression(value), nil
 
 			case parser.SLASH:
+				if numy == 0 {
+					return nil, sql3.NewErrDivideByZero(expr.OpPos.Line, expr.OpPos.Column)
+				}
 				value := numx / numy
 				return newIntLiteralPlanExpression(value), nil
 
 			case parser.REM:
+				if numy == 0 {
+					return nil, sql3.NewErrDivideByZero(expr.OpPos.Line, expr.OpPos.Column)
+				}
 				value := numx % numy
 				return newIntLiteralPlanExpression(value), nil
 
