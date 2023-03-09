@@ -139,6 +139,7 @@ const (
 	ErrQRangeFromAndToTimeCannotBeBothNull errors.Code = "ErrQRangeFromAndToTimeCannotBeBothNull"
 	ErrQRangeInvalidUse                    errors.Code = "ErrQRangeInvalidUse"
 	ErrYearOutOfRange                      errors.Code = "ErrYearOutOfRange"
+	ErrOutputValueOutOfRange               errors.Code = "ErrOutputValueOutOfRange"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -858,5 +859,12 @@ func NewErrYearOutOfRange(line, col int, year int) error {
 	return errors.New(
 		ErrYearOutOfRange,
 		fmt.Sprintf("[%d:%d] year '%d' out of range [0,9999]", line, col, year),
+	)
+}
+
+func NewErrOutputValueOutOfRange(line, col int) error {
+	return errors.New(
+		ErrOutputValueOutOfRange,
+		fmt.Sprintf("[%d:%d] output value out of range", line, col),
 	)
 }

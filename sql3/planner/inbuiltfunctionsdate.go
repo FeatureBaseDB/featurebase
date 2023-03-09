@@ -503,69 +503,86 @@ func isValidTimeInterval(unit string) bool {
 	}
 }
 
+// EvaluateDatetimeDiff takes three arguments:
+// 1. param1, timeunit of the value to be subtracted from the target timestamp
+// 2. param2, starttime to be subtracted from the endtime timestamp
+// 3. param3, endtime timestamp to which the starttime to be subtracted from.
+// It returns the difference between the two timestamps.
 func (n *callPlanExpression) EvaluateDatetimeDiff(currentRow []interface{}) (interface{}, error) {
 	param1, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
 		return nil, err
 	}
-	coercedParam1, err := coerceValue(n.args[0].Type(), parser.NewDataTypeString(), param1, parser.Pos{Line: 0, Column: 0})
-	if err != nil {
-		return nil, err
-	}
-	if coercedParam1 == nil {
+	if param1 == nil {
 		return nil, nil
 	}
-	timeunit, ok := coercedParam1.(string)
+	cp, err := coerceValue(n.args[0].Type(), parser.NewDataTypeString(), param1, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		return nil, err
+	}
+	timeunit, ok := cp.(string)
 	if !ok {
 		return nil, sql3.NewErrInternalf("unable to convert value")
 	}
 
-	param, err := n.args[1].Evaluate(currentRow)
+	param2, err := n.args[1].Evaluate(currentRow)
 	if err != nil {
 		return nil, err
 	}
-	coercedParam, err := coerceValue(n.args[1].Type(), parser.NewDataTypeTimestamp(), param, parser.Pos{Line: 0, Column: 0})
+	coercedParam, err := coerceValue(n.args[1].Type(), parser.NewDataTypeTimestamp(), param2, parser.Pos{Line: 0, Column: 0})
 	if err != nil {
 		return nil, err
 	}
-	date1, ok := coercedParam.(time.Time)
+	if coercedParam == nil {
+		return nil, nil
+	}
+	startDate, ok := coercedParam.(time.Time)
 	if !ok {
 		return nil, sql3.NewErrInternalf("unable to convert value")
 	}
-
-	param, err = n.args[2].Evaluate(currentRow)
+	if coercedParam == nil {
+		return nil, nil
+	}
+	param3, err := n.args[2].Evaluate(currentRow)
 	if err != nil {
 		return nil, err
 	}
-	coercedParam, err = coerceValue(n.args[2].Type(), parser.NewDataTypeTimestamp(), param, parser.Pos{Line: 0, Column: 0})
+	if param3 == nil {
+		return nil, nil
+	}
+	coercedParam, err = coerceValue(n.args[2].Type(), parser.NewDataTypeTimestamp(), param3, parser.Pos{Line: 0, Column: 0})
 	if err != nil {
 		return nil, err
 	}
-	date2, ok := coercedParam.(time.Time)
+	endDate, ok := coercedParam.(time.Time)
 	if !ok {
 		return nil, sql3.NewErrInternalf("unable to convert value")
 	}
-
+	var diff int64
 	switch strings.ToUpper(timeunit) {
 	case intervalYear:
-		return int64(date2.Year() - date1.Year()), nil
+		diff = int64(endDate.Year() - startDate.Year())
 	case intervalMonth:
-		return int64((date2.Year()-date1.Year())*12 + int(date2.Month()-date1.Month())), nil
+		diff = int64((endDate.Year()-startDate.Year())*12 + int(endDate.Month()-startDate.Month()))
 	case intervalDay:
-		return int64(date2.Sub(date1).Hours() / 24), nil
+		diff = int64(endDate.Sub(startDate).Hours() / 24)
 	case intervalHour:
-		return int64(date2.Sub(date1).Hours()), nil
+		diff = int64(endDate.Sub(startDate).Hours())
 	case intervalMinute:
-		return int64(date2.Sub(date1).Minutes()), nil
+		diff = int64(endDate.Sub(startDate).Minutes())
 	case intervalSecond:
-		return int64(date2.Sub(date1).Seconds()), nil
+		diff = int64(endDate.Sub(startDate).Seconds())
 	case intervalMillisecond:
-		return int64(date2.Sub(date1).Milliseconds()), nil
+		diff = endDate.Sub(startDate).Milliseconds()
 	case intervalMicrosecond:
-		return int64(date2.Sub(date1).Microseconds()), nil
+		diff = endDate.Sub(startDate).Microseconds()
 	case intervalNanosecond:
-		return int64(date2.Sub(date1).Nanoseconds()), nil
+		diff = endDate.Sub(startDate).Nanoseconds()
 	default:
 		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, timeunit, "timeunit")
 	}
+	if diff == (-1<<63) || diff == ((1<<63)-1) {
+		return nil, sql3.NewErrOutputValueOutOfRange(0, 0)
+	}
+	return diff, nil
 }

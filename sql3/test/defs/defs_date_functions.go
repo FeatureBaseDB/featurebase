@@ -664,6 +664,33 @@ var datetimedifftests = TableTest{
 		)),
 	SQLTests: []SQLTest{
 		{
+			name: "DatetimeDiffWrongParamCount",
+			SQLs: sqls(
+				"select datetimediff(startTime, endTime) from dttable;",
+			),
+			ExpErr: "count of formal parameters (3) does not match count of actual parameters (2)",
+		},
+		{
+			name: "DatetimeDiffInvalidType",
+			SQLs: sqls(
+				"select datetimediff('yy','nope', endTime) from dttable;",
+			),
+			ExpErr: "[0:0] unable to convert 'nope' to type 'timestamp'",
+		},
+		{
+			name: "DatetimeDiffNull",
+			SQLs: sqls(
+				"select datetimediff(null, startTime, endTime) from dttable;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
 			name: "DatetimeDiffYY",
 			SQLs: sqls(
 				"select datetimediff('yy', startTime, endTime) from dttable;",
