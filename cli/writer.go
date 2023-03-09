@@ -18,6 +18,7 @@ type writeOptions struct {
 	expanded   bool
 	timing     bool
 	tuplesOnly bool
+	location   *time.Location
 }
 
 func defaultWriteOptions() *writeOptions {
@@ -26,6 +27,7 @@ func defaultWriteOptions() *writeOptions {
 		expanded:   false,
 		timing:     false,
 		tuplesOnly: false,
+		location:   time.Local,
 	}
 }
 
@@ -101,7 +103,7 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 				case nil:
 					row[i] = nullValue
 				case time.Time:
-					row[i] = v.Format(time.RFC3339Nano)
+					row[i] = v.In(format.location).Format(time.RFC3339Nano)
 				}
 			}
 			t.AppendRow(table.Row(row))

@@ -1,0 +1,45 @@
+// Show databases now that we have set org.
+SEND:SHOW DATABASES;
+EXPECT:+-----+------+-------+------------+------------+------------+-------+-------------+
+EXPECT:| _id | name | owner | updated_by | created_at | updated_at | units | description |
+EXPECT:+-----+------+-------+------------+------------+------------+-------+-------------+
+EXPECT:+-----+------+-------+------------+------------+------------+-------+-------------+
+EXPECT:
+
+// Create db1.
+SEND:CREATE DATABASE db1 WITH UNITS 1;
+EXPECT:
+
+// List databases via SHOW DATABASES.
+SEND:SHOW DATABASES;
+EXPECT:+--------------------------------------+------+-------+------------+----------------------+----------------------+-------+-------------+
+EXPECT:| _id                                  | name | owner | updated_by | created_at           | updated_at           | units | description |
+EXPECT:+--------------------------------------+------+-------+------------+----------------------+----------------------+-------+-------------+
+EXPECTCOMP:WithFormat:| {uuid} | db1  |       |            | {timestamp} | {timestamp} |     1 |             |
+EXPECT:+--------------------------------------+------+-------+------------+----------------------+----------------------+-------+-------------+
+EXPECT:
+
+// List databases via SHOW DATABASES.
+SEND:\l
+EXPECT:+--------------------------------------+------+-------+------------+----------------------+----------------------+-------+-------------+
+EXPECT:| _id                                  | name | owner | updated_by | created_at           | updated_at           | units | description |
+EXPECT:+--------------------------------------+------+-------+------------+----------------------+----------------------+-------+-------------+
+EXPECTCOMP:WithFormat:| {uuid} | db1  |       |            | {timestamp} | {timestamp} |     1 |             |
+EXPECT:+--------------------------------------+------+-------+------------+----------------------+----------------------+-------+-------------+
+EXPECT:
+
+// Check database connection.
+SEND:\c
+EXPECT:You are not connected to a database.
+
+// Try connecting to an invalid database.
+SEND:\c invalid
+EXPECT:executing meta command: invalid database: invalid
+
+// Try connecting with too many arguments.
+SEND:\c db1 extra
+EXPECT:executing meta command: meta command 'connect' takes zero or one argument
+
+// Connect to a database.
+SEND:\c db1
+EXPECTCOMP:WithFormat:You are now connected to database "db1" ({uuid}).

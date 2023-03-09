@@ -1,0 +1,6 @@
+SEND:\echo
+EXPECT:
+
+// Simple \echo.
+SEND:\echo foo bar
+EXPECT:foo bar

@@ -1,9 +1,10 @@
 package cli_test
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"log"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -32,11 +33,6 @@ func TestCLIIntegration(t *testing.T) {
 		comparer := newComparer(t)
 		comparer.run()
 
-		// convenence function aliases
-		sendLine := capture.sendLine
-		expectLine := comparer.expectLine
-		expectLineComp := comparer.expectLineComp
-
 		fbsql := cli.NewCommand(logger.StderrLogger)
 		fbsql.Stdin = capture
 		fbsql.SetStdout(comparer)
@@ -55,76 +51,86 @@ func TestCLIIntegration(t *testing.T) {
 			close(didQuit)
 		}()
 
-		////////////////////////////////////////////////////////////
-		// input command
-		////////////////////////////////////////////////////////////
+		// testFiles reference files located in the cli/testdata directory. All
+		// tests should be placed there; other than adding another test file to
+		// this list, you probably shouldn't be editing this file unless you are
+		// trying to modify the way the test framework itself works.
+		testFiles := []string{
+			"setup",
+			"database",
+			"table",
+			// the tests below may be dependent on the previous tests, which do
+			// setup and some shared database and table creation.
+			"query_buffer",
+			// meta commands
+			"meta_bang",
+			"meta_cd",
+			"meta_echo",
+			"meta_file",
+			"meta_pset_border",
+			"meta_pset_expanded",
+			"meta_pset_tuples_only",
+			"meta_include",
+			"meta_output",
+			"meta_set",
+			"meta_timing",
+			"meta_write",
+		}
 
-		// Startup splash.
-		expectLine(`FeatureBase CLI ()`)
-		expectLine(`Type "\q" to quit.`)
-		expectLine(`Detected on-prem, serverless deployment.`)
-		expectLineComp(compHasPrefix, `Host: http://localhost:`)
-		expectLine(`You are not connected to a database.`)
+		for _, testFile := range testFiles {
+			t.Run(testFile, func(t *testing.T) {
+				f, err := os.Open("testdata/" + testFile)
+				require.NoError(t, err)
 
-		// Simple \echo.
-		sendLine(`\echo foo bar`)
-		expectLine(`foo bar`)
+				scanner := bufio.NewScanner(f)
+				var lineNo int
+				for scanner.Scan() {
+					line := scanner.Text()
+					lineNo++
 
-		// Show databases.
-		sendLine(`SHOW DATABASES;`)
-		expectLine(`Organization required. Use \org to set an organization.`)
+					// Empty lines and comments (//) are ignored.
+					if line == "" {
+						continue
+					} else if strings.HasPrefix(line, "//") {
+						continue
+					}
 
-		// Set org.
-		sendLine(`\org acme`)
-		expectLine(`You have set organization "acme".`)
+					parts := strings.SplitN(line, ":", 2)
 
-		// Show databases now that we have set org.
-		sendLine(`SHOW DATABASES;`)
-		expectLine(` _id | name | owner | updated_by | created_at | updated_at | units | description `)
-		expectLine(`-----+------+-------+------------+------------+------------+-------+-------------`)
-
-		sendLine(`CREATE DATABASE db1 WITH UNITS 1;`)
-		expectLine(``)
-		expectLine(``)
-		sendLine(`SHOW DATABASES;`)
-		expectLine(` _id                                  | name | owner | updated_by | created_at                | updated_at                | units | description `)
-		expectLine(`--------------------------------------+------+-------+------------+---------------------------+---------------------------+-------+-------------`)
-		//expectLineComp(compWithFormat, ` ________-____-____-____-____________ | db1  |       |            | 20__-__-__T__:__:__-__:00 | ____-__-__T__:__:__-__:__ |     1 |             `)
-		expectLineComp(compWithFormat, ` {uuid} | db1  |       |            | {timestamp} | {timestamp} |     1 |             `)
-		expectLine(``)
-
-		// Check database connection.
-		sendLine(`\c`)
-		expectLine(`You are not connected to a database.`)
-
-		// Try connecting to an invalid database.
-		sendLine(`\c invalid`)
-		expectLine(`executing meta command: invalid database: invalid`)
-
-		// Connect to a database.
-		sendLine(`\c db1`)
-		expectLineComp(compWithFormat, `You are now connected to database "db1" ({uuid}).`)
-
-		// Show tables for database.
-		sendLine(`SHOW TABLES;`)
-		expectLine(` _id                     | name                    | owner | updated_by | created_at                | updated_at                | keys  | space_used | description `)
-		expectLine(`-------------------------+-------------------------+-------+------------+---------------------------+---------------------------+-------+------------+-------------`)
-		// TODO(tlt): the system tables are completely masked off because their
-		// order is not guaranteed. When order is guaranteed, update these to
-		// include the actual system tables names.
-		expectLineComp(compWithFormat, ` fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             `)
-		expectLineComp(compWithFormat, ` fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             `)
-		expectLineComp(compWithFormat, ` fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             `)
-		expectLineComp(compWithFormat, ` fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             `)
-		expectLineComp(compWithFormat, ` fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             `)
-		expectLine(``)
-
-		// expectLine(`STOPPER`)
-
-		////////////////////////////////////////////////////////////
+					switch parts[0] {
+					case "SEND":
+						v := ""
+						if len(parts) == 2 {
+							v = parts[1]
+						}
+						capture.sendLine(v)
+					case "EXPECT":
+						v := ""
+						if len(parts) == 2 {
+							v = parts[1]
+						}
+						comparer.expectLine(v, testFile, lineNo)
+					case "EXPECTCOMP":
+						if len(parts) == 2 {
+							comps := strings.SplitN(parts[1], ":", 2)
+							v := ""
+							if len(comps) == 2 {
+								v = comps[1]
+							}
+							comparer.expectLineComp(comparator(comps[0]), v, testFile, lineNo)
+						} else {
+							t.Errorf("unexpected line: %s[%d]:%s", testFile, lineNo, line)
+						}
+					default:
+						t.Errorf("unexpected line: %s[%d]:%s", testFile, lineNo, line)
+					}
+				}
+				require.NoError(t, scanner.Err())
+			})
+		}
 
 		// End with quit to ensure that fbsql closes without error.
-		sendLine(`\q`)
+		capture.sendLine(`\q`)
 
 		// Ensure fbsql quits cleanly.
 		select {
@@ -155,7 +161,7 @@ func newComparer(t *testing.T) *comparer {
 
 func (c *comparer) run() {
 	// Read bytes off output, and for every line (designated by a line feed "\n"),
-	// push the line onto the ouline channel.
+	// push the line onto the outline channel.
 	go func() {
 		var line []byte
 		for {
@@ -170,44 +176,47 @@ func (c *comparer) run() {
 	}()
 }
 
-type comparitor string
+type comparator string
 
 const (
-	compEq         = "eq"
-	compHasPrefix  = "hasPrefix"
-	compWithFormat = "withFormat"
+	compEquals     = "Equals"
+	compHasPrefix  = "HasPrefix"
+	compWithFormat = "WithFormat"
 )
 
 // expectLine is a convenience method which calls expectLineComp with the compEq
-// comparitor and the given line.
-func (c *comparer) expectLine(line string) {
-	c.expectLineComp(compEq, line)
+// comparator and the given line.
+func (c *comparer) expectLine(line string, fileName string, lineNo int) {
+	c.expectLineComp(compEquals, line, fileName, lineNo)
 }
 
 // expectLineComp reads the next line from the outline channel and compares it
-// with the given `line`. A comparitor can be provided to inform how the lines
-// should be compared (for example, the compHasPrefix comparitor will just
+// with the given `line`. A comparator can be provided to inform how the lines
+// should be compared (for example, the compHasPrefix comparator will just
 // compare the beginning part of the outline).
-func (c *comparer) expectLineComp(comp comparitor, line string) {
+func (c *comparer) expectLineComp(comp comparator, line string, fileName string, lineNo int) {
 	var outline []byte
 	select {
 	case outline = <-c.outline:
-	case <-time.After(2 * time.Second):
-		c.t.Fatalf("expected output line: %s", line)
+	case <-time.After(10 * time.Second):
+		// TODO(tlt): this is 10 seconds to account for the fb_views creation on
+		// a local mac. This should really be something like 2 seconds. Put this
+		// back to 2 once fb_views issue is addressed.
+		c.t.Fatalf("expected output line %s[%d]: >%s<", fileName, lineNo, line)
 	}
 
 	// msg is included in any require which fails.
-	msg := []interface{}{"GOT: >%s<", outline}
+	msg := []interface{}{"exp: %s[%d], got: >%s<", fileName, lineNo, outline}
 
 	switch comp {
-	case compEq:
+	case compEquals:
 		require.Equal(c.t, []byte(line), outline, msg...)
 	case compHasPrefix:
 		require.True(c.t, strings.HasPrefix(string(outline), line), msg...)
 	case compWithFormat:
 		require.True(c.t, compareByteSlices(outline, []byte(line)), msg...)
 	default:
-		c.t.Fatalf("invalid comparitor: %s", comp)
+		c.t.Fatalf("invalid comparator: %s", comp)
 	}
 }
 
@@ -225,7 +234,7 @@ func compareByteSlices(s, format []byte) bool {
 	// Replace some helpers in format before comparing.
 	f := string(format)
 	f = strings.ReplaceAll(f, `{uuid}`, `________-____-____-____-____________`)
-	f = strings.ReplaceAll(f, `{timestamp}`, `____-__-__T__:__:__-__:__`)
+	f = strings.ReplaceAll(f, `{timestamp}`, `____-__-__T__:__:__Z`)
 	format = []byte(f)
 
 	if len(s) != len(format) {
@@ -237,7 +246,7 @@ func compareByteSlices(s, format []byte) bool {
 			continue
 		}
 		if s[i] != format[i] {
-			log.Printf("DEEBUG: characters differ: (%d): '%v' != '%v'", i, s[i], format[i])
+			// log.Printf("DEBUG: characters differ: (%d): '%v' != '%v'", i, s[i], format[i])
 			return false
 		}
 	}
