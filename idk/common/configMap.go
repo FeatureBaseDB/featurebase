@@ -197,14 +197,14 @@ func SetupConfluent(m *idk.ConfluentCommand) (*confluent.ConfigMap, error) {
 		}
 	}
 
-	if m.KafkaMaxPollInterval != "" {
+	if m.KafkaMaxPollInterval > 0 {
 		err = configMap.SetKey("max.poll.interval.ms", m.KafkaMaxPollInterval)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if m.KafkaSessionTimeout != "" {
+	if m.KafkaSessionTimeout > 0 {
 		err = configMap.SetKey("session.timeout.ms", m.KafkaSessionTimeout)
 		if err != nil {
 			return nil, err
