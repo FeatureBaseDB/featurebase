@@ -3377,6 +3377,7 @@ func (n *NopSchemaAPI) DeleteField(ctx context.Context, tname dax.TableName, fna
 
 type ClusterNode struct {
 	ID        string
+	Type      string
 	State     string
 	URI       string
 	GRPCURI   string
