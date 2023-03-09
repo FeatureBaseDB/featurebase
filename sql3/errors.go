@@ -140,6 +140,7 @@ const (
 	ErrQRangeInvalidUse                    errors.Code = "ErrQRangeInvalidUse"
 	ErrInvalidDatetimePart                 errors.Code = "ErrInvalidDatetimePart"
 	ErrOutputValueOutOfRange               errors.Code = "ErrOutputValueOutOfRange"
+	ErrDivideByZero errors.Code = "ErrDivideByZero"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -866,5 +867,12 @@ func NewErrOutputValueOutOfRange(line, col int) error {
 	return errors.New(
 		ErrOutputValueOutOfRange,
 		fmt.Sprintf("[%d:%d] output value out of range", line, col),
+	)
+}
+
+func NewErrDivideByZero(line, col int) error {
+	return errors.New(
+		ErrDivideByZero,
+		fmt.Sprintf("[%d:%d] divisor is equal to zero", line, col),
 	)
 }
