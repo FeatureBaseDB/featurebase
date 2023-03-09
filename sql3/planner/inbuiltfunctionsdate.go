@@ -271,11 +271,56 @@ func (n *callPlanExpression) EvaluateDateTimeFromParts(currentRow []interface{})
 		timestamps[i] = int(val)
 	}
 
+	if val, ok := isValidDateTimeParts(timestamps); !ok {
+		return nil, sql3.NewErrInvalidDatetimePart(0, 0, val)
+	}
+
 	dt := time.Date(timestamps[0], time.Month(timestamps[1]), timestamps[2], timestamps[3], timestamps[4], timestamps[5], timestamps[6]*1000*1000, time.UTC)
 	if dt.Year() < 0 || dt.Year() > 9999 {
-		return nil, sql3.NewErrYearOutOfRange(0, 0, dt.Year())
+		return nil, sql3.NewErrInvalidDatetimePart(0, 0, dt.Year())
 	}
 	return dt, nil
+}
+
+func isValidDateTimeParts(timestamps []int) (value int, ok bool) {
+	if timestamps[0] < 0 || timestamps[0] > 9999 {
+		return timestamps[0], false
+	}
+	if timestamps[1] < 1 || timestamps[1] > 12 {
+		return timestamps[1], false
+	}
+	switch timestamps[1] {
+	case 1, 3, 5, 7, 8, 10, 12:
+		if timestamps[2] < 1 || timestamps[2] > 31 {
+			return timestamps[2], false
+		}
+	case 4, 6, 9, 11:
+		if timestamps[2] < 1 || timestamps[2] > 30 {
+			return timestamps[2], false
+		}
+	case 2:
+		if timestamps[2] < 1 || timestamps[2] > 29 {
+			return timestamps[2], false
+		}
+		if !(timestamps[0]%4 == 0 && timestamps[0]%100 != 0 || timestamps[0]%400 == 0) {
+			if timestamps[2] == 29 {
+				return timestamps[2], false
+			}
+		}
+	}
+	if timestamps[3] < 0 || timestamps[3] > 23 {
+		return timestamps[3], false
+	}
+	if timestamps[4] < 0 || timestamps[4] > 59 {
+		return timestamps[4], false
+	}
+	if timestamps[5] < 0 || timestamps[5] > 59 {
+		return timestamps[5], false
+	}
+	if timestamps[6] < 0 || timestamps[6] > 999 {
+		return timestamps[6], false
+	}
+	return 0, true
 }
 
 func (n *callPlanExpression) EvaluateToTimestamp(currentRow []interface{}) (interface{}, error) {

@@ -138,7 +138,7 @@ const (
 	// time quantum function eval
 	ErrQRangeFromAndToTimeCannotBeBothNull errors.Code = "ErrQRangeFromAndToTimeCannotBeBothNull"
 	ErrQRangeInvalidUse                    errors.Code = "ErrQRangeInvalidUse"
-	ErrYearOutOfRange                      errors.Code = "ErrYearOutOfRange"
+	ErrInvalidDatetimePart                 errors.Code = "ErrInvalidDatetimePart"
 	ErrOutputValueOutOfRange               errors.Code = "ErrOutputValueOutOfRange"
 )
 
@@ -855,10 +855,10 @@ func NewErrQRangeInvalidUse(line, col int) error {
 	)
 }
 
-func NewErrYearOutOfRange(line, col int, year int) error {
+func NewErrInvalidDatetimePart(line, col int, datetimepart int) error {
 	return errors.New(
-		ErrYearOutOfRange,
-		fmt.Sprintf("[%d:%d] year '%d' out of range [0,9999]", line, col, year),
+		ErrInvalidDatetimePart,
+		fmt.Sprintf("[%d:%d] not a valid datetimepart %d", line, col, datetimepart),
 	)
 }
 

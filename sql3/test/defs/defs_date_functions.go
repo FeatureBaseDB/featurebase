@@ -327,11 +327,18 @@ var toTimestampTests = TableTest{
 			ExpErr: "an expression of type 'string' cannot be passed to a parameter of type 'int'",
 		},
 		{
-			name: "DateTimeFromPartsYearOutOfRange",
+			name: "DateTimeFromPartsInvalidDatetimePart",
 			SQLs: sqls(
 				"select datetimefromparts(10000,1,1,1,1,1,1)",
 			),
-			ExpErr: "[0:0] year '10000' out of range [0,9999]",
+			ExpErr: "[0:0] not a valid datetimepart 10000",
+		},
+		{
+			name: "DateTimeFromPartsInvalidDatetimePart2",
+			SQLs: sqls(
+				"select datetimefromparts(2023,2,29,1,1,1,1)",
+			),
+			ExpErr: "[0:0] not a valid datetimepart 29",
 		},
 		{
 			name: "DateTimeFromPartsKnownTimestamp",
