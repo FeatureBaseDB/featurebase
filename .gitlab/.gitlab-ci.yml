@@ -84,7 +84,7 @@ smoke build:
     - go build ./...
 
 golangci-lint:
-  image: golangci/golangci-lint:v1.46.2
+  image: golangci/golangci-lint:v1.51.2
   extends: .go-cache
   stage: lint
   allow_failure: true
