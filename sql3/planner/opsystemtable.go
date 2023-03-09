@@ -395,7 +395,7 @@ func (i *fbDatabaseNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 		n := i.result[0]
 		row := []interface{}{
 			n.ID,
-			"types!",
+			n.Type,
 			n.State,
 			n.URI,
 			n.GRPCURI,
