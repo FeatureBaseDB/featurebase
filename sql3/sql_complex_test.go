@@ -185,6 +185,7 @@ func TestPlanner_Show(t *testing.T) {
 
 		if diff := cmp.Diff([]*pilosa.WireQueryField{
 			wireQueryFieldString("id"),
+			wireQueryFieldString("type"),
 			wireQueryFieldString("state"),
 			wireQueryFieldString("uri"),
 			wireQueryFieldString("grpc_uri"),

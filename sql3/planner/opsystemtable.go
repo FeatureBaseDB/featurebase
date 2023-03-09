@@ -17,8 +17,8 @@ import (
 // exclude this file from SonarCloud dupe eval
 
 const (
-	fbDatabaseInfo         = "fb_database_info"
-	fbDatabaseNodes        = "fb_database_nodes"
+	fbDatabaseInfo        = "fb_database_info"
+	fbDatabaseNodes       = "fb_database_nodes"
 	fbExecRequests        = "fb_exec_requests"
 	fbPerformanceCounters = "fb_performance_counters"
 
@@ -84,6 +84,11 @@ var systemTables = map[string]*systemTable{
 			&types.PlannerColumn{
 				RelationName: fbDatabaseNodes,
 				ColumnName:   "id",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbDatabaseNodes,
+				ColumnName:   "type",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
@@ -390,6 +395,7 @@ func (i *fbDatabaseNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 		n := i.result[0]
 		row := []interface{}{
 			n.ID,
+			"types!",
 			n.State,
 			n.URI,
 			n.GRPCURI,
