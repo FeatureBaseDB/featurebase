@@ -156,7 +156,7 @@ func TestPlanner_Show(t *testing.T) {
 	}
 
 	t.Run("SystemTablesInfo", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, replica_count from fb_cluster_info`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, replica_count from fb_database_info`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -178,7 +178,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("SystemTablesNode", func(t *testing.T) {
-		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_cluster_nodes`)
+		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_database_nodes`)
 		if err != nil {
 			t.Fatal(err)
 		}
