@@ -130,7 +130,7 @@ func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
 		var err error
 		var spaceUsed pilosa.DiskUsage
 		switch strings.ToLower(indexName) {
-		case "fb_cluster_info", "fb_cluster_nodes", "fb_performance_counters", "fb_exec_requests", "fb_table_ddl":
+		case fbDatabaseInfo, fbDatabaseNodes, fbPerformanceCounters, fbExecRequests, fbTableDDL:
 			spaceUsed = pilosa.DiskUsage{
 				Usage: 0,
 			}
