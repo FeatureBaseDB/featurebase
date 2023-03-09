@@ -56,9 +56,9 @@ type Command struct {
 
 	Queryer Queryer `json:"-"`
 
-	Stdin  io.ReadCloser `json:"-"`
+	stdin  io.ReadCloser `json:"-"`
 	stdout io.Writer     `json:"-"`
-	Stderr io.Writer     `json:"-"`
+	stderr io.Writer     `json:"-"`
 
 	// output is where actual results are written. This might point to stdout,
 	// or to a file, based on the current configuration.
@@ -116,9 +116,9 @@ func NewCommand(logdest logger.Logger) *Command {
 		splitter:   newSplitter(newReplacer(variables)),
 		workingDir: newWorkingDir(),
 
-		Stdin:  Stdin,
+		stdin:  Stdin,
 		stdout: Stdout,
-		Stderr: Stderr,
+		stderr: Stderr,
 
 		output:       Stdout,
 		writeOptions: defaultWriteOptions(),
@@ -129,11 +129,21 @@ func NewCommand(logdest logger.Logger) *Command {
 	}
 }
 
-// SetStdout sets both Stdout and output to the value provided. This is useful
+// SetStdin sets stdin. This is useful for initial configuration in tests.
+func (cmd *Command) SetStdin(rc io.ReadCloser) {
+	cmd.stdin = rc
+}
+
+// SetStdout sets both stdout and output to the value provided. This is useful
 // for initial configuration in tests.
-func (cmd *Command) SetStdout(out io.Writer) {
-	cmd.stdout = out
-	cmd.output = out
+func (cmd *Command) SetStdout(w io.Writer) {
+	cmd.stdout = w
+	cmd.output = w
+}
+
+// SetStderr sets stderr. This is useful for initial configuration in tests.
+func (cmd *Command) SetStderr(w io.Writer) {
+	cmd.stderr = w
 }
 
 // Run is the main entry-point to the CLI.
@@ -216,9 +226,9 @@ func (cmd *Command) run(ctx context.Context) error {
 		HistoryLimit:           100000,
 		DisableAutoSaveHistory: true,
 
-		Stdin:  cmd.Stdin,
+		Stdin:  cmd.stdin,
 		Stdout: cmd.stdout,
-		Stderr: cmd.Stderr,
+		Stderr: cmd.stderr,
 	})
 	if err != nil {
 		return errors.Wrap(err, "getting readline")
@@ -383,7 +393,7 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 		}
 		return errors.Wrap(err, "making query")
 	}
-	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.stdout, cmd.Stderr); err != nil {
+	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.stdout, cmd.stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
 
@@ -440,7 +450,7 @@ func (cmd *Command) Outputf(format string, a ...any) {
 // Errorf is a helper method which sends the given payload to stderr.
 func (cmd *Command) Errorf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
-	cmd.Stderr.Write([]byte(out))
+	cmd.stderr.Write([]byte(out))
 }
 
 func (cmd *Command) setupHistory() {

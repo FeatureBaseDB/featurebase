@@ -22,7 +22,7 @@ func TestCLI(t *testing.T) {
 		capture := newCapture(t)
 
 		cli := cli.NewCommand(logger.StderrLogger)
-		cli.Stdin = capture
+		cli.SetStdin(capture)
 		cli.SetStdout(capture)
 		cli.Queryer = capture
 

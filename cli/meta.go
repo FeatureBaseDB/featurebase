@@ -879,7 +879,7 @@ func newMetaWarn(args []string) *metaWarn {
 }
 
 func (m *metaWarn) execute(cmd *Command) (responseAction, error) {
-	return echo(m.args, cmd.Stderr)
+	return echo(m.args, cmd.stderr)
 }
 
 // ////////////////////////////////////////////////////////////////////////////

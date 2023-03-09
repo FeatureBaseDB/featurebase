@@ -34,9 +34,9 @@ func TestCLIIntegration(t *testing.T) {
 		comparer.run()
 
 		fbsql := cli.NewCommand(logger.StderrLogger)
-		fbsql.Stdin = capture
+		fbsql.SetStdin(capture)
 		fbsql.SetStdout(comparer)
-		fbsql.Stderr = comparer
+		fbsql.SetStderr(comparer)
 
 		fbsql.Config = &cli.Config{
 			Host: addr.Host(),
