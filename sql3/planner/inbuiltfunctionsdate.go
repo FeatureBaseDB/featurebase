@@ -23,7 +23,7 @@ const intervalMillisecond = "MS"
 const intervalMicrosecond = "US"
 const intervalNanosecond = "NS"
 
-func (p *ExecutionPlanner) analyzeFunctionDatePart(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+func (p *ExecutionPlanner) analyzeFunctionDateTimePart(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 
 	if len(call.Args) != 2 {
 		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
@@ -144,7 +144,7 @@ func (p *ExecutionPlanner) analyzeFunctionDateTimeName(call *parser.Call, scope 
 	return call, nil
 }
 
-func (n *callPlanExpression) EvaluateDatepart(currentRow []interface{}) (interface{}, error) {
+func (n *callPlanExpression) EvaluateDateTimePart(currentRow []interface{}) (interface{}, error) {
 	intervalEval, err := n.args[0].Evaluate(currentRow)
 	if err != nil {
 		return nil, err

@@ -1537,8 +1537,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateSetContainsAny(currentRow)
 	case "SETCONTAINSALL":
 		return n.EvaluateSetContainsAll(currentRow)
-	case "DATEPART":
-		return n.EvaluateDatepart(currentRow)
+	case "DATETIMEPART":
+		return n.EvaluateDateTimePart(currentRow)
 	case "REVERSE":
 		return n.EvaluateReverse(currentRow)
 	case "UPPER":
