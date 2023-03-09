@@ -49,6 +49,7 @@ var TableTests []TableTest = []TableTest{
 	dateTimeNameTests,
 	toTimestampTests,
 	datetimeAddTests,
+	dateTruncTests,
 	datetimedifftests,
 
 	stringScalarFunctionsTests,
