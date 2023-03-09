@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -122,6 +123,7 @@ func (i *queryIterator) Next(ctx context.Context) (types.Row, error) {
 		userId := ""
 		userId, _ = fbcontext.UserID(ctx)
 
+		log.Printf("DEEBUG: AddRequest: %s, %s, %s", requestId, userId, i.query.sql)
 		i.requests.AddRequest(requestId, userId, time.Now(), i.query.sql)
 		i.hasStarted = &struct{}{}
 	}

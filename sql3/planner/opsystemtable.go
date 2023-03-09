@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"sort"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -450,6 +451,7 @@ type fbExecRequestsRowIter struct {
 var _ types.RowIterator = (*fbExecRequestsRowIter)(nil)
 
 func (i *fbExecRequestsRowIter) Next(ctx context.Context) (types.Row, error) {
+	log.Printf("DEEBUG: fbExecRequestsRowIter.Next() ")
 	if i.result == nil {
 		var err error
 		i.result, err = i.planner.systemLayerAPI.ExecutionRequests().ListRequests()

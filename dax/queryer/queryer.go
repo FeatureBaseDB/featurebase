@@ -39,6 +39,8 @@ type Queryer struct {
 
 	controller dax.Controller
 
+	systemLayer *systemlayer.SystemLayer
+
 	logger logger.Logger
 }
 
@@ -47,6 +49,7 @@ func New(cfg Config) *Queryer {
 	q := &Queryer{
 		controller:    dax.NewNopController(),
 		orchestrators: make(map[dax.QualifiedDatabaseID]*qualifiedOrchestrator),
+		systemLayer:   systemlayer.NewSystemLayer(),
 		logger:        logger.NopLogger,
 	}
 
@@ -138,14 +141,18 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 		applyExecutionTime()
 	}
 
-	// Peek at the first character of sql. If it's "[", then handle this as PQL.
+	// Peek at the first 4k characters of sql. This is limited to 4k to avoid
+	// reading in a very large BULK INSERT statement. If the first character is
+	// "[", then handle this as PQL. We keep more than the first character
+	// because the ExecutionPlanner as currently written expects a sql string
+	// (which it saves in the ExecutionRequests API).
 	var isPQL bool
-	peekSize := 1
+	peekSize := 4096
 	peeker := io.LimitReader(sql, int64(peekSize))
 	peek, err := io.ReadAll(peeker)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading peeker")
-	} else if len(peek) == 1 && peek[0] == byte('[') {
+	} else if len(peek) > 0 && peek[0] == byte('[') {
 		isPQL = true
 	}
 
@@ -182,6 +189,9 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	// put the requestId in the context
 	ctx = fbcontext.WithRequestID(ctx, requestID.String())
 
+	userID := "travis"
+	ctx = fbcontext.WithUserID(ctx, userID)
+
 	st, err := parser.NewParser(multiReader).ParseStatement()
 	if err != nil {
 		applyError(errors.Wrap(err, "parsing sql"))
@@ -198,13 +208,14 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	// SystemAPI.
 	sysapi := &featurebase.NopSystemAPI{}
 
-	systemLayer := systemlayer.NewSystemLayer()
+	// systemLayer.ExecutionRequests().AddRequest("reqid", "userid", time.Now(), "select foo")
+	// systemLayer.ExecutionRequests().
 
 	// We intentionally don't pass the sql argument here because we're working
 	// with an io.Reader rather than a string and it's just not necessary to
 	// send it as a string to this method. Also, what happens if the sql is a
 	// large BULK INSERT?
-	pl := planner.NewExecutionPlanner(q.Orchestrator(qdbid), sapi, sysapi, systemLayer, imp, q.logger, "")
+	pl := planner.NewExecutionPlanner(q.Orchestrator(qdbid), sapi, sysapi, q.systemLayer, imp, q.logger, string(peek))
 
 	planOp, err := pl.CompilePlan(ctx, st)
 	if err != nil {
