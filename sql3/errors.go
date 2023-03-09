@@ -140,7 +140,7 @@ const (
 	ErrQRangeInvalidUse                    errors.Code = "ErrQRangeInvalidUse"
 	ErrInvalidDatetimePart                 errors.Code = "ErrInvalidDatetimePart"
 	ErrOutputValueOutOfRange               errors.Code = "ErrOutputValueOutOfRange"
-	ErrDivideByZero errors.Code = "ErrDivideByZero"
+	ErrDivideByZero                        errors.Code = "ErrDivideByZero"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
