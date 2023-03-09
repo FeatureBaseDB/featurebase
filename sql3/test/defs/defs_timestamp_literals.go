@@ -54,7 +54,7 @@ var timestampLiterals = TableTest{
 		{
 			//compare test is done only for integer test cases (_id in (3,4), because only for these cases we have a determinate year(1970, 1969) to look for.
 			SQLs: sqls(
-				"select _id, datepart('yy', ts) as \"yy\" from testtimestampliterals where _id in (3,4)",
+				"select _id, datetimepart('yy', ts) as \"yy\" from testtimestampliterals where _id in (3,4)",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),

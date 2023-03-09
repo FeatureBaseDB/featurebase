@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-// datepart tests
-var datePartTests = TableTest{
+// datetimepart tests
+var dateTimePartTests = TableTest{
 
 	Table: tbl(
-		"dateparttests",
+		"datetimeparttests",
 		srcHdrs(
 			srcHdr("_id", fldTypeID),
 			srcHdr("a", fldTypeInt, "min 0", "max 1000"),
@@ -22,23 +22,23 @@ var datePartTests = TableTest{
 	),
 	SQLTests: []SQLTest{
 		{
-			name: "DatePartIncorrectParamsCount",
+			name: "DateTimePartIncorrectParamsCount",
 			SQLs: sqls(
-				"select datepart()",
+				"select datetimepart()",
 			),
 			ExpErr: "count of formal parameters (2) does not match count of actual parameters (0)",
 		},
 		{
-			name: "DatePartIntError",
+			name: "DateTimePartIntError",
 			SQLs: sqls(
-				"select datepart(1, 2)",
+				"select datetimepart(1, 2)",
 			),
 			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'string'",
 		},
 		{
-			name: "DatePartInvalidParam",
+			name: "DateTimePartInvalidParam",
 			SQLs: sqls(
-				"select datepart('1', current_timestamp)",
+				"select datetimepart('1', current_timestamp)",
 			),
 			ExpErr: "invalid value '1' for parameter 'interval'",
 		},
@@ -71,9 +71,9 @@ var datePartTests = TableTest{
 			ExpErr: "invalid value 'x' for parameter 'timeunit'",
 		},
 		{
-			name: "DATEPARTYY",
+			name: "DATETIMEPARTYY",
 			SQLs: sqls(
-				"select _id, datepart('yy', ts) from dateparttests",
+				"select _id, datetimepart('yy', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -85,9 +85,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DATEPARTYD",
+			name: "DATETIMEPARTYD",
 			SQLs: sqls(
-				"select _id, datepart('yd', ts) from dateparttests",
+				"select _id, datetimepart('yd', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -99,9 +99,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DATEPARTM",
+			name: "DATETIMEPARTM",
 			SQLs: sqls(
-				"select _id, datepart('m', ts) from dateparttests",
+				"select _id, datetimepart('m', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -113,9 +113,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DATEPARTD",
+			name: "DATETIMEPARTD",
 			SQLs: sqls(
-				"select _id, datepart('d', ts) from dateparttests",
+				"select _id, datetimepart('d', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -127,9 +127,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DATEPARTW",
+			name: "DATETIMEPARTW",
 			SQLs: sqls(
-				"select _id, datepart('w', ts) from dateparttests",
+				"select _id, datetimepart('w', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -141,9 +141,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DATEPARTWK",
+			name: "DATETIMEPARTWK",
 			SQLs: sqls(
-				"select _id, datepart('wk', ts) from dateparttests",
+				"select _id, datetimepart('wk', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -155,9 +155,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DATEPARTHH",
+			name: "DATETIMEPARTHH",
 			SQLs: sqls(
-				"select _id, datepart('hh', ts) from dateparttests",
+				"select _id, datetimepart('hh', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -169,9 +169,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DatePartMI",
+			name: "DateTimePartMI",
 			SQLs: sqls(
-				"select _id, datepart('mi', ts) from dateparttests",
+				"select _id, datetimepart('mi', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -183,9 +183,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DatePartS",
+			name: "DateTimePartS",
 			SQLs: sqls(
-				"select _id, datepart('s', ts) from dateparttests",
+				"select _id, datetimepart('s', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -197,9 +197,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DatePartMS",
+			name: "DateTimePartMS",
 			SQLs: sqls(
-				"select _id, datepart('ms', ts) from dateparttests",
+				"select _id, datetimepart('ms', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -211,8 +211,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			name: "DateTimePartUS",
 			SQLs: sqls(
-				"select _id, datepart('us', ts) from dateparttests",
+				"select _id, datetimepart('us', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -224,9 +225,9 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "DatePartNS",
+			name: "DateTimePartNS",
 			SQLs: sqls(
-				"select _id, datepart('ns', ts) from dateparttests",
+				"select _id, datetimepart('ns', ts) from datetimeparttests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -238,10 +239,10 @@ var datePartTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			//test datepart(timestamp, part) for implicit conversion of integer value passed as argument to timestamp param
-			name: "DatePartImplicitIntConversion",
+			//test datetimepart(timestamp, part) for implicit conversion of integer value passed as argument to timestamp param
+			name: "DateTimePartImplicitIntConversion",
 			SQLs: sqls(
-				"select datepart('yy', 0) as \"yy\", datepart('m', 0) as \"m\", datepart('d', 0) as \"d\"",
+				"select datetimepart('yy', 0) as \"yy\", datetimepart('m', 0) as \"m\", datetimepart('d', 0) as \"d\"",
 			),
 			ExpHdrs: hdrs(
 				hdr("yy", fldTypeInt),
@@ -389,7 +390,7 @@ var dateTimeNameTests = TableTest{
 		// if this works then the other parts converted to strings of digits should also work
 		{
 			SQLs: sqls(
-				"select _id, datetimename('yy', ts) from dateparttests",
+				"select _id, datetimename('yy', ts) from datetimenametests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -403,7 +404,7 @@ var dateTimeNameTests = TableTest{
 		//check to make sure it gets a month name correctly
 		{
 			SQLs: sqls(
-				"select _id, datetimename('m', ts) from dateparttests",
+				"select _id, datetimename('m', ts) from datetimenametests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -417,7 +418,7 @@ var dateTimeNameTests = TableTest{
 		// check to make sure it gets a day of the week correctly
 		{
 			SQLs: sqls(
-				"select _id, datetimename('w', ts) from dateparttests",
+				"select _id, datetimename('w', ts) from datetimenametests",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -484,7 +485,7 @@ var datetimeAddTests = TableTest{
 		//Test datetimeadd() for all possible time units
 		{
 			SQLs: sqls(
-				"select _id, datepart('YY',datetimeadd('YY', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('YY',datetimeadd('YY', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -497,7 +498,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('M',datetimeadd('M', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('M',datetimeadd('M', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -510,7 +511,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('D',datetimeadd('D', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('D',datetimeadd('D', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -523,7 +524,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('HH',datetimeadd('HH', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('HH',datetimeadd('HH', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -536,7 +537,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('MI',datetimeadd('MI', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('MI',datetimeadd('MI', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -549,7 +550,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('S',datetimeadd('S', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('S',datetimeadd('S', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -562,7 +563,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('MS',datetimeadd('MS', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('MS',datetimeadd('MS', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -575,7 +576,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('US',datetimeadd('US', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('US',datetimeadd('US', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -588,7 +589,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('NS',datetimeadd('NS', 1, ts)) from datetimeadd",
+				"select _id, datetimepart('NS',datetimeadd('NS', 1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -602,7 +603,7 @@ var datetimeAddTests = TableTest{
 		//test datetimeadd() for subtraction
 		{
 			SQLs: sqls(
-				"select _id, datepart('YY',datetimeadd('YY', -1, ts)) from datetimeadd",
+				"select _id, datetimepart('YY',datetimeadd('YY', -1, ts)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -616,7 +617,7 @@ var datetimeAddTests = TableTest{
 		//test datetimeadd() for transition
 		{
 			SQLs: sqls(
-				"select _id, datepart('NS',datetimeadd('NS', 700, ts)) as a, datepart('US',datetimeadd('NS', 700, ts)) as b from datetimeadd",
+				"select _id, datetimepart('NS',datetimeadd('NS', 700, ts)) as a, datetimepart('US',datetimeadd('NS', 700, ts)) as b from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -631,7 +632,7 @@ var datetimeAddTests = TableTest{
 		//test datetimeadd() for literals
 		{
 			SQLs: sqls(
-				"select _id, datepart('YY',datetimeadd('YY', 1, 0)) from datetimeadd",
+				"select _id, datetimepart('YY',datetimeadd('YY', 1, 0)) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -644,7 +645,7 @@ var datetimeAddTests = TableTest{
 		},
 		{
 			SQLs: sqls(
-				"select _id, datepart('YY',datetimeadd('YY', 1, '2023-03-03T00:00:00Z')) from datetimeadd",
+				"select _id, datetimepart('YY',datetimeadd('YY', 1, '2023-03-03T00:00:00Z')) from datetimeadd",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
