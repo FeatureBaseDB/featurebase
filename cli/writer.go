@@ -16,25 +16,25 @@ import (
 type writeOptions struct {
 	border     int
 	expanded   bool
+	location   *time.Location
 	timing     bool
 	tuplesOnly bool
-	location   *time.Location
 }
 
 func defaultWriteOptions() *writeOptions {
 	return &writeOptions{
 		border:     1,
 		expanded:   false,
+		location:   time.Local,
 		timing:     false,
 		tuplesOnly: false,
-		location:   time.Local,
 	}
 }
 
-// writeTable writes the query response, taking the format into consideration.
+// writeOutput writes the query response, taking the format into consideration.
 // It sends query output to qOut, non-error informational output (such as query
 // timing) to wOut, and errors to wErr.
-func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.Writer, wOut io.Writer, wErr io.Writer) error {
+func writeOutput(r *featurebase.WireQueryResponse, opts *writeOptions, qOut io.Writer, wOut io.Writer, wErr io.Writer) error {
 	if r == nil {
 		return errors.New("attempt to write out nil response")
 	}
@@ -47,7 +47,7 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 
 	t := table.NewWriter()
 	t.SetOutputMirror(qOut)
-	switch format.border {
+	switch opts.border {
 	case 0:
 		t.SetStyle(styleBorder0)
 	case 1:
@@ -55,7 +55,7 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 	default:
 		t.SetStyle(styleBorder2)
 		// In expanded mode with a border, we need borders between each record.
-		if format.expanded {
+		if opts.expanded {
 			t.Style().Options.SeparateRows = true
 		}
 	}
@@ -63,9 +63,10 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 	// Don't uppercase the header values.
 	t.Style().Format.Header = text.FormatDefault
 
-	if format.expanded {
+	if opts.expanded {
 		// Expanded table
 		for _, row := range r.Data {
+			cleanRow(row, opts)
 			colRow := make([]interface{}, 2)
 			scolRow := make([]string, 2)
 			div := "\n"
@@ -74,11 +75,7 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 					div = ""
 				}
 				scolRow[0] += fmt.Sprintf("%s%s", col.Name, div)
-				if row[i] == nil {
-					scolRow[1] += fmt.Sprintf("%s%s", nullValue, div)
-				} else {
-					scolRow[1] += fmt.Sprintf("%v%s", row[i], div)
-				}
+				scolRow[1] += fmt.Sprintf("%v%s", row[i], div)
 			}
 			colRow[0] = scolRow[0]
 			colRow[1] = scolRow[1]
@@ -86,26 +83,11 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 		}
 	} else {
 		// Normal table (i.e. NOT expanded)
-		if !format.tuplesOnly {
+		if !opts.tuplesOnly {
 			t.AppendHeader(schemaToRow(r.Schema))
 		}
 		for _, row := range r.Data {
-			// Loop through all the colums of each row and modify any based on
-			// type.
-			//
-			// If the value is nil, replace it with a null string; go-pretty
-			// doesn't expect nil pointers in the data values.
-			//
-			// If the value is a time.Time, we want to print it using
-			// RFC3339Nano to be consistent with everything else.
-			for i := range row {
-				switch v := row[i].(type) {
-				case nil:
-					row[i] = nullValue
-				case time.Time:
-					row[i] = v.In(format.location).Format(time.RFC3339Nano)
-				}
-			}
+			cleanRow(row, opts)
 			t.AppendRow(table.Row(row))
 		}
 	}
@@ -119,13 +101,32 @@ func writeTable(r *featurebase.WireQueryResponse, format *writeOptions, qOut io.
 	qOut.Write([]byte("\n"))
 
 	// Timing.
-	if format.timing {
+	if opts.timing {
 		if _, err := wOut.Write([]byte(fmt.Sprintf("Execution time: %dμs\n", r.ExecutionTime))); err != nil {
 			return errors.Wrapf(err, "writing execution time: %s", r.Error)
 		}
 	}
 
 	return nil
+}
+
+// cleanRow loops through all the columns of row and modifies its value based on
+// type.
+//
+// If the value is nil, replace it with a null string; go-pretty doesn't expect
+// nil pointers in the data values.
+//
+// If the value is a time.Time, we want to print it using RFC3339Nano to be
+// consistent with everything else.
+func cleanRow(row []interface{}, opts *writeOptions) {
+	for i := range row {
+		switch v := row[i].(type) {
+		case nil:
+			row[i] = nullValue
+		case time.Time:
+			row[i] = v.In(opts.location).Format(time.RFC3339Nano)
+		}
+	}
 }
 
 func schemaToRow(schema featurebase.WireQuerySchema) []interface{} {
