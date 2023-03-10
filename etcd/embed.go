@@ -134,8 +134,9 @@ func (e *EmbeddedEtcd) Shutdown() {
 }
 
 func (e *EmbeddedEtcd) Peers() []*disco.Peer {
-	var peers []*disco.Peer
-	for _, member := range e.e.Server.Cluster().Members() {
+	members := e.e.Server.Cluster().Members()
+	peers := make([]*disco.Peer, 0, len(members))
+	for _, member := range members {
 		peers = append(peers, &disco.Peer{ID: member.ID.String(), URL: member.PickPeerURL()})
 	}
 	return peers

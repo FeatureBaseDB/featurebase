@@ -706,7 +706,7 @@ func (n *callPlanExpression) EvaluateFormat(currentRow []interface{}) (interface
 		return nil, sql3.NewErrUnexpectedTypeConversion(0, 0, argEval)
 	}
 
-	var args []interface{}
+	args := make([]interface{}, 0, len(n.args)-1)
 
 	// loop, since args can be of any length.
 	for _, arg := range n.args[1:] {

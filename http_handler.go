@@ -2907,8 +2907,9 @@ const (
 
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.
 func parseUint64Slice(s string) ([]uint64, error) {
-	var a []uint64
-	for _, str := range strings.Split(s, ",") {
+	ss := strings.Split(s, ",")
+	a := make([]uint64, 0, len(ss))
+	for _, str := range ss {
 		// Ignore blanks.
 		if str == "" {
 			continue

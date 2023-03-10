@@ -25,7 +25,7 @@ linters:
     - errname
     - gofmt
     # - misspell (lots to fix, but we should)
-    # - prealloc (15 to fix)
+    - prealloc
     # - predeclared (20 to fix)
     # - stylecheck (quite a lot to fix, but we should definitely work on this)
     # - unconvert (not at all critical, but makes for cleaner code)
