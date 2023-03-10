@@ -2045,7 +2045,7 @@ func mutexClearRegression(t *testing.T, importer featurebase.Importer, sapi feat
 	}
 
 	col := uint64(0)
-	row := uint64(1)
+	row := uint64(0)
 	for i := uint64(0); i <= 21; i++ {
 		col = (i%2+1)*featurebase.ShardWidth + i%5
 		row = i % 3
@@ -2126,7 +2126,7 @@ func mutexNilClearID(t *testing.T, importer featurebase.Importer, sapi featureba
 	}
 
 	col := uint64(0)
-	row := uint64(1)
+	row := uint64(0)
 	// populate mutex with some data
 	for i := uint64(0); i < 11; i++ {
 		col = (i%2+1)*featurebase.ShardWidth + i%5

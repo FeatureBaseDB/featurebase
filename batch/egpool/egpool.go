@@ -58,11 +58,11 @@ func (eg *Group) err(err error) {
 	eg.errs = append(eg.errs, err)
 }
 
-type ErrPanic struct {
+type PanicError struct {
 	Value interface{}
 }
 
-func (p ErrPanic) Error() string {
+func (p PanicError) Error() string {
 	return fmt.Sprintf("panic: %v", p.Value)
 }
 
@@ -77,7 +77,7 @@ func (eg *Group) processJobs() {
 	defer func() {
 		if !finished {
 			if p := recover(); p != nil {
-				eg.err(ErrPanic{p})
+				eg.err(PanicError{p})
 			} else {
 				eg.err(ErrGoexit)
 			}

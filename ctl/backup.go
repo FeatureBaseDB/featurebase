@@ -94,13 +94,13 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 
 	// Validate arguments.
 	if cmd.OutputDir == "" {
-		return fmt.Errorf("%w: -o flag required", UsageError)
+		return fmt.Errorf("%w: -o flag required", ErrUsage)
 	} else if cmd.Concurrency <= 0 {
-		return fmt.Errorf("%w: concurrency must be at least one", UsageError)
+		return fmt.Errorf("%w: concurrency must be at least one", ErrUsage)
 	}
 	if cmd.HeaderTimeoutStr != "" {
 		if dur, err := time.ParseDuration(cmd.HeaderTimeoutStr); err != nil {
-			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", UsageError, cmd.HeaderTimeoutStr, err)
+			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", ErrUsage, cmd.HeaderTimeoutStr, err)
 		} else {
 			cmd.HeaderTimeout = dur
 		}

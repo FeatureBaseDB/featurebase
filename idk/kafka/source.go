@@ -571,7 +571,7 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 		switch ft {
 		case "decimal":
 			scale, err := intProp(aField, "scale")
-			if scale > 18 || err == wrongType {
+			if scale > 18 || err == errWrongType {
 				return nil, errors.Errorf("0<=scale<=18, got:%d err:%v", scale, err)
 			}
 			return idk.DecimalField{
@@ -610,12 +610,12 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 			}, nil
 		case "timestamp":
 			layout, err := stringProp(aField, "layout")
-			if err == wrongType {
+			if err == errWrongType {
 				return nil, errors.Errorf("property provided in wrong type for TimestampField: layout, err:%v", err)
 			}
 
 			unit, err := stringProp(aField, "unit")
-			if err == wrongType {
+			if err == errWrongType {
 				return nil, errors.Errorf("property provided in wrong type for TimestampField: unit, err:%v", err)
 			}
 
@@ -624,7 +624,7 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 			}
 
 			granularity, err := stringProp(aField, "granularity")
-			if err == wrongType {
+			if err == errWrongType {
 				return nil, errors.Errorf("property provided in wrong type for TimestampField: unit, err:%v", err)
 			}
 
@@ -795,7 +795,7 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 			NameVal: aField.Name,
 		}
 		scale, err := intProp(aField, "scale")
-		if err == wrongType {
+		if err == errWrongType {
 			return nil, errors.Wrap(err, "getting scale")
 		} else if err == nil {
 			field.Scale = scale
@@ -824,11 +824,11 @@ func avroToPDKField(aField *avro.SchemaField) (idk.Field, error) {
 func stringProp(p propper, s string) (string, error) {
 	ival, ok := p.Prop(s)
 	if !ok {
-		return "", notFound
+		return "", errNotFound
 	}
 	sval, ok := ival.(string)
 	if !ok {
-		return "", wrongType
+		return "", errWrongType
 	}
 	return sval, nil
 }
@@ -855,14 +855,14 @@ func cacheConfigProp(p propper) (*idk.CacheConfig, error) {
 func intProp(p propper, s string) (int64, error) {
 	ival, ok := p.Prop(s)
 	if !ok {
-		return 0, notFound
+		return 0, errNotFound
 	}
 
 	switch v := ival.(type) {
 	case string:
 		n, e := strconv.ParseInt(v, 10, 64)
 		if e != nil {
-			return 0, errors.Wrap(e, wrongType.Error())
+			return 0, errors.Wrap(e, errWrongType.Error())
 		}
 		return n, nil
 
@@ -876,7 +876,7 @@ func intProp(p propper, s string) (int64, error) {
 		return int64(v), nil
 	}
 
-	return 0, wrongType
+	return 0, errWrongType
 }
 
 type propper interface {
@@ -884,8 +884,8 @@ type propper interface {
 }
 
 var (
-	notFound  = errors.New("prop not found")
-	wrongType = errors.New("val is wrong type")
+	errNotFound  = errors.New("prop not found")
+	errWrongType = errors.New("val is wrong type")
 )
 
 // avroUnionToPDKField takes an avro SchemaField with a Union type,

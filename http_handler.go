@@ -1476,7 +1476,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	// Write the closing bracket on any exit from this method.
 	defer func() {
-		var execTime int64 = 0
+		var execTime int64
 		// we are going to make best effort here - don't actually care about the error
 		// if there was an error, the request.ElapsedTime will be zero
 		request, _ := h.api.server.SystemLayer.ExecutionRequests().GetRequest(requestID.String())
@@ -3752,16 +3752,16 @@ func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.api.ReserveIDs(req.Key, req.Session, req.Offset, req.Count)
 	if err != nil {
-		var esync ErrIDOffsetDesync
+		var esync IDOffsetDesyncError
 		if errors.As(err, &esync) {
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			err = json.NewEncoder(w).Encode(struct {
-				ErrIDOffsetDesync
+				IDOffsetDesyncError
 				Err string `json:"error"`
 			}{
-				ErrIDOffsetDesync: esync,
-				Err:               err.Error(),
+				IDOffsetDesyncError: esync,
+				Err:                 err.Error(),
 			})
 			if err != nil {
 				h.logger.Debugf("failed to send desync error: %v", err)

@@ -6569,7 +6569,7 @@ func trailingZeroN(v uint64) int {
 }
 
 // ErrorList represents a list of errors.
-type ErrorList []error
+type ErrorList []error //nolint:errname
 
 func (a ErrorList) Error() string {
 	switch len(a) {

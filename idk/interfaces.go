@@ -1252,15 +1252,13 @@ func toStringArray(val interface{}) ([]string, error) {
 	case []interface{}:
 		ret := make([]string, len(vt))
 		for i, v := range vt {
-			switch v.(type) {
+			switch v := v.(type) {
 			case []byte:
-				ret[i] = string(v.([]byte)[:])
+				ret[i] = string(v[:])
+			case string:
+				ret[i] = v
 			default:
-				vs, ok := v.(string)
-				if !ok {
-					return nil, errors.Errorf("couldn't convert []interface{} to []string, value %v of type %[1]T at %d", v, i)
-				}
-				ret[i] = vs
+				return nil, errors.Errorf("couldn't convert []interface{} to []string, value %v of type %[1]T at %d", v, i)
 			}
 		}
 		return ret, nil

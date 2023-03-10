@@ -1186,8 +1186,8 @@ type Error string // TODO(jaffee) convert to standard error package
 
 func (e Error) Error() string { return string(e) }
 
-const ViewNotFound = Error("view not found")
-const FragmentNotFound = Error("fragment not found")
+const ErrViewNotFound = Error("view not found")
+const ErrFragmentNotFound = Error("fragment not found")
 
 func (o *orchestrator) executeTopK(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopK")

@@ -41,7 +41,7 @@ func UsageErrorWrapper(inner runner) func(*cobra.Command, []string) error {
 // wrappers.
 func considerUsageError(cmd *cobra.Command, err error) error {
 	cmd.SilenceErrors = true
-	if !errors.Is(err, ctl.UsageError) {
+	if !errors.Is(err, ctl.ErrUsage) {
 		cmd.SilenceUsage = true
 	}
 	return err

@@ -837,7 +837,7 @@ func TestAPI_IDAlloc(t *testing.T) {
 			t.Fatalf("obtaining random bytes: %v", err)
 		}
 		ids3, err := primary.ReserveIDs(key, session, 0, 2)
-		var esync pilosa.ErrIDOffsetDesync
+		var esync pilosa.IDOffsetDesyncError
 		if errors.As(err, &esync) {
 			if esync.Requested != 0 {
 				t.Errorf("incorrect requested offset in error: provided %d but got %d", 0, esync.Requested)

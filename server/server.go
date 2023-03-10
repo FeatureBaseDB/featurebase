@@ -201,7 +201,7 @@ const (
 // to report on whether or not that succeeded.
 var (
 	setupResourceLimitsOnce sync.Once
-	setupResourceLimitsErr  error
+	errSetupResourceLimits  error
 )
 
 // doSetupResourceLimits is the function which actually does the
@@ -264,9 +264,9 @@ func (m *Command) doSetupResourceLimits() error {
 // denied errors are not that concerning.
 func (m *Command) setupResourceLimits() error {
 	setupResourceLimitsOnce.Do(func() {
-		setupResourceLimitsErr = m.doSetupResourceLimits()
+		errSetupResourceLimits = m.doSetupResourceLimits()
 	})
-	return setupResourceLimitsErr
+	return errSetupResourceLimits
 }
 
 // StartNoServe starts the pilosa server, but doesn't serve on the http handler.

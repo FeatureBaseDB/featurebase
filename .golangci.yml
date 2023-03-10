@@ -10,9 +10,25 @@ run:
     - pql/pql.peg.go
 linters:
   enable:
+    # Recommended to be enabled by default (https://golangci-lint.run).
+    # - errcheck (lots to fix)
+    - gosimple
     - govet
-    - gofmt
+    - ineffassign
     - staticcheck
+    - typecheck
+    # - unused (about 20 to fix)
+
+    # Additional linters we choose to enable.
+    # - bodyclose (lots to fix, but we should)
+    - errchkjson
+    - errname
+    - gofmt
+    # - misspell (lots to fix, but we should)
+    # - prealloc (15 to fix)
+    # - predeclared (20 to fix)
+    # - stylecheck (quite a lot to fix, but we should definitely work on this)
+    # - unconvert (not at all critical, but makes for cleaner code)
   enable-all: false
   disable-all: true
 
