@@ -2770,10 +2770,10 @@ func (p *Parser) parseOperand() (expr Expr, err error) {
 	case CURRENT_DATE:
 		now := time.Now().UTC()
 		nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		return &DateLit{ValuePos: pos, Value: nowDate}, nil
+		return &DateLit{ValuePos: pos, Value: nowDate, Token: tok}, nil
 	case CURRENT_TIMESTAMP:
 		now := time.Now().UTC()
-		return &DateLit{ValuePos: pos, Value: now}, nil
+		return &DateLit{ValuePos: pos, Value: now, Token: tok}, nil
 	case TRUE, FALSE:
 		return &BoolLit{ValuePos: pos, Value: tok == TRUE}, nil
 	case PLUS, MINUS, BITNOT:

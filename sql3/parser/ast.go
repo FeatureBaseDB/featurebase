@@ -1919,6 +1919,7 @@ func (lit *BoolLit) String() string {
 type DateLit struct {
 	ValuePos Pos       // literal position
 	Value    time.Time // literal value
+	Token    Token     // token found in the sql
 }
 
 func (expr *DateLit) IsLiteral() bool { return true }
@@ -1940,9 +1941,13 @@ func (lit *DateLit) Clone() *DateLit {
 	return &other
 }
 
-// String returns the string representation of the expression.
+// String returns the string representation of the Datetime value.
+// if sql referenced a built-in literal (CURRENT_DATETIME, CURRENT_DATE) then it returns the token.
 func (lit *DateLit) String() string {
-	return lit.Value.Format(time.RFC3339)
+	if lit.Token != 0 {
+		return tokens[lit.Token]
+	}
+	return "'" + lit.Value.Format(time.RFC3339) + "'"
 }
 
 type UnaryExpr struct {
