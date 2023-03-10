@@ -40,6 +40,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Flavor is used to distinguish between serverless and classic. For the moment,
+// we use this in the "ClusterName" returned by a serverless instance.
+const (
+	FlavorClassic    = "Classic"
+	FlavorServerless = "Serverless"
+)
+
 // API provides the top level programmatic interface to Pilosa. It is usually
 // wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {

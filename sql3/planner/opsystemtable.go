@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"sort"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -31,8 +30,19 @@ const (
 )
 
 type systemTable struct {
-	name           string
-	schema         types.Schema
+	name   string
+	schema types.Schema
+
+	// requiresFanout instructs the parser to "fan-out" the query to all cluster
+	// nodes in order to get results from every node. The reasoning is that the
+	// complete data set is distributed across all nodes rather than being
+	// available on a single nodde.
+	//
+	// TODO(tlt): I don't think this logic should be specified by the table.
+	// Rather the implementation of the ExecutionRequests interface should
+	// decide how it wants to retrieve the list of requests. Basically,
+	// "fan-out" should happen as part of the interface implementation; the
+	// fan-out itself shouldn't be calling the interface method.
 	requiresFanout bool
 }
 
@@ -451,7 +461,6 @@ type fbExecRequestsRowIter struct {
 var _ types.RowIterator = (*fbExecRequestsRowIter)(nil)
 
 func (i *fbExecRequestsRowIter) Next(ctx context.Context) (types.Row, error) {
-	log.Printf("DEEBUG: fbExecRequestsRowIter.Next() ")
 	if i.result == nil {
 		var err error
 		i.result, err = i.planner.systemLayerAPI.ExecutionRequests().ListRequests()

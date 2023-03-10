@@ -2,7 +2,6 @@ package systemlayer
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -123,7 +122,6 @@ func (e *ExecutionRequests) UpdateRequest(requestID string,
 
 // ListRequests returns the content of the ExecutionRequests struct as copies
 func (e *ExecutionRequests) ListRequests() ([]pilosa.ExecutionRequest, error) {
-	log.Printf("DEEBUG: ListRequests() called, %p", e)
 	e.RLock()
 	defer e.RUnlock()
 

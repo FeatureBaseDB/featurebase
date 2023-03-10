@@ -189,9 +189,6 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	// put the requestId in the context
 	ctx = fbcontext.WithRequestID(ctx, requestID.String())
 
-	userID := "travis"
-	ctx = fbcontext.WithUserID(ctx, userID)
-
 	st, err := parser.NewParser(multiReader).ParseStatement()
 	if err != nil {
 		applyError(errors.Wrap(err, "parsing sql"))
@@ -204,12 +201,8 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	// Importer
 	imp := idkserverless.NewImporter(q.controller, qdbid, nil)
 
-	// TODO(tlt): We need a serverless-compatible implementation of the
 	// SystemAPI.
-	sysapi := &featurebase.NopSystemAPI{}
-
-	// systemLayer.ExecutionRequests().AddRequest("reqid", "userid", time.Now(), "select foo")
-	// systemLayer.ExecutionRequests().
+	sysapi := newSystemAPI()
 
 	// We intentionally don't pass the sql argument here because we're working
 	// with an io.Reader rather than a string and it's just not necessary to

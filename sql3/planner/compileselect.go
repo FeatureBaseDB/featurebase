@@ -411,14 +411,21 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 			var op types.PlanOperator
 			op = NewPlanOpSystemTable(p, st)
 			if st.requiresFanout {
-				op = NewPlanOpFanout(p, op)
+				// We don't want to do fanout in serverless. There may be a
+				// better place to signify "serverless" vs "classic", but for
+				// now it's gonna be in the ClusterName since the concept of
+				// "cluster" doesn't really apply to serverless anyway.
+				switch p.systemAPI.ClusterName() {
+				case pilosa.FlavorServerless:
+				default:
+					op = NewPlanOpFanout(p, op)
+				}
 			}
 			if sourceExpr.Alias != nil {
 				aliasName := parser.IdentName(sourceExpr.Alias)
 				return NewPlanOpRelAlias(aliasName, op), nil
 			}
 			return op, nil
-
 		}
 		// get all the columns for this table - we will eliminate unused ones
 		// later on in the optimizer
