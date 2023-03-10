@@ -144,6 +144,7 @@ func (p *ExecutionPlanner) analyzeFunctionDateTimeName(call *parser.Call, scope 
 	return call, nil
 }
 
+// analyzeFunctionDateTimeDiff ensures a timeunit and start and end timestamps.
 func (p *ExecutionPlanner) analyzeFunctionDateTimeDiff(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 	if len(call.Args) != 3 {
 		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 3, len(call.Args))
@@ -282,6 +283,9 @@ func (n *callPlanExpression) EvaluateDateTimeFromParts(currentRow []interface{})
 	return dt, nil
 }
 
+// isValidDateTimeParts returns true if the year is between 0 and 9999 and the date and time exists(think of leap year).
+// the argument is a slice of ints representing the year, month, day, hour, minutes, seconds, and milliseconds.
+// If any value in the slice falls outside its range, the value and false are returned.
 func isValidDateTimeParts(timestamps []int) (value int, ok bool) {
 	if timestamps[0] < 0 || timestamps[0] > 9999 {
 		return timestamps[0], false
