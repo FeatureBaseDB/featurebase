@@ -258,6 +258,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		return p.analyseFunctionStr(call, scope)
 	case "DATETIMENAME":
 		return p.analyzeFunctionDateTimeName(call, scope)
+	case "DATE_TRUNC":
+		return p.analyzeFunctionDateTrunc(call, scope)
 	// time quantum funtions
 	case "RANGEQ":
 		return p.analyzeFunctionRangeQ(call, scope)

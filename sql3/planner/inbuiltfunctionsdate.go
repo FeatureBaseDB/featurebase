@@ -144,6 +144,28 @@ func (p *ExecutionPlanner) analyzeFunctionDateTimeName(call *parser.Call, scope 
 	return call, nil
 }
 
+func (p *ExecutionPlanner) analyzeFunctionDateTrunc(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
+
+	if len(call.Args) != 2 {
+		return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
+	}
+	// interval
+	intervalType := parser.NewDataTypeString()
+	if !typesAreAssignmentCompatible(intervalType, call.Args[0].DataType()) {
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Args[0].DataType().TypeDescription(), intervalType.TypeDescription())
+	}
+
+	// date
+	dateType := parser.NewDataTypeTimestamp()
+	if !typesAreAssignmentCompatible(dateType, call.Args[1].DataType()) {
+		return nil, sql3.NewErrParameterTypeMistmatch(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[1].DataType().TypeDescription(), dateType.TypeDescription())
+	}
+
+	//return int
+	call.ResultDataType = parser.NewDataTypeString()
+	return call, nil
+}
+
 // analyzeFunctionDateTimeDiff ensures a timeunit and start and end timestamps.
 func (p *ExecutionPlanner) analyzeFunctionDateTimeDiff(call *parser.Call, scope parser.Statement) (parser.Expr, error) {
 	if len(call.Args) != 3 {
@@ -537,6 +559,67 @@ func (n *callPlanExpression) EvaluateDatetimeAdd(currentRow []interface{}) (inte
 		return target.Add(time.Nanosecond * time.Duration(timeduration)), nil
 	default:
 		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, timeunit, "timeunit")
+	}
+}
+func (n *callPlanExpression) EvaluateDateTrunc(currentRow []interface{}) (interface{}, error) {
+	intervalEval, err := n.args[0].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	dateEval, err := n.args[1].Evaluate(currentRow)
+	if err != nil {
+		return nil, err
+	}
+
+	// nil if anything is nil
+	if intervalEval == nil || dateEval == nil {
+		return nil, nil
+	}
+
+	//get the date value
+	coercedDate, err := coerceValue(n.args[1].Type(), parser.NewDataTypeTimestamp(), dateEval, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	date, dateOk := coercedDate.(time.Time)
+	if !dateOk {
+		return nil, sql3.NewErrInternalf("unable to convert value")
+	}
+
+	//get the interval value
+	coercedInterval, err := coerceValue(n.args[0].Type(), parser.NewDataTypeString(), intervalEval, parser.Pos{Line: 0, Column: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	interval, intervalOk := coercedInterval.(string)
+	if !intervalOk {
+		return nil, sql3.NewErrInternalf("unable to convert value")
+	}
+
+	switch strings.ToUpper(interval) {
+	case intervalYear:
+		return date.Format("2006"), nil
+	case intervalMonth:
+		return date.Format("2006-01"), nil
+	case intervalDay:
+		return date.Format("2006-01-02"), nil
+	case intervalHour:
+		return date.Format("2006-01-02T15"), nil
+	case intervalMinute:
+		return date.Format("2006-01-02T15:04"), nil
+	case intervalSecond:
+		return date.Format("2006-01-02T15:04:05"), nil
+	case intervalMillisecond:
+		return date.Format("2006-01-02T15:04:05.000"), nil
+	case intervalMicrosecond:
+		return date.Format("2006-01-02T15:04:05.000000"), nil
+	case intervalNanosecond:
+		return date.Format("2006-01-02T15:04:05.000000000"), nil
+	default:
+		return nil, sql3.NewErrCallParameterValueInvalid(0, 0, interval, "interval")
 	}
 }
 
