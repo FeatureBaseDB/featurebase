@@ -659,6 +659,184 @@ var datetimeAddTests = TableTest{
 	},
 }
 
+var dateTruncTests = TableTest{
+
+	Table: tbl(
+		"datetrunctests",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("ts", fldTypeTimestamp, "timeunit 'ns'"),
+		),
+		srcRows(
+			srcRow(int64(1), knownSubSecondTimestamp()),
+		),
+	),
+
+	SQLTests: []SQLTest{
+		{
+			name: "DateTruncIncorrectParamsCount",
+			SQLs: sqls(
+				"select date_trunc()",
+			),
+			ExpErr: "count of formal parameters (2) does not match count of actual parameters (0)",
+		},
+		{
+			name: "DateTruncTypeError",
+			SQLs: sqls(
+				"select date_trunc(1, 2)",
+			),
+			ExpErr: "an expression of type 'int' cannot be passed to a parameter of type 'string'",
+		},
+		{
+			name: "DateTruncInvalidParam",
+			SQLs: sqls(
+				"select date_trunc('1', current_timestamp)",
+			),
+			ExpErr: "invalid value '1' for parameter 'interval'",
+		},
+		{
+			name: "DateTruncOnYear",
+			SQLs: sqls(
+				"select _id, date_trunc('yy', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnMonth",
+			SQLs: sqls(
+				"select _id, date_trunc('m', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnDay",
+			SQLs: sqls(
+				"select _id, date_trunc('d', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11-01"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnHour",
+			SQLs: sqls(
+				"select _id, date_trunc('hh', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11-01T22"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnMinute",
+			SQLs: sqls(
+				"select _id, date_trunc('mi', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11-01T22:08"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnSecond",
+			SQLs: sqls(
+				"select _id, date_trunc('s', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11-01T22:08:41"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnMilliS",
+			SQLs: sqls(
+				"select _id, date_trunc('ms', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11-01T22:08:41.100"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnMicroS",
+			SQLs: sqls(
+				"select _id, date_trunc('us', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11-01T22:08:41.100200"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "DateTruncOnNanoS",
+			SQLs: sqls(
+				"select _id, date_trunc('ns', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "2012-11-01T22:08:41.100200300"),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "VerifyTimeStamp",
+			SQLs: sqls(
+				"select _id, datetimename('ns', ts) from datetrunctests",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeString),
+			),
+			ExpRows: rows(
+				row(int64(1), "100200300"),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}
+
 var datetimedifftests = TableTest{
 	name: "DatetimeDiff",
 	Table: tbl("dttable",
