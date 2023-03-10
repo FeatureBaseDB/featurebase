@@ -263,9 +263,10 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		return p.analyzeFunctionRangeQ(call, scope)
 	case "DATETIMEFROMPARTS":
 		return p.analyzeFunctionDateTimeFromParts(call, scope)
-
 	case "DATETIMEADD":
 		return p.analyzeFunctionDatetimeAdd(call, scope)
+	case "DATETIMEDIFF":
+		return p.analyzeFunctionDateTimeDiff(call, scope)
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

@@ -138,10 +138,9 @@ const (
 	// time quantum function eval
 	ErrQRangeFromAndToTimeCannotBeBothNull errors.Code = "ErrQRangeFromAndToTimeCannotBeBothNull"
 	ErrQRangeInvalidUse                    errors.Code = "ErrQRangeInvalidUse"
-	ErrYearOutOfRange                      errors.Code = "ErrYearOutOfRange"
-
-	//evaluate errors
-	ErrDivideByZero errors.Code = "ErrDivideByZero"
+	ErrInvalidDatetimePart                 errors.Code = "ErrInvalidDatetimePart"
+	ErrOutputValueOutOfRange               errors.Code = "ErrOutputValueOutOfRange"
+	ErrDivideByZero                        errors.Code = "ErrDivideByZero"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -857,10 +856,17 @@ func NewErrQRangeInvalidUse(line, col int) error {
 	)
 }
 
-func NewErrYearOutOfRange(line, col int, year int) error {
+func NewErrInvalidDatetimePart(line, col int, datetimepart int) error {
 	return errors.New(
-		ErrYearOutOfRange,
-		fmt.Sprintf("[%d:%d] year '%d' out of range [0,9999]", line, col, year),
+		ErrInvalidDatetimePart,
+		fmt.Sprintf("[%d:%d] not a valid datetimepart %d", line, col, datetimepart),
+	)
+}
+
+func NewErrOutputValueOutOfRange(line, col int) error {
+	return errors.New(
+		ErrOutputValueOutOfRange,
+		fmt.Sprintf("[%d:%d] output value out of range", line, col),
 	)
 }
 

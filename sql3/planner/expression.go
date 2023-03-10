@@ -1588,6 +1588,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateDateTimeFromParts(currentRow)
 	case "DATETIMEADD":
 		return n.EvaluateDatetimeAdd(currentRow)
+	case "DATETIMEDIFF":
+		return n.EvaluateDatetimeDiff(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}
