@@ -3752,16 +3752,16 @@ func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.api.ReserveIDs(req.Key, req.Session, req.Offset, req.Count)
 	if err != nil {
-		var esync ErrIDOffsetDesync
+		var esync IDOffsetDesyncError
 		if errors.As(err, &esync) {
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			err = json.NewEncoder(w).Encode(struct {
-				ErrIDOffsetDesync
+				IDOffsetDesyncError
 				Err string `json:"error"`
 			}{
-				ErrIDOffsetDesync: esync,
-				Err:               err.Error(),
+				IDOffsetDesyncError: esync,
+				Err:                 err.Error(),
 			})
 			if err != nil {
 				h.logger.Debugf("failed to send desync error: %v", err)

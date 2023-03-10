@@ -40,7 +40,7 @@ var ContainerArchetypeNames = []string{
 }
 
 var containerArchetypes [][]*Container
-var containerArchetypesErr error
+var errContainerArchetypes error
 var initContainerArchetypes sync.Once
 
 func makeArchetypalContainer(rng *rand.Rand, name string) (*Container, error) {
@@ -167,9 +167,9 @@ func makeArchetypalContainer(rng *rand.Rand, name string) (*Container, error) {
 // called, and returns the results of that one call.
 func InitContainerArchetypes() ([][]*Container, error) {
 	initContainerArchetypes.Do(func() {
-		containerArchetypes, containerArchetypesErr = createContainerArchetypes(8)
+		containerArchetypes, errContainerArchetypes = createContainerArchetypes(8)
 	})
-	return containerArchetypes, containerArchetypesErr
+	return containerArchetypes, errContainerArchetypes
 }
 
 // createContainerArchetypes creates a slice of *roaring.Container corresponding

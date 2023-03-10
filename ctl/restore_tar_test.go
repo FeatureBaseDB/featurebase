@@ -24,7 +24,7 @@ func TestRestoreTarCommand_Run(t *testing.T) {
 	cm.Host = hostport
 	cm.Path = ""
 	err := cm.Run(context.Background())
-	if !errors.Is(err, UsageError) {
+	if !errors.Is(err, ErrUsage) {
 		t.Fatalf("expected usage error with empty path, got %v", err)
 	}
 	cm.Path = "nonexistent-file"

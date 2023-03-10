@@ -22,7 +22,7 @@ linters:
     # Additional linters we choose to enable.
     # - bodyclose (lots to fix, but we should)
     - errchkjson
-    # - errname (just a go style issue, but not many to change)
+    - errname
     - gofmt
     # - misspell (lots to fix, but we should)
     # - prealloc (15 to fix)

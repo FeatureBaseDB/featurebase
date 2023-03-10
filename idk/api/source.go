@@ -375,7 +375,7 @@ var friendlyTypeNames = map[reflect.Type]string{
 }
 
 // ErrDuplicateElement is an error indicating that an element was included in a set multiple times.
-type ErrDuplicateElement struct {
+type ErrDuplicateElement struct { //nolint (should be: DuplicateElementError)
 	// Elem is the duplicated element.
 	Elem interface{}
 }

@@ -810,7 +810,7 @@ func (m *Metric) Inc(d time.Duration) {
 }
 
 // ErrorList represents a list of errors.
-type ErrorList []error
+type ErrorList []error //nolint:errname
 
 // Err returns the list if it contains errors. Otherwise returns nil.
 func (a ErrorList) Err() error {

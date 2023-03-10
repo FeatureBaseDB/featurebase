@@ -50,9 +50,9 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 
 	// Validate arguments.
 	if cmd.Index == "" {
-		return fmt.Errorf("%w: %v", UsageError, pilosa.ErrIndexRequired)
+		return fmt.Errorf("%w: %v", ErrUsage, pilosa.ErrIndexRequired)
 	} else if cmd.Field == "" {
-		return fmt.Errorf("%w: %v", UsageError, pilosa.ErrFieldRequired)
+		return fmt.Errorf("%w: %v", ErrUsage, pilosa.ErrFieldRequired)
 	}
 
 	// Use output file, if specified.

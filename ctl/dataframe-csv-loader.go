@@ -149,7 +149,7 @@ func (cmd *DataframeCsvLoaderCommand) Run(ctx context.Context) (err error) {
 
 	// Validate arguments.
 	if cmd.Path == "" {
-		return fmt.Errorf("%w: --csv flag required", UsageError)
+		return fmt.Errorf("%w: --csv flag required", ErrUsage)
 	}
 
 	readFile, err := os.Open(cmd.Path)

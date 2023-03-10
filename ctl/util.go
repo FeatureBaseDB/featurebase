@@ -19,7 +19,7 @@ func (c ctlUsageError) Error() string {
 	return "usage error"
 }
 
-var UsageError ctlUsageError
+var ErrUsage ctlUsageError
 
 // startProfilingServer starts a server which handles /debug/pprof and
 // /debug/fgprof for use in utilities we might want to profile but

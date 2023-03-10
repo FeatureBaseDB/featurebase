@@ -73,7 +73,7 @@ type SchemaResponse struct {
 	ID      int    `json:"id"`      // Registry's unique id
 }
 
-type ErrorResponse struct {
+type ErrorResponse struct { //nolint:errname
 	StatusCode int    `json:"error_code"`
 	Body       string `json:"message"`
 }

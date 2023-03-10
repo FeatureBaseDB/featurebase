@@ -109,10 +109,10 @@ func (ida *idAllocator) WriteTo(w io.Writer) (int64, error) {
 	return tx.WriteTo(w)
 }
 
-// ErrIDOffsetDesync is an error generated when attempting to reserve IDs at a committed offset.
+// IDOffsetDesyncError is an error generated when attempting to reserve IDs at a committed offset.
 // This will typically happen when kafka partitions are moved between kafka ingesters - there may be a brief period in which 2 ingesters are processing the same messages at the same time.
 // The ingester can resolve this by ignoring messages under base.
-type ErrIDOffsetDesync struct {
+type IDOffsetDesyncError struct {
 	// Requested is the offset that the client attempted to reserve.
 	Requested uint64 `json:"requested"`
 
@@ -120,7 +120,7 @@ type ErrIDOffsetDesync struct {
 	Base uint64 `json:"base"`
 }
 
-func (err ErrIDOffsetDesync) Error() string {
+func (err IDOffsetDesyncError) Error() string {
 	return fmt.Sprintf("attempted to reserve IDs at committed offset %d (base offset: %d)", err.Requested, err.Base)
 }
 
@@ -149,7 +149,7 @@ func (ida *idAllocator) reserve(key IDAllocKey, session [32]byte, offset, count 
 			if offset < res.offset {
 				// This probbably means that 2 clients are running at the same time.
 				// This is fine - just tell the client that is behind what had been dealt with.
-				return ErrIDOffsetDesync{
+				return IDOffsetDesyncError{
 					Requested: offset,
 					Base:      res.offset,
 				}

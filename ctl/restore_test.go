@@ -15,13 +15,13 @@ func TestRestoreCommand_Run(t *testing.T) {
 	cm := NewRestoreCommand(cmLog)
 	cm.Path = ""
 	err := cm.Run(context.Background())
-	if !errors.Is(err, UsageError) {
+	if !errors.Is(err, ErrUsage) {
 		t.Fatalf("expected usage error, got %v", err)
 	}
 	cm.Path = "foo"
 	cm.Concurrency = 0
 	err = cm.Run(context.Background())
-	if !errors.Is(err, UsageError) {
+	if !errors.Is(err, ErrUsage) {
 		t.Fatalf("expected usage error, got %v", err)
 	}
 }

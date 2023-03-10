@@ -86,11 +86,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	// Validate arguments.
 	// Index and field are validated early before the files are parsed.
 	if cmd.Index == "" {
-		return fmt.Errorf("%w: %v", UsageError, pilosa.ErrIndexRequired)
+		return fmt.Errorf("%w: %v", ErrUsage, pilosa.ErrIndexRequired)
 	} else if cmd.Field == "" {
-		return fmt.Errorf("%w: %v", UsageError, pilosa.ErrFieldRequired)
+		return fmt.Errorf("%w: %v", ErrUsage, pilosa.ErrFieldRequired)
 	} else if len(cmd.Paths) == 0 {
-		return fmt.Errorf("%w: path required", UsageError)
+		return fmt.Errorf("%w: path required", ErrUsage)
 	}
 	// Create a client to the server.
 	client, err := commandClient(cmd)
