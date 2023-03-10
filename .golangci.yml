@@ -12,7 +12,7 @@ linters:
   enable:
     # Recommended to be enabled by default (https://golangci-lint.run).
     # - errcheck (lots to fix)
-    # - gosimple (only 10 to fix)
+    - gosimple
     - govet
     - ineffassign
     - staticcheck

@@ -4,7 +4,6 @@ package ctl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,23 +46,23 @@ func (cmd *ParquetInfoCommand) Run(ctx context.Context) error {
 			return err
 		}
 		if response.StatusCode != 200 {
-			return errors.New(fmt.Sprintf("unexpected response %d", response.StatusCode))
+			return fmt.Errorf("unexpected response %d", response.StatusCode)
 		}
 		defer response.Body.Close()
 		// download to temp file first
 		f, err = os.CreateTemp("", "BulkParquetFile.parquet")
 		if err != nil {
-			return errors.New(fmt.Sprintf("error creating tempfile %v", err))
+			return fmt.Errorf("error creating tempfile %v", err)
 		}
 		_, err = io.Copy(f, response.Body)
 		if err != nil {
-			return errors.New(fmt.Sprintf("error downloading url %v %v", cmd.Path, err))
+			return fmt.Errorf("error downloading url %v %v", cmd.Path, err)
 		}
 		defer os.Remove(f.Name())
 
 		_, err = f.Seek(0, io.SeekStart)
 		if err != nil {
-			return errors.New(fmt.Sprintf("error reseting file for reading %v ", err))
+			return fmt.Errorf("error reseting file for reading %v ", err)
 		}
 	} else {
 		f, err = os.Open(cmd.Path)

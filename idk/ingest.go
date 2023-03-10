@@ -1463,7 +1463,7 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 			for i, value := range rec.Data() {
 				name := avroFields[i].Name
 				if name == "_id" {
-					if m.index.Opts().Keys() == false {
+					if !m.index.Opts().Keys() {
 						recordID, err = toUint64(value)
 						if err != nil {
 							return errors.Errorf("unable convert _id to uint64 for index %s which is has keys set to false", m.index.Name())
@@ -1559,7 +1559,7 @@ func (m *Main) runDeleter(limitCounter *msgCounter) error {
 				m.log.Debugf("Delete consumer running the follow delete queries: %s", bq.Serialize())
 
 				resp, err := client.Query(bq, nil)
-				if err != nil || resp.Success != true {
+				if err != nil || !resp.Success {
 					return errors.Wrap(err, "error deleting values")
 				}
 			case "records":

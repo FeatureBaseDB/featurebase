@@ -91,10 +91,7 @@ type Rows []Row
 // Append appends all the values in r2 to this row and returns the result
 func (r Row) Append(r2 Row) Row {
 	row := make(Row, len(r)+len(r2))
-	// TODO(pok) use a copy here
-	for i := range r {
-		row[i] = r[i]
-	}
+	copy(row, r)
 	for i := range r2 {
 		row[i+len(r)] = r2[i]
 	}
