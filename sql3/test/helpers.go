@@ -30,7 +30,10 @@ func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interf
 
 	// get the plan so that code runs during testing
 	plan := stmt.Plan()
-	bplan, _ := json.MarshalIndent(plan, "", "    ")
+	bplan, err := json.MarshalIndent(plan, "", "    ")
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	ocolumns := stmt.Schema()
 
