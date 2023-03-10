@@ -1476,7 +1476,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	// Write the closing bracket on any exit from this method.
 	defer func() {
-		var execTime int64 = 0
+		var execTime int64
 		// we are going to make best effort here - don't actually care about the error
 		// if there was an error, the request.ElapsedTime will be zero
 		request, _ := h.api.server.SystemLayer.ExecutionRequests().GetRequest(requestID.String())

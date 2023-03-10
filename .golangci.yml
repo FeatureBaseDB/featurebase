@@ -14,7 +14,7 @@ linters:
     # - errcheck (lots to fix)
     # - gosimple (only 10 to fix)
     - govet
-    # - ineffassign (only 4 to fix)
+    - ineffassign
     - staticcheck
     - typecheck
     # - unused (about 20 to fix)

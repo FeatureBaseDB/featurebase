@@ -416,7 +416,6 @@ func (f *fragment) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err er
 // unprotectedClearBit TODO should be replaced by an invocation of
 // importPositions with a single bit to clear.
 func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
-	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
