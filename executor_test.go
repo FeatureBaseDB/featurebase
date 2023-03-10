@@ -1784,7 +1784,7 @@ func TestExecutor_ExecuteTopK(t *testing.T) {
 			fieldName:    "fmutex",
 			fieldOptions: []pilosa.FieldOption{pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10)},
 			bits:         baseBits,
-			query:        "TopK(f, k=2)",
+			query:        "TopK(fmutex, k=2)",
 			result: []pilosa.Pair{
 				{ID: 10, Count: 3},
 				{ID: 0, Count: 2},
@@ -1796,18 +1796,11 @@ func TestExecutor_ExecuteTopK(t *testing.T) {
 
 	for _, tst := range tests {
 		t.Run(tst.fieldName, func(t *testing.T) {
-			pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10)
-			c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, tst.fieldName)
+			c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, tst.fieldName, tst.fieldOptions...)
 			c.ImportBits(t, c.Idx(), tst.fieldName, tst.bits)
 			if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: tst.query}); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
-				Pairs: []pilosa.Pair{
-					{ID: 10, Count: 4},
-					{ID: 0, Count: 3},
-				},
-				Field: "f",
-			}}) {
+			} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{Pairs: tst.result, Field: tst.fieldName}}) {
 				t.Fatalf("unexpected result: %s", spew.Sdump(result))
 			}
 		})
