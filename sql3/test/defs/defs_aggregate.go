@@ -406,7 +406,7 @@ var avgTests = TableTest{
 				}),
 			),
 			ExpRows: rows(
-				row(pql.NewDecimal(0, 4)),
+				row(nil),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -422,7 +422,7 @@ var avgTests = TableTest{
 				}),
 			),
 			ExpRows: rows(
-				row(pql.NewDecimal(0, 4)),
+				row(nil),
 			),
 			Compare: CompareExactUnordered,
 		},

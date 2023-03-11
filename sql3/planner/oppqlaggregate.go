@@ -270,11 +270,7 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 				_, isAvg := i.aggregate.(*avgPlanExpression)
 				if isAvg {
 					if actualResult.Count == 0 {
-						daverage, err := pql.FromFloat64WithScale(float64(0), int(t.Scale))
-						if err != nil {
-							return nil, err
-						}
-						i.resultValue = daverage
+						i.resultValue = nil
 					} else if actualResult.DecimalVal == nil {
 						average := float64(actualResult.Val) / float64(actualResult.Count)
 						daverage, err := pql.FromFloat64WithScale(average, int(t.Scale))
