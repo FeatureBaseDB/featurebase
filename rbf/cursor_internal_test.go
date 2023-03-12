@@ -332,7 +332,7 @@ func TestCursor_putBranchCellsHandlesLotsOfNewBranchesAtTheRoot(t *testing.T) {
 
 	groups := splitLeafCells(leafcells)
 
-	var branches []branchCell
+	branches := make([]branchCell, 0, len(groups))
 
 	for i, group := range groups {
 		_ = i

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/featurebasedb/featurebase/v3"
+	pilosa "github.com/featurebasedb/featurebase/v3"
 )
 
 // Ensure cache stays constrained to its configured size.
@@ -62,7 +62,7 @@ func TestCache_Rank_Dirty(t *testing.T) {
 		cache.Add(v.ID, v.Count)
 	}
 
-	var got []pair
+	var got []pair //nolint:prealloc
 	for _, p := range cache.Top() {
 		got = append(got, pair(p))
 	}

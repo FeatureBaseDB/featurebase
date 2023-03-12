@@ -7620,7 +7620,7 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 	}
 
 	// generate string-set entries for index
-	var stringEntries [][2]string
+	stringEntries := make([][2]string, 0, len(testValues))
 	for _, v := range testValues {
 		stringEntries = append(stringEntries,
 			[2]string{v.rowKey, v.colKey})
@@ -7657,7 +7657,7 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 
 	// generate test cases per each nth argument
 	nthsFloat := []float64{0, 10, 25, 50, 75, 90, 99}
-	var tests []testCase
+	tests := make([]testCase, 0, len(nthsFloat))
 	for _, nth := range nthsFloat {
 		query := fmt.Sprintf(`Percentile(field="net_worth", filter=Row(val="foo"), nth=%f)`, nth)
 		expectedPercentile := getExpectedPercentile(nums, nth)

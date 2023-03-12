@@ -57,7 +57,7 @@ func (c *CallStats) Report(title string) (r string) {
 	r = fmt.Sprintf("CallStats: (%v)\n", title)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var lines []*LineSorter
+	lines := make([]*LineSorter, 0, len(c.elap))
 	for id, elap := range c.elap {
 		slc := elap.dur
 		n := len(slc)

@@ -134,7 +134,7 @@ func (v *view) openWithShardSet(ss *shardSet) error {
 
 	shards := ss.CloneMaybe()
 
-	var frags []*fragment
+	frags := make([]*fragment, 0, len(shards))
 	for shard := range shards {
 		frag := v.newFragment(shard)
 		frags = append(frags, frag)

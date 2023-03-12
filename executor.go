@@ -2321,7 +2321,7 @@ func (e *executor) executeTopKShardTime(ctx context.Context, tx Tx, filter *Row,
 	}
 
 	// Fetch fragments.
-	var fragments []*fragment
+	fragments := make([]*fragment, 0, len(views))
 	for _, view := range views {
 		f := e.Holder.fragment(index, field, view, shard)
 		if f == nil {

@@ -459,7 +459,7 @@ func (t *Table) HasValidPrimaryKey() bool {
 
 // FieldNames returns the list of field names associated with the table.
 func (t *Table) FieldNames() []FieldName {
-	var ret []FieldName
+	ret := make([]FieldName, 0, len(t.Fields))
 	for _, f := range t.Fields {
 		ret = append(ret, f.Name)
 	}
