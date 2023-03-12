@@ -465,7 +465,7 @@ func (s *Source) Close() error {
 					s.opened = false
 				}
 			case <-time.After(time.Duration(s.consumerCloseTimeout * 1000 * 1000 * 1000)):
-				err = fmt.Errorf("Unable to properly close consumer %s after %f seconds", s.client.String(), time.Since(start).Seconds())
+				err = fmt.Errorf("unable to properly close consumer %s after %f seconds", s.client.String(), time.Since(start).Seconds())
 			}
 
 			return errors.Wrap(err, "closing kafka consumer")

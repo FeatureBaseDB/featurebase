@@ -36,7 +36,7 @@ func init() {
 
 // TODO(rdp): add refresh token to this as well
 
-// NewDataframeCsvLoaderCommand
+// DataframeCsvLoaderCommand is used to load a dataframe from CSV.
 type DataframeCsvLoaderCommand struct {
 	tlsConfig *tls.Config
 

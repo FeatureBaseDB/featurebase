@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	gohttp "net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -138,7 +137,7 @@ func (cmd *RestoreTarCommand) Run(ctx context.Context) (err error) {
 	if primary == nil {
 		return errors.New("no primary")
 	}
-	c := &gohttp.Client{}
+	c := &http.Client{}
 	// buf := new(bytes.Buffer)
 	mb512 := 2 << 29
 	buf := buffer.NewFileBuffer(mb512, cmd.TempDir)
@@ -319,7 +318,7 @@ func (cmd *RestoreTarCommand) TLSHost() string { return cmd.Host }
 func (cmd *RestoreTarCommand) TLSConfiguration() server.TLSConfig { return cmd.TLS }
 
 func Post(ctx context.Context, url, contentType string, rd io.Reader, query map[string]string) error {
-	client := &gohttp.Client{}
+	client := &http.Client{}
 	req, err := http.NewRequest(http.MethodPost, url, rd)
 	if err != nil {
 		return err

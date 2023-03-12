@@ -495,7 +495,7 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 		}
 	}
 	var (
-		heartbeats int = 0
+		heartbeats = 0
 	)
 	e.nodeMu.Lock()
 	nodes := e.populateNodeStates(ctx)

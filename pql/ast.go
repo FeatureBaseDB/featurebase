@@ -341,6 +341,7 @@ type callStackElem struct {
 	inList    bool
 }
 
+// CallType represents a Call type such as "global" or "per-node".
 // Some call types may require special handling, which needs to occur
 // before distributing processing to individual shards.
 type CallType byte

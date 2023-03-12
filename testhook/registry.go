@@ -80,6 +80,8 @@ type RegistryHookPostDestroy interface {
 	WasDestroyed(interface{}, KV, *RegistryEntry, error) error
 }
 
+// RegistryHookLive is an interface implemented by a registry hook.
+//
 // If a registry's hooks implement RegistryHookLive, Live() should
 // return only those entries for which a non-nil error was returned, with the
 // error inserted in the RegistryEntry.
