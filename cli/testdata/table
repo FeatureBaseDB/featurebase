@@ -49,7 +49,7 @@ EXPECT:
 // running this creates the fb_views sytem table which has a description.
 // And it's annoying to mask out all of the description fields because we
 // don't know which row fb_views will fall into.
-SEND:SELECT * from users;
+SEND:SELECT * FROM users;
 EXPECT:+-----+-------+-----+
 EXPECT:| _id | name  | age |
 EXPECT:+-----+-------+-----+

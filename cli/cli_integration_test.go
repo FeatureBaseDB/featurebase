@@ -69,6 +69,7 @@ func TestCLIIntegration(t *testing.T) {
 			"meta_file",
 			"meta_pset_border",
 			"meta_pset_expanded",
+			"meta_pset_format_csv",
 			"meta_pset_tuples_only",
 			"meta_include",
 			"meta_output",

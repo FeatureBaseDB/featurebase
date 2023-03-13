@@ -46,5 +46,6 @@ EXPECT:Border style is 2.
 SEND:\pset
 EXPECT:border      2
 EXPECT:expanded    off
+EXPECT:format      aligned
 EXPECT:location    UTC
 EXPECT:tuples_only off

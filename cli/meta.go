@@ -294,6 +294,40 @@ func (m *metaFile) execute(cmd *Command) (responseAction, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
+// format (sub-command of pset)
+// ////////////////////////////////////////////////////////////////////////////
+type metaFormat struct {
+	args []string
+}
+
+func newMetaFormat(args []string) *metaFormat {
+	return &metaFormat{
+		args: args,
+	}
+}
+
+func (m *metaFormat) execute(cmd *Command) (responseAction, error) {
+	switch len(m.args) {
+	case 0:
+		// pass
+	case 1:
+		switch m.args[0] {
+		case formatAligned:
+			cmd.writeOptions.format = formatAligned
+		case formatCSV:
+			cmd.writeOptions.format = formatCSV
+		default:
+			return actionNone, errors.Errorf("\\pset: allowed formats are aligned, csv")
+		}
+	default:
+		return actionNone, errors.Errorf("meta command 'format' takes zero or one argument")
+	}
+
+	cmd.Printf("Output format is %s.\n", cmd.writeOptions.format)
+	return actionNone, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
 // help (?)
 // ////////////////////////////////////////////////////////////////////////////
 type metaHelp struct {
@@ -335,7 +369,7 @@ Informational
 
 Formatting
   \pset [NAME [VALUE]]   set table output option
-                         (border|expanded|location|tuples_only)
+                         (border|expanded|format|location|tuples_only)
   \t [on|off]            show only rows
   \x [on|off]            toggle expanded output
 
@@ -634,6 +668,7 @@ func (m *metaPSet) print(cmd *Command) {
 
 	fmt := `border      %d
 expanded    %s
+format      %s
 location    %s
 tuples_only %s
 `
@@ -641,6 +676,7 @@ tuples_only %s
 	cmd.Printf(fmt,
 		cmd.writeOptions.border,
 		onOff(cmd.writeOptions.expanded),
+		cmd.writeOptions.format,
 		cmd.writeOptions.location,
 		onOff(cmd.writeOptions.tuplesOnly),
 	)
@@ -659,6 +695,9 @@ func (m *metaPSet) execute(cmd *Command) (responseAction, error) {
 			return sub.execute(cmd)
 		case "expanded", "x":
 			sub := newMetaExpanded(m.args[1:])
+			return sub.execute(cmd)
+		case "format":
+			sub := newMetaFormat(m.args[1:])
 			return sub.execute(cmd)
 		case "location":
 			sub := newMetaLocation(m.args[1:])

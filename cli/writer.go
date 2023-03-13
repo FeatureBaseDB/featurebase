@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/csv"
 	"fmt"
 	"io"
+	"log"
 	"time"
 
 	featurebase "github.com/featurebasedb/featurebase/v3"
@@ -16,15 +18,22 @@ import (
 type writeOptions struct {
 	border     int
 	expanded   bool
+	format     string
 	location   *time.Location
 	timing     bool
 	tuplesOnly bool
 }
 
+const (
+	formatAligned = "aligned"
+	formatCSV     = "csv"
+)
+
 func defaultWriteOptions() *writeOptions {
 	return &writeOptions{
 		border:     1,
 		expanded:   false,
+		format:     formatAligned,
 		location:   time.Local,
 		timing:     false,
 		tuplesOnly: false,
@@ -45,6 +54,101 @@ func writeOutput(r *featurebase.WireQueryResponse, opts *writeOptions, qOut io.W
 		return writeWarnings(r, wErr)
 	}
 
+	switch opts.format {
+	case formatAligned:
+		if err := writeTable(r, opts, qOut); err != nil {
+			return errors.Wrap(err, "writing table")
+		}
+
+		// Add some white space after query results.
+		qOut.Write([]byte("\n"))
+
+	case formatCSV:
+		if err := writeCSV(r, opts, qOut); err != nil {
+			return errors.Wrap(err, "writing csv")
+		}
+
+	default:
+		return errors.Errorf("invalid format: %s", opts.format)
+	}
+
+	if err := writeWarnings(r, wErr); err != nil {
+		return err
+	}
+
+	// Timing.
+	if opts.timing {
+		if _, err := wOut.Write([]byte(fmt.Sprintf("Execution time: %dμs\n", r.ExecutionTime))); err != nil {
+			return errors.Wrapf(err, "writing execution time: %s", r.Error)
+		}
+	}
+
+	return nil
+}
+
+// writeCSV writes the WireQueryResponse to qOut as csv.
+func writeCSV(r *featurebase.WireQueryResponse, opts *writeOptions, qOut io.Writer) error {
+	w := csv.NewWriter(qOut)
+
+	if opts.expanded {
+		// Expanded csv
+
+		// rec is used to write the row as a slice of strings. It is reused to
+		// avoid unnecessary memory allocation.
+		rec := make([]string, 2)
+
+		for _, row := range r.Data {
+			cleanRow(row, opts)
+			for i, col := range r.Schema.Fields {
+				rec[0] = string(col.Name)
+				rec[1] = fmt.Sprintf("%v", row[i])
+
+				// Write the record.
+				if err := w.Write(rec); err != nil {
+					log.Fatalln("error writing expanded record to csv:", err)
+				}
+			}
+		}
+
+	} else {
+		// Normal csv (i.e. NOT expanded)
+
+		// Write the schema.
+		if !opts.tuplesOnly {
+			header := make([]string, 0, len(r.Schema.Fields))
+			for i := range r.Schema.Fields {
+				header = append(header, string(r.Schema.Fields[i].Name))
+			}
+			if err := w.Write(header); err != nil {
+				return errors.Wrapf(err, "error writing header to csv")
+			}
+		}
+
+		// Write the records.
+
+		// rec is used to write the row as a slice of strings. It is reused to
+		// avoid unnecessary memory allocation.
+		rec := make([]string, len(r.Schema.Fields))
+
+		for _, row := range r.Data {
+			cleanRow(row, opts)
+			for i := range row {
+				rec[i] = fmt.Sprintf("%v", row[i])
+			}
+			if err := w.Write(rec); err != nil {
+				log.Fatalln("error writing record to csv:", err)
+			}
+		}
+	}
+
+	// Write any buffered data to the underlying writer (standard output).
+	w.Flush()
+
+	return w.Error()
+}
+
+// writeTable writes the WireQueryResponse to qOut in a tabular format.
+func writeTable(r *featurebase.WireQueryResponse, opts *writeOptions, qOut io.Writer) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(qOut)
 	switch opts.border {
@@ -92,20 +196,6 @@ func writeOutput(r *featurebase.WireQueryResponse, opts *writeOptions, qOut io.W
 		}
 	}
 	t.Render()
-
-	if err := writeWarnings(r, wErr); err != nil {
-		return err
-	}
-
-	// Add some white space after query results.
-	qOut.Write([]byte("\n"))
-
-	// Timing.
-	if opts.timing {
-		if _, err := wOut.Write([]byte(fmt.Sprintf("Execution time: %dμs\n", r.ExecutionTime))); err != nil {
-			return errors.Wrapf(err, "writing execution time: %s", r.Error)
-		}
-	}
 
 	return nil
 }
