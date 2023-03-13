@@ -19,7 +19,7 @@ SEND:\timing on extra
 EXPECT:executing meta command: meta command 'timing' takes zero or one argument
 
 
-SEND:SELECT * from users;
+SEND:SELECT * FROM users;
 EXPECT:+-----+-------+-----+
 EXPECT:| _id | name  | age |
 EXPECT:+-----+-------+-----+
@@ -35,7 +35,7 @@ SEND:\timing off
 EXPECT:Timing is off.
 
 // Ensure we don't get timing.
-SEND:SELECT * from users;
+SEND:SELECT * FROM users;
 EXPECT:+-----+-------+-----+
 EXPECT:| _id | name  | age |
 EXPECT:+-----+-------+-----+

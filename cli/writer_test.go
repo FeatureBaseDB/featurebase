@@ -58,6 +58,7 @@ func TestWriter(t *testing.T) {
 				format: &writeOptions{
 					border:     1,
 					expanded:   false,
+					format:     formatAligned,
 					timing:     true,
 					tuplesOnly: false,
 				},
@@ -77,6 +78,7 @@ func TestWriter(t *testing.T) {
 				format: &writeOptions{
 					border:     2,
 					expanded:   false,
+					format:     formatAligned,
 					timing:     false,
 					tuplesOnly: false,
 				},
@@ -98,6 +100,7 @@ func TestWriter(t *testing.T) {
 				format: &writeOptions{
 					border:     0,
 					expanded:   false,
+					format:     formatAligned,
 					timing:     false,
 					tuplesOnly: false,
 				},
@@ -117,6 +120,7 @@ func TestWriter(t *testing.T) {
 				format: &writeOptions{
 					border:     1,
 					expanded:   false,
+					format:     formatAligned,
 					timing:     false,
 					tuplesOnly: true,
 				},
@@ -134,6 +138,7 @@ func TestWriter(t *testing.T) {
 				format: &writeOptions{
 					border:     2,
 					expanded:   true,
+					format:     formatAligned,
 					timing:     false,
 					tuplesOnly: false,
 				},
@@ -164,7 +169,7 @@ func TestWriter(t *testing.T) {
 				wOut := bytes.NewBuffer(make([]byte, 0, 100000))
 				wErr := bytes.NewBuffer(make([]byte, 0, 100000))
 
-				assert.NoError(t, writeTable(wqr, test.format, qOut, wOut, wErr))
+				assert.NoError(t, writeOutput(wqr, test.format, qOut, wOut, wErr))
 
 				assert.Equal(t, test.expQOut, qOut.String())
 				assert.Equal(t, test.expOut, wOut.String())

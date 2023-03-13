@@ -1,0 +1,47 @@
+SEND:\pset format csv
+EXPECT:Output format is csv.
+
+SEND:SELECT * FROM users;
+EXPECT:_id,name,age
+EXPECT:1,Anne,38
+EXPECT:2,Bill,23
+EXPECT:3,Cindy,64
+
+// Exclude headers.
+SEND:\t on
+EXPECT:Tuples only is on.
+
+SEND:SELECT * FROM users;
+EXPECT:1,Anne,38
+EXPECT:2,Bill,23
+EXPECT:3,Cindy,64
+
+// Reset headers.
+SEND:\t off
+EXPECT:Tuples only is off.
+
+// Set expanded to on.
+SEND:\x on
+EXPECT:Expanded display is on.
+
+SEND:SELECT * FROM users;
+EXPECT:_id,1
+EXPECT:name,Anne
+EXPECT:age,38
+EXPECT:_id,2
+EXPECT:name,Bill
+EXPECT:age,23
+EXPECT:_id,3
+EXPECT:name,Cindy
+EXPECT:age,64
+
+// Set expanded back to off.
+SEND:\x off
+EXPECT:Expanded display is off.
+
+// Set format back to aligned as we started.
+SEND:\pset format aligned
+EXPECT:Output format is aligned.
+
+SEND:\pset format invalid
+EXPECT:executing meta command: \pset: allowed formats are aligned, csv

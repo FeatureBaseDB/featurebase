@@ -393,7 +393,7 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 		}
 		return errors.Wrap(err, "making query")
 	}
-	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.stdout, cmd.stderr); err != nil {
+	if err := writeOutput(queryResponse, cmd.writeOptions, cmd.output, cmd.stdout, cmd.stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
 
