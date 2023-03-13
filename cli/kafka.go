@@ -65,6 +65,6 @@ func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 	return kafka.NewRunner(
 		idkCfg,
 		batch.NewSQLBatcher(cmd, flds),
-		cmd.Stderr,
+		cmd.stderr,
 	), nil
 }

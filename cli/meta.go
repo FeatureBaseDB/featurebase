@@ -81,7 +81,7 @@ func (m *metaBang) execute(cmd *Command) (responseAction, error) {
 	}
 	c := exec.Command(m.args[0])
 	c.Args = m.args
-	c.Stdout = cmd.Stdout
+	c.Stdout = cmd.stdout
 	err := c.Run()
 	return actionNone, errors.Wrap(err, "running bang command")
 }
@@ -192,7 +192,7 @@ func newMetaEcho(args []string) *metaEcho {
 }
 
 func (m *metaEcho) execute(cmd *Command) (responseAction, error) {
-	return echo(m.args, cmd.Stdout)
+	return echo(m.args, cmd.stdout)
 }
 
 func echo(args []string, w io.Writer) (responseAction, error) {
@@ -335,7 +335,7 @@ Informational
 
 Formatting
   \pset [NAME [VALUE]]   set table output option
-                         (border|expanded|tuples_only)
+                         (border|expanded|location|tuples_only)
   \t [on|off]            show only rows
   \x [on|off]            toggle expanded output
 
@@ -492,6 +492,37 @@ func (m *metaListViews) execute(cmd *Command) (responseAction, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
+// location (sub-command of pset)
+// ////////////////////////////////////////////////////////////////////////////
+type metaLocation struct {
+	args []string
+}
+
+func newMetaLocation(args []string) *metaLocation {
+	return &metaLocation{
+		args: args,
+	}
+}
+
+func (m *metaLocation) execute(cmd *Command) (responseAction, error) {
+	switch len(m.args) {
+	case 0:
+		// pass
+	case 1:
+		loc, err := time.LoadLocation(m.args[0])
+		if err != nil {
+			return actionNone, errors.Wrapf(err, "loading location: %s", m.args[0])
+		}
+		cmd.writeOptions.location = loc
+	default:
+		return actionNone, errors.Errorf("meta command 'location' takes zero or one argument")
+	}
+
+	cmd.Printf("Location is %s.\n", cmd.writeOptions.location)
+	return actionNone, nil
+}
+
+// ////////////////////////////////////////////////////////////////////////////
 // org
 // ////////////////////////////////////////////////////////////////////////////
 type metaOrg struct {
@@ -542,7 +573,7 @@ func (m *metaOutput) execute(cmd *Command) (responseAction, error) {
 		}
 
 		// Set cmd.output to cmd.Stdout.
-		cmd.output = cmd.Stdout
+		cmd.output = cmd.stdout
 
 		return actionNone, nil
 
@@ -603,12 +634,14 @@ func (m *metaPSet) print(cmd *Command) {
 
 	fmt := `border      %d
 expanded    %s
+location    %s
 tuples_only %s
 `
 
 	cmd.Printf(fmt,
 		cmd.writeOptions.border,
 		onOff(cmd.writeOptions.expanded),
+		cmd.writeOptions.location,
 		onOff(cmd.writeOptions.tuplesOnly),
 	)
 
@@ -626,6 +659,9 @@ func (m *metaPSet) execute(cmd *Command) (responseAction, error) {
 			return sub.execute(cmd)
 		case "expanded", "x":
 			sub := newMetaExpanded(m.args[1:])
+			return sub.execute(cmd)
+		case "location":
+			sub := newMetaLocation(m.args[1:])
 			return sub.execute(cmd)
 		case "tuples_only", "t":
 			sub := newMetaTuplesOnly(m.args[1:])
@@ -678,7 +714,7 @@ func newMetaReset() *metaReset {
 }
 
 func (m *metaReset) execute(cmd *Command) (responseAction, error) {
-	cmd.Printf(cmd.buffer.reset())
+	cmd.Printf(cmd.buffer.reset() + "\n")
 	return actionReset, nil
 }
 
@@ -746,7 +782,7 @@ func (m *metaTiming) execute(cmd *Command) (responseAction, error) {
 		case "off":
 			cmd.writeOptions.timing = false
 		default:
-			return actionNone, errors.Errorf("unrecognized value \"%s\" for \"\timing\": Boolean expected", m.args[0])
+			return actionNone, errors.Errorf("unrecognized value \"%s\" for \"\\timing\": Boolean expected", m.args[0])
 		}
 	default:
 		return actionNone, errors.Errorf("meta command 'timing' takes zero or one argument")
@@ -843,7 +879,7 @@ func newMetaWarn(args []string) *metaWarn {
 }
 
 func (m *metaWarn) execute(cmd *Command) (responseAction, error) {
-	return echo(m.args, cmd.Stderr)
+	return echo(m.args, cmd.stderr)
 }
 
 // ////////////////////////////////////////////////////////////////////////////

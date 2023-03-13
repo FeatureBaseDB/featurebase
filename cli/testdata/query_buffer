@@ -1,0 +1,40 @@
+SEND:select 1 as foo;
+EXPECT:+-----+
+EXPECT:| foo |
+EXPECT:+-----+
+EXPECT:|   1 |
+EXPECT:+-----+
+EXPECT:
+
+SEND:\p
+EXPECT:select 1 as foo;
+
+SEND:select 2
+SEND:\p
+EXPECT:select 2
+SEND:\r
+EXPECT:Query buffer reset (cleared).
+
+SEND:\p
+EXPECT:select 1 as foo;
+
+SEND:select 3
+SEND:\p
+EXPECT:select 3
+
+SEND:as foo
+SEND:\p
+EXPECT:select 3
+EXPECT:as foo
+
+SEND:;
+EXPECT:+-----+
+EXPECT:| foo |
+EXPECT:+-----+
+EXPECT:|   3 |
+EXPECT:+-----+
+EXPECT:
+
+SEND:\p
+EXPECT:select 3
+EXPECT:as foo;

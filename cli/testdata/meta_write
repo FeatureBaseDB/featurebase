@@ -1,0 +1,24 @@
+// Make sure there's something in the query buffer.
+// This is left unterminated because we don't need to execute the query;
+// we just need there to be something in the buffer.
+SEND:SELECT * FROM invalid-table
+SEND:\write query-buffer-contents
+
+// Reset the buffer.
+SEND:\r
+EXPECT:Query buffer reset (cleared).
+
+// Read from the file.
+SEND:\! cat query-buffer-contents
+EXPECT:SELECT * FROM invalid-table
+
+// Remove the file.
+SEND:\! rm query-buffer-contents
+
+// Send \write with no arguments.
+SEND:\write
+EXPECT:\w: missing required argument
+
+// Send \write with extra arguments.
+SEND:\write filename extra
+EXPECT:executing meta command: meta command 'w' exactly one argument

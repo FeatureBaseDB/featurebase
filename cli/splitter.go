@@ -30,7 +30,12 @@ func newSplitter(r *replacer) *splitter {
 // 2- [metaCommands...]: "\! pwd \q"
 // 3- [queryParts...][metaCommands...]: "select * from \i file.sql"
 func (s *splitter) split(line string) ([]queryPart, []metaCommand, error) {
-	// Look for a meta command
+	// Look for a comment line.
+	if strings.HasPrefix(line, "--") {
+		return nil, nil, nil
+	}
+
+	// Look for a meta command.
 	parts := strings.SplitN(line, `\`, 2)
 
 	switch len(parts) {

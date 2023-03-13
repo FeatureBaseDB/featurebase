@@ -1,0 +1,52 @@
+SEND:\pset border 2
+EXPECT:Border style is 2.
+
+SEND:SELECT 1 as foo, 'baz' as bar;
+EXPECT:+-----+-----+
+EXPECT:| foo | bar |
+EXPECT:+-----+-----+
+EXPECT:|   1 | baz |
+EXPECT:+-----+-----+
+EXPECT:
+
+SEND:\pset border
+EXPECT:Border style is 2.
+
+SEND:\pset border 999
+EXPECT:Border style is 0.
+
+SEND:\pset border 1
+EXPECT:Border style is 1.
+
+SEND:SELECT 1 as foo, 'baz' as bar;
+EXPECT: foo | bar 
+EXPECT:-----+-----
+EXPECT:   1 | baz 
+EXPECT:
+
+SEND:\pset border 2
+EXPECT:Border style is 2.
+
+SEND:SELECT 1 as foo, 'baz' as bar;
+EXPECT:+-----+-----+
+EXPECT:| foo | bar |
+EXPECT:+-----+-----+
+EXPECT:|   1 | baz |
+EXPECT:+-----+-----+
+EXPECT:
+
+SEND:\pset border 0
+EXPECT:Border style is 0.
+
+SEND:SELECT 1 as foo, 'baz' as bar;
+EXPECT:foo bar
+EXPECT:--- ---
+EXPECT:  1 baz
+EXPECT:
+
+SEND:\pset border 1 extra
+EXPECT:executing meta command: meta command 'pset' takes zero, one, or two arguments
+
+// Set border back to the testing default.
+SEND:\pset border 2
+EXPECT:Border style is 2.

@@ -56,9 +56,9 @@ type Command struct {
 
 	Queryer Queryer `json:"-"`
 
-	Stdin  io.ReadCloser `json:"-"`
-	Stdout io.Writer     `json:"-"`
-	Stderr io.Writer     `json:"-"`
+	stdin  io.ReadCloser `json:"-"`
+	stdout io.Writer     `json:"-"`
+	stderr io.Writer     `json:"-"`
 
 	// output is where actual results are written. This might point to stdout,
 	// or to a file, based on the current configuration.
@@ -116,9 +116,9 @@ func NewCommand(logdest logger.Logger) *Command {
 		splitter:   newSplitter(newReplacer(variables)),
 		workingDir: newWorkingDir(),
 
-		Stdin:  Stdin,
-		Stdout: Stdout,
-		Stderr: Stderr,
+		stdin:  Stdin,
+		stdout: Stdout,
+		stderr: Stderr,
 
 		output:       Stdout,
 		writeOptions: defaultWriteOptions(),
@@ -127,6 +127,23 @@ func NewCommand(logdest logger.Logger) *Command {
 
 		quit: make(chan struct{}),
 	}
+}
+
+// SetStdin sets stdin. This is useful for initial configuration in tests.
+func (cmd *Command) SetStdin(rc io.ReadCloser) {
+	cmd.stdin = rc
+}
+
+// SetStdout sets both stdout and output to the value provided. This is useful
+// for initial configuration in tests.
+func (cmd *Command) SetStdout(w io.Writer) {
+	cmd.stdout = w
+	cmd.output = w
+}
+
+// SetStderr sets stderr. This is useful for initial configuration in tests.
+func (cmd *Command) SetStderr(w io.Writer) {
+	cmd.stderr = w
 }
 
 // Run is the main entry-point to the CLI.
@@ -209,9 +226,9 @@ func (cmd *Command) run(ctx context.Context) error {
 		HistoryLimit:           100000,
 		DisableAutoSaveHistory: true,
 
-		Stdin:  cmd.Stdin,
-		Stdout: cmd.Stdout,
-		Stderr: cmd.Stderr,
+		Stdin:  cmd.stdin,
+		Stdout: cmd.stdout,
+		Stderr: cmd.stderr,
 	})
 	if err != nil {
 		return errors.Wrap(err, "getting readline")
@@ -376,7 +393,7 @@ func (cmd *Command) executeAndWriteQuery(qry query) error {
 		}
 		return errors.Wrap(err, "making query")
 	}
-	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
+	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.stdout, cmd.stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
 
@@ -421,7 +438,7 @@ func (n *nopPrinter) Errorf(format string, a ...any)  {}
 // Printf is a helper method which sends the given payload to stdout.
 func (cmd *Command) Printf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
-	cmd.Stdout.Write([]byte(out))
+	cmd.stdout.Write([]byte(out))
 }
 
 // Outputf is a helper method which sends the given payload to output.
@@ -433,7 +450,7 @@ func (cmd *Command) Outputf(format string, a ...any) {
 // Errorf is a helper method which sends the given payload to stderr.
 func (cmd *Command) Errorf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
-	cmd.Stderr.Write([]byte(out))
+	cmd.stderr.Write([]byte(out))
 }
 
 func (cmd *Command) setupHistory() {

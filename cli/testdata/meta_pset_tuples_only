@@ -1,0 +1,34 @@
+// Set to off.
+SEND:\pset tuples_only off
+EXPECT:Tuples only is off.
+
+// Set to on.
+SEND:\pset tuples_only on
+EXPECT:Tuples only is on.
+
+// Toggle to off.
+SEND:\pset tuples_only
+EXPECT:Tuples only is off.
+
+// Toggle to on.
+SEND:\pset tuples_only
+EXPECT:Tuples only is on.
+
+// Set to something invalid.
+SEND:\pset tuples_only invalid
+EXPECT:executing meta command: unrecognized value "invalid" for "tuples_only": Boolean expected
+
+// Ensure tuples_only shows only tuples.
+SEND:SELECT 1 as foo, 'baz' as bar;
+EXPECT:+---+-----+
+EXPECT:| 1 | baz |
+EXPECT:+---+-----+
+EXPECT:
+
+// Set back to off as we started.
+SEND:\pset tuples_only off
+EXPECT:Tuples only is off.
+
+// make sure the \t meta-command returns expected errors
+SEND:\t off extra
+EXPECT:executing meta command: meta command 'tuples_only' takes zero or one argument

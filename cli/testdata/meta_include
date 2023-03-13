@@ -1,0 +1,24 @@
+// Include with no argument should error.
+SEND:\i
+EXPECT:executing meta command: meta command 'include' requires exactly one argument
+
+// Include with too many arguments should error.
+SEND:\include testdata/people.sql extra
+EXPECT:executing meta command: meta command 'include' requires exactly one argument
+
+// Invalid file should error.
+SEND:\include invalid.file
+EXPECT:executing meta command: opening file: invalid.file: open invalid.file: no such file or directory
+
+SEND:\include testdata/people.sql
+EXPECT:
+EXPECT:
+EXPECT:+-----+------+-----+
+EXPECT:| _id | name | age |
+EXPECT:+-----+------+-----+
+EXPECT:|   1 | Amy  |  42 |
+EXPECT:|   2 | Bob  |  27 |
+EXPECT:|   3 | Carl |  33 |
+EXPECT:+-----+------+-----+
+EXPECT:
+EXPECT:mix in a meta command
