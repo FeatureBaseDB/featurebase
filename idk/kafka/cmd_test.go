@@ -1553,7 +1553,8 @@ func TestCloseTimeout(t *testing.T) {
 			t.Errorf("issue reading consumer log: %s", err)
 		}
 		s := string(buf)
-		if !(strings.Contains(s, "Application maximum poll interval") && strings.Contains(s, "Unable to properly close consumer")) {
+		if !(strings.Contains(s, "Application maximum poll interval") &&
+			strings.Contains(s, "unable to properly close consumer")) {
 			fmt.Println(s)
 			t.Errorf("the consumer did not exceed max.poll.interval.ms or the consumer was closed properly when it shouldn't have")
 		}
