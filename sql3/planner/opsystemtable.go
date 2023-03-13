@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -22,6 +23,9 @@ const (
 	fbExecRequests        = "fb_exec_requests"
 	fbPerformanceCounters = "fb_performance_counters"
 
+	fbClusterInfo  = "fb_cluster_info"
+	fbClusterNodes = "fb_cluster_nodes"
+
 	fbTableDDL = "fb_table_ddl"
 )
 
@@ -31,7 +35,37 @@ type systemTable struct {
 	requiresFanout bool
 }
 
-var systemTables = map[string]*systemTable{
+type systemTableMap map[string]*systemTable
+
+
+// table enables backwards compatibility with changing the system table names
+// from fb_cluster_nodes and fb_cluster_info to fb_database_nodes and fb_database_info
+// respectively.
+func (s systemTableMap) table(name string) (*systemTable, bool) {
+	switch name {
+	case fbClusterInfo:
+		name = fbDatabaseInfo
+	case fbClusterNodes:
+		name = fbDatabaseNodes
+	}
+
+	t, ok := s[name]
+	return t, ok
+}
+
+// ordered returns the map as an ordered slice of systemTable.
+func (s systemTableMap) ordered() []*systemTable {
+	out := make([]*systemTable, 0, len(s))
+	for _, v := range s {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].name < out[j].name
+	})
+	return out
+}
+
+var systemTables = systemTableMap{
 	fbDatabaseInfo: {
 		name: fbDatabaseInfo,
 		schema: types.Schema{

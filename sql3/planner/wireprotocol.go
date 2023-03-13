@@ -105,7 +105,7 @@ func newMessagePlanOp(p *ExecutionPlanner, reader io.Reader) (*messagePlanOp, er
 	}
 	name := string(bname)
 
-	st, ok := systemTables[name]
+	st, ok := systemTables.table(name)
 	if !ok {
 		return nil, sql3.NewErrInternalf("unexpected system table name %s", name)
 	}
