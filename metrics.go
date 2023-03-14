@@ -309,6 +309,7 @@ var CounterTransactionEnd = prometheus.NewCounter(
 )
 
 // TODO(pok) do these need index names?
+
 var CounterRecalculateCache = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Namespace: "pilosa",
@@ -806,7 +807,7 @@ var CounterQueryArrowTotal = prometheus.NewCounterVec(
 	},
 )
 
-// bitmap calls
+// CounterQueryBitmapTotal represents bitmap calls.
 var CounterQueryBitmapTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Namespace: "pilosa",

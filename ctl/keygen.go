@@ -12,7 +12,7 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
-// Keygen represents a command for generating a cryptographic key.
+// KeygenCommand represents a command for generating a cryptographic key.
 type KeygenCommand struct {
 	stdout    io.Writer
 	logDest   logger.Logger

@@ -172,7 +172,7 @@ func (f FilterKey) MatchOneUntilSameOffset() FilterResult {
 	return f.MatchOneUntilOffset(uint64(f) & keyMask)
 }
 
-// A BitmapFilter, given a series of key/data pairs, is considered to "match"
+// BitmapFilter is, given a series of key/data pairs, considered to "match"
 // some of those containers. Matching may be dependent on key values and
 // cardinalities alone, or on the contents of the container.
 //
@@ -677,7 +677,7 @@ func (b *BitmapRowFilterMultiFilter) ConsiderData(key FilterKey, data *Container
 	return b.SetResult(key, key.MatchReject(lowestYes, lowestYesNo))
 }
 
-// BitmapBitmap filter builds a list of positions in the bitmap which
+// BitmapBitmapFilter builds a list of positions in the bitmap which
 // match those in a provided bitmap. It is shard-agnostic; no matter what
 // offsets the input bitmap's containers have, it matches them against
 // corresponding keys.

@@ -124,7 +124,7 @@ func extractSelectFields(index *pilosa.Index, stmt *sqlparser.Select) ([]Column,
 		switch expr := item.(type) {
 		case *sqlparser.AliasedExpr:
 			var column Column
-			var alias string = expr.As.String()
+			var alias = expr.As.String()
 			switch colExpr := expr.Expr.(type) {
 			case *sqlparser.ColName:
 				fieldName := colExpr.Name.String()

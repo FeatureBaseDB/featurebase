@@ -21,7 +21,7 @@ import (
 
 //TODO(pok) push down filters thru subqueries with aliases
 
-// a function prototype for all optimizer rules
+// OptimizerFunc is a function prototype for all optimizer rules.
 type OptimizerFunc func(context.Context, *ExecutionPlanner, types.PlanOperator, *OptimizerScope) (types.PlanOperator, bool, error)
 
 // a list of optimzer rules; order can be important important
@@ -62,8 +62,9 @@ var optimizerFunctions = []OptimizerFunc{
 	pushdownPQLTop,
 }
 
-// this will be used in future for symbol resolution when CTEs and subquery support matures
-// and we need to introduce the concept of scope to symbol resolution
+// OptimizerScope will be used in future for symbol resolution when CTEs and
+// subquery support matures and we need to introduce the concept of scope to
+// symbol resolution.
 type OptimizerScope struct {
 }
 

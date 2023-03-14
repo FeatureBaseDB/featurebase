@@ -1,9 +1,10 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
 package parser
 
-// A Visitor's Visit method is invoked for each node encountered by Walk.
-// If the result visitor w is not nil, Walk visits each of the children
-// of node with the visitor w, followed by a call of w.Visit(nil).
+// Visitor is an interface implemented by anything needed to act on nodes walked
+// during a node traversal. A Visitor's Visit method is invoked for each node
+// encountered by Walk. If the result visitor w is not nil, Walk visits each of
+// the children of node with the visitor w, followed by a call of w.Visit(nil).
 type Visitor interface {
 	Visit(node Node) (w Visitor, n Node, err error)
 	VisitEnd(node Node) (Node, error)

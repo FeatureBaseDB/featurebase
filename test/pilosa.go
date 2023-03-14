@@ -20,7 +20,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/server"
 )
 
-// //////////////////////////////////////////////////////////////////////////////////
 // Command represents a test wrapper for server.Command.
 type Command struct {
 	*server.Command

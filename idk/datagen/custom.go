@@ -130,8 +130,8 @@ func (g *GenField) DefaultIDKField() (idk.Field, error) {
 	case "uint":
 		return idk.IDField{NameVal: g.Name}, nil
 	case "int":
-		var min int64 = g.Min
-		var max int64 = g.Max
+		var min = g.Min
+		var max = g.Max
 		return idk.IntField{NameVal: g.Name, Min: &min, Max: &max}, nil
 	case "string":
 		return idk.StringField{NameVal: g.Name}, nil
@@ -319,13 +319,13 @@ func (c *Custom) PrimaryKeyFields() []string {
 // DefaultEndAt sets the endAt record value for the
 // case where one is not provided. It implements the
 // Sourcer interface. Not used for Custom.
-func (_ *Custom) DefaultEndAt() uint64 {
+func (*Custom) DefaultEndAt() uint64 {
 	return 0
 }
 
 // Info describes what this implementation of Sourcer
 // generates. It implements the Sourcer interface.
-func (_ *Custom) Info() string {
+func (*Custom) Info() string {
 	return "Generates data from a yaml definition file."
 }
 

@@ -28,6 +28,7 @@ linters:
     - prealloc
     # - predeclared (20 to fix)
     # - stylecheck (quite a lot to fix, but we should definitely work on this)
+    - stylecheck
     # - unconvert (not at all critical, but makes for cleaner code)
   enable-all: false
   disable-all: true
@@ -66,6 +67,12 @@ linters-settings:
       - shadow
     disable-all: false
 
+  stylecheck:
+    # ST1000: at least one file in a package should have a package comment
+    # ST1003: golang naming standards
+    # ST1016: methods on the same type should have the same receiver name
+    # ST1020: comment on exported function
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020"]
 
 issues:
   exclude-use-default: false

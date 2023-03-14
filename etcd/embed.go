@@ -299,10 +299,6 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 		start := time.Now()
 		err = fn(cli)
 		switch err {
-		case etcdserver.ErrLeaderChanged:
-			cli = e.newClient(cli)
-		case nil:
-			return nil
 		default:
 			msg := err.Error()
 			// this shouldn't be necessary, but empirically, we sometimes
@@ -318,6 +314,7 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 				return errors.Wrap(err, "non-retryable error")
 			}
 			fallthrough // treat this as being one of the ErrTimeout derivatives, possibly wrapped.
+
 		case etcdserver.ErrTimeout, etcdserver.ErrTimeoutDueToLeaderFail, etcdserver.ErrTimeoutDueToConnectionLost, etcdserver.ErrTimeoutLeaderTransfer:
 			// sporadic timeouts are concerning but not necessarily fatal
 			// and can usually be retried.
@@ -332,6 +329,12 @@ func (e *Etcd) retryClient(fn func(cli *clientv3.Client) error) (err error) {
 			// timeout to give us a reasonable backoff period and keep us
 			// from spamming these.
 			time.Sleep(100 * time.Millisecond)
+
+		case etcdserver.ErrLeaderChanged:
+			cli = e.newClient(cli)
+
+		case nil:
+			return nil
 		}
 	}
 	// if we got here, we got a total of three of some combination of
@@ -495,7 +498,7 @@ func (e *Etcd) ClusterState(ctx context.Context) (out disco.ClusterState, err er
 		}
 	}
 	var (
-		heartbeats int = 0
+		heartbeats = 0
 	)
 	e.nodeMu.Lock()
 	nodes := e.populateNodeStates(ctx)

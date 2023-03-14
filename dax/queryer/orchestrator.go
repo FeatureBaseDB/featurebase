@@ -62,6 +62,7 @@ func (m *ServerlessTopology) ComputeNodes(ctx context.Context, index string, sha
 	return m.controller.ComputeNodes(ctx, qtid, daxShards...)
 }
 
+// Translator serves the translation portion of a query request.
 // TODO(jaffee) we need version info in here ASAP. whenever schema or topo
 // changes, version gets bumped and nodes know to reject queries
 // and update their info from the Controller instead of querying it every
