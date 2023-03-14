@@ -40,6 +40,8 @@ func (*CreateIndexStatement) node()     {}
 func (*CreateTableStatement) node()     {}
 func (*CreateFunctionStatement) node()  {}
 func (*CreateUserStatement) node()      {}
+func (*CreateGroupStatement) node()     {}
+func (*CreateRoleStatement) node()      {}
 func (*CreateViewStatement) node()      {}
 func (*DateLit) node()                  {}
 func (*DefaultConstraint) node()        {}
@@ -122,6 +124,8 @@ func (*CreateIndexStatement) stmt()     {}
 func (*CreateTableStatement) stmt()     {}
 func (*CreateFunctionStatement) stmt()  {}
 func (*CreateUserStatement) stmt()      {}
+func (*CreateGroupStatement) stmt()     {}
+func (*CreateRoleStatement) stmt()      {}
 func (*CreateViewStatement) stmt()      {}
 func (*DeleteStatement) stmt()          {}
 func (*DropDatabaseStatement) stmt()    {}
@@ -165,6 +169,10 @@ func CloneStatement(stmt Statement) Statement {
 	case *CreateFunctionStatement:
 		return stmt.Clone()
 	case *CreateUserStatement:
+		return stmt.Clone()
+	case *CreateGroupStatement:
+		return stmt.Clone()
+	case *CreateRoleStatement:
 		return stmt.Clone()
 	case *CreateViewStatement:
 		return stmt.Clone()
@@ -2740,9 +2748,12 @@ func (s *DropTableStatement) String() string {
 }
 
 type CreateUserStatement struct {
-	Create Pos
-	User   Pos
-	Name   *Ident
+	Create       Pos
+	User         Pos
+	Name         *Ident
+	With         Pos
+	Password     Pos
+	UserPassword Expr
 }
 
 func (s *CreateUserStatement) Clone() *CreateUserStatement {
@@ -2752,12 +2763,60 @@ func (s *CreateUserStatement) Clone() *CreateUserStatement {
 
 	other := *s
 	other.Name = s.Name.Clone()
+	other.UserPassword = s.UserPassword
 	return &other
 }
 
 func (s *CreateUserStatement) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("CREATE USER")
+	fmt.Fprintf(&buf, " %s WITH PASSWORD %s", s.Name.String(), s.UserPassword.String())
+
+	return buf.String()
+}
+
+type CreateGroupStatement struct {
+	Create Pos
+	Group  Pos
+	Name   *Ident
+}
+
+func (s *CreateGroupStatement) Clone() *CreateGroupStatement {
+	if s == nil {
+		return nil
+	}
+
+	other := *s
+	other.Name = s.Name.Clone()
+	return &other
+}
+
+func (s *CreateGroupStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("CREATE GROUP")
+	fmt.Fprintf(&buf, " %s", s.Name.String())
+	return buf.String()
+}
+
+type CreateRoleStatement struct {
+	Create Pos
+	Role   Pos
+	Name   *Ident
+}
+
+func (s *CreateRoleStatement) Clone() *CreateRoleStatement {
+	if s == nil {
+		return nil
+	}
+
+	other := *s
+	other.Name = s.Name.Clone()
+	return &other
+}
+
+func (s *CreateRoleStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("CREATE ROLE")
 	fmt.Fprintf(&buf, " %s", s.Name.String())
 	return buf.String()
 }

@@ -245,3 +245,13 @@ func (p *ExecutionPlanner) deleteView(ctx context.Context, viewName string) erro
 	}
 	return nil
 }
+
+// func (p *ExecutionPlanner) getUserByUsername(ctx context.Context, username string) error {
+
+// 	query := rbac.GetUserByUsernameMessage{username: username}
+
+// 	return &viewSystemObject{
+// 		name:      row[1].(string),
+// 		statement: row[2].(string),
+// 	}, nil
+// }

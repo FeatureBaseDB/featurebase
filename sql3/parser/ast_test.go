@@ -429,8 +429,29 @@ func TestCreateFunctionStatement_String(t *testing.T) {
 
 func TestCreateUserStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateUserStatement{
-		Name: &parser.Ident{Name: "tuser"},
-	}, `CREATE USER tuser`)
+		Create:       parser.Pos{},
+		User:         parser.Pos{},
+		Name:         &parser.Ident{Name: "tuser"},
+		With:         parser.Pos{},
+		Password:     parser.Pos{},
+		UserPassword: &parser.StringLit{ValuePos: pos(33), Value: "topsecret123"},
+	}, `CREATE USER tuser WITH PASSWORD 'topsecret123'`)
+}
+
+func TestCreateGroupStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.CreateGroupStatement{
+		Create: parser.Pos{},
+		Group:  parser.Pos{},
+		Name:   &parser.Ident{Name: "testers"},
+	}, `CREATE GROUP testers`)
+}
+
+func TestCreateRoleStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.CreateRoleStatement{
+		Create: parser.Pos{},
+		Role:   parser.Pos{},
+		Name:   &parser.Ident{Name: "admin"},
+	}, `CREATE ROLE admin`)
 }
 func TestCreateViewStatement_String(t *testing.T) {
 	AssertStatementStringer(t, &parser.CreateViewStatement{

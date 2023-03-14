@@ -210,6 +210,7 @@ const (
 	RETURNS
 	RETURN
 	RIGHT
+	ROLE
 	ROLLBACK
 	ROW
 	ROWS
@@ -437,6 +438,7 @@ var tokens = [...]string{
 	RETURNS:           "RETURNS",
 	RETURN:            "RETURN",
 	RIGHT:             "RIGHT",
+	ROLE:              "ROLE",
 	ROLLBACK:          "ROLLBACK",
 	ROW:               "ROW",
 	ROWS:              "ROWS",

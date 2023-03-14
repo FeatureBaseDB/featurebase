@@ -22,6 +22,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	pnet "github.com/featurebasedb/featurebase/v3/net"
+	"github.com/featurebasedb/featurebase/v3/rbac"
 	rbfcfg "github.com/featurebasedb/featurebase/v3/rbf/cfg"
 	"github.com/featurebasedb/featurebase/v3/roaring"
 	"github.com/featurebasedb/featurebase/v3/sql3"
@@ -640,6 +641,9 @@ func (s *Server) Open() error {
 			s.logger.Printf("Version check-in complete. Latest version is %s", resp.Version)
 		}
 	}()
+
+	s.logger.Printf("Starting UserAPI...")
+	rbac.UserAPI.Start()
 
 	// Start DisCo.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)

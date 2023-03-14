@@ -132,6 +132,11 @@ const (
 	ErrValueOutOfRange          errors.Code = "ErrValueOutOfRange"
 	ErrStringLengthMismatch     errors.Code = "ErrStringLengthMismatch"
 	ErrUnexpectedTypeConversion errors.Code = "ErrUnexpectedTypeConversion"
+
+	// User errors
+	ErrUserExists          errors.Code = "ErrUserExists"
+	ErrUserInvalidUsername errors.Code = "ErrUserInvalidUsername"
+	ErrUserNotFound        errors.Code = "ErrUserNotFound"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -814,5 +819,26 @@ func NewErrUnexpectedTypeConversion(line, col int, val interface{}) error {
 	return errors.New(
 		ErrUnexpectedTypeConversion,
 		NewErrInternalf("unexpected type conversion %T", val).Error(),
+	)
+}
+
+func NewErrUserExists(line, col int, val interface{}) error {
+	return errors.New(
+		ErrUserExists,
+		NewErrInternalf("user with that username already exists %T", val).Error(),
+	)
+}
+
+func NewErrUserNotFound(line, col int, val interface{}) error {
+	return errors.New(
+		ErrUserNotFound,
+		NewErrInternalf("no user with that username found %T", val).Error(),
+	)
+}
+
+func NewErrUserInvalidUsername(line, col int, val interface{}) error {
+	return errors.New(
+		ErrUserInvalidUsername,
+		NewErrInternalf("invalid username provided %T", val).Error(),
 	)
 }

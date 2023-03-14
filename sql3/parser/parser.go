@@ -338,6 +338,12 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 		return p.parseCreateIndexStatement(pos)*/
 	case FUNCTION:
 		return p.parseCreateFunctionStatement(pos)
+	case USER:
+		return p.parseCreateUserStatement(pos)
+	case GROUP:
+		return p.parseCreateGroupStatement(pos)
+	case ROLE:
+		return p.parseCreateRoleStatement(pos)
 	default:
 		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE, VIEW or FUNCTION")
 	}
@@ -469,6 +475,57 @@ func (p *Parser) parseUnitsOption(optionPos Pos) (_ *UnitsOption, err error) {
 	}
 
 	return &opt, nil
+}
+
+func (p *Parser) parseCreateUserStatement(createPos Pos) (_ *CreateUserStatement, err error) {
+	assert(p.peek() == USER)
+
+	var stmt CreateUserStatement
+	stmt.Create = createPos
+	stmt.User, _, _ = p.scan()
+
+	if stmt.Name, err = p.parseIdent("user name"); err != nil {
+		return &stmt, err
+	}
+
+	stmt.With, _, _ = p.scan()
+	stmt.Password, _, _ = p.scan()
+
+	if isLiteralToken(p.peek()) {
+		stmt.UserPassword = p.mustParseLiteral()
+	} else {
+		return &stmt, p.errorExpected(p.pos, p.tok, "literal")
+	}
+
+	return &stmt, nil
+}
+
+func (p *Parser) parseCreateGroupStatement(createPos Pos) (_ *CreateGroupStatement, err error) {
+	assert(p.peek() == GROUP)
+
+	var stmt CreateGroupStatement
+	stmt.Create = createPos
+	stmt.Group, _, _ = p.scan()
+
+	if stmt.Name, err = p.parseIdent("group name"); err != nil {
+		return &stmt, err
+	}
+
+	return &stmt, nil
+}
+
+func (p *Parser) parseCreateRoleStatement(createPos Pos) (_ *CreateRoleStatement, err error) {
+	assert(p.peek() == ROLE)
+
+	var stmt CreateRoleStatement
+	stmt.Create = createPos
+	stmt.Role, _, _ = p.scan()
+
+	if stmt.Name, err = p.parseIdent("role name"); err != nil {
+		return &stmt, err
+	}
+
+	return &stmt, nil
 }
 
 func (p *Parser) parseCreateTableStatement(createPos Pos) (_ *CreateTableStatement, err error) {
