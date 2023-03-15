@@ -117,6 +117,10 @@ func WriteSchema(schema types.Schema) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// ReadSchema consumes a schema object from a reader
+// Note you cannot do WriteSchema to a buffer then Read that schame
+// back without consuming or skipping the token.
+// so you can't just to WriteSchema -> ReadSchema it must be WriteSchema->ConsumeToken->ReadSchema
 func ReadSchema(reader io.Reader) (types.Schema, error) {
 	var columnCount int16
 	err := binary.Read(reader, binary.BigEndian, &columnCount)
