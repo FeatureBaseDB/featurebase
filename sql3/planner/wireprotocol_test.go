@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
-	"reflect"
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/featurebasedb/featurebase/v3/wireprotocol"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_newMessageError(t *testing.T) {
@@ -51,13 +50,12 @@ func Test_newMessageError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := newMessageError(tt.args.p, tt.args.reader)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("newMessageError() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			if tt.wantErr {
+				assert.NotNil(t, err)
+			} else {
+				assert.Nil(t, err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("newMessageError() = %v, want %v", got, tt.want)
-			}
+			assert.EqualValues(t, tt.want, got)
 		})
 	}
 }
@@ -72,8 +70,6 @@ func Test_Token(t *testing.T) {
 		name := fbClusterInfo
 		binary.Write(&buf, binary.BigEndian, (int32)(len(name)))
 		buf.WriteString(name)
-		b := buf.Bytes()
-		fmt.Printf("%#v", b)
 		return bytes.NewReader(buf.Bytes())
 	}
 	tests := []struct {
@@ -84,7 +80,8 @@ func Test_Token(t *testing.T) {
 		{
 			name: "token error",
 			message: func() wireProtocolMessage {
-				m, _ := newMessageError(nil, makeError())
+				m, err := newMessageError(nil, makeError())
+				assert.Nil(t, err)
 				return m
 			},
 			want: wireprotocol.TOKEN_ERROR_MESSAGE,
@@ -93,9 +90,7 @@ func Test_Token(t *testing.T) {
 			name: "token planOp",
 			message: func() wireProtocolMessage {
 				m, err := newMessagePlanOp(nil, makePlanOp())
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.Nil(t, err)
 
 				return m
 			},
@@ -112,18 +107,12 @@ func Test_Token(t *testing.T) {
 				}
 
 				b, err := wireprotocol.WriteSchema(s)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.Nil(t, err)
 				rdr := bytes.NewReader(b)
 				_, err = wireprotocol.ExpectToken(rdr, wireprotocol.TOKEN_SCHEMA_INFO)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.Nil(t, err)
 				m, err := newMessageSchemaInfo(nil, rdr)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.Nil(t, err)
 				return m
 			},
 
@@ -143,13 +132,9 @@ func Test_Token(t *testing.T) {
 				}
 
 				b, err := wireprotocol.WriteRow(row, schema)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.Nil(t, err)
 				m, err := newMessageRow(nil, bytes.NewReader(b), schema)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.Nil(t, err)
 				return m
 			},
 			want: wireprotocol.TOKEN_ROW,
@@ -166,9 +151,8 @@ func Test_Token(t *testing.T) {
 	for _, tt := range tests {
 		message := tt.message()
 		t.Run(tt.name, func(t *testing.T) {
-			if got := message.Token(); got != tt.want {
-				t.Errorf("messageError.Token() = %v, want %v", got, tt.want)
-			}
+			got := message.Token()
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
