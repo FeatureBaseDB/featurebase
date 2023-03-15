@@ -23,6 +23,7 @@ LABEL maintainer "dev@featurebase.com"
 RUN apk add --no-cache curl jq tree
 
 COPY --from=featurebase-builder /fb/build/featurebase /
+COPY --from=featurebase-builder /fb/dax/database.yml /
 
 COPY NOTICE /NOTICE
 

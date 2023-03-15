@@ -60,7 +60,7 @@ func New(cfg Config) *Poller {
 func (p *Poller) Addresses() []dax.Address {
 	nodes, err := p.nodeService.Nodes(context.Background())
 	if err != nil {
-		p.logger.Printf("POLLER: unable to get nodes from node service")
+		p.logger.Errorf("POLLER: unable to get nodes from node service: %v", err)
 	}
 
 	addrs := make([]dax.Address, 0, len(nodes))

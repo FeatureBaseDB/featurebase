@@ -57,6 +57,10 @@ func New(cfg Config) *Queryer {
 	return q
 }
 
+func (q *Queryer) Logger() logger.Logger {
+	return q.logger
+}
+
 // Orchestrator gets (or creates) an instance of qualifiedOrchestrator based on
 // the provided dax.QualifiedDatabaseID.
 func (q *Queryer) Orchestrator(qdbid dax.QualifiedDatabaseID) *qualifiedOrchestrator {
