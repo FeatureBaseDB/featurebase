@@ -117,6 +117,8 @@ func WriteSchema(schema types.Schema) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Note this expects the token to be consumed prior to execution
+// so you can't just to WriteSchema -> ReadSchema
 func ReadSchema(reader io.Reader) (types.Schema, error) {
 	var columnCount int16
 	err := binary.Read(reader, binary.BigEndian, &columnCount)
