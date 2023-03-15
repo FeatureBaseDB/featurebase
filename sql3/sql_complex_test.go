@@ -1718,6 +1718,16 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+	t.Run("BulkNDJSONFileBadBatchSize", func(t *testing.T) {
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 0;`)
+		if err == nil || !strings.Contains(err.Error(), `invalid batch size '0'`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 'foo';`)
+		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 
 	t.Run("BulkBadRowsLimit", func(t *testing.T) {
 		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' ROWSLIMIT 'foo';`)
@@ -2903,7 +2913,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		}
 	})
 
-	t.Run("BulkFromUrl", func(t *testing.T) {
+	t.Run("BulkParquetFromUrl", func(t *testing.T) {
 		// check that can pull parquet file from URL and load
 
 		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j2 (_id ID, a INT, b STRING);`)
@@ -2978,6 +2988,89 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		assert.NoError(t, err)
 		row := results[0]
 		assert.Equal(t, row[1], row[2])
+	})
+
+	t.Run("BulkCSVFromUrl", func(t *testing.T) {
+		// check that can pull parquet file from URL and load
+
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j3 (_id ID, a INT, b STRING);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkCSVFile.csv")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a csv file with all the example data
+		tmpfile.Write([]byte("1, 42, \"pi\""))
+
+		mux := http.NewServeMux()
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
+			payload, _ := os.ReadFile(tmpfile.Name())
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.WriteHeader(200)
+			w.Write(payload)
+		})
+
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	into j3 (_id,a,b ) 
+	map(
+		0 id, 
+		1 INT, 
+		2 STRING) 
+    from 
+	   '%s' 
+	   WITH FORMAT 'CSV' 
+	   INPUT 'URL';`, ts.URL+"/static"))
+		assert.NoError(t, err)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j3`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(42), "pi"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+	t.Run("BulkNDJSONFromUrl", func(t *testing.T) {
+		// check that can pull parquet file from URL and load
+
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j4 (_id ID, a INT, b STRING);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkJSONFile.json")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a csv file with all the example data
+		tmpfile.Write([]byte(`{ "id":1, "intv":42, "stringv":"pi" }`))
+
+		mux := http.NewServeMux()
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
+			payload, _ := os.ReadFile(tmpfile.Name())
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.WriteHeader(200)
+			w.Write(payload)
+		})
+
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	into j4 (_id,a,b ) 
+	map(
+		'$.id' id, 
+		'$.intv' INT, 
+		'$.stringv' STRING) 
+    from 
+	   '%s' 
+	   WITH FORMAT 'NDJSON' 
+	   INPUT 'URL';`, ts.URL+"/static"))
+		assert.NoError(t, err)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j4`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(42), "pi"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 }
 

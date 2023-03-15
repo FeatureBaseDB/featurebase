@@ -266,13 +266,19 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 	rec, err := i.csvReader.Read()
 	if err == io.EOF {
 		return nil, types.ErrNoMoreRows
-	} else if err != nil {
-		pe, ok := err.(*csv.ParseError)
-		if ok {
-			return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
-		}
-		return nil, err
 	}
+	// err == csv.ParseError is impossible if LazyQuotes is true
+	// we should uncomment the code below if we ever dispable LazyQuotes
+	// so there is no need check for any other error
+	/*
+		else if err != nil {
+			pe, ok := err.(*csv.ParseError)
+			if ok {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
+			}
+			return nil, err
+		}
+	*/
 
 	// now we do the mapping to the output row
 	result := make([]interface{}, len(i.options.mapExpressions))
