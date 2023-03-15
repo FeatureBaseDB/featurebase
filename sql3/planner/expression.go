@@ -1998,6 +1998,59 @@ func (n *boolLiteralPlanExpression) WithChildren(children ...types.PlanExpressio
 	return n, nil
 }
 
+// represents system variables such as CURRENT_DATE and CURRENT_DATETIME
+type sysVariablePlanExpression struct {
+	name  string       // name of the system variable
+	token parser.Token // token mapped to the system variable name
+}
+
+func newSysVariablePlanExpression(name string, token parser.Token) *sysVariablePlanExpression {
+	return &sysVariablePlanExpression{
+		name:  name,
+		token: token,
+	}
+}
+
+func (n *sysVariablePlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+	switch n.token {
+	case parser.CURRENT_DATE:
+		dt := time.Now().UTC()
+		return time.Date(dt.Year(), dt.Month(), dt.Day(), 0, 0, 0, 0, dt.Location()), nil
+	case parser.CURRENT_TIMESTAMP:
+		return time.Now().UTC(), nil
+	}
+	return nil, sql3.NewErrInternal(fmt.Sprintf("Mising plan expression implementation for system variable '%s'", n.name))
+}
+
+func (n *sysVariablePlanExpression) Type() parser.ExprDataType {
+	switch n.token {
+	case parser.CURRENT_DATE, parser.CURRENT_TIMESTAMP:
+		return parser.NewDataTypeTimestamp()
+	}
+	return nil
+}
+
+func (n *sysVariablePlanExpression) String() string {
+	return n.name
+}
+
+func (n *sysVariablePlanExpression) Plan() map[string]interface{} {
+	result := make(map[string]interface{})
+	result["_expr"] = fmt.Sprintf("%T", n)
+	result["description"] = n.String()
+	result["dataType"] = n.Type().TypeDescription()
+	result["value"], _ = n.Evaluate(nil)
+	return result
+}
+
+func (n *sysVariablePlanExpression) Children() []types.PlanExpression {
+	return []types.PlanExpression{}
+}
+
+func (n *sysVariablePlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
+	return n, nil
+}
+
 // dateLiteralPlanExpression is a date literal
 type dateLiteralPlanExpression struct {
 	value time.Time
@@ -2610,6 +2663,9 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 
 	case *parser.DateLit:
 		return newDateLiteralPlanExpression(expr.Value), nil
+
+	case *parser.SysVariable:
+		return newSysVariablePlanExpression(expr.Name(), expr.Token), nil
 
 	case *parser.ParenExpr:
 		return p.compileExpr(expr.X)

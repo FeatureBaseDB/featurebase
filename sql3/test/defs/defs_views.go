@@ -126,9 +126,9 @@ var viewTests = TableTest{
 			ExpErr: "table or view 'viewonviewtable' not found",
 		},
 		{
-			name: "create-view-with-built-in-litterals",
+			name: "create-view-with-built-in-literals",
 			SQLs: sqls(
-				"create view if not exists viewwithliteral as select _id, a_string, a_int, a_date from viewtable where a_date<CURRENT_TIMESTAMP or a_date<CURRENT_DATE;",
+				"create view if not exists viewwithliteral as select _id, a_string, a_int, a_date from viewtable where a_date<CURRENT_TIMESTAMP or a_date<CURRENT_DATE or a_date<'2023-03-15T00:00:00Z';",
 			),
 			ExpHdrs:        hdrs(),
 			ExpRows:        rows(),
@@ -136,7 +136,7 @@ var viewTests = TableTest{
 			SortStringKeys: true,
 		},
 		{
-			name: "select-view-with-built-in-litterals",
+			name: "select-view-with-built-in-literals",
 			SQLs: sqls(
 				"select * from viewwithliteral;",
 				"select _id, a_string, a_int, a_date from viewwithliteral;",

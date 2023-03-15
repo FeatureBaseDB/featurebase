@@ -58,6 +58,7 @@ func (*ForeignKeyConstraint) node()     {}
 func (*FrameSpec) node()                {}
 func (*Ident) node()                    {}
 func (*Variable) node()                 {}
+func (*SysVariable) node()              {}
 func (*IndexedColumn) node()            {}
 func (*InsertStatement) node()          {}
 func (*JoinClause) node()               {}
@@ -248,6 +249,7 @@ func (*Exists) expr()           {}
 func (*ExprList) expr()         {}
 func (*Ident) expr()            {}
 func (*Variable) expr()         {}
+func (*SysVariable) expr()      {}
 func (*NullLit) expr()          {}
 func (*IntegerLit) expr()       {}
 func (*FloatLit) expr()         {}
@@ -1686,6 +1688,42 @@ func IdentName(ident *Ident) string {
 	return ident.Name
 }
 
+// SysVariable represents built-in system variables that can be referenced in the sql for current date, current time and other potential pre-determinable values.
+// In SQL these system provided data elements are referenced using keywords such as CURRENT_DATE & CURRENT_TIMESTAMP, etc.
+type SysVariable struct {
+	NamePos Pos   // variable position in sql
+	Token   Token // parser token mapped to the variable's name/keyword
+}
+
+func (*SysVariable) IsLiteral() bool { return false }
+
+func (svar *SysVariable) Pos() Pos {
+	return svar.NamePos
+}
+
+func (svar *SysVariable) Clone() *SysVariable {
+	if svar == nil {
+		return nil
+	}
+	other := *svar
+	return &other
+}
+func (svar *SysVariable) Name() string {
+	return tokens[svar.Token]
+}
+
+func (svar *SysVariable) String() string {
+	return svar.Name()
+}
+
+func (svar *SysVariable) DataType() ExprDataType {
+	switch svar.Token {
+	case CURRENT_DATE, CURRENT_TIMESTAMP:
+		return NewDataTypeTimestamp()
+	}
+	return nil
+}
+
 type Variable struct {
 	NamePos       Pos    // variable position
 	Name          string // variable name
@@ -1919,7 +1957,6 @@ func (lit *BoolLit) String() string {
 type DateLit struct {
 	ValuePos Pos       // literal position
 	Value    time.Time // literal value
-	Token    Token     // token found in the sql
 }
 
 func (expr *DateLit) IsLiteral() bool { return true }
@@ -1942,11 +1979,7 @@ func (lit *DateLit) Clone() *DateLit {
 }
 
 // String returns the string representation of the Datetime value.
-// if sql referenced a built-in literal (CURRENT_DATETIME, CURRENT_DATE) then it returns the token.
 func (lit *DateLit) String() string {
-	if lit.Token != 0 {
-		return tokens[lit.Token]
-	}
 	return "'" + lit.Value.Format(time.RFC3339) + "'"
 }
 
