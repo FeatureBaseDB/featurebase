@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -17,10 +18,13 @@ import (
 // exclude this file from SonarCloud dupe eval
 
 const (
-	fbClusterInfo         = "fb_cluster_info"
-	fbClusterNodes        = "fb_cluster_nodes"
+	fbDatabaseInfo        = "fb_database_info"
+	fbDatabaseNodes       = "fb_database_nodes"
 	fbExecRequests        = "fb_exec_requests"
 	fbPerformanceCounters = "fb_performance_counters"
+
+	fbClusterInfo  = "fb_cluster_info"
+	fbClusterNodes = "fb_cluster_nodes"
 
 	fbTableDDL = "fb_table_ddl"
 )
@@ -31,83 +35,117 @@ type systemTable struct {
 	requiresFanout bool
 }
 
-var systemTables = map[string]*systemTable{
-	fbClusterInfo: {
-		name: fbClusterInfo,
+type systemTableMap map[string]*systemTable
+
+// table enables backwards compatibility with changing the system table names
+// from fb_cluster_nodes and fb_cluster_info to fb_database_nodes and fb_database_info
+// respectively.
+func (s systemTableMap) table(name string) (*systemTable, bool) {
+	switch name {
+	case fbClusterInfo:
+		name = fbDatabaseInfo
+	case fbClusterNodes:
+		name = fbDatabaseNodes
+	}
+
+	t, ok := s[name]
+	return t, ok
+}
+
+// ordered returns the map as an ordered slice of systemTable.
+func (s systemTableMap) ordered() []*systemTable {
+	out := make([]*systemTable, 0, len(s))
+	for _, v := range s {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].name < out[j].name
+	})
+	return out
+}
+
+var systemTables = systemTableMap{
+	fbDatabaseInfo: {
+		name: fbDatabaseInfo,
 		schema: types.Schema{
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "id",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "name",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "platform",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "platform_version",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "db_version",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "state",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "node_count",
 				Type:         parser.NewDataTypeInt(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterInfo,
+				RelationName: fbDatabaseInfo,
 				ColumnName:   "replica_count",
 				Type:         parser.NewDataTypeInt(),
 			},
 		},
 		requiresFanout: false,
 	},
-	fbClusterNodes: {
-		name: fbClusterNodes,
+	fbDatabaseNodes: {
+		name: fbDatabaseNodes,
 		schema: types.Schema{
 			&types.PlannerColumn{
-				RelationName: fbClusterNodes,
+				RelationName: fbDatabaseNodes,
 				ColumnName:   "id",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterNodes,
+				RelationName: fbDatabaseNodes,
+				ColumnName:   "type",
+				Type:         parser.NewDataTypeString(),
+			},
+			&types.PlannerColumn{
+				RelationName: fbDatabaseNodes,
 				ColumnName:   "state",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterNodes,
+				RelationName: fbDatabaseNodes,
 				ColumnName:   "uri",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterNodes,
+				RelationName: fbDatabaseNodes,
 				ColumnName:   "grpc_uri",
 				Type:         parser.NewDataTypeString(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterNodes,
+				RelationName: fbDatabaseNodes,
 				ColumnName:   "is_primary",
 				Type:         parser.NewDataTypeBool(),
 			},
 			&types.PlannerColumn{
-				RelationName: fbClusterNodes,
+				RelationName: fbDatabaseNodes,
 				ColumnName:   "space_used",
 				Type:         parser.NewDataTypeInt(),
 			},
@@ -311,12 +349,12 @@ func (p *PlanOpSystemTable) Children() []types.PlanOperator {
 
 func (p *PlanOpSystemTable) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
 	switch p.table.name {
-	case fbClusterInfo:
-		return &fbClusterInfoRowIter{
+	case fbDatabaseInfo:
+		return &fbDatabaseInfoRowIter{
 			planner: p.planner,
 		}, nil
-	case fbClusterNodes:
-		return &fbClusterNodesRowIter{
+	case fbDatabaseNodes:
+		return &fbDatabaseNodesRowIter{
 			planner: p.planner,
 		}, nil
 	case fbExecRequests:
@@ -343,14 +381,14 @@ func (p *PlanOpSystemTable) WithChildren(children ...types.PlanOperator) (types.
 	return NewPlanOpSystemTable(p.planner, p.table), nil
 }
 
-type fbClusterInfoRowIter struct {
+type fbDatabaseInfoRowIter struct {
 	planner  *ExecutionPlanner
 	rowIndex int
 }
 
-var _ types.RowIterator = (*fbClusterInfoRowIter)(nil)
+var _ types.RowIterator = (*fbDatabaseInfoRowIter)(nil)
 
-func (i *fbClusterInfoRowIter) Next(ctx context.Context) (types.Row, error) {
+func (i *fbDatabaseInfoRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.rowIndex < 1 {
 		row := []interface{}{
 			i.planner.systemAPI.ClusterName(),
@@ -368,14 +406,14 @@ func (i *fbClusterInfoRowIter) Next(ctx context.Context) (types.Row, error) {
 	return nil, types.ErrNoMoreRows
 }
 
-type fbClusterNodesRowIter struct {
+type fbDatabaseNodesRowIter struct {
 	planner *ExecutionPlanner
 	result  []pilosa.ClusterNode
 }
 
-var _ types.RowIterator = (*fbClusterNodesRowIter)(nil)
+var _ types.RowIterator = (*fbDatabaseNodesRowIter)(nil)
 
-func (i *fbClusterNodesRowIter) Next(ctx context.Context) (types.Row, error) {
+func (i *fbDatabaseNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.result == nil {
 		i.result = i.planner.systemAPI.ClusterNodes()
 	}
@@ -390,6 +428,7 @@ func (i *fbClusterNodesRowIter) Next(ctx context.Context) (types.Row, error) {
 		n := i.result[0]
 		row := []interface{}{
 			n.ID,
+			n.Type,
 			n.State,
 			n.URI,
 			n.GRPCURI,
