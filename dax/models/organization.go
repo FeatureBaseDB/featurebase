@@ -19,7 +19,7 @@ type Organization struct {
 
 // String is not required by pop and may be deleted
 func (o *Organization) String() string {
-	jo, _ := json.MarshalIndent(o, " ", " ")
+	jo, _ := json.MarshalIndent(o, " ", " ") //nolint:errchkjson
 	return string(jo)
 }
 
@@ -28,7 +28,7 @@ type Organizations []Organization
 
 // String is not required by pop and may be deleted
 func (o Organizations) String() string {
-	jo, _ := json.MarshalIndent(o, " ", " ")
+	jo, _ := json.MarshalIndent(o, " ", " ") //nolint:errchkjson
 	return string(jo)
 }
 

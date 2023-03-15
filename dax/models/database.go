@@ -28,7 +28,7 @@ type Database struct {
 
 // String is not required by pop and may be deleted
 func (d Database) String() string {
-	jd, _ := json.MarshalIndent(d, " ", " ")
+	jd, _ := json.MarshalIndent(d, " ", " ") //nolint:errchkjson
 	return string(jd)
 }
 
@@ -37,7 +37,7 @@ type Databases []Database
 
 // String is not required by pop and may be deleted
 func (d Databases) String() string {
-	jd, _ := json.Marshal(d)
+	jd, _ := json.Marshal(d) //nolint:errchkjson
 	return string(jd)
 }
 

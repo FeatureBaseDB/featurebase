@@ -12,7 +12,8 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-// Worker
+// Worker is a node plus a role that gets assigned to a database and
+// can be assigned jobs for that database.
 type Worker struct {
 	ID         uuid.UUID    `json:"id" db:"id"`
 	Address    dax.Address  `json:"address" db:"address"`
@@ -25,7 +26,7 @@ type Worker struct {
 
 // String is not required by pop and may be deleted
 func (t *Worker) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 
@@ -34,7 +35,7 @@ type Workers []Worker
 
 // String is not required by pop and may be deleted
 func (t Workers) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 

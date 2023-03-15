@@ -12,7 +12,7 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-// Job
+// Job represents a job which can be assigned to a worker or free (unassigned).
 type Job struct {
 	ID         uuid.UUID      `json:"id" db:"id"`
 	Name       dax.Job        `json:"name" db:"name"`
@@ -26,7 +26,7 @@ type Job struct {
 
 // String is not required by pop and may be deleted
 func (t *Job) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 
@@ -35,7 +35,7 @@ type Jobs []Job
 
 // String is not required by pop and may be deleted
 func (t Jobs) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 

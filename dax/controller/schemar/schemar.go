@@ -5,6 +5,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
+// Schemar is the interface to the schema service which holds all the
+// databases and tables stored in the system.
 type Schemar interface {
 	CreateDatabase(dax.Transaction, *dax.QualifiedDatabase) error
 	DropDatabase(dax.Transaction, dax.QualifiedDatabaseID) error

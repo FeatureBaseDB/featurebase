@@ -22,7 +22,8 @@ func NewSchemar(log logger.Logger) schemar.Schemar {
 	}
 }
 
-// TODO rename to "schemar" once we get rid of that pesky schemar package
+// Schemar is the SQL implementation of the schemar that stores all
+// the information in a SQL database.
 type Schemar struct {
 	log logger.Logger
 }

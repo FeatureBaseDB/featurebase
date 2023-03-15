@@ -28,8 +28,8 @@ func (t Transactor) Close() error {
 	return t.Connection.Close()
 }
 
-// sqldb.DaxTransaction is a thin wrapper to create a dax.Transaction
-// from a pop Transaction/Connection.
+// DaxTransaction is a thin wrapper to create a dax.Transaction from a
+// pop Transaction/Connection.
 type DaxTransaction struct {
 	C *pop.Connection
 }

@@ -25,7 +25,7 @@ type Column struct {
 
 // String is not required by pop and may be deleted
 func (c *Column) String() string {
-	jc, _ := json.MarshalIndent(c, " ", " ")
+	jc, _ := json.MarshalIndent(c, " ", " ") //nolint:errchkjson
 	return string(jc)
 }
 
@@ -34,7 +34,7 @@ type Columns []Column
 
 // String is not required by pop and may be deleted
 func (c Columns) String() string {
-	jc, _ := json.MarshalIndent(c, " ", " ")
+	jc, _ := json.MarshalIndent(c, " ", " ") //nolint:errchkjson
 	return string(jc)
 }
 

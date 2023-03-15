@@ -11,7 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-// Node
+// Node represents a host or server that is available to work on jobs.
 type Node struct {
 	ID        uuid.UUID   `json:"id" db:"id"`
 	Address   dax.Address `json:"address" db:"address"`
@@ -22,7 +22,7 @@ type Node struct {
 
 // String is not required by pop and may be deleted
 func (t *Node) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 
@@ -31,7 +31,7 @@ type Nodes []*Node
 
 // String is not required by pop and may be deleted
 func (t Nodes) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 

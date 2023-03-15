@@ -29,7 +29,7 @@ type Table struct {
 
 // String is not required by pop and may be deleted
 func (t *Table) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 
@@ -38,7 +38,7 @@ type Tables []*Table
 
 // String is not required by pop and may be deleted
 func (t Tables) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
 

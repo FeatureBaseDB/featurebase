@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// DirectiveVersion
+// DirectiveVersion holds what version the current directive is
 type DirectiveVersion struct {
 	ID        int       `json:"id" db:"id"`
 	Version   int       `json:"version" db:"version"`
@@ -15,6 +15,6 @@ type DirectiveVersion struct {
 
 // String is not required by pop and may be deleted
 func (t *DirectiveVersion) String() string {
-	jt, _ := json.MarshalIndent(t, " ", " ")
+	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
 }
