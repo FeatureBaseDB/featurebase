@@ -37,7 +37,6 @@ type systemTable struct {
 
 type systemTableMap map[string]*systemTable
 
-
 // table enables backwards compatibility with changing the system table names
 // from fb_cluster_nodes and fb_cluster_info to fb_database_nodes and fb_database_info
 // respectively.
