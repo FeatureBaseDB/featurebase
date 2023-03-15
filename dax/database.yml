@@ -15,5 +15,10 @@ test:
   host: {{envOr "POSTGRES_HOST" "127.0.0.1"}}
   pool: 5
 
-# production:
-#   url: {{envOr "DATABASE_URL" "postgres://postgres:postgres@127.0.0.1:5432/dax_production?sslmode=disable"}}
+production:
+  dialect: postgres
+  database: {{envOr "POSTGRES_DB" "controller"}}
+  user: {{envOr "POSTGRES_USER" "dax"}}
+  password: {{envOr "POSTGRES_PASSWORD" ""}}
+  host: {{envOr "POSTGRES_HOST" "127.0.0.1"}}
+  pool: 10 # TODO
