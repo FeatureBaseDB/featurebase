@@ -38,6 +38,8 @@ type Queryer struct {
 	fbClient *featurebase.InternalClient
 
 	controller dax.Controller
+	
+	systemLayer *systemlayer.SystemLayer
 
 	logger logger.Logger
 }
@@ -47,6 +49,7 @@ func New(cfg Config) *Queryer {
 	q := &Queryer{
 		controller:    dax.NewNopController(),
 		orchestrators: make(map[dax.QualifiedDatabaseID]*qualifiedOrchestrator),
+		systemLayer:   systemlayer.NewSystemLayer(),
 		logger:        logger.NopLogger,
 	}
 
@@ -198,17 +201,14 @@ func (q *Queryer) QuerySQL(ctx context.Context, qdbid dax.QualifiedDatabaseID, s
 	// Importer
 	imp := idkserverless.NewImporter(q.controller, qdbid, nil)
 
-	// TODO(tlt): We need a serverless-compatible implementation of the
 	// SystemAPI.
-	sysapi := &featurebase.NopSystemAPI{}
-
-	systemLayer := systemlayer.NewSystemLayer()
+	sysapi := newSystemAPI(q.controller, qdbid)
 
 	// We intentionally don't pass the sql argument here because we're working
 	// with an io.Reader rather than a string and it's just not necessary to
 	// send it as a string to this method. Also, what happens if the sql is a
 	// large BULK INSERT?
-	pl := planner.NewExecutionPlanner(q.Orchestrator(qdbid), sapi, sysapi, systemLayer, imp, q.logger, "")
+	pl := planner.NewExecutionPlanner(q.Orchestrator(qdbid), sapi, sysapi, q.systemLayer, imp, q.logger, "")
 
 	planOp, err := pl.CompilePlan(ctx, st)
 	if err != nil {
