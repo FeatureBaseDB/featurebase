@@ -110,6 +110,12 @@ func TestSQLSchemar(t *testing.T) {
 	require.EqualValues(t, orgID, dbs[0].OrganizationID)
 	require.EqualValues(t, orgID, dbs[1].OrganizationID)
 
+	dbs, err = schemar.Databases(tx, orgID, dbID)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(dbs))
+	require.EqualValues(t, orgID, dbs[0].OrganizationID)
+	require.EqualValues(t, dbID, dbs[0].Database.ID)
+
 	// test create table
 	qtbl := &dax.QualifiedTable{
 		QualifiedDatabaseID: qdbid,

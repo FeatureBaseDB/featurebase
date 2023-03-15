@@ -8,7 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-// NodeRoles holds information about what types of jobs (roles) each node can perform.
+// NodeRole holds information about what types of jobs (roles) each node can perform.
 type NodeRole struct {
 	ID        uuid.UUID    `json:"id" db:"id"`
 	NodeID    uuid.UUID    `json:"node_id" db:"node_id"`

@@ -204,7 +204,7 @@ func (s *Schemar) Databases(tx dax.Transaction, orgID dax.OrganizationID, dbIDs 
 	}
 	if len(dbIDs) > 0 {
 		ifaceIDs := make([]interface{}, len(dbIDs))
-		for i, dbID := range ifaceIDs {
+		for i, dbID := range dbIDs {
 			ifaceIDs[i] = dbID
 		}
 		q = q.Where("id in (?)", ifaceIDs...)
