@@ -16,14 +16,16 @@ var groupByTests = TableTest{
 			srcHdr("d1", fldTypeDecimal2),
 			srcHdr("s1", fldTypeString),
 			srcHdr("i2", fldTypeInt, "min 0", "max 1000"),
+			srcHdr("is1", fldTypeIDSet),
+			srcHdr("id1", fldTypeID),
 		),
 		srcRows(
-			srcRow(int64(1), int64(10), float64(10), string("10"), int64(100)),
-			srcRow(int64(2), int64(10), float64(10), string("10"), int64(200)),
-			srcRow(int64(3), int64(11), float64(11), string("11"), nil),
-			srcRow(int64(4), int64(12), float64(12), string("12"), nil),
-			srcRow(int64(5), int64(12), float64(12), string("12"), nil),
-			srcRow(int64(6), int64(13), float64(13), string("13"), nil),
+			srcRow(int64(1), int64(10), float64(10), string("10"), int64(100), []int64{1, 2}, int64(1)),
+			srcRow(int64(2), int64(10), float64(10), string("10"), int64(200), []int64{1, 2}, int64(2)),
+			srcRow(int64(3), int64(11), float64(11), string("11"), nil, []int64{1, 3}, int64(3)),
+			srcRow(int64(4), int64(12), float64(12), string("12"), nil, []int64{2, 3}, int64(4)),
+			srcRow(int64(5), int64(12), float64(12), string("12"), nil, []int64{1, 3}, int64(1)),
+			srcRow(int64(6), int64(13), float64(13), string("13"), nil, []int64{1, 2, 3}, int64(6)),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -220,6 +222,38 @@ var groupByTests = TableTest{
 				"select max(i1) as p_rows, i1 from groupby_test group by i1",
 			),
 			ExpErr: "aggregate 'MAX()' not allowed in GROUP BY",
+		},
+		{
+			SQLs: sqls(
+				"SELECT COUNT(*), is1 FROM groupby_test group by is1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("is1", fldTypeIDSet),
+			),
+			ExpRows: rows(
+				row(int64(5), []int64{1}),
+				row(int64(4), []int64{2}),
+				row(int64(4), []int64{3}),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT COUNT(*), id1 FROM groupby_test group by id1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("id1", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(2), int64(1)),
+				row(int64(1), int64(2)),
+				row(int64(1), int64(3)),
+				row(int64(1), int64(4)),
+				row(int64(1), int64(6)),
+			),
+			Compare: CompareExactOrdered,
 		},
 	},
 }
