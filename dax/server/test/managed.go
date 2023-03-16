@@ -233,7 +233,9 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 	mc := NewManagedCommand(tb, opts...)
 
 	var err error
-	trans, err := sqldb.Connect(sqldb.GetTestConfig())
+	testconf := sqldb.GetTestConfig()
+	fmt.Printf("testconf: %+v", *testconf)
+	trans, err := sqldb.Connect(testconf)
 	require.NoError(tb, err, "connecting")
 	mc.conn = trans.(sqldb.Transactor).Connection
 
