@@ -221,10 +221,10 @@ func TestSQLSchemar(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Create Table no DB fails", func(t *testing.T) {
-		tx, err := trans.BeginTx(context.Background(), true)
+		tx2, err := trans.BeginTx(context.Background(), true)
 		require.NoError(t, err)
-		defer tx.Rollback()
-		err = schemar.CreateTable(tx, qtbl)
+		defer tx2.Rollback()
+		err = schemar.CreateTable(tx2, qtbl)
 		require.NotNil(t, err)
 	})
 
