@@ -2927,6 +2927,41 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		if !pql.Decimal.EqualTo(d, results[0][0].(pql.Decimal)) {
 			t.Fatal("Should be equal")
 		}
+		// just getting some opOrderBy coverage here
+		// order by string
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, c from j1 order by c`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2), "goldenratio"},
+			{int64(1), "pi"},
+			{int64(3), "sqr2"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+		// order by bool
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, f from j1 order by f`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2), false},
+			{int64(1), true},
+			{int64(3), true},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+		// order by timestamp
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, t from j1 order by t`)
+		assert.NoError(t, err)
+		t2, _ := time.ParseInLocation(time.RFC3339Nano, "1970-01-28T00:00:00Z", time.UTC)
+		t3, _ := time.ParseInLocation(time.RFC3339Nano, "1988-05-30T12:02:00Z", time.UTC)
+		t1, _ := time.ParseInLocation(time.RFC3339Nano, "2022-01-28T12:14:04Z", time.UTC)
+
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2), t2},
+			{int64(3), t3},
+			{int64(1), t1},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
 	t.Run("BulkParquetFromUrl", func(t *testing.T) {
