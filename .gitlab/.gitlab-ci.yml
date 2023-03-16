@@ -257,7 +257,7 @@ run go tests race:
   extends: .go-cache
   variables:
     POSTGRES_DB: run_go_tests_race
-    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_USER: postgres
     POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     POSTGRES_HOST: postgres
     POSTGRES_HOST_AUTH_METHOD: trust
@@ -290,7 +290,7 @@ run go tests:
   extends: .go-cache
   variables:
     POSTGRES_DB: run_go_tests
-    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_USER: postgres
     POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     POSTGRES_HOST: postgres
     POSTGRES_HOST_AUTH_METHOD: trust
@@ -324,7 +324,7 @@ run go tests dax/test/dax:
     - docker
   variables:
     POSTGRES_DB: run_go_tests_dax_integration
-    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_USER: postgres
     POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     POSTGRES_HOST: postgres
     POSTGRES_HOST_AUTH_METHOD: trust
