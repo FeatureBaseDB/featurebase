@@ -1479,21 +1479,40 @@ func TestQueryHistory(t *testing.T) {
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "Set(3000000, f0=0)")
 	test.Do(t, "POST", cmd.URL()+"/index/i0/query", "TopN(f0)")
 
-	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
-	}
-
+	tries := 0
 	ret := make([]pilosa.PastQueryStatus, 4)
-	b, err := io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatalf("reading: %v", err)
-	}
-	err = json.Unmarshal(b, &ret)
-	if err != nil {
-		t.Fatalf("unmarshalling: %v", err)
-	}
+	// We retry this looking for a length of 4. Why? Because the update of
+	// history is actually asynchronous in two ways. First, we're using a
+	// buffered channel for the status updates, so we can have finished
+	// writing to the channel before the tracker picks up the message.
+	// Second, after the tracker gets the message, it has to record it
+	// in a locked data structure. That could take non-zero time, but
+	// we're checking right away. In practice, that means that if we're
+	// slow, such as if we're running `go test -race`, we might miss
+	// it. So we retry until we have four items, or give up after a
+	// few milliseconds.
+	for tries < 3 {
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/query-history", nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
+		}
 
+		b, err := io.ReadAll(w.Body)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		err = json.Unmarshal(b, &ret)
+		if err != nil {
+			t.Fatalf("unmarshalling: %v", err)
+		}
+
+		// verify result length
+		if len(ret) == 4 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+		tries++
+	}
 	// verify result length
 	if len(ret) != 4 {
 		// each set query executes on both nodes once
