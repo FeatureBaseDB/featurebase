@@ -257,8 +257,11 @@ run go tests race:
   extends: .go-cache
   variables:
     SQLDB_DB: run_go_tests
+    POSTGRES_DB: run_go_tests
     SQLDB_USER: postgres
+    POSTGRES_USER: postgres
     SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     SQLDB_HOST: postgres
   services:
     - postgres:13.5
@@ -287,8 +290,11 @@ run go tests:
   extends: .go-cache
   variables:
     SQLDB_DB: run_go_tests
+    POSTGRES_DB: run_go_tests
     SQLDB_USER: postgres
+    POSTGRES_USER: postgres
     SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     SQLDB_HOST: postgres
   services:
     - postgres:13.5
@@ -318,8 +324,11 @@ run go tests dax/test/dax:
     - docker
   variables:
     SQLDB_DB: run_go_tests
+    POSTGRES_DB: run_go_tests
     SQLDB_USER: postgres
+    POSTGRES_USER: postgres
     SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     SQLDB_HOST: postgres
   services:
     - postgres:13.5
