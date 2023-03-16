@@ -256,11 +256,10 @@ run go tests race:
   image: golang:$GOVERSION
   extends: .go-cache
   variables:
-    POSTGRES_DB: run_go_tests_race
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-    POSTGRES_HOST: postgres
-    POSTGRES_HOST_AUTH_METHOD: trust
+    SQLDB_DB: run_go_tests
+    SQLDB_USER: postgres
+    SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    SQLDB_HOST: postgres
   services:
     - postgres:13.5
   rules:
@@ -268,9 +267,6 @@ run go tests race:
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
   script:
     - echo "Running featurebase race tests..."
-    - echo $POSTGRES_USER
-    - echo $POSTGRES_HOST
-    - echo $POSTGRES_PORT
     - ./.gitlab/install-soda.sh
     - cd dax; $GOPATH/bin/soda drop -e test; $GOPATH/bin/soda create -e test; $GOPATH/bin/soda migrate -e test; cd ..;
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
@@ -290,19 +286,16 @@ run go tests:
   image: golang:$GOVERSION
   extends: .go-cache
   variables:
-    POSTGRES_DB: run_go_tests
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-    POSTGRES_HOST: postgres
-    POSTGRES_HOST_AUTH_METHOD: trust
+    SQLDB_DB: run_go_tests
+    SQLDB_USER: postgres
+    SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    SQLDB_HOST: postgres
   services:
     - postgres:13.5
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests..."
-    - echo $POSTGRES_USER
-    - echo $POSTGRES_HOST
     - ./.gitlab/install-soda.sh
     - cd dax; $GOPATH/bin/soda drop -e test; $GOPATH/bin/soda create -e test; $GOPATH/bin/soda migrate -e test; cd ..;
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
@@ -324,11 +317,10 @@ run go tests dax/test/dax:
   tags:
     - docker
   variables:
-    POSTGRES_DB: run_go_tests_dax_integration
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-    POSTGRES_HOST: postgres
-    POSTGRES_HOST_AUTH_METHOD: trust
+    SQLDB_DB: run_go_tests
+    SQLDB_USER: postgres
+    SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    SQLDB_HOST: postgres
   services:
     - postgres:13.5
   rules:

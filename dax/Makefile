@@ -23,8 +23,8 @@ testv-integration:
 ######################## Postgres Backend Stuff #########################
 
 run-postgres:
-	mkdir -p pgdata
-	docker run -p 5432:5432 -v $(shell pwd)/pgdata:/var/lib/postgresql/data:Z  -e POSTGRES_PASSWORD=testpass --user=$(shell id -u) postgres:13.5 -c log_min_duration_statement=0
+	mkdir -p $(HOME)/pgdata
+	docker run -p 5432:5432 -v $(HOME)/pgdata:/var/lib/postgresql/data:Z  -e POSTGRES_PASSWORD=testpass --user=$(shell id -u) postgres:13.5 -c log_min_duration_statement=0
 
 prep-devel:
 	soda drop -e development; soda create -e development; soda migrate -e development

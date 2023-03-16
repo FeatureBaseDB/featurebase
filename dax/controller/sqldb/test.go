@@ -17,10 +17,10 @@ func EnvOr(envName, defaultVal string) string {
 func GetTestConfig() *controller.SQLDBConfig {
 	return &controller.SQLDBConfig{
 		Dialect:  "postgres",
-		Database: EnvOr("POSTGRES_DB", "dax_test"),
-		Host:     EnvOr("POSTGRES_HOST", "127.0.0.1"),
-		Port:     EnvOr("POSTGRES_PORT", "5432"),
-		User:     EnvOr("POSTGRES_USER", "postgres"),
-		Password: EnvOr("POSTGRES_PASSWORD", "testpass"),
+		Database: EnvOr("SQLDB_DB", "dax_test"),
+		Host:     EnvOr("SQLDB_HOST", "127.0.0.1"),
+		Port:     EnvOr("SQLDB_PORT", "5432"),
+		User:     EnvOr("SQLDB_USER", "postgres"),
+		Password: EnvOr("SQLDB_PASSWORD", "testpass"),
 	}
 }
