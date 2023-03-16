@@ -1,24 +1,24 @@
 ---
 development:
   dialect: postgres
-  database: {{envOr "POSTGRES_DB" "dax_development"}}
-  user: {{envOr "POSTGRES_USER" "postgres"}}
-  password: {{envOr "POSTGRES_PASSWORD" "testpass"}}
-  host: {{envOr "POSTGRES_HOST" "127.0.0.1"}}
+  database: {{envOr "SQLDB_DB" "dax_development"}}
+  user: {{envOr "SQLDB_USER" "postgres"}}
+  password: {{envOr "SQLDB_PASSWORD" "testpass"}}
+  host: {{envOr "SQLDB_HOST" "127.0.0.1"}}
   pool: 5
 
 test:
   dialect: postgres
-  database: {{envOr "POSTGRES_DB" "dax_test"}}
-  user: {{envOr "POSTGRES_USER" "postgres"}}
-  password: {{envOr "POSTGRES_PASSWORD" "testpass"}}
-  host: {{envOr "POSTGRES_HOST" "127.0.0.1"}}
+  database: {{envOr "SQLDB_DB" "dax_test"}}
+  user: {{envOr "SQLDB_USER" "postgres"}}
+  password: {{envOr "SQLDB_PASSWORD" "testpass"}}
+  host: {{envOr "SQLDB_HOST" "127.0.0.1"}}
   pool: 5
 
 production:
   dialect: postgres
-  database: {{envOr "POSTGRES_DB" "controller"}}
-  user: {{envOr "POSTGRES_USER" "dax"}}
-  password: {{envOr "POSTGRES_PASSWORD" ""}}
-  host: {{envOr "POSTGRES_HOST" "127.0.0.1"}}
+  database: {{envOr "SQLDB_DB" "controller"}}
+  user: {{envOr "SQLDB_USER" "dax"}}
+  password: {{envOr "SQLDB_PASSWORD" ""}}
+  host: {{envOr "SQLDB_HOST" "127.0.0.1"}}
   pool: 10 # TODO
