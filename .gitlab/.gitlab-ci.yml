@@ -268,6 +268,8 @@ run go tests race:
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
   script:
     - echo "Running featurebase race tests..."
+    - echo $POSTGRES_USER
+    - echo $POSTGRES_HOST
     - ./.gitlab/install-soda.sh
     - cd dax; $GOPATH/bin/soda drop -e test; $GOPATH/bin/soda create -e test; $GOPATH/bin/soda migrate -e test; cd ..;
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
@@ -298,6 +300,8 @@ run go tests:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Running featurebase unit tests..."
+    - echo $POSTGRES_USER
+    - echo $POSTGRES_HOST
     - ./.gitlab/install-soda.sh
     - cd dax; $GOPATH/bin/soda drop -e test; $GOPATH/bin/soda create -e test; $GOPATH/bin/soda migrate -e test; cd ..;
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
