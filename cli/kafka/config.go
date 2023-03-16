@@ -67,6 +67,9 @@ func ValidateConfig(c Config) error {
 				if c.Fields[i].PrimaryKey {
 					found++
 				}
+				if c.Fields[i].Name == "" {
+					return errors.Errorf("a name attribute (which isn't equal to \"\") should exist for all fields")
+				}
 			}
 			if found != 1 {
 				return errors.Errorf("exactly one primary key field is required")
