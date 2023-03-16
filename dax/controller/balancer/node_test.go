@@ -6,6 +6,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,9 +53,9 @@ func TestNodeService(t *testing.T) {
 
 	nodes, err := nodeSvc.Nodes(tx)
 	require.NoError(t, err)
-	require.EqualValues(t, 3, len(nodes))
+	assert.EqualValues(t, 3, len(nodes))
 	for _, node := range nodes {
-		require.Contains(t, node.RoleTypes, dax.RoleType("compute"), "node should have compute role but is: %+v", node)
+		assert.Contains(t, node.RoleTypes, dax.RoleType("compute"), "node should have compute role but is: %+v", node)
 	}
 
 	err = nodeSvc.DeleteNode(tx, nodeAddr2)

@@ -256,8 +256,8 @@ run go tests race:
   image: golang:$GOVERSION
   extends: .go-cache
   variables:
-    SQLDB_DB: run_go_tests
-    POSTGRES_DB: run_go_tests
+    SQLDB_DB: run_go_tests_race
+    POSTGRES_DB: run_go_tests_race
     SQLDB_USER: postgres
     POSTGRES_USER: postgres
     SQLDB_PASSWORD: $POSTGRES_PASSWORD
@@ -323,8 +323,8 @@ run go tests dax/test/dax:
   tags:
     - docker
   variables:
-    SQLDB_DB: run_go_tests
-    POSTGRES_DB: run_go_tests
+    SQLDB_DB: run_go_tests_dax
+    POSTGRES_DB: run_go_tests_dax
     SQLDB_USER: postgres
     POSTGRES_USER: postgres
     SQLDB_PASSWORD: $POSTGRES_PASSWORD
