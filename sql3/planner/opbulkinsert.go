@@ -266,13 +266,19 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 	rec, err := i.csvReader.Read()
 	if err == io.EOF {
 		return nil, types.ErrNoMoreRows
-	} else if err != nil {
-		pe, ok := err.(*csv.ParseError)
-		if ok {
-			return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
-		}
-		return nil, err
 	}
+	// err == csv.ParseError is impossible if LazyQuotes is true
+	// we should uncomment the code below if we ever dispable LazyQuotes
+	// so there is no need check for any other error
+	/*
+		else if err != nil {
+			pe, ok := err.(*csv.ParseError)
+			if ok {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
+			}
+			return nil, err
+		}
+	*/
 
 	// now we do the mapping to the output row
 	result := make([]interface{}, len(i.options.mapExpressions))
@@ -312,8 +318,6 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 			intVal, err := strconv.ParseInt(evalValue, 10, 64)
 			if err != nil {
 				if tm, err := time.ParseInLocation(time.RFC3339Nano, evalValue, time.UTC); err == nil {
-					result[idx] = tm
-				} else if tm, err := time.ParseInLocation(time.RFC3339, evalValue, time.UTC); err == nil {
 					result[idx] = tm
 				} else if tm, err := time.ParseInLocation("2006-01-02", evalValue, time.UTC); err == nil {
 					result[idx] = tm
@@ -658,8 +662,6 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 					case string:
 						if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
-							result[idx] = tm
-						} else if tm, err := time.ParseInLocation(time.RFC3339, v, time.UTC); err == nil {
 							result[idx] = tm
 						} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
 							result[idx] = tm
@@ -1152,8 +1154,6 @@ func (i *bulkInsertSourceParquetRowIter) Next(ctx context.Context) (types.Row, e
 				result[idx] = time.Unix(intVal, 0).UTC()
 			} else if stringVal, ok := evalValue.(string); ok {
 				if tm, err := time.ParseInLocation(time.RFC3339Nano, stringVal, time.UTC); err == nil {
-					result[idx] = tm
-				} else if tm, err := time.ParseInLocation(time.RFC3339, stringVal, time.UTC); err == nil {
 					result[idx] = tm
 				} else if tm, err := time.ParseInLocation("2006-01-02", stringVal, time.UTC); err == nil {
 					result[idx] = tm
