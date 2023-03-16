@@ -2850,6 +2850,11 @@ func simpleParquetMaker(t *testing.T, f *os.File, numRows int64, input []tb) {
 			sbuild.AppendValues(input[i].Value.([]string), nil)
 			newChunk := sbuild.NewArray()
 			chunks = append(chunks, newChunk)
+		case arrow.FixedWidthTypes.Boolean:
+			bbuild := array.NewBooleanBuilder(mem)
+			bbuild.AppendValues(input[i].Value.([]bool), nil)
+			newChunk := bbuild.NewArray()
+			chunks = append(chunks, newChunk)
 		}
 	}
 	// make schema
@@ -2872,7 +2877,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 
 	t.Run("BulkFromLocalFile", func(t *testing.T) {
 		// check that can pull parquet file from local file
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING, d STRINGSET, e IDSET, f BOOL);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
 		assert.NoError(t, err)
@@ -2883,15 +2888,21 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7}},
 			{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803}},
 			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio"}},
+			{Name: "stringsetV", Type: arrow.BinaryTypes.String, Value: []string{"a1", "a2"}},
+			{Name: "idsetV", Type: arrow.PrimitiveTypes.Int64, Value: []int64{10, 20}},
+			{Name: "boolV", Type: arrow.FixedWidthTypes.Boolean, Value: []bool{true, false}},
 		})
 
 		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
-	into j1 (_id,a,b,c ) 
+	into j1 (_id,a,b,c,d,e,f ) 
 	map(
 		'id' id, 
 		'int64V' INT, 
 		'float64V' DECIMAL(2), 
-		'stringV' STRING) 
+		'stringV' STRING,
+		'stringsetV' STRINGSET,
+		'idsetV' IDSET,
+		'boolV' BOOL) 
     from 
 	   '%s' 
 	   WITH FORMAT 'PARQUET' 
@@ -2998,8 +3009,13 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		tmpfile, err := os.CreateTemp("", "BulkCSVFile.csv")
 		assert.NoError(t, err)
 		defer os.Remove(tmpfile.Name())
-		// create a csv file with all the example data
-		tmpfile.Write([]byte("1, 42, \"pi\""))
+		// create a csv file with all the example data bigger than batch size
+		var expect [][]interface{}
+		for i := int64(1); i < 100; i++ {
+			s := fmt.Sprintf("pi%d", i)
+			tmpfile.Write([]byte(fmt.Sprintf("%d, %d, \"%s\"\n", i, i+42, s)))
+			expect = append(expect, []interface{}{i, i + 42, s})
+		}
 
 		mux := http.NewServeMux()
 		ts := httptest.NewServer(mux)
@@ -3021,13 +3037,12 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
     from 
 	   '%s' 
 	   WITH FORMAT 'CSV' 
+	   BATCHSIZE 60
 	   INPUT 'URL';`, ts.URL+"/static"))
 		assert.NoError(t, err)
 		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j3`)
 		assert.NoError(t, err)
-		if diff := cmp.Diff([][]interface{}{
-			{int64(1), int64(42), "pi"},
-		}, results); diff != "" {
+		if diff := cmp.Diff(expect, results); diff != "" {
 			t.Fatal(diff)
 		}
 	})
