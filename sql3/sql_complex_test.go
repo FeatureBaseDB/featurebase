@@ -1879,7 +1879,9 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		x'{ "_id": 1, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": true, "d1": 11.34 }
 		{ "_id": 2, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 0, "d1": 11.34 }
 		{ "_id": 3, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }
-		{ "_id": 4, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }' 
+		{ "_id": 4, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }
+		{ "_id": 5, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01", "s1": 42, "b1": 1, "d1": 11.34 }
+		' 
 	with 
 		format 'NDJSON' 
 		input 'STREAM';`)
@@ -2877,24 +2879,25 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 
 	t.Run("BulkFromLocalFile", func(t *testing.T) {
 		// check that can pull parquet file from local file
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING, d STRINGSET, e IDSET, f BOOL);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING, d STRINGSET, e IDSET, f BOOL, t TIMESTAMP);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
 		assert.NoError(t, err)
 		defer os.Remove(tmpfile.Name())
 		// create a parquet file with all the example data
 		simpleParquetMaker(t, tmpfile, 2, []tb{
-			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1, 2}},
-			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7}},
-			{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803}},
-			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio"}},
-			{Name: "stringsetV", Type: arrow.BinaryTypes.String, Value: []string{"a1", "a2"}},
-			{Name: "idsetV", Type: arrow.PrimitiveTypes.Int64, Value: []int64{10, 20}},
-			{Name: "boolV", Type: arrow.FixedWidthTypes.Boolean, Value: []bool{true, false}},
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1, 2, 3}},
+			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7, 6}},
+			{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803, 1.41426}},
+			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio", "sqr2"}},
+			{Name: "stringsetV", Type: arrow.BinaryTypes.String, Value: []string{"a1", "a2", "a3"}},
+			{Name: "idsetV", Type: arrow.PrimitiveTypes.Int64, Value: []int64{10, 20, 30}},
+			{Name: "boolV", Type: arrow.FixedWidthTypes.Boolean, Value: []bool{true, false, true}},
+			{Name: "timestampstring", Type: arrow.BinaryTypes.String, Value: []string{"2022-01-28T12:14:04Z", "1970-01-28", "1988-05-30T12:02:00.567999999Z"}},
 		})
 
 		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
-	into j1 (_id,a,b,c,d,e,f ) 
+	into j1 (_id,a,b,c,d,e,f,t ) 
 	map(
 		'id' id, 
 		'int64V' INT, 
@@ -2902,7 +2905,8 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		'stringV' STRING,
 		'stringsetV' STRINGSET,
 		'idsetV' IDSET,
-		'boolV' BOOL) 
+		'boolV' BOOL,
+		'timestampstring' TIMESTAMP) 
     from 
 	   '%s' 
 	   WITH FORMAT 'PARQUET' 
@@ -2913,6 +2917,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(42), "pi"},
 			{int64(2), int64(7), "goldenratio"},
+			{int64(3), int64(6), "sqr2"},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
@@ -3049,13 +3054,13 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	t.Run("BulkNDJSONFromUrl", func(t *testing.T) {
 		// check that can pull parquet file from URL and load
 
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j4 (_id ID, a INT, b STRING);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j4 (_id ID, a INT, b STRING, c TIMESTAMP);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkJSONFile.json")
 		assert.NoError(t, err)
 		defer os.Remove(tmpfile.Name())
 		// create a csv file with all the example data
-		tmpfile.Write([]byte(`{ "id":1, "intv":42, "stringv":"pi" }`))
+		tmpfile.Write([]byte(`{ "id":1, "intv":42, "stringv":"pi" , "ts": 1678985262}`))
 
 		mux := http.NewServeMux()
 		ts := httptest.NewServer(mux)
@@ -3069,11 +3074,12 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		})
 
 		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
-	into j4 (_id,a,b ) 
+	into j4 (_id,a,b,c ) 
 	map(
 		'$.id' id, 
 		'$.intv' INT, 
-		'$.stringv' STRING) 
+		'$.stringv' STRING,
+		'$.ts' TIMESTAMP) 
     from 
 	   '%s' 
 	   WITH FORMAT 'NDJSON' 

@@ -319,8 +319,6 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 			if err != nil {
 				if tm, err := time.ParseInLocation(time.RFC3339Nano, evalValue, time.UTC); err == nil {
 					result[idx] = tm
-				} else if tm, err := time.ParseInLocation(time.RFC3339, evalValue, time.UTC); err == nil {
-					result[idx] = tm
 				} else if tm, err := time.ParseInLocation("2006-01-02", evalValue, time.UTC); err == nil {
 					result[idx] = tm
 				} else {
@@ -664,8 +662,6 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 					case string:
 						if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
-							result[idx] = tm
-						} else if tm, err := time.ParseInLocation(time.RFC3339, v, time.UTC); err == nil {
 							result[idx] = tm
 						} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
 							result[idx] = tm
@@ -1158,8 +1154,6 @@ func (i *bulkInsertSourceParquetRowIter) Next(ctx context.Context) (types.Row, e
 				result[idx] = time.Unix(intVal, 0).UTC()
 			} else if stringVal, ok := evalValue.(string); ok {
 				if tm, err := time.ParseInLocation(time.RFC3339Nano, stringVal, time.UTC); err == nil {
-					result[idx] = tm
-				} else if tm, err := time.ParseInLocation(time.RFC3339, stringVal, time.UTC); err == nil {
 					result[idx] = tm
 				} else if tm, err := time.ParseInLocation("2006-01-02", stringVal, time.UTC); err == nil {
 					result[idx] = tm
