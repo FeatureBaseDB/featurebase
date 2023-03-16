@@ -9,7 +9,6 @@ import (
 	cschemar "github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/errors"
-	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,10 +35,9 @@ var (
 func TestSQLSchemar(t *testing.T) {
 	// TODO: currently you must start w/ a clean test database
 	// soda drop -e test; soda create -e test; soda migrate -e test
-	conn, err := pop.Connect("test")
-	require.NoError(t, err, "connecting")
 
-	trans := sqldb.Transactor{Connection: conn}
+	trans, err := sqldb.Connect(sqldb.GetTestConfig())
+	require.NoError(t, err, "connecting")
 
 	tx, err := trans.BeginTx(context.Background(), true)
 	require.NoError(t, err, "getting transaction")
@@ -228,22 +226,9 @@ func TestCreateTableNoDBFails(t *testing.T) {
 	require.NotNil(t, err)
 }
 
-// Testing of failure cases needs to be done in separate tests because they abort the transaction.
-
-// TODO: test create field with empty name fails
-// if err := schemar.CreateField(tx, qtbl.QualifiedID(), &dax.Field{Name: "", Type: "string"}); err == nil {
-// 	t.Fatal("should have errored")
-// } else {
-// 	t.Logf("Got expected error creating field with empty name: '%v'", err)
-// }
-
-// TODO: test create field with nonexistent table fails
-
 func setupSQLDBTx(t *testing.T) (trans controller.Transactor, tx dax.Transaction, finish func()) {
-	conn, err := pop.Connect("test")
+	trans, err := sqldb.Connect(sqldb.GetTestConfig())
 	require.NoError(t, err, "connecting")
-
-	trans = sqldb.Transactor{Connection: conn}
 
 	tx, err = trans.BeginTx(context.Background(), true)
 	require.NoError(t, err, "beginning transaction")

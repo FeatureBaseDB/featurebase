@@ -6,7 +6,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
-	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,10 +21,8 @@ const (
 func TestWorkerJobService(t *testing.T) {
 	// TODO: currently you must start w/ a clean test database
 	// soda drop -e test; soda create -e test; soda migrate -e test
-	conn, err := pop.Connect("test")
+	trans, err := sqldb.Connect(sqldb.GetTestConfig())
 	require.NoError(t, err, "connecting")
-
-	trans := sqldb.Transactor{Connection: conn}
 
 	tx, err := trans.BeginTx(context.Background(), true)
 	require.NoError(t, err, "getting transaction")

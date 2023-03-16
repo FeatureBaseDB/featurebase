@@ -3,19 +3,19 @@ package models_test
 import (
 	"testing"
 
+	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
-	"github.com/gobuffalo/pop/v6"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOrganization(t *testing.T) {
-	c, err := pop.Connect("test")
-	if err != nil {
-		t.Fatalf("connecting: %v", err)
-	}
+	trans, err := sqldb.Connect(sqldb.GetTestConfig())
+	require.NoError(t, err, "connecting")
+
+	c := trans.(sqldb.Transactor).Connection
 
 	tx, err := c.NewTransaction()
-	assert.NoError(t, err, "getting transaction")
+	require.NoError(t, err, "getting transaction")
 
 	defer func() {
 		err := tx.TX.Rollback()

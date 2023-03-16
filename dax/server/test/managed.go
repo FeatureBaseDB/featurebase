@@ -15,6 +15,7 @@ import (
 	computersvc "github.com/featurebasedb/featurebase/v3/dax/computer/service"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllersvc "github.com/featurebasedb/featurebase/v3/dax/controller/service"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
 	queryersvc "github.com/featurebasedb/featurebase/v3/dax/queryer/service"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
@@ -22,6 +23,7 @@ import (
 	fbtest "github.com/featurebasedb/featurebase/v3/test"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ManagedCommand represents a test wrapper for server.Command.
@@ -204,8 +206,8 @@ func DefaultConfig() *server.Config {
 	cfg.Verbose = true
 	cfg.Controller.Run = true
 	cfg.Controller.Config.StorageMethod = "sqldb"
-	cfg.Controller.Config.StorageEnv = "test"
 	cfg.Controller.Config.RegistrationBatchTimeout = 0
+	cfg.Controller.Config.SQLDB = sqldb.GetTestConfig()
 	cfg.Queryer.Run = true
 	cfg.Computer.Run = true
 	cfg.Computer.N = 1
@@ -231,10 +233,10 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 	mc := NewManagedCommand(tb, opts...)
 
 	var err error
-	mc.conn, err = pop.Connect("test")
-	if err != nil {
-		tb.Fatalf("couldn't connect: %v", err)
-	}
+	trans, err := sqldb.Connect(sqldb.GetTestConfig())
+	require.NoError(tb, err, "connecting")
+	mc.conn = trans.(sqldb.Transactor).Connection
+
 	err = mc.conn.TruncateAll()
 	if err != nil {
 		tb.Fatalf("truncating DB: %v", err)

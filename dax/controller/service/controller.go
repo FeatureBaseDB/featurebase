@@ -14,7 +14,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	fbnet "github.com/featurebasedb/featurebase/v3/net"
-	"github.com/gobuffalo/pop/v6"
 )
 
 // Ensure type implements interface.
@@ -75,26 +74,12 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 		controller.Balancer = sqldb.NewBalancer(logr)
 		controller.DirectiveVersion = sqldb.NewDirectiveVersion(logr)
 
-		if cfg.StorageConfigFile != "" {
-			f, err := os.Open(cfg.StorageConfigFile)
-			if err != nil {
-				logr.Printf("opening storage config file '%s': %v", cfg.StorageConfigFile, err)
-				os.Exit(1)
-			}
-			defer f.Close()
-			err = pop.LoadFrom(f)
-			if err != nil {
-				logr.Printf("loading sqldb config from file '%s': %v", cfg.StorageConfigFile, err)
-				os.Exit(1)
-			}
-		}
-
-		conn, err := pop.Connect(cfg.StorageEnv)
+		transactor, err := sqldb.Connect(cfg.SQLDB)
 		if err != nil {
 			logr.Printf("Connecting to database: %v", err)
 			os.Exit(1)
 		}
-		controller.Transactor = sqldb.Transactor{Connection: conn}
+		controller.Transactor = transactor
 	default:
 		logr.Printf("storagemethod %s not supported, try 'boltdb' or 'sqldb'", cfg.StorageMethod)
 		os.Exit(1)

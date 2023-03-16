@@ -71,8 +71,7 @@ func NewConfig() *Config {
 			Config: controller.Config{
 				RegistrationBatchTimeout: time.Second * 3,
 				StorageMethod:            defaultStorageMethod,
-				StorageEnv:               "development",
-				StorageConfigFile:        "",
+				SQLDB:                    controller.NewSQLDBConfig(),
 				SnappingTurtleTimeout:    time.Minute * 3,
 			},
 		},
