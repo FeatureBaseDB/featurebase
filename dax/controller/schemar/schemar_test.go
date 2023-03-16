@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	cschemar "github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,21 +33,13 @@ var (
 // underlying implementations
 
 func TestSQLSchemar(t *testing.T) {
-	// TODO: currently you must start w/ a clean test database
-	// soda drop -e test; soda create -e test; soda migrate -e test
-
-	trans, err := sqldb.Connect(sqldb.GetTestConfig())
+	conf := sqldb.GetTestConfigRandomDB("sql_schemar")
+	trans, err := sqldb.Connect(conf, logger.StderrLogger)
 	require.NoError(t, err, "connecting")
+	defer sqldb.DropDatabase(trans)
 
 	tx, err := trans.BeginTx(context.Background(), true)
 	require.NoError(t, err, "getting transaction")
-
-	defer func() {
-		err := tx.Rollback()
-		if err != nil {
-			t.Logf("rolling back: %v", err)
-		}
-	}()
 
 	schemar := sqldb.NewSchemar(nil)
 
@@ -196,64 +188,13 @@ func TestSQLSchemar(t *testing.T) {
 	require.Equal(t, 1, len(dbs))
 	require.EqualValues(t, dbID2, dbs[0].Database.ID)
 
-}
-
-func TestCreateTableNoDBFails(t *testing.T) {
-	_, tx, finish := setupSQLDBTx(t)
-	defer finish()
-
-	schemar := sqldb.NewSchemar(nil)
-	qtbl := &dax.QualifiedTable{
-		QualifiedDatabaseID: qdbid,
-		Table: dax.Table{
-			Name: tblName,
-			Fields: []*dax.Field{{
-				Name:    "_id",
-				Type:    "string",
-				Options: dax.FieldOptions{},
-			}},
-			PartitionN:  4,
-			Description: "desc",
-			Owner:       "own",
-			UpdatedBy:   "me",
-		},
+	// rollback so we have clean state to test failure cases
+	err = tx.Rollback()
+	if err != nil {
+		require.NoError(t, err, "rolling back to test failure cases")
 	}
 
-	qtbl.QualifiedDatabaseID = dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: dbID4}
-	qtbl.ID = ""
-	qtbl.CreateID()
-	err := schemar.CreateTable(tx, qtbl)
-	require.NotNil(t, err)
-}
-
-func setupSQLDBTx(t *testing.T) (trans controller.Transactor, tx dax.Transaction, finish func()) {
-	trans, err := sqldb.Connect(sqldb.GetTestConfig())
-	require.NoError(t, err, "connecting")
-
-	tx, err = trans.BeginTx(context.Background(), true)
-	require.NoError(t, err, "beginning transaction")
-
-	finish = func() {
-		err := tx.Rollback()
-		if err != nil {
-			t.Logf("committing: %v", err)
-		}
-	}
-	return trans, tx, finish
-}
-
-func TestSchemarErrors(t *testing.T) {
-	trans, tx, _ := setupSQLDBTx(t)
-
-	schemar := sqldb.NewSchemar(nil)
-
-	err := schemar.CreateDatabase(tx,
-		&dax.QualifiedDatabase{
-			OrganizationID: orgID,
-			Database:       dax.Database{ID: dbID, Name: dbName}})
-	require.NoError(t, err)
-
-	qtbl := &dax.QualifiedTable{
+	qtbl = &dax.QualifiedTable{
 		QualifiedDatabaseID: qdbid,
 		Table: dax.Table{
 			Name: tblName,
@@ -275,29 +216,32 @@ func TestSchemarErrors(t *testing.T) {
 			UpdatedBy:   "me",
 		},
 	}
-
+	qtbl.ID = ""
 	_, err = qtbl.CreateID()
 	require.NoError(t, err)
+
+	t.Run("Create Table no DB fails", func(t *testing.T) {
+		tx, err := trans.BeginTx(context.Background(), true)
+		require.NoError(t, err)
+		defer tx.Rollback()
+		err = schemar.CreateTable(tx, qtbl)
+		require.NotNil(t, err)
+	})
+
+	tx, err = trans.BeginTx(context.Background(), true)
+	require.NoError(t, err, "beginning transaction")
+
+	err = schemar.CreateDatabase(tx,
+		&dax.QualifiedDatabase{
+			OrganizationID: orgID,
+			Database:       dax.Database{ID: dbID, Name: dbName}})
+	require.NoError(t, err)
+
 	err = schemar.CreateTable(tx, qtbl)
 	require.NoError(t, err)
 
 	err = tx.Commit()
 	require.NoError(t, err)
-
-	defer func() {
-		tx, err = trans.BeginTx(context.Background(), true)
-		if err != nil {
-			t.Fatalf("Couldn't get tx to drop database: %v", err)
-		}
-		err = schemar.DropDatabase(tx, qdbid)
-		if err != nil {
-			t.Logf("dropping database: %v", err)
-		}
-		err = tx.Commit()
-		if err != nil {
-			t.Logf("committing drop database")
-		}
-	}()
 
 	t.Run("Drop non-existent field fails with correct error", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
@@ -386,7 +330,6 @@ func TestSchemarErrors(t *testing.T) {
 		err = schemar.DropDatabase(tx, dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: "yoooo"})
 		requireCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 	})
-
 }
 
 func requireCode(t *testing.T, err error, code errors.Code) {

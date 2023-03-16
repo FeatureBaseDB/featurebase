@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDirectiveVersion(t *testing.T) {
 	// TODO: currently you must start w/ a clean test database
 	// soda drop -e test; soda create -e test; soda migrate -e test
-	trans, err := sqldb.Connect(sqldb.GetTestConfig())
+	trans, err := sqldb.Connect(sqldb.GetTestConfigRandomDB("directive_version"), logger.StderrLogger) // TODO running migrations takes kind of a long time, consolidate w/ other SQL tests
 	require.NoError(t, err, "connecting")
 
 	tx, err := trans.BeginTx(context.Background(), true)

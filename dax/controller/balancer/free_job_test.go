@@ -10,12 +10,7 @@ import (
 )
 
 func TestFreeJobService(t *testing.T) {
-	// TODO: currently you must start w/ a clean test database
-	// soda drop -e test; soda create -e test; soda migrate -e test
-	trans, err := sqldb.Connect(sqldb.GetTestConfig())
-	require.NoError(t, err, "connecting")
-
-	tx, err := trans.BeginTx(context.Background(), true)
+	tx, err := SQLTransactor.BeginTx(context.Background(), true)
 	require.NoError(t, err, "getting transaction")
 
 	defer func() {

@@ -14,6 +14,7 @@ import (
 // which can be used by the controller agnostic of implementation.
 type Transactor struct {
 	*pop.Connection
+	Migrator *EmbedMigrator
 }
 
 func (t Transactor) BeginTx(ctx context.Context, writable bool) (dax.Transaction, error) {

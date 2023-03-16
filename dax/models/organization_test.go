@@ -5,14 +5,15 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOrganization(t *testing.T) {
-	trans, err := sqldb.Connect(sqldb.GetTestConfig())
+	trans, err := sqldb.Connect(sqldb.GetTestConfigRandomDB("org_tests"), logger.StderrLogger) // TODO consolidate so we don't need to run migrations here
 	require.NoError(t, err, "connecting")
 
-	c := trans.(sqldb.Transactor).Connection
+	c := trans.Connection
 
 	tx, err := c.NewTransaction()
 	require.NoError(t, err, "getting transaction")

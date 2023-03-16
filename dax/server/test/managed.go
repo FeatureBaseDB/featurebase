@@ -20,6 +20,7 @@ import (
 	queryersvc "github.com/featurebasedb/featurebase/v3/dax/queryer/service"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	fbtest "github.com/featurebasedb/featurebase/v3/test"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/assert"
@@ -235,9 +236,9 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 	var err error
 	testconf := sqldb.GetTestConfig()
 	fmt.Printf("testconf: %+v", *testconf)
-	trans, err := sqldb.Connect(testconf)
+	trans, err := sqldb.Connect(testconf, logger.StderrLogger)
 	require.NoError(tb, err, "connecting")
-	mc.conn = trans.(sqldb.Transactor).Connection
+	mc.conn = trans.Connection
 
 	err = mc.conn.TruncateAll()
 	if err != nil {
