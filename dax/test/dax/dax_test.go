@@ -727,30 +727,22 @@ func TestDAXIntegration(t *testing.T) {
 
 				t.Run("CreateDatabase", func(t *testing.T) {
 					err := client.CreateDatabase(ctx, nil)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, schemar.ErrCodeDatabaseNameInvalid))
-					}
+					assertCode(t, err, schemar.ErrCodeDatabaseNameInvalid)
 				})
 
 				t.Run("DropDatabase", func(t *testing.T) {
 					err := client.DropDatabase(ctx, qdbid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 				})
 
 				t.Run("DatabaseByName", func(t *testing.T) {
 					_, err := client.DatabaseByName(ctx, "", "")
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseNameDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrDatabaseNameDoesNotExist)
 				})
 
 				t.Run("DatabaseByID", func(t *testing.T) {
 					_, err := client.DatabaseByID(ctx, qdbid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 				})
 
 				t.Run("SetDatabaseOption", func(t *testing.T) {
@@ -760,38 +752,28 @@ func TestDAXIntegration(t *testing.T) {
 
 				t.Run("Databases", func(t *testing.T) {
 					_, err := client.Databases(ctx, "", dbID)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrOrganizationIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrOrganizationIDDoesNotExist)
 				})
 
 				t.Run("CreateTable", func(t *testing.T) {
 					err := client.CreateTable(ctx, &qtbl)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, schemar.ErrCodeTableNameInvalid))
-					}
+					assertCode(t, err, schemar.ErrCodeTableNameInvalid)
 				})
 
 				t.Run("DropTable", func(t *testing.T) {
 					err := client.DropTable(ctx, qtid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrTableIDDoesNotExist)
 				})
 
 				t.Run("TableByName", func(t *testing.T) {
 					req := dax.QualifiedTableID{}
 					_, err := client.TableByName(ctx, qdbid, req.Name)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrTableNameDoesNotExist)
 				})
 
 				t.Run("TableByID", func(t *testing.T) {
 					_, err := client.TableByID(ctx, qtid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrTableIDDoesNotExist)
 				})
 
 				//Todo: make it so "Tables" doesn't return all tables if error is present
@@ -805,16 +787,12 @@ func TestDAXIntegration(t *testing.T) {
 
 				t.Run("CreateField", func(t *testing.T) {
 					err := client.CreateField(ctx, qtid, tbfld)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, schemar.ErrCodeFieldNameInvalid))
-					}
+					assertCode(t, err, schemar.ErrCodeFieldNameInvalid)
 				})
 
 				t.Run("DropField", func(t *testing.T) {
 					err := client.DropField(ctx, qtid, tbfld.Name)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrFieldDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrFieldDoesNotExist)
 				})
 			})
 		})
