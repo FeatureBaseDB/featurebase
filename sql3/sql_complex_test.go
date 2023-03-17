@@ -403,6 +403,13 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 				constraints: "timequantum 'YMD' ttl '24h' cachetype ranked",
 				expErr:      "[1:60] 'TIMEQUANTUM' constraint cannot be applied to a column of type 'stringset'",
 			},
+			// epoch option is not supported. This test expects an error if the option is specified in the create table statement
+			{
+				name:        "timestampcol",
+				typ:         "timestamp",
+				constraints: "timeunit 's' epoch '2023-03-17T00:00:00Z'",
+				expErr:      "1:95: expected column name, or right paren, found 'EPOCH'",
+			},
 		}
 
 		for i, fld := range fields {
@@ -459,6 +466,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 					Type: "bool",
 				},
 			},
+			//test creates timestamp column without the epoch and expects the "Base" to be defaulted 0, which is the unix epoch
 			{
 				name:        "timestampcol",
 				typ:         "timestamp",
