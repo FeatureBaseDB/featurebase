@@ -365,7 +365,7 @@ var stringScalarFunctionsTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			name: "CharLargeValue",
+			name: "AsciiCharLargeValue",
 			SQLs: sqls(
 				"select ascii(char(255))",
 			),
