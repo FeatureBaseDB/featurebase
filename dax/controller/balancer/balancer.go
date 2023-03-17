@@ -248,17 +248,14 @@ func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.Wor
 
 	// See if the worker is assigned to a database. If it's not, return early.
 	dbkey := b.current.DatabaseForWorker(tx, addr)
-	if dbkey == "" {
-		return diffs.Output(), nil
-	}
-
-	qdbid := dbkey.QualifiedDatabaseID()
-
-	for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
-		if diff, err := b.removeDatabaseWorker(tx, rt, qdbid, addr); err != nil {
-			return nil, errors.Wrapf(err, "removing worker: (%s) %s", rt, addr)
-		} else {
-			diffs.Merge(diff)
+	if dbkey != "" {
+		qdbid := dbkey.QualifiedDatabaseID()
+		for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
+			if diff, err := b.removeDatabaseWorker(tx, rt, qdbid, addr); err != nil {
+				return nil, errors.Wrapf(err, "removing worker: (%s) %s", rt, addr)
+			} else {
+				diffs.Merge(diff)
+			}
 		}
 	}
 
@@ -274,11 +271,14 @@ func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.Wor
 		return nil, errors.Wrapf(err, "deleting node from node service: %s", addr)
 	}
 
-	// Balance the affected database.
-	if diff, err := b.balanceDatabase(tx, qdbid); err != nil {
-		return nil, errors.Wrapf(err, "balancing database: %s", qdbid)
-	} else {
-		diffs.Merge(diff)
+	if dbkey != "" {
+		qdbid := dbkey.QualifiedDatabaseID()
+		// Balance the affected database.
+		if diff, err := b.balanceDatabase(tx, qdbid); err != nil {
+			return nil, errors.Wrapf(err, "balancing database: %s", qdbid)
+		} else {
+			diffs.Merge(diff)
+		}
 	}
 
 	return diffs.Output(), nil
