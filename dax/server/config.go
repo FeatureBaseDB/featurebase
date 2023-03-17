@@ -18,7 +18,7 @@ import (
 
 const (
 	defaultBindPort      = "8080"
-	defaultStorageMethod = "boltdb"
+	defaultStorageMethod = "sqldb"
 )
 
 // Config represents the configuration for the command.
