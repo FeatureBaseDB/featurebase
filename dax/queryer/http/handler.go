@@ -19,7 +19,7 @@ func Handler(q *queryer.Queryer) http.Handler {
 	logRequestMiddleWare := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !strings.Contains(r.URL.Path, "/health") {
-				q.Logger().Printf("serving %s, %v", r.Method, r.URL)
+				q.Logger().Debugf("serving %s, %v", r.Method, r.URL)
 			}
 			next.ServeHTTP(w, r)
 		})

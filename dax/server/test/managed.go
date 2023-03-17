@@ -22,7 +22,6 @@ import (
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	fbtest "github.com/featurebasedb/featurebase/v3/test"
-	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +31,6 @@ type ManagedCommand struct {
 	*server.Command
 
 	svcmgr *dax.ServiceManager
-	conn   *pop.Connection
 
 	started bool
 }
@@ -238,18 +236,24 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 	fmt.Printf("testconf: %+v", *testconf)
 	trans, err := sqldb.Connect(testconf, logger.StderrLogger)
 	require.NoError(tb, err, "connecting")
-	mc.conn = trans.Connection
 
-	err = mc.conn.TruncateAll()
+	// The integration tests reuse the same database every time, but
+	// truncate all the tables *before* the tests run (rather than
+	// after). This has the advantage that if the tests fail partway
+	// through, you can inspect the state of the database for
+	// debugging purposes.
+	err = trans.TruncateAll()
 	if err != nil {
 		tb.Fatalf("truncating DB: %v", err)
 	}
-	err = mc.conn.RawQuery("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00')").Exec()
+
+	// The migrations contain an insert, but since we just truncated everything we need to redo that insert.
+	err = trans.RawQuery("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00')").Exec()
 	if err != nil {
 		tb.Fatalf("reinserting directive_version record after truncation: %v", err)
 	}
 
-	err = mc.conn.Close()
+	err = trans.Close()
 	if err != nil {
 		tb.Fatalf("Closing conn after truncating all tables: %v", err)
 	}

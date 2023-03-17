@@ -46,7 +46,7 @@ func Connect(cfg *controller.SQLDBConfig, log logger.Logger) (Transactor, error)
 		return Transactor{Connection: nil}, errors.Wrap(err, "migrating DB")
 	}
 
-	return Transactor{Connection: conn, Migrator: mig}, nil
+	return Transactor{Connection: conn}, nil
 }
 
 // DropDatabase drops the database associated with the given

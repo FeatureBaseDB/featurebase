@@ -264,7 +264,7 @@ run go tests race:
     POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     SQLDB_HOST: postgres
   services:
-    - postgres:13.5
+    - postgres:14.7
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
@@ -295,7 +295,7 @@ run go tests:
     POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     SQLDB_HOST: postgres
   services:
-    - postgres:13.5
+    - postgres:14.7
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -327,7 +327,7 @@ run go tests dax/test/dax:
     POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     SQLDB_HOST: postgres
   services:
-    - postgres:13.5
+    - postgres:14.7
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:

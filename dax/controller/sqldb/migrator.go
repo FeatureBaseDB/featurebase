@@ -9,8 +9,10 @@ import (
 	"github.com/gobuffalo/pop/v6"
 )
 
-// EmbedMigrator is a migrator for SQL and Fizz
-// files which are embedded in any fs.FS.
+// EmbedMigrator is a migrator for SQL and Fizz files which are
+// embedded in any fs.FS. This is lifted directly from pop's
+// FileMigrator and tweaked slightly to take an fs.FS instead of a
+// file path.
 type EmbedMigrator struct {
 	pop.Migrator
 	FS  fs.FS

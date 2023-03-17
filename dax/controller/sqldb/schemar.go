@@ -369,8 +369,6 @@ func (s *Schemar) DropField(tx dax.Transaction, qtid dax.QualifiedTableID, field
 
 	col := &models.Column{}
 	err := dt.C.Where("table_id = ? and name = ?", qtid.Key(), fieldName).First(col)
-	// TODO if simply not found
-	// return dax.NewErrFieldDoesNotExist(fldName)
 	if err != nil {
 		if isNoRowsError(err) {
 			return dax.NewErrFieldDoesNotExist(fieldName)

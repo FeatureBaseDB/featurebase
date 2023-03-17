@@ -655,12 +655,8 @@ func TestDAXIntegration(t *testing.T) {
 			assert.ElementsMatch(t, allPartitions, gotPartitions)
 		}
 
-		fmt.Println("SETTING OPTION")
-
 		// Change DatabaseOptions.WorkersMin to 3.
 		assert.NoError(t, controllerClient.SetDatabaseOption(context.Background(), qdbid, dax.DatabaseOptionWorkersMin, "3"))
-
-		fmt.Println("DONESETTING OPTION")
 
 		// Query the same data.
 		t.Run("query the same data", func(t *testing.T) {

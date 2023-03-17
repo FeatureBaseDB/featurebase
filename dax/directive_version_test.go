@@ -10,8 +10,6 @@ import (
 )
 
 func TestDirectiveVersion(t *testing.T) {
-	// TODO: currently you must start w/ a clean test database
-	// soda drop -e test; soda create -e test; soda migrate -e test
 	trans, err := sqldb.Connect(sqldb.GetTestConfigRandomDB("directive_version"), logger.StderrLogger) // TODO running migrations takes kind of a long time, consolidate w/ other SQL tests
 	require.NoError(t, err, "connecting")
 
