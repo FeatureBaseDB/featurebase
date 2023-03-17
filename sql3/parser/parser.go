@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 )
 
 // Parser represents a SQL parser.
@@ -2768,12 +2767,9 @@ func (p *Parser) parseOperand() (expr Expr, err error) {
 	case NULL:
 		return &NullLit{ValuePos: pos}, nil
 	case CURRENT_DATE:
-		now := time.Now().UTC()
-		nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		return &DateLit{ValuePos: pos, Value: nowDate}, nil
+		return &SysVariable{NamePos: pos, Token: tok}, nil
 	case CURRENT_TIMESTAMP:
-		now := time.Now().UTC()
-		return &DateLit{ValuePos: pos, Value: now}, nil
+		return &SysVariable{NamePos: pos, Token: tok}, nil
 	case TRUE, FALSE:
 		return &BoolLit{ValuePos: pos, Value: tok == TRUE}, nil
 	case PLUS, MINUS, BITNOT:

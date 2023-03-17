@@ -151,6 +151,9 @@ func (p *ExecutionPlanner) analyzeExpression(ctx context.Context, expr parser.Ex
 	case *parser.DateLit:
 		return e, nil
 
+	case *parser.SysVariable:
+		return e, nil
+
 	case *parser.ParenExpr:
 		pexpr, err := p.analyzeExpression(ctx, e.X, scope)
 		if err != nil {
