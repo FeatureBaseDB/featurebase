@@ -81,7 +81,6 @@ staticcheck.conf
 
 .quick
 dax/dax-data
-dax/pgdata
 
 coverage-from-docker
 *.client_id.txt
