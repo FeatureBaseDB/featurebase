@@ -24,13 +24,7 @@ testv-integration:
 
 run-postgres:
 	mkdir -p $(HOME)/pgdata
-	docker run -p 5432:5432 -v $(HOME)/pgdata:/var/lib/postgresql/data:Z  -e POSTGRES_PASSWORD=testpass --user=$(shell id -u) postgres:13.5 -c log_min_duration_statement=0
-
-prep-devel:
-	soda drop -e development; soda create -e development; soda migrate -e development
-
-prep-test:
-	soda drop -e test; soda create -e test; soda migrate -e test
+	docker run -p 5432:5432 -v $(HOME)/pgdata:/var/lib/postgresql/data:Z  -e POSTGRES_PASSWORD=testpass --user=$(shell id -u) postgres:14.7 -c log_min_duration_statement=0
 
 ############################### AWS STUFF ###############################
 
