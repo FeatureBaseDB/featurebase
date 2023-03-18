@@ -17,6 +17,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
@@ -61,7 +62,8 @@ func TestDAXIntegration(t *testing.T) {
 			// Start ManagedCommand with an empty, new config. This results in a
 			// ServiceManager running with no active services. They are added
 			// later, throughout the test.
-			cfg := server.NewConfig()
+			cfg := server.NewConfig() // TODO: not sure why we're not getting test config here... had to add the SQLDB line below.
+			cfg.Controller.Config.SQLDB = sqldb.GetTestConfig()
 			opt := server.OptCommandConfig(cfg)
 			mc := test.MustRunManagedCommand(t, opt)
 			defer mc.Close()
