@@ -7,6 +7,7 @@ type Config struct {
 
 	OrganizationID string `json:"org-id"`
 	Database       string `json:"db"`
+	DatabaseID     string `json:"db-id"`
 
 	// CloudAuth
 	CloudAuth CloudAuthConfig `json:"cloud-auth"`

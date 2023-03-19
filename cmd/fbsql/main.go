@@ -52,6 +52,7 @@ func buildFlags(cmd *cobra.Command, cliCmd *cli.Command) {
 	flags.StringVar(&cliCmd.Config.HistoryPath, "history-path", cliCmd.Config.HistoryPath, "path for history files.")
 	flags.StringVar(&cliCmd.Config.OrganizationID, "org-id", cliCmd.Config.OrganizationID, "OrganizationID.")
 	flags.StringVarP(&cliCmd.Config.Database, "dbname", "d", cliCmd.Config.Database, "Name of the database to connect to.")
+	flags.StringVarP(&cliCmd.Config.DatabaseID, "db-id", "", cliCmd.Config.DatabaseID, "ID of the database to connect to (TEMPORARY).")
 
 	flags.StringVar(&cliCmd.Config.CloudAuth.ClientID, "client-id", cliCmd.Config.CloudAuth.ClientID, "Cognito Client ID for FeatureBase Cloud access.")
 	flags.StringVar(&cliCmd.Config.CloudAuth.Region, "region", cliCmd.Config.CloudAuth.Region, "Cloud region for FeatureBase Cloud access (e.g. us-east-2).")

@@ -101,6 +101,7 @@ func NewCommand(logdest logger.Logger) *Command {
 
 			OrganizationID: "",
 			Database:       "",
+			DatabaseID:     "",
 
 			CloudAuth: CloudAuthConfig{
 				ClientID: defaultClientID,
@@ -376,6 +377,7 @@ func (cmd *Command) setupConfig() error {
 
 	cmd.organizationID = cmd.Config.OrganizationID
 	cmd.database = cmd.Config.Database
+	cmd.databaseID = cmd.Config.DatabaseID
 
 	cmd.historyPath = cmd.Config.HistoryPath
 
@@ -485,6 +487,12 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 	var p printer = cmd
 	if cmd.nonInteractiveMode {
 		p = newNopPrinter()
+	}
+
+	if cmd.databaseID != "" {
+		cmd.databaseName = "(set by id)"
+		p.Printf(cmd.connectionMessage())
+		return nil
 	}
 
 	if dbName == "" {
