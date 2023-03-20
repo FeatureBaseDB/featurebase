@@ -113,6 +113,6 @@ The output should be as follows:
 
 ## Community and Support
 
-Join us on [https://discord.gg/FBn2vEp7Na][Discord].
+Join us on [Discord](https://discord.gg/featurefirstai).
 
 
