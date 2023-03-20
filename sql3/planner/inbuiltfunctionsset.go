@@ -69,6 +69,11 @@ func (n *callPlanExpression) EvaluateSetContainsAny(currentRow []interface{}) (i
 		return nil, err
 	}
 
+	//if either term is null, then null
+	if testSetEval == nil || targetSetEval == nil {
+		return nil, nil
+	}
+
 	if targetSetEval != nil {
 		switch typ := n.args[0].Type().(type) {
 		case *parser.DataTypeStringSet:
@@ -114,6 +119,11 @@ func (n *callPlanExpression) EvaluateSetContainsAll(currentRow []interface{}) (i
 	testSetEval, err := n.args[1].Evaluate(currentRow)
 	if err != nil {
 		return nil, err
+	}
+
+	//if either term is null, then null
+	if testSetEval == nil || targetSetEval == nil {
+		return nil, nil
 	}
 
 	if targetSetEval != nil {
