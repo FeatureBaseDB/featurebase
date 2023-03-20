@@ -49,7 +49,7 @@ You may insert as many records as you like in a single POST.
 To query the data in a FeatureBase database, do the following:
 
 ```
-curl -X POST http://0.0.0.0:10101/sql -d "SELECT * from planets;" | python3 -m json.tool
+curl -X POST http://0.0.0.0:10101/sql -d "SELECT * FROM planets;" | python3 -m json.tool
 ```
 
 The output should be as follows:
