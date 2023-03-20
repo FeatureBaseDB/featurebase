@@ -45,8 +45,10 @@ func (qryr *standardQueryer) Query(org string, db string, sql io.Reader) (*featu
 	if err != nil {
 		return nil, errors.Wrap(err, "reading response")
 	}
+
 	sqlResponse := &featurebase.WireQueryResponse{}
 	// TODO(tlt): switch this back once all responses are typed
+	// TODO(twg) 2023/03/01 using json.Number to decode large ints so care must be made
 	// if err := json.Unmarshal(fullbod, sqlResponse); err != nil {
 	if err := sqlResponse.UnmarshalJSONTyped(fullbod, true); err != nil {
 		return nil, errors.Wrapf(err, "unmarshaling query response, body:\n'%s'\n", fullbod)
@@ -66,7 +68,10 @@ type serverlessQueryer struct {
 }
 
 func (qryr *serverlessQueryer) Query(org string, db string, sql io.Reader) (*featurebase.WireQueryResponse, error) {
-	// buf := bytes.Buffer{}
+	if org == "" {
+		return nil, NewErrOrganizationRequired()
+	}
+
 	url := fmt.Sprintf("%s/queryer/databases/%s/sql", hostPort(qryr.Host, qryr.Port), db)
 	if db == "" {
 		url = fmt.Sprintf("%s/queryer/sql", hostPort(qryr.Host, qryr.Port))

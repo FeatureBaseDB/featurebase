@@ -235,7 +235,7 @@ func (p *ExecutionPlanner) compileShowCreateTableStatement(ctx context.Context, 
 	}
 
 	// get the system table
-	systemTable, ok := systemTables[fbTableDDL]
+	systemTable, ok := systemTables.table(fbTableDDL)
 	if !ok {
 		return nil, sql3.NewErrInternalf("unable to find system table fb_table_ddl")
 	}

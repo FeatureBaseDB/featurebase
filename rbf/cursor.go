@@ -493,7 +493,7 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 
 	// Write each group to a separate page.
 	newRoot := (len(groups) > 1) && (c.stack.top == 0)
-	var parents []branchCell
+	parents := make([]branchCell, 0, len(groups))
 	origPgno := elem.pgno
 	// newRoot if split occured and bottom of the stack
 	for i, group := range groups {
@@ -724,7 +724,7 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 	}
 
 	// Write each group to a separate page.
-	var parents []branchCell
+	parents := make([]branchCell, 0, len(groups))
 	origPgno := readPageNo(page)
 	newRoot := len(groups) > 1 && stackIndex == 0
 	for i, group := range groups {

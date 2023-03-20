@@ -13,6 +13,7 @@ var (
 	ErrUnsupportedQuery = errors.New("unsupported query")
 )
 
+// KeyIndexColumn is a column for a keyed index.
 // TODO: what the difference between this and IDIndexColumn?
 type KeyIndexColumn struct {
 	Index *pilosa.Index

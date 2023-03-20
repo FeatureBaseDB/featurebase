@@ -406,7 +406,7 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 		tableName := strings.ToLower(parser.IdentName(sourceExpr.Name))
 
 		// doing this check here because we don't have a 'system' flag that exists in the FB schema
-		st, ok := systemTables[tableName]
+		st, ok := systemTables.table(tableName)
 		if ok {
 			var op types.PlanOperator
 			op = NewPlanOpSystemTable(p, st)

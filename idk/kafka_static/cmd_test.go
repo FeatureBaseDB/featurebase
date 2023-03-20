@@ -57,7 +57,7 @@ func configureTestFlags(main *Main) {
 }
 
 func TestFieldTypes(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 
 	fieldNames := []string{"i", "d", "t", "@s", "@st", "unixtime", "e"}
 	records := [][]interface{}{
@@ -639,7 +639,7 @@ func TestIDFieldMissing(t *testing.T) {
 }
 
 func TestCmdAutoID(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 
 	fieldNames := []string{"first"}
 	records := [][]interface{}{

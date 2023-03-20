@@ -84,11 +84,11 @@ func (*NopAuditor) Registry(interface{}) (Registry, error) {
 	return NewNopRegistry(), nil
 }
 
-func (*NopAuditor) Check() (error, []error) {
+func (*NopAuditor) Check() (error, []error) { //nolint:stylecheck
 	return nil, nil
 }
 
-func (*NopAuditor) FinalCheck() (error, []error) {
+func (*NopAuditor) FinalCheck() (error, []error) { //nolint:stylecheck
 	return nil, nil
 }
 
@@ -116,11 +116,11 @@ func (v *VerifyCloseAuditor) Registry(o interface{}) (Registry, error) {
 	return reg, nil
 }
 
-func (*VerifyCloseAuditor) Check() (error, []error) {
+func (*VerifyCloseAuditor) Check() (error, []error) { //nolint:stylecheck
 	return nil, nil
 }
 
-func (v *VerifyCloseAuditor) FinalCheck() (error, []error) {
+func (v *VerifyCloseAuditor) FinalCheck() (error, []error) { //nolint:stylecheck
 	v.regMu.Lock()
 	defer v.regMu.Unlock()
 	var errs []error

@@ -4,9 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"time"
-
 	"io"
+	"time"
 
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -118,6 +117,10 @@ func WriteSchema(schema types.Schema) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// ReadSchema consumes a schema object from a reader
+// Note you cannot do WriteSchema to a buffer then Read that schame
+// back without consuming or skipping the token.
+// so you can't just to WriteSchema -> ReadSchema it must be WriteSchema->ConsumeToken->ReadSchema
 func ReadSchema(reader io.Reader) (types.Schema, error) {
 	var columnCount int16
 	err := binary.Read(reader, binary.BigEndian, &columnCount)
@@ -344,7 +347,6 @@ func WriteRow(row types.Row, schema types.Schema) ([]byte, error) {
 }
 
 func ReadRow(reader io.Reader, schema types.Schema) (types.Row, error) {
-
 	row := make(types.Row, len(schema))
 
 	for idx, s := range schema {
@@ -427,7 +429,7 @@ func ReadRow(reader io.Reader, schema types.Schema) (types.Row, error) {
 				row[idx] = nil
 			} else {
 				set := make([]int64, len)
-				for j, _ := range set {
+				for j := range set {
 					var value int64
 					err := binary.Read(reader, binary.BigEndian, &value)
 					if err != nil {
@@ -465,7 +467,7 @@ func ReadRow(reader io.Reader, schema types.Schema) (types.Row, error) {
 				row[idx] = nil
 			} else {
 				set := make([]string, len)
-				for j, _ := range set {
+				for j := range set {
 					var vlen int16
 					err = binary.Read(reader, binary.BigEndian, &vlen)
 					if err != nil {

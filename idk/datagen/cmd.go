@@ -578,9 +578,9 @@ func (m *Main) makeSources(key string, cfg SourceGeneratorConfig) ([]string, []i
 // (in case it had to be adjusted).
 // returns (concurrency, startEnds, total)
 func startEnds(cfg SourceGeneratorConfig) (int, []startEnd, uint64) {
-	var startFrom uint64 = cfg.StartFrom
-	var endAt uint64 = cfg.EndAt
-	var concurrency int = cfg.Concurrency
+	var startFrom = cfg.StartFrom
+	var endAt = cfg.EndAt
+	var concurrency = cfg.Concurrency
 
 	if concurrency == 0 {
 		return 0, []startEnd{}, 0
@@ -604,7 +604,7 @@ func startEnds(cfg SourceGeneratorConfig) (int, []startEnd, uint64) {
 	// Distribute the total range of records over a number of
 	// Sources equal to the concurrency.
 	for i := 0; i < concurrency; i++ {
-		var start uint64 = current
+		var start = current
 		var end uint64
 		current += interval
 		// Include one of the leftovers in each iteration until there
@@ -631,6 +631,8 @@ func (r record) Commit(ctx context.Context) error { return nil }
 func (r record) Data() []interface{} {
 	return r
 }
+
+func (r record) Schema() interface{} { return nil }
 
 type startEnd struct {
 	start uint64

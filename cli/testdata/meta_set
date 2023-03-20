@@ -1,0 +1,31 @@
+SEND:\set
+
+SEND:\set var1 foo
+SEND:\set
+EXPECT:var1 = 'foo'
+
+SEND:\set var2 bar
+SEND:\set
+EXPECT:var1 = 'foo'
+EXPECT:var2 = 'bar'
+
+SEND:\set var3 zoo
+SEND:\set
+EXPECT:var1 = 'foo'
+EXPECT:var2 = 'bar'
+EXPECT:var3 = 'zoo'
+
+SEND:\unset
+EXPECT:\unset: missing required argument
+
+SEND:\unset non-existent-key
+
+SEND:\unset var1
+SEND:\set
+EXPECT:var2 = 'bar'
+EXPECT:var3 = 'zoo'
+
+SEND:\unset var2 extra
+EXPECT:\unset: extra argument "extra" ignored
+SEND:\set
+EXPECT:var3 = 'zoo'

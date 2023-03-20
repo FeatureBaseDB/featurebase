@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -95,13 +94,13 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 
 	// Validate arguments.
 	if cmd.OutputDir == "" {
-		return fmt.Errorf("%w: -o flag required", UsageError)
+		return fmt.Errorf("%w: -o flag required", ErrUsage)
 	} else if cmd.Concurrency <= 0 {
-		return fmt.Errorf("%w: concurrency must be at least one", UsageError)
+		return fmt.Errorf("%w: concurrency must be at least one", ErrUsage)
 	}
 	if cmd.HeaderTimeoutStr != "" {
 		if dur, err := time.ParseDuration(cmd.HeaderTimeoutStr); err != nil {
-			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", UsageError, cmd.HeaderTimeoutStr, err)
+			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", ErrUsage, cmd.HeaderTimeoutStr, err)
 		} else {
 			cmd.HeaderTimeout = dur
 		}
@@ -549,7 +548,7 @@ func (cmd *BackupCommand) backupShardDataframe(ctx context.Context, indexName st
 	resp, err := client.GetDataframeShard(ctx, indexName, shard)
 	// no error if doesn't exist
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("getting dataframe: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 404 {

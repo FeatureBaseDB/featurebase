@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var FileOrURLNotFound = errors.New("file or url does not exist")
+var ErrFileOrURLNotFound = errors.New("file or url does not exist")
 
 // ReadFileOrURL reads a path from the filesystem or an s3 URL.
 // The s3client parameter is required if reading an s3 URL.
@@ -41,9 +41,9 @@ func ReadFileOrURL(name string, s3client s3iface.S3API) ([]byte, error) {
 			if aerr, ok := err.(awserr.Error); ok {
 				switch aerr.Code() {
 				case s3.ErrCodeNoSuchBucket:
-					return nil, FileOrURLNotFound
+					return nil, ErrFileOrURLNotFound
 				case s3.ErrCodeNoSuchKey:
-					return nil, FileOrURLNotFound
+					return nil, ErrFileOrURLNotFound
 				}
 			}
 			return nil, errors.Wrapf(err, "fetching S3 object %v", name)
@@ -59,7 +59,7 @@ func ReadFileOrURL(name string, s3client s3iface.S3API) ([]byte, error) {
 		content, err = os.ReadFile(name)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return nil, FileOrURLNotFound
+				return nil, ErrFileOrURLNotFound
 			}
 			return nil, errors.Wrapf(err, "reading file %v", name)
 		}

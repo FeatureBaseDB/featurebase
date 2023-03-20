@@ -1,0 +1,51 @@
+// Startup splash.
+EXPECT:FeatureBase CLI ()
+EXPECT:Type "\q" to quit.
+EXPECT:Detected on-prem, serverless deployment.
+EXPECTCOMP:HasPrefix:Host: http://localhost:
+EXPECT:You are not connected to a database.
+
+// Show databases.
+SEND:SHOW DATABASES;
+EXPECT:Organization required. Use \org to set an organization.
+
+// Get current org.
+SEND:\org
+EXPECT:You have not set an organization.
+
+// Set org.
+SEND:\org acme
+EXPECT:You have set organization "acme".
+
+// Try to set org with too many arguments.
+SEND:\org acme extra
+EXPECT:executing meta command: meta command 'org' takes zero or one argument
+
+// Set location to UTC so that expected timestamp size is consistent.
+// Without this, a test running locally in may have a timestamp that
+// ends in a timezone offset such as `-06:00`, while one running as UTC
+// will have `Z`. Since these string lengths differ, our generic
+// {timestamp} comparison will fail.
+SEND:\pset location UTC
+EXPECT:Location is UTC.
+
+// Set an invalid location.
+SEND:\pset location invalid
+EXPECT:executing meta command: loading location: invalid: unknown time zone invalid
+
+// Try to set location with too many arguments.
+SEND:\pset location UTC extra
+EXPECT:executing meta command: meta command 'pset' takes zero, one, or two arguments
+
+// Set border to 2 for testing because it makes it easier to visually see
+// what the tests are expecting (because lines don't end in spaces).
+SEND:\pset border 2
+EXPECT:Border style is 2.
+
+// Check the state of pset.
+SEND:\pset
+EXPECT:border      2
+EXPECT:expanded    off
+EXPECT:format      aligned
+EXPECT:location    UTC
+EXPECT:tuples_only off

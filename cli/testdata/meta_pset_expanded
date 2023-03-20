@@ -1,0 +1,35 @@
+// Set to off.
+SEND:\pset expanded off
+EXPECT:Expanded display is off.
+
+// Set to on.
+SEND:\pset expanded on
+EXPECT:Expanded display is on.
+
+// Toggle to off.
+SEND:\pset expanded
+EXPECT:Expanded display is off.
+
+// Toggle to on.
+SEND:\pset expanded
+EXPECT:Expanded display is on.
+
+// Set to something invalid.
+SEND:\pset expanded invalid
+EXPECT:executing meta command: unrecognized value "invalid" for "expanded": Boolean expected
+
+// Ensure expanded shows results vertically.
+SEND:SELECT 1 as foo, 'baz' as bar;
+EXPECT:+-----+-----+
+EXPECT:| foo | 1   |
+EXPECT:| bar | baz |
+EXPECT:+-----+-----+
+EXPECT:
+
+// Set back to off as we started.
+SEND:\pset expanded off
+EXPECT:Expanded display is off.
+
+// make sure the \x meta-command returns expected errors
+SEND:\x on extra
+EXPECT:executing meta command: meta command 'expanded' takes zero or one argument

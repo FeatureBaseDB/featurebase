@@ -28,14 +28,14 @@ type PlanExpression interface {
 	Plan() map[string]interface{}
 }
 
-// Aggregation buffer is an interface to something that maintains an aggregate during query
-// execution
+// AggregationBuffer is an interface to something that maintains an aggregate
+// during query execution.
 type AggregationBuffer interface {
 	Eval(ctx context.Context) (interface{}, error)
 	Update(ctx context.Context, row Row) error
 }
 
-// interface to an expression that is a an aggregate
+// Aggregable is an interface for an expression that is a an aggregate.
 type Aggregable interface {
 	fmt.Stringer
 
@@ -52,7 +52,8 @@ type Aggregable interface {
 	Type() parser.ExprDataType
 }
 
-// interface to something that can be identified by a name
+// IdentifiableByName is an interface for something that can be identified by a
+// name.
 type IdentifiableByName interface {
 	Name() string
 }

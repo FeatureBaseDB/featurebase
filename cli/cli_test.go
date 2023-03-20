@@ -22,8 +22,8 @@ func TestCLI(t *testing.T) {
 		capture := newCapture(t)
 
 		cli := cli.NewCommand(logger.StderrLogger)
-		cli.Stdin = capture
-		cli.Stdout = capture
+		cli.SetStdin(capture)
+		cli.SetStdout(capture)
 		cli.Queryer = capture
 
 		go func() {
@@ -74,7 +74,7 @@ var _ cli.Queryer = (*capture)(nil)
 
 // capture implements the various CLI interfaces in order to capture test input
 // and submit it as though that input were being read from the command line. It
-// also captures calls made to the Queryer.Query method and ensures the sql the
+// also captures calls made to the Queryer.Query method and ensures the sql they
 // contain is expected.
 type capture struct {
 	t *testing.T

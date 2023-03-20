@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -83,7 +82,7 @@ func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
 	logdest := cmd.Logger()
 	// Validate arguments.
 	if cmd.OutputPath == "" {
-		return fmt.Errorf("%w: -o flag required", UsageError)
+		return fmt.Errorf("%w: -o flag required", ErrUsage)
 	}
 	useStdout := cmd.OutputPath == "-"
 	if useStdout && cmd.logwriter == os.Stdout {
@@ -101,7 +100,7 @@ func (cmd *BackupTarCommand) Run(ctx context.Context) (err error) {
 
 	if cmd.HeaderTimeoutStr != "" {
 		if dur, err := time.ParseDuration(cmd.HeaderTimeoutStr); err != nil {
-			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", UsageError, cmd.HeaderTimeoutStr, err)
+			return fmt.Errorf("%w: could not parse '%s' as a duration: %v", ErrUsage, cmd.HeaderTimeoutStr, err)
 		} else {
 			cmd.HeaderTimeout = dur
 		}
@@ -329,7 +328,7 @@ func (cmd *BackupTarCommand) backupTarShardDataframe(ctx context.Context, tw *ta
 	resp, err := client.GetDataframeShard(ctx, indexName, shard)
 	// no error if doesn't exist
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("getting dataframe: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 404 {

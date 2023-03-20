@@ -13,6 +13,7 @@ import (
 
 	"github.com/chzyer/readline"
 	featurebase "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/cli/batch"
 	"github.com/featurebasedb/featurebase/v3/cli/fbcloud"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -20,8 +21,8 @@ import (
 
 const (
 	defaultHost     string = "localhost"
-	promptBegin     string = "fbsql> "
-	promptMid       string = "    -> "
+	defaultClientID string = "6i2gs7mu215ab23cnvmshdoq6t" // production Cognito client ID
+	defaultRegion   string = "us-east-2"
 	terminationChar string = ";"
 	nullValue       string = "NULL"
 )
@@ -32,14 +33,13 @@ var (
 	Stderr io.Writer     = os.Stderr
 )
 
-var (
-	splash string = fmt.Sprintf(`FeatureBase CLI (%s)
+var splash string = fmt.Sprintf(`FeatureBase CLI (%s)
 Type "\q" to quit.
 `, featurebase.Version)
-)
 
 // Ensure type implments interfaces.
 var _ printer = (*Command)(nil)
+var _ batch.Inserter = (*Command)(nil)
 
 type Command struct {
 	host string
@@ -56,9 +56,9 @@ type Command struct {
 
 	Queryer Queryer `json:"-"`
 
-	Stdin  io.ReadCloser `json:"-"`
-	Stdout io.Writer     `json:"-"`
-	Stderr io.Writer     `json:"-"`
+	stdin  io.ReadCloser `json:"-"`
+	stdout io.Writer     `json:"-"`
+	stderr io.Writer     `json:"-"`
 
 	// output is where actual results are written. This might point to stdout,
 	// or to a file, based on the current configuration.
@@ -103,8 +103,8 @@ func NewCommand(logdest logger.Logger) *Command {
 			Database:       "",
 
 			CloudAuth: CloudAuthConfig{
-				ClientID: "",
-				Region:   "",
+				ClientID: defaultClientID,
+				Region:   defaultRegion,
 				Email:    "",
 				Password: "",
 			},
@@ -116,9 +116,9 @@ func NewCommand(logdest logger.Logger) *Command {
 		splitter:   newSplitter(newReplacer(variables)),
 		workingDir: newWorkingDir(),
 
-		Stdin:  Stdin,
-		Stdout: Stdout,
-		Stderr: Stderr,
+		stdin:  Stdin,
+		stdout: Stdout,
+		stderr: Stderr,
 
 		output:       Stdout,
 		writeOptions: defaultWriteOptions(),
@@ -129,60 +129,106 @@ func NewCommand(logdest logger.Logger) *Command {
 	}
 }
 
+// SetStdin sets stdin. This is useful for initial configuration in tests.
+func (cmd *Command) SetStdin(rc io.ReadCloser) {
+	cmd.stdin = rc
+}
+
+// SetStdout sets both stdout and output to the value provided. This is useful
+// for initial configuration in tests.
+func (cmd *Command) SetStdout(w io.Writer) {
+	cmd.stdout = w
+	cmd.output = w
+}
+
+// SetStderr sets stderr. This is useful for initial configuration in tests.
+func (cmd *Command) SetStderr(w io.Writer) {
+	cmd.stderr = w
+}
+
 // Run is the main entry-point to the CLI.
 func (cmd *Command) Run(ctx context.Context) error {
-	cmd.setupConfig()
+	if err := cmd.run(ctx); err != nil {
+		cmd.Errorf(err.Error() + "\n")
+		return err
+	}
+	return nil
+}
+
+// run is effectively wrapped by the Run() method, but it's split out this way
+// so that run() can simply return errors, rather than worrying about how errors
+// should be printed; printing errors returned by run() is left up to the Run()
+// method.
+func (cmd *Command) run(ctx context.Context) error {
+	if err := cmd.setupConfig(); err != nil {
+		return errors.Wrap(err, "setting up config")
+	}
 
 	// Check to see if Command needs to run in non-interactive mode.
-	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
+	if len(cmd.Commands) > 0 ||
+		len(cmd.Files) > 0 ||
+		cmd.Config.KafkaConfig != "" {
 		cmd.nonInteractiveMode = true
-
-		if err := cmd.setupClient(); err != nil {
-			return errors.Wrap(err, "setting up client")
-		}
-		if err := cmd.connectToDatabase(cmd.database); err != nil {
-			cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
-		}
-
-		// Run Commands.
-		for _, line := range cmd.Commands {
-			if err := cmd.handleLine(line); err != nil {
-				cmd.Errorf(err.Error())
-				return nil
-			}
-		}
-
-		// Run Files.
-		for _, fname := range cmd.Files {
-			if _, err := executeFile(cmd, fname); err != nil {
-				cmd.Errorf(err.Error())
-				return nil
-			}
-		}
-
-		return nil
 	}
 
 	// Print the splash message.
-	cmd.Printf(splash)
-	cmd.setupHistory()
+	if !cmd.nonInteractiveMode {
+		cmd.Printf(splash)
+	}
+
 	if err := cmd.setupClient(); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
 	cmd.printConnInfo()
 	if err := cmd.connectToDatabase(cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
+		// We intentionally do not return err here.
 	}
 
+	// Run in non-interactive mode based on flags and configuration.
+	// This includes either handling `-c` and/or `-f` flags, or handling a
+	// `--kafka-config` flag.
+	if len(cmd.Commands) > 0 || len(cmd.Files) > 0 {
+		// Run Commands.
+		for _, line := range cmd.Commands {
+			if err := cmd.handleLine(line); err != nil {
+				return errors.Wrapf(err, "handling line: %s", line)
+			}
+		}
+
+		// Run Files.
+		for _, fname := range cmd.Files {
+			if _, err := executeFile(cmd, fname); err != nil {
+				return errors.Wrapf(err, "executing file: %s", fname)
+			}
+		}
+
+		return nil
+	} else if cmd.Config.KafkaConfig != "" {
+		runner, err := cmd.newKafkaRunner(cmd.Config.KafkaConfig)
+		if err != nil {
+			return errors.Wrap(err, "getting new kafka runner")
+		}
+		if err := runner.Main.Run(); err != nil {
+			return errors.Wrap(err, "running kafka")
+		}
+		return nil
+	}
+
+	// From this point on, we should be in interactive mode.
+
+	// Set up history for saving user input.
+	cmd.setupHistory()
+
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:                 promptBegin,
+		Prompt:                 cmd.prompt(false),
 		HistoryFile:            cmd.historyPath,
 		HistoryLimit:           100000,
 		DisableAutoSaveHistory: true,
 
-		Stdin:  cmd.Stdin,
-		Stdout: cmd.Stdout,
-		Stderr: cmd.Stderr,
+		Stdin:  cmd.stdin,
+		Stdout: cmd.stdout,
+		Stderr: cmd.stderr,
 	})
 	if err != nil {
 		return errors.Wrap(err, "getting readline")
@@ -194,11 +240,7 @@ func (cmd *Command) Run(ctx context.Context) error {
 	var inMidCommand bool
 
 	for {
-		if inMidCommand {
-			rl.SetPrompt(promptMid)
-		} else {
-			rl.SetPrompt(promptBegin)
-		}
+		rl.SetPrompt(cmd.prompt(inMidCommand))
 
 		// Read user provided input.
 		line, err := rl.Readline()
@@ -297,9 +339,23 @@ func (cmd *Command) Run(ctx context.Context) error {
 			}
 			return nil
 		default:
-			//pass
+			// pass
 		}
 	}
+}
+
+// prompt constructs the prompt that the user sees based on the currently
+// connected database and whether the user is in the middle of a sql statement.
+func (cmd *Command) prompt(mid bool) string {
+	db := "fbsql" // default prompt when a database is not set.
+	if cmd.databaseName != "" {
+		db = cmd.databaseName
+	}
+
+	if mid {
+		return strings.Repeat(" ", len(db)) + "-# "
+	}
+	return db + "=# "
 }
 
 // close is called upon quitting. It should close any remaining open file
@@ -310,9 +366,9 @@ func (cmd *Command) close() error {
 
 // setupConfig sets up private struct members based on values provided via the
 // configuration flags.
-func (cmd *Command) setupConfig() {
+func (cmd *Command) setupConfig() error {
 	if cmd.Config == nil {
-		return
+		return nil
 	}
 
 	cmd.host = cmd.Config.Host
@@ -322,15 +378,22 @@ func (cmd *Command) setupConfig() {
 	cmd.database = cmd.Config.Database
 
 	cmd.historyPath = cmd.Config.HistoryPath
+
+	return nil
 }
 
 func (cmd *Command) executeAndWriteQuery(qry query) error {
 	queryResponse, err := cmd.executeQuery(qry)
 	if err != nil {
+		if errors.Is(err, ErrOrganizationRequired) {
+			// Print an error message and return nil, effectively aborting any
+			// further writes for this query.
+			cmd.Errorf("Organization required. Use \\org to set an organization.\n")
+			return nil
+		}
 		return errors.Wrap(err, "making query")
 	}
-
-	if err := writeTable(queryResponse, cmd.writeOptions, cmd.output, cmd.Stdout, cmd.Stderr); err != nil {
+	if err := writeOutput(queryResponse, cmd.writeOptions, cmd.output, cmd.stdout, cmd.stderr); err != nil {
 		return errors.Wrap(err, "writing out response")
 	}
 
@@ -375,7 +438,7 @@ func (n *nopPrinter) Errorf(format string, a ...any)  {}
 // Printf is a helper method which sends the given payload to stdout.
 func (cmd *Command) Printf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
-	cmd.Stdout.Write([]byte(out))
+	cmd.stdout.Write([]byte(out))
 }
 
 // Outputf is a helper method which sends the given payload to output.
@@ -387,7 +450,7 @@ func (cmd *Command) Outputf(format string, a ...any) {
 // Errorf is a helper method which sends the given payload to stderr.
 func (cmd *Command) Errorf(format string, a ...any) {
 	out := fmt.Sprintf(format, a...)
-	cmd.Stderr.Write([]byte(out))
+	cmd.stderr.Write([]byte(out))
 }
 
 func (cmd *Command) setupHistory() {
@@ -406,7 +469,7 @@ func (cmd *Command) setupHistory() {
 		if err != nil {
 			cmd.Errorf("Creating directory for history: %v\n", err)
 		} else {
-			historyPath = filepath.Join(historyDir, "cli_history")
+			historyPath = filepath.Join(historyDir, "fbsql_history")
 		}
 	}
 	cmd.historyPath = historyPath
@@ -432,16 +495,12 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 	}
 
 	// Look up dbID based on dbName.
-	qry := []queryPart{
-		newPartRaw("SHOW DATABASES"),
-	}
-
-	qr, err := cmd.executeQuery(qry)
+	wqr, err := cmd.executeQuery(newRawQuery("SHOW DATABASES"))
 	if err != nil {
 		return errors.Wrap(err, "executing query")
 	}
 
-	for _, db := range qr.Data {
+	for _, db := range wqr.Data {
 		// 0: _id
 		// 1: name
 		if db[1] == dbName {
@@ -465,7 +524,7 @@ func (cmd *Command) connectionMessage() string {
 	if cmd.databaseName == "" {
 		return "You are not connected to a database.\n"
 	}
-	return fmt.Sprintf("You are now connected to database \"%s\" (%s) as user \"???\".\n", cmd.databaseName, cmd.databaseID)
+	return fmt.Sprintf("You are now connected to database \"%s\" (%s).\n", cmd.databaseName, cmd.databaseID)
 }
 
 func (cmd *Command) setupClient() error {
@@ -697,4 +756,12 @@ func (cmd *Command) handleLineAsQueryParts(line string) error {
 		}
 	}
 	return nil
+}
+
+func (cmd *Command) Insert(sql string) error {
+	wqr, err := cmd.executeQuery(newRawQuery(sql))
+	if wqr.Error != "" {
+		return errors.Errorf(wqr.Error)
+	}
+	return err
 }

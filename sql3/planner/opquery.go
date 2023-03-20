@@ -10,6 +10,7 @@ import (
 	fbcontext "github.com/featurebasedb/featurebase/v3/context"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	"github.com/pkg/errors"
 )
 
 // PlanOpQuery is a query - this is the root node of an execution plan
@@ -130,10 +131,13 @@ func (i *queryIterator) Next(ctx context.Context) (types.Row, error) {
 		// either error or no more rows, either way update the request
 		requestId, ok := fbcontext.RequestID(ctx)
 		if !ok {
-			return nil, sql3.NewErrInternalf("unable to get request id from context")
+			return nil, errors.Wrapf(sql3.NewErrInternalf("unable to get request id from context"), "next on child: %s", err)
 		}
 
-		plan, _ := json.MarshalIndent(i.query.Plan(), "", "    ")
+		plan, err := json.MarshalIndent(i.query.Plan(), "", "    ")
+		if err != nil {
+			i.query.planner.logger.Infof("marshal indent: %s", err)
+		}
 		i.requests.UpdateRequest(requestId, time.Now(), "complete", "", 0, "", 0, 0, 0, 0, 0, string(plan))
 	}
 	return row, err

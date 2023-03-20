@@ -181,6 +181,10 @@ func (wr wikiRecord) Commit(ctx context.Context) error {
 	return nil
 }
 
+func (wr wikiRecord) Schema() interface{} {
+	return nil
+}
+
 func (wr wikiRecord) Data() []interface{} {
 	return wr.record
 }

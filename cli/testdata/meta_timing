@@ -1,0 +1,50 @@
+// Start by ensuring timing is off.
+SEND:\timing off
+EXPECT:Timing is off.
+
+// Set timing on.
+SEND:\timing on
+EXPECT:Timing is on.
+
+// Toggle timing.
+SEND:\timing
+EXPECT:Timing is off.
+
+// Toggle timing again.
+SEND:\timing
+EXPECT:Timing is on.
+
+// Send extra argument to \timing.
+SEND:\timing on extra
+EXPECT:executing meta command: meta command 'timing' takes zero or one argument
+
+
+SEND:SELECT * FROM users;
+EXPECT:+-----+-------+-----+
+EXPECT:| _id | name  | age |
+EXPECT:+-----+-------+-----+
+EXPECT:|   1 | Anne  |  38 |
+EXPECT:|   2 | Bill  |  23 |
+EXPECT:|   3 | Cindy |  64 |
+EXPECT:+-----+-------+-----+
+EXPECT:
+EXPECTCOMP:HasPrefix:Execution time:
+
+// Turn timing back off.
+SEND:\timing off
+EXPECT:Timing is off.
+
+// Ensure we don't get timing.
+SEND:SELECT * FROM users;
+EXPECT:+-----+-------+-----+
+EXPECT:| _id | name  | age |
+EXPECT:+-----+-------+-----+
+EXPECT:|   1 | Anne  |  38 |
+EXPECT:|   2 | Bill  |  23 |
+EXPECT:|   3 | Cindy |  64 |
+EXPECT:+-----+-------+-----+
+EXPECT:
+
+// Ensure an invalid timing value returns an error.
+SEND:\timing invalid
+EXPECT:executing meta command: unrecognized value "invalid" for "\timing": Boolean expected

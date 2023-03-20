@@ -1,0 +1,10 @@
+
+"Id", "Name", "Short description", "Gender", "Country", "Occupation", "Birth year", "Death year", "Manner of death", "Age of death"
+1, "George Washington", "1st president of the United States (1732–1799)", "Male", "United States of America; Kingdom of Great Britain", "Politician", "1732", "1799", "natural causes", "67"
+2, "Douglas Adams", "English writer and humorist", "Male", "United Kingdom", "Artist", "1952", "2001", "natural causes", "49"
+3, "Abraham Lincoln", "16th president of the United States (1809-1865)", "Male", "United States of America", "Politician", "1809", "1865", "homicide", "56"
+4, "Wolfgang Amadeus Mozart", "Austrian composer of the Classical period", "Male", "Archduchy of Austria; Archbishopric of Salzburg", "Artist", "1756", "1791", "0", "35"
+5, "Ludwig van Beethoven", "German classical and romantic composer", "Male", "Holy Roman Empire; Austrian Empire", "Artist", "1770", "1827", "0", "57"
+6, "Jean-François Champollion", "French classical scholar", "Male", "Kingdom of France; First French Empire", "Egyptologist", "1790", "1832", "natural causes", "42"
+7, "Paul Morand", "French writer", "Male", "France", "Artist", "1888", "1976", "0", "88"
+8, "Claude Monet", "French impressionist painter (1840-1926)", "Male", "France", "Artist", "1840", "1926", "natural causes", "86"

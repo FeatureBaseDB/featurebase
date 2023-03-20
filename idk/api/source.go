@@ -375,7 +375,7 @@ var friendlyTypeNames = map[reflect.Type]string{
 }
 
 // ErrDuplicateElement is an error indicating that an element was included in a set multiple times.
-type ErrDuplicateElement struct {
+type ErrDuplicateElement struct { //nolint (should be: DuplicateElementError)
 	// Elem is the duplicated element.
 	Elem interface{}
 }
@@ -474,4 +474,8 @@ func (r idkRec) Commit(ctx context.Context) error {
 
 func (r idkRec) Data() []interface{} {
 	return r
+}
+
+func (r idkRec) Schema() interface{} {
+	return nil
 }

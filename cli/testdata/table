@@ -1,0 +1,60 @@
+// Show tables for database using SHOW TABLES.
+SEND:SHOW TABLES;
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:| _id                     | name                    | owner | updated_by | created_at           | updated_at           | keys  | space_used | description |
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:
+
+// Show tables for database using \dt.
+SEND:\dt
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:| _id                     | name                    | owner | updated_by | created_at           | updated_at           | keys  | space_used | description |
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:
+
+// Create a table. That can be used for general testing.
+SEND:CREATE TABLE users (_id id, name string, age int);
+EXPECT:
+SEND:INSERT INTO users VALUES (1, 'Anne', 38), (2, 'Bill', 23), (3, 'Cindy', 64);
+EXPECT:
+
+
+// Show tables for database to get the newly created table.
+SEND:\dt
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:| _id                     | name                    | owner | updated_by | created_at           | updated_at           | keys  | space_used | description |
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECTCOMP:WithFormat:| users                   | users                   |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:
+
+// We don't select from users until AFTER we check SHOW TABLES above because
+// running this creates the fb_views sytem table which has a description.
+// And it's annoying to mask out all of the description fields because we
+// don't know which row fb_views will fall into.
+SEND:SELECT * FROM users;
+EXPECT:+-----+-------+-----+
+EXPECT:| _id | name  | age |
+EXPECT:+-----+-------+-----+
+EXPECT:|   1 | Anne  |  38 |
+EXPECT:|   2 | Bill  |  23 |
+EXPECT:|   3 | Cindy |  64 |
+EXPECT:+-----+-------+-----+
+EXPECT:

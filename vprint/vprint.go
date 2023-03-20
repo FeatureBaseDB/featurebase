@@ -16,7 +16,7 @@ import (
 const RFC3339MsecTz0 = "2006-01-02T15:04:05.000Z07:00"
 const RFC3339UsecTz0 = "2006-01-02T15:04:05.000000Z07:00"
 
-// for tons of debug output
+// VerboseVerbose will result in tons of debug output when set to true.
 var VerboseVerbose bool = false
 
 func init() {
@@ -73,7 +73,7 @@ func ts() string {
 	return time.Now().Format(RFC3339UsecTz0)
 }
 
-// so we can multi write easily, use our own printf
+// OurStdout is used so we can multi write easily, use our own printf.
 var OurStdout io.Writer = os.Stdout
 
 // Printf formats according to a format specifier and writes to standard output.

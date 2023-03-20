@@ -201,7 +201,7 @@ func (r *shardReader) getRecords() error {
 func ReadOffsets(cfg StreamReaderConfig) (*StreamOffsets, error) {
 	offsetsBytes, err := internal.ReadFileOrURL(cfg.offsetsPath, cfg.s3client)
 	if err != nil {
-		if err == internal.FileOrURLNotFound {
+		if err == internal.ErrFileOrURLNotFound {
 			return &StreamOffsets{
 				StreamName: cfg.streamName,
 				Shards:     make(map[string]*ShardOffset),

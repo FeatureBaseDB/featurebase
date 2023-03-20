@@ -1750,8 +1750,7 @@ func (d *DistinctTimestamp) Union(other DistinctTimestamp) DistinctTimestamp {
 }
 
 const (
-	ViewNotFound     = Error("view not found")
-	FragmentNotFound = Error("fragment not found")
+	ErrViewNotFound = Error("view not found")
 )
 
 func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldName string, shard uint64, filterBitmap *roaring.Bitmap) (result *Row, err0 error) {
@@ -1764,7 +1763,7 @@ func executeDistinctShardSet(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 
 	fragData, _, err := tx.ContainerIterator(index, fieldName, "standard", shard, 0)
 	switch errors.Cause(err) {
-	case ViewNotFound, FragmentNotFound:
+	case ErrViewNotFound, ErrFragmentNotFound:
 		// It may seem reasonable to return `nil` here in the case where the
 		// fragment for this shard does not exist. The problem with doing that
 		// is that if this operation is being performed on a remote node, then
@@ -1851,7 +1850,7 @@ func executeDistinctShardBSI(ctx context.Context, qcx *Qcx, idx *Index, fieldNam
 	existsBitmap, err := tx.OffsetRange(index, fieldName, view, shard, ShardWidth*shard, ShardWidth*0, ShardWidth*1)
 	if err != nil {
 		switch errors.Cause(err) {
-		case ViewNotFound, FragmentNotFound:
+		case ErrViewNotFound, ErrFragmentNotFound:
 			return result, nil
 		}
 		return result, errors.Wrap(err, "getting exists bitmap")
@@ -2322,7 +2321,7 @@ func (e *executor) executeTopKShardTime(ctx context.Context, tx Tx, filter *Row,
 	}
 
 	// Fetch fragments.
-	var fragments []*fragment
+	fragments := make([]*fragment, 0, len(views))
 	for _, view := range views {
 		f := e.Holder.fragment(index, field, view, shard)
 		if f == nil {

@@ -16,7 +16,7 @@ func newKeygenCommand(logdest logger.Logger) *cobra.Command {
 		Long: `
 Generate secret key to configure FeatureBase for Authentication.
 `,
-		RunE: usageErrorWrapper(cmd),
+		RunE: UsageErrorWrapper(cmd),
 	}
 
 	flags := ccmd.Flags()

@@ -1,0 +1,67 @@
+SEND:SELECT * FROM users;
+EXPECT:+-----+-------+-----+
+EXPECT:| _id | name  | age |
+EXPECT:+-----+-------+-----+
+EXPECT:|   1 | Anne  |  38 |
+EXPECT:|   2 | Bill  |  23 |
+EXPECT:|   3 | Cindy |  64 |
+EXPECT:+-----+-------+-----+
+EXPECT:
+
+// Redirect output to a file.
+SEND:\o test-output-file
+SEND:SELECT * FROM users;
+
+// Ensure the output went to the file.
+SEND:\! cat test-output-file
+EXPECT:+-----+-------+-----+
+EXPECT:| _id | name  | age |
+EXPECT:+-----+-------+-----+
+EXPECT:|   1 | Anne  |  38 |
+EXPECT:|   2 | Bill  |  23 |
+EXPECT:|   3 | Cindy |  64 |
+EXPECT:+-----+-------+-----+
+EXPECT:
+
+// Let's test some qecho stuff here while we're at it.
+SEND:\qecho string with "double quotes"
+SEND:\qecho -n one
+SEND:\qecho -n two
+SEND:\qecho three
+SEND:\qecho four
+
+SEND:\! cat test-output-file
+EXPECT:+-----+-------+-----+
+EXPECT:| _id | name  | age |
+EXPECT:+-----+-------+-----+
+EXPECT:|   1 | Anne  |  38 |
+EXPECT:|   2 | Bill  |  23 |
+EXPECT:|   3 | Cindy |  64 |
+EXPECT:+-----+-------+-----+
+EXPECT:
+EXPECT:string with "double quotes"
+EXPECT:onetwothree
+EXPECT:four
+
+// And \warn messages should still go to stderr, not the file.
+SEND:\warn a warning string
+EXPECT:a warning string
+
+// Remove the file.
+SEND:\! rm test-output-file
+
+// Set the output back to stdout.
+SEND:\o
+SEND:SELECT * FROM users;
+EXPECT:+-----+-------+-----+
+EXPECT:| _id | name  | age |
+EXPECT:+-----+-------+-----+
+EXPECT:|   1 | Anne  |  38 |
+EXPECT:|   2 | Bill  |  23 |
+EXPECT:|   3 | Cindy |  64 |
+EXPECT:+-----+-------+-----+
+EXPECT:
+
+// Ensure extra arguments to \output causes an error.
+SEND:\o filename extra
+EXPECT:executing meta command: meta command 'output' takes zero or one argument

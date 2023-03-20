@@ -46,7 +46,7 @@ type nopLocker struct{}
 func (nopLocker) Lock()   {}
 func (nopLocker) Unlock() {}
 
-// TranslateEntryReader represents an implementation of TranslateEntryReader.
+// HTTPTranslateEntryReader represents an implementation of TranslateEntryReader.
 // It consolidates all index & field translate entries into a single reader.
 type HTTPTranslateEntryReader struct {
 	locker sync.Locker

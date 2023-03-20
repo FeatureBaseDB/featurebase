@@ -50,6 +50,8 @@ func (r Record) Data() []interface{} {
 }
 func (r Record) Commit(ctx context.Context) error { return nil } // TODO do
 
+func (r Record) Schema() interface{} { return nil }
+
 func (s *Source) Schema() []idk.Field {
 	s.schemaLock.Lock()
 	defer s.schemaLock.Unlock()

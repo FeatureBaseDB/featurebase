@@ -1,0 +1,8 @@
+SEND:\! echo 'foo'
+EXPECT:foo
+
+SEND:\! echo "foo"
+EXPECT:"foo"
+
+SEND:\!
+EXPECT:executing meta command: meta command '!' requires at least one argument

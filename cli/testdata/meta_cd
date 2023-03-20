@@ -1,0 +1,17 @@
+// Make a directory so we can test \cd'ing into it.
+SEND:\! mkdir cli-test-dir
+SEND:\cd cli-test-dir
+SEND:\cd ..
+SEND:\! rmdir cli-test-dir
+
+// TODO(tlt): before we do this, we should implement the ability to execute
+// commands in a \set like:
+// \set homedir `pwd`
+// then we can store what directory we're in so we can move back to it 
+// at the end of the test
+// Switch to home directory.
+// SEND:\cd
+
+// Expect error on extra argument to \cd.
+SEND:\cd dir extra
+EXPECT:executing meta command: meta command 'cd' takes zero or one argument

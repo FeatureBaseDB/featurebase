@@ -276,9 +276,9 @@ type ExprWithPlanOpFunc func(op types.PlanOperator, expr types.PlanExpression) (
 // whether the expression was modified, and an error or nil.
 type ExprFunc func(expr types.PlanExpression) (types.PlanExpression, bool, error)
 
-// ExprExprSelectorFunc is a function that can be used as a filter selector during
-// expression transformation - it is called before calling a transformation function on
-// a child expression; if it returns false, the child is skipped
+// ExprSelectorFunc is a function that can be used as a filter selector during
+// expression transformation - it is called before calling a transformation
+// function on a child expression; if it returns false, the child is skipped
 type ExprSelectorFunc func(parentExpr, childExpr types.PlanExpression) bool
 
 // TransformSinglePlanOpExpressions applies a transformation function to all expressions on the given plan operator

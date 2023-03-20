@@ -326,10 +326,12 @@ type pilosaIDManager struct {
 	url  url.URL
 }
 
+// ErrIDOffsetDesync is an error used when IDs are reserved at offsets which
+// have already been committed.
 // TODO, once pull/1559 is merged into pilosa main branch
 // no need to maintain a duplicate definition of ErrIDOffsetDesync
 // here
-type ErrIDOffsetDesync struct {
+type ErrIDOffsetDesync struct { //nolint
 	Requested uint64 `json:"requested"`
 	// Base is the next lowest uncommitted offset for which
 	// IDs may be reserved

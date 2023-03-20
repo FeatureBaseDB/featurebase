@@ -1,0 +1,70 @@
+// Create a table.
+SEND:CREATE TABLE famous (
+SEND:    _id ID,
+SEND:    name STRING,
+SEND:    description STRING,
+SEND:    gender STRING,
+SEND:    country STRING,
+SEND:    occupation STRING,
+SEND:    birth_year INT min -32767 max 32767,
+SEND:    death_year INT min -32767 max 32767,
+SEND:    death_manner STRING,
+SEND:    birth_age INT min -32767 max 32767
+SEND:);
+EXPECT:
+
+// Open bulk insert.
+SEND:BULK INSERT
+SEND:INTO famous (_id, name, description, gender, country, occupation,
+SEND:    birth_year, death_year, death_manner, birth_age )
+SEND:MAP(0 INT,
+SEND:1 STRING,
+SEND:2 STRING,
+SEND:3 STRING,
+SEND:4 STRING,
+SEND:5 STRING,
+SEND:6 INT,
+SEND:7 INT,
+SEND:8 STRING,
+SEND:9 INT )
+SEND:FROM
+SEND:    x'
+
+// Call \file
+SEND:\file testdata/famous.csv
+
+// Close bulk insert.
+SEND:'
+SEND:WITH
+SEND:    BATCHSIZE 100000
+SEND:    FORMAT 'CSV'
+SEND:    INPUT 'STREAM'
+SEND:    HEADER_ROW;
+EXPECT:
+
+// Query table to ensure we have data.
+SEND:SELECT * FROM famous;
+EXPECT:+-----+---------------------------+-------------------------------------------------+--------+----------------------------------------------------+--------------+------------+------------+----------------+-----------+
+EXPECT:| _id | name                      | description                                     | gender | country                                            | occupation   | birth_year | death_year | death_manner   | birth_age |
+EXPECT:+-----+---------------------------+-------------------------------------------------+--------+----------------------------------------------------+--------------+------------+------------+----------------+-----------+
+EXPECT:|   1 | George Washington         | 1st president of the United States (1732–1799)  | Male   | United States of America; Kingdom of Great Britain | Politician   |       1732 |       1799 | natural causes |        67 |
+EXPECT:|   2 | Douglas Adams             | English writer and humorist                     | Male   | United Kingdom                                     | Artist       |       1952 |       2001 | natural causes |        49 |
+EXPECT:|   3 | Abraham Lincoln           | 16th president of the United States (1809-1865) | Male   | United States of America                           | Politician   |       1809 |       1865 | homicide       |        56 |
+EXPECT:|   4 | Wolfgang Amadeus Mozart   | Austrian composer of the Classical period       | Male   | Archduchy of Austria; Archbishopric of Salzburg    | Artist       |       1756 |       1791 | 0              |        35 |
+EXPECT:|   5 | Ludwig van Beethoven      | German classical and romantic composer          | Male   | Holy Roman Empire; Austrian Empire                 | Artist       |       1770 |       1827 | 0              |        57 |
+EXPECT:|   6 | Jean-François Champollion | French classical scholar                        | Male   | Kingdom of France; First French Empire             | Egyptologist |       1790 |       1832 | natural causes |        42 |
+EXPECT:|   7 | Paul Morand               | French writer                                   | Male   | France                                             | Artist       |       1888 |       1976 | 0              |        88 |
+EXPECT:|   8 | Claude Monet              | French impressionist painter (1840-1926)        | Male   | France                                             | Artist       |       1840 |       1926 | natural causes |        86 |
+EXPECT:+-----+---------------------------+-------------------------------------------------+--------+----------------------------------------------------+--------------+------------+------------+----------------+-----------+
+EXPECT:
+
+// TODO(tlt): dropping the table seems to cause problems.
+// Drop the table.
+//SEND:DROP TABLE famous;
+
+// Ensure that invalid aruments (none or too many) return an error.
+SEND:\file
+EXPECT:executing meta command: meta command 'file' requires exactly one argument
+SEND:\file filename extra
+EXPECT:executing meta command: meta command 'file' requires exactly one argument
+

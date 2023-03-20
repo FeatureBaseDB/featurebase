@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -53,10 +54,12 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 	type Alias WireQueryResponse
 	var aux Alias
 
-	if err := json.Unmarshal(in, &aux); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(in))
+	dec.UseNumber()
+	err := dec.Decode(&aux)
+	if err != nil {
 		return err
 	}
-
 	*s = WireQueryResponse(aux)
 
 	// If the SQLResponse contains an error, don't bother doing any conversions
@@ -75,7 +78,12 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 		for k, v := range fld.TypeInfo {
 			switch k {
 			case "scale":
-				fld.TypeInfo[k] = int64(v.(float64))
+				switch n := v.(type) {
+				case float64:
+					fld.TypeInfo[k] = int64(n)
+				case json.Number:
+					fld.TypeInfo[k], _ = n.Int64()
+				}
 			}
 		}
 	}
@@ -85,8 +93,13 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 		for j, hdr := range s.Schema.Fields {
 			switch hdr.BaseType {
 			case dax.BaseTypeID, dax.BaseTypeInt:
-				if _, ok := s.Data[i][j].(float64); ok {
-					s.Data[i][j] = int64(s.Data[i][j].(float64))
+				jn := s.Data[i][j]
+				if v, ok := jn.(json.Number); ok {
+					if x, err := v.Int64(); err == nil {
+						s.Data[i][j] = x
+					} else {
+						return errors.Wrap(err, "can't be decoded as int64")
+					}
 				}
 
 			case dax.BaseTypeIDSet:
@@ -94,20 +107,30 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 					if typed {
 						val := make(IDSet, len(src))
 						for k := range src {
-							val[k] = int64(src[k].(float64))
+							v := src[k].(json.Number)
+							if x, err := v.Int64(); err == nil {
+								val[k] = x
+							} else {
+								return errors.Wrap(err, "can't be decoded as int64")
+							}
 						}
 						s.Data[i][j] = val
 					} else {
 						val := make([]int64, len(src))
 						for k := range src {
-							val[k] = int64(src[k].(float64))
+							v := src[k].(json.Number)
+							if x, err := v.Int64(); err == nil {
+								val[k] = x
+							} else {
+								return errors.Wrap(err, "can't be decoded as int64")
+							}
 						}
 						s.Data[i][j] = val
 					}
 				}
 
 			case dax.BaseTypeDecimal:
-				if _, ok := s.Data[i][j].(float64); ok {
+				if jn, ok := s.Data[i][j].(json.Number); ok {
 					var scale int64
 					if scaleVal, ok := hdr.TypeInfo["scale"]; !ok {
 						return errors.New("decimal does not have a scale")
@@ -118,7 +141,11 @@ func (s *WireQueryResponse) UnmarshalJSONTyped(in []byte, typed bool) error {
 					}
 
 					format := fmt.Sprintf("%%.%df", scale)
-					dec, err := pql.ParseDecimal(fmt.Sprintf(format, s.Data[i][j]))
+					f, err := jn.Float64()
+					if err != nil {
+						return errors.Wrap(err, "parsing decimal")
+					}
+					dec, err := pql.ParseDecimal(fmt.Sprintf(format, f))
 					if err != nil {
 						return errors.Wrap(err, "parsing decimal")
 					}
@@ -198,4 +225,71 @@ func (ss StringSet) String() string {
 	sb.WriteString("]")
 
 	return sb.String()
+}
+
+// ShowColumnsResponse returns a structure which is specific to a `SHOW COLUMNS`
+// statement, derived from the results in the WireQueryResponse. This is kind of
+// a crude way to unmarshal a WireQueryResponse into a type which is specific to
+// the sql operation.
+// TODO(tlt): see if we can standardize on this logic, because it would be useful to
+// have the same thing for SHOW DATABASES and SHOW TABLES.
+// TODO(tlt): the fields unmarshalled in this method are a subset of the actual
+// columns available; at the moment, we only handled the ones we need in the
+// CLI.
+func (s *WireQueryResponse) ShowColumnsResponse() (*ShowColumnsResponse, error) {
+	// Make a map of header names to index position. We do this to avoid
+	// breaking things if for some reason the format of the SHOW COLUMNS
+	// response defined in the sql3 package changes.
+	m := make(map[string]int)
+	for i, fld := range s.Schema.Fields {
+		m[string(fld.Name)] = i
+	}
+
+	flds := make([]*dax.Field, 0, len(s.Data))
+	for _, row := range s.Data {
+		// name
+		var name dax.FieldName
+		if val, ok := row[m["name"]].(string); ok {
+			name = dax.FieldName(val)
+		}
+
+		// type
+		var typ dax.BaseType
+		if val, ok := row[m["type"]].(string); ok {
+			typ = dax.BaseType(val)
+		}
+
+		// scale
+		var scale int64
+		if val, ok := row[m["scale"]].(int64); ok {
+			scale = val
+		}
+
+		flds = append(flds, &dax.Field{
+			Name: name,
+			Type: typ,
+			Options: dax.FieldOptions{
+				Scale: scale,
+			},
+		})
+	}
+	return &ShowColumnsResponse{
+		Fields: flds,
+	}, nil
+}
+
+// ShowColumnsResponse is a type used to marshal the results of a `SHOW COLUMNS`
+// statement.
+type ShowColumnsResponse struct {
+	Fields []*dax.Field
+}
+
+// Field returns the field by name. If the field is not found, nil is returned.
+func (s *ShowColumnsResponse) Field(name dax.FieldName) *dax.Field {
+	for i := range s.Fields {
+		if s.Fields[i].Name == name {
+			return s.Fields[i]
+		}
+	}
+	return nil
 }

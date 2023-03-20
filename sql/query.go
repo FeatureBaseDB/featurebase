@@ -5,6 +5,7 @@ package sql
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -218,7 +219,10 @@ func ConstRow(ids ...interface{}) string {
 	if ids == nil {
 		ids = []interface{}{}
 	}
-	data, _ := json.Marshal(ids)
+	data, err := json.Marshal(ids)
+	if err != nil {
+		log.Printf("marshalling json: %s", err)
+	}
 	return fmt.Sprintf("ConstRow(columns=%s)", data)
 }
 

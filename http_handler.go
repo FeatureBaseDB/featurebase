@@ -1384,7 +1384,6 @@ func (h *Handler) writeBadRequest(w http.ResponseWriter, r *http.Request, err er
 // we do not track these requests as user requests
 // TODO(pok) - thus is there anything we need here to align with how we do this for other nodes
 func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Request) {
-
 	writeError := func(err error) {
 		if err != nil {
 			w.Write(wireprotocol.WriteError(err))
@@ -1439,7 +1438,6 @@ func (h *Handler) handlePostSQLPlanOperator(w http.ResponseWriter, r *http.Reque
 // supports a ?plan=true|false parameter to send back the plan in the
 // query response
 func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
-
 	includePlan := false
 	includePlanValue := r.URL.Query().Get("plan")
 	if len(includePlanValue) > 0 {
@@ -1478,7 +1476,7 @@ func (h *Handler) handlePostSQL(w http.ResponseWriter, r *http.Request) {
 
 	// Write the closing bracket on any exit from this method.
 	defer func() {
-		var execTime int64 = 0
+		var execTime int64
 		// we are going to make best effort here - don't actually care about the error
 		// if there was an error, the request.ElapsedTime will be zero
 		request, _ := h.api.server.SystemLayer.ExecutionRequests().GetRequest(requestID.String())
@@ -2909,8 +2907,9 @@ const (
 
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.
 func parseUint64Slice(s string) ([]uint64, error) {
-	var a []uint64
-	for _, str := range strings.Split(s, ",") {
+	ss := strings.Split(s, ",")
+	a := make([]uint64, 0, len(ss))
+	for _, str := range ss {
 		// Ignore blanks.
 		if str == "" {
 			continue
@@ -3754,16 +3753,16 @@ func (h *Handler) handleReserveIDs(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.api.ReserveIDs(req.Key, req.Session, req.Offset, req.Count)
 	if err != nil {
-		var esync ErrIDOffsetDesync
+		var esync IDOffsetDesyncError
 		if errors.As(err, &esync) {
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			err = json.NewEncoder(w).Encode(struct {
-				ErrIDOffsetDesync
+				IDOffsetDesyncError
 				Err string `json:"error"`
 			}{
-				ErrIDOffsetDesync: esync,
-				Err:               err.Error(),
+				IDOffsetDesyncError: esync,
+				Err:                 err.Error(),
 			})
 			if err != nil {
 				h.logger.Debugf("failed to send desync error: %v", err)

@@ -269,7 +269,9 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			case *parser.DataTypeDecimal:
 				_, isAvg := i.aggregate.(*avgPlanExpression)
 				if isAvg {
-					if actualResult.DecimalVal == nil {
+					if actualResult.Count == 0 {
+						i.resultValue = nil
+					} else if actualResult.DecimalVal == nil {
 						average := float64(actualResult.Val) / float64(actualResult.Count)
 						daverage, err := pql.FromFloat64WithScale(average, int(t.Scale))
 						if err != nil {

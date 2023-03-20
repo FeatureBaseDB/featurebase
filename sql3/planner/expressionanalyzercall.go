@@ -214,8 +214,8 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 
 		call.ResultDataType = parser.NewDataTypeBool()
 
-	case "DATEPART":
-		return p.analyzeFunctionDatePart(call, scope)
+	case "DATETIMEPART":
+		return p.analyzeFunctionDateTimePart(call, scope)
 	case "REVERSE":
 		return p.analyseFunctionReverse(call, scope)
 	case "CHAR":
@@ -256,10 +256,19 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		return p.analyzeFunctionToTimestamp(call, scope)
 	case "STR":
 		return p.analyseFunctionStr(call, scope)
+	case "DATETIMENAME":
+		return p.analyzeFunctionDateTimeName(call, scope)
+	case "DATE_TRUNC":
+		return p.analyzeFunctionDateTrunc(call, scope)
 	// time quantum funtions
 	case "RANGEQ":
 		return p.analyzeFunctionRangeQ(call, scope)
-
+	case "DATETIMEFROMPARTS":
+		return p.analyzeFunctionDateTimeFromParts(call, scope)
+	case "DATETIMEADD":
+		return p.analyzeFunctionDatetimeAdd(call, scope)
+	case "DATETIMEDIFF":
+		return p.analyzeFunctionDateTimeDiff(call, scope)
 	default:
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}

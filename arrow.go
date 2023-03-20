@@ -478,7 +478,7 @@ func readTableArrow(filename string, mem memory.Allocator) (arrow.Table, error) 
 		return nil, err
 	}
 	defer rr.Close()
-	records := make([]arrow.Record, rr.NumRecords(), rr.NumRecords())
+	records := make([]arrow.Record, rr.NumRecords())
 	i := 0
 	for {
 		rec, err := rr.Read()

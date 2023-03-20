@@ -50,7 +50,7 @@ func (s *systemTableDefinitionsWrapper) TableByName(ctx context.Context, tname d
 	tbl, err := s.schemaAPI.TableByName(ctx, tname)
 	if err != nil {
 		if isTableNotFoundError(err) {
-			st, ok := systemTables[string(tname)]
+			st, ok := systemTables.table(string(tname))
 			if !ok {
 				return nil, dax.NewErrTableNameDoesNotExist(tname)
 			}
@@ -73,10 +73,10 @@ func (s *systemTableDefinitionsWrapper) Tables(ctx context.Context) ([]*dax.Tabl
 	}
 
 	// Append the system tables.
-	for tblName, st := range systemTables {
+	for _, st := range systemTables.ordered() {
 		ii, err := indexInfoFromSystemTable(st)
 		if err != nil {
-			return nil, errors.Wrapf(err, "converting system table to table: %s", tblName)
+			return nil, errors.Wrapf(err, "converting system table to table: %s", st.name)
 		}
 		tbls = append(tbls, pilosa.IndexInfoToTable(ii))
 	}

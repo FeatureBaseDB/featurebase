@@ -394,6 +394,38 @@ var avgTests = TableTest{
 			),
 			Compare: CompareExactUnordered,
 		},
+		{
+			SQLs: sqls(
+				"SELECT avg(i1) AS avg_rows FROM avg_test WHERE i1 > 100",
+			),
+			ExpHdrs: hdrs(
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT avg(d1) AS avg_rows FROM avg_test WHERE d1 > 100.0",
+			),
+			ExpHdrs: hdrs(
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
+			),
+			ExpRows: rows(
+				row(nil),
+			),
+			Compare: CompareExactUnordered,
+		},
 	},
 }
 

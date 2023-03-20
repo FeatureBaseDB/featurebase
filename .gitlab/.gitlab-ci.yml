@@ -12,10 +12,22 @@ include:
   - template: Security/License-Scanning.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
+default:
+  retry:
+    max: 2 # This is confusing but this means "3 runs at max".
+    when:
+      - unknown_failure
+      - api_failure
+      - runner_system_failure
+      - job_execution_timeout
+      - stuck_or_timeout_failure
+
 variables:
   GOVERSION: "1.19.3"
   GOFUTURE: "latest"
   CI_IMAGE: "${CI_REGISTRY_IMAGE}/ci-builder:0.0.1"
+  CI_PRE_CLONE_SCRIPT: |
+    set -x
 
 stages:
   - ci_image_build
@@ -161,15 +173,47 @@ build featurebase:
       for goos in "darwin" "linux"; do
         for goarch in "amd64" "arm64"; do
           GOOS="${goos}" GOARCH="${goarch}" make build FLAGS="-o featurebase_${goos}_${goarch}"
-          GOOS="${goos}" GOARCH="${goarch}" make build-fbsql FLAGS="-o fbsql_${goos}_${goarch}"
         done
       done
   artifacts:
     paths:
       - featurebase_*
-      - fbsql_*
   needs:
     - job: build lattice
+
+build fbsql amd64:
+  stage: test
+  variables:
+    BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+    - date
+    - GOOS="linux" GOARCH="amd64" make docker-build-fbsql BUILD_CGO=1
+    - GOOS="darwin" GOARCH="amd64" make docker-build-fbsql
+  artifacts:
+    paths:
+      - ./build/fbsql_*
+
+build fbsql arm64:
+  stage: test
+  variables:
+    BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
+  tags:
+    - shell-arm64
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+    - date
+    - GOOS="linux" GOARCH="arm64" make docker-build-fbsql BUILD_CGO=1
+    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
+  artifacts:
+    paths:
+      - ./build/fbsql_*
 
 build amd container fb:
   stage: test
@@ -637,14 +681,16 @@ s3 dump:
     - |
       for goos in "darwin" "linux"; do
         for goarch in "amd64" "arm64"; do
-          for binary in "featurebase" "fbsql"; do
-            aws s3 cp ${binary}_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/${binary}_${goos}_${goarch}
-            aws s3 cp ${binary}_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/${binary}_${goos}_${goarch}
-          done
+          aws s3 cp featurebase_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/featurebase_${goos}_${goarch}
+          aws s3 cp featurebase_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/featurebase_${goos}_${goarch}
+          aws s3 cp ./build/fbsql_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/${CI_COMMIT_SHORT_SHA}/fbsql_${goos}_${goarch}
+          aws s3 cp ./build/fbsql_${goos}_${goarch} s3://molecula-artifact-storage/featurebase/${CI_COMMIT_BRANCH}/_latest/fbsql_${goos}_${goarch}
         done
       done
   needs:
     - job: build featurebase
+    - job: build fbsql amd64
+    - job: build fbsql arm64
 
 s3 dump tag:
   stage: post build

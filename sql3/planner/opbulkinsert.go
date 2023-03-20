@@ -4,6 +4,7 @@ package planner
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -265,13 +266,19 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 	rec, err := i.csvReader.Read()
 	if err == io.EOF {
 		return nil, types.ErrNoMoreRows
-	} else if err != nil {
-		pe, ok := err.(*csv.ParseError)
-		if ok {
-			return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
-		}
-		return nil, err
 	}
+	// err == csv.ParseError is impossible if LazyQuotes is true
+	// we should uncomment the code below if we ever dispable LazyQuotes
+	// so there is no need check for any other error
+	/*
+		else if err != nil {
+			pe, ok := err.(*csv.ParseError)
+			if ok {
+				return nil, sql3.NewErrReadingDatasource(0, 0, i.options.sourceData, fmt.Sprintf("csv parse error on line %d: %s", pe.Line, pe.Error()))
+			}
+			return nil, err
+		}
+	*/
 
 	// now we do the mapping to the output row
 	result := make([]interface{}, len(i.options.mapExpressions))
@@ -312,15 +319,13 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 			if err != nil {
 				if tm, err := time.ParseInLocation(time.RFC3339Nano, evalValue, time.UTC); err == nil {
 					result[idx] = tm
-				} else if tm, err := time.ParseInLocation(time.RFC3339, evalValue, time.UTC); err == nil {
-					result[idx] = tm
 				} else if tm, err := time.ParseInLocation("2006-01-02", evalValue, time.UTC); err == nil {
 					result[idx] = tm
 				} else {
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 				}
 			} else {
-				//implicit conversion of int to timestamp will treat int as seconds since unix epoch
+				// implicit conversion of int to timestamp will treat int as seconds since unix epoch
 				result[idx] = time.Unix(intVal, 0).UTC()
 			}
 
@@ -448,7 +453,6 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 				return nil, sql3.NewErrInternalf("unexpected type for mapValue '%T'", rawMapValue)
 			}
 			i.mapExpressionResults = append(i.mapExpressionResults, mapValue)
-
 			path, err := builder.NewEvaluable(mapValue)
 			if err != nil {
 				return nil, err
@@ -507,13 +511,14 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 			// parse the json
 			v := interface{}(nil)
-			err := json.Unmarshal([]byte(jsonValue), &v)
+			dec := json.NewDecoder(bytes.NewReader([]byte(jsonValue)))
+			dec.UseNumber()
+			err := dec.Decode(&v)
 			if err != nil {
 				return nil, sql3.NewErrParsingJSON(0, 0, jsonValue, err.Error())
 			}
 
 			// type check against the output type of the map operation
-
 			for idx, expr := range i.pathExpressions {
 
 				evalValue, err := expr(ctx, v)
@@ -534,16 +539,14 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 				mapColumn := i.options.mapExpressions[idx]
 				switch mapColumn.colType.(type) {
 				case *parser.DataTypeID, *parser.DataTypeInt:
-
 					switch v := evalValue.(type) {
-					case float64:
-						// if v is a whole number then make it an int
-						if v == float64(int64(v)) {
-							result[idx] = int64(v)
+					case json.Number:
+						n, err := v.Int64()
+						if err == nil {
+							result[idx] = n
 						} else {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
-
 					case []interface{}:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
@@ -566,21 +569,21 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 				case *parser.DataTypeIDSet:
 					switch v := evalValue.(type) {
-					case float64:
-						// if v is a whole number then make it an int, and then turn that into an idset
-						if v == float64(int64(v)) {
-							result[idx] = []int64{int64(v)}
+					case json.Number:
+						n, err := v.Int64()
+						if err == nil {
+							result[idx] = []int64{n}
 						} else {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
-
 					case []interface{}:
 						setValue := make([]int64, 0)
 						for _, i := range v {
 							switch v := i.(type) {
-							case float64:
-								if v == float64(int64(v)) {
-									setValue = append(setValue, int64(v))
+							case json.Number:
+								i, e := v.Int64()
+								if e == nil {
+									setValue = append(setValue, i)
 								} else {
 									return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 								}
@@ -616,13 +619,8 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 				case *parser.DataTypeStringSet:
 					switch v := evalValue.(type) {
-					case float64:
-						if v == float64(int64(v)) {
-							result[idx] = []string{fmt.Sprintf("%d", int64(v))}
-						} else {
-							result[idx] = []string{fmt.Sprintf("%f", v)}
-						}
-
+					case json.Number:
+						result[idx] = []string{v.String()}
 					case []interface{}:
 						setValue := make([]string, 0)
 						for _, i := range v {
@@ -649,11 +647,12 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 				case *parser.DataTypeTimestamp:
 					switch v := evalValue.(type) {
-					case float64:
+					case json.Number:
+						n, err := v.Int64()
 						// if v is a whole number then make it an int
-						if v == float64(int64(v)) {
-							//implicit conversion of int to timestamp will treat int as seconds since unix epoch
-							result[idx] = time.Unix(int64(v), 0).UTC()
+						if err == nil {
+							// implicit conversion of int to timestamp will treat int as seconds since unix epoch
+							result[idx] = time.Unix(n, 0).UTC()
 						} else {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
@@ -663,8 +662,6 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 					case string:
 						if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
-							result[idx] = tm
-						} else if tm, err := time.ParseInLocation(time.RFC3339, v, time.UTC); err == nil {
 							result[idx] = tm
 						} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
 							result[idx] = tm
@@ -684,14 +681,8 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 				case *parser.DataTypeString:
 					switch v := evalValue.(type) {
-					case float64:
-						// if a whole number make it an int
-						if v == float64(int64(v)) {
-							result[idx] = fmt.Sprintf("%d", int64(v))
-						} else {
-							result[idx] = fmt.Sprintf("%f", v)
-						}
-
+					case json.Number:
+						result[idx] = v.String()
 					case []interface{}:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
@@ -710,10 +701,11 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 				case *parser.DataTypeBool:
 					switch v := evalValue.(type) {
-					case float64:
+					case json.Number:
 						// if a whole number make it an int, and convert to a bool
-						if v == float64(int64(v)) {
-							result[idx] = v > 0
+						n, err := v.Int64()
+						if err == nil {
+							result[idx] = n > 0
 						} else {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
@@ -736,8 +728,12 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 
 				case *parser.DataTypeDecimal:
 					switch v := evalValue.(type) {
-					case float64:
-						result[idx] = pql.FromFloat64(v)
+					case json.Number:
+						f, err := v.Float64()
+						if err != nil {
+							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
+						}
+						result[idx] = pql.FromFloat64(f)
 
 					case []interface{}:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
@@ -989,7 +985,6 @@ func (pr *parquetReader) Read() ([]interface{}, error) {
 		return nil, io.EOF // done
 	}
 	for i, col := range pr.columnOrder {
-		// vprint.VV("check row:%v col:%v", pr.rowOffset, col.realColumn)
 		pr.row[i] = pr.table.Get(col.realColumn, pr.rowOffset)
 	}
 	pr.rowOffset++
@@ -1155,12 +1150,10 @@ func (i *bulkInsertSourceParquetRowIter) Next(ctx context.Context) (types.Row, e
 
 		case *parser.DataTypeTimestamp:
 			if intVal, ok := evalValue.(int64); ok {
-				//implicit conversion of int to timestamp will treat int as seconds since unix epoch
+				// implicit conversion of int to timestamp will treat int as seconds since unix epoch
 				result[idx] = time.Unix(intVal, 0).UTC()
 			} else if stringVal, ok := evalValue.(string); ok {
 				if tm, err := time.ParseInLocation(time.RFC3339Nano, stringVal, time.UTC); err == nil {
-					result[idx] = tm
-				} else if tm, err := time.ParseInLocation(time.RFC3339, stringVal, time.UTC); err == nil {
 					result[idx] = tm
 				} else if tm, err := time.ParseInLocation("2006-01-02", stringVal, time.UTC); err == nil {
 					result[idx] = tm

@@ -11,6 +11,9 @@ type Config struct {
 	// CloudAuth
 	CloudAuth CloudAuthConfig `json:"cloud-auth"`
 
+	// Kafka
+	KafkaConfig string `json:"kafka-config"`
+
 	HistoryPath string `json:"history-path"`
 }
 

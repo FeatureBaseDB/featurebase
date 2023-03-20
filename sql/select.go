@@ -206,7 +206,7 @@ func (h handlerSelectFieldsFromTableWhere) Apply(stmt *sqlparser.Select, qm Quer
 		return nil, errors.Wrap(err, "extracting select fields")
 	}
 
-	var fields []string
+	var fields []string //nolint:prealloc
 	for _, fld := range selectFields {
 		if _, ok := fld.(*StarColumn); ok {
 			pflds := index.Fields()

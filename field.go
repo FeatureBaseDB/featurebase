@@ -1018,8 +1018,9 @@ func (f *Field) viewsByTimeRange(from, to time.Time) (views []string, err error)
 	}
 
 	// Get min/max based on existing views.
-	var vs []string
-	for _, v := range f.views() {
+	fv := f.views()
+	vs := make([]string, 0, len(fv))
+	for _, v := range fv {
 		vs = append(vs, v.name)
 	}
 	min, max := minMaxViews(vs, q)

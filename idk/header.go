@@ -506,13 +506,18 @@ func (t PathTable) FlatMap() map[string]int {
 	return m
 }
 
+// RawField is used in cases where header fields are configured as json,
+// typically read from a file. But this type is also used by the kafka runner in
+// fbsql.
+type RawField struct {
+	Name   string   `json:"name"`
+	Path   []string `json:"path"`
+	Type   string   `json:"type"`
+	Config json.RawMessage
+}
+
 func ParseHeader(raw []byte) ([]Field, PathTable, error) {
-	var rawSchema []struct {
-		Name   string   `json:"name"`
-		Path   []string `json:"path"`
-		Type   string   `json:"type"`
-		Config json.RawMessage
-	}
+	var rawSchema []RawField
 	err := json.Unmarshal(raw, &rawSchema)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "parsing schema")

@@ -459,7 +459,7 @@ func (t *Table) HasValidPrimaryKey() bool {
 
 // FieldNames returns the list of field names associated with the table.
 func (t *Table) FieldNames() []FieldName {
-	var ret []FieldName
+	ret := make([]FieldName, 0, len(t.Fields))
 	for _, f := range t.Fields {
 		ret = append(ret, f.Name)
 	}
@@ -693,6 +693,42 @@ func BaseTypeFromString(s string) (BaseType, error) {
 	}
 }
 
+// SplitFieldType splits a string into a BaseType and, when applicable, a slice
+// of qualifiers for that type. For example, the string `decimal(2)` would be
+// split into BaseType `decimal` and []interface{}{int64(2)}.
+func SplitFieldType(s string) (BaseType, []interface{}, error) {
+	var base string
+	var paren string
+
+	parts := strings.Split(s, "(")
+	base = parts[0]
+	if len(parts) > 1 {
+		parenParts := strings.Split(parts[1], ")")
+		if len(parenParts) != 2 {
+			return "", nil, errors.Errorf("invalid type qualifier: %s", s)
+		}
+		paren = parenParts[0]
+	}
+
+	baseType, err := BaseTypeFromString(base)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Handle the string found in parenthesis.
+	args := []interface{}{}
+	switch baseType {
+	case BaseTypeDecimal:
+		scale, err := strconv.ParseInt(paren, 10, 64)
+		if err != nil {
+			return "", nil, errors.Wrapf(err, "parsing int from string: %s", paren)
+		}
+		args = append(args, scale)
+	}
+
+	return baseType, args, nil
+}
+
 // Field represents a field and its configuration.
 type Field struct {
 	Name    FieldName    `json:"name"`
@@ -705,6 +741,17 @@ type Field struct {
 // String returns the field name as a string.
 func (f *Field) String() string {
 	return string(f.Name)
+}
+
+// FullType returns the field type along with its parenthetical (when
+// applicable).
+func (f *Field) FullType() string {
+	switch f.Type {
+	case BaseTypeDecimal:
+		return fmt.Sprintf("%s(%d)", f.Type, f.Options.Scale)
+	default:
+		return string(f.Type)
+	}
 }
 
 // StringKeys returns true if the field uses string keys.

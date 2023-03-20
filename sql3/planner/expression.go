@@ -84,7 +84,7 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 		case *parser.DataTypeString:
 			return value, nil
 		case *parser.DataTypeTimestamp:
-			//try to coerce to a date
+			// try to coerce to a date
 			val, ok := value.(string)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
@@ -112,7 +112,7 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 			return value, nil
 		case *parser.DataTypeIDSetQuantum:
 			return []interface{}{
-				nil, //no timestamp
+				nil, // no timestamp
 				value,
 			}, nil
 		}
@@ -123,7 +123,7 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 			return value, nil
 		case *parser.DataTypeStringSetQuantum:
 			return []interface{}{
-				nil, //no timestamp
+				nil, // no timestamp
 				value,
 			}, nil
 		}
@@ -346,7 +346,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 
 	switch coercedDataType.(type) {
 	case *parser.DataTypeBool:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -370,7 +370,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
 
 	case *parser.DataTypeInt:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -419,11 +419,15 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 			case parser.STAR:
 				return nl * nr, nil
 			case parser.SLASH:
+				if nr == 0 {
+					return nil, sql3.NewErrDivideByZero(0, 0)
+				}
 				return nl / nr, nil
-
 			case parser.REM:
+				if nr == 0 {
+					return nil, sql3.NewErrDivideByZero(0, 0)
+				}
 				return nl % nr, nil
-
 			default:
 				return nil, sql3.NewErrInternalf("unhandled operator %d", n.op)
 			}
@@ -431,7 +435,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
 
 	case *parser.DataTypeID:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -492,7 +496,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
 
 	case *parser.DataTypeDecimal:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -541,7 +545,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%T', '%T'", coercedLhs, coercedRhs)
 
 	case *parser.DataTypeTimestamp:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -581,7 +585,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
 
 	case *parser.DataTypeIDSet:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -603,7 +607,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
 
 	case *parser.DataTypeString:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -646,7 +650,7 @@ func (n *binOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, e
 		return nil, sql3.NewErrInternalf("unexpected type conversion error '%t', '%t'", nlok, nrok)
 
 	case *parser.DataTypeStringSet:
-		//if either side is nil, return nil
+		// if either side is nil, return nil
 		if evalLhs == nil || evalRhs == nil {
 			return nil, nil
 		}
@@ -844,7 +848,7 @@ func (n *casePlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 				return nil, sql3.NewErrInternalf("unhandled type '%s'", n.baseExpr.Type())
 			}
 		}
-		//if we get to here, we're falling back to else
+		// if we get to here, we're falling back to else
 		if n.elseExpr != nil {
 			evalElse, err := n.elseExpr.Evaluate(currentRow)
 			if err != nil {
@@ -915,7 +919,7 @@ func (n *casePlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 				}
 			}
 		}
-		//if we get to here, we're falling back to else
+		// if we get to here, we're falling back to else
 		if n.elseExpr != nil {
 			evalElse, err := n.elseExpr.Evaluate(currentRow)
 			if err != nil {
@@ -1092,25 +1096,25 @@ func newSubqueryPlanExpression(op types.PlanOperator) *subqueryPlanExpression {
 func (n *subqueryPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
 	ctx := context.Background()
 
-	//get an iterator
+	// get an iterator
 	iter, err := n.op.Iterator(ctx, currentRow)
 	if err != nil {
 		return nil, err
 	}
 
-	//get the first row
+	// get the first row
 	row, err := iter.Next(ctx)
 	if err != nil {
 		if err == types.ErrNoMoreRows {
-			//no rows, so return null
-			//TODO(pok) - check that this is the right behavior
+			// no rows, so return null
+			// TODO(pok) - check that this is the right behavior
 			return nil, nil
 		}
 		return nil, err
 	}
 	result := row[0]
 
-	//make sure we don't have a next row - this is an error
+	// make sure we don't have a next row - this is an error
 	_, err = iter.Next(ctx)
 	if err != nil && err == types.ErrNoMoreRows {
 		return result, nil
@@ -1312,7 +1316,7 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return nil, err
 	}
 
-	//if lhs is nil, bail
+	// if lhs is nil, bail
 	if evalLhs == nil {
 		return nil, nil
 	}
@@ -1324,13 +1328,13 @@ func (n *inOpPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 
 	listMembers := []interface{}{}
 
-	//evaluate all the list members
+	// evaluate all the list members
 	for _, lm := range exprList.exprs {
 		lv, err := lm.Evaluate(currentRow)
 		if err != nil {
 			return nil, err
 		}
-		//if any of the list members eval to nil, bail
+		// if any of the list members eval to nil, bail
 		if lv == nil {
 			return nil, nil
 		}
@@ -1494,7 +1498,6 @@ func (n *inOpPlanExpression) Plan() map[string]interface{} {
 	result["lhs"] = n.lhs.Plan()
 	result["rhs"] = n.rhs.Plan()
 	return result
-
 }
 
 func (n *inOpPlanExpression) Children() []types.PlanExpression {
@@ -1534,8 +1537,8 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateSetContainsAny(currentRow)
 	case "SETCONTAINSALL":
 		return n.EvaluateSetContainsAll(currentRow)
-	case "DATEPART":
-		return n.EvaluateDatepart(currentRow)
+	case "DATETIMEPART":
+		return n.EvaluateDateTimePart(currentRow)
 	case "REVERSE":
 		return n.EvaluateReverse(currentRow)
 	case "UPPER":
@@ -1576,9 +1579,19 @@ func (n *callPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		return n.EvaluateToTimestamp(currentRow)
 	case "STR":
 		return n.EvaluateStr(currentRow)
+	case "DATETIMENAME":
+		return n.EvaluateDateTimeName(currentRow)
+	case "DATE_TRUNC":
+		return n.EvaluateDateTrunc(currentRow)
 		// time quantum functions
 	case "RANGEQ":
 		return n.EvaluateRangeQ(currentRow)
+	case "DATETIMEFROMPARTS":
+		return n.EvaluateDateTimeFromParts(currentRow)
+	case "DATETIMEADD":
+		return n.EvaluateDatetimeAdd(currentRow)
+	case "DATETIMEDIFF":
+		return n.EvaluateDatetimeDiff(currentRow)
 	default:
 		return nil, sql3.NewErrInternalf("unhandled function name '%s'", n.name)
 	}
@@ -1719,7 +1732,7 @@ func (n *qualifiedRefPlanExpression) Evaluate(currentRow []interface{}) (interfa
 		return result, nil
 
 	case *parser.DataTypeID:
-		//this could be an int64 or a uint64 internally
+		// this could be an int64 or a uint64 internally
 		iv, iok := currentRow[n.columnIndex].(int64)
 		if iok {
 			return iv, nil
@@ -1795,7 +1808,6 @@ func (n *variableRefPlanExpression) Evaluate(currentRow []interface{}) (interfac
 	}
 
 	switch n.dataType.(type) {
-
 	default:
 		return currentRow[n.variableIndex], nil
 	}
@@ -2067,7 +2079,7 @@ func (n *stringLiteralPlanExpression) WithChildren(children ...types.PlanExpress
 }
 
 func (expr *stringLiteralPlanExpression) ConvertToTimestamp() *time.Time {
-	//try to coerce to a date
+	// try to coerce to a date
 	if tm, err := time.ParseInLocation(time.RFC3339Nano, expr.value, time.UTC); err == nil {
 		return &tm
 	} else if tm, err := time.ParseInLocation(time.RFC3339, expr.value, time.UTC); err == nil {
@@ -2174,7 +2186,7 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		case *parser.DataTypeIDSet:
 			return nl, nil
 		case *parser.DataTypeString:
-			//TODO(pok) come up with a better string representation of idset
+			// TODO(pok) come up with a better string representation of idset
 			return fmt.Sprintf("%v", nl), nil
 		}
 
@@ -2187,7 +2199,7 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		case *parser.DataTypeInt, *parser.DataTypeID:
 			i, err := strconv.Atoi(nl)
 			if err != nil {
-				//TODO(pok) need to push location into here
+				// TODO(pok) need to push location into here
 				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 			return int64(i), nil
@@ -2195,7 +2207,7 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		case *parser.DataTypeBool:
 			i, err := strconv.ParseBool(nl)
 			if err != nil {
-				//TODO(pok) need to push location into here
+				// TODO(pok) need to push location into here
 				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 			return i, nil
@@ -2203,7 +2215,7 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 		case *parser.DataTypeDecimal:
 			castValue, err := pql.ParseDecimal(nl)
 			if err != nil {
-				//TODO(pok) need to push location into here
+				// TODO(pok) need to push location into here
 				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
 			if tt.Scale < castValue.Scale {
@@ -2674,7 +2686,7 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 func (p *ExecutionPlanner) compileUnaryExpr(expr *parser.UnaryExpr) (_ types.PlanExpression, err error) {
 	switch op := expr.Op; op {
 
-	//bitwise operators
+	// bitwise operators
 	case parser.BITNOT:
 		x, err := p.compileExpr(expr.X)
 		if err != nil {
@@ -2682,7 +2694,7 @@ func (p *ExecutionPlanner) compileUnaryExpr(expr *parser.UnaryExpr) (_ types.Pla
 		}
 		return newUnaryOpPlanExpression(expr.Op, x, expr.ResultDataType), nil
 
-	//arithmetic operators
+	// arithmetic operators
 	case parser.PLUS, parser.MINUS:
 		x, err := p.compileExpr(expr.X)
 		if err != nil {
@@ -2706,26 +2718,26 @@ func (p *ExecutionPlanner) compileBinaryExpr(expr *parser.BinaryExpr) (_ types.P
 
 	switch op := expr.Op; op {
 
-	//logical operators
+	// logical operators
 	case parser.AND, parser.OR:
 		return newBinOpPlanExpression(x, expr.Op, y, expr.ResultDataType), nil
 
-	//equality operators
+	// equality operators
 	case parser.EQ, parser.NE:
 		return newBinOpPlanExpression(x, expr.Op, y, expr.ResultDataType), nil
 
-	//comparison operators
+	// comparison operators
 	case parser.LT, parser.LE, parser.GT, parser.GE:
 		return newBinOpPlanExpression(x, expr.Op, y, expr.ResultDataType), nil
 
-	//arithmetic operators
+	// arithmetic operators
 	case parser.PLUS, parser.MINUS, parser.STAR, parser.SLASH, parser.REM:
 
-		//TODO(pok) move constant folding to optimizer
+		// TODO(pok) move constant folding to optimizer
 		opx, okx := x.(*intLiteralPlanExpression)
 		opy, oky := y.(*intLiteralPlanExpression)
 		if okx && oky {
-			//both literals so we can fold
+			// both literals so we can fold
 			numx := opx.value
 			numy := opy.value
 
@@ -2743,26 +2755,32 @@ func (p *ExecutionPlanner) compileBinaryExpr(expr *parser.BinaryExpr) (_ types.P
 				return newIntLiteralPlanExpression(value), nil
 
 			case parser.SLASH:
+				if numy == 0 {
+					return nil, sql3.NewErrDivideByZero(expr.OpPos.Line, expr.OpPos.Column)
+				}
 				value := numx / numy
 				return newIntLiteralPlanExpression(value), nil
 
 			case parser.REM:
+				if numy == 0 {
+					return nil, sql3.NewErrDivideByZero(expr.OpPos.Line, expr.OpPos.Column)
+				}
 				value := numx % numy
 				return newIntLiteralPlanExpression(value), nil
 
 			default:
-				//run home to momma
+				// run home to momma
 				return newBinOpPlanExpression(x, expr.Op, y, expr.ResultDataType), nil
 			}
 		} else {
 			return newBinOpPlanExpression(x, expr.Op, y, expr.ResultDataType), nil
 		}
 
-	//bitwise operators
+	// bitwise operators
 	case parser.BITAND, parser.BITOR, parser.LSHIFT, parser.RSHIFT:
 		return newBinOpPlanExpression(x, expr.Op, y, expr.ResultDataType), nil
 
-	//null test
+	// null test
 	case parser.IS, parser.ISNOT:
 		return newBinOpPlanExpression(x, expr.Op, y, expr.ResultDataType), nil
 
@@ -2837,7 +2855,6 @@ func (p *ExecutionPlanner) compileOrderingTermExpr(expr parser.Expr, projections
 	if expr == nil {
 		return nil, nil
 	}
-
 	switch thisExpr := expr.(type) {
 	case *parser.Ident:
 		for _, proj := range projections {
@@ -2854,7 +2871,7 @@ func (p *ExecutionPlanner) compileOrderingTermExpr(expr parser.Expr, projections
 					if !typeCanBeSortedOn(p.expr.Type()) {
 						return nil, sql3.NewErrExpectedSortableExpression(0, 0, p.expr.Type().TypeDescription())
 					}
-					return p.expr, nil
+					return p, nil
 				}
 
 			}

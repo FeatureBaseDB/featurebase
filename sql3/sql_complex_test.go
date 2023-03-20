@@ -23,6 +23,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/pql"
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/test"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 )
@@ -155,7 +156,7 @@ func TestPlanner_Show(t *testing.T) {
 	}
 
 	t.Run("SystemTablesInfo", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, replica_count from fb_cluster_info`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, replica_count from fb_database_info`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -177,13 +178,14 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("SystemTablesNode", func(t *testing.T) {
-		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_cluster_nodes`)
+		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_database_nodes`)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		if diff := cmp.Diff([]*pilosa.WireQueryField{
 			wireQueryFieldString("id"),
+			wireQueryFieldString("type"),
 			wireQueryFieldString("state"),
 			wireQueryFieldString("uri"),
 			wireQueryFieldString("grpc_uri"),
@@ -1716,6 +1718,16 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+	t.Run("BulkNDJSONFileBadBatchSize", func(t *testing.T) {
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 0;`)
+		if err == nil || !strings.Contains(err.Error(), `invalid batch size '0'`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 'foo';`)
+		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 
 	t.Run("BulkBadRowsLimit", func(t *testing.T) {
 		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' ROWSLIMIT 'foo';`)
@@ -1867,7 +1879,9 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		x'{ "_id": 1, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": true, "d1": 11.34 }
 		{ "_id": 2, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 0, "d1": 11.34 }
 		{ "_id": 3, "id1": 10, "i1": 11,  "ids1": [ 3, 4, 5 ], "ss1": [ "foo", "bar" ], "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }
-		{ "_id": 4, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }' 
+		{ "_id": 4, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01T22:08:41+00:00", "s1": "frobny", "b1": 1, "d1": 11.34 }
+		{ "_id": 5, "id1": 10, "i1": 11,  "ids1": 9, "ss1": "baz", "ts1": "2012-11-01", "s1": 42, "b1": 1, "d1": 11.34 }
+		' 
 	with 
 		format 'NDJSON' 
 		input 'STREAM';`)
@@ -2838,6 +2852,11 @@ func simpleParquetMaker(t *testing.T, f *os.File, numRows int64, input []tb) {
 			sbuild.AppendValues(input[i].Value.([]string), nil)
 			newChunk := sbuild.NewArray()
 			chunks = append(chunks, newChunk)
+		case arrow.FixedWidthTypes.Boolean:
+			bbuild := array.NewBooleanBuilder(mem)
+			bbuild.AppendValues(input[i].Value.([]bool), nil)
+			newChunk := bbuild.NewArray()
+			chunks = append(chunks, newChunk)
 		}
 	}
 	// make schema
@@ -2860,26 +2879,34 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 
 	t.Run("BulkFromLocalFile", func(t *testing.T) {
 		// check that can pull parquet file from local file
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING, d STRINGSET, e IDSET, f BOOL, t TIMESTAMP);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
 		assert.NoError(t, err)
 		defer os.Remove(tmpfile.Name())
 		// create a parquet file with all the example data
 		simpleParquetMaker(t, tmpfile, 2, []tb{
-			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1, 2}},
-			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7}},
-			{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803}},
-			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio"}},
+			{Name: "id", Type: arrow.PrimitiveTypes.Int64, Value: []int64{1, 2, 3}},
+			{Name: "int64V", Type: arrow.PrimitiveTypes.Int64, Value: []int64{42, 7, 6}},
+			{Name: "float64V", Type: arrow.PrimitiveTypes.Float64, Value: []float64{3.14159, 1.61803, 1.41426}},
+			{Name: "stringV", Type: arrow.BinaryTypes.String, Value: []string{"pi", "goldenratio", "sqr2"}},
+			{Name: "stringsetV", Type: arrow.BinaryTypes.String, Value: []string{"a1", "a2", "a3"}},
+			{Name: "idsetV", Type: arrow.PrimitiveTypes.Int64, Value: []int64{10, 20, 30}},
+			{Name: "boolV", Type: arrow.FixedWidthTypes.Boolean, Value: []bool{true, false, true}},
+			{Name: "timestampstring", Type: arrow.BinaryTypes.String, Value: []string{"2022-01-28T12:14:04Z", "1970-01-28", "1988-05-30T12:02:00.567999999Z"}},
 		})
 
 		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
-	into j1 (_id,a,b,c ) 
+	into j1 (_id,a,b,c,d,e,f,t ) 
 	map(
 		'id' id, 
 		'int64V' INT, 
 		'float64V' DECIMAL(2), 
-		'stringV' STRING) 
+		'stringV' STRING,
+		'stringsetV' STRINGSET,
+		'idsetV' IDSET,
+		'boolV' BOOL,
+		'timestampstring' TIMESTAMP) 
     from 
 	   '%s' 
 	   WITH FORMAT 'PARQUET' 
@@ -2890,6 +2917,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(42), "pi"},
 			{int64(2), int64(7), "goldenratio"},
+			{int64(3), int64(6), "sqr2"},
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
@@ -2899,9 +2927,44 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		if !pql.Decimal.EqualTo(d, results[0][0].(pql.Decimal)) {
 			t.Fatal("Should be equal")
 		}
+		// just getting some opOrderBy coverage here
+		// order by string
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, c from j1 order by c`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2), "goldenratio"},
+			{int64(1), "pi"},
+			{int64(3), "sqr2"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+		// order by bool
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, f from j1 order by f`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2), false},
+			{int64(1), true},
+			{int64(3), true},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+		// order by timestamp
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, t from j1 order by t`)
+		assert.NoError(t, err)
+		t2, _ := time.ParseInLocation(time.RFC3339Nano, "1970-01-28T00:00:00Z", time.UTC)
+		t3, _ := time.ParseInLocation(time.RFC3339Nano, "1988-05-30T12:02:00Z", time.UTC)
+		t1, _ := time.ParseInLocation(time.RFC3339Nano, "2022-01-28T12:14:04Z", time.UTC)
+
+		if diff := cmp.Diff([][]interface{}{
+			{int64(2), t2},
+			{int64(3), t3},
+			{int64(1), t1},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
-	t.Run("BulkFromUrl", func(t *testing.T) {
+	t.Run("BulkParquetFromUrl", func(t *testing.T) {
 		// check that can pull parquet file from URL and load
 
 		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j2 (_id ID, a INT, b STRING);`)
@@ -2977,4 +3040,209 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		row := results[0]
 		assert.Equal(t, row[1], row[2])
 	})
+
+	t.Run("BulkCSVFromUrl", func(t *testing.T) {
+		// check that can pull parquet file from URL and load
+
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j3 (_id ID, a INT, b STRING);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkCSVFile.csv")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a csv file with all the example data bigger than batch size
+		var expect [][]interface{}
+		for i := int64(1); i < 100; i++ {
+			s := fmt.Sprintf("pi%d", i)
+			tmpfile.Write([]byte(fmt.Sprintf("%d, %d, \"%s\"\n", i, i+42, s)))
+			expect = append(expect, []interface{}{i, i + 42, s})
+		}
+
+		mux := http.NewServeMux()
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
+			payload, _ := os.ReadFile(tmpfile.Name())
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.WriteHeader(200)
+			w.Write(payload)
+		})
+
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	into j3 (_id,a,b ) 
+	map(
+		0 id, 
+		1 INT, 
+		2 STRING) 
+    from 
+	   '%s' 
+	   WITH FORMAT 'CSV' 
+	   BATCHSIZE 60
+	   INPUT 'URL';`, ts.URL+"/static"))
+		assert.NoError(t, err)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j3`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff(expect, results); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+	t.Run("BulkNDJSONFromUrl", func(t *testing.T) {
+		// check that can pull parquet file from URL and load
+
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j4 (_id ID, a INT, b STRING, c TIMESTAMP);`)
+		assert.NoError(t, err)
+		tmpfile, err := os.CreateTemp("", "BulkJSONFile.json")
+		assert.NoError(t, err)
+		defer os.Remove(tmpfile.Name())
+		// create a csv file with all the example data
+		tmpfile.Write([]byte(`{ "id":1, "intv":42, "stringv":"pi" , "ts": 1678985262}`))
+
+		mux := http.NewServeMux()
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		mux.HandleFunc("/static", func(w http.ResponseWriter, r *http.Request) {
+			payload, _ := os.ReadFile(tmpfile.Name())
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.WriteHeader(200)
+			w.Write(payload)
+		})
+
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+	into j4 (_id,a,b,c ) 
+	map(
+		'$.id' id, 
+		'$.intv' INT, 
+		'$.stringv' STRING,
+		'$.ts' TIMESTAMP) 
+    from 
+	   '%s' 
+	   WITH FORMAT 'NDJSON' 
+	   INPUT 'URL';`, ts.URL+"/static"))
+		assert.NoError(t, err)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j4`)
+		assert.NoError(t, err)
+		if diff := cmp.Diff([][]interface{}{
+			{int64(1), int64(42), "pi"},
+		}, results); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+}
+
+func TestPlanner_BulkInsert_FP1916(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
+	node := c.GetNode(0).Server
+	_, _, _, err := sql_test.MustQueryRows(t, node, `create table greg-test (
+		_id STRING,
+		id_col ID,
+		string_col STRING cachetype ranked size 1000,
+		int_col int,
+		decimal_col DECIMAL(2),
+		bool_col BOOL
+		time_col TIMESTAMP,
+		stringset_col STRINGSET,
+		ideset_col IDSET
+	);`)
+	assert.NoError(t, err)
+
+	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO greg-test (
+		_id,
+		id_col,
+		string_col,
+		int_col,
+		decimal_col,
+		bool_col,
+		time_col,
+		stringset_col,
+		ideset_col)
+		map (
+		0 ID,
+		1 STRING,
+		2 INT,
+		3 DECIMAL(2),
+		4 BOOL,
+		5 TIMESTAMP,
+		6 STRINGSET,
+		7 IDSET)
+		transform(
+		@1,
+		@0,
+		@1,
+		@2,
+		@3,
+		@4,
+		@5,
+		@6,
+		@7)
+		FROM x'1,TEST2,8924809397503602651,31.2,1,"2014-07-15T01:18:46Z",stringset1, 1'
+		with
+			BATCHSIZE 10000
+			format 'CSV'
+			input 'STREAM';`)
+	assert.NoError(t, err)
+	results, _, _, err := sql_test.MustQueryRows(t, node, `select int_col from greg-test`)
+	assert.NoError(t, err)
+	got := results[0][0].(int64)
+	expected := int64(8924809397503602651)
+	assert.Equal(t, got, expected)
+}
+
+func TestPlanner_BulkInsert_FP1915(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
+	node := c.GetNode(0).Server
+	_, _, _, err := sql_test.MustQueryRows(t, node, `create table ids (
+		_id id,
+		a int,
+		b int);`)
+	assert.NoError(t, err)
+	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO ids (_id, a, b) 
+map ('$._id' id, '$.a' int, '$.b' int)
+from x'{ "_id":8924809397503602651 , "a": 10, "b": 20 }
+       { "_id":"8924809397503602652" , "a": 10, "b": 20 }'
+WITH
+    FORMAT 'NDJSON'
+    INPUT 'STREAM';`)
+	assert.NoError(t, err)
+	results, _, _, err := sql_test.MustQueryRows(t, node, `select _id from ids`)
+	assert.NoError(t, err)
+	got := make([]int64, 0)
+	for i := range results {
+		got = append(got, results[i][0].(int64))
+	}
+	sort.Slice(got, func(i, j int) bool {
+		return got[i] < got[j]
+	})
+	vprint.VV("results %#v", results)
+	if diff := cmp.Diff([]int64{
+		8924809397503602651,
+		8924809397503602652,
+	}, got); diff != "" {
+		t.Fatal(diff)
+	}
+
+	// FB_2062
+	_, _, _, err = sql_test.MustQueryRows(t, node, `create table sup305-fails (_id id, bucket string, value int);`)
+	assert.NoError(t, err)
+	_, _, _, err = sql_test.MustQueryRows(t, node, `
+	insert into sup305-fails values (1, 'a', 1000), (2, 'b', 1000), (3, 'c', 1000), (4, 'c', 1000), (5, 'c', 1000), (6, 'c', 1000), (7, 'c', 1000), 
+(8, 'a', 1000), (9, 'b', 1000), (10, 'c', 1000), (11, 'c', 1000), (12, 'c', 1000), (13, 'c', 1000), (14, 'c', 1000), 
+(15, 'a', 1000), (16, 'b', 1000), (17, 'c', 1000), (18, 'c', 1000), (19, 'c', 1000), (20, 'c', 1000), (21, 'c', 1000);`)
+	assert.NoError(t, err)
+	results, _, _, err = sql_test.MustQueryRows(t, node, `select bucket, count(*) as cnt from sup305-fails group by bucket having count(*) > 1 order by cnt;`)
+	assert.NoError(t, err)
+	got = make([]int64, 0)
+	for i := range results {
+		got = append(got, results[i][1].(int64))
+	}
+	sort.Slice(got, func(i, j int) bool {
+		return got[i] < got[j]
+	})
+	if diff := cmp.Diff([]int64{3, 3, 15}, got); diff != "" {
+		t.Fatal(diff)
+	}
 }

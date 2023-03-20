@@ -45,7 +45,13 @@ var TableTests []TableTest = []TableTest{
 	setLiteralTests,
 	setFunctionTests,
 	setParameterTests,
-	datePartTests,
+	dateTimePartTests,
+	dateTimeNameTests,
+	toTimestampTests,
+	datetimeAddTests,
+	dateTruncTests,
+	datetimedifftests,
+
 	stringScalarFunctionsTests,
 
 	insertTest,
@@ -207,6 +213,29 @@ func knownTimestamp() time.Time {
 	if err != nil {
 		panic(err.Error())
 	}
+	return tm
+}
+
+func knownSubSecondTimestamp() time.Time {
+	tm := knownTimestamp()
+	duration, err := time.ParseDuration("100200300ns")
+	if err != nil {
+		panic(err.Error())
+	}
+	tm = tm.Add(duration)
+	return tm
+}
+
+func knownSubSecondTimestamp2() time.Time {
+	tm, err := time.ParseInLocation(time.RFC3339, "2022-12-09T18:04:54+00:00", time.UTC)
+	if err != nil {
+		panic(err.Error())
+	}
+	duration, err := time.ParseDuration("300500800ns")
+	if err != nil {
+		panic(err.Error())
+	}
+	tm = tm.Add(duration)
 	return tm
 }
 

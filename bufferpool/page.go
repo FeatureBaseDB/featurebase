@@ -53,10 +53,10 @@ const PAGE_PREV_POINTER_OFFSET = 12 // offset 12, length 4, end 16
 const PAGE_NEXT_POINTER_OFFSET = 16 // offset 16, length 4, end 20
 const PAGE_SLOTS_START_OFFSET = 20  // offset 20
 
-// page slots
+// PAGE_SLOT_LENGTH is the size of the page slot key/value.
 //
-//	key offset int16    	//offset 0, length 2, end 2
-//	value offset int16	    //offset 2, length 2, end 4
+// key offset int16    	//offset 0, length 2, end 2
+// value offset int16	    //offset 2, length 2, end 4
 const PAGE_SLOT_LENGTH = 4
 
 // Page represents a page on disk
