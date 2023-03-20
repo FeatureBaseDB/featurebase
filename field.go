@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
@@ -980,6 +981,51 @@ func (f *Field) hasBSIGroup(name string) bool {
 		}
 	}
 	return false
+}
+
+// cleanupViewName yields a "corrected" view name, handling some
+// idioms we used elsewhere in code. Given an empty string,
+// it yields a default view name (either "standard" or the BSI view
+// for BSI fields). Given a string starting with numbers, it
+// yields the corresponding time quantum view (prefixing "standard_").
+// It yields an error if the view name given does not correspond
+// to a view which should exist. For instance, the "standard" or
+// "existence" views for a BSI field, or a time quantum view for
+// a non-time field.
+func (f *Field) cleanupViewName(viewName string) (string, error) {
+	if viewName == "" {
+		switch f.options.Type {
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+			return "bsig_" + f.name, nil
+		default:
+			return viewStandard, nil
+		}
+	}
+	switch f.options.Type {
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		if viewName == "bsig_"+f.name {
+			return viewName, nil
+		}
+		return viewName, fmt.Errorf("BSI-type field view should be named bsig_[fieldname], got %q", viewName)
+	case FieldTypeTime:
+		switch {
+		case viewName == viewStandard, viewName == viewExistence:
+			return viewName, nil
+		case strings.HasPrefix(viewName, viewStandard):
+			return viewName, nil
+		case unicode.IsDigit(rune(viewName[0])):
+			return viewStandard + "_" + viewName, nil
+		default:
+			return viewName, fmt.Errorf("time field views are %q, %q, or %q_[digits], got %q", viewStandard, viewExistence, viewStandard, viewName)
+		}
+	default:
+		switch viewName {
+		case viewStandard, viewExistence:
+			return viewName, nil
+		default:
+			return viewName, fmt.Errorf("unexpected view name %q, expecting %q or %q", viewName, viewStandard, viewExistence)
+		}
+	}
 }
 
 // createBSIGroup creates a new bsiGroup on the field.

@@ -499,22 +499,9 @@ func importWorker(importWork chan importJob) {
 	for j := range importWork {
 		err := func() (err0 error) {
 			for viewName, viewData := range j.req.Views {
-				// The logic here corresponds to the logic in fragment.cleanViewName().
-				// Unfortunately, the logic in that method is not completely exclusive
-				// (i.e. an "other" view named with format YYYYMMDD would be handled
-				// incorrectly). One way to address this would be to change the logic
-				// overall so there weren't conflicts. For now, we just
-				// rely on the field type to inform the intended view name.
-				// contrast with cleanupView, which is similar but unfortunately not quite identical
-				switch viewName {
-				case "":
-					viewName = viewStandard
-				case viewStandard, viewExistence:
-					// do nothing, these are fine
-				default: // possibly a time view
-					if j.field.Type() == FieldTypeTime && !strings.HasPrefix(viewName, viewStandard) {
-						viewName = viewStandard + "_" + viewName
-					}
+				viewName, err0 = j.field.cleanupViewName(viewName)
+				if err0 != nil {
+					return err0
 				}
 				if len(viewData) == 0 {
 					return fmt.Errorf("no data to import for view: %s", viewName)
@@ -1687,7 +1674,7 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		}
 
 		fieldType := field.Options().Type
-		if err1 = cleanupView(fieldType, &viewUpdate); err1 != nil {
+		if viewUpdate.View, err1 = field.cleanupViewName(viewUpdate.View); err1 != nil {
 			return err1
 		}
 
@@ -1776,30 +1763,6 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		}
 	}
 
-	return nil
-}
-
-func cleanupView(fieldType string, viewUpdate *RoaringUpdate) error {
-	// TODO wouldn't hurt to have consolidated logic somewhere for validating view names.
-	switch fieldType {
-	case FieldTypeSet, FieldTypeTime:
-		switch viewUpdate.View {
-		case "":
-			viewUpdate.View = viewStandard
-		case viewStandard, viewExistence:
-			// do nothing, these are fine
-		default:
-			if fieldType == FieldTypeTime && !strings.HasPrefix(viewUpdate.View, viewStandard) {
-				viewUpdate.View = viewStandard + "_" + viewUpdate.View
-			}
-		}
-	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
-		if viewUpdate.View == "" {
-			viewUpdate.View = "bsig_" + viewUpdate.Field
-		} else if viewUpdate.View != "bsig_"+viewUpdate.Field {
-			return NewBadRequestError(errors.Errorf("invalid view name (%s) for field %s of type %s", viewUpdate.View, viewUpdate.Field, fieldType))
-		}
-	}
 	return nil
 }
 
