@@ -594,7 +594,7 @@ func NewErrTableOrViewNotFound(line, col int, tableName string) error {
 func NewErrTableExists(line, col int, tableName string) error {
 	return errors.New(
 		ErrTableExists,
-		fmt.Sprintf("[%d:%d] table '%s' already exists", line, col, tableName),
+		fmt.Sprintf("[%d:%d] table or view '%s' already exists", line, col, tableName),
 	)
 }
 

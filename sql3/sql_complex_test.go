@@ -691,7 +691,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		} else {
-			if err.Error() != "[0:0] table 'allcoltypes' already exists" {
+			if err.Error() != "[0:0] table or view 'allcoltypes' already exists" {
 				t.Fatal(err)
 			}
 		}
