@@ -9,12 +9,15 @@ FeatureBase is written in Go and supports SQL.
 FeatureBase is released under the Apache 2.0 Open Source license.
 
 ## Getting Started
+You need to have [Docker](https://docs.docker.com/get-docker/) and [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) installed to use this guide.
 
 ### Build FeatureBase Server with Docker (Optional)
 
 To build Featurebase from source with Docker, run the following from a prompt:
 
 ```
+git clone https://github.com/FeatureBaseDB/featurebase.git
+cd featurebase
 docker build -t featurebasedb/featurebase:latest .
 ```
 
@@ -25,8 +28,6 @@ To run FeatureBase from Docker, enter the following from a prompt:
 ```
 docker run -p 10101:10101 featurebasedb/featurebase:latest
 ```
-
-Don't have Docker? Get started here: [https://docs.docker.com/get-docker/](https://docs.docker.com/get-docker/)
 
 ### Create a Database and Insert Data
 
