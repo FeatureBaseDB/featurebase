@@ -1,6 +1,6 @@
 # FeatureBase
 
-This is FeatureBase v3.34.0, a crazy fast database/analytics engine based on Roaring Bitmaps.
+This is FeatureBase, a crazy fast database/analytics engine based on [B-trees](https://en.wikipedia.org/wiki/B-tree) and [Roaring Bitmaps](https://roaringbitmap.org/).
 
 FeatureBase is written in Go and supports SQL.
 
