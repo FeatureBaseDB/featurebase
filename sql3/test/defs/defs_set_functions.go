@@ -146,6 +146,8 @@ var setFunctionTests = TableTest{
 			name: "set-contains-int",
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(ievent, 101)",
+				"select * from selectwithset where setcontainsany(ievent, [101])",
+				"select * from selectwithset where setcontainsall(ievent, [101])",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),
@@ -156,6 +158,23 @@ var setFunctionTests = TableTest{
 			),
 			ExpRows: rows(
 				row(int64(1), int64(10), int64(100), []string{"POST"}, []int64{101}),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			// SetContainsInt
+			name: "set-contains-int-using-value",
+			SQLs: sqls(
+				"select _id, setcontainsany(ievent, [101]) from selectwithset",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), true),
+				row(int64(2), nil),
+				row(int64(3), nil),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -226,6 +245,30 @@ var setFunctionTests = TableTest{
 				"select * from selectwithset where setcontains(event, ['foo'])",
 			),
 			ExpErr: "types 'stringset' and 'stringset' are not equatable",
+		},
+		{
+			// SetContainsWrongTypeSet
+			name: "set-contains-null-in-values",
+			SQLs: sqls(
+				"select * from selectwithset where setcontains(event, [null])",
+			),
+			ExpErr: "set literal must contain ints or strings",
+		},
+		{
+			// SetContainsWrongTypeSet
+			name: "set-contains-null-value",
+			SQLs: sqls(
+				"select * from selectwithset where setcontains(event, null)",
+			),
+			ExpErr: "types 'stringset' and 'void' are not equatable",
+		},
+		{
+			// SetContainsWrongTypeSet
+			name: "set-contains-null-set",
+			SQLs: sqls(
+				"select * from selectwithset where setcontains(null, [1])",
+			),
+			ExpErr: "set expression expected",
 		},
 	},
 }
