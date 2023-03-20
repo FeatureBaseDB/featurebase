@@ -15,12 +15,13 @@ import (
 	testbolt "github.com/featurebasedb/featurebase/v3/dax/test/boltdb"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newBoltBalancer(t *testing.T) (*daxbolt.DB, func()) {
 	db := testbolt.MustOpenDB(t)
-	assert.NoError(t, db.InitializeBuckets(boltdb.BalancerBuckets...))
-	assert.NoError(t, db.InitializeBuckets(schemardb.SchemarBuckets...))
+	require.NoError(t, db.InitializeBuckets(boltdb.BalancerBuckets...))
+	require.NoError(t, db.InitializeBuckets(schemardb.SchemarBuckets...))
 
 	return db, func() {
 		testbolt.MustCloseDB(t, db)

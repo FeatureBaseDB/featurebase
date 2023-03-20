@@ -33,7 +33,7 @@ func NewNodeService(db *boltdb.DB, logger logger.Logger) *NodeService {
 func (s *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax.Node) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -56,7 +56,7 @@ func (s *NodeService) CreateNode(tx dax.Transaction, addr dax.Address, node *dax
 func (s *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -80,7 +80,7 @@ func (s *NodeService) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node,
 func (s *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -98,7 +98,7 @@ func (s *NodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 func (s *NodeService) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	nodes, err := s.getNodes(txx)

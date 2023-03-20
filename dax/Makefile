@@ -20,6 +20,11 @@ test-integration:
 testv-integration:
 	$(GO) test -v ./test/dax -count 1 -timeout 20m -run TestDAXIntegration/$(RUN)
 
+######################## Postgres Backend Stuff #########################
+
+run-postgres:
+	mkdir -p $(HOME)/pgdata
+	docker run -p 5432:5432 -v $(HOME)/pgdata:/var/lib/postgresql/data:Z  -e POSTGRES_PASSWORD=testpass --user=$(shell id -u) postgres:14.7 -c log_min_duration_statement=0
 
 ############################### AWS STUFF ###############################
 

@@ -161,21 +161,27 @@ func (mm *ResourceManager) RemoveAll() error {
 	errList := make([]error, 0)
 	for k, resource := range mm.shardResources {
 		err := resource.Unlock()
-		if err != nil && !strings.Contains(err.Error(), "resource was not locked") {
+		if err != nil &&
+			!strings.Contains(err.Error(), "resource was not locked") &&
+			!strings.Contains(err.Error(), "no such file or directory") {
 			errList = append(errList, err)
 		}
 		delete(mm.shardResources, k)
 	}
 	for k, resource := range mm.tableKeyResources {
 		err := resource.Unlock()
-		if err != nil && !strings.Contains(err.Error(), "resource was not locked") {
+		if err != nil &&
+			!strings.Contains(err.Error(), "resource was not locked") &&
+			!strings.Contains(err.Error(), "no such file or directory") {
 			errList = append(errList, err)
 		}
 		delete(mm.tableKeyResources, k)
 	}
 	for k, resource := range mm.fieldKeyResources {
 		err := resource.Unlock()
-		if err != nil && !strings.Contains(err.Error(), "resource was not locked") {
+		if err != nil &&
+			!strings.Contains(err.Error(), "resource was not locked") &&
+			!strings.Contains(err.Error(), "no such file or directory") {
 			errList = append(errList, err)
 		}
 		delete(mm.fieldKeyResources, k)

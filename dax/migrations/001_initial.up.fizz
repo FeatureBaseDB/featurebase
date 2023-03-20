@@ -1,0 +1,84 @@
+
+create_table("organizations") {
+	t.Column("id", "string", {primary: true})
+	t.Timestamps()
+}
+
+
+create_table("databases") {
+	t.Column("id", "string", {primary: true})
+	t.Column("organization_id", "string")
+	t.Column("description", "string")
+	t.Column("owner", "string")
+	t.Column("updated_by", "string")
+	t.Column("workers_min", "int")
+	t.Column("workers_max", "int")
+	t.Column("name", "string")
+	t.ForeignKey("organization_id", {"organizations": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+
+create_table("tables") {
+	t.Column("id", "string", {primary: true})
+	t.Column("name", "string", {})
+	t.Column("owner", "string", {})
+	t.Column("updated_by", "string", {})
+	t.Column("description", "string", {})
+	t.Column("partition_n", "integer", {})
+	t.Column("database_id", "string")
+	t.Column("organization_id", "string")
+	t.ForeignKey("database_id", {"databases": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+
+create_table("columns") {
+	t.Column("id", "uuid", {primary: true})
+	t.Column("name", "string", {})
+	t.Column("type", "string", {})
+	t.Column("constraints", "string", {})
+	t.Column("options", "string", {})
+	t.Column("table_id", "string")
+	t.ForeignKey("table_id", {"tables": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+
+create_table("nodes") {
+        t.Column("id", "uuid", {primary: true})
+	t.Column("address", "string")
+	t.Timestamps()
+}
+
+create_table("node_roles") {
+        t.Column("id", "uuid", {primary: true})
+        t.Column("node_id", "uuid")
+	t.Column("role", "string")
+	t.ForeignKey("node_id", {"nodes": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+
+create_table("workers") {
+        t.Column("id", "uuid", {primary: true})
+	t.Column("address", "string")
+	t.Column("role", "string")
+        t.Column("database_id", "string", {"null": true})
+	t.ForeignKey("database_id", {"databases": ["id"]}, {"null": true})
+}
+
+create_table("jobs") {
+        t.Column("id", "uuid", {primary: true})
+	t.Column("name", "string")
+	t.Column("role", "string")
+        t.Column("worker_id", "uuid", {"null": true})
+	t.ForeignKey("worker_id", {"workers": ["id"]}, {"null": true})
+        t.Column("database_id", "string")
+	t.ForeignKey("database_id", {"databases": ["id"]}, {"on_delete": "cascade"})
+	t.Timestamps()
+}
+
+create_table("directive_versions") {
+        t.Column("id", "int", {primary: true})
+	t.Column("version", "int")
+	t.Timestamps()
+}
+
+sql("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00');")

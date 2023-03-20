@@ -1,0 +1,4 @@
+drop_table("columns")
+drop_table("tables")
+drop_table("databases")
+drop_table("organizations")

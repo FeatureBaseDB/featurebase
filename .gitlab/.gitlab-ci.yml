@@ -255,6 +255,16 @@ run go tests race:
   stage: nonblocking # don't let this job block any other jobs because it takes much longer than the other tests.
   image: golang:$GOVERSION
   extends: .go-cache
+  variables:
+    SQLDB_DB: run_go_tests_race
+    POSTGRES_DB: run_go_tests_race
+    SQLDB_USER: postgres
+    POSTGRES_USER: postgres
+    SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    SQLDB_HOST: postgres
+  services:
+    - postgres:14.7
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   needs: ["smoke build"] # we do block on smoke build though bc it's pretty dumb to test stuff if it doesn't build
@@ -276,6 +286,16 @@ run go tests:
   stage: test
   image: golang:$GOVERSION
   extends: .go-cache
+  variables:
+    SQLDB_DB: run_go_tests
+    POSTGRES_DB: run_go_tests
+    SQLDB_USER: postgres
+    POSTGRES_USER: postgres
+    SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    SQLDB_HOST: postgres
+  services:
+    - postgres:14.7
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
@@ -295,14 +315,29 @@ run go tests:
 run go tests dax/test/dax:
   stage: test
   image: golang:$GOVERSION
+  extends: .go-cache
   tags:
-    - aws
+    - docker
+  variables:
+    SQLDB_DB: run_go_tests_dax
+    POSTGRES_DB: run_go_tests_dax
+    SQLDB_USER: postgres
+    POSTGRES_USER: postgres
+    SQLDB_PASSWORD: $POSTGRES_PASSWORD
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    SQLDB_HOST: postgres
+  services:
+    - postgres:14.7
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "Building FB and Datagen docker images for DAX tests"
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData' | paste -s -d, -)
+    - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - mkdir -p $TMPDIR
     - go test -coverprofile=coverage-dax-integration.out -covermode=atomic -coverpkg=${PKG_LIST} -timeout=20m ./dax/test/dax
+  after_script:
+    - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   artifacts:
     paths:
       - coverage-dax-integration.out

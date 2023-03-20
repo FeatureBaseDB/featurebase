@@ -10,6 +10,7 @@ import (
 	balancerboltdb "github.com/featurebasedb/featurebase/v3/dax/controller/balancer/boltdb"
 	controllerhttp "github.com/featurebasedb/featurebase/v3/dax/controller/http"
 	schemarboltdb "github.com/featurebasedb/featurebase/v3/dax/controller/schemar/boltdb"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	fbnet "github.com/featurebasedb/featurebase/v3/net"
@@ -22,12 +23,6 @@ type controllerService struct {
 	uri        *fbnet.URI
 	controller *controller.Controller
 
-	// Because we stopped using a storage method interface, and always use bolt,
-	// we need to be sure to close the boltDBs that are created in controller.New()
-	// whenever controller.Stop() is called. These are pointers to that DB so we can
-	// close it.
-	boltDB *boltdb.DB
-
 	logger logger.Logger
 }
 
@@ -36,11 +31,6 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 	var logr logger.Logger = logger.StderrLogger
 	if cfg.Logger != nil {
 		logr = cfg.Logger.WithPrefix("Controller: ")
-	}
-
-	// Storage methods.
-	if cfg.StorageMethod != "boltdb" && cfg.StorageMethod != "" {
-		logr.Printf("storagemethod %s not supported, try 'boltdb'", cfg.StorageMethod)
 	}
 
 	if cfg.DataDir == "" {
@@ -53,40 +43,53 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 		logr.Warnf("no DataDir given (like '/path/to/directory'); using temp dir at '%s'", cfg.DataDir)
 	}
 
-	buckets := append(schemarboltdb.SchemarBuckets, balancerboltdb.BalancerBuckets...)
+	controller := controller.New(cfg)
+	controllerSvc := &controllerService{
+		uri:        uri,
+		controller: controller,
+		logger:     logr,
+	}
 
-	controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "controller", buckets...)
-	if err != nil {
-		logr.Printf(errors.Wrap(err, "creating controller bolt").Error())
+	// Storage methods.
+	switch cfg.StorageMethod {
+	case "boltdb":
+		buckets := append(schemarboltdb.SchemarBuckets, balancerboltdb.BalancerBuckets...)
+		controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "controller", buckets...)
+		if err != nil {
+			logr.Printf(errors.Wrap(err, "creating controller bolt").Error())
+			os.Exit(1)
+		}
+		// Directive version.
+		if err := controllerDB.InitializeBuckets(boltdb.DirectiveBuckets...); err != nil {
+			logr.Panicf("initializing directive buckets: %v", err)
+		}
+		controller.Schemar = schemarboltdb.NewSchemar(controllerDB, logr)
+		controller.Balancer = balancerboltdb.NewBalancer(controllerDB, controller.Schemar, logr)
+		directiveVersion := boltdb.NewDirectiveVersion(controllerDB)
+		controller.DirectiveVersion = directiveVersion
+
+		controller.Transactor = controllerDB
+	case "sqldb":
+		controller.Schemar = sqldb.NewSchemar(logr)
+		controller.Balancer = sqldb.NewBalancer(logr)
+		controller.DirectiveVersion = sqldb.NewDirectiveVersion(logr)
+
+		transactor, err := sqldb.Connect(cfg.SQLDB, logr)
+		if err != nil {
+			logr.Printf("Connecting to database: %v", err)
+			os.Exit(1)
+		}
+		controller.Transactor = transactor
+	default:
+		logr.Printf("storagemethod %s not supported, try 'boltdb' or 'sqldb'", cfg.StorageMethod)
 		os.Exit(1)
 	}
-
-	schemar := schemarboltdb.NewSchemar(controllerDB, logr)
-	balancer := balancerboltdb.NewBalancer(controllerDB, schemar, logr)
-
-	// Directive version.
-	if err := controllerDB.InitializeBuckets(boltdb.DirectiveBuckets...); err != nil {
-		logr.Panicf("initializing directive buckets: %v", err)
-	}
-	directiveVersion := boltdb.NewDirectiveVersion(controllerDB)
-
-	// Controller.
-	controller := controller.New(cfg)
-	controller.Schemar = schemar
-	controller.Balancer = balancer
-	controller.DirectiveVersion = directiveVersion
-	controller.BoltDB = controllerDB
 
 	if cfg.Director != nil {
 		controller.Director = cfg.Director
 	}
 
-	return &controllerService{
-		uri:        uri,
-		controller: controller,
-		boltDB:     controllerDB,
-		logger:     logr,
-	}
+	return controllerSvc
 }
 
 func (m *controllerService) Start() error {
@@ -101,10 +104,6 @@ func (m *controllerService) Stop() error {
 	err := m.controller.Stop()
 	if err != nil {
 		m.logger.Warnf("error stopping controller: %v", err)
-	}
-
-	if m.boltDB != nil {
-		m.boltDB.Close()
 	}
 
 	return err

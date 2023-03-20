@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -126,7 +127,7 @@ func (db *DB) Close() (err error) {
 // provides a reference to the database and a fixed timestamp at the start of
 // the transaction. The timestamp allows us to mock time during tests as well.
 // The wrapper also contains the context.
-func (db *DB) BeginTx(ctx context.Context, writable bool) (*Tx, error) {
+func (db *DB) BeginTx(ctx context.Context, writable bool) (dax.Transaction, error) {
 	tx, err := db.db.Begin(writable)
 	if err != nil {
 		return nil, err

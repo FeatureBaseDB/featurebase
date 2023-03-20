@@ -66,7 +66,7 @@ func TestPoller(t *testing.T) {
 		nodeService.CreateNode(ctx, addr1, daxNode1)
 		nodeService.CreateNode(ctx, addr2, daxNode2)
 
-		p.Run()
+		go p.Run()
 		defer p.Stop()
 
 		// wait for a done

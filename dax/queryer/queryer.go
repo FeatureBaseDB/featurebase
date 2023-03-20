@@ -57,6 +57,10 @@ func New(cfg Config) *Queryer {
 	return q
 }
 
+func (q *Queryer) Logger() logger.Logger {
+	return q.logger
+}
+
 // Orchestrator gets (or creates) an instance of qualifiedOrchestrator based on
 // the provided dax.QualifiedDatabaseID.
 func (q *Queryer) Orchestrator(qdbid dax.QualifiedDatabaseID) *qualifiedOrchestrator {
@@ -265,7 +269,6 @@ func (q *Queryer) parseAndQueryPQL(ctx context.Context, qdbid dax.QualifiedDatab
 	}
 	table := sql[1:i]
 	query := sql[i+1:]
-	fmt.Println("got table/query", table, query)
 
 	return q.queryPQL(ctx, qdbid, dax.TableName(table), query)
 }

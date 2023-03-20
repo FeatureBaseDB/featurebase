@@ -25,7 +25,7 @@ require (
 	github.com/glycerine/vprint v0.0.0-20200730000117-76cea49a68ea
 	github.com/go-avro/avro v0.0.0-20171219232920-444163702c11
 	github.com/go-openapi/strfmt v0.21.2 // indirect
-	github.com/go-sql-driver/mysql v1.6.0
+	github.com/go-sql-driver/mysql v1.7.0
 	github.com/go-test/deep v1.0.7
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang-jwt/jwt v3.2.2+incompatible
@@ -38,7 +38,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.1
 	github.com/improbable-eng/grpc-web v0.15.0
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
-	github.com/lib/pq v1.10.5
+	github.com/lib/pq v1.10.7
 	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pelletier/go-toml v1.9.5
@@ -53,10 +53,10 @@ require (
 	github.com/satori/go.uuid v1.2.1-0.20180404165556-75cca531ea76
 	github.com/segmentio/kafka-go v0.4.29
 	github.com/shirou/gopsutil/v3 v3.22.5
-	github.com/spf13/cobra v1.2.1
+	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.8.1
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/zeebo/blake3 v0.2.3
@@ -84,6 +84,10 @@ require (
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/apache/arrow/go/v10 v10.0.0-20221021053532-2f627c213fc3
 	github.com/benhoyt/goawk v1.21.0
+	github.com/gobuffalo/nulls v0.4.2
+	github.com/gobuffalo/pop/v6 v6.1.1
+	github.com/gobuffalo/validate/v3 v3.3.3
+	github.com/gofrs/uuid v4.3.1+incompatible
 	github.com/gomem/gomem v0.1.0
 	github.com/google/uuid v1.3.0
 	github.com/jaffee/commandeer v0.6.0
@@ -96,10 +100,42 @@ require (
 require (
 	github.com/DataDog/datadog-agent/pkg/obfuscate v0.0.0-20211129110424-6491aa3bf583 // indirect
 	github.com/DataDog/sketches-go v1.0.0 // indirect
+	github.com/Masterminds/semver/v3 v3.1.1 // indirect
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/dgraph-io/ristretto v0.1.0 // indirect
+	github.com/fatih/color v1.13.0 // indirect
+	github.com/fatih/structs v1.1.0 // indirect
+	github.com/gobuffalo/envy v1.10.2 // indirect
+	github.com/gobuffalo/fizz v1.14.4 // indirect
+	github.com/gobuffalo/flect v1.0.0 // indirect
+	github.com/gobuffalo/github_flavored_markdown v1.1.3 // indirect
+	github.com/gobuffalo/helpers v0.6.7 // indirect
+	github.com/gobuffalo/plush/v4 v4.1.18 // indirect
+	github.com/gobuffalo/tags/v3 v3.1.4 // indirect
+	github.com/gorilla/css v1.0.0 // indirect
+	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
+	github.com/jackc/pgconn v1.13.0 // indirect
+	github.com/jackc/pgio v1.0.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgproto3/v2 v2.3.1 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
+	github.com/jackc/pgtype v1.12.0 // indirect
+	github.com/jackc/pgx/v4 v4.17.2 // indirect
+	github.com/jmoiron/sqlx v1.3.5 // indirect
+	github.com/joho/godotenv v1.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
+	github.com/luna-duclos/instrumentedsql v1.1.3 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/mattn/go-colorable v0.1.11 // indirect
+	github.com/mattn/go-isatty v0.0.16 // indirect
+	github.com/mattn/go-sqlite3 v1.14.16 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.20 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
+	github.com/rogpeppe/go-internal v1.9.0 // indirect
+	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d // indirect
+	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
 	github.com/tinylib/msgp v1.1.2 // indirect
 )
 
@@ -138,7 +174,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -161,12 +197,12 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	github.com/sirupsen/logrus v1.7.0 // indirect
+	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/stretchr/objx v0.4.0 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect

@@ -18,7 +18,7 @@ import (
 
 const (
 	defaultBindPort      = "8080"
-	defaultStorageMethod = "boltdb"
+	defaultStorageMethod = "sqldb"
 )
 
 // Config represents the configuration for the command.
@@ -71,6 +71,7 @@ func NewConfig() *Config {
 			Config: controller.Config{
 				RegistrationBatchTimeout: time.Second * 3,
 				StorageMethod:            defaultStorageMethod,
+				SQLDB:                    controller.NewSQLDBConfig(),
 				SnappingTurtleTimeout:    time.Minute * 3,
 			},
 		},

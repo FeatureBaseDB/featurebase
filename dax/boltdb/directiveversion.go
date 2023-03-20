@@ -34,7 +34,7 @@ func NewDirectiveVersion(db *DB) *DirectiveVersion {
 func (d *DirectiveVersion) Increment(tx dax.Transaction, delta uint64) (uint64, error) {
 	txx, ok := tx.(*Tx)
 	if !ok {
-		return 0, dax.NewErrInvalidTransaction()
+		return 0, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketDirective)

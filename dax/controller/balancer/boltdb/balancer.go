@@ -75,7 +75,7 @@ func (w *workerJobService) ListWorkers(tx dax.Transaction, roleType dax.RoleType
 func (w *workerJobService) getWorkers(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.Addresses, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	c := txx.Bucket(bucketBalancer).Cursor()
@@ -104,7 +104,7 @@ func (w *workerJobService) getWorkers(tx dax.Transaction, roleType dax.RoleType,
 func (w *workerJobService) getWorkerInfos(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.WorkerInfos, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	c := txx.Bucket(bucketBalancer).Cursor()
@@ -147,7 +147,7 @@ func (w *workerJobService) getWorkerInfos(tx dax.Transaction, roleType dax.RoleT
 func (w *workerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -176,7 +176,7 @@ func (w *workerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleTyp
 func (w *workerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -195,10 +195,14 @@ func (w *workerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleTyp
 	return nil
 }
 
+func (w *workerJobService) FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error {
+	return nil
+}
+
 func (w *workerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, jobs ...dax.Job) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -236,7 +240,7 @@ func (w *workerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType,
 func (w *workerJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job dax.Job) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -274,7 +278,7 @@ func (w *workerJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, 
 func (w *workerJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) (balancer.InternalDiffs, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -323,7 +327,7 @@ func (w *workerJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.R
 func (w *workerJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) (dax.Jobs, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -349,7 +353,7 @@ func (w *workerJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, q
 func (w *workerJobService) JobCounts(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addrs ...dax.Address) (map[dax.Address]int, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -466,7 +470,7 @@ func (f *freeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, q
 func (f *freeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job dax.Job) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -504,7 +508,7 @@ func (f *freeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qd
 func (f *freeJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -542,7 +546,7 @@ func (f *freeJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.Rol
 func (f *freeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.Jobs, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -568,7 +572,7 @@ func (f *freeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qdb
 func (f *freeJobService) MergeJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs dax.Jobs) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -621,7 +625,7 @@ func newFreeWorkerService(db *boltdb.DB) *freeWorkerService {
 func (f *freeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleType, addres ...dax.Address) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)
@@ -659,7 +663,7 @@ func (f *freeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleType
 func (f *freeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) error {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return dax.NewErrInvalidTransaction()
+		return dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	workers, err := f.ListWorkers(tx, roleType)
@@ -701,7 +705,7 @@ func (f *freeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleTy
 func (f *freeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleType, num int) ([]dax.Address, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	workers, err := f.ListWorkers(tx, roleType)
@@ -743,7 +747,7 @@ func (f *freeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleType
 func (f *freeWorkerService) ListWorkers(tx dax.Transaction, roleType dax.RoleType) (dax.Addresses, error) {
 	txx, ok := tx.(*boltdb.Tx)
 	if !ok {
-		return nil, dax.NewErrInvalidTransaction()
+		return nil, dax.NewErrInvalidTransaction("*boltdb.Tx")
 	}
 
 	bkt := txx.Bucket(bucketBalancer)

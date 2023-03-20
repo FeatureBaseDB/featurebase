@@ -16,7 +16,17 @@ func Handler(q *queryer.Queryer) http.Handler {
 		queryer: q,
 	}
 
+	logRequestMiddleWare := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.Contains(r.URL.Path, "/health") {
+				q.Logger().Debugf("serving %s, %v", r.Method, r.URL)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+
 	router := mux.NewRouter()
+	router.Use(logRequestMiddleWare)
 	router.HandleFunc("/health", svr.getHealth).Methods("GET").Name("GetHealth")
 	router.HandleFunc("/sql", svr.postSQL).Methods("POST").Name("PostSQL")
 	router.HandleFunc("/databases/{databaseID}/sql", svr.postSQL).Methods("POST").Name("PostDatabaseSQL")

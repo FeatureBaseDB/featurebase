@@ -21,7 +21,6 @@ type Poller struct {
 	nodePoller   NodePoller
 	pollInterval time.Duration
 
-	running  bool
 	stopping chan struct{}
 
 	logger logger.Logger
@@ -61,7 +60,7 @@ func New(cfg Config) *Poller {
 func (p *Poller) Addresses() []dax.Address {
 	nodes, err := p.nodeService.Nodes(context.Background())
 	if err != nil {
-		p.logger.Printf("POLLER: unable to get nodes from node service")
+		p.logger.Errorf("POLLER: unable to get nodes from node service: %v", err)
 	}
 
 	addrs := make([]dax.Address, 0, len(nodes))
@@ -73,17 +72,9 @@ func (p *Poller) Addresses() []dax.Address {
 }
 
 // Run starts the polling goroutine.
-func (p *Poller) Run() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.running {
-		p.logger.Printf("poller is already running")
-		return
-	}
-	p.running = true
-
-	go func() { p.run() }()
+func (p *Poller) Run() error {
+	p.run()
+	return nil
 }
 
 func (p *Poller) run() {

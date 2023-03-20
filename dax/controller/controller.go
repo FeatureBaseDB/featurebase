@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/poller"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
@@ -30,11 +29,7 @@ type Controller struct {
 	Schemar  schemar.Schemar
 	Balancer Balancer
 
-	// Because we stopped using a storage method interface, and always use bolt,
-	// we need to be sure to close the boltDBs that are created in controller.New()
-	// whenever controller.Stop() is called. These are pointers to that DB so we can
-	// close it.
-	BoltDB *boltdb.DB
+	Transactor Transactor
 
 	Snapshotter *snapshotter.Snapshotter
 	Writelogger *writelogger.Writelogger
@@ -51,6 +46,8 @@ type Controller struct {
 	snappingTurtleTimeout    time.Duration
 	snapControl              chan struct{}
 	stopping                 chan struct{}
+
+	backgroundGroup errgroup.Group
 
 	logger logger.Logger
 }
@@ -105,10 +102,16 @@ func New(cfg Config) *Controller {
 
 // Start starts long running subroutines.
 func (c *Controller) Start() error {
-	c.poller.Run()
 
-	go c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
-	go c.snappingTurtleRoutine(c.snappingTurtleTimeout, c.snapControl, c.logger.WithPrefix("Snapping Turtle: "))
+	c.backgroundGroup.Go(c.poller.Run) // TODO: this could just use c.stopping as well?
+
+	c.backgroundGroup.Go(func() error {
+		return c.nodeRegistrationRoutine(c.nodeChan, c.registrationBatchTimeout)
+
+	})
+	c.backgroundGroup.Go(func() error {
+		return c.snappingTurtleRoutine(c.snappingTurtleTimeout, c.snapControl, c.logger.WithPrefix("Snapping Turtle: "))
+	})
 
 	return nil
 }
@@ -119,7 +122,13 @@ func (c *Controller) Stop() error {
 
 	close(c.stopping)
 
-	return nil
+	err := c.backgroundGroup.Wait()
+	err2 := c.Transactor.Close()
+	if err != nil {
+		return errors.Wrap(err, "waiting on background routines")
+	}
+
+	return errors.Wrap(err2, "closing transactor")
 }
 
 // RegisterNodes adds nodes to the controller's list of registered
@@ -127,7 +136,7 @@ func (c *Controller) Stop() error {
 func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) error {
 	c.logger.Printf("c.RegisterNodes(): %s", dax.Nodes(nodes))
 
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -245,7 +254,7 @@ func (c *Controller) RegisterNode(ctx context.Context, n *dax.Node) error {
 		}
 	}
 
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -271,7 +280,7 @@ func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
 		return NewErrNodeKeyInvalid("")
 	}
 
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -294,7 +303,7 @@ func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
 // DeregisterNodes removes nodes from the controller's list of registered nodes.
 // It sends directives to the removed nodes, but ignores errors.
 func (c *Controller) DeregisterNodes(ctx context.Context, addresses ...dax.Address) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -600,7 +609,7 @@ func (c *Controller) translateWorkersToAssignedNodes(tx dax.Transaction, workers
 
 // CreateDatabase adds a database to the schemar.
 func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -619,7 +628,7 @@ func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatab
 }
 
 func (c *Controller) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -642,6 +651,14 @@ func (c *Controller) DropDatabase(ctx context.Context, qdbid dax.QualifiedDataba
 			return errors.Wrapf(err, "dropping table: %s", qtid)
 		}
 		workerSet.Merge(addrs)
+	}
+
+	addrs := make([]dax.Address, 0, len(workerSet))
+	for worker := range workerSet {
+		addrs = append(addrs, worker)
+	}
+	if err := c.Balancer.FreeWorkers(tx, addrs...); err != nil {
+		return errors.Wrap(err, "freeing workers")
 	}
 
 	// Drop the database record from the schema.
@@ -670,7 +687,7 @@ func (c *Controller) DropDatabase(ctx context.Context, qdbid dax.QualifiedDataba
 
 // DatabaseByName returns the database for the given name.
 func (c *Controller) DatabaseByName(ctx context.Context, orgID dax.OrganizationID, dbname dax.DatabaseName) (*dax.QualifiedDatabase, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -686,7 +703,7 @@ func (c *Controller) DatabaseByName(ctx context.Context, orgID dax.OrganizationI
 
 // DatabaseByID returns the database for the given id.
 func (c *Controller) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDatabaseID) (*dax.QualifiedDatabase, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -702,7 +719,7 @@ func (c *Controller) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDataba
 
 // SetDatabaseOption sets the option on the given database.
 func (c *Controller) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatabaseID, option string, value string) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -745,7 +762,7 @@ func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, id
 		return nil, dax.NewErrOrganizationIDDoesNotExist(orgID)
 	}
 
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -759,7 +776,7 @@ func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, id
 // affected nodes based on the change.
 func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {
 	c.logger.Debugf("CreateTable %+v", qtbl)
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -853,7 +870,7 @@ func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) 
 // DropTable removes a table from the schema and sends directives to all affected
 // nodes based on the change.
 func (c *Controller) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -916,7 +933,7 @@ func (c *Controller) dropTable(tx dax.Transaction, qtid dax.QualifiedTableID) (A
 		return nil, errors.Wrapf(err, "dropping table from schemar: %s", qtid)
 	}
 
-	// Delete relavent table files from snapshotter and writelogger.
+	// Delete relevant table files from snapshotter and writelogger.
 	if err := c.Snapshotter.DeleteTable(qtid); err != nil {
 		return nil, errors.Wrap(err, "deleting from snapshotter")
 	}
@@ -929,7 +946,7 @@ func (c *Controller) dropTable(tx dax.Transaction, qtid dax.QualifiedTableID) (A
 
 // TableByID returns a table by quaified table id.
 func (c *Controller) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (*dax.QualifiedTable, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -941,7 +958,7 @@ func (c *Controller) TableByID(ctx context.Context, qtid dax.QualifiedTableID) (
 
 // Tables returns a list of tables by name.
 func (c *Controller) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, ids ...dax.TableID) ([]*dax.QualifiedTable, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -954,7 +971,7 @@ func (c *Controller) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, 
 // RemoveShards deregisters the table/shard combinations with the controller and
 // sends the necessary directives.
 func (c *Controller) RemoveShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.ShardNum) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -1244,7 +1261,7 @@ func (c *Controller) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableI
 // snapshot that shard, then increment its shard version for logs written to the
 // Writelogger.
 func (c *Controller) SnapshotShardData(ctx context.Context, qtid dax.QualifiedTableID, shardNum dax.ShardNum) error {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -1287,7 +1304,7 @@ func (c *Controller) snapshotShardData(tx dax.Transaction, qtid dax.QualifiedTab
 // partition to snapshot the table keys for that partition, then increment its
 // version for logs written to the Writelogger.
 func (c *Controller) SnapshotTableKeys(ctx context.Context, qtid dax.QualifiedTableID, partitionNum dax.PartitionNum) error {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -1330,7 +1347,7 @@ func (c *Controller) snapshotTableKeys(tx dax.Transaction, qtid dax.QualifiedTab
 // to snapshot the keys for that field, then increment its version for logs
 // written to the Writelogger.
 func (c *Controller) SnapshotFieldKeys(ctx context.Context, qtid dax.QualifiedTableID, field dax.FieldName) error {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -1384,7 +1401,7 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 	}
 	qdbid := qtid.QualifiedDatabaseID
 
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -1446,7 +1463,7 @@ func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTable
 	}
 	qdbid := qtid.QualifiedDatabaseID
 
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -1521,7 +1538,7 @@ func (c *Controller) IngestPartition(ctx context.Context, qtid dax.QualifiedTabl
 	qdbid := qtid.QualifiedDatabaseID
 
 	// Try with a read transaction first.
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return "", errors.Wrap(err, "beginning tx")
 	}
@@ -1547,7 +1564,7 @@ func (c *Controller) IngestPartition(ctx context.Context, qtid dax.QualifiedTabl
 	if retryAsWrite {
 		tx.Rollback()
 
-		tx, err = c.BoltDB.BeginTx(ctx, true)
+		tx, err = c.Transactor.BeginTx(ctx, true)
 		if err != nil {
 			return "", errors.Wrap(err, "beginning tx")
 		}
@@ -1614,7 +1631,7 @@ func (c *Controller) IngestShard(ctx context.Context, qtid dax.QualifiedTableID,
 	qdbid := qtid.QualifiedDatabaseID
 
 	// Try with a read transaction first.
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return "", errors.Wrap(err, "beginning tx")
 	}
@@ -1641,7 +1658,7 @@ func (c *Controller) IngestShard(ctx context.Context, qtid dax.QualifiedTableID,
 	if retryAsWrite {
 		tx.Rollback()
 
-		tx, err = c.BoltDB.BeginTx(ctx, true)
+		tx, err = c.Transactor.BeginTx(ctx, true)
 		if err != nil {
 			return "", errors.Wrap(err, "beginning tx")
 		}
@@ -1697,7 +1714,7 @@ func (c *Controller) IngestShard(ctx context.Context, qtid dax.QualifiedTableID,
 ////
 
 func (c *Controller) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld *dax.Field) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -1765,7 +1782,7 @@ func (c *Controller) CreateField(ctx context.Context, qtid dax.QualifiedTableID,
 }
 
 func (c *Controller) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
-	tx, err := c.BoltDB.BeginTx(ctx, true)
+	tx, err := c.Transactor.BeginTx(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "beginning tx")
 	}
@@ -1844,7 +1861,7 @@ func (c *Controller) RemoveAddresses(ctx context.Context, addrs ...dax.Address) 
 }
 
 func (c *Controller) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -1854,7 +1871,7 @@ func (c *Controller) DebugNodes(ctx context.Context) ([]*dax.Node, error) {
 }
 
 func (c *Controller) CurrentState(ctx context.Context) ([]dax.WorkerInfo, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -1878,7 +1895,7 @@ func (c *Controller) sanitizeQTID(tx dax.Transaction, qtid *dax.QualifiedTableID
 
 // TableByName gets the full table by name.
 func (c *Controller) TableByName(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (*dax.QualifiedTable, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
@@ -1896,7 +1913,7 @@ func (c *Controller) TableByName(ctx context.Context, qdbid dax.QualifiedDatabas
 // TableID returns the table id by table name.
 // TODO(tlt): try to phase this out in favor of TableByName().
 func (c *Controller) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID, name dax.TableName) (dax.QualifiedTableID, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return dax.QualifiedTableID{}, errors.Wrap(err, "beginning tx")
 	}
@@ -1917,11 +1934,15 @@ func (c *Controller) DeleteNode(context.Context, dax.Address) error {
 	return errors.Errorf("Controller.DeleteNode() not implemented")
 }
 func (c *Controller) Nodes(ctx context.Context) ([]*dax.Node, error) {
-	tx, err := c.BoltDB.BeginTx(ctx, false)
+	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")
 	}
 	defer tx.Rollback()
 
 	return c.Balancer.Nodes(tx)
+}
+
+func (c *Controller) Logger() logger.Logger {
+	return c.logger
 }

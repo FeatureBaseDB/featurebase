@@ -108,6 +108,7 @@ func (b *Balancer) addWorker(tx dax.Transaction, roleType dax.RoleType, addr dax
 }
 
 func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType) (InternalDiffs, error) {
+	b.logger.Debugf("assigning min workers for '%s'", roleType)
 	// Find out how many free workers we have.
 	freeWorkers, err := b.freeWorkers.ListWorkers(tx, roleType)
 	if err != nil {
@@ -117,6 +118,7 @@ func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType) (
 
 	// If there are no free workers, return early.
 	if freeWorkerCount == 0 {
+		b.logger.Debugf("No free workers for '%s'", roleType)
 		return InternalDiffs{}, nil
 	}
 
@@ -176,7 +178,7 @@ func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType) (
 
 	// For each database, if there are enough free workers to
 	// satisfy its min, then pop that number of workers from the free list. If
-	// not, contine to the next database until either reaching the end of the
+	// not, continue to the next database until either reaching the end of the
 	// database list or until there are no more free workers in the list,
 	// whichever comes first.
 	for _, qdbid := range qdbids {
@@ -242,6 +244,21 @@ func (b *Balancer) databaseHasJobs(tx dax.Transaction, roleType dax.RoleType, qd
 func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error) {
 	diffs := NewInternalDiffs()
 
+	////// The rest is database specific. ////////////
+
+	// See if the worker is assigned to a database. If it's not, return early.
+	dbkey := b.current.DatabaseForWorker(tx, addr)
+	if dbkey != "" {
+		qdbid := dbkey.QualifiedDatabaseID()
+		for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
+			if diff, err := b.removeDatabaseWorker(tx, rt, qdbid, addr); err != nil {
+				return nil, errors.Wrapf(err, "removing worker: (%s) %s", rt, addr)
+			} else {
+				diffs.Merge(diff)
+			}
+		}
+	}
+
 	// Remove the worker from the free worker list (if it's there).
 	for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
 		if err := b.freeWorkers.RemoveWorker(tx, rt, addr); err != nil {
@@ -254,29 +271,14 @@ func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.Wor
 		return nil, errors.Wrapf(err, "deleting node from node service: %s", addr)
 	}
 
-	////// The rest is database specific. ////////////
-
-	// See if the worker is assigned to a database. If it's not, return early.
-	dbkey := b.current.DatabaseForWorker(tx, addr)
-	if dbkey == "" {
-		return diffs.Output(), nil
-	}
-
-	qdbid := dbkey.QualifiedDatabaseID()
-
-	for _, rt := range []dax.RoleType{dax.RoleTypeCompute, dax.RoleTypeTranslate} {
-		if diff, err := b.removeDatabaseWorker(tx, rt, qdbid, addr); err != nil {
-			return nil, errors.Wrapf(err, "removing worker: (%s) %s", rt, addr)
+	if dbkey != "" {
+		qdbid := dbkey.QualifiedDatabaseID()
+		// Balance the affected database.
+		if diff, err := b.balanceDatabase(tx, qdbid); err != nil {
+			return nil, errors.Wrapf(err, "balancing database: %s", qdbid)
 		} else {
 			diffs.Merge(diff)
 		}
-	}
-
-	// Balance the affected database.
-	if diff, err := b.balanceDatabase(tx, qdbid); err != nil {
-		return nil, errors.Wrapf(err, "balancing database: %s", qdbid)
-	} else {
-		diffs.Merge(diff)
 	}
 
 	return diffs.Output(), nil
@@ -307,6 +309,10 @@ func (b *Balancer) removeDatabaseWorker(tx dax.Transaction, roleType dax.RoleTyp
 	}
 
 	return diff, nil
+}
+
+func (b *Balancer) FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error {
+	return errors.Wrap(b.current.FreeWorkers(tx, addrs...), "freeing workers")
 }
 
 func (b *Balancer) AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error) {
@@ -533,6 +539,7 @@ func (b *Balancer) balanceDatabase(tx dax.Transaction, qdbid dax.QualifiedDataba
 }
 
 func (b *Balancer) balanceDatabaseForRole(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (InternalDiffs, error) {
+	b.logger.Debugf("balancing database %s for role: %s\n", qdbid, roleType)
 	diffs := NewInternalDiffs()
 
 	// Before balancing, make sure the database has its minimum number of
@@ -776,16 +783,13 @@ func (b *Balancer) processFreeJobs(tx dax.Transaction, roleType dax.RoleType, qd
 	if err != nil {
 		return nil, errors.Wrapf(err, "listing free jobs: %s", roleType)
 	}
-	for _, job := range jobs {
-		if aj, err := b.addDatabaseJobs(tx, roleType, qdbid, job); err != nil {
-			return nil, errors.Wrapf(err, "adding job: %s", job)
-		} else {
-			diffs.Merge(aj)
-		}
-		if err := b.freeJobs.DeleteJob(tx, roleType, qdbid, job); err != nil {
-			return nil, errors.Wrapf(err, "deleting free job: %s", job)
-		}
+
+	if aj, err := b.addDatabaseJobs(tx, roleType, qdbid, jobs...); err != nil {
+		return nil, errors.Wrapf(err, "adding jobs: %s", jobs)
+	} else {
+		diffs.Merge(aj)
 	}
+
 	return diffs, nil
 }
 
@@ -820,6 +824,7 @@ type WorkerJobService interface {
 
 	CreateWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error
 	DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error
+	FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error
 
 	CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job ...dax.Job) error
 	DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job dax.Job) error

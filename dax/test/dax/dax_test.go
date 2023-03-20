@@ -17,6 +17,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
+	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	queryerclient "github.com/featurebasedb/featurebase/v3/dax/queryer/client"
 	"github.com/featurebasedb/featurebase/v3/dax/server"
 	"github.com/featurebasedb/featurebase/v3/dax/server/test"
@@ -61,7 +62,8 @@ func TestDAXIntegration(t *testing.T) {
 			// Start ManagedCommand with an empty, new config. This results in a
 			// ServiceManager running with no active services. They are added
 			// later, throughout the test.
-			cfg := server.NewConfig()
+			cfg := server.NewConfig() // TODO: not sure why we're not getting test config here... had to add the SQLDB line below.
+			cfg.Controller.Config.SQLDB = sqldb.GetTestConfig()
 			opt := server.OptCommandConfig(cfg)
 			mc := test.MustRunManagedCommand(t, opt)
 			defer mc.Close()
@@ -246,18 +248,18 @@ func TestDAXIntegration(t *testing.T) {
 		// ensure partitions are covered
 		partitions0 := dax.PartitionNums{0, 2, 4, 6, 8, 10}
 		partitions1 := dax.PartitionNums{1, 3, 5, 7, 9, 11}
-		allPartitions := append(partitions0, partitions1...)
-		sort.Sort(allPartitions)
+		allPartitionsExp := append(partitions0, partitions1...)
 
-		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
+		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitionsExp...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 2) {
+
+			allParts := append(nodes[0].Partitions, nodes[1].Partitions...)
+			assert.ElementsMatch(t, allPartitionsExp, allParts)
 			// computer0 (node0)
 			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
-			assert.Equal(t, partitions0, nodes[0].Partitions)
 			// computer1 (node1)
 			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
-			assert.Equal(t, partitions1, nodes[1].Partitions)
 		}
 
 		// stop computer 0 (may need to sleep)
@@ -273,7 +275,7 @@ func TestDAXIntegration(t *testing.T) {
 		if assert.Len(t, nodes, 1) {
 			// computer1 (node0)
 			assert.Equal(t, computers[computerKey1].Address(), nodes[0].Address)
-			assert.Equal(t, allPartitions, nodes[0].Partitions)
+			assert.ElementsMatch(t, allPartitionsExp, nodes[0].Partitions)
 		}
 	})
 
@@ -600,10 +602,9 @@ func TestDAXIntegration(t *testing.T) {
 
 		rootDir := mc.Config.Computer.Config.DataDir
 
-		// Ensure the index and writelogger directories are empty.
+		// Ensure the index and writelogger directories are *not* empty.
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
-		assert.False(t, dirIsEmpty(t, rootDir+"/controller"))
 		assert.False(t, dirIsEmpty(t, rootDir+"/wl"))
 
 		resp := runSQL(t, svcmgr.Queryer.Address(), testconfigs[0].qdbid, "drop table keyed")
@@ -612,7 +613,6 @@ func TestDAXIntegration(t *testing.T) {
 		// Ensure the index and writelogger directories are empty.
 		assert.False(t, dirIsEmpty(t, rootDir+"/computer0"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/computer0/indexes"))
-		assert.False(t, dirIsEmpty(t, rootDir+"/controller"))
 		assert.True(t, dirIsEmpty(t, rootDir+"/wl"))
 	})
 
@@ -636,7 +636,7 @@ func TestDAXIntegration(t *testing.T) {
 		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
 		computerKey1 := dax.ServiceKey(dax.ServicePrefixComputer + "1")
 		computerKey2 := dax.ServiceKey(dax.ServicePrefixComputer + "2")
-		// computerKey3 := dax.ServiceKey(dax.ServicePrefixComputer + "3")
+		computerKey3 := dax.ServiceKey(dax.ServicePrefixComputer + "3")
 
 		// Ingest and query some data.
 		runTableTests(t,
@@ -648,20 +648,13 @@ func TestDAXIntegration(t *testing.T) {
 		assert.NoError(t, err)
 
 		// ensure partitions are covered
-		partitions0 := dax.PartitionNums{0, 2, 4, 6, 8, 10}
-		partitions1 := dax.PartitionNums{1, 3, 5, 7, 9, 11}
-		allPartitions := append(partitions0, partitions1...)
-		sort.Sort(allPartitions)
+		allPartitions := dax.PartitionNums{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
 
 		nodes, err := controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 2) {
-			// computer0 (node0)
-			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
-			assert.Equal(t, partitions0, nodes[0].Partitions)
-			// computer1 (node1)
-			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
-			assert.Equal(t, partitions1, nodes[1].Partitions)
+			gotPartitions := append(nodes[0].Partitions, nodes[1].Partitions...)
+			assert.ElementsMatch(t, allPartitions, gotPartitions)
 		}
 
 		// Change DatabaseOptions.WorkersMin to 3.
@@ -681,25 +674,16 @@ func TestDAXIntegration(t *testing.T) {
 			)
 		})
 
-		// ensure partitions are still covered
-		partitions0 = dax.PartitionNums{0, 10}
-		partitions1 = dax.PartitionNums{1, 11}
-		partitions2 := dax.PartitionNums{2, 3, 4, 5, 6, 7, 8, 9}
-		allPartitions = append(append(partitions0, partitions1...), partitions2...)
-		sort.Sort(allPartitions)
-
 		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, allPartitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 3) {
+			gotPartitions := append(nodes[0].Partitions, append(nodes[1].Partitions, nodes[2].Partitions...)...)
 			// computer0 (node0)
-			assert.Equal(t, computers[computerKey0].Address(), nodes[0].Address)
-			assert.Equal(t, partitions0, nodes[0].Partitions)
-			// computer1 (node1)
-			assert.Equal(t, computers[computerKey1].Address(), nodes[1].Address)
-			assert.Equal(t, partitions1, nodes[1].Partitions)
-			// computer2 (node2)
-			assert.Equal(t, computers[computerKey2].Address(), nodes[2].Address)
-			assert.Equal(t, partitions2, nodes[2].Partitions)
+			assert.ElementsMatch(t, allPartitions, gotPartitions)
+			expKeys := []dax.Address{computers[computerKey0].Address(), computers[computerKey1].Address(),
+				computers[computerKey2].Address(), computers[computerKey3].Address()}
+			gotKeys := []dax.Address{nodes[0].Address, nodes[1].Address, nodes[2].Address}
+			assert.Subset(t, expKeys, gotKeys)
 		}
 	})
 
@@ -745,73 +729,53 @@ func TestDAXIntegration(t *testing.T) {
 
 				t.Run("CreateDatabase", func(t *testing.T) {
 					err := client.CreateDatabase(ctx, nil)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, schemar.ErrCodeDatabaseNameInvalid))
-					}
+					assertCode(t, err, schemar.ErrCodeDatabaseNameInvalid)
 				})
 
 				t.Run("DropDatabase", func(t *testing.T) {
 					err := client.DropDatabase(ctx, qdbid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 				})
 
 				t.Run("DatabaseByName", func(t *testing.T) {
 					_, err := client.DatabaseByName(ctx, "", "")
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseNameDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrDatabaseNameDoesNotExist)
 				})
 
 				t.Run("DatabaseByID", func(t *testing.T) {
 					_, err := client.DatabaseByID(ctx, qdbid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 				})
 
 				t.Run("SetDatabaseOption", func(t *testing.T) {
-					err := client.SetDatabaseOption(ctx, qdbid, "", "")
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrDatabaseIDDoesNotExist))
-					}
+					err := client.SetDatabaseOption(ctx, qdbid, dax.DatabaseOptionWorkersMin, "9")
+					assertCode(t, err, dax.ErrDatabaseIDDoesNotExist)
 				})
 
 				t.Run("Databases", func(t *testing.T) {
 					_, err := client.Databases(ctx, "", dbID)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrOrganizationIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrOrganizationIDDoesNotExist)
 				})
 
 				t.Run("CreateTable", func(t *testing.T) {
 					err := client.CreateTable(ctx, &qtbl)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, schemar.ErrCodeTableNameInvalid))
-					}
+					assertCode(t, err, schemar.ErrCodeTableNameInvalid)
 				})
 
 				t.Run("DropTable", func(t *testing.T) {
 					err := client.DropTable(ctx, qtid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrTableIDDoesNotExist)
 				})
 
 				t.Run("TableByName", func(t *testing.T) {
 					req := dax.QualifiedTableID{}
 					_, err := client.TableByName(ctx, qdbid, req.Name)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableNameDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrTableNameDoesNotExist)
 				})
 
 				t.Run("TableByID", func(t *testing.T) {
 					_, err := client.TableByID(ctx, qtid)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrTableIDDoesNotExist)
 				})
 
 				//Todo: make it so "Tables" doesn't return all tables if error is present
@@ -825,16 +789,12 @@ func TestDAXIntegration(t *testing.T) {
 
 				t.Run("CreateField", func(t *testing.T) {
 					err := client.CreateField(ctx, qtid, tbfld)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, schemar.ErrCodeFieldNameInvalid))
-					}
+					assertCode(t, err, schemar.ErrCodeFieldNameInvalid)
 				})
 
 				t.Run("DropField", func(t *testing.T) {
 					err := client.DropField(ctx, qtid, tbfld.Name)
-					if assert.Error(t, err) {
-						assert.True(t, errors.Is(err, dax.ErrTableIDDoesNotExist))
-					}
+					assertCode(t, err, dax.ErrFieldDoesNotExist)
 				})
 			})
 		})
@@ -1162,5 +1122,11 @@ func sortStringKeys(in [][]interface{}) {
 				sort.Strings(v)
 			}
 		}
+	}
+}
+
+func assertCode(t *testing.T, err error, code errors.Code) {
+	if !errors.Is(err, code) {
+		t.Errorf("Error '%v' does not have code %s.", err, code)
 	}
 }
