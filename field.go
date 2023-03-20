@@ -2233,6 +2233,22 @@ func applyDefaultOptions(o *FieldOptions) FieldOptions {
 	return *o
 }
 
+// ActuallyTrackingExistence reflects the distinction between the
+// TrackExistence bool, which is enabled by default for most fields,
+// and whether we actually do existence tracking. Specifically,
+// we don't do existence tracking for time quantum fields which don't
+// have a standard view, or for BSI fields.
+func (o *FieldOptions) ActuallyTrackingExistence() bool {
+	switch o.Type {
+	case FieldTypeTime:
+		return o.TrackExistence && !o.NoStandardView
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		return false
+	default:
+		return o.TrackExistence
+	}
+}
+
 // MarshalJSON marshals FieldOptions to JSON such that
 // only those attributes associated to the field type
 // are included.

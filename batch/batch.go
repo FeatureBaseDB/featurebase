@@ -23,6 +23,7 @@ import (
 const (
 	DefaultKeyTranslateBatchSize = 100000
 	existenceFieldName           = "_exists"
+	existenceViewName            = "existence" // this should match top level featurebase viewExistence
 )
 
 // TODO if using column translation, column ids might get way out of
@@ -573,6 +574,10 @@ func (b *Batch) Add(rec Row) error {
 		case int64:
 			b.values[field.Name] = append(b.values[field.Name], val)
 		case []string:
+			// note that a length of 0 can be valid, and represents an
+			// empty set. an empty set counts as a non-NULL value for
+			// SQL purposes -- it means the existence view bit should
+			// get set.
 			if val == nil {
 				continue
 			}
@@ -608,7 +613,10 @@ func (b *Batch) Add(rec Row) error {
 			}
 			b.rowIDSets[field.Name] = append(rowIDSets, rowIDs)
 		case []uint64:
-			// if length is 0, that's still a valid, empty, set
+			// note that a length of 0 can be valid, and represents an
+			// empty set. an empty set counts as a non-NULL value for
+			// SQL purposes -- it means the existence view bit should
+			// get set.
 			if val == nil {
 				continue
 			}
@@ -1363,8 +1371,8 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 				// the API treats "" as standard
 				curBM = frags.GetOrCreate(curShard, field.Name, "")
 				clearBM = clearFrags.GetOrCreate(curShard, field.Name, "")
-				if opts.TrackExistence {
-					existCurBM = frags.GetOrCreate(curShard, field.Name, "existence")
+				if opts.ActuallyTrackingExistence() {
+					existCurBM = frags.GetOrCreate(curShard, field.Name, existenceViewName)
 				}
 			}
 			if row != nilSentinel {
@@ -1375,7 +1383,7 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 				// the NoStandardView case would be great.
 				if !(opts.Type == featurebase.FieldTypeTime && opts.NoStandardView) {
 					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
-					if opts.TrackExistence {
+					if opts.ActuallyTrackingExistence() {
 						existCurBM.DirectAdd(col % shardWidth)
 					}
 				}
@@ -1398,9 +1406,14 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 				// we want to make sure that at this point, the "set"
 				// fragments don't contain the bit that we're clearing
 				curBM.DirectRemoveN(clearRow*shardWidth + (col % shardWidth))
-				// don't set the existence bit, probably? i don't actually quite
-				// understand the higher level semantics here.
-				if opts.TrackExistence {
+				// Because this is RowIDs, not RowIDSets, there's only one
+				// bit. We should not be setting the existence bit based on
+				// this value, if we're actually clearing it. This doesn't
+				// mean we will clear an existing existence bit, though.
+				// The case where we would clear an existence bit is the
+				// case where someone specified row[mutexField].Clears = nil,
+				// which is far from here.
+				if opts.ActuallyTrackingExistence() {
 					existCurBM.DirectRemoveN(col % shardWidth)
 				}
 			}
@@ -1427,13 +1440,14 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
 				curBM = frags.GetOrCreate(curShard, fname, "")
-				if opts.TrackExistence {
-					existCurBM = frags.GetOrCreate(curShard, fname, "existence")
+				if opts.ActuallyTrackingExistence() {
+					existCurBM = frags.GetOrCreate(curShard, fname, existenceViewName)
 				}
 			}
 			if len(rowIDs) == 0 {
-				// you can validly specify an empty set, which is not the same as a null
-				if opts.TrackExistence && !(opts.Type == featurebase.FieldTypeTime && opts.NoStandardView) && rowIDs != nil {
+				// you can validly specify an empty set, which is not the same as a null,
+				// but which still ought to set the existence bit if we're tracking that.
+				if opts.ActuallyTrackingExistence() && rowIDs != nil {
 					existCurBM.DirectAdd(col % shardWidth)
 				}
 				continue
@@ -1447,7 +1461,7 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 				for _, row := range rowIDs {
 					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
 				}
-				if opts.TrackExistence {
+				if opts.ActuallyTrackingExistence() {
 					existCurBM.DirectAdd(col % shardWidth)
 				}
 			}
@@ -1578,9 +1592,9 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 		bitmap := frags.GetOrCreate(shard, field.Name, "standard")
 		clearBM := clearFrags.GetOrCreate(shard, field.Name, "standard")
 		var existBM, existClearBM *roaring.Bitmap
-		if field.Options.TrackExistence {
-			existBM = frags.GetOrCreate(shard, field.Name, "existence")
-			existClearBM = clearFrags.GetOrCreate(shard, field.Name, "existence")
+		if field.Options.ActuallyTrackingExistence() {
+			existBM = frags.GetOrCreate(shard, field.Name, existenceViewName)
+			existClearBM = clearFrags.GetOrCreate(shard, field.Name, existenceViewName)
 		}
 		for i, id := range ids {
 			if i+1 < len(ids) {
@@ -1594,9 +1608,9 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 				shard = id / shardWidth
 				bitmap = frags.GetOrCreate(shard, field.Name, "standard")
 				clearBM = clearFrags.GetOrCreate(shard, field.Name, "standard")
-				if field.Options.TrackExistence {
-					existBM = frags.GetOrCreate(shard, field.Name, "existence")
-					existClearBM = clearFrags.GetOrCreate(shard, field.Name, "existence")
+				if field.Options.ActuallyTrackingExistence() {
+					existBM = frags.GetOrCreate(shard, field.Name, existenceViewName)
+					existClearBM = clearFrags.GetOrCreate(shard, field.Name, existenceViewName)
 				}
 			}
 			fragmentColumn := id % shardWidth
@@ -1605,10 +1619,10 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 				// clearSentinel is used for deletion
 				// so this value should only be added if its not clearSentinel
 				bitmap.Add(row*shardWidth + fragmentColumn)
-				if field.Options.TrackExistence {
+				if field.Options.ActuallyTrackingExistence() {
 					existBM.Add(fragmentColumn)
 				}
-			} else if field.Options.TrackExistence {
+			} else if field.Options.ActuallyTrackingExistence() {
 				existClearBM.Add(fragmentColumn)
 			}
 		}
@@ -1638,8 +1652,8 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			fragmentColumn := recID % shardWidth
 
 			clearBM.Add(fragmentColumn)
-			if field.Options.TrackExistence {
-				existClearBM := clearFrags.GetOrCreate(shard, field.Name, "existence")
+			if field.Options.ActuallyTrackingExistence() {
+				existClearBM := clearFrags.GetOrCreate(shard, field.Name, existenceViewName)
 
 				existClearBM.Add(fragmentColumn)
 			}
@@ -1665,8 +1679,8 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 
 			fragmentColumn := recID % shardWidth
 			clearBM.Add(fragmentColumn)
-			if field.Options.TrackExistence {
-				exist := frags.GetOrCreate(shard, field.Name, "existence")
+			if field.Options.ActuallyTrackingExistence() {
+				exist := frags.GetOrCreate(shard, field.Name, existenceViewName)
 				exist.Add(fragmentColumn)
 			}
 
