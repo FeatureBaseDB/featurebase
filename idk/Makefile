@@ -153,11 +153,11 @@ start-all: testenv build-wait
 	echo "branch name" ${BRANCH_NAME}
 	$(DOCKER_COMPOSE) up -d zookeeper
 	$(DOCKER_COMPOSE) run -T  wait zookeeper 'echo "ruok" | nc -w 2 zookeeper 2181 | grep imok'
-	$(DOCKER_COMPOSE) up -d dax
 	$(DOCKER_COMPOSE) up -d kafka
 	$(DOCKER_COMPOSE) up -d schema-registry
 	$(DOCKER_COMPOSE) up -d postgres
 	$(DOCKER_COMPOSE) run -T  wait postgres pg_isready -h postgres -p 5432 -U postgres
+	$(DOCKER_COMPOSE) up -d dax
 	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d pilosa
 	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d pilosa-tls
 	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d pilosa-auth
