@@ -839,7 +839,39 @@ func TestPlanner_AlterTable(t *testing.T) {
 			t.Fatal(diff)
 		}
 	})
-
+	// test for adding duplicate column, this test requires column 'f' to be defined beforehand.
+	t.Run("AlterTableAdd", func(t *testing.T) {
+		_, _, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column f int`, c))
+		if err == nil {
+			t.Fatal("expected error")
+		} else {
+			if err.Error() != "[1:47] duplicate column 'f'" {
+				t.Fatal(err)
+			}
+		}
+	})
+	// test for bad column definitions.
+	t.Run("AlterTableAdd", func(t *testing.T) {
+		_, _, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column dt date`, c))
+		if err == nil {
+			t.Fatal("expected error")
+		} else {
+			if err.Error() != "[1:50] unknown type 'date'" {
+				t.Fatal(err)
+			}
+		}
+	})
+	//test for the system rule that enforces the special primary key column "_id" can't be added using alter table statement.
+	t.Run("AlterTableAdd", func(t *testing.T) {
+		_, _, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column _id int`, c))
+		if err == nil {
+			t.Fatal("expected error")
+		} else {
+			if err.Error() != "[1:47] _id column cannot be added to an existing table" {
+				t.Fatal(err)
+			}
+		}
+	})
 	t.Run("AlterTableRename", func(t *testing.T) {
 		t.Skip("not yet implemented")
 		results, columns, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i rename column f to g`, c))
