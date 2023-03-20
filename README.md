@@ -26,6 +26,8 @@ To run FeatureBase from Docker, enter the following from a prompt:
 docker run -p 10101:10101 featurebasedb/featurebase:latest
 ```
 
+Don't have Docker? Get started here: [https://docs.docker.com/get-docker/](https://docs.docker.com/get-docker/)
+
 ### Create a Database and Insert Data
 
 To create a sample database, run the following:
