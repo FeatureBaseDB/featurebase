@@ -13,7 +13,22 @@ import (
 type Node struct {
 	Address Address `json:"address"`
 
+	// RoleTypes allows a registering node to specify which role type(s) it is
+	// capable of filling. The controller will not assign a role to this node
+	// with a type not included in RoleTypes.
 	RoleTypes []RoleType `json:"role-types"`
+
+	// HasDirective will be true when the node has received at least one
+	// directive from the controller. This can be used to instruct the
+	// controller that it should send a directive regardless of whether it
+	// already knows about this node. This can happen in an on-prem, serverless
+	// setup (when the controller and computer are both running in the same
+	// process) and the node is restarted. In that case, the controller comes
+	// up, reads the meta data, and assumes that the local computer registering
+	// with it has already registered. But we really want the controller to
+	// treat this as a new node registration so the computer can load data from
+	// snapshotter/writelogger.
+	HasDirective bool `json:"has-directive"`
 }
 
 // Nodes is a slice of *Node. It's useful for printing the nodes as a list of

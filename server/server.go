@@ -314,12 +314,21 @@ func (m *Command) checkIn(addr dax.Address) {
 				m.logger.Printf("no Controller implementation with which to check-in on node: %s", m.Config.Advertise)
 			}
 
+			// Determine if this node has received at least one directive from
+			// the controller. This will be true if the server's Holder has a
+			// directive with a non-zero version.
+			var hasDirective bool
+			if holder := m.Server.Holder(); holder != nil {
+				hasDirective = holder.Directive().Version > 0
+			}
+
 			node := &dax.Node{
 				Address: addr,
 				RoleTypes: []dax.RoleType{
 					dax.RoleTypeCompute,
 					dax.RoleTypeTranslate,
 				},
+				HasDirective: hasDirective,
 			}
 
 			if err := m.Registrar.CheckInNode(context.Background(), node); err != nil {

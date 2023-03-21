@@ -34,9 +34,11 @@ var (
 
 func TestSQLSchemar(t *testing.T) {
 	conf := sqldb.GetTestConfigRandomDB("sql_schemar")
-	trans, err := sqldb.Connect(conf, logger.StderrLogger)
+	trans, err := sqldb.NewTransactor(conf, logger.StderrLogger)
 	require.NoError(t, err, "connecting")
 	defer sqldb.DropDatabase(trans)
+
+	require.NoError(t, trans.Start())
 
 	tx, err := trans.BeginTx(context.Background(), true)
 	require.NoError(t, err, "getting transaction")

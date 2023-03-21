@@ -125,6 +125,9 @@ func TestDAXIntegration(t *testing.T) {
 		mc := test.MustRunManagedCommand(t)
 		defer mc.Close()
 
+		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
+		mc.WaitForApplied(t, computerKey0, 60, time.Second)
+
 		svcmgr := mc.Manage()
 
 		// Set up Controller client.
@@ -500,6 +503,72 @@ func TestDAXIntegration(t *testing.T) {
 
 		// Wait for the poller to remove the computer.
 		time.Sleep(10 * time.Second)
+
+		t.Run("restart computer0", func(t *testing.T) {
+			assert.NoError(t, svcmgr.ComputerStart(computerKey0))
+			assert.True(t, mc.Healthy(computerKey0))
+			mc.WaitForApplied(t, computerKey0, 60, time.Second)
+		})
+
+		// Query the same data.
+		t.Run("query the same data", func(t *testing.T) {
+			runTableTests(t,
+				svcmgr.Queryer.Address(),
+				tableTestConfig{
+					qdbid:      qdbid,
+					test:       defs.Keyed,
+					skipCreate: true,
+					skipInsert: true,
+				},
+			)
+		})
+	})
+
+	// Ensure that restarting both the controller and the computer comes up in a
+	// usable state. Prior to the `HasDirective` member added to the `dax.Node`,
+	// if an on-prem process (made up of sub-services) restarted, the Controller
+	// would ignore the Computer registering because it already know about it.
+	// This ensures that they can be restarted and the Computer will receive a
+	// directive.
+	t.Run("All_Restart", func(t *testing.T) {
+		mc := test.MustRunManagedCommand(t)
+		defer mc.Close()
+
+		svcmgr := mc.Manage()
+
+		// Set up Controller client.
+		controllerClient := controllerclient.New(svcmgr.Controller.Address(), svcmgr.Logger)
+
+		// Create database.
+		qdb.Options.WorkersMin = 1
+		qdb.Options.WorkersMax = 1
+		assert.NoError(t, controllerClient.CreateDatabase(context.Background(), qdb))
+
+		controllerKey := dax.ServiceKey(dax.ServicePrefixController)
+		computerKey0 := dax.ServiceKey(dax.ServicePrefixComputer + "0")
+
+		// Ingest and query some data.
+		t.Run("ingest and query some data", func(t *testing.T) {
+			runTableTests(t,
+				svcmgr.Queryer.Address(),
+				basicTableTestConfig(qdbid, defs.Keyed)...,
+			)
+		})
+
+		t.Run("stop controller", func(t *testing.T) {
+			assert.NoError(t, svcmgr.ControllerStop())
+			assert.False(t, mc.Healthy(controllerKey))
+		})
+
+		t.Run("stop computer0", func(t *testing.T) {
+			assert.NoError(t, svcmgr.ComputerStop(computerKey0))
+			assert.False(t, mc.Healthy(computerKey0))
+		})
+
+		t.Run("restart controller", func(t *testing.T) {
+			assert.NoError(t, svcmgr.ControllerStart())
+			assert.True(t, mc.Healthy(controllerKey))
+		})
 
 		t.Run("restart computer0", func(t *testing.T) {
 			assert.NoError(t, svcmgr.ComputerStart(computerKey0))

@@ -33,7 +33,6 @@ func New(cfg Config) *Poller {
 		nodeService:    dax.NewNopNodeService(),
 		nodePoller:     NewNopNodePoller(),
 		pollInterval:   time.Second,
-		stopping:       make(chan struct{}),
 		logger:         logger.NopLogger,
 	}
 
@@ -73,6 +72,10 @@ func (p *Poller) Addresses() []dax.Address {
 
 // Run starts the polling goroutine.
 func (p *Poller) Run() error {
+	// Set up the stopping channel here in case the controller restarts and runs
+	// the Poller again.
+	p.stopping = make(chan struct{})
+
 	p.run()
 	return nil
 }

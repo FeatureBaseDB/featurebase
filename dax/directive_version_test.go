@@ -10,8 +10,9 @@ import (
 )
 
 func TestDirectiveVersion(t *testing.T) {
-	trans, err := sqldb.Connect(sqldb.GetTestConfigRandomDB("directive_version"), logger.StderrLogger) // TODO running migrations takes kind of a long time, consolidate w/ other SQL tests
+	trans, err := sqldb.NewTransactor(sqldb.GetTestConfigRandomDB("directive_version"), logger.StderrLogger) // TODO running migrations takes kind of a long time, consolidate w/ other SQL tests
 	require.NoError(t, err, "connecting")
+	require.NoError(t, trans.Start())
 
 	tx, err := trans.BeginTx(context.Background(), true)
 	require.NoError(t, err, "getting transaction")
