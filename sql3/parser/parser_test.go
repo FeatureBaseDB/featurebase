@@ -2055,38 +2055,36 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 			},
 		})
-		/*
-			// This one doesn't work right now because our stringify of this statement is wrong.
-			AssertParseStatement(t, `SELECT * FROM X INNER JOIN Y ON true INNER JOIN Z ON false`, &parser.SelectStatement{
-				Select: pos(0),
-				Columns: []*parser.ResultColumn{
-					{Star: pos(7)},
-				},
-				From: pos(9),
-				Source: &parser.JoinClause{
+		AssertParseStatement(t, `SELECT * FROM X INNER JOIN Y ON true INNER JOIN Z ON false`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Star: pos(7)},
+			},
+			From: pos(9),
+			Source: &parser.JoinClause{
+				X: &parser.JoinClause{
 					X: &parser.QualifiedTableName{
 						Name: &parser.Ident{NamePos: pos(14), Name: "X"},
 					},
 					Operator: &parser.JoinOperator{Inner: pos(16), Join: pos(22)},
-					Y: &parser.JoinClause{
-						X: &parser.QualifiedTableName{
-							Name: &parser.Ident{NamePos: pos(27), Name: "Y"},
-						},
-						Operator: &parser.JoinOperator{Inner: pos(37), Join: pos(43)},
-						Y: &parser.QualifiedTableName{
-							Name: &parser.Ident{NamePos: pos(48), Name: "Z"},
-						},
-						Constraint: &parser.OnConstraint{
-							On: pos(50),
-							X:  &parser.BoolLit{ValuePos: pos(53), Value: false},
-						},
+					Y: &parser.QualifiedTableName{
+						Name: &parser.Ident{NamePos: pos(27), Name: "Y"},
 					},
 					Constraint: &parser.OnConstraint{
 						On: pos(29),
 						X:  &parser.BoolLit{ValuePos: pos(32), Value: true},
 					},
 				},
-			})*/
+				Operator: &parser.JoinOperator{Inner: pos(37), Join: pos(43)},
+				Y: &parser.QualifiedTableName{
+					Name: &parser.Ident{NamePos: pos(48), Name: "Z"},
+				},
+				Constraint: &parser.OnConstraint{
+					On: pos(50),
+					X:  &parser.BoolLit{ValuePos: pos(53), Value: false},
+				},
+			},
+		})
 		AssertParseStatement(t, `SELECT * FROM foo LEFT OUTER JOIN bar`, &parser.SelectStatement{
 			Select: pos(0),
 			Columns: []*parser.ResultColumn{

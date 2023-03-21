@@ -2419,22 +2419,7 @@ func (p *Parser) parseSource() (source Source, err error) {
 			return source, err
 		}
 
-		// Rewrite last source to nest next join on right side.
-		if lhs, ok := source.(*JoinClause); ok {
-			source = &JoinClause{
-				X:        lhs.X,
-				Operator: lhs.Operator,
-				Y: &JoinClause{
-					X:          lhs.Y,
-					Operator:   operator,
-					Y:          y,
-					Constraint: constraint,
-				},
-				Constraint: lhs.Constraint,
-			}
-		} else {
-			source = &JoinClause{X: source, Operator: operator, Y: y, Constraint: constraint}
-		}
+		source = &JoinClause{X: source, Operator: operator, Y: y, Constraint: constraint}
 	}
 }
 
