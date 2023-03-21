@@ -38,7 +38,7 @@ type Queryer struct {
 	fbClient *featurebase.InternalClient
 
 	controller dax.Controller
-	
+
 	systemLayer *systemlayer.SystemLayer
 
 	logger logger.Logger
