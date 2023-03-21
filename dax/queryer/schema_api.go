@@ -28,6 +28,19 @@ func newQualifiedSchemaAPI(qdbid dax.QualifiedDatabaseID, schema dax.Schemar) *q
 }
 
 func (s *qualifiedSchemaAPI) CreateDatabase(ctx context.Context, db *dax.Database) error {
+	//get all databases for current OrgID and check current databases to see if the db.Name already exists
+	dbs, err := s.Databases(ctx, dax.DatabaseID(s.qdbid.OrganizationID))
+	if err != nil {
+		return err
+	}
+
+	for _, v := range dbs {
+		if db.Name == v.Name {
+			return errors.Wrapf(err, "database name already exists: %s", db.Name)
+		}
+	}
+
+	//creates the database
 	qdb := dax.NewQualifiedDatabase(s.qdbid.OrganizationID, db)
 	return s.schemar.CreateDatabase(ctx, qdb)
 }
