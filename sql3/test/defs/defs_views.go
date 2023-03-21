@@ -21,6 +21,14 @@ var viewTests = TableTest{
 		),
 	),
 	SQLTests: []SQLTest{
+		// test for error where an table exist with the requested new view name.
+		{
+			name: "create-view-should-fail",
+			SQLs: sqls(
+				"create view viewtable as select _id, a_string, a_int from viewtable;",
+			),
+			ExpErr: "table or view 'viewtable' already exists",
+		},
 		{
 			name: "create-view",
 			SQLs: sqls(

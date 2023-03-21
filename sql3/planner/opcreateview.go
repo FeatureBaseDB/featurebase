@@ -96,7 +96,7 @@ func (i *createViewIter) Next(ctx context.Context) (types.Row, error) {
 		if i.ifNotExists {
 			return nil, types.ErrNoMoreRows
 		}
-		return nil, sql3.NewErrViewExists(0, 0, i.view.name)
+		return nil, sql3.NewErrTableExists(0, 0, i.view.name)
 	}
 
 	// now check in the views table to see if it is exists
