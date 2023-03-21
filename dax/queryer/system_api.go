@@ -27,9 +27,31 @@ func (s *systemAPI) ClusterNodes() []featurebase.ClusterNode {
 
 	qdb, err := s.controller.DatabaseByID(ctx, s.qdbid)
 	if err != nil {
-		panic(err)
+		return []featurebase.ClusterNode{}
 	}
 	out := make([]featurebase.ClusterNode, qdb.Options.WorkersMin)
 	//get number of compute nodes and number of query nodes and add them to ```out```
 	return out
+}
+
+func (s *systemAPI) PlatformDescription() string {
+	return "Serverless"
+}
+
+func (s *systemAPI) ClusterName() string {
+	return "Serverless"
+}
+
+func (s *systemAPI) ClusterNodeCount() int {
+	ctx := context.Background()
+
+	qdb, err := s.controller.DatabaseByID(ctx, s.qdbid)
+	if err != nil {
+		return -1
+	}
+	return qdb.Options.WorkersMin
+}
+
+func (s *systemAPI) ClusterState() string {
+	return "NORMAL"
 }
