@@ -487,7 +487,7 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 		p = newNopPrinter()
 	}
 
-	// Providing a blank ("") or hyphen ("-") dnName is the equivalent of
+	// Providing a blank ("") or hyphen ("-") dbName is the equivalent of
 	// disconnecting from the current database. We support the hyphen option
 	// because calling the `\c` meta-command without an argument is how you
 	// print the current connection.
