@@ -41,6 +41,9 @@ func TestScanner_Scan(t *testing.T) {
 		t.Run("NoEndQuote", func(t *testing.T) {
 			AssertScan(t, `'unfinished`, parser.ILLEGAL, `'unfinished`)
 		})
+		t.Run("NoEndQuoteNL", func(t *testing.T) {
+			AssertScan(t, "'unfinished\n", parser.UNTERMSTRING, `'unfinished`)
+		})
 	})
 	t.Run("BLOB", func(t *testing.T) {
 		t.Run("LowerX", func(t *testing.T) {
@@ -51,6 +54,9 @@ func TestScanner_Scan(t *testing.T) {
 		})
 		t.Run("NoEndQuote", func(t *testing.T) {
 			AssertScan(t, `x'0123`, parser.ILLEGAL, `x'0123`)
+		})
+		t.Run("QuotedQuote", func(t *testing.T) {
+			AssertScan(t, `x'01''23'`, parser.BLOB, `01'23`)
 		})
 	})
 

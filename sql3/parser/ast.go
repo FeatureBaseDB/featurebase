@@ -299,6 +299,8 @@ func CloneExpr(expr Expr) Expr {
 		return expr.Clone()
 	case *StringLit:
 		return expr.Clone()
+	case *TupleLiteralExpr:
+		return expr.Clone()
 	case *UnaryExpr:
 		return expr.Clone()
 	case *Variable:
@@ -1795,6 +1797,7 @@ func (t *Type) String() string {
 type StringLit struct {
 	ValuePos Pos    // literal position
 	Value    string // literal value (without quotes)
+	IsBlob   bool   // are we a blob?
 }
 
 func (expr *StringLit) IsLiteral() bool { return true }
@@ -1831,7 +1834,11 @@ func (lit *StringLit) Clone() *StringLit {
 
 // String returns the string representation of the expression.
 func (lit *StringLit) String() string {
-	return `'` + strings.Replace(lit.Value, `'`, `''`, -1) + `'`
+	if lit.IsBlob {
+		return `x'` + strings.Replace(lit.Value, `'`, `''`, -1) + `'`
+	} else {
+		return `'` + strings.Replace(lit.Value, `'`, `''`, -1) + `'`
+	}
 }
 
 type IntegerLit struct {

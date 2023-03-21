@@ -414,6 +414,9 @@ func (p *Parser) parseCreateDatabaseStatement(createPos Pos) (_ *CreateDatabaseS
 		if stmt.Options, err = p.parseDatabaseOptions(); err != nil {
 			return &stmt, err
 		}
+		if len(stmt.Options) == 0 {
+			return &stmt, p.errorExpected(stmt.With, p.peek(), "at least one option after WITH")
+		}
 	}
 
 	return &stmt, nil
@@ -443,19 +446,17 @@ func (p *Parser) parseDatabaseOptions() (_ []DatabaseOption, err error) {
 func (p *Parser) parseDatabaseOption() (_ DatabaseOption, err error) {
 	assert(isDatabaseOptionStartToken(p.peek()))
 
-	var optionPos Pos
-
 	// Parse database options.
 	switch p.peek() {
 	case UNITS:
-		return p.parseUnitsOption(optionPos)
+		return p.parseUnitsOption()
 	default:
 		assert(p.peek() == COMMENT)
-		return p.parseCommentOption(optionPos)
+		return p.parseCommentOption()
 	}
 }
 
-func (p *Parser) parseUnitsOption(optionPos Pos) (_ *UnitsOption, err error) {
+func (p *Parser) parseUnitsOption() (_ *UnitsOption, err error) {
 	assert(p.peek() == UNITS)
 
 	var opt UnitsOption
@@ -562,11 +563,11 @@ func (p *Parser) parseTableOption() (_ TableOption, err error) {
 		return p.parseKeyPartitionsOption(optionPos)
 	default:
 		assert(p.peek() == COMMENT)
-		return p.parseCommentOption(optionPos)
+		return p.parseCommentOption()
 	}
 }
 
-func (p *Parser) parseCommentOption(optionPos Pos) (_ *CommentOption, err error) {
+func (p *Parser) parseCommentOption() (_ *CommentOption, err error) {
 	assert(p.peek() == COMMENT)
 
 	var opt CommentOption
@@ -2731,7 +2732,7 @@ func (p *Parser) mustParseLiteral() Expr {
 	case TRUE, FALSE:
 		return &BoolLit{ValuePos: pos, Value: tok == TRUE}
 	case BLOB:
-		return &StringLit{ValuePos: pos, Value: lit}
+		return &StringLit{ValuePos: pos, IsBlob: true, Value: lit}
 	default:
 		assert(tok == NULL)
 		return &NullLit{ValuePos: pos}
