@@ -335,20 +335,6 @@ func isAlpha(ch rune) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }
 
-func isHex(ch rune) bool {
-	return isDigit(ch) || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
-}
-
 func isUnquotedIdent(ch rune) bool {
 	return isAlpha(ch) || isDigit(ch) || ch == '_' || ch == '-'
-}
-
-// IsInteger returns true if s only contains digits.
-func IsInteger(s string) bool {
-	for _, ch := range s {
-		if !isDigit(ch) {
-			return false
-		}
-	}
-	return s != ""
 }
