@@ -460,6 +460,11 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 		AssertParseStatementError(t, `ALTER TABLE tbl ADD`, `1:19: expected COLUMN keyword or column name, found 'EOF'`)
 		AssertParseStatementError(t, `ALTER TABLE tbl ADD COLUMN`, `1:26: expected column name, found 'EOF'`)
 	})
+	t.Run("AlterView", func(t *testing.T) {
+		AssertParseStatementError(t, `ALTER VIEW`, `1:10: expected view name, found 'EOF'`)
+		AssertParseStatementError(t, `ALTER VIEW vw 23`, `1:15: expected AS, found 23`)
+		AssertParseStatementError(t, `ALTER VIEW vw AS 23`, `1:18: expected SELECT, found 23`)
+	})
 }
 
 func TestParser_ParseFunctionStatement(t *testing.T) {
@@ -900,11 +905,63 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 			},
 		})
+		AssertParseStatement(t, `CREATE DATABASE db WITH COMMENT 'foo' COMMENT 23.5 COMMENT true COMMENT x'foo' COMMENT NULL`, &parser.CreateDatabaseStatement{
+			Create:   pos(0),
+			Database: pos(7),
+			Name: &parser.Ident{
+				Name:    "db",
+				NamePos: pos(16),
+			},
+			With: pos(19),
+			Options: []parser.DatabaseOption{
+				&parser.CommentOption{
+					Comment: pos(24),
+					Expr: &parser.StringLit{
+						ValuePos: pos(32),
+						Value:    "foo",
+					},
+				},
+				&parser.CommentOption{
+					Comment: pos(38),
+					Expr: &parser.FloatLit{
+						ValuePos: pos(46),
+						Value:    "23.5",
+					},
+				},
+				&parser.CommentOption{
+					Comment: pos(51),
+					Expr: &parser.BoolLit{
+						ValuePos: pos(59),
+						Value:    true,
+					},
+				},
+				&parser.CommentOption{
+					Comment: pos(64),
+					Expr: &parser.StringLit{
+						IsBlob:   true,
+						ValuePos: pos(72),
+						Value:    "foo",
+					},
+				},
+				&parser.CommentOption{
+					Comment: pos(79),
+					Expr: &parser.NullLit{
+						ValuePos: pos(87),
+					},
+				},
+			},
+		})
 
+		AssertParseStatementError(t, `CREATE`, `1:1: expected DATABASE, TABLE, VIEW or FUNCTION`)
 		AssertParseStatementError(t, `CREATE DATABASE`, `1:15: expected database name, found 'EOF'`)
+		AssertParseStatementError(t, `CREATE DATABASE IF`, `1:18: expected NOT, found 'EOF'`)
+		AssertParseStatementError(t, `CREATE DATABASE IF NOT`, `1:22: expected EXISTS, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE DATABASE db (`, `1:20: expected semicolon or EOF, found '('`)
 		AssertParseStatementError(t, `CREATE DATABASE db extra`, `1:20: expected semicolon or EOF, found extra`)
+		AssertParseStatementError(t, `CREATE DATABASE db WITH`, `1:20: expected at least one option after WITH`)
 		AssertParseStatementError(t, `CREATE DATABASE db WITH UNITS`, `1:29: expected literal, found 'EOF'`)
+		AssertParseStatementError(t, `CREATE DATABASE db WITH COMMENT`, `1:31: expected literal, found 'EOF'`)
+
 	})
 
 	t.Run("CreateTable", func(t *testing.T) {
@@ -3766,6 +3823,29 @@ func TestParser_ParseStatement(t *testing.T) {
 					Columns: []*parser.Ident{{NamePos: pos(22), Name: "y"}},
 					Eq:      pos(24),
 					Expr:    &parser.IntegerLit{ValuePos: pos(26), Value: "2"},
+				},
+			},
+		})
+		AssertParseStatement(t, `UPDATE tbl SET (x, y) = {1, 2}`, &parser.UpdateStatement{
+			Update: pos(0),
+			Table: &parser.QualifiedTableName{
+				Name: &parser.Ident{NamePos: pos(7), Name: "tbl"},
+			},
+			Set: pos(11),
+			Assignments: []*parser.Assignment{
+				{
+					Lparen:  pos(15),
+					Rparen:  pos(20),
+					Columns: []*parser.Ident{{NamePos: pos(16), Name: "x"}, {NamePos: pos(19), Name: "y"}},
+					Eq:      pos(22),
+					Expr: &parser.TupleLiteralExpr{
+						Lbrace: pos(24),
+						Rbrace: pos(29),
+						Members: []parser.Expr{
+							&parser.IntegerLit{ValuePos: pos(25), Value: "1"},
+							&parser.IntegerLit{ValuePos: pos(28), Value: "2"},
+						},
+					},
 				},
 			},
 		})
