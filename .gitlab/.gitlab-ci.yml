@@ -342,24 +342,12 @@ run go tests dax/test/dax:
     paths:
       - coverage-dax-integration.out
 
-.idk_changed:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-      changes:
-        compare_to: refs/heads/master
-        paths:
-          - idk/**
-          - client/**
-          - batch/**
-
 # idk tests
 run go tests idk race:
   variables:
     PROJECT: race_${CI_CONCURRENT_ID}
   stage: nonblocking
   retry: 1
-  rules:
-    - !reference [.idk_changed, rules]
   script:
     - echo "Running test-all-race"
     - cd ./idk/
@@ -385,8 +373,6 @@ run go tests idk shard transactional:
     PROJECT: shardttrans_${CI_CONCURRENT_ID}
   stage: nonblocking
   retry: 1
-  rules:
-    - !reference [.idk_changed, rules]
   script:
     - echo "Running shard transactional tests"
     - cd ./idk/
@@ -423,8 +409,6 @@ run go tests idk 533:
     - cd ./idk/
     - make save-pilosa-logs
     - make shutdown
-  rules:
-    - !reference [.idk_changed, rules]
   tags:
     - shell
     - aws
@@ -449,8 +433,6 @@ run go tests idk sasl:
     - cd ./idk/
     - make save-pilosa-logs
     - make shutdown
-  rules:
-    - !reference [.idk_changed, rules]
   tags:
     - shell
     - aws
