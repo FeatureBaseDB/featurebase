@@ -32,6 +32,10 @@ type ManagedCommand struct {
 
 	svcmgr *dax.ServiceManager
 
+	// Hang on to the Transactor so we can use it to drop the database upon
+	// closing the ManagedCommand.
+	trans sqldb.Transactor
+
 	started bool
 }
 
@@ -62,7 +66,14 @@ func (mc *ManagedCommand) Start() error {
 
 // Close closes the embedded  command.
 func (mc *ManagedCommand) Close() error {
-	return mc.Command.Close()
+	if err := mc.Command.Close(); err != nil {
+		return errors.Wrap(err, "closing command")
+	}
+
+	// Drop the database upon closing.
+	// return sqldb.DropDatabase(mc.trans)
+
+	return nil
 }
 
 // NewController adds a new ControllerService to the ManagedCommands ServiceManager.
@@ -196,6 +207,13 @@ func NewManagedCommand(tb fbtest.DirCleaner, opts ...server.CommandOption) *Mana
 	mc.Config.Computer.Config.SnapshotterDir = path + "/sn"
 	mc.Config.Controller.Config.SnapshotterDir = path + "/sn"
 
+	var err error
+	testconf := sqldb.GetTestConfig()
+	mc.trans, err = sqldb.NewTransactor(testconf, logger.StderrLogger)
+	if err != nil {
+		tb.Fatalf("getting new transactor: %v", err)
+	}
+
 	return mc
 }
 
@@ -231,29 +249,26 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 
 	mc := NewManagedCommand(tb, opts...)
 
-	var err error
-	testconf := sqldb.GetTestConfig()
-	fmt.Printf("testconf: %+v", *testconf)
-	trans, err := sqldb.Connect(testconf, logger.StderrLogger)
-	require.NoError(tb, err, "connecting")
+	// Start the Transactor.
+	require.NoError(tb, mc.trans.Start())
 
 	// The integration tests reuse the same database every time, but
 	// truncate all the tables *before* the tests run (rather than
 	// after). This has the advantage that if the tests fail partway
 	// through, you can inspect the state of the database for
 	// debugging purposes.
-	err = trans.TruncateAll()
+	err := mc.trans.TruncateAll()
 	if err != nil {
 		tb.Fatalf("truncating DB: %v", err)
 	}
 
 	// The migrations contain an insert, but since we just truncated everything we need to redo that insert.
-	err = trans.RawQuery("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00')").Exec()
+	err = mc.trans.RawQuery("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00')").Exec()
 	if err != nil {
 		tb.Fatalf("reinserting directive_version record after truncation: %v", err)
 	}
 
-	err = trans.Close()
+	err = mc.trans.Close()
 	if err != nil {
 		tb.Fatalf("Closing conn after truncating all tables: %v", err)
 	}

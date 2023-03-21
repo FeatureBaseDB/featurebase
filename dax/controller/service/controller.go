@@ -74,9 +74,9 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 		controller.Balancer = sqldb.NewBalancer(logr)
 		controller.DirectiveVersion = sqldb.NewDirectiveVersion(logr)
 
-		transactor, err := sqldb.Connect(cfg.SQLDB, logr)
+		transactor, err := sqldb.NewTransactor(cfg.SQLDB, logr)
 		if err != nil {
-			logr.Printf("Connecting to database: %v", err)
+			logr.Printf("setting up new transactor: %v", err)
 			os.Exit(1)
 		}
 		controller.Transactor = transactor

@@ -92,6 +92,12 @@ func (db *DB) InitializeBuckets(buckets ...Bucket) (err error) {
 	})
 }
 
+// Start is here to implement the Transactor interface, but we don't really need
+// it in the BoltDB implementation.
+func (db *DB) Start() (err error) {
+	return nil
+}
+
 // Open opens the database connection.
 func (db *DB) Open() (err error) {
 	path, err := db.path()

@@ -603,15 +603,10 @@ func (s *server) postRegisterNode(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	req := RegisterNodeRequest{}
-	if err := json.NewDecoder(body).Decode(&req); err != nil {
+	node := &dax.Node{}
+	if err := json.NewDecoder(body).Decode(node); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	}
-
-	node := &dax.Node{
-		Address:   req.Address,
-		RoleTypes: req.RoleTypes,
 	}
 
 	if err := s.controller.RegisterNode(ctx, node); err != nil {
@@ -620,15 +615,6 @@ func (s *server) postRegisterNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-}
-
-type RegisterNodeRequest struct {
-	Address dax.Address `json:"address"`
-
-	// RoleTypes allows a registering node to specify which role type(s) it is
-	// capable of filling. The controller will not assign a role to this node
-	// with a type not included in RoleTypes.
-	RoleTypes []dax.RoleType `json:"role-types"`
 }
 
 // POST /register-nodes
@@ -688,15 +674,10 @@ func (s *server) postCheckInNode(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	req := CheckInNodeRequest{}
-	if err := json.NewDecoder(body).Decode(&req); err != nil {
+	node := &dax.Node{}
+	if err := json.NewDecoder(body).Decode(node); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	}
-
-	node := &dax.Node{
-		Address:   req.Address,
-		RoleTypes: req.RoleTypes,
 	}
 
 	if err := s.controller.CheckInNode(ctx, node); err != nil {
@@ -705,15 +686,6 @@ func (s *server) postCheckInNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-}
-
-type CheckInNodeRequest struct {
-	Address dax.Address `json:"address"`
-
-	// RoleTypes allows a registering node to specify which role type(s) it is
-	// capable of filling. The controller will not assign a role to this node
-	// with a type not included in RoleTypes.
-	RoleTypes []dax.RoleType `json:"role-types"`
 }
 
 // POST /compute-nodes

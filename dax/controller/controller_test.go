@@ -610,6 +610,7 @@ func TestController(t *testing.T) {
 			RoleTypes: []dax.RoleType{
 				dax.RoleTypeTranslate,
 			},
+			HasDirective: true,
 		}
 		assert.NoError(t, con.RegisterNodes(ctx, node0))
 
