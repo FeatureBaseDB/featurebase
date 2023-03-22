@@ -110,6 +110,8 @@ func NewCommand(logdest logger.Logger) *Command {
 			},
 
 			HistoryPath: "",
+
+			CSV: false,
 		},
 
 		buffer:     newBuffer(),
@@ -167,7 +169,8 @@ func (cmd *Command) run(ctx context.Context) error {
 	// Check to see if Command needs to run in non-interactive mode.
 	if len(cmd.Commands) > 0 ||
 		len(cmd.Files) > 0 ||
-		cmd.Config.KafkaConfig != "" {
+		cmd.Config.KafkaConfig != "" ||
+		cmd.Config.CSV {
 		cmd.nonInteractiveMode = true
 	}
 
@@ -179,7 +182,12 @@ func (cmd *Command) run(ctx context.Context) error {
 	if err := cmd.setupClient(); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
-	cmd.printConnInfo()
+
+	// Print the connection info.
+	if !cmd.nonInteractiveMode {
+		cmd.printConnInfo()
+	}
+
 	if err := cmd.connectToDatabase(cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
 		// We intentionally do not return err here.
@@ -378,6 +386,12 @@ func (cmd *Command) setupConfig() error {
 	cmd.database = cmd.Config.Database
 
 	cmd.historyPath = cmd.Config.HistoryPath
+
+	// If running with the `--csv` flag, configure things to ensure the output
+	// is correct (i.e. that it's just the csv).
+	if cmd.Config.CSV {
+		cmd.writeOptions.format = formatCSV
+	}
 
 	return nil
 }

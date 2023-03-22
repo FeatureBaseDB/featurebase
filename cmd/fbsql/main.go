@@ -60,5 +60,7 @@ func buildFlags(cmd *cobra.Command, cliCmd *cli.Command) {
 
 	flags.StringVar(&cliCmd.Config.KafkaConfig, "kafka-config", cliCmd.Config.KafkaConfig, "Kafka configuration file to read from.")
 
+	flags.BoolVar(&cliCmd.Config.CSV, "csv", cliCmd.Config.CSV, "CSV (Comma-Separated Values) table output mode.")
+
 	flags.String("config", "", "Configuration file to read from.")
 }

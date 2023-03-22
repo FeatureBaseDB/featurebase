@@ -15,6 +15,9 @@ type Config struct {
 	KafkaConfig string `json:"kafka-config"`
 
 	HistoryPath string `json:"history-path"`
+
+	// CSV (Comma-Separated Values) table output mode.
+	CSV bool `json:"csv"`
 }
 
 type CloudAuthConfig struct {
