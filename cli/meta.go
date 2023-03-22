@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -39,6 +40,7 @@ var _ metaCommand = (*metaBang)(nil)
 var _ metaCommand = (*metaBorder)(nil)
 var _ metaCommand = (*metaChangeDirectory)(nil)
 var _ metaCommand = (*metaConnect)(nil)
+var _ metaCommand = (*metaDescribe)(nil)
 var _ metaCommand = (*metaEcho)(nil)
 var _ metaCommand = (*metaExpanded)(nil)
 var _ metaCommand = (*metaFile)(nil)
@@ -363,6 +365,7 @@ Input/Output
 
 Informational
   \d                     list tables
+  \d NAME                describe table
   \dt                    list tables
   \dv                    list views
   \l[ist]                list databases
@@ -375,6 +378,7 @@ Formatting
 
 Connection
   \c[onnect] [DBNAME]    connect to new database
+                         disconnect by sending DBNAME "-"
   \org [ORGNAME]         set organization id
 
 Operating System
@@ -484,7 +488,44 @@ func (m *metaListDatabases) execute(cmd *Command) (responseAction, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
-// list tables (d or dt)
+// describe (d)
+// ////////////////////////////////////////////////////////////////////////////
+type metaDescribe struct {
+	args []string
+}
+
+func newMetaDescribe(args []string) *metaDescribe {
+	return &metaDescribe{
+		args: args,
+	}
+}
+
+func (m *metaDescribe) execute(cmd *Command) (responseAction, error) {
+	switch len(m.args) {
+	case 0:
+		// Describe with no args should list all relations (tables, views,
+		// etc.). For now, we're just going to list the tables.
+		return newMetaListTables().execute(cmd)
+
+	case 1:
+		// Describe with a single arg will assume the arg is a table name, so it
+		// runs a `SHOW COLUMNS` for that table.
+		qry := []queryPart{
+			newPartRaw(fmt.Sprintf(`SHOW COLUMNS FROM "%s"`, m.args[0])),
+		}
+
+		if err := cmd.executeAndWriteQuery(qry); err != nil {
+			return actionNone, errors.Wrap(err, "executing query")
+		}
+
+		return actionReset, nil
+	default:
+		return actionNone, errors.Errorf("meta command 'describe' takes zero or one argument")
+	}
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+// describe (dt)
 // ////////////////////////////////////////////////////////////////////////////
 type metaListTables struct{}
 
@@ -505,7 +546,7 @@ func (m *metaListTables) execute(cmd *Command) (responseAction, error) {
 }
 
 // ////////////////////////////////////////////////////////////////////////////
-// list views (dv)
+// describe views (dv)
 // ////////////////////////////////////////////////////////////////////////////
 type metaListViews struct{}
 
@@ -1064,7 +1105,9 @@ func splitMetaCommand(in string, replacer *replacer) (metaCommand, error) {
 		return newMetaChangeDirectory(args), nil
 	case "c", "connect":
 		return newMetaConnect(args), nil
-	case "d", "dt":
+	case "d":
+		return newMetaDescribe(args), nil
+	case "dt":
 		return newMetaListTables(), nil
 	case "dv":
 		return newMetaListViews(), nil
