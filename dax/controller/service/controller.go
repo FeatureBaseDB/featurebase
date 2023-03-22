@@ -5,11 +5,8 @@ import (
 	"os"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
-	"github.com/featurebasedb/featurebase/v3/dax/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
-	balancerboltdb "github.com/featurebasedb/featurebase/v3/dax/controller/balancer/boltdb"
 	controllerhttp "github.com/featurebasedb/featurebase/v3/dax/controller/http"
-	schemarboltdb "github.com/featurebasedb/featurebase/v3/dax/controller/schemar/boltdb"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -33,16 +30,6 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 		logr = cfg.Logger.WithPrefix("Controller: ")
 	}
 
-	if cfg.DataDir == "" {
-		dir, err := os.MkdirTemp("", "controller_*")
-		if err != nil {
-			logr.Printf("Making temp dir for Controller storage: %v", err)
-			os.Exit(1)
-		}
-		cfg.DataDir = dir
-		logr.Warnf("no DataDir given (like '/path/to/directory'); using temp dir at '%s'", cfg.DataDir)
-	}
-
 	controller := controller.New(cfg)
 	controllerSvc := &controllerService{
 		uri:        uri,
@@ -52,23 +39,6 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 
 	// Storage methods.
 	switch cfg.StorageMethod {
-	case "boltdb":
-		buckets := append(schemarboltdb.SchemarBuckets, balancerboltdb.BalancerBuckets...)
-		controllerDB, err := boltdb.NewSvcBolt(cfg.DataDir, "controller", buckets...)
-		if err != nil {
-			logr.Printf(errors.Wrap(err, "creating controller bolt").Error())
-			os.Exit(1)
-		}
-		// Directive version.
-		if err := controllerDB.InitializeBuckets(boltdb.DirectiveBuckets...); err != nil {
-			logr.Panicf("initializing directive buckets: %v", err)
-		}
-		controller.Schemar = schemarboltdb.NewSchemar(controllerDB, logr)
-		controller.Balancer = balancerboltdb.NewBalancer(controllerDB, controller.Schemar, logr)
-		directiveVersion := boltdb.NewDirectiveVersion(controllerDB)
-		controller.DirectiveVersion = directiveVersion
-
-		controller.Transactor = controllerDB
 	case "sqldb":
 		controller.Schemar = sqldb.NewSchemar(logr)
 		controller.Balancer = sqldb.NewBalancer(logr)
@@ -81,7 +51,7 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 		}
 		controller.Transactor = transactor
 	default:
-		logr.Printf("storagemethod %s not supported, try 'boltdb' or 'sqldb'", cfg.StorageMethod)
+		logr.Printf("storagemethod %s not supported, only 'sqldb' is currently accepted.", cfg.StorageMethod)
 		os.Exit(1)
 	}
 

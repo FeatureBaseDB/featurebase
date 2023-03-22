@@ -6,12 +6,12 @@ import (
 )
 
 // NewBalancer returns a new instance of controller.Balancer.
-func NewBalancer(logger logger.Logger) *balancer.Balancer {
-	schemar := NewSchemar(logger)
-	fjs := NewFreeJobService(logger)
-	wjs := NewWorkerJobService(logger)
-	fws := NewFreeWorkerService(logger)
-	ns := NewNodeService(logger)
+func NewBalancer(log logger.Logger) *balancer.Balancer {
+	schemar := NewSchemar(log)
+	fjs := NewFreeJobService(log)
+	wjs := NewWorkerJobService(log)
+	fws := NewFreeWorkerService(log)
+	ns := NewNodeService(log)
 
-	return balancer.New(ns, fjs, wjs, fws, schemar, logger)
+	return balancer.New(ns, fjs, wjs, fws, schemar, log)
 }

@@ -112,9 +112,12 @@ func (w *workerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleTyp
 
 	worker := &models.Worker{}
 	err := dt.C.Where("address = ? and role = ? and database_id = ?", addr, roleType, qdbid.DatabaseID).First(worker)
-	if err != nil {
+	if isNoRowsError(err) {
+		return nil
+	} else if err != nil {
 		return errors.Wrap(err, "getting worker")
 	}
+
 	err = dt.C.Destroy(worker)
 	return errors.Wrap(err, "deleting worker")
 }

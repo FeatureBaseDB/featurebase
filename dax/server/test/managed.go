@@ -200,7 +200,6 @@ func NewManagedCommand(tb fbtest.DirCleaner, opts ...server.CommandOption) *Mana
 	mc.svcmgr = svcmgr
 
 	mc.Config.Bind = "http://localhost:0"
-	mc.Config.Controller.Config.DataDir = path + "/controller"
 	mc.Config.Computer.Config.DataDir = path
 	mc.Config.Computer.Config.WriteloggerDir = path + "/wl"
 	mc.Config.Controller.Config.WriteloggerDir = path + "/wl"

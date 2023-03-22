@@ -20,7 +20,6 @@ type Config struct {
 
 	// Storage
 	StorageMethod string `toml:"storage-method"`
-	DataDir       string `toml:"-"`
 
 	SQLDB *SQLDBConfig `toml:"sqldb"`
 
