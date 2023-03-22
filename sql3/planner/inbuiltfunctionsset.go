@@ -49,7 +49,7 @@ func (n *callPlanExpression) EvaluateSetContains(currentRow []interface{}) (inte
 				return nil, sql3.NewErrInternalf("unable to convert value")
 			}
 
-			return intSetContains(targetSet, int64(testValue)), nil
+			return intSetContains(targetSet, testValue), nil
 
 		default:
 			return nil, sql3.NewErrInternalf("unexpected data type '%T'", typ)
