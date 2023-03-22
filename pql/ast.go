@@ -596,6 +596,7 @@ var callInfoByFunc = map[string]callInfo{
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
 			"shards": nil,
+			"nodes":  nil,
 		},
 	},
 	"Set": {
