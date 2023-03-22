@@ -18,6 +18,9 @@ type Config struct {
 
 	// CSV (Comma-Separated Values) table output mode.
 	CSV bool `json:"csv"`
+
+	// PSet takes one or more pset arguments of the form: `--pset=VAR[=ARG]`.
+	PSets []string `json:"pset"`
 }
 
 type CloudAuthConfig struct {
