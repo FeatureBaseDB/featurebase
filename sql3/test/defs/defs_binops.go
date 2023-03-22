@@ -2638,6 +2638,30 @@ var binOpExprWithIDID = TableTest{
 			),
 			ExpErr: "operator '||' incompatible with type 'id'",
 		},
+		{
+			SQLs: sqls(
+				"select _id + _id from binoptestid_id;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(20)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select _id - _id from binoptestid_id;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(0)),
+			),
+			Compare: CompareExactUnordered,
+		},
 	},
 }
 
@@ -4810,7 +4834,8 @@ var binOpExprWithTSTimestamp = TableTest{
 			ExpRows: rows(
 				row(bool(false)),
 			),
-			Compare: CompareExactUnordered},
+			Compare: CompareExactUnordered,
+		},
 		{
 			SQLs: sqls(
 				"select a = ts from binoptestts_ts;",
@@ -4821,7 +4846,8 @@ var binOpExprWithTSTimestamp = TableTest{
 			ExpRows: rows(
 				row(bool(true)),
 			),
-			Compare: CompareExactUnordered},
+			Compare: CompareExactUnordered,
+		},
 		{
 			SQLs: sqls(
 				"select a <= ts from binoptestts_ts;",
@@ -4844,7 +4870,8 @@ var binOpExprWithTSTimestamp = TableTest{
 			ExpRows: rows(
 				row(bool(true)),
 			),
-			Compare: CompareExactUnordered},
+			Compare: CompareExactUnordered,
+		},
 		{
 			SQLs: sqls(
 				"select a < ts from binoptestts_ts;",
@@ -4855,7 +4882,8 @@ var binOpExprWithTSTimestamp = TableTest{
 			ExpRows: rows(
 				row(bool(false)),
 			),
-			Compare: CompareExactUnordered},
+			Compare: CompareExactUnordered,
+		},
 		{
 			SQLs: sqls(
 				"select a > ts from binoptestts_ts;",
@@ -4866,7 +4894,8 @@ var binOpExprWithTSTimestamp = TableTest{
 			ExpRows: rows(
 				row(bool(false)),
 			),
-			Compare: CompareExactUnordered},
+			Compare: CompareExactUnordered,
+		},
 		{
 			SQLs: sqls(
 				"select a & ts from binoptestts_ts;",
