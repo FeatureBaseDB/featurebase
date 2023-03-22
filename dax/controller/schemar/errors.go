@@ -15,6 +15,7 @@ const (
 	ErrCodeTableIDInvalid    errors.Code = "TableIDInvalid"
 	ErrCodeTableNameInvalid  errors.Code = "TableNameInvalid"
 	ErrCodeInvalidPrimaryKey errors.Code = "InvalidPrimaryKey"
+	ErrCodeTableNameExists   errors.Code = "TableNameExists"
 
 	ErrCodeFieldNameInvalid errors.Code = "FieldNameInvalid"
 )
@@ -65,5 +66,12 @@ func NewErrDatabaseNameExists(databaseName dax.DatabaseName) error {
 	return errors.New(
 		ErrCodeDatabaseNameExists,
 		fmt.Sprintf("database name %s already exists", databaseName),
+	)
+}
+
+func NewErrTableNameExists(tableName dax.TableName) error {
+	return errors.New(
+		ErrCodeTableNameExists,
+		fmt.Sprintf("table name %s already exists", tableName),
 	)
 }

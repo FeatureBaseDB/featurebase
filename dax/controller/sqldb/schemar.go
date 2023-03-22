@@ -59,6 +59,7 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 		return errors.Wrap(err, "checking for org")
 	}
 
+	// Ensures that therea are no duplicate database names
 	for _, v := range org.Databases {
 		if qdb.Name == v.Name {
 			return schemar.NewErrDatabaseNameExists(qdb.Name)
@@ -248,6 +249,18 @@ func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) erro
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
+	}
+
+	// Getting list of tables from QualifiedDatabaseID and seeing if the table name matches with
+	// an existing table name
+	if tbls, err := s.Tables(tx, qtbl.QualifiedDatabaseID); err != nil {
+		errors.Wrap(err, "error finding list of tables")
+	} else {
+		for _, v := range tbls {
+			if v.Name == qtbl.Name {
+				return schemar.NewErrTableNameExists(qtbl.Name)
+			}
+		}
 	}
 
 	tbl := toModelTable(qtbl)
