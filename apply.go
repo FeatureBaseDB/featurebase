@@ -146,7 +146,7 @@ func (e *executor) executeApply(ctx context.Context, qcx *Qcx, index string, c *
 		reduceFn, tablerFn = IvyReduce(ivyReduce, ",", opt)
 	}
 
-	_, err = e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	_, err = e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn, nil)
 	if err != nil {
 		return nil, err
 	}

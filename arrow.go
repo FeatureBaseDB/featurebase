@@ -88,7 +88,7 @@ func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *
 		return nil
 	}
 
-	_, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	_, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn, nil)
 	if err != nil {
 		return nil, err
 	}
