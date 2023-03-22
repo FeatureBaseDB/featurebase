@@ -51,11 +51,17 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 	}
 
 	org := &models.Organization{ID: string(qdb.OrganizationID)}
-	if ok, err := dt.C.Where("id = ?", qdb.OrganizationID).Exists(org); err != nil {
-		return errors.Wrap(err, "checking for org")
-	} else if !ok {
+	if err := dt.C.Eager().Where("id = ?", qdb.OrganizationID).First(org); isNoRowsError(err) {
 		if err := dt.C.Create(org); err != nil {
 			return errors.Wrap(err, "creating organization")
+		}
+	} else if err != nil {
+		return errors.Wrap(err, "checking for org")
+	}
+
+	for _, v := range org.Databases {
+		if qdb.Name == v.Name {
+			return schemar.NewErrDatabaseNameExists(qdb.Name)
 		}
 	}
 
