@@ -110,6 +110,8 @@ func NewCommand(logdest logger.Logger) *Command {
 			},
 
 			HistoryPath: "",
+
+			CSV: false,
 		},
 
 		buffer:     newBuffer(),
@@ -167,7 +169,8 @@ func (cmd *Command) run(ctx context.Context) error {
 	// Check to see if Command needs to run in non-interactive mode.
 	if len(cmd.Commands) > 0 ||
 		len(cmd.Files) > 0 ||
-		cmd.Config.KafkaConfig != "" {
+		cmd.Config.KafkaConfig != "" ||
+		cmd.Config.CSV {
 		cmd.nonInteractiveMode = true
 	}
 
@@ -179,7 +182,12 @@ func (cmd *Command) run(ctx context.Context) error {
 	if err := cmd.setupClient(); err != nil {
 		return errors.Wrap(err, "setting up client")
 	}
-	cmd.printConnInfo()
+
+	// Print the connection info.
+	if !cmd.nonInteractiveMode {
+		cmd.printConnInfo()
+	}
+
 	if err := cmd.connectToDatabase(cmd.database); err != nil {
 		cmd.Errorf(errors.Wrap(err, "connecting to database").Error() + "\n")
 		// We intentionally do not return err here.
@@ -379,7 +387,43 @@ func (cmd *Command) setupConfig() error {
 
 	cmd.historyPath = cmd.Config.HistoryPath
 
+	// Apply any pset flag arguments.
+	for _, pset := range cmd.Config.PSets {
+		if err := cmd.applyPSet(pset); err != nil {
+			return errors.Wrapf(err, "applying pset: %s", pset)
+		}
+	}
+
+	// If running with the `--csv` flag, configure things to ensure the output
+	// is correct (i.e. that it's just the csv).
+	if cmd.Config.CSV {
+		cmd.writeOptions.format = formatCSV
+	}
+
 	return nil
+}
+
+// applyPSet takes a pset string of the form `arg` or `arg=val` and applies it
+// as if the user had run `\pset arg val`. The only difference is that applying
+// pset here suppresses any output to stdout.
+func (cmd *Command) applyPSet(pset string) error {
+	// We expect arg to be one of the folowing formats:
+	// arg
+	// arg=val
+	args := strings.SplitN(pset, "=", 2)
+
+	// This is kind of hacky, but until we re-think the metaCommand interface to
+	// take a printer interface somewhere (so we can pass in the nopPrinter
+	// here), we're just going to discard stdout for the duration of this apply,
+	// and then set stdout back to its previous writer after the apply.
+	hold := cmd.stdout
+	cmd.stdout = io.Discard
+	defer func() {
+		cmd.stdout = hold
+	}()
+
+	_, err := newMetaPSet(args).execute(cmd)
+	return err
 }
 
 func (cmd *Command) executeAndWriteQuery(qry query) error {
@@ -487,7 +531,12 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 		p = newNopPrinter()
 	}
 
-	if dbName == "" {
+	// Providing a blank ("") or hyphen ("-") dbName is the equivalent of
+	// disconnecting from the current database. We support the hyphen option
+	// because calling the `\c` meta-command without an argument is how you
+	// print the current connection.
+	switch dbName {
+	case "-", "":
 		cmd.databaseID = ""
 		cmd.databaseName = ""
 		p.Printf(cmd.connectionMessage())

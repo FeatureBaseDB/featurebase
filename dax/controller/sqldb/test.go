@@ -20,11 +20,11 @@ func EnvOr(envName, defaultVal string) string {
 func GetTestConfig() *controller.SQLDBConfig {
 	return &controller.SQLDBConfig{
 		Dialect:  "postgres",
-		Database: EnvOr("SQLDB_DB", "dax_test"),
-		Host:     EnvOr("SQLDB_HOST", "127.0.0.1"),
-		Port:     EnvOr("SQLDB_PORT", "5432"),
-		User:     EnvOr("SQLDB_USER", "postgres"),
-		Password: EnvOr("SQLDB_PASSWORD", "testpass"),
+		Database: EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_DATABASE", "dax_test"),
+		Host:     EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_HOST", "127.0.0.1"),
+		Port:     EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_PORT", "5432"),
+		User:     EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_USER", "postgres"),
+		Password: EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_PASSWORD", "testpass"),
 	}
 }
 
@@ -33,9 +33,9 @@ func GetTestConfigRandomDB(dbprefix string) *controller.SQLDBConfig {
 	return &controller.SQLDBConfig{
 		Dialect:  "postgres",
 		Database: fmt.Sprintf("%s_%d", dbprefix, rnd.Int()),
-		Host:     EnvOr("SQLDB_HOST", "127.0.0.1"),
-		Port:     EnvOr("SQLDB_PORT", "5432"),
-		User:     EnvOr("SQLDB_USER", "postgres"),
-		Password: EnvOr("SQLDB_PASSWORD", "testpass"),
+		Host:     EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_HOST", "127.0.0.1"),
+		Port:     EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_PORT", "5432"),
+		User:     EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_USER", "postgres"),
+		Password: EnvOr("FEATUREBASE_CONTROLLER_CONFIG_SQLDB_PASSWORD", "testpass"),
 	}
 }

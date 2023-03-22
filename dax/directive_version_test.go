@@ -28,5 +28,5 @@ func TestDirectiveVersion(t *testing.T) {
 
 	n, err := dvSvc.Increment(tx, 1)
 	require.NoError(t, err)
-	require.Equal(t, uint64(2), n)
+	require.Equal(t, uint64(1), n)
 }

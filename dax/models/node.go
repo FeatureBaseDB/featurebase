@@ -15,7 +15,7 @@ import (
 type Node struct {
 	ID        uuid.UUID   `json:"id" db:"id"`
 	Address   dax.Address `json:"address" db:"address"`
-	NodeRoles NodeRoles   `json:"node_roles" has_many:"node_roles"`
+	NodeRoles NodeRoles   `json:"node_roles" has_many:"node_roles" order_by:"created_at asc"`
 	CreatedAt time.Time   `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at" db:"updated_at"`
 }

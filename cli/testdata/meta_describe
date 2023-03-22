@@ -1,0 +1,33 @@
+// TODO(tlt): we can't run this test until we get the system tables under control (i.e. sorted). Currently, fb_views is in a map with users, so the following can fail 50% of the time.
+// Show tables for database by calling describe with no args.
+// SEND:\d
+// EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+------------------------+
+// EXPECT:| _id                     | name                    | owner | updated_by | created_at           | updated_at           | keys  | space_used | description            |
+// EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+------------------------+
+// EXPECTCOMP:WithFormat:| fb_veiws                | fb_views                |       |            | {timestamp} | {timestamp} | true  |          0 | system table for views |
+// EXPECTCOMP:WithFormat:| users                   | users                   |       |            | {timestamp} | {timestamp} | false |          0 |                        |
+// EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |                        |
+// EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |                        |
+// EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |                        |
+// EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |                        |
+// EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |                        |
+// EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+------------------------+
+// EXPECT:
+
+// Show columns for table.
+SEND:\d users
+EXPECT:+------+------+--------+----------------------+-------+------------+------------+-------+----------------------+---------------------+----------+-------+-------------+-----+
+EXPECT:| _id  | name | type   | created_at           | keys  | cache_type | cache_size | scale |                  min |                 max | timeunit | epoch | timequantum | ttl |
+EXPECT:+------+------+--------+----------------------+-------+------------+------------+-------+----------------------+---------------------+----------+-------+-------------+-----+
+EXPECTCOMP:WithFormat:| _id  | _id  | id     | {timestamp} | false |            |          0 |     0 |                    0 |                   0 |          |     0 |             | 0s  |
+EXPECTCOMP:WithFormat:| name | name | string | {timestamp} | true  | ranked     |      50000 |     0 |                    0 |                   0 |          |     0 |             | 0s  |
+EXPECTCOMP:WithFormat:| age  | age  | int    | {timestamp} | false |            |          0 |     0 | -9223372036854775808 | 9223372036854775807 |          |     0 |             | 0s  |
+EXPECT:+------+------+--------+----------------------+-------+------------+------------+-------+----------------------+---------------------+----------+-------+-------------+-----+
+EXPECT:
+
+// Show columns for an invalid table.
+SEND:\d invalid
+EXPECT:Error: compiling plan: [1:19] table 'invalid' not found
+
+SEND:\d users extra
+EXPECT:executing meta command: meta command 'describe' takes zero or one argument
