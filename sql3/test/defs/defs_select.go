@@ -113,3 +113,37 @@ var selectKeyedTests = TableTest{
 		},
 	},
 }
+
+var selectBetweenTests = TableTest{
+	name: "selectBetweenTests",
+	Table: tbl(
+		"selectbetween",
+		srcHdrs(
+			srcHdr("_id", fldTypeString),
+			srcHdr("an_int", fldTypeInt, "min 0", "max 100"),
+		),
+		srcRows(
+			srcRow(string("user1"), int64(11)),
+			srcRow(string("user2"), int64(22)),
+			srcRow(string("user3"), int64(33)),
+			srcRow(string("user4"), int64(44)),
+		),
+	),
+	SQLTests: []SQLTest{
+		{
+			SQLs: sqls(
+				"select _id,an_int from selectbetween where an_int between 22 AND 33",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeString),
+				hdr("an_int", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(string("user2"), int64(22)),
+				row(string("user3"), int64(33)),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+	},
+}

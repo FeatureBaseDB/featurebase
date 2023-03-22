@@ -57,7 +57,7 @@ func Test_coerceValue(t *testing.T) {
 			wantErr: false,
 		}, {
 			name:    "ID-timestamp",
-			args:    args{sourceType: &parser.DataTypeInt{}, targetType: &parser.DataTypeTimestamp{}, value: int64(1679499982), atPos: parser.Pos{}},
+			args:    args{sourceType: &parser.DataTypeID{}, targetType: &parser.DataTypeTimestamp{}, value: int64(1679499982), atPos: parser.Pos{}},
 			want:    time.Unix(1679499982, 0).UTC(),
 			wantErr: false,
 		}, {
