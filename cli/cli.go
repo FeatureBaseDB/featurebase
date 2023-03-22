@@ -487,7 +487,12 @@ func (cmd *Command) connectToDatabase(dbName string) error {
 		p = newNopPrinter()
 	}
 
-	if dbName == "" {
+	// Providing a blank ("") or hyphen ("-") dbName is the equivalent of
+	// disconnecting from the current database. We support the hyphen option
+	// because calling the `\c` meta-command without an argument is how you
+	// print the current connection.
+	switch dbName {
+	case "-", "":
 		cmd.databaseID = ""
 		cmd.databaseName = ""
 		p.Printf(cmd.connectionMessage())

@@ -43,3 +43,11 @@ EXPECT:executing meta command: meta command 'connect' takes zero or one argument
 // Connect to a database.
 SEND:\c db1
 EXPECTCOMP:WithFormat:You are now connected to database "db1" ({uuid}).
+
+// Disconnect from the current database.
+SEND:\c -
+EXPECT:You are not connected to a database.
+
+// Connect to a database again.
+SEND:\c db1
+EXPECTCOMP:WithFormat:You are now connected to database "db1" ({uuid}).
