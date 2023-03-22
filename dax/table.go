@@ -380,8 +380,6 @@ type Table struct {
 
 	Description string `json:"description,omitempty"`
 	Owner       string `json:"owner,omitempty"`
-	CreatedAt   int64  `json:"createdAt,omitempty"`
-	UpdatedAt   int64  `json:"updatedAt,omitempty"`
 	UpdatedBy   string `json:"updatedBy,omitempty"`
 }
 

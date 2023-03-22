@@ -82,9 +82,12 @@ func (n *nodeService) DeleteNode(tx dax.Transaction, addr dax.Address) error {
 
 	node := &models.Node{}
 	err := dt.C.Eager().Where("address = ?", addr).First(node)
-	if err != nil {
-		return errors.Wrap(err, "getting node")
+	if isNoRowsError(err) {
+		return nil
+	} else if err != nil {
+		return errors.Wrap(err, "finding node")
 	}
+
 	err = dt.C.Destroy(node)
 	return errors.Wrap(err, "destroying node")
 }

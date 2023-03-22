@@ -19,7 +19,7 @@ type Database struct {
 	Description    string           `json:"description" db:"description"`
 	Owner          string           `json:"owner" db:"owner"`
 	UpdatedBy      string           `json:"updated_by" db:"updated_by"`
-	Tables         Tables           `json:"tables" has_many:"tables"`
+	Tables         Tables           `json:"tables" has_many:"tables" order_by:"name asc"`
 	Organization   *Organization    `json:"organization" belongs_to:"organization"`
 	OrganizationID string           `json:"organization_id" db:"organization_id"`
 	CreatedAt      time.Time        `json:"created_at" db:"created_at"`
