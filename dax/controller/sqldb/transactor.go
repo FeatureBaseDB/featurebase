@@ -76,7 +76,10 @@ func (t Transactor) Start() error {
 }
 
 func (t Transactor) BeginTx(ctx context.Context, writable bool) (dax.Transaction, error) {
-	cn, err := t.NewTransactionContextOptions(ctx, &sql.TxOptions{ReadOnly: !writable})
+	cn, err := t.NewTransactionContextOptions(ctx, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
+		ReadOnly:  !writable,
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "getting SQL transaction")
 	}

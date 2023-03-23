@@ -29,7 +29,7 @@ type Controller struct {
 	Schemar  schemar.Schemar
 	Balancer Balancer
 
-	Transactor Transactor
+	Transactor dax.Transactor
 
 	Snapshotter *snapshotter.Snapshotter
 	Writelogger *writelogger.Writelogger
