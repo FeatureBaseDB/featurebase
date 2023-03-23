@@ -299,12 +299,12 @@ func TestSQLSchemar(t *testing.T) {
 		requireCode(t, err, cschemar.ErrCodeFieldNameInvalid)
 	})
 
-	t.Run("Test create table that already exists", func(t *testing.T) {
+	t.Run("Test create table where table name already exists", func(t *testing.T) {
 		tx, err = trans.BeginTx(context.Background(), true)
 		require.NoError(t, err)
 		defer tx.Rollback()
 		err = schemar.CreateTable(tx, qtbl)
-		requireCode(t, err, dax.ErrTableIDExists)
+		requireCode(t, err, dax.ErrTableNameExists)
 	})
 
 	t.Run("Find database by name that doesn't exist", func(t *testing.T) {
@@ -313,6 +313,17 @@ func TestSQLSchemar(t *testing.T) {
 		defer tx.Rollback()
 		_, err = schemar.DatabaseByName(tx, orgID, "blooooooo")
 		requireCode(t, err, dax.ErrDatabaseNameDoesNotExist)
+	})
+
+	t.Run("Create database with database name that already exists", func(t *testing.T) {
+		tx, err = trans.BeginTx(context.Background(), true)
+		require.NoError(t, err)
+		defer tx.Rollback()
+		err = schemar.CreateDatabase(tx,
+			&dax.QualifiedDatabase{
+				OrganizationID: orgID,
+				Database:       dax.Database{ID: dbID2, Name: dbName}})
+		requireCode(t, err, dax.ErrDatabaseNameExists)
 	})
 
 	t.Run("Find database by ID that doesn't exist", func(t *testing.T) {
@@ -333,6 +344,7 @@ func TestSQLSchemar(t *testing.T) {
 }
 
 func requireCode(t *testing.T, err error, code errors.Code) {
+	t.Helper()
 	if !errors.Is(err, code) {
 		t.Fatalf("Error '%v' does not have code %s.", err, code)
 	}
