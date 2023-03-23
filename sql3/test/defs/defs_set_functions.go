@@ -304,3 +304,93 @@ var setParameterTests = TableTest{
 		},
 	},
 }
+
+// test IDSetQ and StringSetQ functions
+var setTimeQuantumTests = TableTest{
+	name: "selectwithsetqliterals",
+	Table: tbl(
+		"selectwithsetqliterals",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("a", fldTypeInt, "min 0", "max 1000"),
+			srcHdr("b", fldTypeInt, "min 0", "max 1000"),
+			srcHdr("ssq1", fldTypeStringSetQ, "timequantum 'YMD'"),
+			srcHdr("isq1", fldTypeIDSetQ, "timequantum 'YMD'"),
+		),
+	),
+	SQLTests: []SQLTest{
+		// can't find example syntax or docs for how to put time quantum fields in with srcRow()
+		// so i'm inserting them with SQL statements.
+		{
+			SQLs: sqls(
+				"insert into selectwithsetqliterals(_id, a, b, ssq1, isq1) values (1, 10, 100, {'2022-01-03T00:00:00Z', ['foo']}, {'2022-01-01T00:00:00Z', [99, 101]})",
+				"insert into selectwithsetqliterals(_id, a, b, ssq1, isq1) values (2, 20, 200, {'2022-01-03T00:00:00Z', ['bar']}, {'2022-01-01T00:00:00Z', [100]})",
+				"insert into selectwithsetqliterals(_id, a, b, ssq1, isq1) values (3, 30, 300, {'2022-01-03T00:00:00Z', ['foo', 'bar']}, {'2022-01-01T00:00:00Z', [101]})",
+			),
+			ExpHdrs: hdrs(),
+			ExpRows: rows(),
+			Compare: CompareExactUnordered,
+		},
+		{
+			// SetContainsSelectList
+			name: "set-contains-select-list",
+			SQLs: sqls(
+				"select _id, setcontains(ssq1, 'bar') from selectwithsetqliterals",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), false),
+				row(int64(2), true),
+				row(int64(3), true),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			// SetContainsSelectListInt
+			name: "set-contains-select-list-int",
+			SQLs: sqls(
+				"select _id, setcontains(isq1, 101) from selectwithsetqliterals",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), true),
+				row(int64(2), false),
+				row(int64(3), true),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			// SetContainsWithLiteral
+			// SetContainsWithLiteralInt
+			// SetContainsWithLiteralAny
+			// SetContainsWithLiteralAnyInt
+			// SetContainsWithLiteralAll
+			// SetContainsWithLiteralAllInt
+			name: "set-contains-with-literal",
+			SQLs: sqls(
+				"select _id, setcontains(['foo'], 'foo') from selectwithsetqliterals",
+				"select _id, setcontains([101], 101) from selectwithsetqliterals",
+				"select _id, setcontainsany(['foo'], ['foo']) from selectwithsetqliterals",
+				"select _id, setcontainsany([101], [101]) from selectwithsetqliterals",
+				"select _id, setcontainsall(['foo'], ['foo']) from selectwithsetqliterals",
+				"select _id, setcontainsall([101], [101]) from selectwithsetqliterals",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), true),
+				row(int64(2), true),
+				row(int64(3), true),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}
