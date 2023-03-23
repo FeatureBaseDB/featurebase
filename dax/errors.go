@@ -129,4 +129,3 @@ func NewErrInvalidTransaction(txType string) error {
 		fmt.Sprintf("tx is not expected type: '%s'", txType),
 	)
 }
-
