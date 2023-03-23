@@ -10,12 +10,10 @@ import (
 const (
 	ErrCodeDatabaseIDInvalid   errors.Code = "DatabaseIDInvalid"
 	ErrCodeDatabaseNameInvalid errors.Code = "DatabaseNameInvalid"
-	ErrCodeDatabaseNameExists  errors.Code = "DatabaseNameExists"
 
 	ErrCodeTableIDInvalid    errors.Code = "TableIDInvalid"
 	ErrCodeTableNameInvalid  errors.Code = "TableNameInvalid"
 	ErrCodeInvalidPrimaryKey errors.Code = "InvalidPrimaryKey"
-	ErrCodeTableNameExists   errors.Code = "TableNameExists"
 
 	ErrCodeFieldNameInvalid errors.Code = "FieldNameInvalid"
 )
@@ -59,19 +57,5 @@ func NewErrFieldNameInvalid(fieldName dax.FieldName) error {
 	return errors.New(
 		ErrCodeFieldNameInvalid,
 		fmt.Sprintf("field name '%s' is invalid", fieldName),
-	)
-}
-
-func NewErrDatabaseNameExists(databaseName dax.DatabaseName) error {
-	return errors.New(
-		ErrCodeDatabaseNameExists,
-		fmt.Sprintf("database name %s already exists", databaseName),
-	)
-}
-
-func NewErrTableNameExists(tableName dax.TableName) error {
-	return errors.New(
-		ErrCodeTableNameExists,
-		fmt.Sprintf("table name %s already exists", tableName),
 	)
 }

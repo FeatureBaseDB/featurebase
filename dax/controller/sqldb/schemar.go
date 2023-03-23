@@ -64,7 +64,7 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 	if exists, err := dt.C.Where("name = ? AND organization_id = ?", qdb.Name, org.ID).Exists(&models.Database{}); err != nil {
 		return errors.Wrap(err, "checking database name")
 	} else if exists {
-		return schemar.NewErrDatabaseNameExists(qdb.Name)
+		return dax.NewErrDatabaseNameExists(qdb.Name)
 	}
 
 	db := toModelDatabase(qdb)
@@ -252,11 +252,11 @@ func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) erro
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
-	// Check if TableID returns an error, that table does not exist and can be created
+	// Check to see if table name exists for a database ID, and if so, throw error
 	if exists, err := dt.C.Where("name = ? AND database_id = ?", qtbl.Name, qtbl.DatabaseID).Exists(&models.Table{}); err != nil {
 		return errors.Wrap(err, "checking if table name exists")
 	} else if exists {
-		return schemar.NewErrTableNameExists(qtbl.Name)
+		return dax.NewErrTableNameExists(qtbl.Name)
 	}
 
 	tbl := toModelTable(qtbl)

@@ -60,7 +60,7 @@ func NewErrDatabaseNameDoesNotExist(dbName DatabaseName) error {
 	)
 }
 
-func NewErrorDatabaseNameExists(dbName DatabaseName) error {
+func NewErrDatabaseNameExists(dbName DatabaseName) error {
 	return errors.New(
 		ErrDatabaseNameExists,
 		fmt.Sprintf("database name %s already exists", dbName),
