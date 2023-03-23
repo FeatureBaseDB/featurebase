@@ -308,10 +308,9 @@ func toField(col models.Column) *dax.Field {
 		panic(err)
 	}
 	return &dax.Field{
-		Name:      col.Name,
-		Type:      col.Type,
-		Options:   opts,
-		CreatedAt: col.CreatedAt.Unix(),
+		Name:    col.Name,
+		Type:    col.Type,
+		Options: opts,
 	}
 }
 
@@ -332,8 +331,6 @@ func toQualifiedTable(mtbl *models.Table) *dax.QualifiedTable {
 			PartitionN:  mtbl.PartitionN,
 			Description: mtbl.Description,
 			Owner:       mtbl.Owner,
-			CreatedAt:   mtbl.CreatedAt.Unix(),
-			UpdatedAt:   mtbl.UpdatedAt.Unix(),
 			UpdatedBy:   mtbl.UpdatedBy,
 		},
 	}
@@ -440,7 +437,7 @@ func (s *Schemar) Tables(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, tabl
 		query = query.Where("id in (?)", ifaceIDs)
 	}
 	tables := []*models.Table{}
-	err := query.Eager().Order("created_at asc").All(&tables)
+	err := query.Eager().Order("name asc").All(&tables)
 	if err != nil {
 		return nil, errors.Wrap(err, "querying all tables")
 	}

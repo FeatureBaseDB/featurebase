@@ -24,9 +24,13 @@ func run(m *testing.M) int {
 	// We connect to a randomized database, create it, and run migrations. Then we drop it when tests are done.
 	conf := sqldb.GetTestConfigRandomDB("balancer_test")
 	var err error
-	SQLTransactor, err = sqldb.Connect(conf, logger.StderrLogger)
+	SQLTransactor, err = sqldb.NewTransactor(conf, logger.StderrLogger)
 	if err != nil {
-		fmt.Printf("couldn't make connection to database: %v", err)
+		fmt.Printf("couldn't set up transactor: %v", err)
+		return -1
+	}
+	if err := SQLTransactor.Start(); err != nil {
+		fmt.Printf("couldn't start transactor: %v", err)
 		return -1
 	}
 

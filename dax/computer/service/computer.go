@@ -74,6 +74,7 @@ func (c *computerService) Start() error {
 				dax.RoleTypeCompute,
 				dax.RoleTypeTranslate,
 			},
+			HasDirective: false,
 		}
 
 		if err := c.computer.Registrar.RegisterNode(context.TODO(), node); err != nil {

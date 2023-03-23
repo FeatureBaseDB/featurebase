@@ -81,4 +81,3 @@ create_table("directive_versions") {
 	t.Timestamps()
 }
 
-sql("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00');")

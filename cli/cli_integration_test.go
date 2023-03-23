@@ -66,6 +66,7 @@ func TestCLIIntegration(t *testing.T) {
 			"meta_bang",
 			"meta_cd",
 			"meta_echo",
+			"meta_describe",
 			"meta_file",
 			"meta_pset_border",
 			"meta_pset_expanded",

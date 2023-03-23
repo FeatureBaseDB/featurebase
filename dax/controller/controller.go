@@ -77,8 +77,7 @@ func New(cfg Config) *Controller {
 		snappingTurtleTimeout:    cfg.SnappingTurtleTimeout,
 		snapControl:              make(chan struct{}),
 
-		stopping: make(chan struct{}),
-		logger:   logr,
+		logger: logr,
 	}
 
 	// Poller.
@@ -102,6 +101,12 @@ func New(cfg Config) *Controller {
 
 // Start starts long running subroutines.
 func (c *Controller) Start() error {
+	// Set up the stopping channel here in case the controller restarts.
+	c.stopping = make(chan struct{})
+
+	if err := c.Transactor.Start(); err != nil {
+		return errors.Wrap(err, "starting transactor")
+	}
 
 	c.backgroundGroup.Go(c.poller.Run) // TODO: this could just use c.stopping as well?
 
@@ -172,6 +177,11 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 	for _, n := range nodes {
 		// If the node already exists, skip it.
 		if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
+			// If the node already exists, but it has indicated that it doesn't
+			// have a directive, then send it one.
+			if !n.HasDirective {
+				workerSet.Add(n.Address)
+			}
 			continue
 		}
 
@@ -260,7 +270,10 @@ func (c *Controller) RegisterNode(ctx context.Context, n *dax.Node) error {
 	}
 	defer tx.Rollback()
 
-	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
+	// If the node is telling us that it doesn't have a directive, let it
+	// continue because we need to send it one even though we already think we
+	// know about it.
+	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil && n.HasDirective {
 		return nil
 	}
 
@@ -291,7 +304,11 @@ func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
 	// Directive; then we could check that the compute node is actually doing
 	// what we expect it to be doing. But for now, we're just checking that we
 	// know about the compute node at all.
-	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
+	//
+	// However, if the node is telling us that it doesn't have a directive, let
+	// it continue because we need to send it one even though we already think
+	// we know about it.
+	if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil && n.HasDirective {
 		return nil
 	}
 

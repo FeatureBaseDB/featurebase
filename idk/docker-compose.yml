@@ -147,10 +147,6 @@ services:
       FEATUREBASE_CONTROLLER_CONFIG_SQLDB_USER: "postgres"
       FEATUREBASE_CONTROLLER_CONFIG_SQLDB_PASSWORD: "password"
       FEATUREBASE_CONTROLLER_CONFIG_SQLDB_HOST: "postgres"
-      SQLDB_DB: "postgres"
-      SQLDB_USER: "postgres"
-      SQLDB_PASSWORD: "password"
-      SQLDB_HOST: "postgres"
       FEATUREBASE_COMPUTER_RUN: "true"
       FEATUREBASE_COMPUTER_CONFIG_DATA_DIR: /dax-data/computer
       FEATUREBASE_COMPUTER_CONFIG_WRITELOGGER_DIR: /dax-data/wl

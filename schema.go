@@ -162,8 +162,6 @@ func IndexInfoToTable(ii *IndexInfo) *dax.Table {
 
 		Description: ii.Options.Description,
 		Owner:       ii.Owner,
-		CreatedAt:   ii.CreatedAt,
-		UpdatedAt:   ii.UpdatedAt,
 		UpdatedBy:   ii.LastUpdateUser,
 	}
 
@@ -178,9 +176,8 @@ func IndexInfoToTable(ii *IndexInfo) *dax.Table {
 		idType = dax.BaseTypeString
 	}
 	tbl.Fields = append(tbl.Fields, &dax.Field{
-		Name:      "_id",
-		Type:      idType,
-		CreatedAt: ii.CreatedAt,
+		Name: "_id",
+		Type: idType,
 	})
 
 	// Populate the rest of the fields.
@@ -268,8 +265,6 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 			TTL:            fo.TTL,
 			ForeignIndex:   foreignIndex,
 		},
-
-		CreatedAt: fi.CreatedAt,
 	}
 }
 
@@ -308,8 +303,6 @@ func TableToIndexInfo(tbl *dax.Table) *IndexInfo {
 	ii := &IndexInfo{
 		Name:           string(tbl.Name),
 		Owner:          tbl.Owner,
-		CreatedAt:      tbl.CreatedAt,
-		UpdatedAt:      tbl.UpdatedAt,
 		LastUpdateUser: tbl.UpdatedBy,
 		Options: IndexOptions{
 			Keys:           tbl.StringKeys(),
@@ -359,8 +352,7 @@ func FieldToFieldInfo(fld *dax.Field) *FieldInfo {
 	}
 
 	return &FieldInfo{
-		Name:      string(fld.Name),
-		CreatedAt: fld.CreatedAt,
+		Name: string(fld.Name),
 		Options: FieldOptions{
 			Type:           fieldToFieldType(fld),
 			Base:           base,

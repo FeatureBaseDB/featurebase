@@ -618,9 +618,10 @@ func (c *Client) RegisterNode(ctx context.Context, node *dax.Node) error {
 	url := fmt.Sprintf("%s/register-node", c.address.WithScheme(defaultScheme))
 	c.logger.Debugf("RegisterNode: %s, url: %s", node.Address, url)
 
-	req := &controllerhttp.RegisterNodeRequest{
-		Address:   node.Address,
-		RoleTypes: node.RoleTypes,
+	req := &dax.Node{
+		Address:      node.Address,
+		RoleTypes:    node.RoleTypes,
+		HasDirective: node.HasDirective,
 	}
 
 	// Encode the request.
@@ -648,9 +649,10 @@ func (c *Client) CheckInNode(ctx context.Context, node *dax.Node) error {
 	url := fmt.Sprintf("%s/check-in-node", c.address.WithScheme(defaultScheme))
 	c.logger.Debugf("CheckInNode url: %s", url)
 
-	req := &controllerhttp.CheckInNodeRequest{
-		Address:   node.Address,
-		RoleTypes: node.RoleTypes,
+	req := &dax.Node{
+		Address:      node.Address,
+		RoleTypes:    node.RoleTypes,
+		HasDirective: node.HasDirective,
 	}
 
 	// Encode the request.
