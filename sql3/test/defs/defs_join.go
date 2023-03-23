@@ -136,6 +136,25 @@ var joinTests = TableTest{
 			),
 			Compare: CompareExactOrdered,
 		},
+		// test u.* and expect select list is expanded to all collumns in table alias u
+		{
+			name: "join-select-start",
+			SQLs: sqls(
+				"select distinct u.* from users u join orders o on o.userid = u._id;",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("name", fldTypeString),
+				hdr("age", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(0), string("a"), int64(21)),
+				row(int64(1), string("b"), int64(18)),
+				row(int64(2), string("c"), int64(28)),
+				row(int64(3), string("d"), int64(34)),
+			),
+			Compare: CompareExactOrdered,
+		},
 		{
 			name: "fulljoin",
 			SQLs: sqls(

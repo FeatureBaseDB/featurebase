@@ -151,6 +151,7 @@ func TestDAXIntegration(t *testing.T) {
 			"viewtests/select-view-after-drop",
 			"time_quantum_insert/stringset-rangeq", // orchestrator currently does not support to,from args on Rows()
 			"time_quantum_insert/idset-rangeq",
+			"select-having/string", // fails in DAX because the string isn't translated.
 		}
 
 		doSkip := func(name string) bool {

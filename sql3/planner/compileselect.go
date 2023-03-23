@@ -573,7 +573,7 @@ func (p *ExecutionPlanner) analyzeSource(ctx context.Context, source parser.Sour
 		return source, nil
 
 	case *parser.TableValuedFunction:
-		return nil, sql3.NewErrInternalf("table valued function expected")
+		return nil, sql3.NewErrUnsupported(0, 0, true, "table valued function")
 
 	case *parser.SelectStatement:
 		expr, err := p.analyzeSelectStatement(ctx, source)
