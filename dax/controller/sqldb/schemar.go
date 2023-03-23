@@ -251,16 +251,9 @@ func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) erro
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
-	// Getting list of tables from QualifiedDatabaseID and seeing if the table name matches with
-	// an existing table name
-	if tbls, err := s.Tables(tx, qtbl.QualifiedDatabaseID); err != nil {
-		errors.Wrap(err, "error finding list of tables")
-	} else {
-		for _, v := range tbls {
-			if v.Name == qtbl.Name {
-				return schemar.NewErrTableNameExists(qtbl.Name)
-			}
-		}
+	// if TableID returns an error, that table does not exist and is able to be created
+	if _, err := s.TableID(tx, qtbl.QualifiedDatabaseID, qtbl.Name); err == nil {
+		return schemar.NewErrTableNameExists(qtbl.Name)
 	}
 
 	tbl := toModelTable(qtbl)

@@ -28,7 +28,6 @@ func newQualifiedSchemaAPI(qdbid dax.QualifiedDatabaseID, schema dax.Schemar) *q
 }
 
 func (s *qualifiedSchemaAPI) CreateDatabase(ctx context.Context, db *dax.Database) error {
-	//creates the database
 	qdb := dax.NewQualifiedDatabase(s.qdbid.OrganizationID, db)
 	return s.schemar.CreateDatabase(ctx, qdb)
 }
