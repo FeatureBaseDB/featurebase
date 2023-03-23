@@ -45,6 +45,7 @@ var TableTests []TableTest = []TableTest{
 	setLiteralTests,
 	setFunctionTests,
 	setParameterTests,
+	setTimeQuantumTests,
 	dateTimePartTests,
 	dateTimeNameTests,
 	toTimestampTests,
