@@ -15,40 +15,49 @@ import (
 )
 
 // TODO(pok)
-// ▶ on create/alter table, update the schema version
 // ▶ on open index run the aries recovery
 
 // ▶ move latchState into Page ✅
 // ▶ latch buffer pool ✅
 // ▶ schema versioning on the page 🔧
 //		▶ write initial schema version on the root page ✅
-//		▶ write new schema versions on the root page
-//		▶ handle schema version overflow
+//		▶ write new schema versions on the root page - what happens when we have more schema version than fit on the root page
+//			hint - schema should probably be its own b-tree (sigh)
+//		▶ handle schema version overflow ✅
 
 // ▶ put the insert into the split routine, so we don't have the do the insert after the fact
 
 // - [x] Tuple format
-//     - [ ] Tid (int64) - transaction id of last write
-//     - [ ] Redo page ptr - pointer to last version of row
-//     - [ ] schema version (int16)
-//     - [ ] count of fields (int16)
-//     - [ ] array of field offsets
-//         - [ ] offset for each field (-1 for null)
-//     - [ ] data payload
-//         - [ ] for each column (len, only for variable columns) data
+// 		writeTID (int64)
+// 		schemaVersion (int16) (will we ever have > 64K of schema versions??)
+// 		versionsPtr (int64) ptr to old versions page for this tuple
+// 		fieldOffsets (one for each field, int16, 0xFF is null)
+//   		offsets point to:
+// 				fieldData (one for each field)
+//   				[valueLen (int32)] optional only used for variable length types (right now varchar)
+//					valueBytes
 
-// - math that that works out max payload length for a tuple
-//		- tries to key fanout min >= 4
+// ▶ math that that works out max payload length for a tuple ✅
+//		- tries to key fanout min >= 4 ✅
 
 // ▶ WAL
 // 		▶  implement log buffers for wal files
-// 		▶  implement write log event for PageID, event id etc.
+//			    in the buffer pool keep some buffers
+// 		▶  implement writing of log
+//				log every change to a page, before we write to the page
+//		▶ log format
+//				- previousLSN (LSN is the offset in the log file)
+//				- TID
+//				- record type
+//				- PageID
+//				- old data (undo) (+ offset and len)
+//				- new data (redo) (+ offset and len)
 
 // ▶ lazy writer on the buffer pool
-// 		▶  implement a checkpoint that scans the pool and writes out dirty pages every minute or so
+// 		▶  implement a checkpoint that scans the pool and writes out dirty pages periodically
 
 // ▶ MVCC versioning
-// ▶ 3000+ columns (thanks Q2)
+// ▶ 3000+ columns (thanks Q2) ✅
 
 // ▶ handle nulls on insert
 // ▶ backup/restore
@@ -60,6 +69,14 @@ import (
 
 // BTree represents a b+tree structure used for storing and
 // retrieving tuple data for a given shard in a table
+//
+// BTrees for FeatureBase t-store data contain a header page
+// TODO (pok) - the following decribes aspirational state, vs. actual state right now
+//   - slot 1 of the header page will be a pointer to the root page for the schema data
+//     the schema is stored as a tuple of schema version (int), and schema ([]byte)
+//     like any other tuple
+//   - slot 2 will be the pointer to the root page of the tuple data that is being stored in
+//     this b-tree
 type BTree struct {
 	mu            sync.RWMutex
 	schema        types.Schema
@@ -72,8 +89,17 @@ type BTree struct {
 	shard      int32
 	rootNode   bufferpool.PageID
 	bufferpool *bufferpool.BufferPool
+
+	// debug
+	// pinnedPages map[bufferpool.PageID]bufferpool.PageID
 }
 
+// NewBTree creates a b+tree for a schema object denoted by objectID, and a shard denoted by shard. The maxKeySize specifies the
+// size of the key to be used for this b-tree. Once the data is persisted to disk, it is a very bad idea to change this. schema specifies
+// the schema used to write new data, this schema will be cheked against a history of schemas used for writes in this b+tree and if it differs
+// from the current know schema version, it will be given a new version number (applying only to this b-tree) and stored. This version
+// number will be stored with the tuple data. When data is read, the schema version is also read so that data in the page can be interpreted
+// correctly.
 func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, bpool *bufferpool.BufferPool) (*BTree, error) {
 	// use key size to calculate keys per leaf and internal page
 	if maxKeySize > bufferpool.MAX_KEY_ON_PAGE_SIZE {
@@ -119,6 +145,8 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 		bufferpool:          bpool,
 		keysPerLeafPage:     keysPerLeafPage,
 		keysPerInternalPage: keysPerInternalPage,
+		// debug
+		// pinnedPages:         make(map[bufferpool.PageID]bufferpool.PageID),
 	}
 
 	headerNode, err := tree.fetchNode(bufferpool.PageID{ObjectID: objectID, Shard: shard, Page: 0})
@@ -200,20 +228,14 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 	return tree, nil
 }
 
-// protocol for latching
-// 		▶ latch parent node
-// 		▶ get latch for childNode
-// 		▶ Release latch for parent if “safe”.
-// 			• A safe node is one that will not split or merge when updated.
-// 				▶ Not full (on insertion)
-// 				▶ More than half-full (on deletion)
-//
-//
+// Latching for Search --> start at root with a read latch and go down; repeatedly,
+// 		▶ acquire read latch on child
+// 		▶ then unlatch parent
 
-//Latching for Search --> start at root with a read latch and go down; repeatedly,
-// ▶ Acquire read latch on child
-// ▶ Then unlatch parent
-
+// Search finds a key k in the b+tree and returns the matching tuple. If no tuple is
+// found, nil is returned
+// TODO(pok) - remove the first parameter for the public method
+// TODO(pok) - add ability to return an error
 func (b *BTree) Search(currentNode *BTreeNode, k Sortable) (Sortable, *BTreeTuple) {
 	if currentNode != nil {
 		if currentNode.isLeaf() {
@@ -224,7 +246,27 @@ func (b *BTree) Search(currentNode *BTreeNode, k Sortable) (Sortable, *BTreeTupl
 			if found {
 				slot := currentNode.page.ReadPageSlot(int16(i))
 				lpl := slot.LeafPayload(currentNode.page)
-				return k, NewBTreeTupleFromBytes(lpl.ValueAsBytes(currentNode.page), b.schema)
+				rdr := lpl.GetPayloadReader(currentNode.page)
+				payload := make([]byte, rdr.PayloadTotalLength)
+				copy(payload, rdr.PayloadChunkBytes)
+				bytesReceived := rdr.PayloadChunkLength
+				if rdr.Flags == 1 {
+					nextPtr := rdr.OverflowPtr
+					for nextPtr != bufferpool.INVALID_PAGE {
+						onode, _ := b.fetchNode(bufferpool.PageID{ObjectID: b.objectID, Shard: b.shard, Page: nextPtr})
+						onode.takeReadLatch()
+						defer onode.releaseReadLatch()
+						defer b.unpin(onode)
+
+						// read the overflow bytes
+						clen, cbytes := onode.page.ReadLeafPagePayloadBytes(bufferpool.PAGE_SLOTS_START_OFFSET)
+						copy(payload[bytesReceived:], cbytes)
+						bytesReceived += clen
+
+						nextPtr = onode.page.ReadNextPointer().Page
+					}
+				}
+				return k, NewBTreeTupleFromBytes(payload, b.schema)
 			}
 			return nil, nil
 		} else {
@@ -242,14 +284,10 @@ func (b *BTree) Search(currentNode *BTreeNode, k Sortable) (Sortable, *BTreeTupl
 	}
 }
 
-//Latching for Insert --> start at root and go down, start at root with a read latch and go down; repeatedly,
-// 		▶ latch parent node
-// 		▶ get latch for childNode
-// 			▶ if childNode is a leaf and will split and we only have a read latch, bail and start from the top in exclusive mode
-// 		▶ release latch for parent if “safe”.
-// 			• A safe node is one that will not split or merge when updated.
-// 				▶ Not full (on insertion)
-
+// Insert inserts a tuple into the b+tree. The key is assumed to be in the first column of the tuple.
+// The function returns nill on success or an error.
+//
+// We use an optimistic latching model for inserts. (see insertNonFull() for more details)
 func (b *BTree) Insert(tup *BTreeTuple) error {
 	// go get the root page from the buffer pool
 	node, err := b.fetchNode(b.rootNode)
@@ -338,6 +376,9 @@ func (b *BTree) Insert(tup *BTreeTuple) error {
 
 // private methods
 
+// fetchNode gets the page specified by pageID from the buffer pool and wraps
+// it in a BTreeNode. The page is pinned and read to use. It is the callers
+// responsibiluty to unpin the page once they have finished with it.
 func (b *BTree) fetchNode(pageID bufferpool.PageID) (*BTreeNode, error) {
 	page, err := b.bufferpool.FetchPage(pageID)
 	if err != nil {
@@ -346,13 +387,33 @@ func (b *BTree) fetchNode(pageID bufferpool.PageID) (*BTreeNode, error) {
 	node := &BTreeNode{
 		page: page,
 	}
+	//debug
+	// if page.ID().Page == 200 {
+	// 	fmt.Printf("here\n")
+	// }
+	// _, ok := b.pinnedPages[pageID]
+	// if ok {
+	// 	fmt.Printf("pinning page (already pinned) %v\n", pageID)
+	// } else {
+	// 	fmt.Printf("pinning page %v\n", pageID)
+	// 	b.pinnedPages[pageID] = pageID
+	// }
+	//---
 	return node, nil
 }
 
+// unpin is a convenience method to unpin the page wrapped by node
 func (b *BTree) unpin(node *BTreeNode) error {
+	// debug
+	// fmt.Printf("unpinning page %v\n", node.page.ID())
+	// delete(b.pinnedPages, node.page.ID())
+	//---
 	return b.bufferpool.UnpinPage(node.page.ID())
 }
 
+// newOverflow creates a new overflow page and wraps it in a *BTreeNode
+// The new page is pinned and read to use. It is the callers
+// responsibiluty to unpin the page once they have finished with it.
 func (b *BTree) newOverflow() (*BTreeNode, error) {
 	page, err := b.bufferpool.NewPage(b.objectID, b.shard)
 	if err != nil {
@@ -362,9 +423,23 @@ func (b *BTree) newOverflow() (*BTreeNode, error) {
 	node := &BTreeNode{
 		page: page,
 	}
+
+	//debug
+	// _, ok := b.pinnedPages[page.ID()]
+	// if ok {
+	// 	fmt.Printf("pinning page (already pinned) %v\n", page.ID())
+	// } else {
+	// 	fmt.Printf("pinning page %v\n", page.ID())
+	// 	b.pinnedPages[page.ID()] = page.ID()
+	// }
+	//---
+
 	return node, nil
 }
 
+// newOverflow creates a new leaf page and wraps it in a *BTreeNode
+// The new page is pinned and read to use. It is the callers
+// responsibiluty to unpin the page once they have finished with it.
 func (b *BTree) newLeaf() (*BTreeNode, error) {
 	page, err := b.bufferpool.NewPage(b.objectID, b.shard)
 	if err != nil {
@@ -374,9 +449,24 @@ func (b *BTree) newLeaf() (*BTreeNode, error) {
 	node := &BTreeNode{
 		page: page,
 	}
+	//debug
+	// if page.ID().Page == 200 {
+	// 	fmt.Printf("here\n")
+	// }
+	// _, ok := b.pinnedPages[page.ID()]
+	// if ok {
+	// 	fmt.Printf("pinning page (already pinned) %v\n", page.ID())
+	// } else {
+	// 	fmt.Printf("pinning page %v\n", page.ID())
+	// 	b.pinnedPages[page.ID()] = page.ID()
+	// }
+	//---
 	return node, nil
 }
 
+// newOverflow creates a new internal page and wraps it in a *BTreeNode
+// The new page is pinned and read to use. It is the callers
+// responsibiluty to unpin the page once they have finished with it.
 func (b *BTree) newInternal() (*BTreeNode, error) {
 	page, err := b.bufferpool.NewPage(b.objectID, b.shard)
 	if err != nil {
@@ -386,9 +476,26 @@ func (b *BTree) newInternal() (*BTreeNode, error) {
 	node := &BTreeNode{
 		page: page,
 	}
+	//debug
+	// _, ok := b.pinnedPages[page.ID()]
+	// if ok {
+	// 	fmt.Printf("pinning page (already pinned) %v\n", page.ID())
+	// } else {
+	// 	fmt.Printf("pinning page %v\n", page.ID())
+	// 	b.pinnedPages[page.ID()] = page.ID()
+	// }
+	//---
 	return node, nil
 }
 
+// isNodeFull returns true if a given node n is full and needs to
+// be split. Being 'full' is a function of slot count and not
+// free space on the page.
+// The number of slots on the page is dictated by the page type and
+// the values calculated during the b-tree creation based on the key
+// size and the schema.
+// It is possible for this function to return false and there to be
+// no free space on the page - see compactLeafNode(), compactInternalNode()
 func (b *BTree) isNodeFull(n *BTreeNode) bool {
 	if n.latchState() == bufferpool.None {
 		panic("unexpected latch state")
@@ -408,6 +515,8 @@ func (b *BTree) isNodeFull(n *BTreeNode) bool {
 	return false
 }
 
+// findNextPointer uses a binary search to locate the nearest key value and what
+// pageID to jump to next during a search down the tree
 func (b *BTree) findNextPointer(node *BTreeNode, key Sortable) bufferpool.PageID {
 	slotCount := int(node.page.ReadSlotCount())
 
@@ -436,6 +545,9 @@ func (b *BTree) findNextPointer(node *BTreeNode, key Sortable) bufferpool.PageID
 	}
 }
 
+// setRootNode writes the new root node page id into the appropriate slot
+// in the header page of the b+tree, flushes the page and then updates the
+// rootNode member on the BTree struct instance pointed to by b
 func (b *BTree) setRootNode(newRootNode bufferpool.PageID) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -463,6 +575,8 @@ func (b *BTree) setRootNode(newRootNode bufferpool.PageID) error {
 	return nil
 }
 
+// handleRootNodeSplit creates a new root node, inserts the seperator key pivot to point to the lhsPtr and
+// the next pointer to point to the rhsPtr
 func (b *BTree) handleRootNodeSplit(pivot Sortable, lhsPtr bufferpool.PageID, rhsPtr bufferpool.PageID) error {
 	// create a new root node
 	newRoot, err := b.newInternal()
@@ -483,20 +597,132 @@ func (b *BTree) handleRootNodeSplit(pivot Sortable, lhsPtr bufferpool.PageID, rh
 	return nil
 }
 
+// compactLeafPage compacts the data on a leaf page.
+// When inserts happen, the free space pointer on the page is offset by the length of the data,
+// the data is written to that offset and the free space pointer is decremented.
+// We know how many keys we can fit on a page because we did the math when we created the BTree with the
+// key length and the schema.
+// When the page is split, we move half the keys on to the new page, but the data on the page that is split is
+// is not rewritten for performance reasons. This means that even though there is plenty of room left for slots
+// we may still have old data on the page taking up space. This function compacts the data on the page that is
+// actually pointed to by slots on this page and rewrites the page, thereby freeing up space.
 func (b *BTree) compactLeafPage(node *BTreeNode) error {
+	// 1. make a scratch page
+	// 2. iterate the slots on this page and copy data
+	// 3. put the scratch page back over this one
+
+	scratchPage := b.bufferpool.ScratchPage()
+	scratchPage.WritePageType(bufferpool.PAGE_TYPE_BTREE_LEAF)
+	freeSpaceOffset := scratchPage.ReadFreeSpaceOffset()
+
+	slotCount := int(node.page.ReadSlotCount())
+
+	for i := 0; i < slotCount; i++ {
+
+		// read the slot from the page
+		s := node.page.ReadPageSlot(int16(i))
+		// read the chunk from the page
+		lbl := s.LeafPayload(node.page)
+		c := lbl.GetPayloadReader(node.page)
+
+		// mod the freespace offset based on the size of the chunk
+		freeSpaceOffset -= int16(c.Length())
+		// update the values in the slot
+		s.PayloadOffset = freeSpaceOffset
+
+		// write the chunk
+		offset := scratchPage.WriteLeafPagePayloadHeader(int16(freeSpaceOffset), c.KeyLength, c.KeyBytes, c.Flags, c.OverflowPtr, c.PayloadTotalLength)
+		scratchPage.WriteLeafPagePayloadBytes(offset, c.PayloadChunkLength, c.PayloadChunkBytes)
+		//write the slot
+		scratchPage.WritePageSlot(int16(i), s)
+
+		// update the free space offset
+		scratchPage.WriteFreeSpaceOffset(int16(freeSpaceOffset))
+	}
+	// set the new slotcounts
+	scratchPage.WriteSlotCount(int16(slotCount))
+
+	// set sibling pointers
+	scratchPage.WritePrevPointer(node.page.ReadPrevPointer())
+	scratchPage.WriteNextPointer(node.page.ReadNextPointer())
+
+	scratchPage.CopyPageTo(node.page)
+
 	return nil
 }
 
-// this function handles overflow
+// compactInternalPage compacts the data on an internal page.
+// see compactLeafPage() above
+func (b *BTree) compactInternalPage(node *BTreeNode) error {
+	// 1. make a scratch page
+	// 2. iterate the slots on this page and copy data
+	// 3. put the scratch page back over this one
+
+	// debug
+	// node.page.Dump("pre compact")
+	// --
+
+	scratchPage := b.bufferpool.ScratchPage()
+	scratchPage.WritePageType(bufferpool.PAGE_TYPE_BTREE_INTERNAL)
+	freeSpaceOffset := scratchPage.ReadFreeSpaceOffset()
+
+	slotCount := int(node.page.ReadSlotCount())
+
+	for i := 0; i < slotCount; i++ {
+
+		// read the slot from the page
+		s := node.page.ReadPageSlot(int16(i))
+		// read the chunk from the page
+		ipl := s.InternalPayload(node.page)
+		c := ipl.InternalPageChunk(node.page)
+
+		// mod the freespace offset based on the size of the chunk
+		freeSpaceOffset -= int16(c.Length())
+		// update the values in the slot
+		s.PayloadOffset = freeSpaceOffset
+
+		// write the chunk
+		scratchPage.WriteInternalPageChunk(int16(freeSpaceOffset), c)
+		//write the slot
+		scratchPage.WritePageSlot(int16(i), s)
+
+		// update the free space offset
+		scratchPage.WriteFreeSpaceOffset(int16(freeSpaceOffset))
+	}
+	// set the new slotcounts
+	scratchPage.WriteSlotCount(int16(slotCount))
+
+	// set sibling pointers
+	scratchPage.WritePrevPointer(node.page.ReadPrevPointer())
+	scratchPage.WriteNextPointer(node.page.ReadNextPointer())
+
+	scratchPage.CopyPageTo(node.page)
+
+	// debug
+	// node.page.Dump("post compact")
+	// ---
+
+	return nil
+}
+
+// writeLeafEntryInSlot handles writing a leaf entry into a slot on a leaf page.
+// We already know what slotNumber we want to insert into.
+// This function checks free space on the page and will compact if the write won't fit. It also handles overflowing data
+// to overflow pages if the payload will not fit on this page.
 func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes []byte, payloadBytes []byte) error {
 
+	// calculate the size of the stuf we plan on writing
 	keyLength := len(keyBytes)
 	payloadChunkLength := len(payloadBytes)
 
+	// set total length to the payload chunk length
 	payloadTotalLength := payloadChunkLength
 
+	// assume we aren't going to overflow
 	flags := 0
 
+	// if the payload chuck is more that we can fit on the page, adjust the size
+	// for payload on this page and set the flag to indicate overflow
 	if payloadChunkLength > bufferpool.MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE {
 		// we need to overflow to a new page, so set the fact we have to overflow
 		flags = 1
@@ -504,13 +730,17 @@ func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes
 		payloadChunkLength = bufferpool.MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE
 	}
 
-	// double check we won't blow free space on page
+	// if we are going to blow space, try to compact page
+	// if we do blow space - we have larger math-y logic-y problems
 	onPageSize := node.page.ComputeLeafPayloadTotalLength(keyLength, payloadChunkLength)
 	if (onPageSize + bufferpool.PAGE_SLOT_LENGTH) > int32(node.page.FreeSpaceOnPage()) {
 		err := b.compactLeafPage(node)
 		if err != nil {
 			return err
 		}
+		// debug
+		// node.page.Dump("after compact")
+		// ---
 		// check again
 		if (onPageSize + bufferpool.PAGE_SLOT_LENGTH) > int32(node.page.FreeSpaceOnPage()) {
 			// this shouldn't happen - if it does we have a logic error
@@ -518,6 +748,13 @@ func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes
 			// or saggitarius is rising in scorpio, or somesuch
 			panic("page is full")
 		}
+	}
+
+	// move all the slots after where we are going to insert
+	// get the current slot count
+	for j := int(node.page.ReadSlotCount()); j > int(slotNumber); j-- {
+		sl := node.page.ReadPageSlot(int16(j - 1))
+		node.page.WritePageSlot(int16(j), sl)
 	}
 
 	// get the current freespace offset
@@ -552,7 +789,7 @@ func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes
 
 			var err error
 			var nextOverflowPage *BTreeNode
-			nextOverflowPtr := int64(0)
+			nextOverflowPtr := bufferpool.INVALID_PAGE
 			if bytesRemaining > overflowFreeSpace {
 				// we're gonna need another overflow page
 				nextOverflowPage, err = b.newOverflow()
@@ -571,9 +808,7 @@ func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes
 			payloadChunkLength := overflowFreeSpace - 2
 			hiWater += payloadChunkLength
 
-			if nextOverflowPtr > 0 {
-				overflowPage.page.WriteNextPointer(bufferpool.PageID{ObjectID: b.objectID, Shard: b.shard, Page: nextOverflowPtr})
-			}
+			overflowPage.page.WriteNextPointer(bufferpool.PageID{ObjectID: b.objectID, Shard: b.shard, Page: nextOverflowPtr})
 
 			overflowPage.page.WriteLeafPagePayloadBytes(bufferpool.PAGE_SLOTS_START_OFFSET, int16(payloadChunkLength), payloadBytes[lowWater:hiWater])
 			bytesRemaining -= payloadChunkLength
@@ -593,22 +828,18 @@ func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes
 		PayloadOffset: freeSpaceOffset,
 	}
 	node.page.WritePageSlot(slotNumber, slot)
+
 	return nil
 }
 
-func (b *BTree) insertLeafEntryAt(node *BTreeNode, i int, key Sortable, tup *BTreeTuple) error {
+// insertLeafEntryAt inserts a tuple at the slot denoted by keyPosition
+func (b *BTree) insertLeafEntryAt(node *BTreeNode, keyPosition int, key Sortable, tup *BTreeTuple) error {
 	if node.latchState() != bufferpool.Write {
 		panic("unexpected latch state")
 	}
 
-	// get the slot count
+	// read the slotcount first
 	slotCount := int(node.page.ReadSlotCount())
-
-	// move all the slots after where we are going to insert
-	for j := slotCount; j > i; j-- {
-		sl := node.page.ReadPageSlot(int16(j - 1))
-		node.page.WritePageSlot(int16(j), sl)
-	}
 
 	// put the payload together
 	valueData, err := tup.Bytes()
@@ -616,9 +847,7 @@ func (b *BTree) insertLeafEntryAt(node *BTreeNode, i int, key Sortable, tup *BTr
 		return err
 	}
 
-	// write to WAL here before we write to page!!!
-
-	err = b.writeLeafEntryInSlot(node, int16(i), key.Bytes(), valueData)
+	err = b.writeLeafEntryInSlot(node, int16(keyPosition), key.Bytes(), valueData)
 	if err != nil {
 		return err
 	}
@@ -630,14 +859,42 @@ func (b *BTree) insertLeafEntryAt(node *BTreeNode, i int, key Sortable, tup *BTr
 	return nil
 }
 
+// writeInternalEntryInSlot handles writing an internal entry into a slot on an internal page.
+// We already know what slotNumber we want to insert into.
+// This function checks free space on the page and will compact if the write won't fit.
 func (b *BTree) writeInternalEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes []byte, ptrValue int64) error {
+
+	// get length info
+	keyLength := len(keyBytes)
+	onPageSize := node.page.ComputeInternalPayloadTotalLength(keyLength)
+
+	// if we are going to blow space, try to compact page
+	// if we do blow space - we have larger math-y logic-y problems
+	if (onPageSize + bufferpool.PAGE_SLOT_LENGTH) > int32(node.page.FreeSpaceOnPage()) {
+		err := b.compactInternalPage(node)
+		if err != nil {
+			return err
+		}
+		// debug
+		// node.page.Dump("after compact")
+		// ---
+		// check again
+		if (onPageSize + bufferpool.PAGE_SLOT_LENGTH) > int32(node.page.FreeSpaceOnPage()) {
+			// this shouldn't happen - if it does we have a logic error
+			// in our assumptions about how many keys fit on a page
+			// or saggitarius is rising in scorpio, or somesuch
+			panic("page is full")
+		}
+	}
+
+	// move all the slots after where we are going to insert
+	for j := int(node.page.ReadSlotCount()); j > int(slotNumber); j-- {
+		sl := node.page.ReadPageSlot(int16(j - 1))
+		node.page.WritePageSlot(int16(j), sl)
+	}
 
 	// get the current freespace offset
 	freeSpaceOffset := node.page.ReadFreeSpaceOffset()
-
-	keyLength := len(keyBytes)
-
-	onPageSize := node.page.ComputeInternalPayloadTotalLength(keyLength)
 
 	// compute the new free space offset for this page
 	freeSpaceOffset -= int16(onPageSize)
@@ -655,7 +912,8 @@ func (b *BTree) writeInternalEntryInSlot(node *BTreeNode, slotNumber int16, keyB
 	return nil
 }
 
-func (b *BTree) insertInternalEntryAt(node *BTreeNode, i int, key Sortable, pageID bufferpool.PageID) error {
+// insertInternalEntryAt inserts a tuple at the slot denoted by keyPosition
+func (b *BTree) insertInternalEntryAt(node *BTreeNode, keyPosition int, key Sortable, pageID bufferpool.PageID) error {
 	if node.latchState() != bufferpool.Write {
 		panic("unexpected latch state")
 	}
@@ -663,13 +921,7 @@ func (b *BTree) insertInternalEntryAt(node *BTreeNode, i int, key Sortable, page
 	// get the slot count
 	slotCount := int(node.page.ReadSlotCount())
 
-	// move all the slots after where we are going to insert
-	for j := slotCount; j > i; j-- {
-		sl := node.page.ReadPageSlot(int16(j - 1))
-		node.page.WritePageSlot(int16(j), sl)
-	}
-
-	err := b.writeInternalEntryInSlot(node, int16(i), key.Bytes(), pageID.Page)
+	err := b.writeInternalEntryInSlot(node, int16(keyPosition), key.Bytes(), pageID.Page)
 	if err != nil {
 		return err
 	}
@@ -681,14 +933,16 @@ func (b *BTree) insertInternalEntryAt(node *BTreeNode, i int, key Sortable, page
 	return nil
 }
 
-func (b *BTree) updatePointerEntryAt(node *BTreeNode, i int, value bufferpool.PageID) error {
-	slot := node.page.ReadPageSlot(int16(i))
+// updatePointerEntryAt updates a pointer entry that already exists on an internal node
+func (b *BTree) updatePointerEntryAt(node *BTreeNode, slotNumber int, pagePtr bufferpool.PageID) error {
+	slot := node.page.ReadPageSlot(int16(slotNumber))
 	ipl := slot.InternalPayload(node.page)
-	return ipl.PutPagePointer(node.page, value)
+	return ipl.PutPagePointer(node.page, pagePtr)
 }
 
+// splitNode calls the appropriate split function based on page type
 func (b *BTree) splitNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BTreeNode, error) {
-	// TODO(pok) handle the sitch when inserting the new key and it ends up as the min key in rhs
+	// TODO(pok) handle the sitch when inserting the new key and it ends up as the min key in rhs? We should probably test for this...
 	if nodeToSplit.isLeaf() {
 		return b.splitLeafNode(nodeToSplit)
 	} else {
@@ -696,9 +950,30 @@ func (b *BTree) splitNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BTreeN
 	}
 }
 
+// insertNonFull handles insert operations.
+// If the node is a leaf node, the data is simply inserted.
+// If the node is an internal node, the key is used to find which child page pointer to follow. If the child node
+// is full then pre-emptivly split it and then call insertNonFull on the appropriate child. If the child node is not
+// full then call insertNonFull on the child node.
+// Most of the complexity in this function is centered around latch-crabbing for concurrency.
+//
+// Latching for Insert --> start at root and go down, start at root with a read latch and go down; repeatedly,
+// 		▶ latch parent node
+// 		▶ get latch for childNode
+// 			▶ if childNode is a leaf and will split and we only have a read latch, bail and start from the top in exclusive mode
+// 		▶ release latch for parent if “safe”.
+// 			• A safe node is one that will not split or merge when updated.
+// 				▶ Not full (on insertion)
+
 func (b *BTree) insertNonFull(node *BTreeNode, key Sortable, tup *BTreeTuple, forceExclusive bool) error {
 	if node.isLeaf() {
+		// debug
 		// fmt.Printf("leaf insert on page %v (%v)\n", node.page.ID(), tup)
+
+		// if key == Int(289) {
+		// 	node.page.Dump("200")
+		// }
+		// ---
 
 		if node.latchState() != bufferpool.Write {
 			panic("unexpected latch state")
@@ -717,6 +992,11 @@ func (b *BTree) insertNonFull(node *BTreeNode, key Sortable, tup *BTreeTuple, fo
 			return err
 		}
 
+		// debug
+		// if node.page.ID().Page == 200 {
+		// 	node.page.Dump("200")
+		// }
+		//
 		return nil
 	} else {
 		// its an internal node so follow the pointers
@@ -756,6 +1036,7 @@ func (b *BTree) insertNonFull(node *BTreeNode, key Sortable, tup *BTreeTuple, fo
 				node.releaseAnyLatch()
 				// release latch on childNode
 				childNode.releaseAnyLatch()
+				b.unpin(childNode)
 				return ErrNeedsExclusive
 			}
 
@@ -805,6 +1086,8 @@ func (b *BTree) insertNonFull(node *BTreeNode, key Sortable, tup *BTreeTuple, fo
 	}
 }
 
+// splitLeafNode handles splitting of a leaf node. It returns the original node, the seperator key on
+// which the split happended and the new node, or an error.
 func (b *BTree) splitLeafNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BTreeNode, error) {
 	// fmt.Printf("leaf split on page %v\n", nodeToSplit.page.ID())
 
@@ -865,9 +1148,18 @@ func (b *BTree) splitLeafNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BT
 	lhs.page.WriteNextPointer(rhs.page.ID())
 	rhs.page.WritePrevPointer(lhs.page.ID())
 
+	// debug
+	// if lhs.page.ID().Page == 200 {
+	// 	lhs.page.Dump("200:lhs")
+	// 	rhs.page.Dump("200:rhs")
+	// }
+	// ---
+
 	return lhs, seperationKey, rhs, nil
 }
 
+// splitInternalNode handles splitting of an internal node. It returns the original node, the seperator key on
+// which the split happended and the new node, or an error.
 func (b *BTree) splitInternalNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BTreeNode, error) {
 	// fmt.Printf("internal split on page %v\n", nodeToSplit.page.ID())
 

@@ -2,7 +2,9 @@
 
 package tstore
 
-import "github.com/featurebasedb/featurebase/v3/bufferpool"
+import (
+	"github.com/featurebasedb/featurebase/v3/bufferpool"
+)
 
 type BTreeNode struct {
 	page *bufferpool.Page
@@ -68,6 +70,12 @@ func (n *BTreeNode) findNextPointer(key Sortable, objectID int32, shard int32) (
 	if n.latchState() == bufferpool.None {
 		panic("unexpected latch state")
 	}
+
+	// debug
+	// if n.page.ID().Page == 24 {
+	// 	n.page.Dump("findNextPointer")
+	// }
+	// ---
 
 	slotCount := int(n.page.ReadSlotCount())
 
