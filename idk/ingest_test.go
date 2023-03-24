@@ -3,6 +3,7 @@ package idk
 // comment
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -60,6 +61,48 @@ func configureTestFlagsController(main *Main, address dax.Address, qtbl *dax.Qua
 	main.NewImporterFn = func() pilosa.Importer {
 		return serverless.NewImporter(controllerClient, qtbl.QualifiedDatabaseID, &qtbl.Table)
 	}
+}
+
+type versionHolder struct {
+	Version string
+}
+
+func TestFeaturebaseVersion(t *testing.T) {
+	m := NewMain()
+	configureTestFlags(m)
+	// We don't need to fully run an ingester, but we do need its client set up.
+	_, err := m.setupClient()
+	if err != nil {
+		t.Fatalf("setting up client: %v", err)
+	}
+	c := m.PilosaClient()
+	status, body, err := c.HTTPRequest("GET", "/version", nil, nil)
+	if err != nil {
+		t.Fatalf("getting version: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("unexpected status: %d (wanted StatusOK)", status)
+	}
+	var vh versionHolder
+	err = json.Unmarshal(body, &vh)
+	if err != nil {
+		t.Fatalf("unmarshalling version: %v", err)
+	}
+	v := vh.Version
+	expectedHash := os.Getenv("IDK_FEATUREBASE_HASH")
+	if expectedHash == "" {
+		t.Skipf("featurebase version: %s [no expected version]", v)
+	}
+	offset := strings.LastIndex(v, "-g")
+	if offset == -1 {
+		t.Fatalf("version %s doesn't have -g followed by a hash", v)
+	}
+	hash := v[offset+2:]
+	// allow either hash to be abbreviated
+	if !strings.HasPrefix(expectedHash, hash) && !strings.HasPrefix(hash, expectedHash) {
+		t.Fatalf("expected hash to look like %q, got %q", expectedHash, hash)
+	}
+	t.Logf("featurebase commit %q matches expectations", hash)
 }
 
 func TestErrFlush(t *testing.T) {
