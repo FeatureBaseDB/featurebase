@@ -232,7 +232,33 @@ func (p *ExecutionPlanner) generatePQLCallFromExpr(ctx context.Context, expr typ
 			call.Children = append(call.Children, rc)
 		}
 		return call, nil
-
+	case *betweenOpPlanExpression:
+		lhs, ok := expr.lhs.(*qualifiedRefPlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("expected expression type: planner.qualifiedRefPlanExpression got:%T", expr.lhs)
+		}
+		rexp, ok := expr.rhs.(*rangePlanExpression)
+		if !ok {
+			return nil, sql3.NewErrInternalf("expected expression type: planner.rangePlanExpression got:%T", expr.rhs)
+		}
+		lower, err := planExprToValue(rexp.lhs)
+		if err != nil {
+			return nil, err
+		}
+		upper, err := planExprToValue(rexp.rhs)
+		if err != nil {
+			return nil, err
+		}
+		call := &pql.Call{
+			Name: "Row",
+			Args: map[string]interface{}{
+				lhs.columnName: &pql.Condition{
+					Op:    pql.BETWEEN,
+					Value: []interface{}{lower, upper},
+				},
+			},
+		}
+		return call, nil
 	default:
 		return nil, sql3.NewErrInternalf("unexpected expression type: %T", expr)
 	}
