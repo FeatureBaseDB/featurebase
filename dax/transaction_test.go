@@ -59,8 +59,7 @@ func TestTransaction(t *testing.T) {
 
 			return nil
 		}
-		reads, writes := 0, 1
-		require.NoError(t, dax.RetryWithTx(ctx, trans, tx1, reads, writes))
+		require.NoError(t, dax.RetryWithTx(ctx, trans, tx1, true, 1))
 
 		// tx2
 
@@ -77,13 +76,6 @@ func TestTransaction(t *testing.T) {
 			1: 3,
 		}
 		tx2 := func(tx dax.Transaction, writable bool) error {
-			if tx2cnt == 0 {
-				// After the first call of tx2 completes, close the done channel
-				// so that tx5 can proceed and verify that tx2 eventually got to
-				// commit its transaction.
-				defer close(done)
-			}
-
 			dt, ok := tx.(*sqldb.DaxTransaction)
 			require.True(t, ok)
 
@@ -110,8 +102,12 @@ func TestTransaction(t *testing.T) {
 		// Run the calls to tx2 in a go routine because we want to mimic
 		// concurrent attempt to read/write the same data.
 		go func() {
-			reads, writes := 0, 2
-			require.NoError(t, dax.RetryWithTx(ctx, trans, tx2, reads, writes))
+			require.NoError(t, dax.RetryWithTx(ctx, trans, tx2, true, 2))
+
+			// After the second call of tx2 completes, close the done channel
+			// so that tx5 can proceed and verify that tx2 eventually got to
+			// commit its transaction.
+			close(done)
 		}()
 
 		// Wait until tx2 does its first read of the data before allowing tx3 to
@@ -136,8 +132,7 @@ func TestTransaction(t *testing.T) {
 			return nil
 		}
 
-		reads, writes = 0, 1
-		require.NoError(t, dax.RetryWithTx(ctx, trans, tx3, reads, writes))
+		require.NoError(t, dax.RetryWithTx(ctx, trans, tx3, true, 1))
 
 		// tx4
 		tx4 := func(tx dax.Transaction, writable bool) error {
@@ -151,8 +146,7 @@ func TestTransaction(t *testing.T) {
 			return nil
 		}
 
-		reads, writes = 1, 0
-		require.NoError(t, dax.RetryWithTx(ctx, trans, tx4, reads, writes))
+		require.NoError(t, dax.RetryWithTx(ctx, trans, tx4, false, 1))
 
 		// Close wait2 so that tx2 can continue retrying transactions.
 		close(wait2)
@@ -175,8 +169,7 @@ func TestTransaction(t *testing.T) {
 			return nil
 		}
 
-		reads, writes = 1, 0
-		require.NoError(t, dax.RetryWithTx(ctx, trans, tx5, reads, writes))
+		require.NoError(t, dax.RetryWithTx(ctx, trans, tx5, false, 1))
 	})
 
 }

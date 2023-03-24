@@ -23,52 +23,58 @@ type Transactor interface {
 	Close() error
 }
 
+const (
+	postgresTxConflictError = "(SQLSTATE 40001)"
+)
+
+// txFunc is the function signature for a function which can be retried using
+// the RetryWithTx function.
 type txFunc func(tx Transaction, writable bool) error
 
-func RetryWithTx(ctx context.Context, trans Transactor, fn txFunc, reads int, writes int) error {
-	// Try with a read lock first.
-	for reads >= 1 {
-		reads--
+// RetryWithTx will retry the txFunc up to maxTries, or a try succeeds,
+// whichever comes first. If writable is set to true, RetryWithTx will use a
+// writable transaction for each try, and attempt to Commit the transaction. If
+// the transaction fails with an error related to invalid serialization, and
+// there are still tries remaining, the transaction will be retried.
+func RetryWithTx(ctx context.Context, trans Transactor, fn txFunc, writable bool, maxTries int) error {
+	// stopRetry can be set to true to abort the retry loop. This is useful when
+	// a transaction completes successfully, but maxTries has not been reached;
+	// i.e, because the transaction succeeded, there's no reason to keep trying.
+	var stopRetry bool
 
-		// Begin a read transaction.
-		tx, err := trans.BeginTx(ctx, false)
-		if err != nil {
-			return errors.Wrap(err, "beginning read tx")
-		}
-		defer tx.Rollback()
+	for maxTries >= 1 && !stopRetry {
+		maxTries--
 
-		// Call the function as read.
-		if err := fn(tx, false); err != nil {
-			return errors.Wrap(err, "calling function with read tx")
-		}
-	}
+		if err := func() error {
+			// Begin a read transaction.
+			tx, err := trans.BeginTx(ctx, writable)
+			if err != nil {
+				return errors.Wrapf(err, "beginning tx, writable: %v", writable)
+			}
+			defer tx.Rollback()
 
-	// Try with a write lock.
-	for writes >= 1 {
-		writes--
+			// Call the function with the transaction. We pass in writable in
+			// case the function operates differently based on whether it is a
+			// read or write transaction.
+			if err := fn(tx, writable); err != nil {
+				return errors.Wrapf(err, "calling function with tx, writable: %v", writable)
+			}
 
-		// Begin a write transaction.
-		tx, err := trans.BeginTx(ctx, true)
-		if err != nil {
-			return errors.Wrap(err, "beginning read tx")
-		}
-		defer tx.Rollback()
+			if writable {
+				if err := tx.Commit(); err != nil {
+					return errors.Wrap(err, "committing tx")
+				}
+			}
 
-		// Call the function as write.
-		if err := fn(tx, true); err != nil {
-			if writes > 0 && strings.Contains(err.Error(), "(SQLSTATE 40001)") {
+			stopRetry = true
+			return nil
+		}(); err != nil {
+			// If we get a serialization error, and we still have some write
+			// attempts remaining, then continue trying.
+			if maxTries > 0 && strings.Contains(err.Error(), postgresTxConflictError) {
 				continue
 			}
-			return errors.Wrap(err, "calling function with write tx")
-		}
-
-		// If we get a serialization error, and we still have some write
-		// attempts remaining, then continue trying.
-		if err := tx.Commit(); err != nil {
-			if writes > 0 && strings.Contains(err.Error(), "(SQLSTATE 40001)") {
-				continue
-			}
-			return errors.Wrap(err, "committing tx")
+			return err
 		}
 	}
 
