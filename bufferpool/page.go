@@ -228,7 +228,6 @@ func (p *Page) ReadNextPointer() PageID {
 func (p *Page) ReadPageSlot(slot int16) PageSlot {
 	offset := PAGE_SLOTS_START_OFFSET + PAGE_SLOT_LENGTH*slot
 	keyOffset := int16(binary.BigEndian.Uint16(p.data[offset:]))
-	offset += 2
 	return PageSlot{
 		PayloadOffset: keyOffset,
 	}
@@ -332,6 +331,14 @@ func (p *Page) WriteLeafPagePayloadBytes(offset int16, payloadChunkLength int16,
 	p.isDirty = true
 }
 
+func (p *Page) ReadLeafPagePayloadBytes(offset int16) (int16, []byte) {
+	chunkLen := int16(binary.BigEndian.Uint16(p.data[offset:]))
+	offset += 2
+	chunkBytes := make([]byte, chunkLen)
+	copy(chunkBytes, p.data[offset:offset+chunkLen])
+	return chunkLen, chunkBytes
+}
+
 func (p *Page) WriteInternalPageChunk(offset int16, chunk InternalPageChunk) {
 	binary.BigEndian.PutUint16(p.data[offset:], uint16(chunk.KeyLength))
 	offset += 2
@@ -374,7 +381,7 @@ func (pg *Page) Dump(label string) {
 		indent += 4
 	}
 	pageType := pg.ReadPageType()
-	fmt.Printf("%sPAGE(%d) pageType: %d slotCount: %d, prevPtr: %d, nextPtr: %d\n", fmt.Sprintf("%*s", indent, ""), pg.ID(), pageType, pg.ReadSlotCount(), pg.ReadPrevPointer(), pg.ReadNextPointer())
+	fmt.Printf("%sPAGE(%d) pageType: %d slotCount: %d, freeSpaceOffset: %d, freeSpaceOnPage: %d, prevPtr: %d, nextPtr: %d\n", fmt.Sprintf("%*s", indent, ""), pg.ID(), pageType, pg.ReadSlotCount(), pg.ReadFreeSpaceOffset(), pg.FreeSpaceOnPage(), pg.ReadPrevPointer(), pg.ReadNextPointer())
 	fmt.Printf("%sKEYS: -->\n", fmt.Sprintf("%*s", indent, ""))
 	indent += 4
 
