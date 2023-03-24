@@ -234,6 +234,42 @@ var binOpExprWithIntInt = TableTest{
 			),
 			ExpErr: "operator '||' incompatible with type 'int'",
 		},
+		{
+			SQLs: sqls(
+				"select 1 - 1 ;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(0)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select 1 / 1 ;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(1)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select 1 % 1 ;",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(0)),
+			),
+			Compare: CompareExactUnordered,
+		},
 	},
 }
 

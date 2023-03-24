@@ -2981,8 +2981,6 @@ func wildCardToRegexp(pattern string) string {
 func timestampFromString(s string) (time.Time, error) {
 	if tm, err := time.ParseInLocation(time.RFC3339Nano, s, time.UTC); err == nil {
 		return tm, nil
-	} else if tm, err := time.ParseInLocation(time.RFC3339, s, time.UTC); err == nil {
-		return tm, nil
 	} else if tm, err := time.ParseInLocation("2006-01-02", s, time.UTC); err == nil {
 		return tm, nil
 	}
