@@ -120,6 +120,7 @@ services:
       dockerfile: ./idk/Dockerfile-test
     environment:
       IDK_DEFAULT_SHARD_TRANSACTIONAL: ${IDK_DEFAULT_SHARD_TRANSACTIONAL}
+      IDK_FEATUREBASE_HASH: ${IDK_FEATUREBASE_HASH}
     volumes:
       - ./testenv/certs:/certs
       - ./docker-sasl/ssl_keys:/ssl_keys

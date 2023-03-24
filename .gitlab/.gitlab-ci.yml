@@ -353,7 +353,7 @@ run go tests idk race:
     - cd ./idk/
     - echo $PROJECT
     - echo $CI_COMMIT_REF_SLUG
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-race
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} IDK_FEATUREBASE_HASH=${CI_COMMIT_SHA} make test-all-race
   after_script:
     - cd ./idk/
     - make save-pilosa-logs
@@ -378,7 +378,7 @@ run go tests idk shard transactional:
     - cd ./idk/
     - echo $PROJECT
     - echo $CI_COMMIT_REF_SLUG
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} IDK_FEATUREBASE_HASH=${CI_COMMIT_SHA} make test-all
   after_script:
     - cd ./idk/
     - make save-pilosa-logs
@@ -404,7 +404,7 @@ run go tests idk 533:
     - cd ./idk/
     - echo $PROJECT
     - echo $CI_COMMIT_REF_SLUG
-    - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all
+    - CONFLUENT_VERSION=5.3.3 BRANCH_NAME=${CI_COMMIT_REF_SLUG} IDK_FEATUREBASE_HASH=${CI_COMMIT_SHA} make test-all
   after_script:
     - cd ./idk/
     - make save-pilosa-logs
@@ -428,7 +428,7 @@ run go tests idk sasl:
     - cd ./idk/
     - echo $PROJECT
     - echo $CI_COMMIT_REF_SLUG
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make test-all-kafka-sasl
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} IDK_FEATUREBASE_HASH=${CI_COMMIT_SHA} make test-all-kafka-sasl
   after_script:
     - cd ./idk/
     - make save-pilosa-logs
