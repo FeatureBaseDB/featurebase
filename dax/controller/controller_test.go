@@ -155,18 +155,20 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(0),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        2,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               2,
 			},
 		}
 		got = director.flush()
@@ -229,78 +231,88 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(1),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        5,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               5,
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
 						Shards:   dax.NewShardNums(2),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        6,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               6,
 			},
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewShardNums(0, 3),
+						Shards:   dax.NewShardNums(3),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        7,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               7,
 			},
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewShardNums(1, 5),
+						Shards:   dax.NewShardNums(5),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        8,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               8,
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbl0.Key(),
-						Shards:   dax.NewShardNums(2, 8),
+						Shards:   dax.NewShardNums(8),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        9,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               9,
 			},
 		}
 		got = director.flush()
@@ -320,83 +332,71 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
-					tbls[1],
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(3),
 					},
-					{
-						TableKey: tbls[1].Key(),
-						Shards:   dax.NewShardNums(0, 3),
-					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        10,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               10,
 			},
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
-					tbls[1],
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(5),
 					},
-					{
-						TableKey: tbls[1].Key(),
-						Shards:   dax.NewShardNums(1, 5),
-					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        11,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               11,
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
-					tbls[1],
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbls[0].Key(),
 						Shards:   dax.NewShardNums(8),
 					},
-					{
-						TableKey: tbls[1].Key(),
-						Shards:   dax.NewShardNums(2, 8),
-					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        12,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               12,
 			},
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
-					tbls[1],
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbls[0].Key(),
-						Shards:   dax.NewShardNums(3, 13),
-					},
-					{
-						TableKey: tbls[1].Key(),
-						Shards:   dax.NewShardNums(0, 3),
+						Shards:   dax.NewShardNums(13),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        13,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               13,
 			},
 		}
 		got = director.flush()
@@ -409,43 +409,42 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
-					tbls[0],
 					tbls[1],
 				},
-				ComputeRoles: []dax.ComputeRole{
-					{
-						TableKey: tbls[0].Key(),
-						Shards:   dax.NewShardNums(3, 13),
-					},
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbls[1].Key(),
-						Shards:   dax.NewShardNums(0, 1, 3),
+						Shards:   dax.NewShardNums(1),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        14,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               14,
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodFull,
+				Method:  dax.DirectiveMethodDiff,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
 				},
-				ComputeRoles: []dax.ComputeRole{
+				ComputeRolesAdded: []dax.ComputeRole{
 					{
 						TableKey: tbls[0].Key(),
-						Shards:   dax.NewShardNums(5, 8),
+						Shards:   dax.NewShardNums(5),
 					},
 					{
 						TableKey: tbls[1].Key(),
-						Shards:   dax.NewShardNums(2, 5, 8),
+						Shards:   dax.NewShardNums(5),
 					},
 				},
-				TranslateRoles: []dax.TranslateRole{},
-				Version:        15,
+				ComputeRolesRemoved:   []dax.ComputeRole{},
+				TranslateRolesAdded:   []dax.TranslateRole{},
+				TranslateRolesRemoved: []dax.TranslateRole{},
+				Version:               15,
 			},
 		}
 		got = director.flush()
