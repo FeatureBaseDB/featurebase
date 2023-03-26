@@ -79,3 +79,54 @@ func TestWorkerDiffAdd(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkerDiffsApply(t *testing.T) {
+
+	a := []WorkerDiff{
+		{
+			Address:     "addr2",
+			AddedJobs:   []Job{"j10", "j11"},
+			RemovedJobs: []Job{"j99", "j100"},
+		},
+		{
+			Address:     "addr1",
+			AddedJobs:   []Job{"j1", "j2"},
+			RemovedJobs: []Job{"j86"},
+		},
+	}
+
+	b := []WorkerDiff{
+		{
+			Address:     "addr2",
+			AddedJobs:   []Job{"j3", "j99"},
+			RemovedJobs: []Job{"j2", "j10"},
+		},
+		{
+			Address:     "addr3",
+			AddedJobs:   []Job{"j777"},
+			RemovedJobs: []Job{},
+		},
+	}
+
+	out := WorkerDiffs(a).Apply(b)
+
+	exp := []WorkerDiff{
+		{
+			Address:     "addr1",
+			AddedJobs:   []Job{"j1", "j2"},
+			RemovedJobs: []Job{"j86"},
+		},
+		{
+			Address:     "addr2",
+			AddedJobs:   []Job{"j11", "j3", "j99"},
+			RemovedJobs: []Job{"j10", "j100", "j2"},
+		},
+		{
+			Address:     "addr3",
+			AddedJobs:   []Job{"j777"},
+			RemovedJobs: []Job{},
+		},
+	}
+
+	assert.ElementsMatch(t, exp, out)
+}

@@ -42,7 +42,7 @@ type WorkerDiff struct {
 	RemovedJobs []Job
 }
 
-// Add adds w2 to w. It panics of w and w2 don't have teh same worker
+// Add adds w2 to w. It panics if w and w2 don't have the same worker
 // ID. Any job that is added and then removed or removed and then
 // added cancels out and won't be present after add is called.
 func (w *WorkerDiff) Add(w2 WorkerDiff) {
@@ -55,7 +55,8 @@ func (w *WorkerDiff) Add(w2 WorkerDiff) {
 	r2 := NewSet(w2.RemovedJobs...)
 
 	// final Added is (a1 - r2) + (a2 - r1)
-	// this is because anything that is removed and then added, or added and then removed cancels out
+	// this is because anything that is removed and then added, or added and
+	// then removed cancels out
 	added := a1.Minus(r2).Plus(a2.Minus(r1))
 
 	// final removed is (r1 - a2) + (r2 - a1)
@@ -65,12 +66,64 @@ func (w *WorkerDiff) Add(w2 WorkerDiff) {
 	w.RemovedJobs = removed.Slice()
 }
 
+// AddLastWins is like Add in that it adds w2 to w. Unlike Add, however,
+// AddLastWins will favor the changes in w2 over those in w. So any job that is
+// added in w and removed in w2, will be removed. Any job that is removed in w
+// and added in w2 will be added. It panics if w and w2 don't have the same
+// worker ID.
+func (w *WorkerDiff) AddLastWins(w2 WorkerDiff) {
+	if w.Address != w2.Address {
+		panic("can't add worker diffs from different workers")
+	}
+	a1 := NewSet(w.AddedJobs...)
+	a2 := NewSet(w2.AddedJobs...)
+	r1 := NewSet(w.RemovedJobs...)
+	r2 := NewSet(w2.RemovedJobs...)
+
+	// final Added is (a1 + a2 - r2)
+	added := a1.Plus(a2).Minus(r2)
+
+	// final removed is (r1 + r2 - a2)
+	removed := r1.Plus(r2).Minus(a2)
+
+	w.AddedJobs = added.Sorted()
+	w.RemovedJobs = removed.Sorted()
+}
+
 // WorkerDiffs is a sortable slice of WorkerDiff.
 type WorkerDiffs []WorkerDiff
 
 func (w WorkerDiffs) Len() int           { return len(w) }
 func (w WorkerDiffs) Less(i, j int) bool { return w[i].Address < w[j].Address }
 func (w WorkerDiffs) Swap(i, j int)      { w[i], w[j] = w[j], w[i] }
+
+func (w WorkerDiffs) Apply(o WorkerDiffs) WorkerDiffs {
+	out := make(WorkerDiffs, len(w))
+
+	// m is a map which makes it easy for us to match on Address between the two
+	// WorkerDiffs; i.e. without doing nested loops.
+	m := make(map[Address]int)
+	for i := range w {
+		out[i] = w[i]
+		m[out[i].Address] = i
+	}
+
+	for i := range o {
+		oAddr := o[i].Address
+		if idx, ok := m[oAddr]; ok {
+			// merge these
+			out[idx].AddLastWins(o[i])
+			continue
+		}
+
+		// Append any items from o which don't exist in w.
+		out = append(out, o[i])
+	}
+
+	sort.Sort(out)
+
+	return out
+}
 
 // Set is a set of stringy items.
 type Set[K ~string] map[K]struct{}

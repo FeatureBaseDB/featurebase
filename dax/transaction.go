@@ -2,6 +2,7 @@ package dax
 
 import (
 	"context"
+	"log"
 	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/errors"
@@ -43,6 +44,7 @@ func RetryWithTx(ctx context.Context, trans Transactor, fn txFunc, writable bool
 	var stopRetry bool
 
 	for maxTries >= 1 && !stopRetry {
+		log.Printf("DEEBUG: RetryWithTx (writable: %v): %d", writable, maxTries)
 		maxTries--
 
 		if err := func() error {

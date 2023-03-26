@@ -19,16 +19,16 @@ func TestTransaction(t *testing.T) {
 		require.NoError(t, err, "connecting")
 		require.NoError(t, trans.Start())
 
-		orgID := dax.OrganizationID("acme")
-		db := &dax.Database{
+		orgID1 := dax.OrganizationID("acme")
+		db1 := &dax.Database{
 			ID:   "db1id",
 			Name: "db1",
 			Options: dax.DatabaseOptions{
 				WorkersMin: 1,
 			},
 		}
-		qdb := dax.NewQualifiedDatabase(orgID, db)
-		qdbid := qdb.QualifiedID()
+		qdb1 := dax.NewQualifiedDatabase(orgID1, db1)
+		qdbid1 := qdb1.QualifiedID()
 		schemar := sqldb.NewSchemar(log)
 
 		// The purpose of this test is to ensure that we're enforcing repeatable
@@ -55,7 +55,7 @@ func TestTransaction(t *testing.T) {
 			dt, ok := tx.(*sqldb.DaxTransaction)
 			require.True(t, ok)
 
-			require.NoError(t, schemar.CreateDatabase(dt, qdb))
+			require.NoError(t, schemar.CreateDatabase(dt, qdb1))
 
 			return nil
 		}
@@ -79,7 +79,7 @@ func TestTransaction(t *testing.T) {
 			dt, ok := tx.(*sqldb.DaxTransaction)
 			require.True(t, ok)
 
-			qdb, err := schemar.DatabaseByID(dt, qdbid)
+			qdb, err := schemar.DatabaseByID(dt, qdbid1)
 			require.NoError(t, err)
 			require.Equal(t, exp[tx2cnt], qdb.Options.WorkersMin)
 			if tx2cnt == 0 {
@@ -89,14 +89,14 @@ func TestTransaction(t *testing.T) {
 			// Wait until tx3 commits before trying to do anything else.
 			<-wait2
 
-			qdb, err = schemar.DatabaseByID(dt, qdbid)
+			qdb, err = schemar.DatabaseByID(dt, qdbid1)
 			require.NoError(t, err)
 			require.Equal(t, exp[tx2cnt], qdb.Options.WorkersMin)
 
 			// Increment tx2cnt for the next time tx2 gets called.
 			tx2cnt++
 
-			return schemar.SetDatabaseOption(dt, qdbid, dax.DatabaseOptionWorkersMin, "2")
+			return schemar.SetDatabaseOption(dt, qdbid1, dax.DatabaseOptionWorkersMin, "2")
 		}
 
 		// Run the calls to tx2 in a go routine because we want to mimic
@@ -123,11 +123,11 @@ func TestTransaction(t *testing.T) {
 			dt, ok := tx.(*sqldb.DaxTransaction)
 			require.True(t, ok)
 
-			qdb, err := schemar.DatabaseByID(dt, qdb.QualifiedID())
+			qdb, err := schemar.DatabaseByID(dt, qdb1.QualifiedID())
 			require.NoError(t, err)
 			require.Equal(t, 1, qdb.Options.WorkersMin)
 
-			require.NoError(t, schemar.SetDatabaseOption(dt, qdbid, dax.DatabaseOptionWorkersMin, "3"))
+			require.NoError(t, schemar.SetDatabaseOption(dt, qdbid1, dax.DatabaseOptionWorkersMin, "3"))
 
 			return nil
 		}
@@ -139,7 +139,7 @@ func TestTransaction(t *testing.T) {
 			dt, ok := tx.(*sqldb.DaxTransaction)
 			require.True(t, ok)
 
-			qdb, err := schemar.DatabaseByID(dt, qdb.QualifiedID())
+			qdb, err := schemar.DatabaseByID(dt, qdb1.QualifiedID())
 			require.NoError(t, err)
 			require.Equal(t, 3, qdb.Options.WorkersMin)
 
@@ -162,7 +162,7 @@ func TestTransaction(t *testing.T) {
 			dt, ok := tx.(*sqldb.DaxTransaction)
 			require.True(t, ok)
 
-			qdb, err := schemar.DatabaseByID(dt, qdb.QualifiedID())
+			qdb, err := schemar.DatabaseByID(dt, qdb1.QualifiedID())
 			require.NoError(t, err)
 			require.Equal(t, 2, qdb.Options.WorkersMin)
 

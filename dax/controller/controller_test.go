@@ -155,7 +155,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -229,7 +229,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -244,7 +244,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -259,7 +259,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -274,7 +274,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -289,7 +289,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -320,7 +320,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -340,7 +340,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -360,7 +360,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -380,7 +380,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -409,7 +409,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -429,7 +429,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -458,7 +458,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -534,7 +534,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node3.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -565,7 +565,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node3.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -594,7 +594,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node3.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 				},
@@ -690,7 +690,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -743,7 +743,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -758,7 +758,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl0,
 				},
@@ -803,7 +803,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -823,7 +823,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -843,7 +843,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 					tbls[1],
@@ -871,7 +871,7 @@ func TestController(t *testing.T) {
 		exp = []*dax.Directive{
 			{
 				Address: node0.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 				},
@@ -886,7 +886,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node1.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 				},
@@ -901,7 +901,7 @@ func TestController(t *testing.T) {
 			},
 			{
 				Address: node2.Address,
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbls[0],
 				},

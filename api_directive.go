@@ -35,6 +35,22 @@ func (api *API) ApplyDirective(ctx context.Context, d *dax.Directive) error {
 	// Handle the operations based on the directive method.
 	switch d.Method {
 	case dax.DirectiveMethodDiff:
+		// In order to prevent adding too much code specific to handling a diff
+		// directive (e.g. adding something like an `enactDirectiveDiff()`
+		// method), we are instead going to build a full Directive based on the
+		// diff, and then proceed normally as if we had received a full
+		// Directive. We do that by copying the previous Directive and then
+		// applying the diffs to the copy.
+		newD := previousDirective.Copy()
+
+		// Apply the diffs from the incoming Directive to the new, copied
+		// Directive.
+		newD.ApplyDiff(d)
+
+		// Now proceed with the new diff as if we had received it as a full diff.
+		d = newD
+
+	case dax.DirectiveMethodFull:
 		// pass: normal operation
 
 	case dax.DirectiveMethodReset:
