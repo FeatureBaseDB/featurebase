@@ -46,6 +46,13 @@ func NewBTreeTupleFromBytes(b []byte, schema types.Schema) *BTreeTuple {
 			bvalue := make([]byte, l)
 			binary.Read(rdr, binary.BigEndian, &bvalue)
 			t.Tuple[i] = string(bvalue)
+
+		case *parser.DataTypeVarbinary:
+			var l int32
+			binary.Read(rdr, binary.BigEndian, &l)
+			bvalue := make([]byte, l)
+			binary.Read(rdr, binary.BigEndian, &bvalue)
+			t.Tuple[i] = []byte(bvalue)
 		default:
 			panic("unexpected type")
 		}
@@ -76,6 +83,20 @@ func (b *BTreeTuple) Bytes() ([]byte, error) {
 				binary.BigEndian.PutUint32(b, uint32(len(data)))
 				valueBuf.Write(b)
 				valueBuf.WriteString(data)
+			}
+		case *parser.DataTypeVarbinary:
+			if rd == nil {
+				b := []byte{0, 0, 0, 0}
+				valueBuf.Write(b)
+			} else {
+				data, ok := rd.([]byte)
+				if !ok {
+					return []byte{}, errors.Errorf("unexpected type conversion '%T'", rd)
+				}
+				b := make([]byte, 4)
+				binary.BigEndian.PutUint32(b, uint32(len(data)))
+				valueBuf.Write(b)
+				valueBuf.Write(data)
 			}
 		default:
 			return []byte{}, errors.Errorf("unexpected type '%T'", ty)

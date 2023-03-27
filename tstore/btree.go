@@ -67,16 +67,20 @@ import (
 // ▶ do a test on concurrent inserts
 // ▶ latch buffer I/Os
 
+const (
+	SLOT_DATA_ROOT   = 1
+	SLOT_SCHEMA_ROOT = 2
+)
+
 // BTree represents a b+tree structure used for storing and
 // retrieving tuple data for a given shard in a table
 //
 // BTrees for FeatureBase t-store data contain a header page
-// TODO (pok) - the following decribes aspirational state, vs. actual state right now
-//   - slot 1 of the header page will be a pointer to the root page for the schema data
+//   - slot 1 will be the pointer to the root page of the tuple data that is being stored in
+//     this b-tree
+//   - slot 2 of the header page will be a pointer to the root page for the schema data
 //     the schema is stored as a tuple of schema version (int), and schema ([]byte)
 //     like any other tuple
-//   - slot 2 will be the pointer to the root page of the tuple data that is being stored in
-//     this b-tree
 type BTree struct {
 	mu            sync.RWMutex
 	schema        types.Schema
@@ -88,6 +92,7 @@ type BTree struct {
 	objectID   int32
 	shard      int32
 	rootNode   bufferpool.PageID
+	schemaNode bufferpool.PageID
 	bufferpool *bufferpool.BufferPool
 
 	// debug
@@ -157,29 +162,98 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 	defer headerNode.releaseWriteLatch()
 	defer tree.unpin(headerNode)
 
+	slotCount := headerNode.page.ReadSlotCount()
+	if slotCount == 0 {
+		panic("inavlid slot count")
+	}
+
+	// get the root node for the data part of the b-tree
 	slot := headerNode.page.ReadPageSlot(0)
-	// no need to protect updating this with a RWMutex yet
 	ipl := slot.InternalPayload(headerNode.page)
+	// no need to protect updating rootNode with a RWMutex while we are still creating
 	tree.rootNode = ipl.ValueAsPagePointer(headerNode.page)
 
-	// see if the headerPage is in overflow
-	nextHeader := headerNode.page.ReadNextPointer()
-	if nextHeader.Page != bufferpool.INVALID_PAGE {
-		// right now overflow is an error
-		return nil, errors.Errorf("headerPage overflow")
+	// make the root for the schema part of the b-tree if it does not exist
+	if slotCount == 1 {
+		schemaNode, err := tree.newLeaf()
+		if err != nil {
+			return nil, err
+		}
+		keyBytes := []byte{0, 0, 0, 1}
+		tree.writeInternalEntryInSlot(headerNode, 1, keyBytes, schemaNode.page.ID().Page)
+		headerNode.page.WriteSlotCount(2)
+		tree.unpin(schemaNode)
+		tree.schemaNode = schemaNode.page.ID()
+	} else {
+		slot := headerNode.page.ReadPageSlot(1)
+		ipl := slot.InternalPayload(headerNode.page)
+		tree.schemaNode = ipl.ValueAsPagePointer(headerNode.page)
 	}
-	// get the slot count from the headerPage
-	slotCount := headerNode.page.ReadSlotCount()
-	if slotCount > 1 {
-		// we have schema versions
-		slot = headerNode.page.ReadPageSlot(slotCount - 1)
 
-		pl := slot.KeyPayload(headerNode.page)
-		lpl := slot.LeafPayload(headerNode.page)
+	// get the last schema version
 
-		latestVersion := int(pl.KeyAsInt(headerNode.page))
+	schemaSchema := types.Schema{
+		&types.PlannerColumn{
+			ColumnName: "schema",
+			Type:       parser.NewDataTypeVarbinary(16384),
+		},
+	}
 
-		b := lpl.ValueAsBytes(headerNode.page)
+	insertSchemaSchema := types.Schema{
+		&types.PlannerColumn{
+			ColumnName: "_id",
+			Type:       parser.NewDataTypeID(),
+		},
+		&types.PlannerColumn{
+			ColumnName: "schema",
+			Type:       parser.NewDataTypeVarbinary(16384),
+		},
+	}
+
+	schemaNode, err := tree.fetchNode(tree.schemaNode)
+	if err != nil {
+		return nil, err
+	}
+	schemaNode.takeReadLatch()
+	defer schemaNode.releaseAnyLatch()
+	defer tree.unpin(schemaNode)
+
+	// get an iterator on the schema and get the last row
+	iter := tree.getIterator(schemaNode, nil, nil, true, schemaSchema)
+	sk, ss, err := iter.Next()
+	if err != nil {
+		return nil, err
+	}
+	iter.Dispose()
+
+	// if there isn't any schema, insert this one as the last
+	if sk == nil {
+		// make a tuple
+		b, err := wireprotocol.WriteSchema(schema)
+		if err != nil {
+			return nil, err
+		}
+
+		tup := &BTreeTuple{
+			TupleSchema: insertSchemaSchema,
+			Tuple: types.Row{
+				int64(1),
+				b,
+			},
+		}
+
+		err = tree.insert(SLOT_SCHEMA_ROOT, schemaNode, tup)
+		if err != nil {
+			return nil, err
+		}
+		tree.schemaVersion = 1
+		// TODO(pok) - can take this out once we have logging and checkpoints
+		tree.bufferpool.FlushPage(schemaNode.page.ID())
+	} else {
+		// if there is one, see if it is the same as this one, if it is not, insert this one as the latest
+		latestVersion := int(sk.(Int))
+
+		b := ss.Tuple[0].([]byte)
 
 		rdr := bytes.NewReader(b)
 		_, err = wireprotocol.ExpectToken(rdr, wireprotocol.TOKEN_SCHEMA_INFO)
@@ -204,84 +278,37 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 			}
 		}
 		if newSchema {
+			// TODO(pok) add another schema version
 			return nil, errors.Errorf("schema mismatch")
 		}
 		tree.schemaVersion = latestVersion
 		tree.schema = schema
-	} else {
-		// no schema versions so write first one
-		b, err := wireprotocol.WriteSchema(schema)
-		if err != nil {
-			return nil, err
-		}
 
-		err = tree.writeLeafEntryInSlot(headerNode, 1, Int(1).Bytes(), b)
-		if err != nil {
-			return nil, err
-		}
-		headerNode.page.WriteSlotCount(2)
-
-		tree.schemaVersion = 1
-		tree.schema = schema
-		tree.bufferpool.FlushPage(headerNode.page.ID())
 	}
+	tree.bufferpool.FlushPage(headerNode.page.ID())
 	return tree, nil
 }
 
-// Latching for Search --> start at root with a read latch and go down; repeatedly,
-// 		▶ acquire read latch on child
-// 		▶ then unlatch parent
+// GetIterator constructs an iterator on the b+tree so that range scans may be performed or an error
+func (b *BTree) GetIterator(from Sortable, to Sortable, reverse bool) (*BTreeNodeIterator, error) {
+	n, err := b.fetchNode(b.rootNode)
+	if err != nil {
+		return nil, err
+	}
+	n.takeReadLatch()
+	iter := b.getIterator(n, from, to, reverse, b.schema)
+	return iter, nil
+}
 
 // Search finds a key k in the b+tree and returns the matching tuple. If no tuple is
 // found, nil is returned
-// TODO(pok) - remove the first parameter for the public method
-// TODO(pok) - add ability to return an error
-func (b *BTree) Search(currentNode *BTreeNode, k Sortable) (Sortable, *BTreeTuple) {
-	if currentNode != nil {
-		if currentNode.isLeaf() {
-			defer currentNode.releaseReadLatch()
-			defer b.unpin(currentNode)
-			// search for the key
-			i, found := currentNode.findKey(k)
-			if found {
-				slot := currentNode.page.ReadPageSlot(int16(i))
-				lpl := slot.LeafPayload(currentNode.page)
-				rdr := lpl.GetPayloadReader(currentNode.page)
-				payload := make([]byte, rdr.PayloadTotalLength)
-				copy(payload, rdr.PayloadChunkBytes)
-				bytesReceived := rdr.PayloadChunkLength
-				if rdr.Flags == 1 {
-					nextPtr := rdr.OverflowPtr
-					for nextPtr != bufferpool.INVALID_PAGE {
-						onode, _ := b.fetchNode(bufferpool.PageID{ObjectID: b.objectID, Shard: b.shard, Page: nextPtr})
-						onode.takeReadLatch()
-						defer onode.releaseReadLatch()
-						defer b.unpin(onode)
-
-						// read the overflow bytes
-						clen, cbytes := onode.page.ReadLeafPagePayloadBytes(bufferpool.PAGE_SLOTS_START_OFFSET)
-						copy(payload[bytesReceived:], cbytes)
-						bytesReceived += clen
-
-						nextPtr = onode.page.ReadNextPointer().Page
-					}
-				}
-				return k, NewBTreeTupleFromBytes(payload, b.schema)
-			}
-			return nil, nil
-		} else {
-			nodePtr := b.findNextPointer(currentNode, k)
-			node, _ := b.fetchNode(nodePtr)
-			node.takeReadLatch()
-			currentNode.releaseReadLatch()
-			b.unpin(currentNode)
-			return b.Search(node, k)
-		}
-	} else {
-		n, _ := b.fetchNode(b.rootNode)
-		n.takeReadLatch()
-		return b.Search(n, k)
+func (b *BTree) Search(currentNode *BTreeNode, k Sortable) (Sortable, *BTreeTuple, error) {
+	n, err := b.fetchNode(b.rootNode)
+	if err != nil {
+		return nil, nil, err
 	}
+	n.takeReadLatch()
+	return b.search(n, k)
 }
 
 // Insert inserts a tuple into the b+tree. The key is assumed to be in the first column of the tuple.
@@ -289,12 +316,58 @@ func (b *BTree) Search(currentNode *BTreeNode, k Sortable) (Sortable, *BTreeTupl
 //
 // We use an optimistic latching model for inserts. (see insertNonFull() for more details)
 func (b *BTree) Insert(tup *BTreeTuple) error {
-	// go get the root page from the buffer pool
+	// go get the root data page from the buffer pool
 	node, err := b.fetchNode(b.rootNode)
 	if err != nil {
 		return err
 	}
+	return b.insert(SLOT_DATA_ROOT, node, tup)
+}
 
+// private methods
+
+func (b *BTree) getIterator(node *BTreeNode, from Sortable, to Sortable, reverse bool, schema types.Schema) *BTreeNodeIterator {
+	if reverse {
+		// go to the right
+		if node.isLeaf() {
+			return NewBTreeNodeIterator(b, node, reverse, schema)
+		} else {
+			panic("implement me")
+		}
+	} else {
+		// go to the left
+		panic("implement me")
+	}
+}
+
+// Latching for Search --> start at root with a read latch and go down; repeatedly,
+// 		▶ acquire read latch on child
+// 		▶ then unlatch parent
+
+func (b *BTree) search(currentNode *BTreeNode, k Sortable) (Sortable, *BTreeTuple, error) {
+	if currentNode.isLeaf() {
+		defer currentNode.releaseReadLatch()
+		defer b.unpin(currentNode)
+		// search for the key
+		i, found := currentNode.findKey(k)
+		if found {
+			return b.getTuple(currentNode, i, b.schema)
+		}
+		return nil, nil, nil
+	} else {
+		nodePtr := b.findNextPointer(currentNode, k)
+		node, err := b.fetchNode(nodePtr)
+		if err != nil {
+			return nil, nil, err
+		}
+		node.takeReadLatch()
+		currentNode.releaseReadLatch()
+		b.unpin(currentNode)
+		return b.search(node, k)
+	}
+}
+
+func (b *BTree) insert(rootSlot int, node *BTreeNode, tup *BTreeTuple) error {
 	key := tup.keyValue()
 
 	// special handling for the case where root is a leaf
@@ -350,7 +423,7 @@ func (b *BTree) Insert(tup *BTreeTuple) error {
 			}
 
 			// this is the root node splitting so handle that...
-			err = b.handleRootNodeSplit(pivot, lhsPtr, rhsPtr)
+			err = b.handleRootNodeSplit(rootSlot, pivot, lhsPtr, rhsPtr)
 			if err != nil {
 				return err
 			}
@@ -374,7 +447,37 @@ func (b *BTree) Insert(tup *BTreeTuple) error {
 	}
 }
 
-// private methods
+func (b *BTree) getTuple(node *BTreeNode, slotNumber int, schema types.Schema) (Sortable, *BTreeTuple, error) {
+	slot := node.page.ReadPageSlot(int16(slotNumber))
+	kpl := slot.KeyPayload(node.page)
+	lpl := slot.LeafPayload(node.page)
+	rdr := lpl.GetPayloadReader(node.page)
+	payload := make([]byte, rdr.PayloadTotalLength)
+	copy(payload, rdr.PayloadChunkBytes)
+	bytesReceived := rdr.PayloadChunkLength
+	if rdr.Flags == 1 {
+		nextPtr := rdr.OverflowPtr
+		for nextPtr != bufferpool.INVALID_PAGE {
+			onode, err := b.fetchNode(bufferpool.PageID{ObjectID: b.objectID, Shard: b.shard, Page: nextPtr})
+			if err != nil {
+				return nil, nil, err
+			}
+			onode.takeReadLatch()
+			// read the overflow bytes
+			clen, cbytes := onode.page.ReadLeafPagePayloadBytes(bufferpool.PAGE_SLOTS_START_OFFSET)
+			copy(payload[bytesReceived:], cbytes)
+			bytesReceived += clen
+
+			nextPtr = onode.page.ReadNextPointer().Page
+
+			// release the latch and unpin
+			onode.releaseReadLatch()
+			b.unpin(onode)
+		}
+	}
+	return Int(kpl.KeyAsInt(node.page)), NewBTreeTupleFromBytes(payload, schema), nil
+
+}
 
 // fetchNode gets the page specified by pageID from the buffer pool and wraps
 // it in a BTreeNode. The page is pinned and read to use. It is the callers
@@ -545,7 +648,7 @@ func (b *BTree) findNextPointer(node *BTreeNode, key Sortable) bufferpool.PageID
 // setRootNode writes the new root node page id into the appropriate slot
 // in the header page of the b+tree, flushes the page and then updates the
 // rootNode member on the BTree struct instance pointed to by b
-func (b *BTree) setRootNode(newRootNode bufferpool.PageID) error {
+func (b *BTree) setRootNode(rootSlot int, newRootNode bufferpool.PageID) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -558,8 +661,8 @@ func (b *BTree) setRootNode(newRootNode bufferpool.PageID) error {
 	defer headerNode.releaseWriteLatch()
 	defer b.unpin(headerNode)
 
-	// root page pointer is in slot 0
-	slot := headerNode.page.ReadPageSlot(0)
+	// root page pointer is in rootSlot - 1
+	slot := headerNode.page.ReadPageSlot(int16(rootSlot))
 
 	ipl := slot.InternalPayload(headerNode.page)
 
@@ -568,13 +671,18 @@ func (b *BTree) setRootNode(newRootNode bufferpool.PageID) error {
 
 	b.bufferpool.FlushPage(headerNode.page.ID())
 
-	b.rootNode = newRootNode
+	switch rootSlot {
+	case SLOT_DATA_ROOT:
+		b.rootNode = newRootNode
+	case SLOT_SCHEMA_ROOT:
+		b.schemaNode = newRootNode
+	}
 	return nil
 }
 
 // handleRootNodeSplit creates a new root node, inserts the seperator key pivot to point to the lhsPtr and
 // the next pointer to point to the rhsPtr
-func (b *BTree) handleRootNodeSplit(pivot Sortable, lhsPtr bufferpool.PageID, rhsPtr bufferpool.PageID) error {
+func (b *BTree) handleRootNodeSplit(rootSlot int, pivot Sortable, lhsPtr bufferpool.PageID, rhsPtr bufferpool.PageID) error {
 	// create a new root node
 	newRoot, err := b.newInternal()
 	if err != nil {
@@ -590,7 +698,7 @@ func (b *BTree) handleRootNodeSplit(pivot Sortable, lhsPtr bufferpool.PageID, rh
 	// set the next ptr to point to newNode
 	newRoot.page.WriteNextPointer(rhsPtr)
 
-	b.setRootNode(newRoot.page.ID())
+	b.setRootNode(rootSlot, newRoot.page.ID())
 	return nil
 }
 

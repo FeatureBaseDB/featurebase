@@ -56,6 +56,7 @@ func (*DataTypeStringSet) exprDataType()        {}
 func (*DataTypeStringSetQuantum) exprDataType() {}
 func (*DataTypeTimestamp) exprDataType()        {}
 func (*DataTypeVarchar) exprDataType()          {}
+func (*DataTypeVarbinary) exprDataType()        {}
 
 type DataTypeVoid struct {
 }
@@ -223,6 +224,30 @@ func (d *DataTypeVarchar) TypeDescription() string {
 }
 
 func (d *DataTypeVarchar) TypeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		"length": d.Length,
+	}
+}
+
+type DataTypeVarbinary struct {
+	Length int64
+}
+
+func NewDataTypeVarbinary(length int64) *DataTypeVarbinary {
+	return &DataTypeVarbinary{
+		Length: length,
+	}
+}
+
+func (d *DataTypeVarbinary) BaseTypeName() string {
+	return "varbinary" // dax.BaseTypeVarchar
+}
+
+func (d *DataTypeVarbinary) TypeDescription() string {
+	return fmt.Sprintf("%s(%d)", "varbinary" /*dax.BaseTypeVarchar*/, d.Length)
+}
+
+func (d *DataTypeVarbinary) TypeInfo() map[string]interface{} {
 	return map[string]interface{}{
 		"length": d.Length,
 	}

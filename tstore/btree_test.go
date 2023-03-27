@@ -72,7 +72,7 @@ func TestAddItemsToBTreeAndValidate(t *testing.T) {
 		}
 	}
 
-	key, tuple := b.Search(nil, Int(33))
+	key, tuple, _ := b.Search(nil, Int(33))
 
 	fmt.Printf("%v, %v\n\n", key, tuple)
 
@@ -157,7 +157,7 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 	fmt.Printf("inserted %d rows in %v\n", numRecs, duration)
 
 	start = time.Now()
-	key, tuple := b.Search(nil, Int(524))
+	key, tuple, _ := b.Search(nil, Int(524))
 	duration = time.Since(start)
 
 	vals := "["
