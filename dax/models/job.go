@@ -39,6 +39,16 @@ func (t Jobs) String() string {
 	return string(jt)
 }
 
+// Contains returns true if j is in Jobs.
+func (t Jobs) Contains(j dax.Job) bool {
+	for i := range t {
+		if t[i].Name == j {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate gets run every time you call a "pop.Validate*" (pop.ValidateAndSave, pop.ValidateAndCreate, pop.ValidateAndUpdate) method.
 // This method is not required and may be deleted.
 func (t *Job) Validate(tx *pop.Connection) (*validate.Errors, error) {

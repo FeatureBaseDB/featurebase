@@ -28,14 +28,23 @@ func (fj *freeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, 
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
+
+	// jobNames is used as input to the "name in (...)" query.
+	jobNames := make([]interface{}, 0, len(job))
+	for i := range job {
+		jobNames = append(jobNames, job[i].Job())
+	}
+
+	// existing will contain the list of jobs which already exist.
+	existing := &models.Jobs{}
+	if err := dt.C.Where("name in (?)", jobNames...).All(existing); err != nil {
+		return errors.Wrap(err, "getting existing jobs")
+	}
+
 	jobs := make(models.Jobs, 0, len(job))
 	for _, j := range job {
 		// Check to be sure this job doesn't already exist.
-		// TODO(tlt): this is running a query for every job. We should refactor
-		// this to do everything in one query.
-		if exists, err := dt.C.Where("name = ?", j).Exists(models.Job{}); err != nil {
-			return errors.Wrapf(err, "checking job by name exists: %s", j)
-		} else if exists {
+		if existing.Contains(j) {
 			continue
 		}
 		jobs = append(jobs, models.Job{
