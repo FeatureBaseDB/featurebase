@@ -43,6 +43,41 @@ var bulkInsert = TableTest{
 			Compare: CompareExactOrdered,
 		},
 		{
+			name: "bulk-insert-assignment-compatibility",
+			SQLs: sqls(
+				`BULK INSERT INTO 
+					bulktest (_id, id_col, string_col, int_col,decimal_col, bool_col, time_col, stringset_col, idset_col)
+					map (0 ID, 1 STRING, 2 STRING, 3 DECIMAL(2), 4 BOOL, 5 TIMESTAMP, 6 STRINGSET, 7 IDSET)
+					transform(@1, @0, @1, @2, @3, @4, @5, @6, @7)
+					FROM x'1,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset1, 1
+					2,TEST2,321,31.2,1,2014-07-15T01:18:46Z,stringset1, 1
+					1,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset2, 2'
+					with
+						BATCHSIZE 10000
+						format 'CSV'
+						input 'STREAM';`,
+			),
+			ExpErr:  "an expression of type 'string' cannot be assigned to type 'int'",
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "bulk-insert-assignment-compatibility-no-transform",
+			SQLs: sqls(
+				`BULK INSERT INTO 
+					bulktest (_id, id_col, string_col, int_col,decimal_col, bool_col, time_col, stringset_col, idset_col)
+					map (0 ID, 1 ID, 2 STRING, 3 STRING, 4 DECIMAL(2), 5 BOOL, 6 TIMESTAMP, 7 STRINGSET, 8 IDSET)
+					FROM x'1, 1,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset1, 1
+					2, 2,TEST2,321,31.2,1,2014-07-15T01:18:46Z,stringset1, 1
+					3, 1,TEST,-123,1.12,0,2013-07-15T01:18:46Z,stringset2, 2'
+					with
+						BATCHSIZE 10000
+						format 'CSV'
+						input 'STREAM';`,
+			),
+			ExpErr:  "an expression of type 'id' cannot be assigned to type 'string'",
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "leftjoin",
 			SQLs: sqls(
 				"select time_col from bulktest where _id = 'TEST2';",
