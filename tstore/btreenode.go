@@ -4,6 +4,7 @@ package tstore
 
 import (
 	"github.com/featurebasedb/featurebase/v3/bufferpool"
+	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
 type BTreeNode struct {
@@ -88,4 +89,55 @@ func (n *BTreeNode) findNextPointer(key Sortable, objectID int32, shard int32) (
 	slot := n.page.ReadPageSlot(int16(keyPosition))
 	ipl := slot.InternalPayload(n.page)
 	return ipl.ValueAsPagePointer(n.page), nil
+}
+
+type BTreeNodeIterator struct {
+	tree    *BTree
+	node    *BTreeNode
+	schema  types.Schema
+	reverse bool
+	cursor  int16
+}
+
+func NewBTreeNodeIterator(tree *BTree, initialNode *BTreeNode, reverse bool, schema types.Schema) *BTreeNodeIterator {
+	return &BTreeNodeIterator{
+		tree:    tree,
+		node:    initialNode,
+		schema:  schema,
+		reverse: reverse,
+		cursor:  0,
+	}
+}
+
+func (i *BTreeNodeIterator) init() {
+	if i.reverse {
+		slotCount := i.node.slotCount()
+		if slotCount > 0 {
+			i.cursor = int16(slotCount)
+		} else {
+			i.cursor = 0
+		}
+	} else {
+		panic("implement me")
+	}
+}
+
+func (i *BTreeNodeIterator) Next() (Sortable, *BTreeTuple, error) {
+	if i.cursor == 0 {
+		i.init()
+	}
+	if i.reverse {
+		if i.cursor == 0 {
+			return nil, nil, nil
+		}
+		ci := i.cursor
+		i.cursor -= 1
+		return i.tree.getTuple(i.node, int(ci-1), i.schema)
+	} else {
+		panic("implement me")
+	}
+}
+
+func (i *BTreeNodeIterator) Dispose() {
+	i.node.releaseReadLatch()
 }
