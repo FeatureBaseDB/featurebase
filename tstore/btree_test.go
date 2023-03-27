@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/featurebasedb/featurebase/v3/bufferpool"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
@@ -92,7 +93,7 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 	tableSchema := make(types.Schema, 0)
 
 	var numCols = 3000
-	var numRecs = 1000
+	var numRecs = 1000000
 
 	// build schema
 	for i := 0; i < numCols; i++ {
@@ -126,8 +127,9 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 	rand.Seed(10)
 	rand.Shuffle(len(inserts), func(i, j int) { inserts[i], inserts[j] = inserts[j], inserts[i] })
 
+	start := time.Now()
 	rr := make(types.Row, numCols+1)
-	for /*j*/ _, i := range inserts {
+	for j, i := range inserts {
 		rr[0] = int64(i)
 
 		for j := 0; j < numCols; j++ {
@@ -141,9 +143,9 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 
 		// fmt.Printf("[%d]row key %v\n\n", j, i)
 
-		// if j == 2134 {
-		// 	fmt.Printf("here\n")
-		// }
+		if j%100000 == 0 {
+			fmt.Printf("inserting (%d)...\n", j)
+		}
 
 		err = b.Insert(tup)
 		if err != nil {
@@ -151,10 +153,29 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 		}
 
 	}
+	duration := time.Since(start)
+	fmt.Printf("inserted %d rows in %v\n", numRecs, duration)
 
+	start = time.Now()
 	key, tuple := b.Search(nil, Int(524))
+	duration = time.Since(start)
 
-	fmt.Printf("%v, %v\n\n", key, tuple)
+	vals := "["
+	for i, v := range tuple.Tuple {
+		if i > 10 {
+			vals += "..."
+			break
+		}
+		if i != 0 {
+			vals += ", "
+		}
+		vals += fmt.Sprintf("%v", v)
+	}
+	vals += "]"
 
-	// b.Dump(0)
+	fmt.Printf("retrieved key %v, tuple (%d columns), %s in %v\n", key, len(tuple.TupleSchema), vals, duration)
+
+	fmt.Printf("\n\n")
+
+	b.Dump(0)
 }

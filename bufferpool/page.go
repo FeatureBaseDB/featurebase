@@ -53,7 +53,7 @@ const PAGE_TYPE_HASH_TABLE = 12
 // keyBytes
 // ptrValue (int64) (page number)
 
-// == tuple payload chunk ==
+// == leaf payload chunk ==
 // keyLength (int16)
 // keyBytes
 // flags int8
