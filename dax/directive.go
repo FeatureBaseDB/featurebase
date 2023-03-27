@@ -127,29 +127,6 @@ func (d *Directive) computeShardsMapOfMaps() map[TableKey]map[ShardNum]struct{} 
 	return m
 }
 
-// // TranslatePartitions returns the list of partitions, for the given table, for
-// // which this translate node is responsible. It assumes that the Directive does
-// // not contain more than one TranslateRole for the same table; in that case, we
-// // would need to return the union of Shards.
-// func (d *Directive) TranslatePartitions(tbl TableKey) PartitionNums {
-// 	if d == nil || d.TranslateRoles == nil {
-// 		return PartitionNums{}
-// 	}
-
-// 	for _, tr := range d.TranslateRoles {
-// 		// Since we added FieldVersions to the TranslateRole, it's possible for
-// 		// a TranslateRole to have an empty Partitions list. In that case, we
-// 		// want to exclude that from the map.
-// 		if len(tr.Partitions) == 0 {
-// 			continue
-// 		}
-// 		if tr.TableKey == tbl {
-// 			return tr.Partitions
-// 		}
-// 	}
-// 	return PartitionNums{}
-// }
-
 // TranslatePartitionsMap returns a map of table to partitions. It assumes that
 // the Directive does not contain more than one TranslateRole for the same
 // table; in that case, we would need to return the union of Partitions.
