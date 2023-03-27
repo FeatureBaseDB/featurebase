@@ -380,6 +380,22 @@ var avgTests = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"SELECT avg(d1) AS avg_rows FROM avg_test WHERE d1 > 10",
+			),
+			ExpHdrs: hdrs(
+				hdr("avg_rows", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(4)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(4)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(120000, 4)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
 				"SELECT avg(len(s1)) AS avg_rows FROM avg_test",
 			),
 			ExpHdrs: hdrs(
@@ -498,10 +514,38 @@ var percentileTests = TableTest{
 				hdr("p_rows", fldTypeDecimal2),
 			),
 			ExpRows: rows(
+				// This should probably be (1200, 2), not (1000, 2).
+				// TODO: look into this when investigating the percentile/WHERE bug.
 				row(pql.NewDecimal(1000, 2)),
 			),
 			Compare: CompareExactUnordered,
 		},
+		{
+			SQLs: sqls(
+				"SELECT percentile(i1, 50) AS p_rows FROM percentile_test WHERE i1 < 13",
+			),
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(12)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		// This test is failing! It seems to be returning the count of elements < 13,
+		// rather than processing them for percentile.
+		//{
+		//	SQLs: sqls(
+		//		"SELECT percentile(d1, 50) AS p_rows FROM percentile_test WHERE d1 < 13",
+		//	),
+		//	ExpHdrs: hdrs(
+		//		hdr("p_rows", fldTypeDecimal2),
+		//	),
+		//	ExpRows: rows(
+		//		row(pql.NewDecimal(1200, 2)),
+		//	),
+		//	Compare: CompareExactUnordered,
+		//},
 	},
 }
 
@@ -651,6 +695,30 @@ var minmaxTests = TableTest{
 			),
 			ExpRows: rows(
 				row(pql.NewDecimal(1300, 2)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT min(d1) AS p_rows FROM minmax_test WHERE d1 > 10",
+			),
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(1100, 2)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT max(d1) AS p_rows FROM minmax_test WHERE d1 < 13",
+			),
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(1200, 2)),
 			),
 			Compare: CompareExactUnordered,
 		},
