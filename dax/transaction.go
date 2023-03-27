@@ -24,7 +24,14 @@ type Transactor interface {
 }
 
 const (
+	// postgresTxConflictError occurs any time a transaction violates the
+	// repeatable isolation level.
 	postgresTxConflictError = "(SQLSTATE 40001)"
+
+	// postgresDuplicateKeyContraint occurs when two concurrent transactions try
+	// to create the same record, causing one of them to violate a key
+	// constraint.
+	postgresDuplicateKeyContraint = "(SQLSTATE 23505)"
 )
 
 // txFunc is the function signature for a function which can be retried using
@@ -71,7 +78,10 @@ func RetryWithTx(ctx context.Context, trans Transactor, fn txFunc, writable bool
 		}(); err != nil {
 			// If we get a serialization error, and we still have some write
 			// attempts remaining, then continue trying.
-			if maxTries > 0 && strings.Contains(err.Error(), postgresTxConflictError) {
+			if maxTries > 0 && containsAny(err.Error(), []string{
+				postgresTxConflictError,
+				postgresDuplicateKeyContraint,
+			}) {
 				continue
 			}
 			return err
@@ -79,4 +89,15 @@ func RetryWithTx(ctx context.Context, trans Transactor, fn txFunc, writable bool
 	}
 
 	return nil
+}
+
+// containsAny returns true if s contains at least one of the strings in
+// substrs.
+func containsAny(s string, substrs []string) bool {
+	for _, substr := range substrs {
+		if strings.Contains(s, substr) {
+			return true
+		}
+	}
+	return false
 }

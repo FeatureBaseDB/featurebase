@@ -50,7 +50,7 @@ func (fj *freeJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, 
 	}
 
 	err := dt.C.Create(jobs)
-	return errors.Wrap(err, "creating jobs")
+	return errors.Wrap(err, "creating free jobs")
 }
 
 func (fj *freeJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job dax.Job) error {
