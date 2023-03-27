@@ -158,9 +158,9 @@ start-all: testenv build-wait
 	$(DOCKER_COMPOSE) up -d postgres
 	$(DOCKER_COMPOSE) run -T  wait postgres pg_isready -h postgres -p 5432 -U postgres
 	$(DOCKER_COMPOSE) up -d dax
-	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d pilosa
-	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d pilosa-tls
-	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d pilosa-auth
+	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d --build pilosa
+	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d --build pilosa-tls
+	BRANCH_NAME=${BRANCH_NAME} $(DOCKER_COMPOSE) up -d --build pilosa-auth
 	$(DOCKER_COMPOSE) run -T  wait pilosa curl --silent --fail http://pilosa:10101/status
 	$(DOCKER_COMPOSE) run -T  wait pilosa-tls curl --silent --cacert /certs/ca.crt --key /certs/theclient.key --cert /certs/theclient.crt --fail https://pilosa-tls:10111/status
 	$(DOCKER_COMPOSE) run -T  wait pilosa-auth curl --silent --fail http://pilosa-auth:10105/version
