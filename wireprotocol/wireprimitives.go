@@ -37,6 +37,7 @@ const (
 	TYPE_STRING    int8 = 0x07
 	TYPE_STRINGSET int8 = 0x08
 	TYPE_VARCHAR   int8 = 0x09
+	TYPE_VARBINARY int8 = 0xA
 )
 
 func ExpectToken(reader io.Reader, token int16) (int16, error) {
@@ -123,6 +124,10 @@ func WriteSchema(schema types.Schema) ([]byte, error) {
 			writeInt8(writer, TYPE_VARCHAR)
 			writeInt32(writer, int32(ty.Length))
 
+		case *parser.DataTypeVarbinary:
+			writeInt8(writer, TYPE_VARBINARY)
+			writeInt32(writer, int32(ty.Length))
+
 		default:
 			return []byte{}, errors.Errorf("unexpected type '%T'", s.Type)
 		}
@@ -201,6 +206,14 @@ func ReadSchema(reader io.Reader) (types.Schema, error) {
 				return nil, err
 			}
 			dataType = parser.NewDataTypeVarchar(int64(length))
+
+		case TYPE_VARBINARY:
+			var length int32
+			err = binary.Read(reader, binary.BigEndian, &length)
+			if err != nil {
+				return nil, err
+			}
+			dataType = parser.NewDataTypeVarbinary(int64(length))
 		}
 
 		schema = append(schema, &types.PlannerColumn{
@@ -372,6 +385,18 @@ func WriteRow(row types.Row, schema types.Schema) ([]byte, error) {
 				writer.WriteString(v)
 			}
 
+		case *parser.DataTypeVarbinary:
+			if val == nil {
+				writeInt32(writer, 0)
+			} else {
+				v, ok := row[i].([]byte)
+				if !ok {
+					return []byte{}, errors.Errorf("unexpected type '%T'", row[i])
+				}
+				writeInt32(writer, int32(len(v)))
+				writer.Write(v)
+			}
+
 		default:
 			return []byte{}, errors.Errorf("unexpected type '%T'", s.Type)
 		}
@@ -532,6 +557,23 @@ func ReadRow(reader io.Reader, schema types.Schema) (types.Row, error) {
 					return nil, err
 				}
 				row[idx] = string(bvalue)
+			}
+
+		case *parser.DataTypeVarbinary:
+			var len int32
+			err := binary.Read(reader, binary.BigEndian, &len)
+			if err != nil {
+				return nil, err
+			}
+			if len == 0 {
+				row[idx] = nil
+			} else {
+				bvalue := make([]byte, len)
+				err = binary.Read(reader, binary.BigEndian, &bvalue)
+				if err != nil {
+					return nil, err
+				}
+				row[idx] = bvalue
 			}
 
 		default:

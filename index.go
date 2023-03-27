@@ -116,7 +116,8 @@ func (i *Index) DataframesPath() string {
 
 // TStorePath returns the path of the t-store files specific to an index
 func (i *Index) TStorePath() string {
-	return filepath.Join(i.path, TStoreDir)
+	path := backendsDir + sep + TStoreDir
+	return filepath.Join(i.path, path)
 }
 
 // Name returns name of the index.
