@@ -146,7 +146,7 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 		keysPerLeafPage:     keysPerLeafPage,
 		keysPerInternalPage: keysPerInternalPage,
 		// debug
-		// pinnedPages:         make(map[bufferpool.PageID]bufferpool.PageID),
+		// pinnedPages: make(map[bufferpool.PageID]bufferpool.PageID),
 	}
 
 	headerNode, err := tree.fetchNode(bufferpool.PageID{ObjectID: objectID, Shard: shard, Page: 0})
@@ -450,9 +450,6 @@ func (b *BTree) newLeaf() (*BTreeNode, error) {
 		page: page,
 	}
 	//debug
-	// if page.ID().Page == 200 {
-	// 	fmt.Printf("here\n")
-	// }
 	// _, ok := b.pinnedPages[page.ID()]
 	// if ok {
 	// 	fmt.Printf("pinning page (already pinned) %v\n", page.ID())
@@ -1034,6 +1031,7 @@ func (b *BTree) insertNonFull(node *BTreeNode, key Sortable, tup *BTreeTuple, fo
 			if node.latchState() != bufferpool.Write {
 				// release latch on node
 				node.releaseAnyLatch()
+				b.unpin(node)
 				// release latch on childNode
 				childNode.releaseAnyLatch()
 				b.unpin(childNode)
