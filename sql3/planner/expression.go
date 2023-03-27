@@ -91,8 +91,6 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 			}
 			if tm, err := time.ParseInLocation(time.RFC3339Nano, val, time.UTC); err == nil {
 				return tm, nil
-			} else if tm, err := time.ParseInLocation(time.RFC3339, val, time.UTC); err == nil {
-				return tm, nil
 			} else if tm, err := time.ParseInLocation("2006-01-02", val, time.UTC); err == nil {
 				return tm, nil
 			} else {
@@ -1720,7 +1718,7 @@ func (n *qualifiedRefPlanExpression) Evaluate(currentRow []interface{}) (interfa
 	}
 
 	switch n.dataType.(type) {
-	case *parser.DataTypeIDSet:
+	case *parser.DataTypeIDSet, *parser.DataTypeIDSetQuantum:
 		row, ok := currentRow[n.columnIndex].([]uint64)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected type for current row '%T'", currentRow[n.columnIndex])
@@ -2982,8 +2980,6 @@ func wildCardToRegexp(pattern string) string {
 // time formats.
 func timestampFromString(s string) (time.Time, error) {
 	if tm, err := time.ParseInLocation(time.RFC3339Nano, s, time.UTC); err == nil {
-		return tm, nil
-	} else if tm, err := time.ParseInLocation(time.RFC3339, s, time.UTC); err == nil {
 		return tm, nil
 	} else if tm, err := time.ParseInLocation("2006-01-02", s, time.UTC); err == nil {
 		return tm, nil

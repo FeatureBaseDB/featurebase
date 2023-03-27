@@ -566,7 +566,7 @@ func TestQuerySQL(t *testing.T) {
 					{[]columnResponse{uint64(5), int64(16), []string{"blue"}, int64(60), int64(-2), "2014-01-02T12:32:00Z"}},
 					{[]columnResponse{uint64(6), int64(34), []string{"blue"}, int64(70), int64(100), "2010-05-02T12:32:00Z"}},
 					{[]columnResponse{uint64(7), int64(27), []string{"blue"}, int64(80), int64(0), "2016-08-02T12:32:00Z"}},
-					{[]columnResponse{uint64(8), int64(16), []string{}, int64(90), int64(-13), "2020-01-02T12:32:00Z"}},
+					{[]columnResponse{uint64(8), int64(16), []string(nil), int64(90), int64(-13), "2020-01-02T12:32:00Z"}},
 					{[]columnResponse{uint64(9), int64(16), []string{"red"}, int64(100), int64(80), "2000-03-02T12:32:00Z"}},
 					{[]columnResponse{uint64(10), int64(31), []string{"red"}, int64(110), int64(-2), "2018-01-02T12:32:00Z"}},
 				},

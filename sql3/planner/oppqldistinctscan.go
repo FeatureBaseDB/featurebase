@@ -265,24 +265,22 @@ func (i *distinctScanRowIter) Next(ctx context.Context) (types.Row, error) {
 			row[0] = pql.NewDecimal(val, t.Scale)
 
 		case *parser.DataTypeIDSet:
-			//empty sets are null
 			val, ok := result.([]uint64)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result)
 			}
-			if len(val) == 0 {
+			if val == nil {
 				row[0] = nil
 			} else {
 				row[0] = val
 			}
 
 		case *parser.DataTypeStringSet:
-			//empty sets are null
 			val, ok := result.([]string)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result)
 			}
-			if len(val) == 0 {
+			if val == nil {
 				row[0] = nil
 			} else {
 				row[0] = val

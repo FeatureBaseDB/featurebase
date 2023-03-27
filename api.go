@@ -367,8 +367,8 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 }
 
 // CreateField makes the named field in the named index with the given options.
-// This method currently only takes a single functional option, but that may be
-// changed in the future to support multiple options.
+//
+// The resulting field will always have TrackExistence set.
 func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.CreateField")
 	defer span.Finish()
@@ -381,6 +381,11 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	// authN/Z info
 	requestUserID, _ := fbcontext.UserID(ctx) // requestUserID is "" if not in ctx
 
+	// newFieldOptions is also used in the path through the index creating
+	// a field from an update from DAX, so it can't assume it can always
+	// override this. But we're the call path for creating new fields, and
+	// new fields should always have TrackExistence on.
+	opts = append(opts, OptFieldTrackExistence())
 	// Apply and validate functional options.
 	fo, err := newFieldOptions(opts...)
 	if err != nil {
@@ -494,16 +499,9 @@ func importWorker(importWork chan importJob) {
 	for j := range importWork {
 		err := func() (err0 error) {
 			for viewName, viewData := range j.req.Views {
-				// The logic here corresponds to the logic in fragment.cleanViewName().
-				// Unfortunately, the logic in that method is not completely exclusive
-				// (i.e. an "other" view named with format YYYYMMDD would be handled
-				// incorrectly). One way to address this would be to change the logic
-				// overall so there weren't conflicts. For now, we just
-				// rely on the field type to inform the intended view name.
-				if viewName == "" {
-					viewName = viewStandard
-				} else if j.field.Type() == FieldTypeTime {
-					viewName = fmt.Sprintf("%s_%s", viewStandard, viewName)
+				viewName, err0 = j.field.cleanupViewName(viewName)
+				if err0 != nil {
+					return err0
 				}
 				if len(viewData) == 0 {
 					return fmt.Errorf("no data to import for view: %s", viewName)
@@ -1316,7 +1314,6 @@ type ImportOptions struct {
 	Clear          bool
 	IgnoreKeyCheck bool
 	Presorted      bool
-	fullySorted    bool // format-aware sorting, internal use only please.
 	suppressLog    bool
 
 	// test Tx atomicity if > 0
@@ -1523,7 +1520,6 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 		return errors.Wrap(err, "validating api method")
 	}
 
-	api.server.logger.Debugf("ImportWithTx: %v %v %v", req.Index, req.Field, req.Shard)
 	idx, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting index and field")
@@ -1642,6 +1638,12 @@ func (api *API) ImportWithTx(ctx context.Context, qcx *Qcx, req *ImportRequest, 
 // across many fields in a single shard. It can both set and clear
 // bits and updates caches/bitDepth as appropriate, although only the
 // bitmap parts happen truly transactionally.
+//
+// This function does not attempt to do existence tracking, because
+// it can't; there's no way to distinguish empty sets from not setting
+// bits. As a result, users of this endpoint are responsible for
+// providing corrected existence views for fields with existence
+// tracking. Our batch API does that.
 func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard uint64, req *ImportRoaringShardRequest) error {
 	index, err := api.Index(ctx, indexName)
 	if err != nil {
@@ -1672,7 +1674,7 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		}
 
 		fieldType := field.Options().Type
-		if err1 = cleanupView(fieldType, &viewUpdate); err1 != nil {
+		if viewUpdate.View, err1 = field.cleanupViewName(viewUpdate.View); err1 != nil {
 			return err1
 		}
 
@@ -1761,27 +1763,6 @@ func (api *API) ImportRoaringShard(ctx context.Context, indexName string, shard 
 		}
 	}
 
-	return nil
-}
-
-func cleanupView(fieldType string, viewUpdate *RoaringUpdate) error {
-	// TODO wouldn't hurt to have consolidated logic somewhere for validating view names.
-	switch fieldType {
-	case FieldTypeSet, FieldTypeTime:
-		if viewUpdate.View == "" {
-			viewUpdate.View = "standard"
-		}
-		// add 'standard_' if we just have a time... this is how IDK works by default
-		if fieldType == FieldTypeTime && !strings.HasPrefix(viewUpdate.View, viewStandard) {
-			viewUpdate.View = fmt.Sprintf("%s_%s", viewStandard, viewUpdate.View)
-		}
-	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
-		if viewUpdate.View == "" {
-			viewUpdate.View = "bsig_" + viewUpdate.Field
-		} else if viewUpdate.View != "bsig_"+viewUpdate.Field {
-			return NewBadRequestError(errors.Errorf("invalid view name (%s) for field %s of type %s", viewUpdate.View, viewUpdate.Field, fieldType))
-		}
-	}
 	return nil
 }
 
@@ -2038,21 +2019,20 @@ func (api *API) ImportValueWithTx(ctx context.Context, qcx *Qcx, req *ImportValu
 	return nil
 }
 
-func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) error {
+func importExistenceColumns(qcx *Qcx, index *Index, columnIDs []uint64, shard uint64) (err0 error) {
 	ef := index.existenceField()
 	if ef == nil {
 		return nil
 	}
-
-	existenceRowIDs := make([]uint64, len(columnIDs))
-	// If we don't gratuitously hand-duplicate things in field.Import,
-	// the fact that fragment.bulkImport rewrites its row and column
-	// lists can burn us if we don't make a copy before doing the
-	// existence field write.
-	columnCopy := make([]uint64, len(columnIDs))
-	copy(columnCopy, columnIDs)
-	options := ImportOptions{}
-	return ef.Import(qcx, existenceRowIDs, columnCopy, nil, shard, &options)
+	tx, finisher, err := qcx.GetTx(Txo{Write: true, Index: index, Shard: shard})
+	if err != nil {
+		return err
+	}
+	defer finisher(&err0)
+	// markExistingInView is simpler/faster than Import, but unusually, we use the
+	// standard view of the existence field, instead of the existence view of
+	// a specific field, when doing the index-wide update.
+	return ef.markExistingInView(tx, columnIDs, viewStandard, shard)
 }
 
 // ShardDistribution returns an object representing the distribution of shards

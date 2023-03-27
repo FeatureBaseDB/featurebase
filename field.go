@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
@@ -376,13 +377,27 @@ func OptFieldTypeBool() FieldOption {
 	}
 }
 
+// OptFieldTrackExistence exists mostly to allow the
+// FieldFromFieldOptions/FieldOptionsFromField round-trip to work.
+// If you are actually creating a field, via api.CreateField,
+// it will be turned on unconditionally. You can't turn it
+// off.
+func OptFieldTrackExistence() FieldOption {
+	return func(fo *FieldOptions) error {
+		fo.TrackExistence = true
+		return nil
+	}
+}
+
 // newField returns a new instance of field (without name validation).
-func newField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
+func newField(holder *Holder, path, index, name string, opts ...FieldOption) (*Field, error) {
 	// Apply functional option.
 	fo := FieldOptions{}
-	err := opts(&fo)
-	if err != nil {
-		return nil, errors.Wrap(err, "applying option")
+	for _, opt := range opts {
+		err := opt(&fo)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
 	}
 
 	f := &Field{
@@ -968,6 +983,51 @@ func (f *Field) hasBSIGroup(name string) bool {
 	return false
 }
 
+// cleanupViewName yields a "corrected" view name, handling some
+// idioms we used elsewhere in code. Given an empty string,
+// it yields a default view name (either "standard" or the BSI view
+// for BSI fields). Given a string starting with numbers, it
+// yields the corresponding time quantum view (prefixing "standard_").
+// It yields an error if the view name given does not correspond
+// to a view which should exist. For instance, the "standard" or
+// "existence" views for a BSI field, or a time quantum view for
+// a non-time field.
+func (f *Field) cleanupViewName(viewName string) (string, error) {
+	if viewName == "" {
+		switch f.options.Type {
+		case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+			return "bsig_" + f.name, nil
+		default:
+			return viewStandard, nil
+		}
+	}
+	switch f.options.Type {
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		if viewName == "bsig_"+f.name {
+			return viewName, nil
+		}
+		return viewName, fmt.Errorf("BSI-type field view should be named bsig_[fieldname], got %q", viewName)
+	case FieldTypeTime:
+		switch {
+		case viewName == viewStandard, viewName == viewExistence:
+			return viewName, nil
+		case strings.HasPrefix(viewName, viewStandard):
+			return viewName, nil
+		case unicode.IsDigit(rune(viewName[0])):
+			return viewStandard + "_" + viewName, nil
+		default:
+			return viewName, fmt.Errorf("time field views are %q, %q, or %q_[digits], got %q", viewStandard, viewExistence, viewStandard, viewName)
+		}
+	default:
+		switch viewName {
+		case viewStandard, viewExistence:
+			return viewName, nil
+		default:
+			return viewName, fmt.Errorf("unexpected view name %q, expecting %q or %q", viewName, viewStandard, viewExistence)
+		}
+	}
+}
+
 // createBSIGroup creates a new bsiGroup on the field.
 func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	// Append bsiGroup.
@@ -1253,6 +1313,15 @@ func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed boo
 		} else if v {
 			changed = v
 		}
+		if f.options.TrackExistence {
+			view, err := f.createViewIfNotExists(viewExistence)
+			if err != nil {
+				return changed, errors.Wrap(err, "creating existence view")
+			}
+			if _, err := view.setBit(qcx, bsiExistsBit, colID); err != nil {
+				return changed, errors.Wrap(err, "setting existence on view")
+			}
+		}
 	}
 
 	// Exit early if no timestamp is specified.
@@ -1278,6 +1347,9 @@ func (f *Field) SetBit(qcx *Qcx, rowID, colID uint64, t *time.Time) (changed boo
 }
 
 // ClearBit clears a bit within the field.
+//
+// This does not, for now, create existence bits for the field, because it
+// doesn't create them for the index.
 func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error) {
 	viewName := viewStandard
 
@@ -1292,8 +1364,20 @@ func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error
 		return false, errors.Wrap(err, "clearing on view")
 	} else if v {
 		changed = changed || v
+		if changed && f.options.TrackExistence && f.options.Type == FieldTypeMutex {
+			// we also want to try to clear any existence bit
+			existView, ok := f.viewMap[viewExistence]
+			if ok {
+				_, err := existView.clearBit(qcx, 0, colID)
+				if err != nil {
+					return false, errors.Wrap(err, "clearing existence bit")
+				}
+			}
+		}
 	}
-	if len(f.viewMap) == 1 { // assuming no time views
+	// We used to check length of view map here. Now that we might
+	// have an existence view, that won't work.
+	if f.options.Type != FieldTypeTime { // assuming no time views
 		return changed, nil
 	}
 	lastViewNameSize := 0
@@ -1323,30 +1407,6 @@ func (f *Field) ClearBit(qcx *Qcx, rowID, colID uint64) (changed bool, err error
 	return changed, nil
 }
 
-// ClearBits clears all bits corresponding to the given record IDs in standard
-// or BSI views. It does not delete bits from time quantum views.
-func (f *Field) ClearBits(tx Tx, shard uint64, recordIDs ...uint64) error {
-	bsig := f.bsiGroup(f.name)
-	var v *view
-	if bsig != nil {
-		// looks like we're a BSI field?
-		v = f.view(viewBSIGroupPrefix + f.name)
-	} else {
-		v = f.view(viewStandard)
-	}
-	// it's fine if we never actually created the view, that means the
-	// bits are all clear!
-	if v == nil {
-		return nil
-	}
-	frag := v.Fragment(shard)
-	if frag == nil {
-		return nil
-	}
-	_, err := frag.ClearRecords(tx, recordIDs)
-	return err
-}
-
 func groupCompare(a, b string, offset int) (lt, eq bool) {
 	if len(a) > offset {
 		a = a[:offset]
@@ -1368,6 +1428,12 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 			me[i] = v
 			i++
 		}
+	}
+	// return the empty list if there weren't any. this could happen
+	// if we got called because this is a time field, but in fact
+	// no time views have been created.
+	if i == 0 {
+		return me[:0]
 	}
 	me = me[:i]
 	year := strings.Index(me[0].name, "_") + 4
@@ -1611,6 +1677,92 @@ func (f *Field) Range(qcx *Qcx, name string, op pql.Token, predicate int64) (*Ro
 	return view.rangeOp(qcx, op, bsig.BitDepth, baseValue)
 }
 
+// existenceViewName reports the field we should use row 0 of
+// for existence data. For a BSI field (integer, decimal,
+// timestamp) this is the single BSI group. For other fields,
+// it's viewExistence, which is probably "existence".
+func (f *Field) existenceViewName() string {
+	if len(f.bsiGroups) > 0 {
+		return f.bsiGroups[0].Name
+	}
+	return viewExistence
+}
+
+// MarkExisting sets a range of column IDs as existing. The columnIDs
+// are assumed to include the shard offset, but this will also work if
+// they are shard-relative, as it's just stripping the offset.
+//
+// Positions aren't the same as column IDs; this function takes advantage
+// of the fact that we're always doing row 0, so we don't have to think
+// hard about this. It doesn't overwrite its input because the column IDs
+// could be reused by other things.
+//
+// Note that this is subtly inefficient; if you're tracking existence for
+// a field, we're computing the same column ID set to write to the index's
+// existence field as we're using for the field's existence view. We don't
+// have a good way to coalesce those, yet. (Also, that's not accurate in
+// the ImportValue case, where we don't write to the existence view, etc.)
+func (f *Field) MarkExisting(tx Tx, columnIDs []uint64, shard uint64) error {
+	return f.markExistingInView(tx, columnIDs, f.existenceViewName(), shard)
+}
+
+// markExistingInView implements the internals of MarkExisting, but lets
+// you use a non-standard view. It's only interesting for the existence field.
+func (f *Field) markExistingInView(tx Tx, columnIDs []uint64, viewName string, shard uint64) error {
+	copyCols := make([]uint64, len(columnIDs))
+	for i := range columnIDs {
+		copyCols[i] = columnIDs[i] % ShardWidth
+	}
+	eView, err := f.createViewIfNotExists(viewName)
+	if err != nil {
+		return errors.Wrapf(err, "creating view %s", viewName)
+	}
+
+	eFrag, err := eView.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return errors.Wrap(err, "creating fragment")
+	}
+	return eFrag.importPositions(tx, copyCols, nil, map[uint64]struct{}{0: {}})
+}
+
+// MarkNotExisting is just like MarkExisting, except it is clearing bits,
+// so it doesn't have to create the view or fragment if it doesn't exist.
+// Because the bits reported to us in the case we wrote this for are likely
+// to be sorted by position in the fragment, not by column ID, we sort the
+// list after stripping the rows from the positions.
+func (f *Field) MarkNotExisting(tx Tx, columnIDs []uint64, shard uint64) error {
+	viewName := f.existenceViewName()
+	v := f.view(viewName)
+	if v == nil {
+		return nil
+	}
+	frag := v.Fragment(shard)
+	if frag == nil {
+		return nil
+	}
+	copyCols := make([]uint64, len(columnIDs))
+	for i := range columnIDs {
+		copyCols[i] = columnIDs[i] % ShardWidth
+	}
+	sort.Slice(copyCols, func(i, j int) bool { return copyCols[i] < copyCols[j] })
+	return frag.importPositions(tx, nil, copyCols, map[uint64]struct{}{0: {}})
+}
+
+// Existing returns the existence row for this field, which
+// comes from either the BSI view or the existence view.
+func (f *Field) Existing(tx Tx, shard uint64) (*Row, error) {
+	viewName := f.existenceViewName()
+	v := f.view(viewName)
+	if v == nil {
+		return nil, nil
+	}
+	frag := v.Fragment(shard)
+	if frag == nil {
+		return nil, nil
+	}
+	return frag.row(tx, bsiExistsBit)
+}
+
 // Import bulk imports data.
 func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64, shard uint64, options *ImportOptions) (err0 error) {
 	// Determine quantum if timestamps are set.
@@ -1622,6 +1774,9 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 			return errors.New("import clear is not supported with timestamps")
 		}
 	} else {
+		if f.options.NoStandardView {
+			return errors.New("can't import data with no timestamps into a field with no standard view")
+		}
 		// short path: if we don't have any timestamps, we only need
 		// to write to exactly one view, which is always viewStandard,
 		// and *every* bit goes into that view, and we already verified that
@@ -1649,7 +1804,33 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 		if err != nil {
 			return errors.Wrap(err, "creating fragment")
 		}
-
+		if f.options.TrackExistence {
+			// if we're clearing a mutex, we do something fancy. otherwise,
+			// if we're not clearing, we mark the existence bits. either way,
+			// we then fall on out to the default behavior of importing the
+			// bits.
+			switch {
+			case options.Clear && fieldType == FieldTypeMutex:
+				// special fancy case; we have to try to clear the bits first, to
+				// find out WHICH bits we cleared, so we can mark those bits as
+				// null.
+				var changed []uint64
+				changed, err1 = frag.clearBitsReportingChanges(tx, rowIDs, columnIDs)
+				if err1 != nil {
+					return err1
+				}
+				err1 = f.MarkNotExisting(tx, changed, shard)
+				return err1
+			case !options.Clear:
+				err1 = f.MarkExisting(tx, columnIDs, shard)
+				if err1 != nil {
+					return err1
+				}
+			default:
+				// nothing to do. we'll fall on out of the TrackExistence
+				// case and go ahead and import those bits naively
+			}
+		}
 		err1 = frag.bulkImport(tx, rowIDs, columnIDs, options)
 		return err1
 	}
@@ -1733,6 +1914,16 @@ func (f *Field) Import(qcx *Qcx, rowIDs, columnIDs []uint64, timestamps []int64,
 		}
 
 		err1 = frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options)
+		if err1 != nil {
+			return err1
+		}
+	}
+	// If we are tracking existence, and don't have NoStandardView, we
+	// create the existence view.
+	if f.options.TrackExistence && !f.options.NoStandardView {
+		// this dance with err1 is so the finisher gets called with
+		// the right error value if we hit an error
+		err1 = f.MarkExisting(tx, columnIDs, shard)
 		if err1 != nil {
 			return err1
 		}
@@ -1991,6 +2182,7 @@ type FieldOptions struct {
 	Scale          int64         `json:"scale,omitempty"`
 	Keys           bool          `json:"keys"`
 	NoStandardView bool          `json:"noStandardView,omitempty"`
+	TrackExistence bool          `json:"trackExistence,omitempty"`
 	CacheSize      uint32        `json:"cacheSize,omitempty"`
 	CacheType      string        `json:"cacheType,omitempty"`
 	Type           string        `json:"type,omitempty"`
@@ -2039,6 +2231,22 @@ func applyDefaultOptions(o *FieldOptions) FieldOptions {
 		o.CacheSize = DefaultCacheSize
 	}
 	return *o
+}
+
+// ActuallyTrackingExistence reflects the distinction between the
+// TrackExistence bool, which is enabled by default for most fields,
+// and whether we actually do existence tracking. Specifically,
+// we don't do existence tracking for time quantum fields which don't
+// have a standard view, or for BSI fields.
+func (o *FieldOptions) ActuallyTrackingExistence() bool {
+	switch o.Type {
+	case FieldTypeTime:
+		return o.TrackExistence && !o.NoStandardView
+	case FieldTypeInt, FieldTypeDecimal, FieldTypeTimestamp:
+		return false
+	default:
+		return o.TrackExistence
+	}
 }
 
 // MarshalJSON marshals FieldOptions to JSON such that

@@ -637,6 +637,7 @@ func (s Serializer) encodeFieldOptions(o *pilosa.FieldOptions) *pb.FieldOptions 
 		Keys:           o.Keys,
 		ForeignIndex:   o.ForeignIndex,
 		NoStandardView: o.NoStandardView,
+		TrackExistence: o.TrackExistence,
 	}
 }
 
@@ -973,6 +974,7 @@ func (s Serializer) decodeFieldOptions(options *pb.FieldOptions, m *pilosa.Field
 	m.Keys = options.Keys
 	m.ForeignIndex = options.ForeignIndex
 	m.NoStandardView = options.NoStandardView
+	m.TrackExistence = options.TrackExistence
 }
 
 func (s Serializer) decodeDecimal(d *pb.Decimal, m *pql.Decimal) {

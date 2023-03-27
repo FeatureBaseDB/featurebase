@@ -197,7 +197,10 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 			default:
 				// If we get to here, it's likey that the id type is unsupported
 				// and will cause an error in batch.Add(). So there's no need to
-				// return an error here in this default.
+				// return an error here in this default. The only route here
+				// would be if a primary key had a type other than intLiteralPlanExpression
+				// or stringLiteralPlanExpression
+
 				row.ID = eval
 			}
 		}
@@ -390,8 +393,8 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 						return nil, errors.Wrapf(err, "converting timestamp to int64: %s", v)
 					}
 					row.Values[posVals[idx]] = i64
-				//integers passed as input for Timestamp fields will be treated as time represented in number of seconds since epoch defined for the field
-				//for timestamp fields created using SQL epoch will be defaulted to unix epoch
+				// integers passed as input for Timestamp fields will be treated as time represented in number of seconds since epoch defined for the field
+				// for timestamp fields created using SQL epoch will be defaulted to unix epoch
 				case int64:
 					// Convert the input seconds to target timeunit defined for the Timestamp field
 					// Add Base, which is the base epoch for Timestamp fields, to the input before saving

@@ -12,6 +12,7 @@ const (
 	ErrDatabaseIDExists         errors.Code = "DatabaseIDExists"
 	ErrDatabaseIDDoesNotExist   errors.Code = "DatabaseIDDoesNotExist"
 	ErrDatabaseNameDoesNotExist errors.Code = "DatabaseNameDoesNotExist"
+	ErrDatabaseNameExists       errors.Code = "DatabaseNameExists"
 
 	ErrTableIDExists         errors.Code = "TableIDExists"
 	ErrTableKeyExists        errors.Code = "TableKeyExists"
@@ -56,6 +57,13 @@ func NewErrDatabaseNameDoesNotExist(dbName DatabaseName) error {
 	return errors.New(
 		ErrDatabaseNameDoesNotExist,
 		fmt.Sprintf("database name '%s' does not exist", dbName),
+	)
+}
+
+func NewErrDatabaseNameExists(dbName DatabaseName) error {
+	return errors.New(
+		ErrDatabaseNameExists,
+		fmt.Sprintf("database name %s already exists", dbName),
 	)
 }
 

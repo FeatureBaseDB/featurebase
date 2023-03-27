@@ -36,6 +36,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var TempDir = getTempDirString()
@@ -1784,7 +1785,7 @@ func TestExecutor_ExecuteTopK(t *testing.T) {
 			fieldName:    "fmutex",
 			fieldOptions: []pilosa.FieldOption{pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10)},
 			bits:         baseBits,
-			query:        "TopK(f, k=2)",
+			query:        "TopK(fmutex, k=2)",
 			result: []pilosa.Pair{
 				{ID: 10, Count: 3},
 				{ID: 0, Count: 2},
@@ -1796,18 +1797,11 @@ func TestExecutor_ExecuteTopK(t *testing.T) {
 
 	for _, tst := range tests {
 		t.Run(tst.fieldName, func(t *testing.T) {
-			pilosa.OptFieldTypeMutex(pilosa.CacheTypeRanked, 10)
-			c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, tst.fieldName)
+			c.CreateField(t, c.Idx(), pilosa.IndexOptions{TrackExistence: true}, tst.fieldName, tst.fieldOptions...)
 			c.ImportBits(t, c.Idx(), tst.fieldName, tst.bits)
 			if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: tst.query}); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
-				Pairs: []pilosa.Pair{
-					{ID: 10, Count: 4},
-					{ID: 0, Count: 3},
-				},
-				Field: "f",
-			}}) {
+			} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{Pairs: tst.result, Field: tst.fieldName}}) {
 				t.Fatalf("unexpected result: %s", spew.Sdump(result))
 			}
 		})
@@ -3040,6 +3034,14 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := idx.CreateField("idset", "", pilosa.OptFieldTypeSet("none", 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateField("tq", "", pilosa.OptFieldTypeTime("YM", "0")); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `
 		Set(0, f=0)
 		Set(` + strconv.Itoa(ShardWidth+1) + `, f=0)
@@ -3053,6 +3055,10 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		Set(0, other=1000)
 		Set(0, edge=100)
 		Set(1, edge=-100)
+		Set(0, idset=3)
+		Set(1, idset=3)
+		Clear(0, idset=3)
+		Set(50, tq=5, 2017-01-02T12:34)
 	`}); err != nil {
 		t.Fatal(err)
 	}
@@ -3076,6 +3082,46 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 			t.Fatal(err)
 		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{50, (5 * ShardWidth) + 100}; !reflect.DeepEqual(exp, got) {
 			t.Fatalf("Query().Row.Columns=%#v, expected %#v", got, exp)
+		}
+
+		// time quantum EQ null
+		_, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(tq == null, from=2010-01-01T00:00)`})
+		if err == nil {
+			t.Fatalf("expected error from invalid time quantum null query")
+		}
+		if !strings.Contains(err.Error(), "time range with a check") {
+			t.Fatalf("unexpected error; expecting can't use time range with a null check, got %v", err)
+		}
+
+		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(tq == null)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{
+			0,
+			1,
+			ShardWidth,
+			ShardWidth + 1,
+			ShardWidth + 2,
+			(5 * ShardWidth) + 100,
+		}, result.Results[0].(*pilosa.Row).Columns()) {
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
+		}
+
+		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(idset == null)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{
+			50,
+			ShardWidth,
+			ShardWidth + 1,
+			ShardWidth + 2,
+			(5 * ShardWidth) + 100,
+		}, result.Results[0].(*pilosa.Row).Columns()) {
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
+		}
+
+		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(idset == 3)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{1}, result.Results[0].(*pilosa.Row).Columns()) {
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
 		}
 
 		// EQ (single = form) <int>
@@ -3104,6 +3150,24 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
+		}
+
+		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(tq != null)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{50}, result.Results[0].(*pilosa.Row).Columns()) {
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
+		}
+
+		if result, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(idset != null)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{0, 1}, result.Results[0].(*pilosa.Row).Columns()) {
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
+		}
+
+		if _, err := c.GetNode(0).API.Query(context.Background(), &pilosa.QueryRequest{Index: c.Idx(), Query: `Row(idset != 3)`}); err == nil {
+			t.Fatal("expected error from trying != 3 on a set field")
+		} else if !strings.Contains(err.Error(), "only support != for null") {
+			t.Fatalf("expected error about only supporting != for null, got %v", err)
 		}
 	})
 
@@ -5000,7 +5064,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 				{
 					Column: pilosa.KeyOrID{ID: 0},
 					Rows: []interface{}{
-						[]uint64{},
+						[]uint64(nil),
 						[]string{
 							"h",
 							"plugh",
@@ -5051,11 +5115,11 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						[]uint64{
 							0,
 						},
-						[]string{},
+						[]string(nil),
 						uint64(0),
 						nil,
-						[]uint64{},
-						[]string{},
+						[]uint64(nil),
+						[]string(nil),
 						nil,
 						nil,
 						nil,
@@ -5065,14 +5129,14 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 				{
 					Column: pilosa.KeyOrID{ID: 3},
 					Rows: []interface{}{
-						[]uint64{},
-						[]string{},
+						[]uint64(nil),
+						[]string(nil),
 						nil,
 						"plugh",
 						[]uint64{
 							3,
 						},
-						[]string{},
+						[]string(nil),
 						int64(2),
 						pql.NewDecimal(-101, 2),
 						time.Date(2000, time.January, 1, 0, 0, 3, 0, time.UTC),
@@ -5082,12 +5146,12 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 				{
 					Column: pilosa.KeyOrID{ID: ShardWidth},
 					Rows: []interface{}{
-						[]uint64{},
-						[]string{},
+						[]uint64(nil),
+						[]string(nil),
 						nil,
 						nil,
-						[]uint64{},
-						[]string{},
+						[]uint64(nil),
+						[]string(nil),
 						nil,
 						nil,
 						nil,
@@ -5100,11 +5164,11 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 						[]uint64{
 							4,
 						},
-						[]string{},
+						[]string(nil),
 						uint64(4),
 						nil,
-						[]uint64{},
-						[]string{},
+						[]uint64(nil),
+						[]string(nil),
 						nil,
 						nil,
 						nil,
@@ -5114,10 +5178,7 @@ func TestExecutor_Execute_Extract(t *testing.T) {
 			},
 		},
 	}
-
-	if !reflect.DeepEqual(expect, resp.Results) {
-		t.Errorf("expected %v but got %v", expect, resp.Results)
-	}
+	require.Equal(t, expect, resp.Results)
 }
 
 func TestExecutor_Execute_Extract_Keyed(t *testing.T) {
@@ -5230,7 +5291,7 @@ func TestExecutor_Execute_MaxMemory(t *testing.T) {
 				{
 					Column: pilosa.KeyOrID{ID: ShardWidth},
 					Rows: []interface{}{
-						[]uint64{},
+						[]uint64(nil),
 					},
 				},
 				{
@@ -5244,10 +5305,7 @@ func TestExecutor_Execute_MaxMemory(t *testing.T) {
 			},
 		},
 	}
-
-	if !reflect.DeepEqual(expect, resp.Results) {
-		t.Errorf("expected %v but got %v", expect, resp.Results)
-	}
+	require.Equal(t, expect, resp.Results)
 }
 
 func TestExecutor_Execute_Rows(t *testing.T) {

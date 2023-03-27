@@ -28,6 +28,48 @@ var timeQuantumTest = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, ['1'], {[1]})",
+			),
+			ExpErr: "an expression of type 'tuple(idset)' cannot be assigned to type 'idsetq'",
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {'notatimestamp', ['1']}, [1])",
+			),
+			ExpErr: "unable to convert 'notatimestamp' to type 'timestamp'",
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, ['1'], {'notatimestamp', [1]})",
+			),
+			ExpErr: "unable to convert 'notatimestamp' to type 'timestamp'",
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {'2022-01-01T00:00:00Z', [1]}, {[1]})",
+			),
+			ExpErr: "an expression of type 'tuple(string, idset)' cannot be assigned to type 'stringsetq'",
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, ['1'], {'2022-01-01T00:00:00Z', ['1']})",
+			),
+			ExpErr: "an expression of type 'tuple(string, stringset)' cannot be assigned to type 'idsetq'",
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, '1', {[1]})",
+			),
+			ExpErr: "an expression of type 'string' cannot be assigned to type 'stringsetq'",
+		},
+		{
+			SQLs: sqls(
+				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, ['1'], 1)",
+			),
+			ExpErr: "an expression of type 'int' cannot be assigned to type 'idsetq'",
+		},
+		{
+			SQLs: sqls(
 				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {1676649734, ['1']}, {1676649734, [1]})",
 			),
 			ExpHdrs: hdrs(),
@@ -84,7 +126,7 @@ var timeQuantumTest = TableTest{
 			SQLs: sqls(
 				"select a._id, a.ss1 from time_quantum_insert a where rangeq(a.ss1, null, null)",
 			),
-			ExpErr: "alling ranqeq() 'from' and 'to' parameters cannot both be null",
+			ExpErr: "calling ranqeq() 'from' and 'to' parameters cannot both be null",
 		},
 		{
 			SQLs: sqls(
@@ -99,6 +141,7 @@ var timeQuantumTest = TableTest{
 			ExpErr: "calling ranqeq() usage invalid",
 		},
 		{
+			name: "stringset-rangeq",
 			SQLs: sqls(
 				"select a._id, a.ss1 from time_quantum_insert a where rangeq(a.ss1, '2022-01-02T00:00:00Z', null)",
 			),
@@ -108,6 +151,20 @@ var timeQuantumTest = TableTest{
 			),
 			ExpRows: rows(
 				row(int64(1), []string{"1", "test1", "test2"}),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			name: "idset-rangeq",
+			SQLs: sqls(
+				"select a._id, a.ids1 from time_quantum_insert a where rangeq(a.ids1, '2022-01-02T00:00:00Z', null)",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("ids1", fldTypeIDSetQ),
+			),
+			ExpRows: rows(
+				row(int64(1), []int64{1, 2}),
 			),
 			Compare: CompareExactUnordered,
 		},

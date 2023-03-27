@@ -50,13 +50,21 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 		return dax.NewErrDatabaseIDExists(qdb.QualifiedID())
 	}
 
+	// Check if org exists, if not, create org.
 	org := &models.Organization{ID: string(qdb.OrganizationID)}
-	if ok, err := dt.C.Where("id = ?", qdb.OrganizationID).Exists(org); err != nil {
+	if exists, err := dt.C.Where("id = ?", qdb.OrganizationID).Exists(org); err != nil {
 		return errors.Wrap(err, "checking for org")
-	} else if !ok {
+	} else if !exists {
 		if err := dt.C.Create(org); err != nil {
 			return errors.Wrap(err, "creating organization")
 		}
+	}
+
+	// Check if database name exists in org, if does, throw error.
+	if exists, err := dt.C.Where("name = ? AND organization_id = ?", qdb.Name, org.ID).Exists(&models.Database{}); err != nil {
+		return errors.Wrap(err, "checking database name")
+	} else if exists {
+		return dax.NewErrDatabaseNameExists(qdb.Name)
 	}
 
 	db := toModelDatabase(qdb)
@@ -242,6 +250,13 @@ func (s *Schemar) CreateTable(tx dax.Transaction, qtbl *dax.QualifiedTable) erro
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
+	}
+
+	// Check to see if table name exists for a database ID, and if so, throw error
+	if exists, err := dt.C.Where("name = ? AND database_id = ?", qtbl.Name, qtbl.DatabaseID).Exists(&models.Table{}); err != nil {
+		return errors.Wrap(err, "checking if table name exists")
+	} else if exists {
+		return dax.NewErrTableNameExists(qtbl.Name)
 	}
 
 	tbl := toModelTable(qtbl)

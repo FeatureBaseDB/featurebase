@@ -964,7 +964,7 @@ func createField(idx *Index, fld *dax.Field) error {
 		return errors.Wrapf(err, "creating field options from field: %s", fld.Name)
 	}
 
-	if _, err := idx.CreateField(string(fld.Name), "", opts...); err != nil {
+	if _, err := idx.createNullableField(string(fld.Name), "", opts...); err != nil {
 		return errors.Wrapf(err, "creating field on index: %s", fld.Name)
 	}
 	return nil

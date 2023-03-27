@@ -49,7 +49,7 @@ func (n *callPlanExpression) EvaluateSetContains(currentRow []interface{}) (inte
 				return nil, sql3.NewErrInternalf("unable to convert value")
 			}
 
-			return intSetContains(targetSet, int64(testValue)), nil
+			return intSetContains(targetSet, testValue), nil
 
 		default:
 			return nil, sql3.NewErrInternalf("unexpected data type '%T'", typ)
@@ -67,6 +67,11 @@ func (n *callPlanExpression) EvaluateSetContainsAny(currentRow []interface{}) (i
 	testSetEval, err := n.args[1].Evaluate(currentRow)
 	if err != nil {
 		return nil, err
+	}
+
+	//if either term is null, then null
+	if testSetEval == nil || targetSetEval == nil {
+		return nil, nil
 	}
 
 	if targetSetEval != nil {
@@ -114,6 +119,11 @@ func (n *callPlanExpression) EvaluateSetContainsAll(currentRow []interface{}) (i
 	testSetEval, err := n.args[1].Evaluate(currentRow)
 	if err != nil {
 		return nil, err
+	}
+
+	//if either term is null, then null
+	if testSetEval == nil || targetSetEval == nil {
+		return nil, nil
 	}
 
 	if targetSetEval != nil {

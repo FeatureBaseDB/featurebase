@@ -314,24 +314,22 @@ func (i *tableScanRowIter) Next(ctx context.Context) (types.Row, error) {
 			} else {
 				switch mappedColumn.dataType.(type) {
 				case *parser.DataTypeIDSet:
-					//empty sets are null
 					val, ok := result.Rows[mappedSrcColIdx].([]uint64)
 					if !ok {
 						return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result.Rows[mappedSrcColIdx])
 					}
-					if len(val) == 0 {
+					if val == nil {
 						row[mappedColIdx] = nil
 					} else {
 						row[mappedColIdx] = val
 					}
 
 				case *parser.DataTypeStringSet:
-					//empty sets are null
 					val, ok := result.Rows[mappedSrcColIdx].([]string)
 					if !ok {
 						return nil, sql3.NewErrInternalf("unexpected type for column value '%T'", result.Rows[mappedSrcColIdx])
 					}
-					if len(val) == 0 {
+					if val == nil {
 						row[mappedColIdx] = nil
 					} else {
 						row[mappedColIdx] = val

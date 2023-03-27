@@ -664,8 +664,8 @@ func TestClient_ImportRoaring_MultiView(t *testing.T) {
 	host := cluster.GetNode(0).URL()
 	c := MustNewClient(host, pilosa.GetHTTPClient(nil))
 	req := &pilosa.ImportRoaringRequest{Views: map[string][]byte{}}
-	req.Views["a"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
-	req.Views["b"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
+	req.Views["standard"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
+	req.Views["existence"], _ = hex.DecodeString("3B3001000100000900010000000100010009000100")
 	if err := c.ImportRoaring(context.Background(), &cluster.GetNode(0).API.Node().URI, cluster.Idx(), "f", 0, false, req); err != nil {
 		t.Fatal(err)
 	}

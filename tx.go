@@ -101,6 +101,10 @@ type Tx interface {
 	// Remove removes the 'a' values from the Bitmap for the fragment.
 	Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error)
 
+	// Removed removes values, returning the set of values it removed.
+	// It may overwrite the slice passed to it.
+	Removed(index, field, view string, shard uint64, a ...uint64) (changed []uint64, err error)
+
 	// Contains tests if the uint64 v is stored in the fragment's Bitmap.
 	Contains(index, field, view string, shard uint64, v uint64) (exists bool, err error)
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -232,8 +233,9 @@ func TestExecutor_DeleteRecords(t *testing.T) {
 		t.Run("DeleteWithBitmapError", func(t *testing.T) {
 			setup(t, require, c)
 			defer tearDown(t, require, c)
-			_, err := c.GetPrimary().API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: `Delete(Row(setfield == 1))`})
-			if err == nil || err.Error() != `executing: executeDelete: mapping on primary node: bsigroup not found` {
+			_, err := c.GetPrimary().API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: `Delete(Row(setfield > 1))`})
+			// we don't allow `>` operators on set fields
+			if err == nil || !strings.Contains(err.Error(), "row call: only support") {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})

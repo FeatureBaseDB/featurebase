@@ -4995,69 +4995,6 @@ func TestParallelSlicesFullPrune(t *testing.T) {
 	})
 }
 
-func compareSlices(tb testing.TB, name string, s1, s2 []uint64) {
-	if len(s1) != len(s2) {
-		tb.Fatalf("slice length mismatch %q: expected %d items %d, got %d items %d",
-			name, len(s1), s1, len(s2), s2)
-	}
-	for i, v := range s1 {
-		if s2[i] != v {
-			tb.Fatalf("row mismatch %q: expected item %d to be %d, got %d",
-				name, i, s1[i], s2[i])
-		}
-	}
-}
-
-type sliceDifferenceTestCase struct {
-	original, remove, expected []uint64
-}
-
-func TestSliceDifference(t *testing.T) {
-	testCases := map[string]sliceDifferenceTestCase{
-		"noOverlap": {
-			original: []uint64{1, 2, 3},
-			remove:   []uint64{0, 5},
-			expected: []uint64{1, 2, 3},
-		},
-		"before": {
-			original: []uint64{3, 5, 7},
-			remove:   []uint64{0, 6},
-			expected: []uint64{3, 5, 7},
-		},
-		"after": {
-			original: []uint64{3, 5, 7},
-			remove:   []uint64{8, 10},
-			expected: []uint64{3, 5, 7},
-		},
-		"all": {
-			original: []uint64{3, 5, 7},
-			remove:   []uint64{3, 5, 7},
-			expected: []uint64{},
-		},
-		"first": {
-			original: []uint64{3, 5, 7},
-			remove:   []uint64{3},
-			expected: []uint64{5, 7},
-		},
-		"last": {
-			original: []uint64{3, 5, 7},
-			remove:   []uint64{7},
-			expected: []uint64{3, 5},
-		},
-		"middle": {
-			original: []uint64{3, 5, 7},
-			remove:   []uint64{5},
-			expected: []uint64{3, 7},
-		},
-	}
-	var scratch []uint64
-	for name, tc := range testCases {
-		scratch = append(scratch[:0], tc.original...)
-		result := sliceDifference(scratch, tc.remove)
-		compareSlices(t, name, tc.expected, result)
-	}
-}
-
 func TestImportRoaringSingleValued(t *testing.T) {
 	f, _, tx := mustOpenFragment(t)
 	defer f.Clean(t)

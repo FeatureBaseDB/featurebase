@@ -561,7 +561,47 @@ func (i *Index) recalculateCaches() {
 	}
 }
 
-// CreateField creates a field.
+// createNullableField is just like CreateField, except that it allows
+// the field to not have TrackExistence enabled. This should be used
+// only for existing fields which were already actually created, where
+// what we're really doing now is reifying them, so for instance, this
+// shows up in api_directive:createField to apply directives, which
+// are assumed to correctly reflect the intended behavior.
+func (i *Index) createNullableField(name string, requestUserID string, opts ...FieldOption) (*Field, error) {
+	err := ValidateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
+	// Grab lock, check for field existing, release lock. We don't want
+	// to stay holding the lock, but we might care about the ErrFieldExists
+	// part of this.
+	err = func() error {
+		i.mu.Lock()
+		defer i.mu.Unlock()
+
+		// Ensure field doesn't already exist.
+		if i.fields[name] != nil {
+			return newConflictError(ErrFieldExists)
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
+	}
+	return i.createFieldWithOptions(name, requestUserID, fo)
+}
+
+// CreateField creates a field. This interface enforces the setting
+// of the TrackExistence flag; if you don't want that, use
+// createNullableField, but actually don't. That should be used only
+// for applying previously-created fields.
 func (i *Index) CreateField(name string, requestUserID string, opts ...FieldOption) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {
@@ -590,7 +630,13 @@ func (i *Index) CreateField(name string, requestUserID string, opts ...FieldOpti
 	if err != nil {
 		return nil, errors.Wrap(err, "applying option")
 	}
+	fo.TrackExistence = true
+	return i.createFieldWithOptions(name, requestUserID, fo)
+}
 
+// createFieldWithOptions creates a field given a finalized FieldOptions
+// structure, instead of functional options.
+func (i *Index) createFieldWithOptions(name string, requestUserID string, fo *FieldOptions) (*Field, error) {
 	ts := timestamp()
 	cfm := &CreateFieldMessage{
 		Index:     i.name,
@@ -625,6 +671,8 @@ func (i *Index) CreateField(name string, requestUserID string, opts ...FieldOpti
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
+//
+// Does NOT apply the "default" TrackExistence.
 func (i *Index) CreateFieldIfNotExists(name string, requestUserID string, opts ...FieldOption) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {
@@ -671,6 +719,8 @@ func (i *Index) CreateFieldIfNotExists(name string, requestUserID string, opts .
 // function options, taking a *FieldOptions struct. TODO: This should
 // definintely be refactored so we don't have these virtually equivalent
 // methods, but I'm puttin this here for now just to see if it works.
+//
+// Does NOT apply the "default" TrackExistence.
 func (i *Index) CreateFieldIfNotExistsWithOptions(name string, requestUserID string, opt *FieldOptions) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {

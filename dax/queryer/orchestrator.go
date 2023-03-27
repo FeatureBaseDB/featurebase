@@ -3302,6 +3302,9 @@ func (o *orchestrator) translateResult(ctx context.Context, qtbl *dax.QualifiedT
 						return nil, errors.Wrapf(err, "orch: translating IDs of field %q", v)
 					}
 					mapper = func(ids []uint64) (interface{}, error) {
+						if ids == nil {
+							return []string(nil), nil
+						}
 						keys := make([]string, len(ids))
 						for i, id := range ids {
 							keys[i] = translations[id]
@@ -3311,9 +3314,6 @@ func (o *orchestrator) translateResult(ctx context.Context, qtbl *dax.QualifiedT
 				} else {
 					datatype = "[]uint64"
 					mapper = func(ids []uint64) (interface{}, error) {
-						if ids == nil {
-							ids = []uint64{}
-						}
 						return ids, nil
 					}
 				}

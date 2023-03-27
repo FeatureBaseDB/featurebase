@@ -10,11 +10,15 @@ import (
 )
 
 func TestExpressions(t *testing.T) {
-
 	t.Run("StringerTest", func(t *testing.T) {
-
 		uop := newUnaryOpPlanExpression(parser.PLUS, newIntLiteralPlanExpression(10), parser.NewDataTypeInt())
 		assert.Equal(t, uop.String(), "+10")
+
+		uop1 := newUnaryOpPlanExpression(parser.PLUS, newIntLiteralPlanExpression(10), parser.NewDataTypeID())
+		assert.Equal(t, uop1.String(), "+10")
+
+		uop2 := newUnaryOpPlanExpression(parser.MINUS, newIntLiteralPlanExpression(10), parser.NewDataTypeID())
+		assert.Equal(t, uop2.String(), "-10")
 
 		bop := newBinOpPlanExpression(newIntLiteralPlanExpression(10), parser.PLUS, newIntLiteralPlanExpression(20), parser.NewDataTypeInt())
 		assert.Equal(t, bop.String(), "10+20")
@@ -78,7 +82,5 @@ func TestExpressions(t *testing.T) {
 
 		tplop := newExprTupleLiteralPlanExpression([]types.PlanExpression{newStringLiteralPlanExpression("foo"), newStringLiteralPlanExpression("bar")}, parser.NewDataTypeString())
 		assert.Equal(t, tplop.String(), "{'foo', 'bar'}")
-
 	})
-
 }

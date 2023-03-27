@@ -23,6 +23,7 @@ import (
 const (
 	DefaultKeyTranslateBatchSize = 100000
 	existenceFieldName           = "_exists"
+	existenceViewName            = "existence" // this should match top level featurebase viewExistence
 )
 
 // TODO if using column translation, column ids might get way out of
@@ -573,7 +574,11 @@ func (b *Batch) Add(rec Row) error {
 		case int64:
 			b.values[field.Name] = append(b.values[field.Name], val)
 		case []string:
-			if len(val) == 0 {
+			// note that a length of 0 can be valid, and represents an
+			// empty set. an empty set counts as a non-NULL value for
+			// SQL purposes -- it means the existence view bit should
+			// get set.
+			if val == nil {
 				continue
 			}
 			rowIDSets, ok := b.rowIDSets[field.Name]
@@ -608,7 +613,11 @@ func (b *Batch) Add(rec Row) error {
 			}
 			b.rowIDSets[field.Name] = append(rowIDSets, rowIDs)
 		case []uint64:
-			if len(val) == 0 {
+			// note that a length of 0 can be valid, and represents an
+			// empty set. an empty set counts as a non-NULL value for
+			// SQL purposes -- it means the existence view bit should
+			// get set.
+			if val == nil {
 				continue
 			}
 			rowIDSets, ok := b.rowIDSets[field.Name]
@@ -663,6 +672,9 @@ func (b *Batch) Add(rec Row) error {
 
 	for i, uval := range rec.Clears {
 		field := b.header[i]
+		if field.Options.Type == featurebase.FieldTypeMutex && uval != nil {
+			return errors.Errorf("individual-bit clears not allowed on mutex fields; use nil to clear a mutex")
+		}
 		if _, ok := b.clearRowIDs[i]; !ok {
 			b.clearRowIDs[i] = make(map[int]uint64)
 		}
@@ -1245,7 +1257,7 @@ func (b *Batch) doImport(frags, clearFrags fragments) error {
 			}
 
 			ferr := b.importer.ImportRoaringBitmap(ctx, b.tbl.ID, fld, shard, viewMap, false)
-			b.log.Debugf("imp-roar    field: %s, shard:%d, views:%d %v", field, shard, len(clearViewMap), time.Since(starty))
+			b.log.Debugf("imp-roar    field: %s, shard:%d, views:%d %v", field, shard, len(viewMap), time.Since(starty))
 			return errors.Wrapf(ferr, "importing data for %s", field)
 		})
 	}
@@ -1343,6 +1355,7 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
 		var clearBM *roaring.Bitmap
+		var existCurBM *roaring.Bitmap
 		for j := range b.ids {
 			col := b.ids[j]
 			row := nilSentinel
@@ -1355,8 +1368,12 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
+				// the API treats "" as standard
 				curBM = frags.GetOrCreate(curShard, field.Name, "")
 				clearBM = clearFrags.GetOrCreate(curShard, field.Name, "")
+				if opts.ActuallyTrackingExistence() {
+					existCurBM = frags.GetOrCreate(curShard, field.Name, existenceViewName)
+				}
 			}
 			if row != nilSentinel {
 				// TODO this is super ugly, but we want to avoid setting
@@ -1366,6 +1383,9 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 				// the NoStandardView case would be great.
 				if !(opts.Type == featurebase.FieldTypeTime && opts.NoStandardView) {
 					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
+					if opts.ActuallyTrackingExistence() {
+						existCurBM.DirectAdd(col % shardWidth)
+					}
 				}
 				if opts.Type == featurebase.FieldTypeTime {
 					views, err := b.times[j].views(opts.TimeQuantum)
@@ -1386,6 +1406,16 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 				// we want to make sure that at this point, the "set"
 				// fragments don't contain the bit that we're clearing
 				curBM.DirectRemoveN(clearRow*shardWidth + (col % shardWidth))
+				// Because this is RowIDs, not RowIDSets, there's only one
+				// bit. We should not be setting the existence bit based on
+				// this value, if we're actually clearing it. This doesn't
+				// mean we will clear an existing existence bit, though.
+				// The case where we would clear an existence bit is the
+				// case where someone specified row[mutexField].Clears = nil,
+				// which is far from here.
+				if opts.ActuallyTrackingExistence() {
+					existCurBM.DirectRemoveN(col % shardWidth)
+				}
 			}
 		}
 	}
@@ -1404,14 +1434,23 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 		opts := field.Options
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
+		var existCurBM *roaring.Bitmap
 		for j := range b.ids {
 			col, rowIDs := b.ids[j], rowIDSets[j]
-			if len(rowIDs) == 0 {
-				continue
-			}
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
 				curBM = frags.GetOrCreate(curShard, fname, "")
+				if opts.ActuallyTrackingExistence() {
+					existCurBM = frags.GetOrCreate(curShard, fname, existenceViewName)
+				}
+			}
+			if len(rowIDs) == 0 {
+				// you can validly specify an empty set, which is not the same as a null,
+				// but which still ought to set the existence bit if we're tracking that.
+				if opts.ActuallyTrackingExistence() && rowIDs != nil {
+					existCurBM.DirectAdd(col % shardWidth)
+				}
+				continue
 			}
 			// TODO this is super ugly, but we want to avoid setting
 			// bits on the standard view in the specific case when
@@ -1421,6 +1460,9 @@ func (b *Batch) makeFragments(frags, clearFrags fragments) (fragments, fragments
 			if !(opts.Type == featurebase.FieldTypeTime && opts.NoStandardView) {
 				for _, row := range rowIDs {
 					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
+				}
+				if opts.ActuallyTrackingExistence() {
+					existCurBM.DirectAdd(col % shardWidth)
 				}
 			}
 			if opts.Type == featurebase.FieldTypeTime {
@@ -1549,6 +1591,11 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 		shard := ids[0] / shardWidth
 		bitmap := frags.GetOrCreate(shard, field.Name, "standard")
 		clearBM := clearFrags.GetOrCreate(shard, field.Name, "standard")
+		var existBM, existClearBM *roaring.Bitmap
+		if field.Options.ActuallyTrackingExistence() {
+			existBM = frags.GetOrCreate(shard, field.Name, existenceViewName)
+			existClearBM = clearFrags.GetOrCreate(shard, field.Name, existenceViewName)
+		}
 		for i, id := range ids {
 			if i+1 < len(ids) {
 				// we only want the last value set for each id
@@ -1561,6 +1608,10 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 				shard = id / shardWidth
 				bitmap = frags.GetOrCreate(shard, field.Name, "standard")
 				clearBM = clearFrags.GetOrCreate(shard, field.Name, "standard")
+				if field.Options.ActuallyTrackingExistence() {
+					existBM = frags.GetOrCreate(shard, field.Name, existenceViewName)
+					existClearBM = clearFrags.GetOrCreate(shard, field.Name, existenceViewName)
+				}
 			}
 			fragmentColumn := id % shardWidth
 			clearBM.Add(fragmentColumn) // Will use this to clear columns.
@@ -1568,6 +1619,11 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 				// clearSentinel is used for deletion
 				// so this value should only be added if its not clearSentinel
 				bitmap.Add(row*shardWidth + fragmentColumn)
+				if field.Options.ActuallyTrackingExistence() {
+					existBM.Add(fragmentColumn)
+				}
+			} else if field.Options.ActuallyTrackingExistence() {
+				existClearBM.Add(fragmentColumn)
 			}
 		}
 	}
@@ -1596,6 +1652,11 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 			fragmentColumn := recID % shardWidth
 
 			clearBM.Add(fragmentColumn)
+			if field.Options.ActuallyTrackingExistence() {
+				existClearBM := clearFrags.GetOrCreate(shard, field.Name, existenceViewName)
+
+				existClearBM.Add(fragmentColumn)
+			}
 		}
 	}
 
@@ -1618,6 +1679,10 @@ func (b *Batch) makeSingleValFragments(frags, clearFrags fragments) (fragments, 
 
 			fragmentColumn := recID % shardWidth
 			clearBM.Add(fragmentColumn)
+			if field.Options.ActuallyTrackingExistence() {
+				exist := frags.GetOrCreate(shard, field.Name, existenceViewName)
+				exist.Add(fragmentColumn)
+			}
 
 			if boolVal {
 				bitmap.Add(trueRowOffset + fragmentColumn)

@@ -24,6 +24,7 @@ var TableTests []TableTest = []TableTest{
 	selectTests,
 	selectKeyedTests,
 	selectHavingTests,
+	selectBetweenTests,
 	filterPredicates,
 	filterPredicatesIdKey,
 	filterPredicatesId,
@@ -45,6 +46,7 @@ var TableTests []TableTest = []TableTest{
 	setLiteralTests,
 	setFunctionTests,
 	setParameterTests,
+	setTimeQuantumTests,
 	dateTimePartTests,
 	dateTimeNameTests,
 	toTimestampTests,
@@ -139,7 +141,7 @@ var TableTests []TableTest = []TableTest{
 	binOpExprWithStringSetString,
 	binOpExprWithStringSetStringSet,
 
-	//cast tests
+	// cast tests
 	castIntLiteral,
 	castInt,
 
@@ -151,26 +153,26 @@ var TableTests []TableTest = []TableTest{
 	castStringSet,
 	castTimestamp,
 
-	//like tests
+	// like tests
 	likeTests,
 	notLikeTests,
 
-	//null tests
+	// null tests
 	nullTests,
 	notNullTests,
 
-	//null filter tests
+	// null filter tests
 	nullFilterTests,
 
-	//between tests
+	// between tests
 	betweenTests,
 	notBetweenTests,
 
-	//in tests
+	// in tests
 	inTests,
 	notInTests,
 
-	//aggregate tests
+	// aggregate tests
 	countTests,
 	countDistinctTests,
 	sumTests,
@@ -178,14 +180,14 @@ var TableTests []TableTest = []TableTest{
 	percentileTests,
 	minmaxTests,
 
-	//groupby tests
+	// groupby tests
 	groupByTests,
 
-	//create table tests
+	// create table tests
 	createTable,
 	alterTable,
 
-	//joins
+	// joins
 	joinTestsUsers,
 	joinTestsOrders,
 	joinTests,
@@ -194,7 +196,7 @@ var TableTests []TableTest = []TableTest{
 	bulkInsertTable,
 	bulkInsert,
 
-	//bool (batch logic)
+	// bool (batch logic)
 	boolTests,
 
 	// time quantums
