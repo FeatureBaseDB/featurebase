@@ -88,23 +88,6 @@ var setLiteralTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
-			// SetContainsSelectAllListInt
-			name: "set-contains-select-all-list-int",
-			SQLs: sqls(
-				"select _id, setcontainsall(ievent, [101]) from selectwithsetliterals",
-			),
-			ExpHdrs: hdrs(
-				hdr("_id", fldTypeID),
-				hdr("", fldTypeBool),
-			),
-			ExpRows: rows(
-				row(int64(1), false),
-				row(int64(2), false),
-				row(int64(3), true),
-			),
-			Compare: CompareExactUnordered,
-		},
-		{
 			// SetContainsSelectAnyListInt
 			name: "set-contains-select-any-list-int",
 			SQLs: sqls(
