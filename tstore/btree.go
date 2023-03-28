@@ -17,15 +17,9 @@ import (
 // TODO(pok)
 // ▶ on open index run the aries recovery
 
-// ▶ move latchState into Page ✅
-// ▶ latch buffer pool ✅
-// ▶ schema versioning on the page 🔧
-//		▶ write initial schema version on the root page ✅
-//		▶ write new schema versions on the root page - what happens when we have more schema version than fit on the root page
-//			hint - schema should probably be its own b-tree (sigh)
-//		▶ handle schema version overflow ✅
-
 // ▶ put the insert into the split routine, so we don't have the do the insert after the fact
+// ▶ add a BTreeFile struct to wrap n (data, schema) BTrees
+// ▶ move bootstrap into BTreeFile ?
 
 // - [x] Tuple format
 // 		writeTID (int64)
@@ -36,9 +30,6 @@ import (
 // 				fieldData (one for each field)
 //   				[valueLen (int32)] optional only used for variable length types (right now varchar)
 //					valueBytes
-
-// ▶ math that that works out max payload length for a tuple ✅
-//		- tries to key fanout min >= 4 ✅
 
 // ▶ WAL
 // 		▶  implement log buffers for wal files
@@ -57,7 +48,6 @@ import (
 // 		▶  implement a checkpoint that scans the pool and writes out dirty pages periodically
 
 // ▶ MVCC versioning
-// ▶ 3000+ columns (thanks Q2) ✅
 
 // ▶ handle nulls on insert
 // ▶ backup/restore
@@ -247,6 +237,7 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 			return nil, err
 		}
 		tree.schemaVersion = 1
+		tree.schema = schema
 		// TODO(pok) - can take this out once we have logging and checkpoints
 		tree.bufferpool.FlushPage(schemaNode.page.ID())
 	} else {
@@ -911,6 +902,9 @@ func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes
 			// set the payload chunk length to the free space on the page
 			// less the 2 byte chunk length
 			payloadChunkLength := overflowFreeSpace - 2
+			if payloadChunkLength > bytesRemaining {
+				payloadChunkLength = bytesRemaining
+			}
 			hiWater += payloadChunkLength
 
 			overflowPage.page.WriteNextPointer(bufferpool.PageID{ObjectID: b.objectID, Shard: b.shard, Page: nextOverflowPtr})
