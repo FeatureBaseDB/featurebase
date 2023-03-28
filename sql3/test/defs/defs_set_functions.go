@@ -98,8 +98,8 @@ var setLiteralTests = TableTest{
 				hdr("", fldTypeBool),
 			),
 			ExpRows: rows(
-				row(int64(1), nil),
-				row(int64(2), nil),
+				row(int64(1), false),
+				row(int64(2), false),
 				row(int64(3), true),
 			),
 			Compare: CompareExactUnordered,
