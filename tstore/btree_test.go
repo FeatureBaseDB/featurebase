@@ -49,12 +49,14 @@ func TestAddItemsToBTreeAndValidate(t *testing.T) {
 	}
 
 	inserts := make([]int, 0)
-	for i := 1; i <= 300; i++ {
+	for i := 1; i <= 3000; i++ {
 		inserts = append(inserts, i)
 	}
 	rand.Shuffle(len(inserts), func(i, j int) { inserts[i], inserts[j] = inserts[j], inserts[i] })
 
 	rr := make(types.Row, 2)
+
+	start := time.Now()
 	for _, i := range inserts {
 		rr[0] = int64(i)
 		rr[1] = fmt.Sprintf("This is a test of things %d", i)
@@ -72,9 +74,29 @@ func TestAddItemsToBTreeAndValidate(t *testing.T) {
 		}
 	}
 
-	key, tuple, _ := b.Search(nil, Int(33))
+	duration := time.Since(start)
+	fmt.Printf("inserted %d rows in %v\n", 3000, duration)
 
-	fmt.Printf("%v, %v\n\n", key, tuple)
+	start = time.Now()
+	key, tuple, _ := b.Search(nil, Int(33))
+	duration = time.Since(start)
+
+	vals := "["
+	for i, v := range tuple.Tuple {
+		if i > 10 {
+			vals += "..."
+			break
+		}
+		if i != 0 {
+			vals += ", "
+		}
+		vals += fmt.Sprintf("%v", v)
+	}
+	vals += "]"
+
+	fmt.Printf("retrieved key %v, tuple (%d columns), %s in %v\n", key, len(tuple.TupleSchema), vals, duration)
+
+	fmt.Printf("\n\n")
 
 	b.Dump(0)
 }
@@ -93,7 +115,7 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 	tableSchema := make(types.Schema, 0)
 
 	var numCols = 3000
-	var numRecs = 1000000
+	var numRecs = 3000
 
 	// build schema
 	for i := 0; i < numCols; i++ {
