@@ -692,7 +692,7 @@ func TestDAXIntegration(t *testing.T) {
 		cfg.Computer.N = 4
 		opt := server.OptCommandConfig(cfg)
 		mc := test.MustRunManagedCommand(t, opt)
-
+		defer mc.Close()
 		svcmgr := mc.Manage()
 
 		// Set up Controller client.

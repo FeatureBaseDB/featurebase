@@ -30,7 +30,8 @@ type Directive struct {
 }
 
 type DirectiveVersion interface {
-	Increment(tx Transaction, delta uint64) (uint64, error)
+	GetCurrent(tx Transaction, addr Address) (uint64, error)
+	SetNext(tx Transaction, addr Address, current, next uint64) error
 }
 
 // DirectiveMethod is used to tell the compute node how it should handle the
@@ -399,5 +400,5 @@ func (d *Directive) ApplyDiff(diff *Directive) *Directive {
 type Directives []*Directive
 
 func (d Directives) Len() int           { return len(d) }
-func (d Directives) Less(i, j int) bool { return d[i].Version < d[j].Version }
+func (d Directives) Less(i, j int) bool { return d[i].Address < d[j].Address }
 func (d Directives) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }

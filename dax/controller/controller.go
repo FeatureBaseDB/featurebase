@@ -1097,25 +1097,6 @@ func applyAddressMethod(addrs []dax.Address, method dax.DirectiveMethod) []addre
 	return ams
 }
 
-func (c *Controller) nextDirectiveVersion(ctx context.Context) (uint64, error) {
-	var version uint64
-
-	fn := func(tx dax.Transaction, writable bool) error {
-		var err error
-		version, err = c.DirectiveVersion.Increment(tx, 1)
-		if err != nil {
-			return errors.Wrap(err, "incrementing directive version")
-		}
-		return nil
-	}
-
-	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, 3); err != nil {
-		return 0, errors.Wrap(err, "retry with tx: write")
-	}
-
-	return version, nil
-}
-
 // buildDirectives builds a list of directives for the given addrs (i.e. nodes)
 // using information (i.e. current state) from the balancers.
 func (c *Controller) buildDirectives(ctx context.Context, tx dax.Transaction, addrs []addressMethod) ([]*dax.Directive, error) {
@@ -1127,14 +1108,13 @@ func (c *Controller) buildDirectives(ctx context.Context, tx dax.Transaction, ad
 	directives := make([]*dax.Directive, len(addrs))
 
 	for i, addressMethod := range addrs {
-		// dVersion, err := c.DirectiveVersion.Increment(tx, 1)
-		// if err != nil {
-		// 	return nil, errors.Wrap(err, "incrementing directive version")
-		// }
-		dVersion, err := c.nextDirectiveVersion(ctx)
+		// Get the current directive version for address. If this address has
+		// never been sent a directive before, we should get 0 here.
+		currentDirectiveVersion, err := c.DirectiveVersion.GetCurrent(tx, addressMethod.address)
 		if err != nil {
-			return nil, errors.Wrap(err, "getting next directive version")
+			return nil, errors.Wrap(err, "getting current directive version")
 		}
+		nextDirectiveVersion := currentDirectiveVersion + 1
 
 		d := &dax.Directive{
 			Address:        addressMethod.address,
@@ -1142,7 +1122,7 @@ func (c *Controller) buildDirectives(ctx context.Context, tx dax.Transaction, ad
 			Tables:         []*dax.QualifiedTable{},
 			ComputeRoles:   []dax.ComputeRole{},
 			TranslateRoles: []dax.TranslateRole{},
-			Version:        dVersion,
+			Version:        nextDirectiveVersion,
 		}
 
 		// computeMap maps a table to a list of shards for that table. We need
@@ -1288,6 +1268,12 @@ func (c *Controller) buildDirectives(ctx context.Context, tx dax.Transaction, ad
 		sort.Slice(d.TranslateRoles, func(i, j int) bool { return d.TranslateRoles[i].TableKey < d.TranslateRoles[j].TableKey })
 
 		directives[i] = d
+
+		// Set directive version to nextDirectiveVersion where directiveVersion
+		// equals currentDirectiveVersion for this address.
+		if err := c.DirectiveVersion.SetNext(tx, addressMethod.address, currentDirectiveVersion, nextDirectiveVersion); err != nil {
+			return nil, errors.Wrap(err, "setting next directive version")
+		}
 	}
 
 	return directives, nil
@@ -1304,10 +1290,13 @@ func (c *Controller) buildDirectivesAsDiffs(ctx context.Context, tx dax.Transact
 	directives := make([]*dax.Directive, len(diffs))
 
 	for i, workerDiff := range diffs {
-		dVersion, err := c.nextDirectiveVersion(ctx)
+		// Get the current directive version for address. If this address has
+		// never been sent a directive before, we should get 0 here.
+		currentDirectiveVersion, err := c.DirectiveVersion.GetCurrent(tx, workerDiff.Address)
 		if err != nil {
-			return nil, errors.Wrap(err, "getting next directive version")
+			return nil, errors.Wrap(err, "getting current directive version")
 		}
+		nextDirectiveVersion := currentDirectiveVersion + 1
 
 		d := &dax.Directive{
 			Address:               workerDiff.Address,
@@ -1317,7 +1306,7 @@ func (c *Controller) buildDirectivesAsDiffs(ctx context.Context, tx dax.Transact
 			ComputeRolesRemoved:   []dax.ComputeRole{},
 			TranslateRolesAdded:   []dax.TranslateRole{},
 			TranslateRolesRemoved: []dax.TranslateRole{},
-			Version:               dVersion,
+			Version:               nextDirectiveVersion,
 		}
 
 		// tableSet maintains the set of tables which have a job assignment
@@ -1549,6 +1538,12 @@ func (c *Controller) buildDirectivesAsDiffs(ctx context.Context, tx dax.Transact
 		sort.Slice(d.TranslateRolesRemoved, func(i, j int) bool { return d.TranslateRolesRemoved[i].TableKey < d.TranslateRolesRemoved[j].TableKey })
 
 		directives[i] = d
+
+		// Set directive version to nextDirectiveVersion where directiveVersion
+		// equals currentDirectiveVersion for this address.
+		if err := c.DirectiveVersion.SetNext(tx, workerDiff.Address, currentDirectiveVersion, nextDirectiveVersion); err != nil {
+			return nil, errors.Wrap(err, "setting next directive version")
+		}
 	}
 
 	return directives, nil

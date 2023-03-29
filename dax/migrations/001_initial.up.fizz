@@ -43,34 +43,34 @@ create_table("columns") {
 }
 
 create_table("nodes") {
-        t.Column("id", "uuid", {primary: true})
+	t.Column("id", "uuid", {primary: true})
 	t.Column("address", "string")
 	t.Timestamps()
 }
 
 create_table("node_roles") {
-        t.Column("id", "uuid", {primary: true})
-        t.Column("node_id", "uuid")
+	t.Column("id", "uuid", {primary: true})
+	t.Column("node_id", "uuid")
 	t.Column("role", "string")
 	t.ForeignKey("node_id", {"nodes": ["id"]}, {"on_delete": "cascade"})
 	t.Timestamps()
 }
 
 create_table("workers") {
-        t.Column("id", "uuid", {primary: true})
+	t.Column("id", "uuid", {primary: true})
 	t.Column("address", "string")
 	t.Column("role", "string")
-        t.Column("database_id", "string", {"null": true})
+	t.Column("database_id", "string", {"null": true})
 	t.ForeignKey("database_id", {"databases": ["id"]}, {"null": true})
 }
 
 create_table("jobs") {
-        t.Column("id", "uuid", {primary: true})
+	t.Column("id", "uuid", {primary: true})
 	t.Column("name", "string")
 	t.Column("role", "string")
-        t.Column("worker_id", "uuid", {"null": true})
+	t.Column("worker_id", "uuid", {"null": true})
 	t.ForeignKey("worker_id", {"workers": ["id"]}, {"null": true})
-        t.Column("database_id", "string")
+	t.Column("database_id", "string")
 	t.ForeignKey("database_id", {"databases": ["id"]}, {"on_delete": "cascade"})
 	t.Timestamps()
 }
@@ -78,7 +78,7 @@ create_table("jobs") {
 add_index("jobs", ["database_id", "name"], {"unique": true})
 
 create_table("directive_versions") {
-        t.Column("id", "int", {primary: true})
+	t.Column("id", "string", {primary: true})
 	t.Column("version", "int")
 	t.Timestamps()
 }
