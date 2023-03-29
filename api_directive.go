@@ -332,6 +332,14 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 		qtid := tkey.QualifiedTableID()
 		for _, partition := range partitions {
 			api.serverlessStorage.RemoveTableKeyResource(qtid, partition)
+			// idea is to delete partition
+			// think about the holder as that's the local disk space
+				// NOTE: index = table --> don't want to delete the whole index/table
+				// maybe search via indexes in the translatestores in index.go?
+			// FeatureBase storage has no concept of database or org, so when we create an index in FeatureBase which maps 
+			// to a qtbl, the name of that index is the TableKey, which is made up of org/database/tableID
+			
+			//api.Holder().what? do I need to create methods on holder to delete partitions?
 		}
 	}
 
