@@ -881,6 +881,7 @@ func (n *maxPlanExpression) WithChildren(children ...types.PlanExpression) (type
 
 // percentilePlanExpression handles PERCENTILE()
 type percentilePlanExpression struct {
+	pos            parser.Pos
 	arg            types.PlanExpression
 	nthArg         types.PlanExpression
 	returnDataType parser.ExprDataType
@@ -888,8 +889,9 @@ type percentilePlanExpression struct {
 
 var _ types.Aggregable = (*percentilePlanExpression)(nil)
 
-func newPercentilePlanExpression(arg types.PlanExpression, nthArg types.PlanExpression, returnDataType parser.ExprDataType) *percentilePlanExpression {
+func newPercentilePlanExpression(pos parser.Pos, arg types.PlanExpression, nthArg types.PlanExpression, returnDataType parser.ExprDataType) *percentilePlanExpression {
 	return &percentilePlanExpression{
+		pos:            pos,
 		arg:            arg,
 		nthArg:         nthArg,
 		returnDataType: returnDataType,
@@ -905,7 +907,7 @@ func (n *percentilePlanExpression) Evaluate(currentRow []interface{}) (interface
 }
 
 func (n *percentilePlanExpression) NewBuffer() (types.AggregationBuffer, error) {
-	return NewAggCountBuffer(n), nil
+	return nil, sql3.NewErrUnsupported(n.pos.Line, n.pos.Column, true, "Percentile call that can't be pushed down to PQL")
 }
 
 func (n *percentilePlanExpression) FirstChildExpr() types.PlanExpression {
@@ -941,7 +943,7 @@ func (n *percentilePlanExpression) WithChildren(children ...types.PlanExpression
 	if len(children) != 2 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return newPercentilePlanExpression(children[0], children[1], n.returnDataType), nil
+	return newPercentilePlanExpression(n.pos, children[0], children[1], n.returnDataType), nil
 }
 
 // aggregator for CORR()

@@ -2899,7 +2899,7 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 		return agg, nil
 
 	case "PERCENTILE":
-		agg := newPercentilePlanExpression(args[0], args[1], expr.ResultDataType)
+		agg := newPercentilePlanExpression(expr.Name.NamePos, args[0], args[1], expr.ResultDataType)
 		return agg, nil
 
 	case "CORR":
