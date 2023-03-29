@@ -230,17 +230,15 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 				return nil, sql3.NewErrInternalf("unexpected aggregate nth arg type '%T'", coercedNthValue)
 			}
 
-			if cond == nil {
-				cond = &pql.Call{Name: "All"}
-			}
-
 			call = &pql.Call{
 				Name: "Percentile",
 				Args: map[string]interface{}{
 					"field": expr.columnName,
 					"nth":   nth,
 				},
-				Children: []*pql.Call{cond},
+			}
+			if cond != nil {
+				call.Args["filter"] = cond
 			}
 
 		default:
