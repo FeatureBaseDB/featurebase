@@ -496,6 +496,12 @@ var percentileTests = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"SELECT percentile(i1, 50) AS avg_rows FROM percentile_test WHERE s1 != 'a'",
+			),
+			ExpErr: "Percentile call that can't be pushed down to PQL is not supported",
+		},
+		{
+			SQLs: sqls(
 				"SELECT percentile(i1, 50) AS p_rows FROM percentile_test",
 			),
 			ExpHdrs: hdrs(
