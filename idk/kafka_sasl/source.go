@@ -26,8 +26,15 @@ type Source struct {
 	Log                logger.Logger
 	Timeout            time.Duration
 	SkipOld            bool
-	Header             string
 	AllowMissingFields bool
+
+	// Header is a file referencing a file containing JSON header configuration.
+	Header string
+
+	// HeaderFields can be provided instead of Header. It is a slice of
+	// RawFields which will be marshalled and parsed the same way a JSON object
+	// in Header would be. It is used only if a Header is not provided.
+	HeaderFields []idk.RawField
 
 	schema []idk.Field
 	paths  idk.PathTable
@@ -193,14 +200,24 @@ func (r *Record) Data() []interface{} {
 
 // Open initializes the kafka source.
 func (s *Source) Open() error {
-	if len(s.Header) == 0 {
-		return errors.New("needs header specification file")
+	if len(s.Header) == 0 && len(s.HeaderFields) == 0 {
+		return errors.New("needs header specification file (file or fields)")
 	}
 
-	headerData, err := os.ReadFile(s.Header)
-	if err != nil {
-		return errors.Wrap(err, "reading header file")
+	var headerData []byte
+	var err error
+	if s.Header != "" {
+		headerData, err = os.ReadFile(s.Header)
+		if err != nil {
+			return errors.Wrap(err, "reading header file")
+		}
+	} else {
+		headerData, err = json.Marshal(s.HeaderFields)
+		if err != nil {
+			return errors.Wrap(err, "marshalling header fields")
+		}
 	}
+
 	schema, paths, err := idk.ParseHeader(headerData)
 	if err != nil {
 		return errors.Wrap(err, "processing header")

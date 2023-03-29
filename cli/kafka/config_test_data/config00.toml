@@ -1,0 +1,20 @@
+## confirm defaults are being set correctly
+topics = "topic00"
+table = "table00"
+
+[[fields]]
+name		= "id"
+source-type	= "string"
+primary-key	= true
+
+[[fields]]
+name		= "name"
+source-type	= "string"
+
+[[fields]]
+name		= "age"
+source-type	= "int"
+
+[[fields]]
+name		= "hobbies"
+source-type	= "stringset"

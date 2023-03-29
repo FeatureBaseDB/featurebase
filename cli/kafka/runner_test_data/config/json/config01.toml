@@ -1,0 +1,25 @@
+hosts = ["localhost:9092"]
+group = "grp"
+topics = "topic01"
+table = "table01"
+batch-size = 1
+batch-max-staleness = "5s"
+timeout = "5s"
+encode = "json"
+
+[[fields]]
+name		= "id"
+source-type	= "string"
+primary-key	= true
+
+[[fields]]
+name		= "name"
+source-type	= "string"
+
+[[fields]]
+name		= "age"
+source-type	= "int"
+
+[[fields]]
+name		= "hobbies"
+source-type	= "stringset"
