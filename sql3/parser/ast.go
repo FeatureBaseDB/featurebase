@@ -181,6 +181,8 @@ func CloneStatement(stmt Statement) Statement {
 		return stmt.Clone()
 	case *InsertStatement:
 		return stmt.Clone()
+	case *BulkInsertStatement:
+		return stmt.Clone()
 	case *ReleaseStatement:
 		return stmt.Clone()
 	case *RollbackStatement:
@@ -304,6 +306,12 @@ func CloneExpr(expr Expr) Expr {
 	case *UnaryExpr:
 		return expr.Clone()
 	case *Variable:
+		return expr.Clone()
+	case *SysVariable:
+		return expr.Clone()
+	case *DateLit:
+		return expr.Clone()
+	case *SetLiteralExpr:
 		return expr.Clone()
 	default:
 		panic(fmt.Sprintf("invalid expr type: %T", expr))
@@ -1237,10 +1245,8 @@ func (c *CacheTypeConstraint) String() string {
 }
 
 type TimeUnitConstraint struct {
-	TimeUnit  Pos  // position of TIMEUNIT keyword
-	Expr      Expr // expression
-	Epoch     Pos  // position of TIMEUNIT keyword
-	EpochExpr Expr // expression
+	TimeUnit Pos  // position of TIMEUNIT keyword
+	Expr     Expr // expression
 }
 
 // Clone returns a deep copy of c.
@@ -1258,10 +1264,6 @@ func (c *TimeUnitConstraint) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("TIMEUNIT ")
 	buf.WriteString(c.Expr.String())
-	if c.Epoch.IsValid() {
-		buf.WriteString(" EPOCH ")
-		buf.WriteString(c.EpochExpr.String())
-	}
 	return buf.String()
 }
 
@@ -1690,8 +1692,10 @@ func IdentName(ident *Ident) string {
 	return ident.Name
 }
 
-// SysVariable represents built-in system variables that can be referenced in the sql for current date, current time and other potential pre-determinable values.
-// In SQL these system provided data elements are referenced using keywords such as CURRENT_DATE & CURRENT_TIMESTAMP, etc.
+// SysVariable represents built-in system variables that can be referenced in
+// the sql for current date, current time and other potential system determinable
+// values. In SQL these system provided data elements are referenced using
+// keywords such as CURRENT_DATE & CURRENT_TIMESTAMP, etc.
 type SysVariable struct {
 	NamePos Pos   // variable position in sql
 	Token   Token // parser token mapped to the variable's name/keyword
@@ -1711,11 +1715,11 @@ func (svar *SysVariable) Clone() *SysVariable {
 	return &other
 }
 func (svar *SysVariable) Name() string {
-	return tokens[svar.Token]
+	return svar.String()
 }
 
 func (svar *SysVariable) String() string {
-	return svar.Name()
+	return svar.Token.String()
 }
 
 func (svar *SysVariable) DataType() ExprDataType {
@@ -3115,8 +3119,6 @@ func (c *BulkInsertMapDefinition) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(c.MapExpr.String())
 	buf.WriteString(" ")
-	buf.WriteString(c.Name.String())
-	buf.WriteString(" ")
 	buf.WriteString(c.Type.String())
 	return buf.String()
 }
@@ -3202,33 +3204,63 @@ func (s *BulkInsertStatement) String() string {
 
 	buf.WriteString(" FROM ")
 	fmt.Fprintf(&buf, " %s", s.DataSource.String())
-	buf.WriteString(" WITH ")
+	buf.WriteString(" WITH")
 
 	if s.Format != nil {
-		buf.WriteString("FORMAT ")
+		buf.WriteString(" FORMAT ")
 		buf.WriteString(s.Format.String())
 	}
 
 	if s.Input != nil {
-		buf.WriteString("INPUT ")
+		buf.WriteString(" INPUT ")
 		buf.WriteString(s.Input.String())
 	}
 
 	if s.HeaderRow != nil {
-		buf.WriteString("HEADER_ROW ")
+		buf.WriteString(" HEADER_ROW ")
 	}
 
 	if s.BatchSize != nil {
-		buf.WriteString("BATCHSIZE ")
+		buf.WriteString(" BATCHSIZE ")
 		buf.WriteString(s.BatchSize.String())
 	}
 
 	if s.RowsLimit != nil {
-		buf.WriteString("ROWSLIMIT ")
+		buf.WriteString(" ROWSLIMIT ")
 		buf.WriteString(s.RowsLimit.String())
 	}
 
+	if s.AllowMissingValues != nil {
+		buf.WriteString(" ALLOW_MISSING_VALUES ")
+	}
 	return buf.String()
+}
+
+func (s *BulkInsertStatement) Clone() *BulkInsertStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Table = s.Table.Clone()
+	other.Columns = cloneIdents(s.Columns)
+	other.TransformList = cloneExprs(s.TransformList)
+	other.DataSource = CloneExpr(s.DataSource)
+	other.BatchSize = CloneExpr(s.BatchSize)
+	other.RowsLimit = CloneExpr(s.RowsLimit)
+	other.Format = CloneExpr(s.Format)
+	other.Input = CloneExpr(s.Input)
+	other.HeaderRow = CloneExpr(s.HeaderRow)
+	other.AllowMissingValues = CloneExpr(s.AllowMissingValues)
+	other.MapList = cloneBulkInsertMap(s.MapList)
+	return &other
+}
+
+func cloneBulkInsertMap(s []*BulkInsertMapDefinition) []*BulkInsertMapDefinition {
+	other := make([]*BulkInsertMapDefinition, len(s))
+	for i := range s {
+		other[i] = s[i].Clone()
+	}
+	return other
 }
 
 type InsertStatement struct {
@@ -4139,6 +4171,7 @@ func (c *JoinClause) Clone() *JoinClause {
 	other.X = CloneSource(c.X)
 	other.Y = CloneSource(c.Y)
 	other.Constraint = CloneJoinConstraint(c.Constraint)
+	other.Operator = c.Operator.Clone()
 	return &other
 }
 

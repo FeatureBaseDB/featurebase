@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/go-test/deep"
@@ -701,6 +702,88 @@ func TestInsertStatement_String(t *testing.T) {
 			UpdateWhereExpr: &parser.BoolLit{Value: false},
 		},
 	}, `INSERT INTO "tbl" DEFAULT VALUES ON CONFLICT ("x" ASC, "y" DESC) WHERE TRUE DO UPDATE SET "x" = 100, ("y", "z") = 200 WHERE FALSE`)*/
+
+	// Testing upsert clause separately until it is enabled in Insert.
+	{
+		upsertast := parser.UpsertClause{
+			DoNothing: pos(0),
+		}
+		upsertsql := `ON CONFLICT DO NOTHING`
+
+		if upsertast.String() != upsertsql {
+			t.Fatalf("parser.UpsertClause.String()=%q, want %q", upsertast.String(), upsertsql)
+		}
+		upsertast = parser.UpsertClause{
+			Columns: []*parser.IndexedColumn{
+				{X: &parser.Ident{Name: "x"}, Asc: pos(0)},
+				{X: &parser.Ident{Name: "y"}, Desc: pos(0)},
+			},
+			WhereExpr: &parser.BoolLit{Value: true},
+			Assignments: []*parser.Assignment{
+				{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
+				{Columns: []*parser.Ident{{Name: "y"}, {Name: "z"}}, Expr: &parser.IntegerLit{Value: "200"}},
+			},
+			UpdateWhereExpr: &parser.BoolLit{Value: false},
+		}
+		upsertsql = "ON CONFLICT (x ASC, y DESC) WHERE TRUE DO UPDATE SET x = 100, (y, z) = 200 WHERE FALSE"
+
+		if upsertast.String() != upsertsql {
+			t.Fatalf("parser.UpsertClause.String()=%q, want %q", upsertast.String(), upsertsql)
+		}
+
+		if upsertast.Clone().String() != upsertsql {
+			t.Fatalf("parser.UpsertClause.Clone().String()=%q, want %q", upsertast.Clone().String(), upsertsql)
+		}
+	}
+}
+
+// Test Bulk Insert for CSV format
+func TestBulkInsertStatement_String(t *testing.T) {
+	AssertStatementStringer(t, &parser.BulkInsertStatement{
+		Table: &parser.Ident{Name: "tbl"},
+		Columns: []*parser.Ident{
+			{Name: "string"},
+			{Name: "int"},
+			{Name: "decimal"},
+			{Name: "timestamp"},
+		},
+		MapList: []*parser.BulkInsertMapDefinition{
+			{Name: &parser.Ident{Name: "string"},
+				Type:    &parser.Type{Name: &parser.Ident{Name: "STRING"}},
+				MapExpr: &parser.Ident{Name: "1"}},
+			{Name: &parser.Ident{Name: "int"},
+				Type:    &parser.Type{Name: &parser.Ident{Name: "INT"}},
+				MapExpr: &parser.Ident{Name: "2"}},
+			{Name: &parser.Ident{Name: "decimal"},
+				Type: &parser.Type{Name: &parser.Ident{Name: "DECIMAL"},
+					Scale: &parser.IntegerLit{Value: "2"}},
+				MapExpr: &parser.Ident{Name: "3"}},
+			{Name: &parser.Ident{Name: "timestamp"},
+				Type:    &parser.Type{Name: &parser.Ident{Name: "TIMESTAMP"}},
+				MapExpr: &parser.Ident{Name: "4"}},
+		},
+		TransformList: []parser.Expr{
+			&parser.CaseExpr{
+				//Operand: &parser.Ident{Name: "foo"},
+				Blocks: []*parser.CaseBlock{
+					{Condition: &parser.BinaryExpr{Op: parser.EQ, X: &parser.Variable{Name: "@0", VariableIndex: 0}, Y: &parser.StringLit{Value: "Texas"}}, Body: &parser.StringLit{Value: "TX"}},
+					{Condition: &parser.BinaryExpr{Op: parser.EQ, X: &parser.Variable{Name: "@0", VariableIndex: 0}, Y: &parser.StringLit{Value: "Mass"}}, Body: &parser.StringLit{Value: "MA"}},
+				},
+				ElseExpr: &parser.NullLit{},
+			},
+			&parser.BinaryExpr{Op: parser.STAR, X: &parser.Variable{Name: "@1", VariableIndex: 1}, Y: &parser.IntegerLit{Value: "10"}},
+			&parser.Variable{Name: "@2", VariableIndex: 2},
+			&parser.SysVariable{Token: parser.CURRENT_TIMESTAMP},
+		},
+		DataSource:         &parser.StringLit{Value: "csvdata.csv"},
+		BatchSize:          &parser.IntegerLit{Value: "100000"},
+		Format:             &parser.StringLit{Value: "CSV"},
+		Input:              &parser.StringLit{Value: "FILE"},
+		RowsLimit:          &parser.IntegerLit{Value: "1000000"},
+		HeaderRow:          &parser.BoolLit{Value: false},
+		AllowMissingValues: &parser.BoolLit{Value: true},
+	}, `BULK INSERT INTO  tbl(string, int, decimal, timestamp) MAP (1 STRING, 2 INT, 3 DECIMAL(2), 4 TIMESTAMP) TRANSFORM (CASE WHEN @0 = 'Texas' THEN 'TX' WHEN @0 = 'Mass' THEN 'MA' ELSE NULL END, @1 * 10, @2, CURRENT_TIMESTAMP) FROM  'csvdata.csv' WITH FORMAT 'CSV' INPUT 'FILE' HEADER_ROW  BATCHSIZE 100000 ROWSLIMIT 1000000 ALLOW_MISSING_VALUES `)
+
 }
 
 func TestReleaseStatement_String(t *testing.T) {
@@ -736,6 +819,22 @@ func TestSelectStatement_String(t *testing.T) {
 			{Expr: &parser.Ident{Name: "x"}},
 		},
 	}, `SELECT DISTINCT x`)
+
+	AssertStatementStringer(t, &parser.SelectStatement{
+		Top:     pos(0),
+		TopExpr: &parser.IntegerLit{Value: "10"},
+		Columns: []*parser.ResultColumn{
+			{Expr: &parser.Ident{Name: "x"}},
+		},
+	}, `SELECT TOP(10) x`)
+
+	AssertStatementStringer(t, &parser.SelectStatement{
+		TopN:    pos(0),
+		TopExpr: &parser.IntegerLit{Value: "10"},
+		Columns: []*parser.ResultColumn{
+			{Expr: &parser.Ident{Name: "x"}},
+		},
+	}, `SELECT TOPN(10) x`)
 
 	// AssertStatementStringer(t, &sql.SelectStatement{
 	// 	All: pos(0),
@@ -901,6 +1000,228 @@ func TestSelectStatement_String(t *testing.T) {
 	// 		Y:        &parser.QualifiedTableName{Name: &parser.Ident{Name: "y"}},
 	// 	},
 	// }, `SELECT * FROM x CROSS JOIN y`)
+
+	// Test SELECT with WITH clause only upto SQL comparison, skip AssertStatementSanity() until parser can handle WITH clauses.
+	{
+		selectast := parser.SelectStatement{
+			WithClause: &parser.WithClause{
+				CTEs: []*parser.CTE{
+					{
+						TableName: &parser.Ident{Name: "cte"},
+						Columns: []*parser.Ident{
+							{Name: "col1"},
+							{Name: "col2"},
+						},
+						Select: &parser.SelectStatement{
+							Columns: []*parser.ResultColumn{
+								{Expr: &parser.Ident{Name: "col1"}},
+								{Expr: &parser.Ident{Name: "col2"}},
+							},
+							Source: &parser.QualifiedTableName{Name: &parser.Ident{Name: "table"}},
+						},
+						As: parser.Pos{Column: 1},
+					}},
+			},
+			Columns: []*parser.ResultColumn{{Star: pos(0)}},
+			Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "cte"}},
+		}
+		selectsql := `WITH cte (col1, col2) AS (SELECT col1, col2 FROM table) SELECT * FROM cte`
+
+		if s := selectast.String(); s != selectsql {
+			t.Fatalf("parser.SelectStatement.String()=%q, want %q", s, selectsql)
+		}
+		if s := selectast.Clone().String(); s != selectsql {
+			t.Fatalf("parser.SelectStatement.Clone().String()=%q, want %q", s, selectsql)
+		}
+	}
+	// Test SelectStatement.HasWildcard()
+	{
+		selectast := &parser.SelectStatement{
+			Columns: []*parser.ResultColumn{{Star: pos(0)}},
+			Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}},
+		}
+		if !selectast.HasWildcard() {
+			t.Fatalf("parser.SelectStatement.HasWildcard()=%v, want %v", false, true)
+		}
+
+		selectast = &parser.SelectStatement{
+			Columns: []*parser.ResultColumn{{Expr: &parser.QualifiedRef{Star: pos(0)}}},
+			Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}},
+		}
+		if !selectast.HasWildcard() {
+			t.Fatalf("parser.SelectStatement.HasWildcard()=%v, want %v", false, true)
+		}
+
+		selectast = &parser.SelectStatement{
+			Columns: []*parser.ResultColumn{{Expr: &parser.Ident{Name: "col"}}},
+			Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}},
+		}
+		if selectast.HasWildcard() {
+			t.Fatalf("parser.SelectStatement.HasWildcard()=%v, want %v", true, false)
+		}
+	}
+}
+
+func TestSources_String(t *testing.T) {
+	// Test helper functions for QualifiedTableName
+	{
+		qtast := parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}}
+		if s := qtast.TableName(); s != "tbl" {
+			t.Fatalf("parser.QualifiedTableName.TableName()=%v, want %v", s, "tbl")
+		}
+		if !qtast.MatchesTablenameOrAlias("tbl") {
+			t.Fatalf("parser.QualifiedTableName.MatchesTablenameOrAlias()=%v, want %v", false, true)
+		}
+		qtast = parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}, Alias: &parser.Ident{Name: "t1"}}
+		if qtast.SourceFromAlias("t1") != qtast.SourceFromAlias("tbl") {
+			t.Fatalf("parser.QualifiedTableName.SourceFromAlias()=%v, want %v", qtast.SourceFromAlias("t1"), qtast.SourceFromAlias("tbl"))
+		}
+		qtast = parser.QualifiedTableName{
+			Name:  &parser.Ident{Name: "tbl"},
+			Alias: &parser.Ident{Name: "t1"},
+			OutputColumns: []*parser.SourceOutputColumn{
+				{TableName: "tbl", ColumnName: "col1", ColumnIndex: 1},
+				{TableName: "tbl", ColumnName: "col2", ColumnIndex: 2},
+			},
+		}
+		if n := len(qtast.PossibleOutputColumns()); n != 2 {
+			t.Fatalf("len(parser.QualifiedTableName.PossibleOutputColumns())=%v, want %v", n, 2)
+		}
+		if c, _ := qtast.OutputColumnNamed("col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.QualifiedTableName.OutputColumnNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := qtast.OutputColumnNamed("col99"); c != nil {
+			t.Fatalf("parser.QualifiedTableName.OutputColumnNamed()=%v, want %v", c, nil)
+		}
+		if c, _ := qtast.OutputColumnQualifierNamed("tbl", "col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.QualifiedTableName.OutputColumnQualifierNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := qtast.OutputColumnQualifierNamed("t1", "col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.QualifiedTableName.OutputColumnQualifierNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := qtast.OutputColumnQualifierNamed("t9", "col99"); c != nil {
+			t.Fatalf("parser.QualifiedTableName.OutputColumnQualifierNamed()=%v, want %v", c, nil)
+		}
+	}
+
+	// Test helper functions for JoinClause
+	{
+		jcast := parser.JoinClause{
+			X: &parser.QualifiedTableName{
+				Name:  &parser.Ident{Name: "tbl1"},
+				Alias: &parser.Ident{Name: "t1"},
+				OutputColumns: []*parser.SourceOutputColumn{
+					{TableName: "tbl1", ColumnName: "col1", ColumnIndex: 1},
+					{TableName: "tbl1", ColumnName: "col2", ColumnIndex: 2},
+				},
+			},
+			Y: &parser.QualifiedTableName{
+				Name:  &parser.Ident{Name: "tbl2"},
+				Alias: &parser.Ident{Name: "t2"},
+				OutputColumns: []*parser.SourceOutputColumn{
+					{TableName: "tbl2", ColumnName: "col3", ColumnIndex: 1},
+					{TableName: "tbl2", ColumnName: "col4", ColumnIndex: 2},
+				},
+			},
+		}
+
+		if n := len(jcast.PossibleOutputColumns()); n != 4 {
+			t.Fatalf("len(parser.JoinClause.PossibleOutputColumns())=%v, want %v", n, 4)
+		}
+		if c, _ := jcast.OutputColumnNamed("col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.JoinClause.OutputColumnNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := jcast.OutputColumnNamed("col3"); c.ColumnName != "col3" {
+			t.Fatalf("parser.JoinClause.OutputColumnNamed()=%v, want %v", c.ColumnName, "col3")
+		}
+		if c, _ := jcast.OutputColumnNamed("col99"); c != nil {
+			t.Fatalf("parser.JoinClause.OutputColumnNamed()=%v, want %v", c, nil)
+		}
+		if c, _ := jcast.OutputColumnQualifierNamed("tbl1", "col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.JoinClause.OutputColumnQualifierNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := jcast.OutputColumnQualifierNamed("t2", "col3"); c.ColumnName != "col3" {
+			t.Fatalf("parser.JoinClause.OutputColumnQualifierNamed()=%v, want %v", c.ColumnName, "col3")
+		}
+		if c, _ := jcast.OutputColumnQualifierNamed("t1", "col3"); c != nil {
+			t.Fatalf("parser.JoinClause.OutputColumnQualifierNamed()=%v, want %v", c, nil)
+		}
+		if c, _ := jcast.OutputColumnQualifierNamed("t2", "col1"); c != nil {
+			t.Fatalf("parser.JoinClause.OutputColumnQualifierNamed()=%v, want %v", c, nil)
+		}
+		if s := jcast.SourceFromAlias("t1"); s != jcast.X {
+			t.Fatalf("parser.JoinClause.SourceFromAlias()=%v, want %v", s, jcast.X)
+		}
+		if s := jcast.SourceFromAlias("t2"); s != jcast.Y {
+			t.Fatalf("parser.JoinClause.SourceFromAlias()=%v, want %v", s, jcast.Y)
+		}
+		if s := jcast.SourceFromAlias("t3"); s != nil {
+			t.Fatalf("parser.JoinClause.SourceFromAlias()=%v, want %v", s, nil)
+		}
+	}
+
+	// test ParenSource helper functions
+	{
+		psast := parser.ParenSource{
+			X: &parser.QualifiedTableName{
+				Name: &parser.Ident{Name: "tbl1"},
+				OutputColumns: []*parser.SourceOutputColumn{
+					{TableName: "tbl1", ColumnName: "col1", ColumnIndex: 1},
+					{TableName: "tbl1", ColumnName: "col2", ColumnIndex: 2},
+				},
+			},
+			Alias: &parser.Ident{Name: "t1"},
+		}
+		if s := psast.SourceFromAlias("t1"); s.String() != psast.String() {
+			t.Fatalf("parser.ParenSource.SourceFromAlias()=%v, want %v", s, psast)
+		}
+		if s := psast.SourceFromAlias("t3"); s != nil {
+			t.Fatalf("parser.ParenSource.SourceFromAlias()=%v, want %v", s, nil)
+		}
+		if n := len(psast.PossibleOutputColumns()); n != 2 {
+			t.Fatalf("len(parser.JoinClause.PossibleOutputColumns())=%v, want %v", n, 2)
+		}
+		if c, _ := psast.OutputColumnNamed("col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.JoinClause.OutputColumnNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := psast.OutputColumnNamed("col99"); c != nil {
+			t.Fatalf("parser.JoinClause.OutputColumnNamed()=%v, want %v", c, nil)
+		}
+		if c, _ := psast.OutputColumnQualifierNamed("t1", "col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.JoinClause.OutputColumnQualifierNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := psast.OutputColumnQualifierNamed("t1", "col3"); c != nil {
+			t.Fatalf("parser.JoinClause.OutputColumnQualifierNamed()=%v, want %v", c, nil)
+		}
+	}
+
+	// Test select statement source helper functions
+	{
+		selectast := &parser.SelectStatement{
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{Name: "col1"}},
+				{Expr: &parser.Ident{Name: "col2"}},
+			},
+			Source: &parser.QualifiedTableName{Name: &parser.Ident{Name: "table"}},
+		}
+
+		if s := selectast.SourceFromAlias("table"); s != nil {
+			t.Fatalf("parser.SelectStatement.SourceFromAlias()=%v, want %v", s, nil)
+		}
+		if n := len(selectast.PossibleOutputColumns()); n != 2 {
+			t.Fatalf("len(parser.SelectStatement.PossibleOutputColumns())=%v, want %v", n, 2)
+		}
+		if c, _ := selectast.OutputColumnNamed("col1"); c.ColumnName != "col1" {
+			t.Fatalf("parser.SelectStatement.OutputColumnNamed()=%v, want %v", c.ColumnName, "col1")
+		}
+		if c, _ := selectast.OutputColumnNamed("col99"); c != nil {
+			t.Fatalf("parser.SelectStatement.OutputColumnNamed()=%v, want %v", c, nil)
+		}
+		if c, _ := selectast.OutputColumnQualifierNamed("table", "col1"); c != nil {
+			t.Fatalf("parser.SelectStatement.OutputColumnQualifierNamed()=%v, want %v", c, nil)
+		}
+
+	}
 }
 
 func TestUpdateStatement_String(t *testing.T) {
@@ -953,20 +1274,58 @@ func TestUpdateStatement_String(t *testing.T) {
 		},
 	}, `UPDATE OR IGNORE tbl SET x = 100`)
 
-	// AssertStatementStringer(t, &sql.UpdateStatement{
-	// 	WithClause: &sql.WithClause{
-	// 		CTEs: []*sql.CTE{{
-	// 			TableName: &sql.Ident{Name: "cte"},
-	// 			Select: &sql.SelectStatement{
-	// 				Columns: []*sql.ResultColumn{{Star: pos(0)}},
+	// AssertStatementStringer(t, &parser.UpdateStatement{
+	// 	WithClause: &parser.WithClause{
+	// 		CTEs: []*parser.CTE{{
+	// 			TableName: &parser.Ident{Name: "cte"},
+	// 			Select: &parser.SelectStatement{
+	// 				Columns: []*parser.ResultColumn{{Star: pos(0)}},
 	// 			},
+	// 			As: parser.Pos{Column: 1},
 	// 		}},
 	// 	},
-	// 	Table: &sql.QualifiedTableName{Name: &sql.Ident{Name: "tbl"}},
-	// 	Assignments: []*sql.Assignment{
-	// 		{Columns: []*sql.Ident{{Name: "x"}}, Expr: &sql.NumberLit{Value: "100"}},
+	// 	Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}},
+	// 	Assignments: []*parser.Assignment{
+	// 		{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
 	// 	},
-	// }, `WITH "cte" AS (SELECT *) UPDATE "tbl" SET "x" = 100`)
+	// }, `WITH cte AS (SELECT *) UPDATE tbl SET x = 100`)
+
+	// Testing UPDATE with WITH clause only upto SQL comparison until parser can handle WITH clauses.
+	{
+		updateast := parser.UpdateStatement{
+			WithClause: &parser.WithClause{
+				Recursive: parser.Pos{Column: 1},
+				CTEs: []*parser.CTE{{
+					TableName: &parser.Ident{Name: "cte1"},
+					Select: &parser.SelectStatement{
+						Columns: []*parser.ResultColumn{{Star: pos(0)}},
+						Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "table"}},
+					},
+					As: parser.Pos{Column: 1},
+				},
+					{
+						TableName: &parser.Ident{Name: "cte2"},
+						Select: &parser.SelectStatement{
+							Columns: []*parser.ResultColumn{{Star: pos(0)}},
+							Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "cte1"}},
+						},
+						As: parser.Pos{Column: 1},
+					}},
+			},
+			Table: &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}},
+			Assignments: []*parser.Assignment{
+				{Columns: []*parser.Ident{{Name: "x"}}, Expr: &parser.IntegerLit{Value: "100"}},
+			},
+		}
+		updatesql := `WITH RECURSIVE cte1 AS (SELECT * FROM table), cte2 AS (SELECT * FROM cte1) UPDATE tbl SET x = 100`
+
+		if updateast.String() != updatesql {
+			t.Fatalf("parser.UpdateStatement.String()=%q, want %q", updateast.String(), updatesql)
+		}
+		if updateast.Clone().String() != updatesql {
+			t.Fatalf("parser.UpdateStatement.Clone().String()=%q, want %q", updateast.Clone().String(), updatesql)
+		}
+	}
 }
 
 func TestIdent_String(t *testing.T) {
@@ -992,6 +1351,80 @@ func TestNullLit_String(t *testing.T) {
 	AssertExprStringer(t, &parser.NullLit{}, `NULL`)
 }
 
+// test Date literal type. DateLit.String() will return a quoted string.
+func TestDateLit_String(t *testing.T) {
+	dl := &parser.DateLit{Value: time.Unix(0, 0).UTC()}
+	AssertExprStringer(t, dl, `'1970-01-01T00:00:00Z'`)
+}
+
+// test SetLiteralExpr.
+func TestSetLiteralExpr_String(t *testing.T) {
+	sl := &parser.SetLiteralExpr{
+		Lbracket: pos(0),
+		Rbracket: pos(0),
+		Members: []parser.Expr{
+			&parser.StringLit{Value: "val1"},
+			&parser.StringLit{Value: "val2"},
+		},
+	}
+	AssertExprStringer(t, sl, `['val1', 'val2']`)
+}
+
+// test TupleLiteralExpr.
+func TestTupleLiteralExpr_String(t *testing.T) {
+	sl := &parser.TupleLiteralExpr{
+		Lbrace: pos(0),
+		Rbrace: pos(0),
+		Members: []parser.Expr{
+			&parser.StringLit{Value: "val1"},
+			&parser.StringLit{Value: "val2"},
+		},
+	}
+	AssertExprStringer(t, sl, `{'val1', 'val2'}`)
+}
+
+// Test string literal to timestamp conversion
+func TestStringLit_ConvertToTimestamp(t *testing.T) {
+	// string value in RFC3339 format
+	sl := &parser.StringLit{Value: "2023-03-24T10:06:01Z"}
+	AssertExprStringer(t, sl.ConvertToTimestamp(), `'2023-03-24T10:06:01Z'`)
+
+	// string value in RFC3339Nano format
+	// DateLit.String() uses time.RFC3339 format, because of that the nano part
+	// will be truncated in the string.
+	sl = &parser.StringLit{Value: "2023-03-24T10:06:01.100000Z"}
+	AssertExprStringer(t, sl.ConvertToTimestamp(), `'2023-03-24T10:06:01Z'`)
+
+	// string value in common date format
+	sl = &parser.StringLit{Value: "2023-03-24"}
+	AssertExprStringer(t, sl.ConvertToTimestamp(), `'2023-03-24T00:00:00Z'`)
+
+	// string value contains a bad date
+	sl = &parser.StringLit{Value: "2023-13-32"}
+	dl := sl.ConvertToTimestamp()
+	if dl != nil {
+		t.Fatalf("StringLit('2023-13-32').ConvertToTimestamp()=%q, want %q", dl.String(), "nil")
+	}
+}
+
+// test System Variable type.
+func TestSysVariable_String(t *testing.T) {
+	// test CURRENT_DATE
+	sv := &parser.SysVariable{Token: parser.CURRENT_DATE}
+	AssertExprStringer(t, sv, parser.CURRENT_DATE.String())
+	// test CURRENTTIMESTAMP
+	sv = &parser.SysVariable{Token: parser.CURRENT_TIMESTAMP}
+	AssertExprStringer(t, sv, parser.CURRENT_TIMESTAMP.String())
+	// test CURRENT_TIMESTAMP's data type and expect it to be timestamp type
+	if sv.DataType() != parser.NewDataTypeTimestamp() {
+		t.Fatalf("SysVariable(CURRENT_TIMESTAMP).DataType()=%q, want %q", sv.DataType().TypeDescription(), parser.NewDataTypeTimestamp().TypeDescription())
+	}
+	// test CURRENT_TIMESTAMP's name and expect it to be CURRENT_TIMESTAMP
+	if sv.Name() != sv.String() {
+		t.Fatalf("SysVariable(CURRENT_TIMESTAMP).Name()=%q, want %q", sv.String(), sv.Name())
+	}
+}
+
 func TestParenExpr_String(t *testing.T) {
 	AssertExprStringer(t, &parser.ParenExpr{X: &parser.NullLit{}}, `(NULL)`)
 }
@@ -999,6 +1432,7 @@ func TestParenExpr_String(t *testing.T) {
 func TestUnaryExpr_String(t *testing.T) {
 	AssertExprStringer(t, &parser.UnaryExpr{Op: parser.PLUS, X: &parser.IntegerLit{Value: "100"}}, `+100`)
 	AssertExprStringer(t, &parser.UnaryExpr{Op: parser.MINUS, X: &parser.IntegerLit{Value: "100"}}, `-100`)
+	AssertExprStringer(t, &parser.UnaryExpr{Op: parser.BITNOT, X: &parser.BoolLit{Value: true}}, `!TRUE`)
 	AssertNodeStringerPanic(t, &parser.UnaryExpr{X: &parser.IntegerLit{Value: "100"}}, `sql.UnaryExpr.String(): invalid op ILLEGAL`)
 }
 

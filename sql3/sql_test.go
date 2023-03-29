@@ -17,6 +17,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// add test names here to limit the tests to be run. Following sample
+// will run only the 2 tests listed in the filter.
+// var testsToRunFilter=[]string{"sql1testsgrouper", "sql1testsjoiner"}
+var testsToRunFilter = []string{}
+
+func isFilteredTest(s string) bool {
+	for i := 0; i < len(testsToRunFilter); i++ {
+		if testsToRunFilter[i] == s {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSQL_Execute(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
@@ -24,6 +38,10 @@ func TestSQL_Execute(t *testing.T) {
 	svr := c.GetNode(0).Server
 
 	for i, test := range defs.TableTests {
+		if len(testsToRunFilter) > 0 && !isFilteredTest(test.Name(0)) {
+			continue
+		}
+
 		t.Run(test.Name(i), func(t *testing.T) {
 
 			// Create a table with all field types.
@@ -138,6 +156,16 @@ func TestSQL_Execute(t *testing.T) {
 				})
 			}
 		})
+	}
+
+	if len(testsToRunFilter) > 0 {
+		t.Log("WARNING: Only tests specified in the filter list were run. Don't forget to remove the filter before commiting.")
+	}
+}
+
+func TestSQL_FilterCheck(t *testing.T) {
+	if len(testsToRunFilter) > 0 {
+		t.Error("An active SQL test filter is found. Test filters should be removed before checking-in the commit. Empty the filter by assigning testsToRunFilter={}")
 	}
 }
 
