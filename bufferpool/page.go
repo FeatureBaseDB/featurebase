@@ -65,10 +65,11 @@ const PAGE_TYPE_HASH_TABLE = 12
 // == row payload bytes ==
 // writeTID (int64)
 // schemaVersion (int16)
-// redoPtr (int64)
-// fieldOffsets (one for each field, int16, FF is null)
+// versionsPtr (int64)
+// flags (int8) flags that include a deletion marker
+// fieldOffsets (one for each field, int32, FF is null)
 //   offsets point to:
-// *fieldData (one for each field)
+// fieldData (one for each field)
 //   	valueLen (int32) only used for variable length types
 //		valueBytes
 
@@ -385,28 +386,38 @@ func (pg *Page) Dump(label string) {
 	fmt.Printf("%sKEYS: -->\n", fmt.Sprintf("%*s", indent, ""))
 	indent += 4
 
-	// get the keys off the page
-	keys := make([]int, 0)
-	pointers := make([]PageID, 0)
-	iter := NewPageSlotIterator(pg, 0)
-	for {
-		ps := iter.Next()
-		if ps == nil {
-			break
+	switch pageType {
+	case PAGE_TYPE_BTREE_LEAF:
+		// get the keys off the page
+		keys := make([]int, 0)
+		iter := NewPageSlotIterator(pg, 0)
+		for {
+			ps := iter.Next()
+			if ps == nil {
+				break
+			}
+			pl := ps.KeyPayload(pg)
+			keys = append(keys, int(pl.KeyAsInt(pg)))
 		}
-		pl := ps.KeyPayload(pg)
-		keys = append(keys, int(pl.KeyAsInt(pg)))
-		if pageType == PAGE_TYPE_BTREE_INTERNAL {
-			ipl := ps.InternalPayload(pg)
-			pointers = append(pointers, ipl.ValueAsPagePointer(pg))
-		}
-	}
 
-	if pageType == PAGE_TYPE_BTREE_LEAF {
 		for _, key := range keys {
 			fmt.Printf("%s(%d)\n", fmt.Sprintf("%*s", indent, ""), key)
 		}
-	} else {
+	case PAGE_TYPE_BTREE_INTERNAL, PAGE_TYPE_BTREE_HEADER:
+		// get the keys off the page
+		keys := make([]int, 0)
+		pointers := make([]PageID, 0)
+		iter := NewPageSlotIterator(pg, 0)
+		for {
+			ps := iter.Next()
+			if ps == nil {
+				break
+			}
+			pl := ps.KeyPayload(pg)
+			keys = append(keys, int(pl.KeyAsInt(pg)))
+			ipl := ps.InternalPayload(pg)
+			pointers = append(pointers, ipl.ValueAsPagePointer(pg))
+		}
 		for idx, key := range keys {
 			ptr := pointers[idx]
 			fmt.Printf("%s(%d, %d)\n", fmt.Sprintf("%*s", indent, ""), key, ptr)
@@ -414,7 +425,6 @@ func (pg *Page) Dump(label string) {
 		ptr := pg.ReadNextPointer()
 		fmt.Printf("%s(-->, %d)\n", fmt.Sprintf("%*s", indent, ""), ptr)
 	}
-
 }
 
 type KeyPayload struct {
@@ -490,7 +500,7 @@ func (l *LeafPayload) ValueLength(page *Page) int32 {
 	return valueLen
 }
 
-// this wil fail in overflow
+// only call this if you are sure this there is no overflow
 func (l *LeafPayload) ValueAsBytes(page *Page) []byte {
 	offset := l.valueOffset(page)
 	valueLen := int32(binary.BigEndian.Uint32(page.data[offset:]))
@@ -533,6 +543,10 @@ func (l *LeafPayload) GetPayloadReader(page *Page) LeafPagePayLoadReader {
 		PayloadChunkLength: valueLen,
 		PayloadChunkBytes:  valueBytes,
 	}
+}
+
+func (l *LeafPayload) IsVisibleToTID(page *Page, tid int64) bool {
+	return true
 }
 
 type PageSlot struct {

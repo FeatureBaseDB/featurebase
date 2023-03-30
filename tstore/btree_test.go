@@ -13,7 +13,7 @@ import (
 )
 
 func TestAddItemsToBTreeAndValidate(t *testing.T) {
-	diskManager := bufferpool.NewOnDiskDiskManager()
+	diskManager := bufferpool.NewTupleStoreDiskManager()
 
 	objectId := int32(1)
 	shard := int32(0)
@@ -77,24 +77,7 @@ func TestAddItemsToBTreeAndValidate(t *testing.T) {
 	duration := time.Since(start)
 	fmt.Printf("inserted %d rows in %v\n", 3000, duration)
 
-	start = time.Now()
-	key, tuple, _ := b.Search(nil, Int(33))
-	duration = time.Since(start)
-
-	vals := "["
-	for i, v := range tuple.Tuple {
-		if i > 10 {
-			vals += "..."
-			break
-		}
-		if i != 0 {
-			vals += ", "
-		}
-		vals += fmt.Sprintf("%v", v)
-	}
-	vals += "]"
-
-	fmt.Printf("retrieved key %v, tuple (%d columns), %s in %v\n", key, len(tuple.TupleSchema), vals, duration)
+	getKey(b, Int(33))
 
 	fmt.Printf("\n\n")
 
@@ -102,7 +85,7 @@ func TestAddItemsToBTreeAndValidate(t *testing.T) {
 }
 
 func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
-	diskManager := bufferpool.NewOnDiskDiskManager()
+	diskManager := bufferpool.NewTupleStoreDiskManager()
 
 	objectId := int32(1)
 	shard := int32(0)
@@ -178,9 +161,95 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 	duration := time.Since(start)
 	fmt.Printf("inserted %d rows in %v\n", numRecs, duration)
 
-	start = time.Now()
-	key, tuple, _ := b.Search(nil, Int(524))
-	duration = time.Since(start)
+	getKey(b, Int(524))
+
+	fmt.Printf("\n\n")
+
+	b.Dump(0)
+}
+
+func TestAddItemsWithNullsToBTreeAndValidate(t *testing.T) {
+	diskManager := bufferpool.NewTupleStoreDiskManager()
+
+	objectId := int32(1)
+	shard := int32(0)
+	dataFile := fmt.Sprintf("ts-shard.%04d", shard)
+
+	os.Remove(dataFile)
+
+	diskManager.CreateOrOpenShard(objectId, shard, dataFile)
+
+	bufferPool := bufferpool.NewBufferPool(100, diskManager)
+
+	tableSchema := types.Schema{
+		&types.PlannerColumn{
+			ColumnName: "vtest",
+			Type:       parser.NewDataTypeVarchar(50),
+		},
+	}
+
+	b, err := NewBTree(8, objectId, shard, tableSchema, bufferPool)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rowSchema := types.Schema{
+		&types.PlannerColumn{
+			ColumnName: "_id",
+			Type:       parser.NewDataTypeID(),
+		},
+		&types.PlannerColumn{
+			ColumnName: "vtest",
+			Type:       parser.NewDataTypeVarchar(50),
+		},
+	}
+
+	inserts := make([]int, 0)
+	for i := 1; i <= 50; i++ {
+		inserts = append(inserts, i)
+	}
+	rand.Shuffle(len(inserts), func(i, j int) { inserts[i], inserts[j] = inserts[j], inserts[i] })
+
+	rr := make(types.Row, 2)
+
+	start := time.Now()
+	for _, i := range inserts {
+		rr[0] = int64(i)
+		if i%2 == 0 {
+			rr[1] = fmt.Sprintf("This is a test of things %d", i)
+		} else {
+			rr[1] = nil
+		}
+
+		tup := &BTreeTuple{
+			TupleSchema: rowSchema,
+			Tuple:       rr,
+		}
+
+		// fmt.Printf("%v", tup)
+
+		err = b.Insert(tup)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	duration := time.Since(start)
+	fmt.Printf("inserted %d rows in %v\n", 50, duration)
+
+	getKey(b, Int(32))
+	fmt.Printf("\n\n")
+
+	getKey(b, Int(33))
+	fmt.Printf("\n\n")
+
+	b.Dump(0)
+}
+
+func getKey(b *BTree, k Sortable) {
+	start := time.Now()
+	key, tuple, _ := b.Search(k)
+	duration := time.Since(start)
 
 	vals := "["
 	for i, v := range tuple.Tuple {
@@ -197,7 +266,4 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 
 	fmt.Printf("retrieved key %v, tuple (%d columns), %s in %v\n", key, len(tuple.TupleSchema), vals, duration)
 
-	fmt.Printf("\n\n")
-
-	b.Dump(0)
 }

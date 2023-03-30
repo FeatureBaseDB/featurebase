@@ -5,6 +5,7 @@ package tstore
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 
 	"github.com/pkg/errors"
 
@@ -18,9 +19,41 @@ const (
 
 var ErrNeedsExclusive = errors.New("ErrNeedsExclusive")
 
+type BTreeTupleHeader struct {
+	writeTID      TID
+	schemaVersion int16
+	versionsPtr   int64
+	flags         int8
+}
+
+func NewBTreeTupleHeaderFromBytes(b []byte) *BTreeTupleHeader {
+	rdr := bytes.NewReader(b)
+
+	var writeTID int64
+	binary.Read(rdr, binary.BigEndian, &writeTID)
+
+	var schemaVersion int16
+	binary.Read(rdr, binary.BigEndian, &schemaVersion)
+
+	var versionsPtr int64
+	binary.Read(rdr, binary.BigEndian, &versionsPtr)
+
+	var flags int8
+	binary.Read(rdr, binary.BigEndian, &flags)
+
+	return &BTreeTupleHeader{
+		writeTID:      TID(writeTID),
+		schemaVersion: schemaVersion,
+		versionsPtr:   versionsPtr,
+		flags:         flags,
+	}
+}
+
 type BTreeTuple struct {
 	TupleSchema types.Schema
 	Tuple       types.Row
+
+	tupleSchemaIndex map[string]int
 }
 
 func (t *BTreeTuple) keyValue() Sortable {
@@ -31,6 +64,21 @@ func (t *BTreeTuple) keyValue() Sortable {
 	return Int(kv)
 }
 
+func (t *BTreeTuple) column(name string) (int, *types.PlannerColumn) {
+	if t.tupleSchemaIndex == nil {
+		t.tupleSchemaIndex = make(map[string]int)
+		for i, s := range t.TupleSchema {
+			t.tupleSchemaIndex[s.ColumnName] = i
+		}
+	}
+	idx, ok := t.tupleSchemaIndex[name]
+	if !ok {
+		return -1, nil
+	}
+	ps := t.TupleSchema[idx]
+	return idx, ps
+}
+
 func NewBTreeTupleFromBytes(b []byte, schema types.Schema) *BTreeTuple {
 	t := &BTreeTuple{
 		TupleSchema: schema,
@@ -38,21 +86,45 @@ func NewBTreeTupleFromBytes(b []byte, schema types.Schema) *BTreeTuple {
 	}
 
 	rdr := bytes.NewReader(b)
+	var writeTID int64
+	binary.Read(rdr, binary.BigEndian, &writeTID)
+
+	var schemaVersion int16
+	binary.Read(rdr, binary.BigEndian, &schemaVersion)
+
+	var versionsPtr int64
+	binary.Read(rdr, binary.BigEndian, &versionsPtr)
+
+	var flags int8
+	binary.Read(rdr, binary.BigEndian, &flags)
+
+	dataRdr := bytes.NewReader(b)
+
 	for i, s := range schema {
+		// read the offset
+		var fieldOffset uint32
+		binary.Read(rdr, binary.BigEndian, &fieldOffset)
+		if fieldOffset == 0xFFFFFFFF {
+			t.Tuple[i] = nil
+			continue
+		}
+
 		switch s.Type.(type) {
 		case *parser.DataTypeVarchar:
+			dataRdr.Seek(int64(fieldOffset), io.SeekStart)
 			var l int32
-			binary.Read(rdr, binary.BigEndian, &l)
+			binary.Read(dataRdr, binary.BigEndian, &l)
 			bvalue := make([]byte, l)
-			binary.Read(rdr, binary.BigEndian, &bvalue)
+			binary.Read(dataRdr, binary.BigEndian, &bvalue)
 			t.Tuple[i] = string(bvalue)
 
 		case *parser.DataTypeVarbinary:
+			dataRdr.Seek(int64(fieldOffset), io.SeekStart)
 			var l int32
-			binary.Read(rdr, binary.BigEndian, &l)
+			binary.Read(dataRdr, binary.BigEndian, &l)
 			bvalue := make([]byte, l)
-			binary.Read(rdr, binary.BigEndian, &bvalue)
-			t.Tuple[i] = []byte(bvalue)
+			binary.Read(dataRdr, binary.BigEndian, &bvalue)
+			t.Tuple[i] = bvalue
 		default:
 			panic("unexpected type")
 		}
@@ -60,48 +132,108 @@ func NewBTreeTupleFromBytes(b []byte, schema types.Schema) *BTreeTuple {
 	return t
 }
 
-func (b *BTreeTuple) Bytes() ([]byte, error) {
+// tuple format
+// 		writeTID (int64)
+// 		schemaVersion (int16) (will we ever have > 64K of schema versions??)
+// 		versionsPtr (int64) ptr to old versions page for this tuple
+//		flags (int8) flags that include a deletion marker
+// 		fieldOffsets (one for each field, int32, 0xFFFFFFFF is null)
+//   		offsets point to:
+// 				fieldData (one for each field)
+//   				[valueLen (int32)] optional only used for variable length types (right now varchar)
+//					valueBytes
+
+func (b *BTreeTuple) Bytes(tid TID, schema types.Schema, schemaVersion int, versionsPtr int64, forDeletion bool) ([]byte, error) {
 	var valueBuf bytes.Buffer
-	for cidx, c := range b.TupleSchema {
-		// skip the key column
-		if cidx == 0 {
+
+	hdrBytes := make([]byte, 8+2+8+1)
+	offset := 0
+
+	// write TID
+	binary.BigEndian.PutUint64(hdrBytes[offset:], uint64(tid))
+	offset += 8
+
+	// schemaVersion
+	binary.BigEndian.PutUint16(hdrBytes[offset:], uint16(schemaVersion))
+	offset += 2
+
+	// versionsPtr
+	binary.BigEndian.PutUint64(hdrBytes[offset:], uint64(versionsPtr))
+	offset += 8
+
+	// flags
+	hdrBytes[offset] = 0
+	offset += 1
+
+	// write header
+	valueBuf.Write(hdrBytes)
+
+	// hang on to a null value
+	nullValue := make([]byte, 4)
+	binary.BigEndian.PutUint32(nullValue, uint32(0xFFFFFFFF))
+
+	// initialize offset to be header + field array
+	offset += len(schema) * 4
+
+	// now write offsets and field data
+	var fieldData bytes.Buffer
+	for _, sc := range schema {
+		cidx, tsc := b.column(sc.ColumnName)
+		// if the schema column is not in the schema being used for insert we write a null
+		if tsc == nil {
+			valueBuf.Write(nullValue)
 			continue
 		}
+
 		rd := b.Tuple[cidx]
 
-		switch ty := c.Type.(type) {
+		// if we get an explict null write it
+		if rd == nil {
+			valueBuf.Write(nullValue)
+			continue
+		}
+
+		switch tsc.Type.(type) {
 		case *parser.DataTypeVarchar:
-			if rd == nil {
-				b := []byte{0, 0, 0, 0}
-				valueBuf.Write(b)
-			} else {
-				data, ok := rd.(string)
-				if !ok {
-					return []byte{}, errors.Errorf("unexpected type conversion '%T'", rd)
-				}
-				b := make([]byte, 4)
-				binary.BigEndian.PutUint32(b, uint32(len(data)))
-				valueBuf.Write(b)
-				valueBuf.WriteString(data)
-			}
+			// write field offset
+			b := make([]byte, 4)
+			binary.BigEndian.PutUint32(b, uint32(offset))
+			valueBuf.Write(b)
+
+			// write field data
+			data := rd.(string)
+			b = make([]byte, 4)
+			l := len(data)
+			offset += 4 + l
+			binary.BigEndian.PutUint32(b, uint32(l))
+			fieldData.Write(b)
+			fieldData.WriteString(data)
+
 		case *parser.DataTypeVarbinary:
-			if rd == nil {
-				b := []byte{0, 0, 0, 0}
-				valueBuf.Write(b)
-			} else {
-				data, ok := rd.([]byte)
-				if !ok {
-					return []byte{}, errors.Errorf("unexpected type conversion '%T'", rd)
-				}
-				b := make([]byte, 4)
-				binary.BigEndian.PutUint32(b, uint32(len(data)))
-				valueBuf.Write(b)
-				valueBuf.Write(data)
-			}
+			// write field offset
+			b := make([]byte, 4)
+			binary.BigEndian.PutUint32(b, uint32(offset))
+			valueBuf.Write(b)
+
+			// write field data
+			data := rd.([]byte)
+			b = make([]byte, 4)
+			l := len(data)
+			offset += 4 + l
+			binary.BigEndian.PutUint32(b, uint32(l))
+			binary.BigEndian.PutUint32(b, uint32(len(data)))
+			fieldData.Write(b)
+			fieldData.Write(data)
+
 		default:
-			return []byte{}, errors.Errorf("unexpected type '%T'", ty)
+			panic("unexpected field type")
 		}
 	}
+
+	// write the field data
+	valueBuf.Write(fieldData.Bytes())
+
+	// and we're done
 	return valueBuf.Bytes(), nil
 }
 

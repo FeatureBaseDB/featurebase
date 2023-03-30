@@ -151,7 +151,7 @@ type Holder struct {
 
 	// t-store
 	tstorepool *bufferpool.BufferPool
-	tstoredisk *bufferpool.OnDiskDiskManager
+	tstoredisk *bufferpool.TupleStoreDiskManager
 }
 
 // HolderOpts holds information about the holder which other things might want
@@ -264,7 +264,7 @@ type HolderConfig struct {
 	CacheFlushInterval   time.Duration
 	Logger               logger.Logger
 	TStoreBufferPool     *bufferpool.BufferPool
-	TStoreDiskManager    *bufferpool.OnDiskDiskManager
+	TStoreDiskManager    *bufferpool.TupleStoreDiskManager
 
 	StorageConfig *storage.Config
 	RBFConfig     *rbfcfg.Config
@@ -277,7 +277,7 @@ type HolderConfig struct {
 // need to override these; that's usually handled by server options
 // such as OptServerOpenTranslateStore.
 func DefaultHolderConfig() *HolderConfig {
-	dm := bufferpool.NewOnDiskDiskManager()
+	dm := bufferpool.NewTupleStoreDiskManager()
 	return &HolderConfig{
 		PartitionN:           disco.DefaultPartitionN,
 		OpenTranslateStore:   OpenInMemTranslateStore,
