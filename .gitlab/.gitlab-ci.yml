@@ -733,6 +733,7 @@ s3 dump tag:
           echo "Directory ${dir}"
           mkdir $dir
           mv featurebase_${goos}_${goarch} ${dir}/featurebase
+          mv ./build/fbsql_${goos}_${goarch} ${dir}/fbsql
           cp NOTICE install/featurebase.conf install/featurebase.*.service ${dir}/
           tar cvzf ${dir}.tar.gz ${dir}
           aws s3 cp ${dir} s3://${LOCATION}/${CI_COMMIT_TAG}/${dir}/ --recursive
@@ -742,3 +743,5 @@ s3 dump tag:
 
   needs:
     - job: build featurebase
+    - job: build fbsql amd64
+    - job: build fbsql arm64
