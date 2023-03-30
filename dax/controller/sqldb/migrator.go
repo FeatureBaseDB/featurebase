@@ -57,7 +57,7 @@ func NewEmbedMigrator(fs fs.FS, c *pop.Connection, log logger.Logger) (*EmbedMig
 }
 
 func (fm *EmbedMigrator) findMigrations(runner func(mf pop.Migration, tx *pop.Connection) error) error {
-	return fs.WalkDir(fm.FS, "migrations", func(path string, d fs.DirEntry, err error) error {
+	return fs.WalkDir(fm.FS, "migrations", func(path string, d fs.DirEntry, _ error) error {
 		if d.IsDir() {
 			return nil
 		}
