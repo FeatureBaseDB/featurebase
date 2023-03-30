@@ -18,7 +18,10 @@ import (
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/featurebasedb/featurebase/v3/testhook"
+	"github.com/featurebasedb/featurebase/v3/tstore"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
@@ -64,6 +67,8 @@ type Index struct {
 
 	// indicate that we're closing and should wrap up and not allow new actions
 	closing chan struct{}
+
+	tstores map[uint64]*tstore.BTree
 }
 
 // NewIndex returns an existing (but possibly empty) instance of
@@ -94,6 +99,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		translationSyncer: NopTranslationSyncer,
 
 		OpenTranslateStore: OpenInMemTranslateStore,
+		tstores:            make(map[uint64]*tstore.BTree),
 	}
 	return idx, nil
 }
@@ -1095,6 +1101,47 @@ func (i *Index) GetDataFramePath(shard uint64) string {
 	os.MkdirAll(i.path, 0o750)
 	shardpad := fmt.Sprintf("%04d", shard)
 	return filepath.Join(path, shardpad)
+}
+
+func (i *Index) GetTStore(shard uint64) (*tstore.BTree, error) {
+	b, ok := i.tstores[shard]
+	if ok {
+		return b, nil
+	}
+	basePath := i.TStorePath()
+	// open or create btreefile for this shard
+	dataFile := filepath.Join(basePath, fmt.Sprintf("ts-shard.%04d", shard))
+	i.holder.tstoredisk.CreateOrOpenShard(i.ID, int32(shard), dataFile)
+
+	// get the schema from the FeatureBase table in the form of a planner_types.Schema
+	// we just want the t-store types
+
+	fieldList := make([]*Field, 0)
+	for _, f := range i.fields {
+		if strings.EqualFold(f.options.Type, FieldTypeVarchar) {
+			fieldList = append(fieldList, f)
+		}
+	}
+
+	sort.Slice(fieldList, func(i, j int) bool {
+		return fieldList[i].CreatedAt() < fieldList[j].CreatedAt()
+	})
+
+	indexSchema := make(planner_types.Schema, len(fieldList))
+	for i, f := range fieldList {
+		indexSchema[i] = &planner_types.PlannerColumn{
+			ColumnName: f.name,
+			Type:       parser.NewDataTypeVarchar(f.options.Length),
+		}
+	}
+
+	// create the b-tree we're going to use
+	b, err := tstore.NewBTree(tstore.KEY_SIZE_INT64, i.ID, int32(shard), indexSchema, i.holder.tstorepool)
+	if err != nil {
+		return nil, err
+	}
+	i.tstores[shard] = b
+	return b, nil
 }
 
 type indexSlice []*Index
