@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/gobuffalo/pop/v6"
 )
@@ -57,7 +58,11 @@ func NewEmbedMigrator(fs fs.FS, c *pop.Connection, log logger.Logger) (*EmbedMig
 }
 
 func (fm *EmbedMigrator) findMigrations(runner func(mf pop.Migration, tx *pop.Connection) error) error {
-	return fs.WalkDir(fm.FS, "migrations", func(path string, d fs.DirEntry, _ error) error {
+	return fs.WalkDir(fm.FS, "migrations", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return errors.Wrap(err, "walking dir")
+		}
+
 		if d.IsDir() {
 			return nil
 		}
