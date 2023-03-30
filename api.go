@@ -773,6 +773,10 @@ func (api *API) DeleteShard(_ context.Context, indexName string, shardID uint64)
 	}
 
 	// Get views of shards
+	// --> maybe can use InMemSharder() from disco?
+	sharder := disco.NewInMemSharder()
+	ctx := context.Background()
+	// sharder.Shards(ctx, idx,) <-- need a field name
 	// ??? sv := idx.fieldView2shard().removeField()
 	// ??? maybe just use the api.DeleteField() method?
 
