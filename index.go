@@ -1016,6 +1016,19 @@ func (i *Index) DeleteField(name string) error {
 	return i.translationSyncer.Reset()
 }
 
+func (i *Index) DeleteShard(shardName string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Confirm shard exists.
+	// Delete shard
+	// --> need to make schemator DeleteShard too?
+	// ???
+	// profit
+
+	return nil
+}
+
 // SetTranslatePartitions sets the cached value: translatePartitions.
 //
 // There's already logic in api_directive.go which creates a new index with

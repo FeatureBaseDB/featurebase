@@ -760,7 +760,22 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	return nil
 }
 
+// DeleteShard deletes a given shard in an index.
 func (api *API) DeleteShard(_ context.Context, indexName string, shardID uint64) error {
+	if err := api.validate(apiDeleteShard); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+
+	// Find index.
+	idx := api.holder.Index(indexName)
+	if idx == nil {
+		return newNotFoundError(ErrIndexNotFound, indexName)
+	}
+
+	// Get views of shards
+	// ??? sv := idx.fieldView2shard().removeField()
+	// ??? maybe just use the api.DeleteField() method?
+
 	return nil
 }
 
@@ -3187,6 +3202,7 @@ const (
 	apiCreateField
 	apiCreateIndex
 	apiDeleteField
+	apiDeleteShard
 	apiDeleteAvailableShard
 	apiDeleteIndex
 	apiDeleteView
@@ -3257,6 +3273,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiCreateField:          {},
 	apiCreateIndex:          {},
 	apiDeleteField:          {},
+	apiDeleteShard:          {},
 	apiDeleteAvailableShard: {},
 	apiDeleteIndex:          {},
 	apiDeleteView:           {},

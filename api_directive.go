@@ -341,7 +341,8 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 
 			//maybe start with shards, since multiple shards belong to a partition
 			api.Holder().Index(string(tkey)).TranslateStore(int(partition)) //.Delete(records *roaring.Bitmap)
-			// maybe need to do this since it's local disk? os.RemoveAll(pathname) maybe partition path?
+
+			// this implementation is going to be much more difficult
 		}
 	}
 
@@ -433,14 +434,12 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 	fieldComp := newFieldsComparer(fromD.TranslateFieldsMap(), toD.TranslateFieldsMap())
 
 	// Remove any field keys which are no longer assigned to this worker.
-	// TODO(tlt): currently, this is just removing the file lock on the
-	// resource; it's not actually removing the resource from the local
-	// computer. We should do that.
 	for tkey, fields := range fieldComp.removed() {
 		qtid := tkey.QualifiedTableID()
 		for _, field := range fields {
 			api.serverlessStorage.RemoveFieldKeyResource(qtid, field)
 
+			// deleting field from disk
 			err := api.DeleteField(ctx, string(tkey), string(field))
 			if err != nil {
 				errors.Wrapf(err, "error deleting field")
@@ -541,7 +540,7 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 		for _, shard := range shards {
 			partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
 			api.serverlessStorage.RemoveShardResource(qtid, partition, shard)
-			
+
 			//this is a noop implementation of DeleteShard for now
 			err := api.DeleteShard(ctx, string(tkey), uint64(shard))
 			if err != nil {
