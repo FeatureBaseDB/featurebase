@@ -190,6 +190,7 @@ var TableTests []TableTest = []TableTest{
 	// joins
 	joinTestsUsers,
 	joinTestsOrders,
+	joinTestsQuantity,
 	joinTests,
 
 	// bulk insert
