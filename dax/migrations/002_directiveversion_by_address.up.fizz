@@ -1,0 +1,13 @@
+create_table("directive_versions_tmp") {
+	t.Column("id", "string", {primary: true})
+	t.Column("version", "int")
+	t.Timestamps()
+}
+
+sql("insert into directive_versions_tmp (id, version, created_at, updated_at) select address, 0, created_at, updated_at from workers where role = 'compute';")
+
+sql("update directive_versions_tmp set version = (select version from directive_versions where id = 1);")
+
+drop_table("directive_versions")
+
+rename_table("directive_versions_tmp", "directive_versions")

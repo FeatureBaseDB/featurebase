@@ -78,7 +78,7 @@ create_table("jobs") {
 add_index("jobs", ["database_id", "name"], {"unique": true})
 
 create_table("directive_versions") {
-	t.Column("id", "string", {primary: true})
+	t.Column("id", "int", {primary: true})
 	t.Column("version", "int")
 	t.Timestamps()
 }
