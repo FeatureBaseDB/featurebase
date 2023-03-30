@@ -760,6 +760,10 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	return nil
 }
 
+func (api *API) DeleteShard(_ context.Context, indexName string, shardID uint64) error {
+	return nil
+}
+
 // DeleteAvailableShard a shard ID from the available shard set cache.
 func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName string, shardID uint64) error {
 	if err := api.validate(apiDeleteAvailableShard); err != nil {

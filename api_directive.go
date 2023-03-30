@@ -332,14 +332,16 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 		qtid := tkey.QualifiedTableID()
 		for _, partition := range partitions {
 			api.serverlessStorage.RemoveTableKeyResource(qtid, partition)
-			// idea is to delete partition
 			// think about the holder as that's the local disk space
-				// NOTE: index = table --> don't want to delete the whole index/table
-				// maybe search via indexes in the translatestores in index.go?
-			// FeatureBase storage has no concept of database or org, so when we create an index in FeatureBase which maps 
-			// to a qtbl, the name of that index is the TableKey, which is made up of org/database/tableID
-			
-			//api.Holder().what? do I need to create methods on holder to delete partitions?
+			// NOTE: index = table --> don't want to delete the whole index/table
+			// maybe search via indexes in the translatestores in index.go?
+			// FeatureBase storage has no concept of database or org, so when we create an index in
+			// FeatureBase which maps to a qtbl, the name of that index is the TableKey,
+			// which is made up of org/database/tableID
+
+			//maybe start with shards, since multiple shards belong to a partition
+			api.Holder().Index(string(tkey)).TranslateStore(int(partition)) //.Delete(records *roaring.Bitmap)
+			// maybe need to do this since it's local disk? os.RemoveAll(pathname) maybe partition path?
 		}
 	}
 
@@ -438,6 +440,11 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 		qtid := tkey.QualifiedTableID()
 		for _, field := range fields {
 			api.serverlessStorage.RemoveFieldKeyResource(qtid, field)
+
+			err := api.DeleteField(ctx, string(tkey), string(field))
+			if err != nil {
+				errors.Wrapf(err, "error deleting field")
+			}
 		}
 	}
 
@@ -534,6 +541,12 @@ func (api *API) pushJobsShards(ctx context.Context, jobs chan<- directiveJobType
 		for _, shard := range shards {
 			partition := dax.PartitionNum(disco.ShardToShardPartition(string(tkey), uint64(shard), disco.DefaultPartitionN))
 			api.serverlessStorage.RemoveShardResource(qtid, partition, shard)
+			
+			//this is a noop implementation of DeleteShard for now
+			err := api.DeleteShard(ctx, string(tkey), uint64(shard))
+			if err != nil {
+				log.Printf("error deleting shard: %v", err)
+			}
 		}
 	}
 
