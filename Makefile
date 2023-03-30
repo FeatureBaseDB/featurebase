@@ -266,7 +266,12 @@ docker-image-featurebase-quick: build-for-quick
 docker-image-datagen: vendor
 	docker build --tag dax/datagen --file Dockerfile-datagen .
 
+get-account-id:
+	$(eval AWS_ACCOUNTID := $(shell aws sts get-caller-identity --output=json | jq -r .Account))
+
+
 ecr-push-featurebase: docker-login
+	echo "Pushing to account $(AWS_ACCOUNTID), profile $(AWS_PROFILE)"
 	docker tag dax/featurebase:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/featurebase:latest
 	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/featurebase:latest
 
@@ -274,7 +279,7 @@ ecr-push-datagen: docker-login
 	docker tag dax/datagen:latest $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/datagen:latest
 	docker push $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com/dax/datagen:latest
 
-docker-login:
+docker-login: get-account-id
 	aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $(AWS_ACCOUNTID).dkr.ecr.us-east-2.amazonaws.com
 
 # Create docker image (alias)
