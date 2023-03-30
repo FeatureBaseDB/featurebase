@@ -46,13 +46,13 @@ func TestSQL_Execute(t *testing.T) {
 
 			// Create a table with all field types.
 			if test.HasTable() {
-				_, _, _, err := sql_test.MustQueryRows(t, svr, test.CreateTable())
+				_, _, _, err := sql_test.MustQueryRows(t, svr, nil, test.CreateTable())
 				assert.NoError(t, err)
 			}
 
 			if test.HasTable() && test.HasData() {
 				// Populate fields with data.
-				_, _, _, err := sql_test.MustQueryRows(t, svr, test.InsertInto(t))
+				_, _, _, err := sql_test.MustQueryRows(t, svr, nil, test.InsertInto(t))
 				assert.NoError(t, err)
 			}
 
@@ -61,7 +61,7 @@ func TestSQL_Execute(t *testing.T) {
 					for _, sql := range sqltest.SQLs {
 						t.Run(fmt.Sprintf("sql-%s", sql), func(t *testing.T) {
 							log.Printf("SQL: %s", sql)
-							rows, headers, plan, err := sql_test.MustQueryRows(t, svr, sql)
+							rows, headers, plan, err := sql_test.MustQueryRows(t, svr, nil, sql)
 
 							// Check expected error instead of results.
 							if sqltest.ExpErr != "" {

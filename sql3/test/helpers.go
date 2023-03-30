@@ -14,14 +14,23 @@ import (
 )
 
 // MustQueryRows returns the row results as a slice of []interface{}, along with the columns, the query plan as a []byte or an error.
-func MustQueryRows(tb testing.TB, svr *featurebase.Server, q string) ([][]interface{}, []*featurebase.WireQueryField, []byte, error) {
+func MustQueryRows(tb testing.TB, svr *featurebase.Server, c context.Context, q string) ([][]interface{}, []*featurebase.WireQueryField, []byte, error) {
 	tb.Helper()
 	requestId, err := uuid.NewV4()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	ctx := fbcontext.WithRequestID(context.Background(), requestId.String())
+	// Originally MustQueryRows just created a context for itself do test with.
+	// However, for some tests, we may want access to the test's context so that,
+	// for example, we can cancel the context mid-test and make sure that gets
+	// handled correctly.
+	var ctx context.Context
+	if c == nil {
+		ctx = fbcontext.WithRequestID(context.Background(), requestId.String())
+	} else {
+		ctx = c
+	}
 
 	stmt, err := svr.CompileExecutionPlan(ctx, q)
 	if err != nil {

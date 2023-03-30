@@ -51,7 +51,7 @@ func TestPlanner_SystemTableFanout(t *testing.T) {
 	server := c.GetNode(0).Server
 
 	t.Run("PerfCounters", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, server, `select * from fb_performance_counters`)
+		results, columns, _, err := sql_test.MustQueryRows(t, server, nil, `select * from fb_performance_counters`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func TestPlanner_SystemTableFanout(t *testing.T) {
 	})
 
 	t.Run("SystemTablesExecRequests", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_exec_requests`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select * from fb_exec_requests`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +105,7 @@ func TestPlanner_SystemTableFanout(t *testing.T) {
 	})
 
 	t.Run("SystemTablesExecRequestsAgg", func(t *testing.T) {
-		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select 
+		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select 
 		count(request_id) as request_count,
 		min(elapsed_time) as min_duration,
 		max(elapsed_time) as max_duration,
@@ -156,7 +156,7 @@ func TestPlanner_Show(t *testing.T) {
 	}
 
 	t.Run("SystemTablesInfo", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select name, platform, platform_version, db_version, state, node_count, replica_count from fb_database_info`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select name, platform, platform_version, db_version, state, node_count, replica_count from fb_database_info`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -178,7 +178,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("SystemTablesNode", func(t *testing.T) {
-		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select * from fb_database_nodes`)
+		_, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select * from fb_database_nodes`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -197,7 +197,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowDatabases", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW DATABASES`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `SHOW DATABASES`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -223,7 +223,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowTables", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW TABLES`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `SHOW TABLES`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +250,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowCreateTable", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SHOW CREATE TABLE %i`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SHOW CREATE TABLE %i`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -272,7 +272,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowCreateTableCacheTypes", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table iris1 (
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table iris1 (
 			_id id,
 			speciesid id cachetype ranked size 1000
 			species string cachetype ranked size 1000
@@ -287,7 +287,7 @@ func TestPlanner_Show(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW CREATE TABLE iris1`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `SHOW CREATE TABLE iris1`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -309,7 +309,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowColumns", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SHOW COLUMNS FROM %i`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SHOW COLUMNS FROM %i`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -338,7 +338,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowColumns2", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SHOW COLUMNS FROM %l`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SHOW COLUMNS FROM %l`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -367,7 +367,7 @@ func TestPlanner_Show(t *testing.T) {
 	})
 
 	t.Run("ShowColumnsFromNotATable", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SHOW COLUMNS FROM foo`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `SHOW COLUMNS FROM foo`)
 		if err != nil {
 			if err.Error() != "[1:19] table 'foo' not found" {
 				t.Fatal(err)
@@ -426,7 +426,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 			sql += `) keypartitions 12`
 
 			// Run the create table statement.
-			_, _, _, err := sql_test.MustQueryRows(t, server, sql)
+			_, _, _, err := sql_test.MustQueryRows(t, server, nil, sql)
 			if assert.Error(t, err) {
 				assert.Equal(t, fld.expErr, err.Error())
 				// sql3.SQLErrConflictingColumnConstraint.Message
@@ -603,7 +603,7 @@ func TestPlanner_CoverCreateTable(t *testing.T) {
 		sql += `) keypartitions 12`
 
 		// Run the create table statement.
-		results, columns, _, err := sql_test.MustQueryRows(t, server, sql)
+		results, columns, _, err := sql_test.MustQueryRows(t, server, nil, sql)
 		assert.NoError(t, err)
 		assert.Equal(t, [][]interface{}{}, results)
 		assert.Equal(t, []*pilosa.WireQueryField{}, columns)
@@ -666,7 +666,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 	server := c.GetNode(0).Server
 
 	t.Run("CreateTableAllDataTypes", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, server, `create table allcoltypes (
+		results, columns, _, err := sql_test.MustQueryRows(t, server, nil, `create table allcoltypes (
 			_id id,
 			intcol int, 
 			boolcol bool, 
@@ -689,7 +689,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 	})
 
 	t.Run("CreateTableAllDataTypesAgain", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, `create table allcoltypes (
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, `create table allcoltypes (
 			_id id,
 			intcol int, 
 			boolcol bool, 
@@ -709,28 +709,28 @@ func TestPlanner_CreateTable(t *testing.T) {
 	})
 
 	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, `create table lowercase (_id id, name string, SomeColumn string, legalname string);`)
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, `create table lowercase (_id id, name string, SomeColumn string, legalname string);`)
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("CreateTableMixedCaseColumn", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, `create table MixedCcase (_id id, name string, SomeColumn string, legalname string);`)
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, `create table MixedCcase (_id id, name string, SomeColumn string, legalname string);`)
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("DropTable1", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, `drop table allcoltypes`)
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, `drop table allcoltypes`)
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("CreateTableAllDataTypesAllConstraints", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, server, `create table allcoltypes (
+		results, columns, _, err := sql_test.MustQueryRows(t, server, nil, `create table allcoltypes (
 			_id id,
 			intcol int min 0 max 10000,
 			boolcol bool,
@@ -756,7 +756,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 	})
 
 	t.Run("ShowColumns1", func(t *testing.T) {
-		_, columns, _, err := sql_test.MustQueryRows(t, server, `SHOW COLUMNS FROM allcoltypes`)
+		_, columns, _, err := sql_test.MustQueryRows(t, server, nil, `SHOW COLUMNS FROM allcoltypes`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -781,7 +781,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 	})
 
 	t.Run("CreateTableDupeColumns", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, `create table dupecols (
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, `create table dupecols (
 			_id id,
 			_id int)`)
 		if err == nil {
@@ -794,7 +794,7 @@ func TestPlanner_CreateTable(t *testing.T) {
 	})
 
 	t.Run("CreateTableMissingId", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, `create table missingid (
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, `create table missingid (
 			foo int)`)
 		if err == nil {
 			t.Fatal("expected error")
@@ -824,7 +824,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	server := c.GetNode(0).Server
 
 	t.Run("AlterTableDrop", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i drop column f`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, server, nil, fmt.Sprintf(`alter table %i drop column f`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -838,7 +838,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 
 	t.Run("AlterTableAdd", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column f int`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, server, nil, fmt.Sprintf(`alter table %i add column f int`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -852,7 +852,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 	// test for adding duplicate column, this test requires column 'f' to be defined beforehand.
 	t.Run("AlterTableAdd", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column f int`, c))
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, fmt.Sprintf(`alter table %i add column f int`, c))
 		if err == nil {
 			t.Fatal("expected error")
 		} else {
@@ -863,7 +863,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 	// test for bad column definitions.
 	t.Run("AlterTableAdd", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column dt date`, c))
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, fmt.Sprintf(`alter table %i add column dt date`, c))
 		if err == nil {
 			t.Fatal("expected error")
 		} else {
@@ -874,7 +874,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 	//test for the system rule that enforces the special primary key column "_id" can't be added using alter table statement.
 	t.Run("AlterTableAdd", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i add column _id int`, c))
+		_, _, _, err := sql_test.MustQueryRows(t, server, nil, fmt.Sprintf(`alter table %i add column _id int`, c))
 		if err == nil {
 			t.Fatal("expected error")
 		} else {
@@ -885,7 +885,7 @@ func TestPlanner_AlterTable(t *testing.T) {
 	})
 	t.Run("AlterTableRename", func(t *testing.T) {
 		t.Skip("not yet implemented")
-		results, columns, _, err := sql_test.MustQueryRows(t, server, fmt.Sprintf(`alter table %i rename column f to g`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, server, nil, fmt.Sprintf(`alter table %i rename column f to g`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -915,29 +915,29 @@ func TestPlanner_DropThings(t *testing.T) {
 	}
 
 	t.Run("DropTable", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`DROP TABLE %i`, c))
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`DROP TABLE %i`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`DROP TABLE %j`, c))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`DROP TABLE %j`, c))
 		if err == nil || !strings.Contains(err.Error(), `not found`) {
 			t.Fatalf("expected 'table not found', got %v", err)
 		}
 	})
 	t.Run("DropView", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `CREATE VIEW vw AS SELECT true`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `CREATE VIEW vw AS SELECT true`)
 		if err != nil {
 			t.Fatalf("creating view: %v", err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `DROP VIEW vw`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `DROP VIEW vw`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `DROP VIEW vw`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `DROP VIEW vw`)
 		if err == nil || !strings.Contains(err.Error(), `not found`) {
 			t.Fatalf("expected 'table not found', got %v", err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `DROP VIEW IF EXISTS vw`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `DROP VIEW IF EXISTS vw`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -984,7 +984,7 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 	}
 
 	t.Run("ParenOne", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT (a != b) = false, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT (a != b) = false, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1005,7 +1005,7 @@ func TestPlanner_ExpressionsInSelectListParen(t *testing.T) {
 	})
 
 	t.Run("ParenTwo", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT (a != b) = (false), _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT (a != b) = (false), _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1064,7 +1064,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	}
 
 	t.Run("LiteralsBool", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT false = true, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT false = true, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1085,7 +1085,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsInt", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT 1 + 2, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT 1 + 2, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1106,7 +1106,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsID", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT _id + 2, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT _id + 2, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1127,7 +1127,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsDecimal", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT d + 2.0, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT d + 2.0, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1152,7 +1152,7 @@ func TestPlanner_ExpressionsInSelectListLiterals(t *testing.T) {
 	})
 
 	t.Run("LiteralsString", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT str || ' bar', _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT str || ' bar', _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1211,7 +1211,7 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 	}
 
 	t.Run("CaseWithBase", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT b, case b when 100 then 10 when 201 then 20 else 5 end, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT b, case b when 100 then 10 when 201 then 20 else 5 end, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1233,7 +1233,7 @@ func TestPlanner_ExpressionsInSelectListCase(t *testing.T) {
 	})
 
 	t.Run("CaseWithNoBase", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT b, case when b = 100 then 10 when b = 201 then 20 else 5 end, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT b, case when b = 100 then 10 when b = 201 then 20 else 5 end, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1295,7 +1295,7 @@ func TestPlanner_Select(t *testing.T) {
 	}
 
 	t.Run("UnqualifiedColumns", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b, _id FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT a, b, _id FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1317,7 +1317,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("QualifiedTableRef", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT bar.a, bar.b, bar._id FROM %j as bar`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT bar.a, bar.b, bar._id FROM %j as bar`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1339,7 +1339,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("AliasedUnqualifiedColumns", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a as foo, b as bar, _id as baz FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT a as foo, b as bar, _id as baz FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1361,7 +1361,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("QualifiedColumns", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT %j._id, %j.a, %j.b FROM %j`, c, c, c, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT %j._id, %j.a, %j.b FROM %j`, c, c, c, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1383,7 +1383,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("UnqualifiedStar", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT * FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT * FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1405,7 +1405,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("QualifiedStar", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT %j.* FROM %j`, c, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT %j.* FROM %j`, c, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1427,7 +1427,7 @@ func TestPlanner_Select(t *testing.T) {
 	})
 
 	t.Run("NoIdentifier", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b FROM %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT a, b FROM %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1484,7 +1484,7 @@ func TestPlanner_SelectOrderBy(t *testing.T) {
 	}
 
 	t.Run("OrderBy", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b, _id FROM %j order by a desc`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT a, b, _id FROM %j order by a desc`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1510,22 +1510,22 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, "create table j (_id id, a int, b int)")
+	_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, "create table j (_id id, a int, b int)")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, "create table j1 (_id id, a int, b int)")
+	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, "create table j1 (_id id, a int, b int)")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, "create table j2 (_id id, a int, b int)")
+	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, "create table j2 (_id id, a int, b int)")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table alltypes (
+	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table alltypes (
 		_id id,
 		id1 id,
 		i1 int,
@@ -1541,96 +1541,96 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	}
 
 	t.Run("BulkBadMap", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0, 1 int, 2 int) from '/Users/bar/foo.csv';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0, 1 int, 2 int) from '/Users/bar/foo.csv';`)
 		if err == nil || !strings.Contains(err.Error(), `expected type name, found ','`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkNoWith", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv';`)
 		if err == nil || !strings.Contains(err.Error(), ` expected WITH, found ';'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadWith", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH UNICORNS AND RAINBOWS;`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH UNICORNS AND RAINBOWS;`)
 		if err == nil || !strings.Contains(err.Error(), `expected BATCHSIZE, ROWSLIMIT, FORMAT, INPUT, ALLOW_MISSING_VALUES or HEADER_ROW, found UNICORNS`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkNoWithFormat", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' with batchsize 2;`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' with batchsize 2;`)
 		if err == nil || !strings.Contains(err.Error(), `format specifier expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadWithFormat", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'BLAH';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'BLAH';`)
 		if err == nil || !strings.Contains(err.Error(), `invalid format specifier 'BLAH'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkNoWithInput", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV';`)
 		if err == nil || !strings.Contains(err.Error(), `input specifier expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadWithInput", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'WOOPWOOP';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'WOOPWOOP';`)
 		if err == nil || !strings.Contains(err.Error(), `invalid input specifier 'WOOPWOOP'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadTable", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into foo (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into foo (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `table 'foo' not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkNoID", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (a, b) map (0 int, 1 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (a, b) map (0 int, 1 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `insert column list must have '_id' column specified`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkNoNonID", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id) map (0 id) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id) map (0 id) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `insert column list must have at least one non '_id' column specified`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadColumn", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, k, l) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, k, l) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `column 'k' not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkMapCountMismatch", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `mismatch in the count of expressions and target columns`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int, 3 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int, 3 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `mismatch in the count of expressions and target columns`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkCSVFileNonExistent", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/Users/bar/foo.csv' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `unable to read datasource '/Users/bar/foo.csv': file '/Users/bar/foo.csv' does not exist`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1652,19 +1652,19 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j1 (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE';`, tmpfile.Name()))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert into j1 (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE';`, tmpfile.Name()))
 		if err == nil || !strings.Contains(err.Error(), `value '_id' cannot be converted to type 'id'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j1 (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE' HEADER_ROW;`, tmpfile.Name()))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert into j1 (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE' HEADER_ROW;`, tmpfile.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("BulkCSVBadMap", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 10 int) from x'1,10,20
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 10 int) from x'1,10,20
 		2,11,21
 		3,12,22
 		4,13,23
@@ -1680,36 +1680,36 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkBadSource", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 23 WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 23 WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadFormat", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 'foo' WITH FORMAT 12 INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 'foo' WITH FORMAT 12 INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadMap", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, "3" int, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, "3" int, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, "3" int, 2 int) from 'foo' WITH FORMAT 'NDJSON' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, "3" int, 2 int) from 'foo' WITH FORMAT 'NDJSON' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 3 aunt, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 3 aunt, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `unknown type 'aunt'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadInput", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 23;`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from 'foo' WITH FORMAT 'CSV' INPUT 23;`)
 		if err == nil || !strings.Contains(err.Error(), `string literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1731,7 +1731,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE';`, tmpfile.Name()))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE';`, tmpfile.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1753,42 +1753,42 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE';`, tmpfile.Name()))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert into j map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE';`, tmpfile.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("BulkCSVFileBadBatchSize", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' BATCHSIZE 0;`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' BATCHSIZE 0;`)
 		if err == nil || !strings.Contains(err.Error(), `invalid batch size '0'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' BATCHSIZE 'foo';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' BATCHSIZE 'foo';`)
 		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 	t.Run("BulkNDJSONFileBadBatchSize", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 0;`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 0;`)
 		if err == nil || !strings.Contains(err.Error(), `invalid batch size '0'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 'foo';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map ('id' id, 'a' int, 'b' int) from '/foo/bar' WITH FORMAT 'NDJSON' INPUT 'FILE' BATCHSIZE 'foo';`)
 		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkBadRowsLimit", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' ROWSLIMIT 'foo';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from '/foo/bar' WITH FORMAT 'CSV' INPUT 'FILE' ROWSLIMIT 'foo';`)
 		if err == nil || !strings.Contains(err.Error(), `integer literal expected`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("BulkTransformBadName", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) transform (@0, @1, @z) from 'foo' WITH FORMAT 'NDJSON' INPUT 'FILE';`)
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) transform (@0, @1, @z) from 'foo' WITH FORMAT 'NDJSON' INPUT 'FILE';`)
 		if err == nil || !strings.Contains(err.Error(), `unknown identifier 'z'`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1810,12 +1810,12 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j2 (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE' ROWSLIMIT 2;`, tmpfile.Name()))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert into j2 (_id, a, b) map (0 id, 1 int, 2 int) from '%s' WITH FORMAT 'CSV' INPUT 'FILE' ROWSLIMIT 2;`, tmpfile.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `SELECT count(*) from j2`)
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `SELECT count(*) from j2`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1834,14 +1834,14 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkCSVBlobDefault", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, "bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from x'1,10,20\n2,11,21\n3,12,22\n4,13,23\n5,13,23\n6,13,23\n7,13,23\n8,13,23\n9,13,23\n10,13,23' WITH FORMAT 'CSV' INPUT 'STREAM';")
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, "bulk insert into j (_id, a, b) map (0 id, 1 int, 2 int) from x'1,10,20\n2,11,21\n3,12,22\n4,13,23\n5,13,23\n6,13,23\n7,13,23\n8,13,23\n9,13,23\n10,13,23' WITH FORMAT 'CSV' INPUT 'STREAM';")
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("BulkNDJsonBlobDefault", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) 
 		from  x'{ "_id": 1, "a": 10, "b": 20  }
 		{ "_id": 2, "a": 10, "b": 20  }
 		{ "_id": 3, "a": 10, "b": 20  }
@@ -1858,7 +1858,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonBlobBadPath", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.frobny' int) 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.frobny' int) 
 		from  x'{ "_id": 1, "a": 10, "b": 20  }
 		{ "_id": 2, "a": 10, "b": 20  }
 		{ "_id": 3, "a": 10, "b": 20  }
@@ -1891,7 +1891,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) from '%s' WITH FORMAT 'NDJSON' INPUT 'FILE';`, tmpfile.Name()))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) from '%s' WITH FORMAT 'NDJSON' INPUT 'FILE';`, tmpfile.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1914,14 +1914,14 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) transform (@0, @1, @2) from '%s' WITH FORMAT 'NDJSON' INPUT 'FILE';`, tmpfile.Name()))
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert into j (_id, a, b) map ('$._id' id, '$.a' int, '$.b' int) transform (@0, @1, @2) from '%s' WITH FORMAT 'NDJSON' INPUT 'FILE';`, tmpfile.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("BulkNDJsonAllTypes", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert 
 		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
 	
 		map ('$._id' id, '$.id1' id, '$.i1' int, '$.ids1' idset, '$.ss1' stringset, '$.ts1' timestamp, '$.s1' string, '$.b1' bool, '$.d1' decimal(2))
@@ -1942,7 +1942,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonBadJsonPath", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert 
 		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
 	
 		map ('$._id' id, '$.id1' id, '$.i1' int, '$.ids1' idset, '$.ss1' stringset, '$.ts1' timestamp, '$.s1' string, '$.blah' bool, '$.d1' decimal(2))
@@ -1961,7 +1961,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkNDJsonBadJson", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert 
 		into alltypes (_id, id1, i1, ids1, ss1, ts1, s1, b1, d1) 
 	
 		map ('$._id' id, '$.id1' id, '$.i1' int, '$.ids1' idset, '$.ss1' stringset, '$.ts1' timestamp, '$.s1' string, '$.b1' bool, '$.d1' decimal(2))
@@ -1980,7 +1980,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertDecimals", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table iris (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table iris (
 			_id id,
 			sepallength decimal(2),
 			sepalwidth decimal(2),
@@ -1992,7 +1992,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert
 		into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
 		map('id' id,
 		'sepalLength' DECIMAL,
@@ -2011,7 +2011,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert
 		into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
 		map('id' id,
 		'sepalLength' DECIMAL(2),
@@ -2032,7 +2032,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertDupeColumnPlusNullsInJson", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table dataviz (_id string, guid string, aba string,amount int, 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table dataviz (_id string, guid string, aba string,amount int, 
 			audit_id id, bools bool, bools-exist bool, browser string, browser_version string, central_group string, device string, 
 			error_description string, event_date_str string, event_epoch int, event_length int, event_type string, fidb string, 
 			gt_status string, gt_type string, operating_system string, os_version string, transaction_id string, user_id id);`)
@@ -2040,7 +2040,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert
 		into dataviz (_id, aba, amount, audit_id, bools, bools-exist, browser, browser_version, central_group, device, error_description, event_date_str, event_epoch,event_length,event_type,fidb,gt_status,gt_type,_id,operating_system,os_version,transaction_id,user_id)
 		map('guid' string,'aba' string, 'amount' int, 'audit_id' id, 'event_success' bool, 'db_success' bool, 'browser' string, 'browser_version' string, 'central_group' string, 'device' string, 'error_description' string, 'event_date_str' string, 'event_epoch' int, 'event_length' int, 'event_type' string, 'fidb' string, 'gt_status' string, 'gt_type' string, 'guid' string, 'operating_system' string, 'os_version' string, 'transaction_id' string, 'user_id' id)
 		from
@@ -2056,7 +2056,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertCSVStringIDSet", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table greg-test (
 			_id STRING,
 			id_col ID,
 			string_col STRING cachetype ranked size 1000,
@@ -2071,7 +2071,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `BULK INSERT INTO greg-test (
 			_id,
 			id_col,
 			string_col,
@@ -2114,7 +2114,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertCSVStringNulls", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-n (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table greg-test-n (
 			_id ID,
 			id_col ID,
 			string_col STRING cachetype ranked size 1000,
@@ -2129,7 +2129,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-n (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `BULK INSERT INTO greg-test-n (
 			_id,
 			id_col,
 			string_col,
@@ -2172,7 +2172,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 	})
 
 	t.Run("BulkInsertAllowMissingValues", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-amv (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table greg-test-amv (
 			_id STRING,
 			id_col ID,
 			string_col STRING cachetype ranked size 1000,
@@ -2187,7 +2187,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-amv (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `BULK INSERT INTO greg-test-amv (
 			_id,
 			id_col,
 			string_col,
@@ -2229,7 +2229,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 		}
 	})
 	t.Run("BulkInsertNDJSONStringIDSet", func(t *testing.T) {
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table greg-test-01 (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table greg-test-01 (
 			_id STRING,
 			id_col ID,
 			string_col STRING cachetype ranked size 1000,
@@ -2244,7 +2244,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-01 (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `BULK INSERT INTO greg-test-01 (
 			_id,
 			id_col,
 			string_col,
@@ -2282,7 +2282,7 @@ func TestPlanner_BulkInsert(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `BULK INSERT INTO greg-test-01 (
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `BULK INSERT INTO greg-test-01 (
 			_id,
 			id_col,
 			string_col,
@@ -2351,7 +2351,7 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 	}
 
 	t.Run("ParenSource", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a, b, _id FROM (select * from %j)`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT a, b, _id FROM (select * from %j)`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2373,7 +2373,7 @@ func TestPlanner_SelectSelectSource(t *testing.T) {
 	})
 
 	t.Run("ParenSourceWithAlias", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT foo.a, b, _id FROM (select * from %j) as foo`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT foo.a, b, _id FROM (select * from %j) as foo`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2449,7 +2449,7 @@ func TestPlanner_In(t *testing.T) {
 
 	t.Run("Count", func(t *testing.T) {
 		t.Skip("Need to add join conditions to get this to pass")
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT %j._id, %j.a, %k._id, %k.parentid, %k.x FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c, c, c, c, c, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT %j._id, %j.a, %k._id, %k.parentid, %k.x FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c, c, c, c, c, c))
 		// results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid`, c, c, c, c))
 		// results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT a FROM %j where a = 20`, c)) //   SELECT COUNT(*) FROM %j INNER JOIN %k ON %j._id = %k.parentid
 		if err != nil {
@@ -2581,7 +2581,7 @@ func TestPlanner_Distinct(t *testing.T) {
 	}
 
 	t.Run("SelectDistinct_id", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT distinct _id from %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT distinct _id from %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2603,7 +2603,7 @@ func TestPlanner_Distinct(t *testing.T) {
 
 	t.Run("SelectDistinctNonId", func(t *testing.T) {
 		t.Skip("WIP")
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`SELECT distinct parentid from %k`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`SELECT distinct parentid from %k`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2624,7 +2624,7 @@ func TestPlanner_Distinct(t *testing.T) {
 	})
 
 	t.Run("SelectDistinctMultiple", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`select distinct _id, parentid from %k`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`select distinct _id, parentid from %k`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2679,7 +2679,7 @@ func TestPlanner_SelectTop(t *testing.T) {
 	}
 
 	t.Run("SelectTopStar", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`select top(1) * from %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`select top(1) * from %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2700,7 +2700,7 @@ func TestPlanner_SelectTop(t *testing.T) {
 	})
 
 	t.Run("SelectTopNStar", func(t *testing.T) {
-		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`select topn(1) * from %j`, c))
+		results, columns, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`select topn(1) * from %j`, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2781,12 +2781,12 @@ func TestPlanner_BulkInsert_FB1831(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 
-	_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table iris (_id id, sepallength decimal(2), sepalwidth decimal(2), petallength decimal(2), petalwidth decimal(2), species string cachetype ranked size 1000);`)
+	_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table iris (_id id, sepallength decimal(2), sepalwidth decimal(2), petallength decimal(2), petalwidth decimal(2), species string cachetype ranked size 1000);`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert
 	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
 	map('id' id,
 	'sepalLength' DECIMAL(2),
@@ -2804,7 +2804,7 @@ func TestPlanner_BulkInsert_FB1831(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(1).Server, `bulk insert
+	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(1).Server, nil, `bulk insert
 	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
 	map('id' id,
 	'sepalLength' DECIMAL(2),
@@ -2822,7 +2822,7 @@ func TestPlanner_BulkInsert_FB1831(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(2).Server, `bulk insert
+	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(2).Server, nil, `bulk insert
 	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
 	map('id' id,
 	'sepalLength' DECIMAL(2),
@@ -2840,7 +2840,7 @@ func TestPlanner_BulkInsert_FB1831(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `bulk insert
+	_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `bulk insert
 	into iris (_id, sepallength, sepalwidth, petallength, petalwidth, species)
 	map('id' id,
 	'sepalLength' DECIMAL(2),
@@ -2858,7 +2858,7 @@ func TestPlanner_BulkInsert_FB1831(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id from iris`)
+	results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id from iris`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2930,7 +2930,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 
 	t.Run("BulkFromLocalFile", func(t *testing.T) {
 		// check that can pull parquet file from local file
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING, d STRINGSET, e IDSET, f BOOL, t TIMESTAMP);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table j1 (_id ID, a INT, b DECIMAL(2), c STRING, d STRINGSET, e IDSET, f BOOL, t TIMESTAMP);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
 		assert.NoError(t, err)
@@ -2947,7 +2947,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			{Name: "timestampstring", Type: arrow.BinaryTypes.String, Value: []string{"2022-01-28T12:14:04Z", "1970-01-28", "1988-05-30T12:02:00.567999999Z"}},
 		})
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert 
 	into j1 (_id,a,b,c,d,e,f,t ) 
 	map(
 		'id' id, 
@@ -2963,7 +2963,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	   WITH FORMAT 'PARQUET' 
 	   INPUT 'FILE';`, tmpfile.Name()))
 		assert.NoError(t, err)
-		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,c from j1`)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, a,c from j1`)
 		assert.NoError(t, err)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(42), "pi"},
@@ -2972,7 +2972,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		}, results); diff != "" {
 			t.Fatal(diff)
 		}
-		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select b from j1`)
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select b from j1`)
 		assert.NoError(t, err)
 		d, _ := pql.FromFloat64WithScale(3.14159, 2)
 		if !pql.Decimal.EqualTo(d, results[0][0].(pql.Decimal)) {
@@ -2980,7 +2980,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		}
 		// just getting some opOrderBy coverage here
 		// order by string
-		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, c from j1 order by c`)
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, c from j1 order by c`)
 		assert.NoError(t, err)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(2), "goldenratio"},
@@ -2990,7 +2990,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			t.Fatal(diff)
 		}
 		// order by bool
-		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, f from j1 order by f`)
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, f from j1 order by f`)
 		assert.NoError(t, err)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(2), false},
@@ -3000,7 +3000,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			t.Fatal(diff)
 		}
 		// order by timestamp
-		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, t from j1 order by t`)
+		results, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, t from j1 order by t`)
 		assert.NoError(t, err)
 		t2, _ := time.ParseInLocation(time.RFC3339Nano, "1970-01-28T00:00:00Z", time.UTC)
 		t3, _ := time.ParseInLocation(time.RFC3339Nano, "1988-05-30T12:02:00Z", time.UTC)
@@ -3018,7 +3018,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	t.Run("BulkParquetFromUrl", func(t *testing.T) {
 		// check that can pull parquet file from URL and load
 
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j2 (_id ID, a INT, b STRING);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table j2 (_id ID, a INT, b STRING);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
 		assert.NoError(t, err)
@@ -3041,7 +3041,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			w.Write(payload)
 		})
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert 
 	into j2 (_id,a,b ) 
 	map(
 		'id' id, 
@@ -3052,7 +3052,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	   WITH FORMAT 'PARQUET' 
 	   INPUT 'URL';`, ts.URL+"/static"))
 		assert.NoError(t, err)
-		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j2`)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, a,b from j2`)
 		assert.NoError(t, err)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(42), "pi"},
@@ -3062,7 +3062,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	})
 
 	t.Run("FileTimeStamp", func(t *testing.T) {
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table continuum (_id ID, created timestamp, updated timestamp);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table continuum (_id ID, created timestamp, updated timestamp);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkParquetFile.parquet")
 		assert.NoError(t, err)
@@ -3075,7 +3075,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			{Name: "stringtime", Type: arrow.BinaryTypes.String, Value: []string{now.Format(time.RFC3339)}},
 		})
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert 
 	into continuum (_id,created,updated ) 
 	map(
 		'id' id, 
@@ -3086,7 +3086,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	   WITH FORMAT 'PARQUET' 
 	   INPUT 'FILE';`, tmpfile.Name()))
 		assert.NoError(t, err)
-		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, created,updated from continuum`)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, created,updated from continuum`)
 		assert.NoError(t, err)
 		row := results[0]
 		assert.Equal(t, row[1], row[2])
@@ -3095,7 +3095,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	t.Run("BulkCSVFromUrl", func(t *testing.T) {
 		// check that can pull parquet file from URL and load
 
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j3 (_id ID, a INT, b STRING);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table j3 (_id ID, a INT, b STRING);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkCSVFile.csv")
 		assert.NoError(t, err)
@@ -3119,7 +3119,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			w.Write(payload)
 		})
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert 
 	into j3 (_id,a,b ) 
 	map(
 		0 id, 
@@ -3131,7 +3131,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	   BATCHSIZE 60
 	   INPUT 'URL';`, ts.URL+"/static"))
 		assert.NoError(t, err)
-		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j3`)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, a,b from j3`)
 		assert.NoError(t, err)
 		if diff := cmp.Diff(expect, results); diff != "" {
 			t.Fatal(diff)
@@ -3140,7 +3140,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	t.Run("BulkNDJSONFromUrl", func(t *testing.T) {
 		// check that can pull parquet file from URL and load
 
-		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `create table j4 (_id ID, a INT, b STRING, c TIMESTAMP);`)
+		_, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `create table j4 (_id ID, a INT, b STRING, c TIMESTAMP);`)
 		assert.NoError(t, err)
 		tmpfile, err := os.CreateTemp("", "BulkJSONFile.json")
 		assert.NoError(t, err)
@@ -3159,7 +3159,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 			w.Write(payload)
 		})
 
-		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, fmt.Sprintf(`bulk insert 
+		_, _, _, err = sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, fmt.Sprintf(`bulk insert 
 	into j4 (_id,a,b,c ) 
 	map(
 		'$.id' id, 
@@ -3171,7 +3171,7 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 	   WITH FORMAT 'NDJSON' 
 	   INPUT 'URL';`, ts.URL+"/static"))
 		assert.NoError(t, err)
-		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, `select _id, a,b from j4`)
+		results, _, _, err := sql_test.MustQueryRows(t, c.GetNode(0).Server, nil, `select _id, a,b from j4`)
 		assert.NoError(t, err)
 		if diff := cmp.Diff([][]interface{}{
 			{int64(1), int64(42), "pi"},
@@ -3186,7 +3186,7 @@ func TestPlanner_BulkInsert_FP1916(t *testing.T) {
 	defer c.Close()
 	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
 	node := c.GetNode(0).Server
-	_, _, _, err := sql_test.MustQueryRows(t, node, `create table greg-test (
+	_, _, _, err := sql_test.MustQueryRows(t, node, nil, `create table greg-test (
 		_id STRING,
 		id_col ID,
 		string_col STRING cachetype ranked size 1000,
@@ -3199,7 +3199,7 @@ func TestPlanner_BulkInsert_FP1916(t *testing.T) {
 	);`)
 	assert.NoError(t, err)
 
-	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO greg-test (
+	_, _, _, err = sql_test.MustQueryRows(t, node, nil, `BULK INSERT INTO greg-test (
 		_id,
 		id_col,
 		string_col,
@@ -3234,7 +3234,7 @@ func TestPlanner_BulkInsert_FP1916(t *testing.T) {
 			format 'CSV'
 			input 'STREAM';`)
 	assert.NoError(t, err)
-	results, _, _, err := sql_test.MustQueryRows(t, node, `select int_col from greg-test`)
+	results, _, _, err := sql_test.MustQueryRows(t, node, nil, `select int_col from greg-test`)
 	assert.NoError(t, err)
 	got := results[0][0].(int64)
 	expected := int64(8924809397503602651)
@@ -3246,12 +3246,12 @@ func TestPlanner_BulkInsert_FP1915(t *testing.T) {
 	defer c.Close()
 	// 8924809397503602651 is larger than 2^53 which is the largest integer value representable in float64
 	node := c.GetNode(0).Server
-	_, _, _, err := sql_test.MustQueryRows(t, node, `create table ids (
+	_, _, _, err := sql_test.MustQueryRows(t, node, nil, `create table ids (
 		_id id,
 		a int,
 		b int);`)
 	assert.NoError(t, err)
-	_, _, _, err = sql_test.MustQueryRows(t, node, `BULK INSERT INTO ids (_id, a, b) 
+	_, _, _, err = sql_test.MustQueryRows(t, node, nil, `BULK INSERT INTO ids (_id, a, b) 
 map ('$._id' id, '$.a' int, '$.b' int)
 from x'{ "_id":8924809397503602651 , "a": 10, "b": 20 }
        { "_id":"8924809397503602652" , "a": 10, "b": 20 }'
@@ -3259,7 +3259,7 @@ WITH
     FORMAT 'NDJSON'
     INPUT 'STREAM';`)
 	assert.NoError(t, err)
-	results, _, _, err := sql_test.MustQueryRows(t, node, `select _id from ids`)
+	results, _, _, err := sql_test.MustQueryRows(t, node, nil, `select _id from ids`)
 	assert.NoError(t, err)
 	got := make([]int64, 0)
 	for i := range results {
@@ -3277,14 +3277,14 @@ WITH
 	}
 
 	// FB_2062
-	_, _, _, err = sql_test.MustQueryRows(t, node, `create table sup305-fails (_id id, bucket string, value int);`)
+	_, _, _, err = sql_test.MustQueryRows(t, node, nil, `create table sup305-fails (_id id, bucket string, value int);`)
 	assert.NoError(t, err)
-	_, _, _, err = sql_test.MustQueryRows(t, node, `
+	_, _, _, err = sql_test.MustQueryRows(t, node, nil, `
 	insert into sup305-fails values (1, 'a', 1000), (2, 'b', 1000), (3, 'c', 1000), (4, 'c', 1000), (5, 'c', 1000), (6, 'c', 1000), (7, 'c', 1000), 
 (8, 'a', 1000), (9, 'b', 1000), (10, 'c', 1000), (11, 'c', 1000), (12, 'c', 1000), (13, 'c', 1000), (14, 'c', 1000), 
 (15, 'a', 1000), (16, 'b', 1000), (17, 'c', 1000), (18, 'c', 1000), (19, 'c', 1000), (20, 'c', 1000), (21, 'c', 1000);`)
 	assert.NoError(t, err)
-	results, _, _, err = sql_test.MustQueryRows(t, node, `select bucket, count(*) as cnt from sup305-fails group by bucket having count(*) > 1 order by cnt;`)
+	results, _, _, err = sql_test.MustQueryRows(t, node, nil, `select bucket, count(*) as cnt from sup305-fails group by bucket having count(*) > 1 order by cnt;`)
 	assert.NoError(t, err)
 	got = make([]int64, 0)
 	for i := range results {
