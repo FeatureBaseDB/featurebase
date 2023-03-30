@@ -14,22 +14,22 @@ type FileShardID struct {
 	Shard    int32
 }
 
-// OnDiskDiskManager is a on disk implementation for a DiskManager interface
-type OnDiskDiskManager struct {
+// TupleStoreDiskManager is a on disk implementation for a DiskManager interface
+type TupleStoreDiskManager struct {
 	mu sync.Mutex
 
 	files map[FileShardID]*os.File
 }
 
-// NewInMemDiskSpillingDiskManager returns a in-memory version of disk manager
-func NewOnDiskDiskManager() *OnDiskDiskManager {
-	dm := &OnDiskDiskManager{
+// NewTupleStoreDiskManager returns a disk manager for t-store btrees
+func NewTupleStoreDiskManager() *TupleStoreDiskManager {
+	dm := &TupleStoreDiskManager{
 		files: make(map[FileShardID]*os.File),
 	}
 	return dm
 }
 
-func (d *OnDiskDiskManager) CreateOrOpenShard(objectId int32, shard int32, dataFile string) error {
+func (d *TupleStoreDiskManager) CreateOrOpenShard(objectId int32, shard int32, dataFile string) error {
 	// serialize access here
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -53,7 +53,7 @@ func (d *OnDiskDiskManager) CreateOrOpenShard(objectId int32, shard int32, dataF
 			return fmt.Errorf("open file: %w", err)
 		}
 		// write the root page
-		err = d.writeRootPage(fd, objectId, shard)
+		err = d.bootstrapTStoreFile(fd, objectId, shard)
 		if err != nil {
 			return err
 		}
@@ -69,7 +69,37 @@ func (d *OnDiskDiskManager) CreateOrOpenShard(objectId int32, shard int32, dataF
 	return nil
 }
 
-func (d *OnDiskDiskManager) writeRootPage(fd *os.File, objectId int32, shard int32) error {
+func (d *TupleStoreDiskManager) writePageIDToSlot(page *Page, slotNumber int16, key byte, ptr int64) {
+	// get the free space offset
+	freeSpaceOffset := page.ReadFreeSpaceOffset()
+	keyBytes := []byte{0, 0, 0, key}
+	// build a chunk
+	chunk := InternalPageChunk{
+		KeyLength: int16(len(keyBytes)),
+		KeyBytes:  keyBytes,
+		PtrValue:  ptr,
+	}
+	// compute the new free space offset
+	freeSpaceOffset -= int16(chunk.Length())
+	page.WriteInternalPageChunk(freeSpaceOffset, chunk)
+	// update the free space offset
+	page.WriteFreeSpaceOffset(int16(freeSpaceOffset))
+
+	// make a slot
+	slot := PageSlot{
+		PayloadOffset: freeSpaceOffset,
+	}
+	// write the slot
+	page.WritePageSlot(slotNumber, slot)
+
+	// update the slot count
+	slotCount := page.ReadSlotCount()
+	slotCount += 1
+	page.WriteSlotCount(slotCount)
+}
+
+func (d *TupleStoreDiskManager) bootstrapTStoreFile(fd *os.File, objectId int32, shard int32) error {
+	// make a new header page
 	headerPage := NewPage(PageID{objectId, shard, 0}, 0)
 	headerPage.WritePageNumber(0)
 	headerPage.WriteFreeSpaceOffset(int16(PAGE_SIZE))
@@ -77,61 +107,53 @@ func (d *OnDiskDiskManager) writeRootPage(fd *os.File, objectId int32, shard int
 	headerPage.WritePrevPointer(PageID{0, 0, INVALID_PAGE})
 	headerPage.WritePageType(PAGE_TYPE_BTREE_HEADER)
 
-	// write a slot that points to the initial root page
-	rootPageID := PageID{objectId, shard, 1}
+	// write the pages ids for the data and schema btrees into the right slots
+	dataRootPageID := PageID{objectId, shard, 1}
+	schemaRootPageID := PageID{objectId, shard, 2}
 
-	// get the free space offset
-	freeSpaceOffset := headerPage.ReadFreeSpaceOffset()
+	d.writePageIDToSlot(headerPage, 0, 0, dataRootPageID.Page)
+	d.writePageIDToSlot(headerPage, 1, 1, schemaRootPageID.Page)
 
-	keyBytes := []byte{0, 0, 0, 0}
+	fileOffset := int64(0)
 
-	// build a chunk
-	chunk := InternalPageChunk{
-		KeyLength: int16(len(keyBytes)),
-		KeyBytes:  keyBytes,
-		PtrValue:  1,
-	}
-
-	// compute the new free space offset
-	freeSpaceOffset -= int16(chunk.Length())
-
-	headerPage.WriteInternalPageChunk(freeSpaceOffset, chunk)
-
-	// update the free space offset
-	headerPage.WriteFreeSpaceOffset(int16(freeSpaceOffset))
-
-	// make a slot
-	slot := PageSlot{
-		PayloadOffset: freeSpaceOffset,
-	}
-	// write the slot
-	headerPage.WritePageSlot(0, slot)
-
-	// update the slot count
-	headerPage.WriteSlotCount(int16(1))
-
-	_, err := fd.WriteAt(headerPage.data[:], 0)
+	// write the header page
+	_, err := fd.WriteAt(headerPage.data[:], fileOffset)
 	if err != nil {
 		return err
 	}
 
-	rootPage := NewPage(rootPageID, 0)
-	rootPage.WritePageNumber(1)
-	rootPage.WriteFreeSpaceOffset(int16(PAGE_SIZE))
-	rootPage.WriteNextPointer(PageID{0, 0, INVALID_PAGE})
-	rootPage.WritePrevPointer(PageID{0, 0, INVALID_PAGE})
-	rootPage.WritePageType(PAGE_TYPE_BTREE_LEAF)
+	// write the data root page
+	fileOffset += PAGE_SIZE
+	dataRootPage := NewPage(dataRootPageID, 0)
+	dataRootPage.WritePageNumber(dataRootPageID.Page)
+	dataRootPage.WriteFreeSpaceOffset(int16(PAGE_SIZE))
+	dataRootPage.WriteNextPointer(PageID{0, 0, INVALID_PAGE})
+	dataRootPage.WritePrevPointer(PageID{0, 0, INVALID_PAGE})
+	dataRootPage.WritePageType(PAGE_TYPE_BTREE_LEAF)
 
-	_, err = fd.WriteAt(rootPage.data[:], PAGE_SIZE)
+	_, err = fd.WriteAt(dataRootPage.data[:], fileOffset)
 	if err != nil {
 		return err
 	}
 
+	// write the schema root page
+	fileOffset += PAGE_SIZE
+	schemaRootPage := NewPage(schemaRootPageID, 0)
+	schemaRootPage.WritePageNumber(dataRootPageID.Page)
+	schemaRootPage.WriteFreeSpaceOffset(int16(PAGE_SIZE))
+	schemaRootPage.WriteNextPointer(PageID{0, 0, INVALID_PAGE})
+	schemaRootPage.WritePrevPointer(PageID{0, 0, INVALID_PAGE})
+	schemaRootPage.WritePageType(PAGE_TYPE_BTREE_LEAF)
+
+	_, err = fd.WriteAt(schemaRootPage.data[:], fileOffset)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 // ReadPage reads a page from disk
-func (d *OnDiskDiskManager) ReadPage(pageID PageID) (*Page, error) {
+func (d *TupleStoreDiskManager) ReadPage(pageID PageID) (*Page, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -173,7 +195,7 @@ func (d *OnDiskDiskManager) ReadPage(pageID PageID) (*Page, error) {
 }
 
 // WritePage writes a page in memory to pages
-func (d *OnDiskDiskManager) WritePage(page *Page) error {
+func (d *TupleStoreDiskManager) WritePage(page *Page) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -212,7 +234,7 @@ func (d *OnDiskDiskManager) WritePage(page *Page) error {
 }
 
 // AllocatePage allocates a page and returns the page number
-func (d *OnDiskDiskManager) AllocatePage(objectId int32, shard int32) (PageID, error) {
+func (d *TupleStoreDiskManager) AllocatePage(objectId int32, shard int32) (PageID, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -242,7 +264,7 @@ func (d *OnDiskDiskManager) AllocatePage(objectId int32, shard int32) (PageID, e
 }
 
 // DeallocatePage removes page from disk
-func (d *OnDiskDiskManager) DeallocatePage(pageID PageID) error {
+func (d *TupleStoreDiskManager) DeallocatePage(pageID PageID) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -250,12 +272,12 @@ func (d *OnDiskDiskManager) DeallocatePage(pageID PageID) error {
 	return nil
 }
 
-func (d *OnDiskDiskManager) FileSize(objectId int32, shard int32) int64 {
+func (d *TupleStoreDiskManager) FileSize(objectId int32, shard int32) int64 {
 	// TODO(pok) return correct file size
 	return 0
 }
 
-func (d *OnDiskDiskManager) Close() {
+func (d *TupleStoreDiskManager) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
