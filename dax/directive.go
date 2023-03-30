@@ -29,6 +29,16 @@ type Directive struct {
 	Version uint64 `json:"version"`
 }
 
+// DirectiveVersion defines how the buildDirective step of the controller gets
+// the next directive version. It's important that the two methods on this
+// interface are not consolidated into a single step, because we use each method
+// as a sort of lock/unlock to ensure that only one directive (per address) is
+// built at a time. Since we always to the `GetCurrent()` call at the beginning
+// of buildDirective, if two directives are being build for the same address
+// concurrently, then when one of the calls `SetNext()`, the RepeatableRead
+// isolation level enforced on the transaction will cause the latest call to
+// fail since the value of version will have changed since it was first read at
+// the beginning of its transaction.
 type DirectiveVersion interface {
 	GetCurrent(tx Transaction, addr Address) (uint64, error)
 	SetNext(tx Transaction, addr Address, current, next uint64) error
