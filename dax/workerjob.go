@@ -66,30 +66,6 @@ func (w *WorkerDiff) Add(w2 WorkerDiff) {
 	w.RemovedJobs = removed.Slice()
 }
 
-// AddLastWins is like Add in that it adds w2 to w. Unlike Add, however,
-// AddLastWins will favor the changes in w2 over those in w. So any job that is
-// added in w and removed in w2, will be removed. Any job that is removed in w
-// and added in w2 will be added. It panics if w and w2 don't have the same
-// worker ID.
-func (w *WorkerDiff) AddLastWins(w2 WorkerDiff) {
-	if w.Address != w2.Address {
-		panic("can't add worker diffs from different workers")
-	}
-	a1 := NewSet(w.AddedJobs...)
-	a2 := NewSet(w2.AddedJobs...)
-	r1 := NewSet(w.RemovedJobs...)
-	r2 := NewSet(w2.RemovedJobs...)
-
-	// final Added is (a1 + a2 - r2)
-	added := a1.Plus(a2).Minus(r2)
-
-	// final removed is (r1 + r2 - a2)
-	removed := r1.Plus(r2).Minus(a2)
-
-	w.AddedJobs = added.Sorted()
-	w.RemovedJobs = removed.Sorted()
-}
-
 // WorkerDiffs is a sortable slice of WorkerDiff.
 type WorkerDiffs []WorkerDiff
 
@@ -112,7 +88,7 @@ func (w WorkerDiffs) Apply(o WorkerDiffs) WorkerDiffs {
 		oAddr := o[i].Address
 		if idx, ok := m[oAddr]; ok {
 			// merge these
-			out[idx].AddLastWins(o[i])
+			out[idx].Add(o[i])
 			continue
 		}
 
