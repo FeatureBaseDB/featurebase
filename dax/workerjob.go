@@ -62,8 +62,8 @@ func (w *WorkerDiff) Add(w2 WorkerDiff) {
 	// final removed is (r1 - a2) + (r2 - a1)
 	removed := r1.Minus(a2).Plus(r2.Minus(a1))
 
-	w.AddedJobs = added.Slice()
-	w.RemovedJobs = removed.Slice()
+	w.AddedJobs = added.Sorted()
+	w.RemovedJobs = removed.Sorted()
 }
 
 // WorkerDiffs is a sortable slice of WorkerDiff.

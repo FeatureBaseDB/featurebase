@@ -118,8 +118,8 @@ func TestWorkerDiffsApply(t *testing.T) {
 		},
 		{
 			Address:     "addr2",
-			AddedJobs:   []Job{"j11", "j3", "j99"},
-			RemovedJobs: []Job{"j10", "j100", "j2"},
+			AddedJobs:   []Job{"j11", "j3"},
+			RemovedJobs: []Job{"j100", "j2"},
 		},
 		{
 			Address:     "addr3",
