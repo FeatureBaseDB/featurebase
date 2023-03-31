@@ -102,7 +102,7 @@ func (p *ExecutionPlanner) optimizePlan(ctx context.Context, plan types.PlanOper
 
 	dumpPlan(
 		[]string{"================================================================================", "plan post-optimzation"},
-		plan,
+		result,
 		"--------------------------------------------------------------------------------",
 	)
 
