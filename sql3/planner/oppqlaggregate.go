@@ -294,6 +294,10 @@ func (i *pqlAggregateRowIter) Next(ctx context.Context) (types.Row, error) {
 			default:
 				return nil, sql3.NewErrInternalf("unhandled return type '%T'", i.aggregate.Type())
 			}
+		case nil:
+			// it's valid for an aggregate to yield a NULL in some cases, such as
+			// when it's called on what turns out to be an empty set.
+			i.resultValue = nil
 		default:
 			return nil, sql3.NewErrInternalf("unexpected result type '%T'", queryResponse.Results[0])
 		}

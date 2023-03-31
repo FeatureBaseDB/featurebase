@@ -113,26 +113,26 @@ var joinTests = TableTest{
 		{
 			name: "innerjoin-aggregate-groupby-count-distinct-filter",
 			SQLs: sqls(
-				"SELECT COUNT(DISTINCT u.name) FROM orders o JOIN users u ON o.userid = u._id WHERE o.price > 10;",
+				"SELECT COUNT(DISTINCT u.name) FROM orders o JOIN users u ON o.userid = u._id WHERE o.price > 9;",
 			),
 			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(4)),
+				row(int64(2)),
 			),
 			Compare: CompareExactOrdered,
 		},
 		{
 			name: "innerjoin-aggregate-groupby-count-filter",
 			SQLs: sqls(
-				"SELECT COUNT(u.name) FROM orders o JOIN users u ON o.userid = u._id WHERE o.price > 10;",
+				"SELECT COUNT(u.name) FROM orders o JOIN users u ON o.userid = u._id WHERE o.price > 9;",
 			),
 			ExpHdrs: hdrs(
 				hdr("", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(6)),
+				row(int64(3)),
 			),
 			Compare: CompareExactOrdered,
 		},

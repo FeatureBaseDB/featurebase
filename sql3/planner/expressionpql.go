@@ -499,18 +499,19 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			if err != nil {
 				return nil, err
 			}
-			val, ok := pqlValue.(float64)
-			if !ok {
+			cond := &pql.Condition{Op: pqlOp}
+			switch val := pqlValue.(type) {
+			case float64:
+				cond.Value = pql.FromFloat64(val)
+			case int64:
+				cond.Value = pql.FromInt64(val, 0)
+			default:
 				return nil, sql3.NewErrInternalf("unexpected type '%T", pqlValue)
 			}
-			d := pql.FromFloat64(val)
 			return &pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
-					lhs.columnName: &pql.Condition{
-						Op:    pqlOp,
-						Value: d,
-					},
+					lhs.columnName: cond,
 				},
 			}, nil
 
@@ -541,7 +542,7 @@ func (p *ExecutionPlanner) generatePQLCallFromBinaryExpr(ctx context.Context, ex
 			pqlOp = pql.NEQ
 		}
 		switch typ := expr.lhs.Type().(type) {
-		case *parser.DataTypeID, *parser.DataTypeString, *parser.DataTypeIDSet, *parser.DataTypeStringSet:
+		case *parser.DataTypeID, *parser.DataTypeString, *parser.DataTypeIDSet, *parser.DataTypeStringSet, *parser.DataTypeBool:
 			if strings.EqualFold(lhs.columnName, string(dax.PrimaryKeyFieldName)) {
 				return nil, sql3.NewErrInvalidColumnInFilterExpression(0, 0, string(dax.PrimaryKeyFieldName), "is/is not null")
 			}
