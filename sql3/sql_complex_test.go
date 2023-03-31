@@ -127,6 +127,26 @@ func TestPlanner_SystemTableFanout(t *testing.T) {
 			t.Fatal(diff)
 		}
 	})
+
+	// additional testing for *ExecutionPlanner.mapper is going here because
+	// this is where the existing coverage comes from.
+	t.Run("MapperContextCancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		errch := make(chan error)
+		go func() {
+			_, _, _, err := sql_test.MustQueryRows(t, server, ctx, `select * from fb_performance_counters`)
+			errch <- err
+		}()
+		// give the query time to start, but not enough time to finish.
+		// works in conjunction with the 100 ms delay in a MustRunQuery
+		// that's been given a non-nil context.
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+		err := <-errch
+		if err != context.Canceled {
+			t.Fatalf("expected %v error, got %v", context.Canceled, err)
+		}
+	})
 }
 
 func TestPlanner_Show(t *testing.T) {
