@@ -18,6 +18,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	txRetry = 5
+)
+
 // Ensure type implements interface.
 var _ computer.Registrar = (*Controller)(nil)
 var _ dax.Schemar = (*Controller)(nil)
@@ -29,7 +33,7 @@ type Controller struct {
 	Schemar  schemar.Schemar
 	Balancer Balancer
 
-	Transactor Transactor
+	Transactor dax.Transactor
 
 	Snapshotter *snapshotter.Snapshotter
 	Writelogger *writelogger.Writelogger
@@ -141,12 +145,6 @@ func (c *Controller) Stop() error {
 func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) error {
 	c.logger.Printf("c.RegisterNodes(): %s", dax.Nodes(nodes))
 
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
-
 	// Validate input.
 	for _, n := range nodes {
 		if n.Address == "" {
@@ -162,85 +160,92 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 		}
 	}
 
-	// workerSet maintains the set of workers which have a job assignment change
-	// and therefore need to be sent an updated Directive.
-	workerSet := NewAddressSet()
+	var directives []*dax.Directive
 
-	// diffByAddr keeps track of the diffs that have been applied to each
-	// specific address.
-	// TODO(tlt): I don't understand why we're keeping track of the
-	// dax.WorkerDiff here (as opposed to just the unique Address) because it
-	// doesn't ever seem to be used.
-	diffByAddr := make(map[dax.Address]dax.WorkerDiff)
+	fn := func(tx dax.Transaction, writable bool) error {
+		// workerSet maintains the set of workers which have a job assignment change
+		// and therefore need to be sent an updated Directive.
+		workerSet := NewAddressSet()
 
-	// Create node if we don't already have it
-	for _, n := range nodes {
-		// If the node already exists, skip it.
-		if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
-			// If the node already exists, but it has indicated that it doesn't
-			// have a directive, then send it one.
-			if !n.HasDirective {
-				workerSet.Add(n.Address)
+		// diffByAddr keeps track of the diffs that have been applied to each
+		// specific address.
+		// TODO(tlt): I don't understand why we're keeping track of the
+		// dax.WorkerDiff here (as opposed to just the unique Address) because it
+		// doesn't ever seem to be used.
+		diffByAddr := make(map[dax.Address]dax.WorkerDiff)
+
+		// Create node if we don't already have it
+		for _, n := range nodes {
+			// If the node already exists, skip it.
+			if node, _ := c.Balancer.ReadNode(tx, n.Address); node != nil {
+				// If the node already exists, but it has indicated that it doesn't
+				// have a directive, then send it one.
+				if !n.HasDirective {
+					workerSet.Add(n.Address)
+				}
+				continue
 			}
-			continue
+
+			// Add the node to the workerSet so that it receives a directive.
+			// Even if there is currently no data for this worker (i.e. it
+			// doesn't result in a diffByAddr entry below), we still want to
+			// send it a "reset" directive so that in the off chance it has some
+			// local data, that data gets removed.
+			workerSet.Add(n.Address)
+
+			adiffs, err := c.Balancer.AddWorker(tx, n)
+			if err != nil {
+				return errors.Wrap(err, "adding worker")
+			}
+
+			for _, diff := range adiffs {
+				existingDiff, ok := diffByAddr[dax.Address(diff.Address)]
+				if !ok {
+					existingDiff.Address = diff.Address
+				}
+				existingDiff.Add(diff)
+				diffByAddr[dax.Address(diff.Address)] = existingDiff
+			}
 		}
 
-		// Add the node to the workerSet so that it receives a directive.
-		// Even if there is currently no data for this worker (i.e. it
-		// doesn't result in a diffByAddr entry below), we still want to
-		// send it a "reset" directive so that in the off chance it has some
-		// local data, that data gets removed.
-		workerSet.Add(n.Address)
+		// Add any worker which has a diff to the workerSet so that it receives a
+		// directive.
+		for addr := range diffByAddr {
+			workerSet.Add(addr)
+		}
 
-		adiffs, err := c.Balancer.AddWorker(tx, n)
+		// No need to send directives if the workerSet is empty.
+		if len(workerSet) == 0 {
+			return nil
+		}
+
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
+
+		// For the addresses which are being added, set their method to "reset".
+		for i := range addrMethods {
+			for j := range nodes {
+				if addrMethods[i].address == nodes[j].Address {
+					addrMethods[i].method = dax.DirectiveMethodReset
+				}
+			}
+		}
+
+		var err error
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
 		if err != nil {
-			return errors.Wrap(err, "adding worker")
+			return errors.Wrap(err, "building directives")
 		}
 
-		for _, diff := range adiffs {
-			existingDiff, ok := diffByAddr[dax.Address(diff.Address)]
-			if !ok {
-				existingDiff.Address = diff.Address
-			}
-			existingDiff.Add(diff)
-			diffByAddr[dax.Address(diff.Address)] = existingDiff
-		}
-	}
-
-	// Add any worker which has a diff to the workerSet so that it receives a
-	// directive.
-	for addr := range diffByAddr {
-		workerSet.Add(addr)
-	}
-
-	// No need to send directives if the workerSet is empty.
-	if len(workerSet) == 0 {
 		return nil
 	}
 
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-	// For the addresses which are being added, set their method to "reset".
-	for i := range addrMethods {
-		for j := range nodes {
-			if addrMethods[i].address == nodes[j].Address {
-				addrMethods[i].method = dax.DirectiveMethodReset
-			}
-		}
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
 	}
 
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
-	}
-
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 
@@ -320,94 +325,97 @@ func (c *Controller) CheckInNode(ctx context.Context, n *dax.Node) error {
 // DeregisterNodes removes nodes from the controller's list of registered nodes.
 // It sends directives to the removed nodes, but ignores errors.
 func (c *Controller) DeregisterNodes(ctx context.Context, addresses ...dax.Address) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
+	var directives []*dax.Directive
 
-	// workerSet maintains the set of workers which have a job assignment change
-	// and therefore need to be sent an updated Directive.
-	workerSet := NewAddressSet()
+	fn := func(tx dax.Transaction, writable bool) error {
+		// workerSet maintains the set of workers which have a job assignment change
+		// and therefore need to be sent an updated Directive.
+		workerSet := NewAddressSet()
 
-	// diffByAddr keeps track of the diffs that have been applied to each
-	// specific address.
-	diffByAddr := make(map[dax.Address]dax.WorkerDiff)
+		// diffByAddr keeps track of the diffs that have been applied to each
+		// specific address.
+		diffByAddr := make(map[dax.Address]dax.WorkerDiff)
 
-	for _, address := range addresses {
-		// Add the removed node to the workerSet so that it receives a
-		// directive. Even if there is currently no data for the worker (i.e. it
-		// doesn't result in a diffByAddr entry below), we still want to send it
-		// a "reset" directive so that in the off chance it has some local data,
-		// that data gets removed.
-		// TODO(tlt): see below where we actually REMOVE this. We need to
-		// address this confusion.
-		// workerSet.Add(address)
+		for _, address := range addresses {
+			// Add the removed node to the workerSet so that it receives a
+			// directive. Even if there is currently no data for the worker (i.e. it
+			// doesn't result in a diffByAddr entry below), we still want to send it
+			// a "reset" directive so that in the off chance it has some local data,
+			// that data gets removed.
+			// TODO(tlt): see below where we actually REMOVE this. We need to
+			// address this confusion.
+			// workerSet.Add(address)
 
-		rdiffs, err := c.Balancer.RemoveWorker(tx, address)
+			rdiffs, err := c.Balancer.RemoveWorker(tx, address)
+			if err != nil {
+				return errors.Wrapf(err, "removing worker: %s", address)
+			}
+
+			// we assume that the job names are different between the
+			// different role types so we don't have to track each
+			// role separately which would be annoying.
+			for _, diff := range rdiffs {
+				existingDiff, ok := diffByAddr[dax.Address(diff.Address)]
+				if !ok {
+					existingDiff.Address = diff.Address
+				}
+				existingDiff.Add(diff)
+				diffByAddr[dax.Address(diff.Address)] = existingDiff
+			}
+		}
+
+		for addr := range diffByAddr {
+			workerSet.Add(addr)
+		}
+
+		// Don't send a Directive to the removed nodes after all.
+		// TODO(tlt): we have to do this because otherwise the send request hangs
+		// while holding a mu.Lock on Controller.
+		for _, addr := range addresses {
+			workerSet.Remove(addr)
+		}
+
+		// No need to send Directives if nothing has ultimately changed.
+		if len(workerSet) == 0 {
+			return nil
+		}
+
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
+
+		// For the addresses which are being removed, set their method to "reset".
+		for i := range addrMethods {
+			for j := range addresses {
+				if addrMethods[i].address == addresses[j] {
+					addrMethods[i].method = dax.DirectiveMethodReset
+				}
+			}
+		}
+
+		var err error
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
 		if err != nil {
-			return errors.Wrapf(err, "removing worker: %s", address)
+			return errors.Wrap(err, "building directives")
 		}
 
-		// we assume that the job names are different between the
-		// different role types so we don't have to track each
-		// role separately which would be annoying.
-		for _, diff := range rdiffs {
-			existingDiff, ok := diffByAddr[dax.Address(diff.Address)]
-			if !ok {
-				existingDiff.Address = diff.Address
-			}
-			existingDiff.Add(diff)
-			diffByAddr[dax.Address(diff.Address)] = existingDiff
-		}
+		return nil
 	}
 
-	for addr := range diffByAddr {
-		workerSet.Add(addr)
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
 	}
 
-	// Don't send a Directive to the removed nodes after all.
-	// TODO(tlt): we have to do this because otherwise the send request hangs
-	// while holding a mu.Lock on Controller.
-	for _, addr := range addresses {
-		workerSet.Remove(addr)
-	}
-
-	// No need to send Directives if nothing has ultimately changed.
-	if len(workerSet) == 0 {
-		return tx.Commit()
-	}
-
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-	// For the addresses which are being removed, set their method to "reset".
-	for i := range addrMethods {
-		for j := range addresses {
-			if addrMethods[i].address == addresses[j] {
-				addrMethods[i].method = dax.DirectiveMethodReset
-			}
-		}
-	}
-
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
-	}
-
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 
 	return nil
 }
 
-func (c *Controller) nodesTranslateReadOrWrite(tx dax.Transaction, role *dax.TranslateRole, qdbid dax.QualifiedDatabaseID, createMissing bool, asWrite bool) ([]dax.AssignedNode, bool, []*dax.Directive, error) {
+// nodesTranslateReadOrWrite contains the logic for the c.nodesTranslate()
+// method, but it supports being called with either a read or write lock.
+func (c *Controller) nodesTranslateReadOrWrite(ctx context.Context, tx dax.Transaction, role *dax.TranslateRole, qdbid dax.QualifiedDatabaseID, createMissing bool, asWrite bool) ([]dax.AssignedNode, bool, []*dax.Directive, error) {
 	qtid := role.TableKey.QualifiedTableID()
 	roleType := dax.RoleTypeTranslate
 
@@ -422,6 +430,7 @@ func (c *Controller) nodesTranslateReadOrWrite(tx dax.Transaction, role *dax.Tra
 		return nil, false, nil, errors.Wrap(err, "getting workers for jobs")
 	}
 
+	// figure out if any jobs in the role have no workers assigned
 	outJobs := dax.NewSet[dax.Job]()
 	for _, worker := range workers {
 		for _, job := range worker.Jobs {
@@ -449,7 +458,7 @@ func (c *Controller) nodesTranslateReadOrWrite(tx dax.Transaction, role *dax.Tra
 
 		sort.Slice(missed, func(i, j int) bool { return missed[i] < missed[j] })
 
-		workerSet := NewAddressSet()
+		workerDiffs := dax.WorkerDiffs{}
 		for _, job := range missed {
 			j, err := decodePartition(job)
 			if err != nil {
@@ -459,18 +468,12 @@ func (c *Controller) nodesTranslateReadOrWrite(tx dax.Transaction, role *dax.Tra
 			if err != nil {
 				return nil, false, nil, errors.Wrap(err, "adding job")
 			}
-			for _, diff := range diffs {
-				workerSet.Add(dax.Address(diff.Address))
-			}
+			workerDiffs = workerDiffs.Apply(diffs)
 		}
 
-		// Convert the slice of addresses into a slice of addressMethod
-		// containing the appropriate method.
-		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-		directives, err = c.buildDirectives(tx, addrMethods)
+		directives, err = c.buildDirectivesAsDiffs(ctx, tx, roleType, workerDiffs)
 		if err != nil {
-			return nil, false, nil, errors.Wrap(err, "building directives")
+			return nil, false, nil, errors.Wrap(err, "building directives as diffs")
 		}
 
 		// Re-run WorkersForJobs.
@@ -486,7 +489,7 @@ func (c *Controller) nodesTranslateReadOrWrite(tx dax.Transaction, role *dax.Tra
 
 // nodesComputeReadOrWrite contains the logic for the c.nodesCompute() method,
 // but it supports being called with either a read or write lock.
-func (c *Controller) nodesComputeReadOrWrite(tx dax.Transaction, role *dax.ComputeRole, qdbid dax.QualifiedDatabaseID, createMissing bool, asWrite bool) ([]dax.AssignedNode, bool, []*dax.Directive, error) {
+func (c *Controller) nodesComputeReadOrWrite(ctx context.Context, tx dax.Transaction, role *dax.ComputeRole, qdbid dax.QualifiedDatabaseID, createMissing bool, asWrite bool) ([]dax.AssignedNode, bool, []*dax.Directive, error) {
 	qtid := role.TableKey.QualifiedTableID()
 	roleType := dax.RoleTypeCompute
 
@@ -529,7 +532,7 @@ func (c *Controller) nodesComputeReadOrWrite(tx dax.Transaction, role *dax.Compu
 
 		sort.Slice(missed, func(i, j int) bool { return missed[i] < missed[j] })
 
-		workerSet := NewAddressSet()
+		workerDiffs := dax.WorkerDiffs{}
 		for _, job := range missed {
 			j, err := decodeShard(job)
 			if err != nil {
@@ -539,18 +542,12 @@ func (c *Controller) nodesComputeReadOrWrite(tx dax.Transaction, role *dax.Compu
 			if err != nil {
 				return nil, false, nil, errors.Wrap(err, "adding job")
 			}
-			for _, diff := range diffs {
-				workerSet.Add(dax.Address(diff.Address))
-			}
+			workerDiffs = workerDiffs.Apply(diffs)
 		}
 
-		// Convert the slice of addresses into a slice of addressMethod
-		// containing the appropriate method.
-		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-		directives, err = c.buildDirectives(tx, addrMethods)
+		directives, err = c.buildDirectivesAsDiffs(ctx, tx, roleType, workerDiffs)
 		if err != nil {
-			return nil, false, nil, errors.Wrap(err, "building directives")
+			return nil, false, nil, errors.Wrap(err, "building directives as diffs")
 		}
 
 		// Re-run WorkersForJobs.
@@ -626,77 +623,74 @@ func (c *Controller) translateWorkersToAssignedNodes(tx dax.Transaction, workers
 
 // CreateDatabase adds a database to the schemar.
 func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
-
 	// Create Database ID.
 	if _, err := qdb.CreateID(); err != nil {
 		return errors.Wrap(err, "creating database ID")
 	}
 
-	if err := c.Schemar.CreateDatabase(tx, qdb); err != nil {
-		return errors.Wrap(err, "creating database in schemar")
+	fn := func(tx dax.Transaction, writable bool) error {
+		if err := c.Schemar.CreateDatabase(tx, qdb); err != nil {
+			return errors.Wrap(err, "creating database in schemar")
+		}
+		return nil
 	}
 
-	return tx.Commit()
+	return dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry)
 }
 
 func (c *Controller) DropDatabase(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
+	var directives []*dax.Directive
 
-	// Get all the tables for the database and call dropTable on each one.
-	qtbls, err := c.Schemar.Tables(tx, qdbid)
-	if err != nil {
-		return errors.Wrapf(err, "getting tables for database: %s", qdbid)
-	}
-
-	// workerSet maintains the set of workers which have a job assignment change
-	// and therefore need to be sent an updated Directive.
-	workerSet := NewAddressSet()
-
-	for _, qtbl := range qtbls {
-		qtid := qtbl.QualifiedID()
-		addrs, err := c.dropTable(tx, qtid)
+	fn := func(tx dax.Transaction, writable bool) error {
+		// Get all the tables for the database and call dropTable on each one.
+		qtbls, err := c.Schemar.Tables(tx, qdbid)
 		if err != nil {
-			return errors.Wrapf(err, "dropping table: %s", qtid)
+			return errors.Wrapf(err, "getting tables for database: %s", qdbid)
 		}
-		workerSet.Merge(addrs)
+
+		// workerSet maintains the set of workers which have a job assignment change
+		// and therefore need to be sent an updated Directive.
+		workerSet := NewAddressSet()
+
+		for _, qtbl := range qtbls {
+			qtid := qtbl.QualifiedID()
+			addrs, err := c.dropTable(tx, qtid)
+			if err != nil {
+				return errors.Wrapf(err, "dropping table: %s", qtid)
+			}
+			workerSet.Merge(addrs)
+		}
+
+		addrs := make([]dax.Address, 0, len(workerSet))
+		for worker := range workerSet {
+			addrs = append(addrs, worker)
+		}
+		if err := c.Balancer.FreeWorkers(tx, addrs...); err != nil {
+			return errors.Wrap(err, "freeing workers")
+		}
+
+		// Drop the database record from the schema.
+		if err := c.Schemar.DropDatabase(tx, qdbid); err != nil {
+			return errors.Wrap(err, "dropping database from schemar")
+		}
+
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
+
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
+		if err != nil {
+			return errors.Wrap(err, "building directives")
+		}
+
+		return nil
 	}
 
-	addrs := make([]dax.Address, 0, len(workerSet))
-	for worker := range workerSet {
-		addrs = append(addrs, worker)
-	}
-	if err := c.Balancer.FreeWorkers(tx, addrs...); err != nil {
-		return errors.Wrap(err, "freeing workers")
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
 	}
 
-	// Drop the database record from the schema.
-	if err := c.Schemar.DropDatabase(tx, qdbid); err != nil {
-		return errors.Wrap(err, "dropping database from schemar")
-	}
-
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
-	}
-
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 	return nil
@@ -736,39 +730,40 @@ func (c *Controller) DatabaseByID(ctx context.Context, qdbid dax.QualifiedDataba
 
 // SetDatabaseOption sets the option on the given database.
 func (c *Controller) SetDatabaseOption(ctx context.Context, qdbid dax.QualifiedDatabaseID, option string, value string) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
+	var directives []*dax.Directive
 
-	if err := c.Schemar.SetDatabaseOption(tx, qdbid, option, value); err != nil {
-		return errors.Wrapf(err, "setting database option: %s", option)
-	}
+	fn := func(tx dax.Transaction, writable bool) error {
+		if err := c.Schemar.SetDatabaseOption(tx, qdbid, option, value); err != nil {
+			return errors.Wrapf(err, "setting database option: %s", option)
+		}
 
-	diffs, err := c.Balancer.BalanceDatabase(tx, qdbid)
-	if err != nil {
-		return errors.Wrapf(err, "balancing database: %s", qdbid)
-	}
+		diffs, err := c.Balancer.BalanceDatabase(tx, qdbid)
+		if err != nil {
+			return errors.Wrapf(err, "balancing database: %s", qdbid)
+		}
 
-	workerSet := NewAddressSet()
-	for _, diff := range diffs {
-		workerSet.Add(dax.Address(diff.Address))
-	}
+		workerSet := NewAddressSet()
+		for _, diff := range diffs {
+			workerSet.Add(dax.Address(diff.Address))
+		}
 
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
-	}
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
 
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
+		if err != nil {
+			return errors.Wrap(err, "building directives")
+		}
+
+		return nil
 	}
 
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
+	}
+
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 	return nil
@@ -793,92 +788,94 @@ func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, id
 // affected nodes based on the change.
 func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) error {
 	c.logger.Debugf("CreateTable %+v", qtbl)
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
 
 	// Create Table ID.
 	if _, err := qtbl.CreateID(); err != nil {
 		return errors.Wrap(err, "creating table ID")
 	}
 
-	// Create the table in schemar.
-	if err := c.Schemar.CreateTable(tx, qtbl); err != nil {
-		return errors.Wrapf(err, "creating table: %s", qtbl)
-	}
+	var directives []*dax.Directive
 
-	var addrMethods []addressMethod
-
-	// If the table is keyed, add partitions to the balancer.
-	if qtbl.StringKeys() {
-		// workerSet maintains the set of workers which have a job assignment change
-		// and therefore need to be sent an updated Directive.
-		workerSet := NewAddressSet()
-
-		// Generate the list of partitionsToAdd to be added.
-		partitionsToAdd := make(dax.PartitionNums, qtbl.PartitionN)
-		for partitionNum := 0; partitionNum < qtbl.PartitionN; partitionNum++ {
-			partitionsToAdd[partitionNum] = dax.PartitionNum(partitionNum)
+	fn := func(tx dax.Transaction, writable bool) error {
+		// Create the table in schemar.
+		if err := c.Schemar.CreateTable(tx, qtbl); err != nil {
+			return errors.Wrapf(err, "creating table: %s", qtbl)
 		}
 
-		jobs := make([]dax.Job, 0, len(partitionsToAdd))
-		for _, p := range partitionsToAdd {
-			jobs = append(jobs, partition(qtbl.Key(), p).Job())
+		var addrMethods []addressMethod
+
+		// If the table is keyed, add partitions to the balancer.
+		if qtbl.StringKeys() {
+			// workerSet maintains the set of workers which have a job assignment change
+			// and therefore need to be sent an updated Directive.
+			workerSet := NewAddressSet()
+
+			// Generate the list of partitionsToAdd to be added.
+			partitionsToAdd := make(dax.PartitionNums, qtbl.PartitionN)
+			for partitionNum := 0; partitionNum < qtbl.PartitionN; partitionNum++ {
+				partitionsToAdd[partitionNum] = dax.PartitionNum(partitionNum)
+			}
+
+			jobs := make([]dax.Job, 0, len(partitionsToAdd))
+			for _, p := range partitionsToAdd {
+				jobs = append(jobs, partition(qtbl.Key(), p).Job())
+			}
+
+			diffs, err := c.Balancer.AddJobs(tx, dax.RoleTypeTranslate, qtbl.QualifiedID(), jobs...)
+			if err != nil {
+				return errors.Wrap(err, "adding job")
+			}
+			for _, diff := range diffs {
+				workerSet.Add(dax.Address(diff.Address))
+			}
+
+			// Convert the slice of addresses into a slice of addressMethod containing
+			// the appropriate method.
+			addrMethods = applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
 		}
 
-		diffs, err := c.Balancer.AddJobs(tx, dax.RoleTypeTranslate, qtbl.QualifiedID(), jobs...)
+		// This is more FieldVersion hackery. Even if the table is not keyed, we
+		// still want to manage partition 0 for the table in case any of the table's
+		// fields contain string keys (we use partition 0 for field string keys for
+		// now; in the future we should distribute/balance the field key translation
+		// like we do shards and partitions).
+		if !qtbl.StringKeys() {
+			// workerSet maintains the set of workers which have a job assignment change
+			// and therefore need to be sent an updated Directive.
+			workerSet := NewAddressSet()
+
+			p := dax.PartitionNum(0)
+
+			// We don't currently use the returned diff, other than to determine
+			// which worker was affected, because we send the full Directive
+			// every time.
+			diffs, err := c.Balancer.AddJobs(tx, dax.RoleTypeTranslate, qtbl.QualifiedID(), partition(qtbl.Key(), p).Job())
+			if err != nil {
+				return errors.Wrap(err, "adding job")
+			}
+			for _, diff := range diffs {
+				workerSet.Add(dax.Address(diff.Address))
+			}
+
+			// Convert the slice of addresses into a slice of addressMethod containing
+			// the appropriate method.
+			addrMethods = applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
+		}
+
+		var err error
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
 		if err != nil {
-			return errors.Wrap(err, "adding job")
-		}
-		for _, diff := range diffs {
-			workerSet.Add(dax.Address(diff.Address))
+			return errors.Wrap(err, "building directives")
 		}
 
-		// Convert the slice of addresses into a slice of addressMethod containing
-		// the appropriate method.
-		addrMethods = applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
+		return nil
 	}
 
-	// This is more FieldVersion hackery. Even if the table is not keyed, we
-	// still want to manage partition 0 for the table in case any of the table's
-	// fields contain string keys (we use partition 0 for field string keys for
-	// now; in the future we should distribute/balance the field key translation
-	// like we do shards and partitions).
-	if !qtbl.StringKeys() {
-		// workerSet maintains the set of workers which have a job assignment change
-		// and therefore need to be sent an updated Directive.
-		workerSet := NewAddressSet()
-
-		p := dax.PartitionNum(0)
-
-		// We don't currently use the returned diff, other than to determine
-		// which worker was affected, because we send the full Directive
-		// every time.
-		diffs, err := c.Balancer.AddJobs(tx, dax.RoleTypeTranslate, qtbl.QualifiedID(), partition(qtbl.Key(), p).Job())
-		if err != nil {
-			return errors.Wrap(err, "adding job")
-		}
-		for _, diff := range diffs {
-			workerSet.Add(dax.Address(diff.Address))
-		}
-
-		// Convert the slice of addresses into a slice of addressMethod containing
-		// the appropriate method.
-		addrMethods = applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
 	}
 
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
-	}
-
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 	return nil
@@ -887,31 +884,31 @@ func (c *Controller) CreateTable(ctx context.Context, qtbl *dax.QualifiedTable) 
 // DropTable removes a table from the schema and sends directives to all affected
 // nodes based on the change.
 func (c *Controller) DropTable(ctx context.Context, qtid dax.QualifiedTableID) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
+	var directives []*dax.Directive
 
-	addrs, err := c.dropTable(tx, qtid)
-	if err != nil {
-		return errors.Wrapf(err, "dropping table: %s", qtid)
-	}
+	fn := func(tx dax.Transaction, writable bool) error {
+		addrs, err := c.dropTable(tx, qtid)
+		if err != nil {
+			return errors.Wrapf(err, "dropping table: %s", qtid)
+		}
 
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(addrs.SortedSlice(), dax.DirectiveMethodDiff)
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(addrs.SortedSlice(), dax.DirectiveMethodFull)
 
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
-	}
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
+		if err != nil {
+			return errors.Wrap(err, "building directives")
+		}
 
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
+		return nil
 	}
 
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
+	}
+
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 	return nil
@@ -988,50 +985,56 @@ func (c *Controller) Tables(ctx context.Context, qdbid dax.QualifiedDatabaseID, 
 // RemoveShards deregisters the table/shard combinations with the controller and
 // sends the necessary directives.
 func (c *Controller) RemoveShards(ctx context.Context, qtid dax.QualifiedTableID, shards ...dax.ShardNum) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
 
-	// workerSet maintains the set of workers which have a job assignment change
-	// and therefore need to be sent an updated Directive.
-	workerSet := NewAddressSet()
+	var directives []*dax.Directive
 
-	for _, s := range shards {
-		// We don't currently use the returned diff, other than to determine
-		// which worker was affected, because we send the full Directive every
-		// time.
-		diffs, err := c.Balancer.RemoveJobs(tx, dax.RoleTypeCompute, qtid, shard(qtid.Key(), s).Job())
+	fn := func(tx dax.Transaction, writable bool) error {
+		// workerSet maintains the set of workers which have a job assignment change
+		// and therefore need to be sent an updated Directive.
+		workerSet := NewAddressSet()
+
+		for _, s := range shards {
+			// We don't currently use the returned diff, other than to determine
+			// which worker was affected, because we send the full Directive every
+			// time.
+			diffs, err := c.Balancer.RemoveJobs(tx, dax.RoleTypeCompute, qtid, shard(qtid.Key(), s).Job())
+			if err != nil {
+				return errors.Wrap(err, "removing job")
+			}
+			for _, diff := range diffs {
+				workerSet.Add(dax.Address(diff.Address))
+			}
+		}
+
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
+
+		var err error
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
 		if err != nil {
-			return errors.Wrap(err, "removing job")
+			return errors.Wrap(err, "building directives")
 		}
-		for _, diff := range diffs {
-			workerSet.Add(dax.Address(diff.Address))
-		}
+
+		return nil
 	}
 
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
 	}
 
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
-	}
-
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 
 	return nil
 }
 
-func (c *Controller) sendDirectives2(ctx context.Context, directives []*dax.Directive) error {
+func (c *Controller) sendDirectives(ctx context.Context, directives []*dax.Directive) error {
+	if len(directives) == 0 {
+		return nil
+	}
+
 	errs := make([]error, len(directives))
 	var eg errgroup.Group
 	for i, dir := range directives {
@@ -1096,8 +1099,8 @@ func applyAddressMethod(addrs []dax.Address, method dax.DirectiveMethod) []addre
 
 // buildDirectives builds a list of directives for the given addrs (i.e. nodes)
 // using information (i.e. current state) from the balancers.
-func (c *Controller) buildDirectives(tx dax.Transaction, addrs []addressMethod) ([]*dax.Directive, error) {
-	// If nodes is empty, return early.
+func (c *Controller) buildDirectives(ctx context.Context, tx dax.Transaction, addrs []addressMethod) ([]*dax.Directive, error) {
+	// If addrs is empty, return early.
 	if len(addrs) == 0 {
 		return nil, nil
 	}
@@ -1105,10 +1108,13 @@ func (c *Controller) buildDirectives(tx dax.Transaction, addrs []addressMethod) 
 	directives := make([]*dax.Directive, len(addrs))
 
 	for i, addressMethod := range addrs {
-		dVersion, err := c.DirectiveVersion.Increment(tx, 1)
+		// Get the current directive version for address. If this address has
+		// never been sent a directive before, we should get 0 here.
+		currentDirectiveVersion, err := c.DirectiveVersion.GetCurrent(tx, addressMethod.address)
 		if err != nil {
-			return nil, errors.Wrap(err, "incrementing directive version")
+			return nil, errors.Wrap(err, "getting current directive version")
 		}
+		nextDirectiveVersion := currentDirectiveVersion + 1
 
 		d := &dax.Directive{
 			Address:        addressMethod.address,
@@ -1116,7 +1122,7 @@ func (c *Controller) buildDirectives(tx dax.Transaction, addrs []addressMethod) 
 			Tables:         []*dax.QualifiedTable{},
 			ComputeRoles:   []dax.ComputeRole{},
 			TranslateRoles: []dax.TranslateRole{},
-			Version:        dVersion,
+			Version:        nextDirectiveVersion,
 		}
 
 		// computeMap maps a table to a list of shards for that table. We need
@@ -1262,6 +1268,282 @@ func (c *Controller) buildDirectives(tx dax.Transaction, addrs []addressMethod) 
 		sort.Slice(d.TranslateRoles, func(i, j int) bool { return d.TranslateRoles[i].TableKey < d.TranslateRoles[j].TableKey })
 
 		directives[i] = d
+
+		// Set directive version to nextDirectiveVersion where directiveVersion
+		// equals currentDirectiveVersion for this address.
+		if err := c.DirectiveVersion.SetNext(tx, addressMethod.address, currentDirectiveVersion, nextDirectiveVersion); err != nil {
+			return nil, errors.Wrap(err, "setting next directive version")
+		}
+	}
+
+	return directives, nil
+}
+
+// buildDirectivesAsDiffs builds a list of directives based on the given
+// WorkerDiffs. These are used for directives of type DirectiveMethodDiff.
+func (c *Controller) buildDirectivesAsDiffs(ctx context.Context, tx dax.Transaction, roleType dax.RoleType, diffs []dax.WorkerDiff) ([]*dax.Directive, error) {
+	// If addrs is empty, return early.
+	if len(diffs) == 0 {
+		return nil, nil
+	}
+
+	directives := make([]*dax.Directive, len(diffs))
+
+	for i, workerDiff := range diffs {
+		// Get the current directive version for address. If this address has
+		// never been sent a directive before, we should get 0 here.
+		currentDirectiveVersion, err := c.DirectiveVersion.GetCurrent(tx, workerDiff.Address)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting current directive version")
+		}
+		nextDirectiveVersion := currentDirectiveVersion + 1
+
+		d := &dax.Directive{
+			Address:               workerDiff.Address,
+			Method:                dax.DirectiveMethodDiff,
+			Tables:                []*dax.QualifiedTable{},
+			ComputeRolesAdded:     []dax.ComputeRole{},
+			ComputeRolesRemoved:   []dax.ComputeRole{},
+			TranslateRolesAdded:   []dax.TranslateRole{},
+			TranslateRolesRemoved: []dax.TranslateRole{},
+			Version:               nextDirectiveVersion,
+		}
+
+		// tableSet maintains the set of tables which have a job assignment
+		// change and therefore need to be included in the Directive schema.
+		tableSet := NewTableSet()
+
+		// computeMapAdded maps a table to a list of shards added for that
+		// table. We need to aggregate them here because the list of jobs from
+		// WorkerDiff can contain a mixture of table/shards.
+		computeMapAdded := make(map[dax.TableKey][]dax.ShardNum)
+		computeMapRemoved := make(map[dax.TableKey][]dax.ShardNum)
+
+		// translateMapAdded maps a table to a list of partitions added for that
+		// table. We need to aggregate them here because the list of jobs from
+		// WorkerDiff can contain a mixture of table/partitions.
+		translateMapAdded := make(map[dax.TableKey][]dax.PartitionNum)
+		translateMapRemoved := make(map[dax.TableKey][]dax.PartitionNum)
+
+		// ownsPartition0Added is the list of tables for which this node owns
+		// partition 0, based on partition 0 being added. This is used to
+		// determine FieldVersion responsiblity.
+		ownsPartition0Added := make(map[dax.TableKey]struct{}, 0)
+		ownsPartition0Removed := make(map[dax.TableKey]struct{}, 0)
+
+		switch roleType {
+		case dax.RoleTypeCompute:
+			for _, job := range workerDiff.AddedJobs {
+				j, err := decodeShard(job)
+				if err != nil {
+					return nil, errors.Wrapf(err, "decoding shard job added: %s", job)
+				}
+
+				tkey := j.table()
+				computeMapAdded[tkey] = append(computeMapAdded[tkey], j.shardNum())
+				tableSet.Add(tkey)
+			}
+			for _, job := range workerDiff.RemovedJobs {
+				j, err := decodeShard(job)
+				if err != nil {
+					return nil, errors.Wrapf(err, "decoding shard job removed: %s", job)
+				}
+
+				tkey := j.table()
+				computeMapRemoved[tkey] = append(computeMapRemoved[tkey], j.shardNum())
+				tableSet.Add(tkey)
+			}
+		case dax.RoleTypeTranslate:
+			for _, job := range workerDiff.AddedJobs {
+				j, err := decodePartition(job)
+				if err != nil {
+					return nil, errors.Wrapf(err, "decoding partition job added: %s", job)
+				}
+
+				// This check is related to the FieldVersion logic below.
+				// Basically, we need to determine if this node is
+				// responsible for partition 0 for any table(s), and if so,
+				// include FieldVersion in the directive for the node.
+				if j.partitionNum() == 0 {
+					ownsPartition0Added[j.table()] = struct{}{}
+				}
+
+				tkey := j.table()
+				translateMapAdded[tkey] = append(translateMapAdded[tkey], j.partitionNum())
+				tableSet.Add(tkey)
+			}
+			for _, job := range workerDiff.RemovedJobs {
+				j, err := decodePartition(job)
+				if err != nil {
+					return nil, errors.Wrapf(err, "decoding partition job removed: %s", job)
+				}
+
+				// This check is related to the FieldVersion logic below.
+				// Basically, we need to determine if this node is no longer
+				// responsible for partition 0 for any table(s), and if so,
+				// remove FieldVersion in the directive for the node.
+				if j.partitionNum() == 0 {
+					ownsPartition0Removed[j.table()] = struct{}{}
+				}
+
+				tkey := j.table()
+				translateMapRemoved[tkey] = append(translateMapRemoved[tkey], j.partitionNum())
+				tableSet.Add(tkey)
+			}
+		}
+
+		// Convert the computeMapAdded into a list of ComputeRole.
+		for k, v := range computeMapAdded {
+			// Because these were encoded as strings in the balancer and may be
+			// out of order numerically, sort them as integers.
+			//sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
+			sort.Sort(dax.ShardNums(v))
+
+			d.ComputeRolesAdded = append(d.ComputeRolesAdded, dax.ComputeRole{
+				TableKey: k,
+				Shards:   v,
+			})
+		}
+
+		// Convert the computeMapRemoved into a list of ComputeRole.
+		for k, v := range computeMapRemoved {
+			// Because these were encoded as strings in the balancer and may be
+			// out of order numerically, sort them as integers.
+			//sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
+			sort.Sort(dax.ShardNums(v))
+
+			d.ComputeRolesRemoved = append(d.ComputeRolesRemoved, dax.ComputeRole{
+				TableKey: k,
+				Shards:   v,
+			})
+		}
+
+		// Convert the translateMapAdded into a list of TranslateRole.
+		for k, v := range translateMapAdded {
+			// Because these were encoded as strings in the balancer and may be
+			// out of order numerically, sort them as integers.
+			sort.Sort(dax.PartitionNums(v))
+
+			d.TranslateRolesAdded = append(d.TranslateRolesAdded, dax.TranslateRole{
+				TableKey:   k,
+				Partitions: v,
+			})
+		}
+
+		// Convert the translateMapRemoved into a list of TranslateRole.
+		for k, v := range translateMapRemoved {
+			// Because these were encoded as strings in the balancer and may be
+			// out of order numerically, sort them as integers.
+			sort.Sort(dax.PartitionNums(v))
+
+			d.TranslateRolesRemoved = append(d.TranslateRolesRemoved, dax.TranslateRole{
+				TableKey:   k,
+				Partitions: v,
+			})
+		}
+
+		// Add field-specific TranslateRoles to the node which is responsible
+		// for partition 0. This is a bit clunkly; ideally we would handle this
+		// the same way we handle shards and partitions, by maintaining a
+		// distinct balancer for FieldVersions. But because the query side isn't
+		// currently set up to look for field translation anywhere but on the
+		// local node (or in the case of Serverless, on partition 0), we're
+		// keeping everything that way for now.
+		for tkey := range ownsPartition0Added {
+			qtid := tkey.QualifiedTableID()
+			table, err := c.Schemar.Table(tx, qtid)
+			if err != nil {
+				return nil, errors.Wrapf(err, "getting table: %s", tkey)
+			}
+
+			fieldNames := make([]dax.FieldName, 0)
+			for _, field := range table.Fields {
+				if !field.StringKeys() {
+					continue
+				}
+
+				// Skip the primary key field; it uses table translation.
+				if field.IsPrimaryKey() {
+					continue
+				}
+
+				fieldNames = append(fieldNames, field.Name)
+			}
+
+			if len(fieldNames) == 0 {
+				continue
+			}
+
+			d.TranslateRolesAdded = append(d.TranslateRolesAdded, dax.TranslateRole{
+				TableKey: tkey,
+				Fields:   fieldNames,
+			})
+
+			tableSet.Add(tkey)
+		}
+
+		// And in case partition 0 was removed.
+		for tkey := range ownsPartition0Removed {
+			qtid := tkey.QualifiedTableID()
+			table, err := c.Schemar.Table(tx, qtid)
+			if err != nil {
+				return nil, errors.Wrapf(err, "getting table: %s", tkey)
+			}
+
+			fieldNames := make([]dax.FieldName, 0)
+			for _, field := range table.Fields {
+				if !field.StringKeys() {
+					continue
+				}
+
+				// Skip the primary key field; it uses table translation.
+				if field.IsPrimaryKey() {
+					continue
+				}
+
+				fieldNames = append(fieldNames, field.Name)
+			}
+
+			if len(fieldNames) == 0 {
+				continue
+			}
+
+			d.TranslateRolesRemoved = append(d.TranslateRolesRemoved, dax.TranslateRole{
+				TableKey: tkey,
+				Fields:   fieldNames,
+			})
+
+			tableSet.Add(tkey)
+		}
+		/////////////// end of FieldVersion logic //////////////////////
+
+		if len(tableSet) > 0 {
+			dTables := make([]*dax.QualifiedTable, 0)
+			for qdbid, tblIDs := range tableSet.QualifiedSortedSlice() {
+				qtbls, err := c.Schemar.Tables(tx, qdbid, tblIDs...)
+				if err != nil {
+					return nil, errors.Wrapf(err, "getting directive tables for qdbid: %s", qdbid)
+				}
+				dTables = append(dTables, qtbls...)
+			}
+			d.Tables = dTables
+		}
+
+		// Sort ComputeRolesAdded by table.
+		sort.Slice(d.ComputeRolesAdded, func(i, j int) bool { return d.ComputeRolesAdded[i].TableKey < d.ComputeRolesAdded[j].TableKey })
+		sort.Slice(d.ComputeRolesRemoved, func(i, j int) bool { return d.ComputeRolesRemoved[i].TableKey < d.ComputeRolesRemoved[j].TableKey })
+
+		// Sort TranslateRolesAdded by table.
+		sort.Slice(d.TranslateRolesAdded, func(i, j int) bool { return d.TranslateRolesAdded[i].TableKey < d.TranslateRolesAdded[j].TableKey })
+		sort.Slice(d.TranslateRolesRemoved, func(i, j int) bool { return d.TranslateRolesRemoved[i].TableKey < d.TranslateRolesRemoved[j].TableKey })
+
+		directives[i] = d
+
+		// Set directive version to nextDirectiveVersion where directiveVersion
+		// equals currentDirectiveVersion for this address.
+		if err := c.DirectiveVersion.SetNext(tx, workerDiff.Address, currentDirectiveVersion, nextDirectiveVersion); err != nil {
+			return nil, errors.Wrap(err, "setting next directive version")
+		}
 	}
 
 	return directives, nil
@@ -1438,7 +1720,7 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 		return computeNodes, nil
 	}
 
-	assignedNodes, _, _, err := c.nodesComputeReadOrWrite(tx, role, qdbid, false, false)
+	assignedNodes, _, _, err := c.nodesComputeReadOrWrite(ctx, tx, role, qdbid, false, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting compute nodes read or write")
 	}
@@ -1500,7 +1782,7 @@ func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTable
 		return translateNodes, nil
 	}
 
-	assignedNodes, _, _, err := c.nodesTranslateReadOrWrite(tx, role, qdbid, false, false)
+	assignedNodes, _, _, err := c.nodesTranslateReadOrWrite(ctx, tx, role, qdbid, false, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting translate nodes read or write")
 	}
@@ -1554,42 +1836,39 @@ func (c *Controller) IngestPartition(ctx context.Context, qtid dax.QualifiedTabl
 	}
 	qdbid := qtid.QualifiedDatabaseID
 
-	// Try with a read transaction first.
-	tx, err := c.Transactor.BeginTx(ctx, false)
-	if err != nil {
-		return "", errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
-
-	if err := c.sanitizeQTID(tx, &qtid); err != nil {
-		return "", errors.Wrap(err, "sanitizing")
-	}
-
-	// Verify that the table exists.
-	if _, err := c.Schemar.Table(tx, qtid); err != nil {
-		return "", errors.Wrap(err, "getting table")
-	}
-
-	nodes, retryAsWrite, _, err := c.nodesTranslateReadOrWrite(tx, role, qdbid, true, false)
-	if err != nil {
-		return "", errors.Wrap(err, "getting translate nodes read or write")
-	}
-
+	var nodes []dax.AssignedNode
+	var retryAsWrite bool
 	var directives []*dax.Directive
+
+	fn := func(tx dax.Transaction, writable bool) error {
+		if err := c.sanitizeQTID(tx, &qtid); err != nil {
+			return errors.Wrap(err, "sanitizing")
+		}
+
+		// Verify that the table exists.
+		if _, err := c.Schemar.Table(tx, qtid); err != nil {
+			return errors.Wrap(err, "getting table")
+		}
+
+		var err error
+		nodes, retryAsWrite, directives, err = c.nodesTranslateReadOrWrite(ctx, tx, role, qdbid, true, writable)
+		if err != nil {
+			return errors.Wrap(err, "getting translate nodes read or write")
+		}
+
+		return nil
+	}
+
+	// Try with a read transaction first.
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, false, 1); err != nil {
+		return "", errors.Wrap(err, "retry with tx: read")
+	}
+
 	// If it's writable, and we couldn't find all the partitions with just a
 	// read, try again with a write transaction.
 	if retryAsWrite {
-		tx.Rollback()
-
-		tx, err = c.Transactor.BeginTx(ctx, true)
-		if err != nil {
-			return "", errors.Wrap(err, "beginning tx")
-		}
-		defer tx.Rollback()
-
-		nodes, _, directives, err = c.nodesTranslateReadOrWrite(tx, role, qdbid, true, true)
-		if err != nil {
-			return "", errors.Wrap(err, "getting translate nodes read or write retry")
+		if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+			return "", errors.Wrap(err, "retry with tx: write")
 		}
 	}
 
@@ -1623,17 +1902,8 @@ func (c *Controller) IngestPartition(ctx context.Context, qtid dax.QualifiedTabl
 				fmt.Sprintf("partition returned (%d) does not match requested (%d)", p, partition))
 	}
 
-	// Only commit if the transaction is writable.
-	if retryAsWrite {
-		if err := tx.Commit(); err != nil {
-			return node.Address, errors.Wrap(err, "committing")
-		}
-
-		if err := c.sendDirectives2(ctx, directives); err != nil {
-			return node.Address, NewErrDirectiveSendFailure(err.Error())
-		}
-
-		return node.Address, nil
+	if err := c.sendDirectives(ctx, directives); err != nil {
+		return node.Address, NewErrDirectiveSendFailure(err.Error())
 	}
 
 	return node.Address, nil
@@ -1647,44 +1917,41 @@ func (c *Controller) IngestShard(ctx context.Context, qtid dax.QualifiedTableID,
 	}
 	qdbid := qtid.QualifiedDatabaseID
 
-	// Try with a read transaction first.
-	tx, err := c.Transactor.BeginTx(ctx, false)
-	if err != nil {
-		return "", errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
-
-	if err := c.sanitizeQTID(tx, &qtid); err != nil {
-		return "", errors.Wrap(err, "sanitizing")
-	}
-
-	// Verify that the table exists.
-	if _, err := c.Schemar.Table(tx, qtid); err != nil {
-		return "", err
-	}
-
-	nodes, retryAsWrite, _, err := c.nodesComputeReadOrWrite(tx, role, qdbid, true, false)
-	if err != nil {
-		return "", errors.Wrap(err, "getting compute nodes read or write")
-	}
-
+	var nodes []dax.AssignedNode
+	var retryAsWrite bool
 	var directives []*dax.Directive
+
+	fn := func(tx dax.Transaction, writable bool) error {
+		if err := c.sanitizeQTID(tx, &qtid); err != nil {
+			return errors.Wrap(err, "sanitizing")
+		}
+
+		// Verify that the table exists.
+		if _, err := c.Schemar.Table(tx, qtid); err != nil {
+			return err
+		}
+
+		var err error
+		nodes, retryAsWrite, directives, err = c.nodesComputeReadOrWrite(ctx, tx, role, qdbid, true, writable)
+		if err != nil {
+			return errors.Wrap(err, "getting compute nodes read or write")
+		}
+
+		return nil
+	}
+
+	// Try with a read transaction first.
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, false, 1); err != nil {
+		return "", errors.Wrap(err, "retry with tx: read")
+	}
 
 	// If it's writable, and we couldn't find all the partitions with just a
 	// read, try again with a write transaction.
 	if retryAsWrite {
-		tx.Rollback()
-
-		tx, err = c.Transactor.BeginTx(ctx, true)
-		if err != nil {
-			return "", errors.Wrap(err, "beginning tx")
+		if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+			return "", errors.Wrap(err, "retry with tx: write")
 		}
-		defer tx.Rollback()
-
-		nodes, _, directives, err = c.nodesComputeReadOrWrite(tx, role, qdbid, true, true)
-		if err != nil {
-			return "", errors.Wrap(err, "getting compute nodes read or write retry")
-		}
+		retryAsWrite = true
 	}
 
 	computeNodes, err := c.assignedToComputeNodes(nodes)
@@ -1714,13 +1981,8 @@ func (c *Controller) IngestShard(ctx context.Context, qtid dax.QualifiedTableID,
 			fmt.Sprintf("shard returned (%d) does not match requested (%d)", s, shrdNum))
 	}
 
-	// Only commit if the transaction is writable.
 	if retryAsWrite {
-		if err := tx.Commit(); err != nil {
-			return node.Address, errors.Wrap(err, "committing")
-		}
-
-		if err := c.sendDirectives2(ctx, directives); err != nil {
+		if err := c.sendDirectives(ctx, directives); err != nil {
 			return node.Address, NewErrDirectiveSendFailure(err.Error())
 		}
 	}
@@ -1731,136 +1993,136 @@ func (c *Controller) IngestShard(ctx context.Context, qtid dax.QualifiedTableID,
 ////
 
 func (c *Controller) CreateField(ctx context.Context, qtid dax.QualifiedTableID, fld *dax.Field) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
+	var directives []*dax.Directive
 
-	if err := c.sanitizeQTID(tx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
+	fn := func(tx dax.Transaction, writable bool) error {
+		if err := c.sanitizeQTID(tx, &qtid); err != nil {
+			return errors.Wrap(err, "sanitizing")
+		}
 
-	// Create the field in schemar.
-	if err := c.Schemar.CreateField(tx, qtid, fld); err != nil {
-		return errors.Wrapf(err, "creating field: %s, %s", qtid, fld)
-	}
+		// Create the field in schemar.
+		if err := c.Schemar.CreateField(tx, qtid, fld); err != nil {
+			return errors.Wrapf(err, "creating field: %s, %s", qtid, fld)
+		}
 
-	// workerSet maintains the set of workers which have a job assignment change
-	// and therefore need to be sent an updated Directive.
-	workerSet := NewAddressSet()
+		// workerSet maintains the set of workers which have a job assignment change
+		// and therefore need to be sent an updated Directive.
+		workerSet := NewAddressSet()
 
-	qdbid := qtid.QualifiedDatabaseID
+		qdbid := qtid.QualifiedDatabaseID
 
-	// Get the worker(s) responsible for partition 0.
-	job := partition(qtid.Key(), 0).Job()
-	workers, err := c.Balancer.WorkersForJobs(tx, dax.RoleTypeTranslate, qdbid, job)
-	if err != nil {
-		return errors.Wrapf(err, "getting workers for job: %s", job)
-	}
+		// Get the worker(s) responsible for partition 0.
+		job := partition(qtid.Key(), 0).Job()
+		workers, err := c.Balancer.WorkersForJobs(tx, dax.RoleTypeTranslate, qdbid, job)
+		if err != nil {
+			return errors.Wrapf(err, "getting workers for job: %s", job)
+		}
 
-	for _, w := range workers {
-		workerSet.Add(dax.Address(w.Address))
-	}
+		for _, w := range workers {
+			workerSet.Add(dax.Address(w.Address))
+		}
 
-	// Get the list of workers responsible for shard data for this table.
-	if state, err := c.Balancer.CurrentState(tx, dax.RoleTypeCompute, qdbid); err != nil {
-		return errors.Wrap(err, "getting current compute state")
-	} else {
-		for _, worker := range state {
-			for _, job := range worker.Jobs {
-				if shard, err := decodeShard(job); err != nil {
-					return errors.Wrapf(err, "decoding shard: %s", job)
-				} else if shard.table() == qtid.Key() {
-					workerSet.Add(dax.Address(worker.Address))
-					break
+		// Get the list of workers responsible for shard data for this table.
+		if state, err := c.Balancer.CurrentState(tx, dax.RoleTypeCompute, qdbid); err != nil {
+			return errors.Wrap(err, "getting current compute state")
+		} else {
+			for _, worker := range state {
+				for _, job := range worker.Jobs {
+					if shard, err := decodeShard(job); err != nil {
+						return errors.Wrapf(err, "decoding shard: %s", job)
+					} else if shard.table() == qtid.Key() {
+						workerSet.Add(dax.Address(worker.Address))
+						break
+					}
 				}
 			}
 		}
+
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
+
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
+		if err != nil {
+			return errors.Wrap(err, "building directives")
+		}
+
+		return nil
 	}
 
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
 	}
 
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
-	}
-
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 	return nil
 }
 
 func (c *Controller) DropField(ctx context.Context, qtid dax.QualifiedTableID, fldName dax.FieldName) error {
-	tx, err := c.Transactor.BeginTx(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
+	var directives []*dax.Directive
 
-	if err := c.sanitizeQTID(tx, &qtid); err != nil {
-		return errors.Wrap(err, "sanitizing")
-	}
+	fn := func(tx dax.Transaction, writable bool) error {
+		if err := c.sanitizeQTID(tx, &qtid); err != nil {
+			return errors.Wrap(err, "sanitizing")
+		}
 
-	// Drop the field from schemar.
-	if err := c.Schemar.DropField(tx, qtid, fldName); err != nil {
-		return errors.Wrapf(err, "dropping field: %s, %s", qtid, fldName)
-	}
+		// Drop the field from schemar.
+		if err := c.Schemar.DropField(tx, qtid, fldName); err != nil {
+			return errors.Wrapf(err, "dropping field: %s, %s", qtid, fldName)
+		}
 
-	// workerSet maintains the set of workers which have a job assignment change
-	// and therefore need to be sent an updated Directive.
-	workerSet := NewAddressSet()
+		// workerSet maintains the set of workers which have a job assignment change
+		// and therefore need to be sent an updated Directive.
+		workerSet := NewAddressSet()
 
-	qdbid := qtid.QualifiedDatabaseID
+		qdbid := qtid.QualifiedDatabaseID
 
-	// Get the worker(s) responsible for partition 0.
-	job := partition(qtid.Key(), 0).Job()
-	workers, err := c.Balancer.WorkersForJobs(tx, dax.RoleTypeTranslate, qdbid, job)
-	if err != nil {
-		return errors.Wrapf(err, "getting workers for job: %s", job)
-	}
+		// Get the worker(s) responsible for partition 0.
+		job := partition(qtid.Key(), 0).Job()
+		workers, err := c.Balancer.WorkersForJobs(tx, dax.RoleTypeTranslate, qdbid, job)
+		if err != nil {
+			return errors.Wrapf(err, "getting workers for job: %s", job)
+		}
 
-	for _, w := range workers {
-		workerSet.Add(dax.Address(w.Address))
-	}
+		for _, w := range workers {
+			workerSet.Add(dax.Address(w.Address))
+		}
 
-	// Get the list of workers responsible for shard data for this table.
-	if state, err := c.Balancer.CurrentState(tx, dax.RoleTypeCompute, qdbid); err != nil {
-		return errors.Wrap(err, "getting current compute state")
-	} else {
-		for _, worker := range state {
-			for _, job := range worker.Jobs {
-				if shard, err := decodeShard(job); err != nil {
-					return errors.Wrapf(err, "decoding shard: %s", job)
-				} else if shard.table() == qtid.Key() {
-					workerSet.Add(dax.Address(worker.Address))
-					break
+		// Get the list of workers responsible for shard data for this table.
+		if state, err := c.Balancer.CurrentState(tx, dax.RoleTypeCompute, qdbid); err != nil {
+			return errors.Wrap(err, "getting current compute state")
+		} else {
+			for _, worker := range state {
+				for _, job := range worker.Jobs {
+					if shard, err := decodeShard(job); err != nil {
+						return errors.Wrapf(err, "decoding shard: %s", job)
+					} else if shard.table() == qtid.Key() {
+						workerSet.Add(dax.Address(worker.Address))
+						break
+					}
 				}
 			}
 		}
+
+		// Convert the slice of addresses into a slice of addressMethod containing
+		// the appropriate method.
+		addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodFull)
+
+		directives, err = c.buildDirectives(ctx, tx, addrMethods)
+		if err != nil {
+			return errors.Wrap(err, "building directives")
+		}
+
+		return nil
 	}
 
-	// Convert the slice of addresses into a slice of addressMethod containing
-	// the appropriate method.
-	addrMethods := applyAddressMethod(workerSet.SortedSlice(), dax.DirectiveMethodDiff)
-
-	directives, err := c.buildDirectives(tx, addrMethods)
-	if err != nil {
-		return errors.Wrap(err, "building directives")
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return errors.Wrap(err, "retry with tx: write")
 	}
 
-	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "committing")
-	}
-
-	if err := c.sendDirectives2(ctx, directives); err != nil {
+	if err := c.sendDirectives(ctx, directives); err != nil {
 		return NewErrDirectiveSendFailure(err.Error())
 	}
 	return nil

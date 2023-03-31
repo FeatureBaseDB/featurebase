@@ -371,7 +371,7 @@ func TestDAXIntegration(t *testing.T) {
 		qtid, err := controllerClient.TableID(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
-		controllerClient.SnapshotTable(ctx, qtid)
+		assert.NoError(t, controllerClient.SnapshotTable(ctx, qtid))
 
 		// Ingest more data.
 		t.Run("ingest and query more data", func(t *testing.T) {
@@ -692,7 +692,7 @@ func TestDAXIntegration(t *testing.T) {
 		cfg.Computer.N = 4
 		opt := server.OptCommandConfig(cfg)
 		mc := test.MustRunManagedCommand(t, opt)
-
+		defer mc.Close()
 		svcmgr := mc.Manage()
 
 		// Set up Controller client.
