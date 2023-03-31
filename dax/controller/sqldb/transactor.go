@@ -2,7 +2,6 @@ package sqldb
 
 import (
 	"context"
-	"strings"
 
 	"database/sql"
 
@@ -67,16 +66,14 @@ func (t Transactor) Start() error {
 		return errors.Wrap(err, "migrating DB")
 	}
 
-	err := t.RawQuery("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 0, '1970-01-01T00:00', '1970-01-01T00:00')").Exec()
-	if err != nil && !strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
-		return errors.Wrap(err, "unexpected error (re)inserting directive_version record")
-	}
-
 	return nil
 }
 
 func (t Transactor) BeginTx(ctx context.Context, writable bool) (dax.Transaction, error) {
-	cn, err := t.NewTransactionContextOptions(ctx, &sql.TxOptions{ReadOnly: !writable})
+	cn, err := t.NewTransactionContextOptions(ctx, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
+		ReadOnly:  !writable,
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "getting SQL transaction")
 	}
