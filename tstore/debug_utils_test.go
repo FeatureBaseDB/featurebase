@@ -9,11 +9,12 @@ import (
 	"github.com/featurebasedb/featurebase/v3/bufferpool"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBTree_Dot(t *testing.T) {
-	diskManager := bufferpool.NewOnDiskDiskManager()
+	diskManager := bufferpool.NewTupleStoreDiskManager()
 
 	objectId := int32(1)
 	shard := int32(0)
@@ -69,7 +70,16 @@ func TestBTree_Dot(t *testing.T) {
 		}
 	}
 
-	b.Dot(os.Stdout, "first", true)
+	b.Dot(os.Stdout, "first", false)
+	root, err := b.fetchNode(b.rootNode)
+	assert.NotNil(t, err)
+	itr := NewBTreeIterator(b, root, Int(1), Int(100), b.schema)
+	assert.NotNil(t, err)
+	// k, tupe, err := itr.Next()
+	for itr.Next() {
+		item := itr.Item()
+		vprint.VV("item:%v", item)
+	}
 }
 
 func TestDotOverflow(t *testing.T) {
@@ -79,7 +89,7 @@ func TestDotOverflow(t *testing.T) {
 	assert.NotNil(t, err)
 	dot.Dot(os.Stdout, "next", true)
 
-	diskManager := bufferpool.NewOnDiskDiskManager()
+	diskManager := bufferpool.NewTupleStoreDiskManager()
 
 	dataFile := fmt.Sprintf("ts-shard.%04d", shard)
 	//	os.Remove(dataFile)
