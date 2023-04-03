@@ -1627,6 +1627,11 @@ func (f *Field) MinForShard(qcx *Qcx, shard uint64, filter *Row) (ValCount, erro
 // includes the int64 "Val\" value to make comparisons easier in the
 // executor (at time of writing, Percentile takes advantage of this,
 // but we might be able to simplify logic in other places as well).
+//
+// Note that the ValCount returned has bsig.Base included, or if
+// you specify a nil bsig, includes the field's bsig.Base. Which is
+// to say, don't use this if you have a value that's already been
+// adjusted by base.
 func (f *Field) valCountize(val int64, cnt uint64, bsig *bsiGroup) (ValCount, error) {
 	if bsig == nil {
 		bsig = f.bsiGroup(f.name)
@@ -1637,10 +1642,10 @@ func (f *Field) valCountize(val int64, cnt uint64, bsig *bsiGroup) (ValCount, er
 	}
 	valCount := ValCount{Count: int64(cnt)}
 
-	if f.Options().Type == FieldTypeDecimal {
+	if f.options.Type == FieldTypeDecimal {
 		dec := pql.NewDecimal(val+bsig.Base, bsig.Scale)
 		valCount.DecimalVal = &dec
-	} else if f.Options().Type == FieldTypeTimestamp {
+	} else if f.options.Type == FieldTypeTimestamp {
 		ts, err := ValToTimestamp(f.options.TimeUnit, val+bsig.Base)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "translating value to timestamp")

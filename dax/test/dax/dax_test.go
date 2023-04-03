@@ -142,7 +142,6 @@ func TestDAXIntegration(t *testing.T) {
 		// need to get these passing before alpha.
 		skips := []string{
 			"testinsert/test-5",             // error messages differ
-			"percentile_test/test-6",        // related to TODO in orchestrator.executePercentile
 			"alterTable/alterTableBadTable", // looks like table does not exist is a different error in DAX
 			"top-limit-tests/test-2",        // don't know why this is failing at all
 			"top-limit-tests/test-3",        // don't know why this is failing at all
