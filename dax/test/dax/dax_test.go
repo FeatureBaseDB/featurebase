@@ -97,7 +97,7 @@ func TestDAXIntegration(t *testing.T) {
 			assert.False(t, mc.Healthy(computerKey1))
 
 			// New and Start Computer 0.
-			computerKey0 = mc.NewComputer()
+			computerKey0 = mc.NewComputer(0)
 			assert.NoError(t, svcmgr.ComputerStart(computerKey0))
 			assert.True(t, mc.Healthy(controllerKey))
 			assert.True(t, mc.Healthy(queryerKey))
@@ -105,7 +105,7 @@ func TestDAXIntegration(t *testing.T) {
 			assert.False(t, mc.Healthy(computerKey1))
 
 			// New and Start Computer 1.
-			computerKey1 = mc.NewComputer()
+			computerKey1 = mc.NewComputer(1)
 			assert.NoError(t, svcmgr.ComputerStart(computerKey1))
 			assert.True(t, mc.Healthy(controllerKey))
 			assert.True(t, mc.Healthy(queryerKey))
@@ -318,7 +318,7 @@ func TestDAXIntegration(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		// New and Start Computer 1.
-		computerKey1 := mc.NewComputer()
+		computerKey1 := mc.NewComputer(1)
 		assert.NoError(t, svcmgr.ComputerStart(computerKey1))
 		assert.False(t, mc.Healthy(computerKey0))
 		assert.True(t, mc.Healthy(computerKey1))
@@ -397,7 +397,7 @@ func TestDAXIntegration(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		// New and Start Computer 1.
-		computerKey1 := mc.NewComputer()
+		computerKey1 := mc.NewComputer(1)
 		assert.NoError(t, svcmgr.ComputerStart(computerKey1))
 		assert.True(t, mc.Healthy(computerKey1))
 		mc.WaitForApplied(t, computerKey1, 60, time.Second)

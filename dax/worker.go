@@ -11,7 +11,13 @@ import (
 // Node is used in API requests, like RegisterNode (before being assigned
 // roles).
 type Node struct {
+	// Address is the node's network address
 	Address Address `json:"address"`
+
+	// WorkerServiceID identifies the service that created the
+	// node. That will affect which database this node/worker can be
+	// assigned to.
+	ServiceID WorkerServiceID `json:"service_id"`
 
 	// RoleTypes allows a registering node to specify which role type(s) it is
 	// capable of filling. The controller will not assign a role to this node

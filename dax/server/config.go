@@ -12,6 +12,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
+	wsp "github.com/featurebasedb/featurebase/v3/dax/worker_service_provider"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	fbserver "github.com/featurebasedb/featurebase/v3/server"
 )
@@ -43,9 +44,10 @@ type Config struct {
 	// LogPath configures where Pilosa will write logs.
 	LogPath string `toml:"log-path"`
 
-	Controller ControllerOptions `toml:"controller"`
-	Queryer    QueryerOptions    `toml:"queryer"`
-	Computer   ComputerOptions   `toml:"computer"`
+	Controller            ControllerOptions `toml:"controller"`
+	Queryer               QueryerOptions    `toml:"queryer"`
+	WorkerServiceProvider WSPOptions        `toml:"worker-service-provider"`
+	Computer              ComputerOptions   `toml:"computer"`
 }
 
 type ControllerOptions struct {
@@ -59,9 +61,14 @@ type QueryerOptions struct {
 }
 
 type ComputerOptions struct {
-	Run    bool            `toml:"run"`
-	N      int             `toml:"n"`
-	Config fbserver.Config `toml:"config"`
+	Run             bool            `toml:"run"`
+	WorkerServiceID string          `toml:"worker-service-id"`
+	Config          fbserver.Config `toml:"config"`
+}
+
+type WSPOptions struct {
+	Run    bool       `toml:"run"`
+	Config wsp.Config `toml:"config"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -74,6 +81,10 @@ func NewConfig() *Config {
 				SQLDB:                    controller.NewSQLDBConfig(),
 				SnappingTurtleTimeout:    time.Minute * 3,
 			},
+		},
+		WorkerServiceProvider: WSPOptions{
+			Run:    false,
+			Config: wsp.NewConfig(),
 		},
 		Bind: ":" + defaultBindPort,
 		Computer: ComputerOptions{

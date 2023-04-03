@@ -13,6 +13,8 @@ import (
 // example, see the Is() method.
 type Code string
 
+var CodeTODO Code = "TODOError"
+
 func New(code Code, message string) error {
 	return errors.WithStack(codedError{
 		Code:    code,

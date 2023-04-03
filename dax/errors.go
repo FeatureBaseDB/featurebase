@@ -129,3 +129,10 @@ func NewErrInvalidTransaction(txType string) error {
 		fmt.Sprintf("tx is not expected type: '%s'", txType),
 	)
 }
+
+func NewErrUnimplemented(what string) error {
+	return errors.New(
+		ErrUnimplemented,
+		fmt.Sprintf("%s is unimplemented", what),
+	)
+}

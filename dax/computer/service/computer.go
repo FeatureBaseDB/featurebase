@@ -115,7 +115,8 @@ type CommandConfig struct {
 	// separate data directory for its holder.
 	Name string
 
-	ComputerConfig fbserver.Config
+	ComputerConfig  fbserver.Config
+	WorkerServiceID dax.WorkerServiceID
 
 	Listener    net.Listener
 	RootDataDir string

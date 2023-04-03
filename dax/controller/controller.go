@@ -2,8 +2,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"sort"
 	"time"
 
@@ -147,6 +150,9 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 
 	// Validate input.
 	for _, n := range nodes {
+		if n.ServiceID == "" {
+			return errors.New(errors.CodeTODO, "node must be associated with a WorkerService to register")
+		}
 		if n.Address == "" {
 			return NewErrNodeKeyInvalid(n.Address)
 		}
@@ -257,6 +263,9 @@ func (c *Controller) RegisterNodes(ctx context.Context, nodes ...*dax.Node) erro
 // used for anything or assigned any jobs.
 func (c *Controller) RegisterNode(ctx context.Context, n *dax.Node) error {
 	// Validate input.
+	if n.ServiceID == "" {
+		return errors.New(errors.CodeTODO, "node must be associated with a WorkerService to register")
+	}
 	if n.Address == "" {
 		return NewErrNodeKeyInvalid(n.Address)
 	}
@@ -632,6 +641,29 @@ func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatab
 		if err := c.Schemar.CreateDatabase(tx, qdb); err != nil {
 			return errors.Wrap(err, "creating database in schemar")
 		}
+
+		wsps, err := c.Balancer.WorkerServiceProviders(tx)
+		if err != nil {
+			return errors.Wrap(err, "getting worker service providers")
+		}
+		if len(wsps) != 1 {
+			return errors.Errorf("unexpected number of worker service providers... should be exactly 1, got %d", len(wsps))
+		}
+		wsp := wsps[0]
+
+		svc, err := c.Balancer.AssignFreeServiceToDatabase(tx, wsp.ID, qdb)
+		if err != nil {
+			return errors.Wrap(err, "assigning free service to database")
+		}
+
+		// Encode the request.
+		postBody, err := json.Marshal(svc)
+		if err != nil {
+			return errors.Wrap(err, "marshalling post request")
+		}
+		buf := bytes.NewBuffer(postBody)
+
+		http.Post(fmt.Sprintf("%s/claim", wsp.Address), "application/json", buf)
 		return nil
 	}
 
@@ -2220,6 +2252,46 @@ func (c *Controller) Workers(ctx context.Context) ([]*dax.Node, error) {
 	defer tx.Rollback()
 
 	return c.Balancer.Nodes(tx)
+}
+
+// RegisterWorkerServiceProvider makes the controller aware of a new
+// WorkerServiceProvider. When a database is created, the Controller
+// can decided which WorkerServiceProvider should provide the
+// WorkerService for that database. Different providers might exist in
+// different geographic locations, or be earmarked for particular
+// organizations, or whatever... the possibilities are endless.
+func (c *Controller) RegisterWorkerServiceProvider(ctx context.Context, sp dax.WorkerServiceProvider) (dax.WorkerServices, error) {
+	var svcs dax.WorkerServices
+
+	fn := func(tx dax.Transaction, writable bool) error {
+		err := c.Balancer.CreateWorkerServiceProvider(tx, sp)
+		if err != nil {
+			return errors.Wrap(err, "creating worker service provider")
+		}
+
+		svcs, err = c.Balancer.WorkerServices(tx, sp.ID)
+		return err
+	}
+
+	if err := dax.RetryWithTx(ctx, c.Transactor, fn, true, txRetry); err != nil {
+		return nil, errors.Wrap(err, "retry with tx: write")
+	}
+
+	return svcs, nil
+}
+
+// RegisterWorkerService makes the controller aware of a new
+// WorkerService, so that when workers of that service register
+// themselves, the controller will have an entity to associate them
+// with, which will ultimately correspond to what Database those
+// workers get jobs for. The controller does not pick Services from
+// those that are registered at this endpoint, rather it asks the
+// WorkerServiceProvider to assign a WorkerService (which must already
+// be registered). This way the WorkerServiceProvider knows which
+// Services are used and can maintain enough free capacity to serve
+// new requests.
+func (c *Controller) RegisterWorkerService(ctx context.Context, srv dax.WorkerService) error {
+	return dax.NewErrUnimplemented("RegisterWorkerService")
 }
 
 func (c *Controller) Logger() logger.Logger {

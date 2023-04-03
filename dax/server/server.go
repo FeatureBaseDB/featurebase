@@ -29,6 +29,8 @@ import (
 	daxhttp "github.com/featurebasedb/featurebase/v3/dax/http"
 	"github.com/featurebasedb/featurebase/v3/dax/queryer"
 	queryersvc "github.com/featurebasedb/featurebase/v3/dax/queryer/service"
+	wsp "github.com/featurebasedb/featurebase/v3/dax/worker_service_provider"
+	wspsvc "github.com/featurebasedb/featurebase/v3/dax/worker_service_provider/service"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	fbnet "github.com/featurebasedb/featurebase/v3/net"
@@ -246,7 +248,9 @@ func (m *Command) setupServer() error {
 
 	//m.Config.FeatureBase.Config.Listener = ln
 
-	// Get advertise address as uri.
+	// Get advertise address as uri. TODO: What if you pass a
+	// non-default bind and then don't pass advertise? Looks like
+	// advertise will be set to the default? Seems like a bug.
 	m.advertiseURI, err = featurebase.AddressWithDefaults(m.Config.Advertise)
 	if err != nil {
 		return errors.Wrap(err, "processing advertise address")
@@ -256,14 +260,15 @@ func (m *Command) setupServer() error {
 	}
 
 	handlerOpts := []daxhttp.HandlerOption{
-		daxhttp.OptHandlerBind(m.Config.Bind),
-		daxhttp.OptHandlerListener(m.ln, m.advertiseURI.String()),
+		daxhttp.OptHandlerListener(m.ln),
 		daxhttp.OptHandlerLogger(m.logger),
 	}
 
 	drouter := m.svcmgr.HTTPHandler()
 
 	// Set up Handler based on which services are running in process.
+	// TODO above comment seems wrong... not sure what this handler
+	// has to do with which services are running.
 	m.Handler, err = daxhttp.NewHandler(drouter, handlerOpts...)
 	if err != nil {
 		return errors.Wrap(err, "new handler")
@@ -286,6 +291,7 @@ func (m *Command) setupServices() error {
 			})
 
 		m.svcmgr.Controller = controllersvc.New(m.advertiseURI, controllerCfg)
+		// TODO: why are we starting the controller (and later Queryer) in here?? We call svcmgr.StartAll right after setupServices
 		if err := m.svcmgr.ControllerStart(); err != nil {
 			return errors.Wrap(err, "starting controller service")
 		}
@@ -325,34 +331,44 @@ func (m *Command) setupServices() error {
 	// every iteration and create the new Command based on the copy (which can
 	// have a unique DataDir).
 	rootDataDir := m.Config.Computer.Config.DataDir
+	baseComputerConfig := computersvc.CommandConfig{
+		ComputerConfig: m.Config.Computer.Config,
+
+		Listener:    m.ln,
+		RootDataDir: rootDataDir,
+
+		Stderr: m.stderr,
+		Logger: m.logger,
+	}
+
+	if m.Config.WorkerServiceProvider.Run {
+		wspCfg := m.Config.WorkerServiceProvider.Config
+		wspCfg.Address = m.advertiseURI
+		if m.svcmgr.Controller != nil {
+			wspCfg.ControllerAddress = string(m.svcmgr.Controller.Address())
+		}
+		wspCfg.Logger = m.logger
+
+		m.svcmgr.WorkerServiceProvider = wspsvc.New(m.advertiseURI, wsp.New(m.svcmgr, wspCfg), m.logger)
+
+		if err := m.svcmgr.WorkerServiceProvider.Start(); err != nil {
+			return errors.Wrap(err, "starting worker service provider service")
+		}
+	}
 
 	// Set up Computer.
 	if m.Config.Computer.Run {
-		n := m.Config.Computer.N
-		if n == 0 {
-			n = 1
+		m.logger.Printf("Set up computer")
+		cfg := baseComputerConfig
+		cfg.WorkerServiceID = dax.WorkerServiceID(m.Config.Computer.WorkerServiceID)
+
+		if cfg.ComputerConfig.ControllerAddress == "" && m.svcmgr.Controller != nil {
+			cfg.ComputerConfig.ControllerAddress = string(m.svcmgr.Controller.Address())
 		}
 
-		for i := 0; i < n; i++ {
-			m.logger.Printf("Set up computer (%d)", i)
-			cfg := computersvc.CommandConfig{
-				ComputerConfig: m.Config.Computer.Config,
-
-				Listener:    m.ln,
-				RootDataDir: rootDataDir,
-
-				Stderr: m.stderr,
-				Logger: m.logger,
-			}
-
-			if cfg.ComputerConfig.ControllerAddress == "" && m.svcmgr.Controller != nil {
-				cfg.ComputerConfig.ControllerAddress = string(m.svcmgr.Controller.Address())
-			}
-
-			// Add new computer service.
-			_ = m.svcmgr.AddComputer(
-				computersvc.New(dax.Address(m.advertiseURI.HostPort()), cfg, m.logger))
-		}
+		// Add new computer service.
+		_ = m.svcmgr.AddComputer(
+			computersvc.New(dax.Address(m.advertiseURI.HostPort()), cfg, m.logger), 0)
 	}
 
 	return nil

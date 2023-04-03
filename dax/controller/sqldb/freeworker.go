@@ -49,7 +49,7 @@ func (fw *freeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleTyp
 	return ret, nil
 }
 
-func (fw *freeWorkerService) ListWorkers(tx dax.Transaction, roleType dax.RoleType) (dax.Addresses, error) {
+func (fw *freeWorkerService) ListWorkers(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, roleType dax.RoleType) (dax.Addresses, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")

@@ -108,7 +108,7 @@ func (mc *ManagedCommand) NewQueryer(cfg queryer.Config) dax.ServiceKey {
 }
 
 // NewComputer adds a new ComputerService to the ManagedCommands ServiceManager.
-func (mc *ManagedCommand) NewComputer() dax.ServiceKey {
+func (mc *ManagedCommand) NewComputer(id int) dax.ServiceKey {
 	cfg := computersvc.CommandConfig{
 		ComputerConfig: mc.Config.Computer.Config,
 
@@ -122,7 +122,7 @@ func (mc *ManagedCommand) NewComputer() dax.ServiceKey {
 
 	// Add new computer service.
 	return mc.svcmgr.AddComputer(
-		computersvc.New(mc.Address(), cfg, cfg.Logger))
+		computersvc.New(mc.Address(), cfg, cfg.Logger), id)
 }
 
 // Healthy returns true if the provided service's /health endpoint returns 200
@@ -225,8 +225,6 @@ func DefaultConfig() *server.Config {
 	cfg.Controller.Config.RegistrationBatchTimeout = 0
 	cfg.Controller.Config.SQLDB = sqldb.GetTestConfig()
 	cfg.Queryer.Run = true
-	cfg.Computer.Run = true
-	cfg.Computer.N = 1
 	return cfg
 }
 

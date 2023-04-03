@@ -1,5 +1,7 @@
 package dax
 
+import "github.com/featurebasedb/featurebase/v3/errors"
+
 // RoleType represents a role type which a worker node can act as.
 type RoleType string
 
@@ -59,4 +61,25 @@ type TranslateRole struct {
 // interface.
 func (cr *TranslateRole) Type() RoleType {
 	return RoleTypeTranslate
+}
+
+func RoleTypesFromStrings(roles []string) (RoleTypes, error) {
+	tmp := make(map[RoleType]struct{})
+	for _, role := range roles {
+		switch role {
+		case string(RoleTypeCompute):
+			tmp[RoleTypeCompute] = struct{}{}
+		case string(RoleTypeTranslate):
+			tmp[RoleTypeTranslate] = struct{}{}
+		case string(RoleTypeQuery):
+			tmp[RoleTypeQuery] = struct{}{}
+		default:
+			return nil, errors.Errorf("unknown role type: '%s'", role)
+		}
+	}
+	ret := make(RoleTypes, 0, len(tmp))
+	for k := range tmp {
+		ret = append(ret, k)
+	}
+	return ret, nil
 }

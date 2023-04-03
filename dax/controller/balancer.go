@@ -46,6 +46,32 @@ type Balancer interface {
 
 	// Nodes returns all nodes known by the Balancer.
 	Nodes(tx dax.Transaction) ([]*dax.Node, error)
+
+	// CreateWorkerServiceProvider adds a WorkerServiceProvider (WSP) to
+	// storage. Any WorkerService which registers must have a
+	// WorkerServiceProviderID that matches an existing WSP, and the
+	// Controller will ask for which WSPs are available when asked to
+	// create a database. It will then ask one of the WSPs for a
+	// WorkerService to assign to the database.
+	CreateWorkerServiceProvider(tx dax.Transaction, sp dax.WorkerServiceProvider) error
+
+	// CreateWorkerService adds a WorkerService to storage. Generally
+	// a WSP can create WorkerServices (which can create Workers)
+	// before they are requested. Because the workers will register
+	// themselves as soon as they come up, and they must be associated
+	// with a WorkerService, the WSP registers all Services with the
+	// Controller which stores the knowledge of their existence by
+	// calling this method.
+	CreateWorkerService(tx dax.Transaction, srv dax.WorkerService) error
+
+	WorkerServiceProviders(tx dax.Transaction /*, future optional filters */) (dax.WorkerServiceProviders, error)
+
+	AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error)
+
+	// WorkerServices returns all worker services which came from the
+	// WorkerServiceProvider with the given ID. If that ID is empty,
+	// then all WorkerServices are returned.
+	WorkerServices(tx dax.Transaction, wspID dax.WorkerServiceProviderID) (dax.WorkerServices, error)
 }
 
 // Ensure type implements interface.
@@ -94,3 +120,20 @@ func (b *NopBalancer) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node,
 func (b *NopBalancer) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	return []*dax.Node{}, nil
 }
+
+func (b *NopBalancer) CreateWorkerServiceProvider(tx dax.Transaction, sp dax.WorkerServiceProvider) error {
+	return nil
+}
+func (b *NopBalancer) CreateWorkerService(tx dax.Transaction, srv dax.WorkerService) error {
+	return nil
+}
+
+func (b *NopBalancer) WorkerServices(tx dax.Transaction, wspID dax.WorkerServiceProviderID) (dax.WorkerServices, error) {
+	return nil, nil
+}
+
+func (b *NopBalancer) WorkerServiceProviders(tx dax.Transaction /*, future optional filters */) (dax.WorkerServiceProviders, error) {
+	return nil, nil
+}
+
+func (b *NopBalancer) AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error)

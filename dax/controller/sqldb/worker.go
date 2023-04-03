@@ -29,34 +29,9 @@ func (w *workerRegistry) AddWorker(tx dax.Transaction, node *dax.Node) error {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
-	workers := models.Workers{}
-
-	// Determine if a worker for this address already exists. We use `All()`
-	// here instead of `First()` because `First()` returns an error if there's
-	// no match.
-	if err := dt.C.Where("address = ?", node.Address).All(&workers); err != nil {
-		return errors.Wrapf(err, "getting workers by address: %s", node.Address)
-	}
-
-	switch len(workers) {
-	case 0:
-		// Continue on to create.
-	case 1:
-		// Since a worker for this address already exists, just update it and
-		// return.
-		worker := workers[0]
-		for _, roleType := range node.RoleTypes {
-			if err := worker.SetRole(roleType); err != nil {
-				return errors.Wrapf(err, "setting role: %s", roleType)
-			}
-		}
-		return dt.C.Update(worker)
-	default:
-		return errors.Errorf("found more than one worker for address: %s", node.Address)
-	}
-
 	worker := &models.Worker{
-		Address: node.Address,
+		Address:   node.Address,
+		ServiceID: node.ServiceID,
 	}
 	for _, roleType := range node.RoleTypes {
 		if err := worker.SetRole(roleType); err != nil {

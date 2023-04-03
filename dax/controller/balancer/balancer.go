@@ -40,17 +40,20 @@ type Balancer struct {
 
 	schemar schemar.Schemar
 
+	wsp WorkerServiceProviderService
+
 	logger logger.Logger
 }
 
 // New returns a new instance of Balancer.
-func New(wr controller.WorkerRegistry, fjs FreeJobService, wjs WorkerJobService, fws FreeWorkerService, schemar schemar.Schemar, logger logger.Logger) *Balancer {
+func New(wr controller.WorkerRegistry, fjs FreeJobService, wjs WorkerJobService, fws FreeWorkerService, schemar schemar.Schemar, wsp WorkerServiceProviderService, logger logger.Logger) *Balancer {
 	return &Balancer{
 		current:        wjs,
 		workerRegistry: wr,
 		freeJobs:       fjs,
 		freeWorkers:    fws,
 		schemar:        schemar,
+		wsp:            wsp,
 		logger:         logger,
 	}
 }
@@ -86,7 +89,7 @@ func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType, q
 	b.logger.Debugf("assigning min workers for '%s', '%s'", roleType, qdbid)
 
 	// Find out how many free workers we have.
-	freeWorkers, err := b.freeWorkers.ListWorkers(tx, roleType)
+	freeWorkers, err := b.freeWorkers.ListWorkers(tx, qdbid, roleType)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting free worker list")
 	}
@@ -783,6 +786,24 @@ func (b *Balancer) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	return b.workerRegistry.Workers(tx)
 }
 
+func (b *Balancer) CreateWorkerServiceProvider(tx dax.Transaction, sp dax.WorkerServiceProvider) error {
+	return b.wsp.CreateWorkerServiceProvider(tx, sp)
+}
+func (b *Balancer) CreateWorkerService(tx dax.Transaction, srv dax.WorkerService) error {
+	return b.wsp.CreateWorkerService(tx, srv)
+}
+func (b *Balancer) WorkerServiceProviders(tx dax.Transaction /*, future optional filters */) (dax.WorkerServiceProviders, error) {
+	return b.wsp.WorkerServiceProviders(tx)
+}
+
+func (b *Balancer) AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error) {
+	return b.wsp.AssignFreeServiceToDatabase(tx, wspID, qdb)
+}
+
+func (b *Balancer) WorkerServices(tx dax.Transaction, wsp dax.WorkerServiceProviderID) (dax.WorkerServices, error) {
+	return b.wsp.WorkerServices(tx, wsp)
+}
+
 type WorkerJobService interface {
 	WorkersJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerInfo, error)
 
@@ -811,5 +832,13 @@ type FreeJobService interface {
 
 type FreeWorkerService interface {
 	PopWorkers(tx dax.Transaction, roleType dax.RoleType, num int) ([]dax.Address, error)
-	ListWorkers(tx dax.Transaction, roleType dax.RoleType) (dax.Addresses, error)
+	ListWorkers(tx dax.Transaction, qdbid dax.QualifiedDatabaseID, roleType dax.RoleType) (dax.Addresses, error)
+}
+
+type WorkerServiceProviderService interface {
+	CreateWorkerServiceProvider(tx dax.Transaction, sp dax.WorkerServiceProvider) error
+	CreateWorkerService(tx dax.Transaction, srv dax.WorkerService) error
+	WorkerServiceProviders(tx dax.Transaction /*, future optional filters */) (dax.WorkerServiceProviders, error)
+	WorkerServices(tx dax.Transaction, wspID dax.WorkerServiceProviderID) (dax.WorkerServices, error)
+	AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error)
 }

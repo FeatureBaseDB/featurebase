@@ -1,0 +1,4 @@
+drop_table("worker_service_providers")
+drop_table("worker_services")
+drop_foreign_key("workers", "service_id", {"if_exists": true})
+drop_column("workers", "service_id")

@@ -36,8 +36,13 @@ func BuildDAXFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.BoolVar(&srv.Config.Queryer.Run, "queryer.run", srv.Config.Queryer.Run, "Run the Queryer service in process.")
 	flags.StringVar(&srv.Config.Queryer.Config.ControllerAddress, "queryer.config.controller-address", srv.Config.Queryer.Config.ControllerAddress, "Address of remote Controller process.")
 
+	// Worker Service Provider
+	flags.BoolVar(&srv.Config.WorkerServiceProvider.Run, "wsp.run", srv.Config.WorkerServiceProvider.Run, "Run the WSP service in process.")
+	flags.StringVar(&srv.Config.WorkerServiceProvider.Config.ID, "wsp.id", srv.Config.WorkerServiceProvider.Config.ID, "ID for worker service provider. Should be a string distinct from any other WSP in the deployment.")
+	flags.StringVar(&srv.Config.WorkerServiceProvider.Config.ControllerAddress, "wsp.config.controller-address", srv.Config.WorkerServiceProvider.Config.ControllerAddress, "Address of remote Controller process.")
 	// Computer
 	flags.BoolVar(&srv.Config.Computer.Run, "computer.run", srv.Config.Computer.Run, "Run the Computer service in process.")
 	flags.IntVar(&srv.Config.Computer.N, "computer.n", srv.Config.Computer.N, "The number of Computer services to run in process.")
+	flags.StringVar(&srv.Config.Computer.WorkerServiceID, "computer.worker_service_id", srv.Config.Computer.WorkerServiceID, "ID of WorkerService which spawned this computer.")
 	flags.AddFlagSet(serverFlagSet(&srv.Config.Computer.Config, "computer.config"))
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/gorilla/mux"
 )
 
@@ -49,6 +50,9 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/check-in-node", server.postCheckInNode).Methods("POST").Name("PostCheckInNode")
 	router.HandleFunc("/compute-nodes", server.postComputeNodes).Methods("POST").Name("PostComputeNodes")
 	router.HandleFunc("/translate-nodes", server.postTranslateNodes).Methods("POST").Name("PostTranslateNodes")
+
+	router.HandleFunc("/register-worker-service-provider", server.postRegisterWorkerServiceProvider).Methods("POST").Name("PostregisterWorkerServiceProvider")
+	router.HandleFunc("/register-worker-service", server.postRegisterWorkerService).Methods("POST").Name("PostregisterWorkerService")
 
 	// debug endpoints
 	router.HandleFunc("/debug/nodes", server.getDebugNodes).Methods("GET").Name("GetDebugNodes")
@@ -790,7 +794,55 @@ func (s *server) postTranslateNodes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.Log().Errorf("Error writing response to /translate-nodes request: '%v'", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+}
+
+// POST /register-worker-service-provider
+func (s *server) postRegisterWorkerServiceProvider(w http.ResponseWriter, r *http.Request) {
+	body := r.Body
+	defer body.Close()
+
+	ctx := r.Context()
+
+	req := dax.WorkerServiceProvider{}
+	if err := json.NewDecoder(body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	svcs, err := s.controller.RegisterWorkerServiceProvider(ctx, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(svcs); err != nil {
+		s.Log().Errorf("Error writing response to /register-worker-service-provider request: '%v'", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// POST /register-worker-service
+func (s *server) postRegisterWorkerService(w http.ResponseWriter, r *http.Request) {
+	body := r.Body
+	defer body.Close()
+
+	ctx := r.Context()
+
+	req := dax.WorkerService{}
+	if err := json.NewDecoder(body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err := s.controller.RegisterWorkerService(ctx, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
@@ -809,4 +861,8 @@ type TranslateNodesRequest struct {
 // if there are currently no active translate nodes.
 type TranslateNodesResponse struct {
 	TranslateNodes []dax.TranslateNode `json:"translate-nodes"`
+}
+
+func (s *server) Log() logger.Logger {
+	return s.controller.Logger()
 }

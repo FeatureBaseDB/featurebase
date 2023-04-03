@@ -701,3 +701,58 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 
 	return nil
 }
+
+func (c *Client) RegisterWorkerServiceProvider(ctx context.Context, sp dax.WorkerServiceProvider) (dax.WorkerServices, error) {
+	url := fmt.Sprintf("%s/register-worker-service-provider", c.address.WithScheme(defaultScheme))
+
+	postBody, err := json.Marshal(sp)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling WorkerServiceProvider")
+	}
+
+	reqBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	resp, err := c.httpClient.Post(url, "application/json", reqBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "posting translate-nodes request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	var svcs dax.WorkerServices
+	if err := json.NewDecoder(resp.Body).Decode(&svcs); err != nil {
+		return nil, errors.Wrap(err, "decoding worker services")
+	}
+
+	return svcs, nil
+}
+
+func (c *Client) RegisterWorkerService(ctx context.Context, srv dax.WorkerService) error {
+	url := fmt.Sprintf("%s/register-worker-service", c.address.WithScheme(defaultScheme))
+
+	postBody, err := json.Marshal(srv)
+	if err != nil {
+		return errors.Wrap(err, "marshaling WorkerService")
+	}
+
+	reqBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	resp, err := c.httpClient.Post(url, "application/json", reqBody)
+	if err != nil {
+		return errors.Wrap(err, "posting translate-nodes request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	return nil
+}

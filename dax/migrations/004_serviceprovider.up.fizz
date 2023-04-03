@@ -1,0 +1,27 @@
+create_table("worker_service_providers") {
+	t.Column("id", "string", {primary: true})
+	t.Column("role_compute", "bool")
+	t.Column("role_translate", "bool")
+	t.Column("address", "string")
+	t.Column("description", "string")
+	t.Timestamps()
+}
+
+create_table("worker_services") {
+	t.Column("id", "string", {primary: true})
+	t.Column("worker_service_provider_id", "string")
+	t.ForeignKey("worker_service_provider_id", {"worker_service_providers": ["id"]}, {"on_delete": "cascade"})
+	t.Column("database_id", "string", {"null": true})
+	t.ForeignKey("database_id", {"databases": ["id"]}, {"on_delete": "cascade"})
+
+	t.Column("role_compute", "bool")
+	t.Column("role_translate", "bool")
+	t.Column("workers_min", "integer", {})
+	t.Column("workers_max", "integer", {})
+	t.Timestamps()
+}
+
+
+add_column("workers", "service_id", "string", {})
+add_foreign_key("workers", "service_id", {"worker_services": ["id"]}, {"on_delete": "cascade"})
+

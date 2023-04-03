@@ -6,6 +6,7 @@ const (
 	ServicePrefixComputer    = "computer"
 	ServicePrefixController  = "controller"
 	ServicePrefixQueryer     = "queryer"
-	ServicePrefixSnapshotter = "snapshotter"
-	ServicePrefixWritelogger = "writelogger"
+	ServicePrefixWSP         = "worker_service_provider"
+	ServicePrefixSnapshotter = "snapshotter" // TODO remove?
+	ServicePrefixWritelogger = "writelogger" // TODO remove?
 )

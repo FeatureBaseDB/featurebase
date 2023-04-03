@@ -31,9 +31,12 @@ type ServiceManager struct {
 	Queryer        QueryerService
 	queryerStarted bool
 
+	// WorkerServiceProvider
+	WorkerServiceProvider WorkerServiceProviderService
+	wspStarted            bool
+
 	// Computers
-	computerID int
-	computers  map[ServiceKey]*computerServiceState
+	computers map[ServiceKey]*computerServiceState
 
 	drouter *dynamicRouter
 
@@ -75,6 +78,10 @@ func (s *ServiceManager) StartAll() error {
 		return errors.Wrap(err, "starting queryer")
 	}
 
+	if err := s.WorkerServiceProvider.Start(); err != nil {
+		return errors.Wrap(err, "starting worker service provider")
+	}
+
 	// Computer(s)
 	for key := range s.computers {
 		if err := s.ComputerStart(key); err != nil {
@@ -91,6 +98,10 @@ func (s *ServiceManager) StopAll() error {
 			s.Logger.Printf("stopping computer %s: %v", key, err)
 		}
 	}
+	if err := s.WorkerServiceProviderStop(); err != nil {
+		s.Logger.Printf("stopping WorkerServiceProvider: %v", err)
+	}
+
 	if err := s.QueryerStop(); err != nil {
 		s.Logger.Printf("stopping queryer: %v", err)
 	}
@@ -199,6 +210,14 @@ func (s *ServiceManager) QueryerStop() error {
 	return nil
 }
 
+func (s *ServiceManager) WorkerServiceProviderStart() error {
+	return NewErrUnimplemented("WorkerServiceProviderStart")
+}
+
+func (s *ServiceManager) WorkerServiceProviderStop() error {
+	return NewErrUnimplemented("WorkerServiceProviderStop")
+}
+
 // Computer returns the ComputerService specified by the provided key.
 func (s *ServiceManager) Computer(key ServiceKey) ComputerService {
 	serviceState, ok := s.computers[key]
@@ -284,17 +303,18 @@ func (s *ServiceManager) Computers() map[ServiceKey]ComputerService {
 
 // AddComputer adds the provided ComputerService to ServiceManager. It assigns
 // the service a unique ServiceKey.
-func (s *ServiceManager) AddComputer(cs ComputerService) ServiceKey {
+func (s *ServiceManager) AddComputer(cs ComputerService, id int) ServiceKey {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	key := ServiceKey(fmt.Sprintf("%s%d", ServicePrefixComputer, s.computerID))
+	key := ServiceKey(fmt.Sprintf("%s%d", ServicePrefixComputer, id))
+	if _, ok := s.computers[key]; ok {
+		panic(fmt.Sprintf("attempt to add computer with key %s that already exists", key))
+	}
 	s.computers[key] = &computerServiceState{
 		service: cs,
 	}
 	cs.SetKey(key)
-
-	s.computerID++
 
 	return key
 }
@@ -391,6 +411,11 @@ type ComputerService interface {
 type QueryerService interface {
 	Service
 
+	SetController(Address) error
+}
+
+type WorkerServiceProviderService interface {
+	Service
 	SetController(Address) error
 }
 

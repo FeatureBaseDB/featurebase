@@ -19,11 +19,7 @@ import (
 type Handler struct {
 	Handler http.Handler
 
-	bind string
-
 	ln net.Listener
-	// url is used to hold the advertise bind address for printing a log during startup.
-	url string
 
 	closeTimeout time.Duration
 
@@ -41,13 +37,6 @@ type Handler struct {
 
 // HandlerOption is a functional option type for Handler
 type HandlerOption func(s *Handler) error
-
-func OptHandlerBind(b string) HandlerOption {
-	return func(h *Handler) error {
-		h.bind = b
-		return nil
-	}
-}
 
 func OptHandlerController(c *controller.Controller) HandlerOption {
 	return func(h *Handler) error {
@@ -93,13 +82,11 @@ func OptHandlerCloseTimeout(d time.Duration) HandlerOption {
 	}
 }
 
-// OptHandlerListener set the listener that will be used by the HTTP server.
-// Url must be the advertised URL. It will be used to show a log to the user
-// about where the Web UI is. This option is mandatory.
-func OptHandlerListener(ln net.Listener, url string) HandlerOption {
+// OptHandlerListener set the listener that will be used by the HTTP
+// server. This option is not optional.
+func OptHandlerListener(ln net.Listener) HandlerOption {
 	return func(h *Handler) error {
 		h.ln = ln
-		h.url = url
 		return nil
 	}
 }

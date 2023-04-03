@@ -16,15 +16,16 @@ import (
 // Worker is a node plus a role that gets assigned to a database and
 // can be assigned jobs for that database.
 type Worker struct {
-	ID            uuid.UUID    `json:"id" db:"id"`
-	Address       dax.Address  `json:"address" db:"address"`
-	DatabaseID    nulls.String `json:"database_id" db:"database_id"` // this can be empty which means the worker is unassigned
-	CreatedAt     time.Time    `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at" db:"updated_at"`
-	Jobs          Jobs         `json:"jobs" has_many:"jobs" order_by:"name asc"`
-	RoleCompute   bool         `json:"role_compute" db:"role_compute"`
-	RoleTranslate bool         `json:"role_translate" db:"role_translate"`
-	RoleQuery     bool         `json:"role_query" db:"role_query"`
+	ID            uuid.UUID           `json:"id" db:"id"`
+	Address       dax.Address         `json:"address" db:"address"`
+	ServiceID     dax.WorkerServiceID `json:"service_id" db:"service_id"`
+	Jobs          Jobs                `json:"jobs" has_many:"jobs" order_by:"name asc"`
+	RoleCompute   bool                `json:"role_compute" db:"role_compute"`
+	RoleTranslate bool                `json:"role_translate" db:"role_translate"`
+	RoleQuery     bool                `json:"role_query" db:"role_query"`
+	DatabaseID    nulls.String        `json:"database_id" db:"database_id"` // this can be empty which means the worker is unassigned. Probably get rid of this now that every worker is associated w/ a Service and every Service has an ID
+	CreatedAt     time.Time           `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time           `json:"updated_at" db:"updated_at"`
 }
 
 // String is not required by pop and may be deleted
