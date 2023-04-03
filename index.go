@@ -1022,6 +1022,7 @@ func (i *Index) DeleteShard(ctx context.Context, indexName string, shardID uint6
 
 	// Delete shard
 	// --> need to make schemator DeleteShard too?
+	// --> --> --> The real question is where to actually delete the shard? and how? Through fields? Views?
 	// --> --> shards and partitions aren't part of schema?
 	// ???
 
