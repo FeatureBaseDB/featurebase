@@ -1020,15 +1020,6 @@ func (i *Index) DeleteField(name string) error {
 // This is currently a no-op implementation
 func (i *Index) DeleteShard(ctx context.Context, indexName string, shardID uint64) error {
 
-	// Delete shard
-	// --> need to make schemator DeleteShard too?
-	// --> --> --> The real question is where to actually delete the shard? and how? Through fields? Views?
-	// --> --> shards and partitions aren't part of schema?
-	// ???
-
-	i.holder.txf.DeleteShardFromStore(indexName, shardID)
-	// profit
-
 	return nil
 }
 

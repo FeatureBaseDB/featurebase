@@ -765,9 +765,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	return nil
 }
 
-// DeleteShard deletes a given shard in an index.
-// This is me taking a stab at implementing this logic, currently
-// a no-op implementation - DK
+// DeleteShard is currently a no-op implementation deletes a given shard in an index.
 func (api *API) DeleteShard(ctx context.Context, indexName string, shardID uint64) error {
 	if err := api.validate(apiDeleteShard); err != nil {
 		return errors.Wrap(err, "validating api method")
@@ -790,8 +788,6 @@ func (api *API) DeleteShard(ctx context.Context, indexName string, shardID uint6
 	if err := idx.DeleteShard(ctx, idx.Name(), dbs.Shard); err != nil {
 		return errors.Wrapf(err, "deleting shard")
 	}
-
-	// Since this is serverless, don't need to send to all nodes.
 
 	return nil
 }
