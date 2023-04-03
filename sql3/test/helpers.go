@@ -15,7 +15,7 @@ import (
 )
 
 // MustQueryRows returns the row results as a slice of []interface{}, along with the columns, the query plan as a []byte or an error.
-func MustQueryRows(tb testing.TB, svr *featurebase.Server, c context.Context, q string) ([][]interface{}, []*featurebase.WireQueryField, []byte, error) {
+func MustQueryRows(tb testing.TB, c context.Context, svr *featurebase.Server, q string) ([][]interface{}, []*featurebase.WireQueryField, []byte, error) {
 	tb.Helper()
 	requestId, err := uuid.NewV4()
 	if err != nil {
