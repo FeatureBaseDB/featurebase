@@ -8,7 +8,7 @@ import (
 
 func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 
-	cfg, err := kafka.ConfigStructFromFile(cfgFile)
+	cfg, err := kafka.ConfigFromFile(cfgFile)
 	if err != nil {
 		return nil, err
 	}

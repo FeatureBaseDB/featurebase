@@ -176,23 +176,10 @@ func buildBulkInsert(tbl *dax.Table, fields []*dax.Field, ids []interface{}, row
 
 	// MAP
 
-	// We need to set ID value below based on ids. Rather than changing what we
-	// get by changing IDK, decide how to format based on the type of ids. We
-	// get []uint64 for not keyed indexes or []byte for keyed indexes.
-	// Additionally, IDK doesn't give us a valid table for some reason (the keys
-	// options is always false). We will also use ids type to determine how to
 	// map values in the MAP clause
-	var fmtStr string
-	var keyType string
-	if len(ids) > 0 {
-		switch ids[0].(type) {
-		case uint64:
-			fmtStr = "%d"
-			keyType = dax.BaseTypeID
-		case []byte:
-			fmtStr = "%s"
-			keyType = dax.BaseTypeString
-		}
+	keyType := dax.BaseTypeID
+	if tbl.StringKeys() {
+		keyType = dax.BaseTypeString
 	}
 
 	sb.WriteString(`) MAP ('$._id' `)
@@ -210,7 +197,13 @@ func buildBulkInsert(tbl *dax.Table, fields []*dax.Field, ids []interface{}, row
 
 	for i := range rows {
 		// Write the ID value.
-		m[string(dax.PrimaryKeyFieldName)] = fmt.Sprintf(fmtStr, ids[i])
+		if keyType == dax.BaseTypeID {
+			m[string(dax.PrimaryKeyFieldName)] = ids[i]
+		} else {
+			// ids for key index can be string or []byte
+			m[string(dax.PrimaryKeyFieldName)] = fmt.Sprintf("%s", ids[i])
+		}
+
 		// Write the rest of the data values.
 		for col := range rows[i] {
 			m[fmt.Sprintf("col_%d", col)] = rows[i][col]

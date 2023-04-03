@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -210,6 +211,17 @@ func (ii IDSet) String() string {
 	return sb.String()
 }
 
+// SortedInt64Slice returns the values in a IDSet field in a int64 slice that is
+// sorted
+func (ii IDSet) SortedInt64Slice() []int64 {
+	var idSetSlice = make([]int64, len(ii))
+	for i, str := range ii {
+		idSetSlice[i] = str
+	}
+	sort.Slice(idSetSlice, func(i, j int) bool { return idSetSlice[i] < idSetSlice[j] })
+	return idSetSlice
+}
+
 // StringSet is a return type specific to SQLResponse types.
 type StringSet []string
 
@@ -225,6 +237,17 @@ func (ss StringSet) String() string {
 	sb.WriteString("]")
 
 	return sb.String()
+}
+
+// SortedStringSlice returns the values in a StringSet field in a string slice
+// that is sorted
+func (ss StringSet) SortedStringSlice() []string {
+	var stringSetSlice = make([]string, len(ss))
+	for i, str := range ss {
+		stringSetSlice[i] = str
+	}
+	sort.Strings(stringSetSlice)
+	return stringSetSlice
 }
 
 // ShowColumnsResponse returns a structure which is specific to a `SHOW COLUMNS`

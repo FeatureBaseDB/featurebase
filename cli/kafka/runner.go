@@ -35,6 +35,7 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	idkMain.Batcher = batcher
 	idkMain.BatchSize = cfg.BatchSize
 	idkMain.BatchMaxStaleness = cfg.BatchMaxStaleness
+	idkMain.MaxMsgs = uint64(cfg.MaxMessages)
 	idkMain.SetBasic()
 	idkMain.SetLog(logger.NewStandardLogger(logWriter))
 	idkMain.OffsetMode = true
@@ -51,16 +52,16 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	}
 
 	// NewSource should be set based on the encoding of the source (e.g. JSON, Avro)
-	if cfg.Encode == Avro {
-		kr.GetAvroNewSource()
-	} else if cfg.Encode == JSON {
-		kr.GetJSONNewSource()
+	if cfg.Encode == encodingTypeAvro {
+		kr.GetAvroNewSource(cfg)
+	} else if cfg.Encode == encodingTypeJSON {
+		kr.GetJSONNewSource(cfg)
 	}
 
 	return kr
 }
 
-func (r *Runner) GetJSONNewSource() {
+func (r *Runner) GetJSONNewSource(cfg ConfigForIDK) {
 	r.NewSource = func() (idk.Source, error) {
 		source := kafka_sasl.NewSource()
 		source.KafkaBootstrapServers = r.Hosts
@@ -69,11 +70,13 @@ func (r *Runner) GetJSONNewSource() {
 		source.Log = r.Main.Log()
 		source.Timeout = r.Timeout
 		source.HeaderFields = r.Header
-		cfg, err := common.SetupConfluent(&r.ConfluentCommand)
+		source.AllowMissingFields = cfg.AllowMissingFields
+		source.KafkaConfiguration = cfg.ConfluentConfig
+		confluentCfg, err := common.SetupConfluent(&r.ConfluentCommand)
 		if err != nil {
 			return nil, err
 		}
-		source.ConfigMap = cfg
+		source.ConfigMap = confluentCfg
 
 		err = source.Open()
 		if err != nil {
@@ -83,7 +86,7 @@ func (r *Runner) GetJSONNewSource() {
 	}
 }
 
-func (r *Runner) GetAvroNewSource() {
+func (r *Runner) GetAvroNewSource(cfg ConfigForIDK) {
 	r.NewSource = func() (idk.Source, error) {
 		source := kafka.NewSource()
 		source.KafkaBootstrapServers = r.Hosts
@@ -91,11 +94,12 @@ func (r *Runner) GetAvroNewSource() {
 		source.Topics = r.Topics
 		source.Log = r.Main.Log()
 		source.Timeout = r.Timeout
-		cfg, err := common.SetupConfluent(&r.ConfluentCommand)
+		source.KafkaConfiguration = cfg.ConfluentConfig
+		confluentcfg, err := common.SetupConfluent(&r.ConfluentCommand)
 		if err != nil {
 			return nil, err
 		}
-		source.ConfigMap = cfg
+		source.ConfigMap = confluentcfg
 
 		err = source.Open()
 		if err != nil {

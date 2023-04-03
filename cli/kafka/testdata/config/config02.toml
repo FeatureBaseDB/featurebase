@@ -1,0 +1,27 @@
+hosts = ["kafka:9090"]
+group = "testGroup"
+topics = "testTopic"
+table = "testTable"
+batch-size = 35
+batch-max-staleness = "25s"
+timeout = "16s"
+encode = "avro"
+schemaRegistryHost = "localhost:8081"
+
+[[fields]]
+name		= "id"
+source-type	= "id"
+primary-key	= true
+
+[[fields]]
+name		= "name"
+source-type	= "string"
+source-path = ["test", "path"]
+
+[[fields]]
+name		= "age"
+source-type	= "int"
+
+[[fields]]
+name		= "hobbies"
+source-type	= "stringset"
