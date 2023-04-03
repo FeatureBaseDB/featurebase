@@ -331,6 +331,11 @@ func (per *DBPerShard) DeleteFieldFromStore(index, field, fieldPath string) (err
 	return err
 }
 
+// DeleteShardFromStore is currently a no-op implementation
+func (per *DBPerShard) DeleteShardFromStore(index string, shardID uint64) error {
+	return nil
+}
+
 func (per *DBPerShard) DeleteFragment(index, field, view string, shard uint64, frag *fragment) error {
 
 	idx := per.txf.holder.Index(index)

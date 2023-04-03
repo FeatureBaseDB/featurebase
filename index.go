@@ -1016,14 +1016,16 @@ func (i *Index) DeleteField(name string) error {
 	return i.translationSyncer.Reset()
 }
 
-func (i *Index) DeleteShard(shardName string) error {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+// DeleteShard removes a shard in an index.
+// This is currently a no-op implementation
+func (i *Index) DeleteShard(ctx context.Context, indexName string, shardID uint64) error {
 
-	// Confirm shard exists.
 	// Delete shard
 	// --> need to make schemator DeleteShard too?
+	// --> --> shards and partitions aren't part of schema?
 	// ???
+
+	i.holder.txf.DeleteShardFromStore(indexName, shardID)
 	// profit
 
 	return nil

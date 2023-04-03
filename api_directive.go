@@ -343,6 +343,9 @@ func (api *API) pushJobsTableKeys(ctx context.Context, jobs chan<- directiveJobT
 			api.Holder().Index(string(tkey)).TranslateStore(int(partition)) //.Delete(records *roaring.Bitmap)
 
 			// this implementation is going to be much more difficult
+
+			//implement this via no-op
+			api.DeletePartition(ctx, string(qtid.Name), int(partition))
 		}
 	}
 
@@ -439,6 +442,7 @@ func (api *API) pushJobsFieldKeys(ctx context.Context, jobs chan<- directiveJobT
 		for _, field := range fields {
 			api.serverlessStorage.RemoveFieldKeyResource(qtid, field)
 
+			// Attempt at implementing deletion from disk -- DK
 			// deleting field from disk
 			err := api.DeleteField(ctx, string(tkey), string(field))
 			if err != nil {

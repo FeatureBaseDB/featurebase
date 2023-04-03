@@ -724,6 +724,11 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	}
 }
 
+func (api *API) DeletePartition(ctx context.Context, indexName string, partition int) error { // not sure what else is needed here for arguments
+	// will probably need an index.go implementation?
+	return nil
+}
+
 // DeleteField removes the named field from the named index. If the index is not
 // found, an error is returned. If the field is not found, it is ignored and no
 // action is taken.
@@ -761,7 +766,9 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 }
 
 // DeleteShard deletes a given shard in an index.
-func (api *API) DeleteShard(_ context.Context, indexName string, shardID uint64) error {
+// This is me taking a stab at implementing this logic, currently
+// a no-op implementation - DK
+func (api *API) DeleteShard(ctx context.Context, indexName string, shardID uint64) error {
 	if err := api.validate(apiDeleteShard); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -772,13 +779,19 @@ func (api *API) DeleteShard(_ context.Context, indexName string, shardID uint64)
 		return newNotFoundError(ErrIndexNotFound, indexName)
 	}
 
-	// Get views of shards
-	// --> maybe can use InMemSharder() from disco?
-	sharder := disco.NewInMemSharder()
-	ctx := context.Background()
-	// sharder.Shards(ctx, idx,) <-- need a field name
-	// ??? sv := idx.fieldView2shard().removeField()
-	// ??? maybe just use the api.DeleteField() method?
+	// Get a DBShard.
+	dbs, err := api.holder.Txf().dbPerShard.GetDBShard(indexName, shardID, idx)
+	if err != nil {
+		return errors.Wrapf(err, "GetDBShard")
+	}
+
+	// Delete shard
+	// currently a no-op implementation --> working on logic
+	if err := idx.DeleteShard(ctx, idx.Name(), dbs.Shard); err != nil {
+		return errors.Wrapf(err, "deleting shard")
+	}
+
+	// Since this is serverless, don't need to send to all nodes.
 
 	return nil
 }

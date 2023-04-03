@@ -479,6 +479,10 @@ func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) (err er
 	return f.dbPerShard.DeleteFieldFromStore(index, field, fieldPath)
 }
 
+func (f *TxFactory) DeleteShardFromStore(index string, shardID uint64) error {
+	return f.dbPerShard.DeleteShardFromStore(index, shardID)
+}
+
 func (f *TxFactory) DeleteFragmentFromStore(
 	index, field, view string, shard uint64, frag *fragment,
 ) (err error) {
