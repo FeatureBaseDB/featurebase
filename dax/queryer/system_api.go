@@ -7,7 +7,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 )
 
-// systemAPI is a no-op implementation of the systemAPI.
+// systemAPI is an implementation of the systemAPI.
 type systemAPI struct {
 	featurebase.NopSystemAPI
 	controller dax.Controller
@@ -21,6 +21,8 @@ func newSystemAPI(c dax.Controller, qdbid dax.QualifiedDatabaseID) *systemAPI {
 	}
 }
 
+// ClusterNodes returns a list of featurebase.ClusterNodes
+// with length of the minimum number of workers
 func (s *systemAPI) ClusterNodes() []featurebase.ClusterNode {
 
 	ctx := context.Background()
@@ -30,7 +32,6 @@ func (s *systemAPI) ClusterNodes() []featurebase.ClusterNode {
 		return []featurebase.ClusterNode{}
 	}
 	out := make([]featurebase.ClusterNode, qdb.Options.WorkersMin)
-	//get number of compute nodes and number of query nodes and add them to ```out```
 	return out
 }
 
