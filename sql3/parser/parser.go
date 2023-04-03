@@ -2742,8 +2742,12 @@ func (p *Parser) parseOperand() (expr Expr, err error) {
 	case VARIABLE:
 		return &Variable{Name: lit, NamePos: pos}, nil
 	case MIN, MAX:
-		ident := &Ident{Name: lit, NamePos: pos, Quoted: tok == QIDENT}
-		return p.parseCall(ident)
+		pk := p.peek()
+		if pk == LP {
+			ident := &Ident{Name: lit, NamePos: pos, Quoted: false}
+			return p.parseCall(ident)
+		}
+		return nil, p.errorExpected(p.pos, pk, "call expression")
 	case STRING:
 		return &StringLit{ValuePos: pos, Value: lit}, nil
 	case FLOAT:

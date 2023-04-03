@@ -40,6 +40,9 @@ func TestParser_ParseMinMaxColumnConstraints(t *testing.T) {
 		t.Run("ErrNoKey", func(t *testing.T) {
 			AssertParseStatementError(t, `CREATE TABLE tbl (col1 INT MIN`, `1:30: expected expression, found 'EOF'`)
 		})
+		t.Run("ErrNoCall", func(t *testing.T) {
+			AssertParseStatementError(t, `SELECT MIN;`, `1:11: expected call expression, found ';'`)
+		})
 		t.Run("Simple", func(t *testing.T) {
 			AssertParseStatement(t, `CREATE TABLE tbl (col1 INT MIN 0)`, &parser.CreateTableStatement{
 				Create: pos(0),
