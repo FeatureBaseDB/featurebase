@@ -894,145 +894,297 @@ func (o *orchestrator) executeMax(ctx context.Context, tableKeyer dax.TableKeyer
 	return other, nil
 }
 
-// TODO(jaffee) fix this... valcountize assumes access to field details like base
-// executePercentile executes a Percentile() call.
-func (o *orchestrator) executePercentile(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ featurebase.ValCount, err error) {
+// executePercentile executes a Percentile() call. This logic is mirrored from
+// featurebase executor, but we should probably replace it with a smarter algorithm.
+func (o *orchestrator) executePercentile(ctx context.Context, tableKeyer dax.TableKeyer, c *pql.Call, shards []uint64, opt *featurebase.ExecOptions) (_ interface{}, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePercentile")
 	defer span.Finish()
 
 	// get nth
 	var nthFloat float64
-	nthArg, ok := c.Args["nth"]
-	if !ok {
-		return featurebase.ValCount{}, errors.New(errors.ErrUncoded, "Percentile(): nth required")
-	}
+	nthArg := c.Args["nth"]
 	switch nthArg := nthArg.(type) {
 	case pql.Decimal:
 		nthFloat = nthArg.Float64()
 	case int64:
 		nthFloat = float64(nthArg)
+	case nil:
+		return nil, errors.New(errors.ErrUncoded, "Percentile(): nth required")
 	default:
-		return featurebase.ValCount{}, errors.Errorf("Percentile(): invalid nth='%v' of type (%[1]T), should be a number between 0 and 100 inclusive", c.Args["nth"])
+		return nil, errors.Errorf("Percentile(): invalid nth='%v' of type (%[1]T), should be a number between 0 and 100 inclusive", c.Args["nth"])
 	}
 	if nthFloat < 0 || nthFloat > 100.0 {
-		return featurebase.ValCount{}, errors.Errorf("Percentile(): invalid nth value (%f), should be a number between 0 and 100 inclusive", nthFloat)
+		return nil, errors.Errorf("Percentile(): invalid nth value (%f), should be a number between 0 and 100 inclusive", nthFloat)
 	}
 
 	// get field
 	fieldName, err := c.FirstStringArg("field", "_field")
 	if err != nil {
-		return featurebase.ValCount{}, errors.New(errors.ErrUncoded, "Percentile(): field required")
+		return nil, errors.New(errors.ErrUncoded, "Percentile(): field required")
 	}
 	field, err := o.schemaFieldInfo(ctx, tableKeyer, fieldName)
 	if err != nil {
-		return featurebase.ValCount{}, ErrFieldNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	// filter call for min & max
 	var filterCall *pql.Call
 
+	// We want to know the total number of values, so that when we check
+	// for values <X, or >X, we are also able to infer the number of values
+	// equal to X.
+	var totalCountCall *pql.Call
 	// check if filter provided
 	if filterArg, ok := c.Args["filter"].(*pql.Call); ok && filterArg != nil {
+		// You could supply a filter like `Not(x=3)` which would yield values
+		// which exist in the database but are null in this field, we don't
+		// want that.
 		filterCall = filterArg
+		totalCountCall = &pql.Call{
+			Name: "Count",
+			Children: []*pql.Call{
+				{
+					Name: "Intersect",
+					Children: []*pql.Call{
+						filterCall,
+						{
+							Name: "Row",
+							Args: map[string]interface{}{
+								fieldName: &pql.Condition{
+									Op:    pql.NEQ,
+									Value: nil,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	} else {
+		// request a count of IS NOT NULL, aka Row(field!=null). We care about
+		// the actual number of results that should exist.
+		totalCountCall = &pql.Call{
+			Name: "Count",
+			Children: []*pql.Call{
+				{
+					Name: "Row",
+					Args: map[string]interface{}{
+						fieldName: &pql.Condition{
+							Op:    pql.NEQ,
+							Value: nil,
+						},
+					},
+				},
+			},
+		}
+	}
+	// total values matched by the filter (if it exists) or that aren't null
+	totalCountInterface, err := o.executeCall(ctx, tableKeyer, totalCountCall, shards, opt)
+	totalCount, ok := totalCountInterface.(uint64)
+	if !ok || totalCount == 0 {
+		// it's not an error, but the median of nothing is NULL.
+		return nil, nil
 	}
 
+	// We have totalCount values. If nth is 50, we want half the values to be
+	// above us, and half below us. So for instance, if we have 6 values, we want
+	// 3 above us, and 3 below us. For odd numbers, we can round these *both*
+	// down -- for 7 values, we'd want 3 higher, and 3 lower.
+	desiredLess := uint64((float64(totalCount) * nthFloat) / 100.0)
+	desiredGreater := uint64((float64(totalCount) * (100 - nthFloat)) / 100.0)
+
 	// get min
-	q, _ := pql.ParseString(fmt.Sprintf(`Min(field="%s")`, fieldName))
-	minCall := q.Calls[0]
-	if filterCall != nil {
-		minCall.Children = append(minCall.Children, filterCall)
-	}
-	minVal, err := o.executeMin(ctx, tableKeyer, minCall, shards, opt)
-	if err != nil {
-		return featurebase.ValCount{}, errors.Wrap(err, "executing Min call for Percentile")
-	}
-	if nthFloat == 0.0 {
-		return minVal, nil
+	var minVal featurebase.ValCount
+
+	if desiredGreater != 0 {
+		q, err := pql.ParseString(fmt.Sprintf(`Min(field="%s")`, fieldName))
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing max call for Percentile")
+		}
+		minCall := q.Calls[0]
+		if filterCall != nil {
+			minCall.Children = append(minCall.Children, filterCall)
+		}
+		minVal, err = o.executeMin(ctx, tableKeyer, minCall, shards, opt)
+		if err != nil {
+			return nil, errors.Wrap(err, "executing Min call for Percentile")
+		}
+
+		if desiredLess == 0 {
+			if minVal.DecimalVal != nil {
+				minVal.FloatVal = minVal.DecimalVal.Float64()
+			}
+			return minVal, nil
+		}
 	}
 
 	// get max
-	q, _ = pql.ParseString(fmt.Sprintf(`Max(field="%s")`, fieldName))
+	q, err := pql.ParseString(fmt.Sprintf(`Max(field="%s")`, fieldName))
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing max call for Percentile")
+	}
 	maxCall := q.Calls[0]
 	if filterCall != nil {
 		maxCall.Children = append(maxCall.Children, filterCall)
 	}
 	maxVal, err := o.executeMax(ctx, tableKeyer, maxCall, shards, opt)
 	if err != nil {
-		return featurebase.ValCount{}, errors.Wrap(err, "executing Max call for Percentile")
+		return nil, errors.Wrap(err, "executing Max call for Percentile")
 	}
-	// set up reusables
-	var countCall, rangeCall *pql.Call
-	if filterCall == nil {
-		countQuery, _ := pql.ParseString(fmt.Sprintf("Count(Row(%s < 0))", fieldName))
-		countCall = countQuery.Calls[0]
-		rangeCall = countCall.Children[0]
+
+	if desiredGreater == 0 {
+		if maxVal.DecimalVal != nil {
+			maxVal.FloatVal = maxVal.DecimalVal.Float64()
+		}
+		return maxVal, nil
+	}
+
+	// o.executeCount(ctx, tableKeyer, countCall, shards, opt)
+	// cookValCount(possibleNthVal, 1, field), nil
+	// the logic here is basically identical whether we're doing a decimal field
+	// or an integer field, but the actual code used to compare maximum and minimum
+	// values, or extract values from valCount objects, differs.
+	// So we set up generic functions which will produce the right values.
+	var averageMinMax func() interface{}
+	var minLessthanMax func() bool
+	var maxValueUnder func(interface{})
+	var minValueOver func(interface{})
+
+	if field.Options.Type == FieldTypeDecimal {
+		minPtr := minVal.DecimalVal
+		maxPtr := maxVal.DecimalVal
+		if minPtr == nil {
+			return nil, fmt.Errorf("unexpectedly nil min value in percentile")
+		}
+		if maxPtr == nil {
+			return nil, fmt.Errorf("unexpectedly nil max value in percentile")
+		}
+		min := *minPtr
+		max := *maxPtr
+		two := pql.NewDecimal(2, 0)
+		one := pql.NewDecimal(1, field.Options.Scale)
+		averageMinMax = func() interface{} {
+			return pql.DivideDecimal(pql.AddDecimal(min, max), two)
+		}
+		minLessthanMax = func() bool {
+			return min.LessThan(max)
+		}
+		maxValueUnder = func(v interface{}) {
+			max = pql.SubtractDecimal(v.(pql.Decimal), one)
+		}
+		minValueOver = func(v interface{}) {
+			min = pql.AddDecimal(v.(pql.Decimal), one)
+		}
 	} else {
-		countQuery, _ := pql.ParseString(fmt.Sprintf(`Count(Intersect(Row(%s < 0)))`, fieldName))
-		countCall = countQuery.Calls[0]
-		intersectCall := countCall.Children[0]
-		intersectCall.Children = append(intersectCall.Children, filterCall)
-		rangeCall = intersectCall.Children[0]
+		// plain BSI field
+		min := minVal.Val
+		max := maxVal.Val
+		averageMinMax = func() interface{} {
+			// min+max could overflow, in theory, but if they're both odd, we want one
+			// higher than min/2 + max/2.
+			return (min / 2) + (max / 2) + (((min % 2) + (max % 2)) / 2)
+		}
+		minLessthanMax = func() bool {
+			return min < max
+		}
+		maxValueUnder = func(v interface{}) {
+			max = v.(int64) - 1
+		}
+		minValueOver = func(v interface{}) {
+			min = v.(int64) + 1
+		}
 	}
 
-	k := (100 - nthFloat) / nthFloat
+	// set up reusable pql.Call objects representing a count (or intersectioncount,
+	// if we have a filter) with a condition we can alter.
+	var countCall, rangeCall *pql.Call
+	rangeCondition := pql.Condition{
+		Op:    pql.LT,
+		Value: nil,
+	}
+	rangeCall = &pql.Call{
+		Name: "Row",
+		Args: map[string]interface{}{
+			fieldName: &rangeCondition,
+		},
+	}
+	if filterCall == nil {
+		countCall = &pql.Call{
+			Name:     "Count",
+			Children: []*pql.Call{rangeCall},
+		}
+	} else {
+		countCall = &pql.Call{
+			Name: "Count",
+			Children: []*pql.Call{
+				{
+					Name:     "Intersect",
+					Children: []*pql.Call{rangeCall, filterCall},
+				},
+			},
+		}
+	}
 
-	min, max := minVal.Val, maxVal.Val
 	// estimate nth val, eg median when nth=0.5
-	for min < max {
+	// we start with a blind guess of minVal, so if min and max are equal,
+	// we just fall out of the loop. If they're not, we compute the middle value
+	// of whatever range we're looking at, and compare it to our expectations of
+	// how many
+	var possibleNthVal interface{}
+	if minVal.DecimalVal != nil {
+		possibleNthVal = minVal.DecimalVal
+	} else {
+		possibleNthVal = minVal.Val
+	}
+	for minLessthanMax() {
 		// compute average without integer overflow, then correct for division of
 		// odd numbers by 2
-		possibleNthVal := ((max / 2) + (min / 2)) + (((max % 2) + (min % 2)) / 2)
-		// possibleNthVal = (max + min) / 2
-		// get left count
-		rangeCall.Args[fieldName] = &pql.Condition{
-			Op:    pql.Token(pql.LT),
-			Value: possibleNthVal,
-		}
-		leftCountUint64, err := o.executeCount(ctx, tableKeyer, countCall, shards, opt)
+		possibleNthVal = averageMinMax()
+		rangeCondition.Value = possibleNthVal
+		rangeCondition.Op = pql.LT
+		leftCount, err := o.executeCount(ctx, tableKeyer, countCall, shards, opt)
 		if err != nil {
-			return featurebase.ValCount{}, errors.Wrap(err, "executing Count call L for Percentile")
+			return nil, errors.Wrap(err, "executing Count call L for Percentile")
 		}
-		leftCount := int64(leftCountUint64)
 
-		// get right count
-		rangeCall.Args[fieldName] = &pql.Condition{
-			Op:    pql.Token(pql.GT),
-			Value: possibleNthVal,
+		// If there's more things less than possibleNthVal than our desired number
+		// of things less, we need to look at the left side of this.
+		if leftCount > desiredLess {
+			maxValueUnder(possibleNthVal)
+			continue
 		}
-		rightCountUint64, err := o.executeCount(ctx, tableKeyer, countCall, shards, opt)
+
+		rangeCondition.Op = pql.GT
+		rightCount, err := o.executeCount(ctx, tableKeyer, countCall, shards, opt)
 		if err != nil {
-			return featurebase.ValCount{}, errors.Wrap(err, "executing Count call R for Percentile")
+			return nil, errors.Wrap(err, "executing Count call R for Percentile")
 		}
-		rightCount := int64(rightCountUint64)
-
-		// 'weight' the left count as per k
-		leftCountWeighted := int64(math.Round(k * float64(leftCount)))
-
-		// binary search
-		if leftCountWeighted > rightCount {
-			max = possibleNthVal - 1
-		} else if leftCountWeighted < rightCount {
-			min = possibleNthVal + 1
-		} else {
-			return cookValCount(possibleNthVal, 1, field), nil
+		// If there's more things greater than the desired number, we need to look to the right.
+		if rightCount > desiredGreater {
+			minValueOver(possibleNthVal)
+			continue
 		}
-	}
 
-	return cookValCount(min, 1, field), nil
-}
-
-func cookValCount(val int64, cnt uint64, field *featurebase.FieldInfo) featurebase.ValCount {
-	valCount := featurebase.ValCount{Count: int64(cnt)}
-	base := field.Options.Base
-	switch field.Options.Type {
-	case featurebase.FieldTypeDecimal:
-		dec := pql.NewDecimal(val+base, field.Options.Scale)
-		valCount.DecimalVal = &dec
-	case FieldTypeTimestamp:
-		valCount.TimestampVal = time.Unix(0, (val+base)*featurebase.TimeUnitNanos(field.Options.TimeUnit)).UTC()
+		// min and max may be different, but the number of values above and below this
+		// value are both reasonable. For instance, with 7 items and looking for median,
+		// we'd have 3 less and 3 greater, and we can't really do better than that.
+		break
 	}
-	valCount.Val = val + base
-	return valCount
+	switch v := possibleNthVal.(type) {
+	case int64:
+		return featurebase.ValCount{
+			Val:   v,
+			Count: 1,
+		}, nil
+	case pql.Decimal:
+		return featurebase.ValCount{
+			DecimalVal: &v,
+			FloatVal:   v.Float64(),
+			Count:      1,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected percentile Nth value type %T", possibleNthVal)
+	}
 }
 
 // executeMinRow executes a MinRow() call.

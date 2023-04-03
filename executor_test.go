@@ -7641,13 +7641,22 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 		if nth == 0.0 {
 			return min
 		}
-		k := (100 - nth) / nth
-
+		if nth == 100.0 {
+			return max
+		}
 		possibleNthVal := int64(0)
+		desiredLess := int((float64(len(nums)) * nth) / 100.0)
+		desiredGreater := int((float64(len(nums)) * (100 - nth)) / 100.0)
+		if desiredLess == 0 {
+			return min
+		}
+		if desiredGreater == 0 {
+			return max
+		}
 		// bin search
 		for min < max {
 			possibleNthVal = ((max / 2) + (min / 2)) + (((max % 2) + (min % 2)) / 2)
-			leftCount, rightCount := int64(0), int64(0)
+			leftCount, rightCount := 0, 0
 			for _, num := range nums {
 				if num < possibleNthVal {
 					leftCount++
@@ -7656,11 +7665,9 @@ func variousQueriesOnPercentiles(t *testing.T, c *test.Cluster) {
 				}
 			}
 
-			leftCountWeighted := int64(math.Round(k * float64(leftCount)))
-
-			if leftCountWeighted > rightCount {
+			if leftCount > desiredLess {
 				max = possibleNthVal - 1
-			} else if leftCountWeighted < rightCount {
+			} else if rightCount > desiredGreater {
 				min = possibleNthVal + 1
 			} else { // perfectly balanced, as all things should be
 				return possibleNthVal

@@ -502,7 +502,7 @@ var percentileTests = TableTest{
 				hdr("p_rows", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(12)),
+				row(int64(11)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -514,9 +514,7 @@ var percentileTests = TableTest{
 				hdr("p_rows", fldTypeDecimal2),
 			),
 			ExpRows: rows(
-				// This should probably be (1200, 2), not (1000, 2).
-				// TODO: look into this when investigating the percentile/WHERE bug.
-				row(pql.NewDecimal(1000, 2)),
+				row(pql.NewDecimal(1150, 2)),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -528,24 +526,22 @@ var percentileTests = TableTest{
 				hdr("p_rows", fldTypeInt),
 			),
 			ExpRows: rows(
-				row(int64(12)),
+				row(int64(11)),
 			),
 			Compare: CompareExactUnordered,
 		},
-		// This test is failing! It seems to be returning the count of elements < 13,
-		// rather than processing them for percentile.
-		//{
-		//	SQLs: sqls(
-		//		"SELECT percentile(d1, 50) AS p_rows FROM percentile_test WHERE d1 < 13",
-		//	),
-		//	ExpHdrs: hdrs(
-		//		hdr("p_rows", fldTypeDecimal2),
-		//	),
-		//	ExpRows: rows(
-		//		row(pql.NewDecimal(1200, 2)),
-		//	),
-		//	Compare: CompareExactUnordered,
-		//},
+		{
+			SQLs: sqls(
+				"SELECT percentile(d1, 50) AS p_rows FROM percentile_test WHERE d1 < 13",
+			),
+			ExpHdrs: hdrs(
+				hdr("p_rows", fldTypeDecimal2),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(1100, 2)),
+			),
+			Compare: CompareExactUnordered,
+		},
 	},
 }
 
