@@ -4,6 +4,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"time"
 
@@ -623,6 +624,21 @@ func (c *Controller) translateWorkersToAssignedNodes(tx dax.Transaction, workers
 
 // CreateDatabase adds a database to the schemar.
 func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
+	// check to see if special characters are either first or last in the database name
+	fc := string(qdb.Name[0])
+	// lc := string(qdb.Name[len(qdb.Name)-1])
+	regexpattern := "[$&+,:;=?@#|'<>.^*()%!-]"
+	regex, err := regexp.Compile(regexpattern)
+	if err != nil {
+		c.logger.Printf("error in compiling regex: err %+v", err)
+		return errors.Wrap(err, "error compiling regex")
+	}
+
+	if ok, err := regexp.MatchString(regex.String(), fc); ok {
+		c.logger.Printf("error with database first character, err: %+v", err)
+		return errors.Errorf("invalid first character in database name, char: %s", fc)
+	}
+
 	// Create Database ID.
 	if _, err := qdb.CreateID(); err != nil {
 		return errors.Wrap(err, "creating database ID")
