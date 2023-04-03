@@ -102,8 +102,9 @@ func (fj *freeJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, qd
 	return djs, nil
 }
 
-// MergeJobs - AFAICT this means "mark these jobs as free"
-func (fj *freeJobService) MergeJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs dax.Jobs) error {
+// MarkJobsAsFree disassociates any worker that was previously assigned to this
+// job.
+func (fj *freeJobService) MarkJobsAsFree(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs dax.Jobs) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")

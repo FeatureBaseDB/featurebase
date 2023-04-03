@@ -6,6 +6,11 @@ type RoleType string
 const (
 	RoleTypeCompute   RoleType = "compute"
 	RoleTypeTranslate RoleType = "translate"
+	RoleTypeQuery     RoleType = "query"
+)
+
+var (
+	AllRoleTypes = []RoleType{RoleTypeCompute, RoleTypeTranslate, RoleTypeQuery}
 )
 
 // RoleTypes is a list of RoleType, used primarily to introduce helper methods

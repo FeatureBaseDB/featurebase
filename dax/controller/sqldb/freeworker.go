@@ -1,6 +1,8 @@
 package sqldb
 
 import (
+	"fmt"
+
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/balancer"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
@@ -21,34 +23,6 @@ type freeWorkerService struct {
 	log logger.Logger
 }
 
-func (fw *freeWorkerService) AddWorkers(tx dax.Transaction, roleType dax.RoleType, addrs ...dax.Address) error {
-	dt, ok := tx.(*DaxTransaction)
-	if !ok {
-		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
-	}
-
-	workers := make(models.Workers, len(addrs))
-	for i, addr := range addrs {
-		workers[i] = models.Worker{
-			Address: addr,
-			Role:    roleType,
-		}
-	}
-
-	err := dt.C.Create(workers)
-	return errors.Wrap(err, "creating workers")
-}
-
-func (fw *freeWorkerService) RemoveWorker(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) error {
-	dt, ok := tx.(*DaxTransaction)
-	if !ok {
-		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
-	}
-
-	err := dt.C.RawQuery("DELETE from workers where database_id is null and role = ? and address = ?", roleType, addr).Exec()
-	return errors.Wrap(err, "deleting")
-}
-
 func (fw *freeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleType, num int) ([]dax.Address, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
@@ -58,7 +32,8 @@ func (fw *freeWorkerService) PopWorkers(tx dax.Transaction, roleType dax.RoleTyp
 	results := make([]struct {
 		Address dax.Address `db:"address"`
 	}, 0, num)
-	err := dt.C.RawQuery("select address from workers where role = ? and database_id is NULL limit ?", roleType, num).All(&results)
+	sel := fmt.Sprintf("select address from workers where role_%s = true and database_id is NULL limit ?", roleType)
+	err := dt.C.RawQuery(sel, num).All(&results)
 	if err != nil {
 		return nil, errors.Wrap(err, "querying")
 	}
@@ -81,9 +56,10 @@ func (fw *freeWorkerService) ListWorkers(tx dax.Transaction, roleType dax.RoleTy
 	}
 
 	workers := make(models.Workers, 0)
-	err := dt.C.Select("address").Where("role = ? and database_id is NULL", roleType).Order("address asc").All(&workers)
+	where := fmt.Sprintf("role_%s = true and database_id is NULL", roleType)
+	err := dt.C.Select("address").Where(where).Order("address asc").All(&workers)
 	if err != nil {
-		return nil, errors.Wrap(err, "querying for workers")
+		return nil, errors.Wrap(err, "querying for free workers")
 	}
 
 	ret := make(dax.Addresses, len(workers))
