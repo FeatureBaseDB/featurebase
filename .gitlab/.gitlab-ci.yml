@@ -209,7 +209,7 @@ build fbsql arm64 darwin:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
-    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
+    - GOOS="darwin" GOARCH="amd64" make docker-build-fbsql
   artifacts:
     paths:
       - ./build/fbsql_*
