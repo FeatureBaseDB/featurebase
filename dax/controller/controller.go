@@ -784,18 +784,18 @@ func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, id
 	return c.Schemar.Databases(tx, orgID, ids...)
 }
 
-// get the list of workers being used by a database
-func (c *Controller) GetDatabaseNumberOfWorkers(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
-	tx, err := c.Transactor.BeginTx(ctx, false)
-	if err != nil {
-		return -1, errors.Wrap(err, "beginning tx")
-	}
-	defer tx.Rollback()
-
-	// get the number of workers for the database from the balancer
-	workers, err := c.Balancer.GetDatabaseNumberOfWorkers(tx, qdbid)
-
-}
+//// get the list of workers being used by a database
+//func (c *Controller) GetDatabaseNumberOfWorkers(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
+//	tx, err := c.Transactor.BeginTx(ctx, false)
+//	if err != nil {
+//		return -1, errors.Wrap(err, "beginning tx")
+//	}
+//	defer tx.Rollback()
+//
+//	// get the number of workers for the database from the balancer
+//	workers, err := c.Balancer.GetDatabaseNumberOfWorkers(tx, qdbid)
+//
+//}
 
 // CreateTable adds a table to the schemar, and then sends directives to all
 // affected nodes based on the change.

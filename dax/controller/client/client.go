@@ -702,21 +702,29 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 	return nil
 }
 
-func (c *Client) GetDatabaseNumberOfWorkers(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
-	url := fmt.Sprintf("%s/database-number-of-workers", c.address.WithScheme(defaultScheme))
-	c.logger.Debugf("Database number of workers: %s", url)
+func (c *Client) GetDatabaseNumberOfWorkers() (int, error) {
+	//url := fmt.Sprintf("%s/database-number-of-workers", c.address.WithScheme(defaultScheme))
+	//url := fmt.Sprintf("%s/database-number-of-workers", "localhost:8080/controller")
+	url := "http://localhost:8080/controller/database-number-of-workers"
+	// print something
+	fmt.Println("GetDatabaseNumberOfWorkers url: %s", url)
 
-	// Get the request.
+	c.logger.Debugf("GetDatabaseNumberOfWorkers url: %s", url)
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
-		return errors.Wrap(err, "getting number of workers")
+		return 0, errors.Wrap(err, "getting database-number-of-workers")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return 0, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
 	}
 
-	return nil
+	var workers int
+	if err := json.NewDecoder(resp.Body).Decode(&workers); err != nil {
+		return 0, errors.Wrap(err, "reading response body")
+	}
+
+	return workers, nil
 }
