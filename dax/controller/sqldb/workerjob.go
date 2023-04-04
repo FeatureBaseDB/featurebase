@@ -54,7 +54,14 @@ func (w *workerJobService) WorkerCount(tx dax.Transaction, roleType dax.RoleType
 		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 	worker := &models.Worker{}
-	cnt, err := dt.C.Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).Count(worker)
+	query := dt.C.Q()
+	if roleType != "" {
+		query = query.Where("role = ?", roleType)
+	}
+	if qdbid.DatabaseID != "" {
+		query = query.Where("database_id = ?", qdbid.DatabaseID)
+	}
+	cnt, err := query.Count(worker)
 	return cnt, errors.Wrap(err, "getting count")
 }
 

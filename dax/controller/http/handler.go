@@ -226,27 +226,26 @@ func (s *server) patchDatabaseOptions(w http.ResponseWriter, r *http.Request) {
 
 // create a response struct
 func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Request) {
-	//// get the context
-	//ctx := r.Context()
-	//
-	//// create a variable to hold the id
-	//var id dax.QualifiedDatabaseID
-	//
-	//// for now, fill the id with a hard-coded value
-	//id = dax.QualifiedDatabaseID{
-	//	OrganizationID: dax.OrganizationID("org1"),
-	//	DatabaseID:     dax.DatabaseID("db1"),
-	//}
+	// get the context
+	ctx := r.Context()
 
-	// send the id into the controller, get the number of workers back
-	//numWorkers, err := s.controller.GetDatabaseNumberOfWorkers(ctx, id)
-	numWorkers := -1
+	// create a variable to hold the id
+	var id dax.QualifiedDatabaseID
 
-	//// handle error
-	//if err != nil {
-	//	http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
-	//	return
-	//}
+	// for now, fill the id with a hard-coded value
+	id = dax.QualifiedDatabaseID{
+		OrganizationID: dax.OrganizationID("org1"),
+		DatabaseID:     dax.DatabaseID("db1"),
+	}
+
+	//send the id into the controller, get the number of workers back
+	numWorkers, err := s.controller.GetDatabaseNumberOfWorkers(ctx, id)
+
+	// handle error
+	if err != nil {
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
+		return
+	}
 
 	// send the number back to the client
 	if err := json.NewEncoder(w).Encode(numWorkers); err != nil {

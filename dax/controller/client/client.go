@@ -707,7 +707,7 @@ func (c *Client) GetDatabaseNumberOfWorkers() (int, error) {
 	//url := fmt.Sprintf("%s/database-number-of-workers", "localhost:8080/controller")
 	url := "http://localhost:8080/controller/database-number-of-workers"
 	// print something
-	fmt.Println("GetDatabaseNumberOfWorkers url: %s", url)
+	//fmt.Println("GetDatabaseNumberOfWorkers url: %s", url)
 
 	c.logger.Debugf("GetDatabaseNumberOfWorkers url: %s", url)
 	resp, err := c.httpClient.Get(url)

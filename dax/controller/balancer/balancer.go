@@ -672,8 +672,8 @@ func (b *Balancer) WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qt
 	return workers, nil
 }
 
-func (b *Balancer) GetDatabaseNumberOfWorkers(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (int, error) {
-	return b.current.WorkerCount(tx, roleType, qdbid)
+func (b *Balancer) WorkerCount(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (int, error) {
+	return b.current.WorkerCount(tx, "", qdbid)
 }
 
 func (b *Balancer) removeJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job dax.Job) (InternalDiffs, error) {
