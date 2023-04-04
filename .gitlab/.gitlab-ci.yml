@@ -738,7 +738,8 @@ s3 dump:
   needs:
     - job: build featurebase
     - job: build fbsql amd64
-    - job: build fbsql arm64
+    - job: build fbsql arm64 linux
+    - job: build fbsql arm64 darwin
 
 s3 dump tag:
   stage: post build
