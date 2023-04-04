@@ -604,7 +604,7 @@ func planExprToValue(expr types.PlanExpression) (interface{}, error) {
 		return expr.value, nil
 	case *stringLiteralPlanExpression:
 		return expr.value, nil
-	case *dateLiteralPlanExpression:
+	case *timestampLiteralPlanExpression:
 		return expr.value, nil
 	case *boolLiteralPlanExpression:
 		return expr.value, nil

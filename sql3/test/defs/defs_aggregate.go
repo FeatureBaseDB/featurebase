@@ -737,3 +737,178 @@ var minmaxTests = TableTest{
 		},
 	},
 }
+
+var corrTests = TableTest{
+	Table: tbl(
+		"corr_test",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("i1", fldTypeInt, "min 0", "max 1000"),
+			srcHdr("d1", fldTypeDecimal2),
+			srcHdr("s1", fldTypeString),
+			srcHdr("id1", fldTypeID),
+		),
+		srcRows(
+			srcRow(int64(1), int64(10), float64(10), string("foo"), int64(10)),
+			srcRow(int64(2), int64(10), float64(10), string("foo2"), int64(11)),
+			srcRow(int64(3), int64(11), float64(11), string("foo34"), int64(12)),
+			srcRow(int64(4), int64(12), float64(12), string("foo45"), int64(13)),
+			srcRow(int64(5), int64(12), float64(12), string("foo63"), int64(14)),
+			srcRow(int64(6), int64(13), float64(13), string("foo22222"), int64(15)),
+		),
+	),
+	SQLTests: []SQLTest{
+		{
+			SQLs: sqls(
+				"SELECT corr(*, i1) AS corr1 FROM corr_test",
+			),
+			ExpErr: "expected right paren, found ','",
+		},
+		{
+			SQLs: sqls(
+				"SELECT corr(i1, d1) AS corr1 FROM corr_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("corr1", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(6)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(6)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(1000000, 6)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT corr(_id, i1) AS corr1 FROM corr_test",
+			),
+			ExpErr: "_id column cannot be used in aggregate function 'corr'",
+		},
+		{
+			SQLs: sqls(
+				"SELECT corr(i1) AS corr1 FROM corr_test",
+			),
+			ExpErr: "count of formal parameters (2) does not match count of actual parameters (1)",
+		},
+		{
+			SQLs: sqls(
+				"SELECT corr(s1, i1) AS avg_rows FROM corr_test",
+			),
+			ExpErr: "integer, decimal or timestamp expression expected",
+		},
+		{
+			SQLs: sqls(
+				"SELECT corr(len(s1), i1) AS corr1 FROM corr_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("corr1", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(6)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(6)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(888234, 6)),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}
+
+var varTests = TableTest{
+	Table: tbl(
+		"var_test",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("i1", fldTypeInt, "min 0", "max 1000"),
+			srcHdr("d1", fldTypeDecimal2),
+			srcHdr("s1", fldTypeString),
+			srcHdr("id1", fldTypeID),
+		),
+		srcRows(
+			srcRow(int64(1), int64(10), float64(10), string("foo"), int64(10)),
+			srcRow(int64(2), int64(10), float64(10), string("foo"), int64(11)),
+			srcRow(int64(3), int64(11), float64(11), string("foo"), int64(12)),
+			srcRow(int64(4), int64(12), float64(12), string("foo"), int64(13)),
+			srcRow(int64(5), int64(12), float64(12), string("foo"), int64(14)),
+			srcRow(int64(6), int64(13), float64(13), string("foo"), int64(15)),
+		),
+	),
+	SQLTests: []SQLTest{
+		{
+			SQLs: sqls(
+				"SELECT var(*) AS var1 FROM var_test",
+			),
+			ExpErr: "column reference expected",
+		},
+		{
+			SQLs: sqls(
+				"SELECT var(_id) AS var1 FROM var_test",
+			),
+			ExpErr: "_id column cannot be used in aggregate function 'var'",
+		},
+		{
+			SQLs: sqls(
+				"SELECT var(i1, d1) AS var1 FROM var_test",
+			),
+			ExpErr: "count of formal parameters (1) does not match count of actual parameters (2)",
+		},
+		{
+			SQLs: sqls(
+				"SELECT var(s1) AS var1 FROM var_test",
+			),
+			ExpErr: "integer, decimal or timestamp expression expected",
+		},
+		{
+			SQLs: sqls(
+				"SELECT var(id1) AS var1 FROM var_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("var1", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(6)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(6)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(2916666, 6)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT var(i1) AS var1 FROM var_test",
+				"SELECT var(d1) AS var1 FROM var_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("var1", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(6)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(6)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(1222222, 6)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"SELECT var(len(s1)) AS var1 FROM var_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("var1", featurebase.WireQueryField{
+					Type:     dax.BaseTypeDecimal + "(6)",
+					BaseType: dax.BaseTypeDecimal,
+					TypeInfo: map[string]interface{}{"scale": int64(6)},
+				}),
+			),
+			ExpRows: rows(
+				row(pql.NewDecimal(0, 6)),
+			),
+			Compare: CompareExactUnordered,
+		},
+	},
+}

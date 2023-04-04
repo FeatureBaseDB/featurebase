@@ -78,8 +78,6 @@ const (
 	ACTION
 	ADD
 	AFTER
-	AGG_COLUMN
-	AGG_FUNCTION
 	ALL
 	ALTER
 	ANALYZE
@@ -106,9 +104,9 @@ const (
 	COMMENT
 	CONFLICT
 	CONSTRAINT
+	COPY
 	CREATE
 	CROSS
-	CTIME_KW
 	CURRENT
 	CURRENT_DATE
 	CURRENT_TIMESTAMP
@@ -167,11 +165,13 @@ const (
 	LAST
 	LEFT
 	LIKE
+	LIMIT
 	LRU
 	MAP
 	MATCH
 	MAX
 	MIN
+	MODEL
 	NO
 	NOT
 	NOTBETWEEN
@@ -194,6 +194,7 @@ const (
 	PLAN
 	PRAGMA
 	PRECEDING
+	PREDICT
 	PRIMARY
 	QUERY
 	RANGE
@@ -304,8 +305,6 @@ var tokens = [...]string{
 	ACTION:            "ACTION",
 	ADD:               "ADD",
 	AFTER:             "AFTER",
-	AGG_COLUMN:        "AGG_COLUMN",
-	AGG_FUNCTION:      "AGG_FUNCTION",
 	ALL:               "ALL",
 	ALTER:             "ALTER",
 	ANALYZE:           "ANALYZE",
@@ -332,9 +331,9 @@ var tokens = [...]string{
 	COMMENT:           "COMMENT",
 	CONFLICT:          "CONFLICT",
 	CONSTRAINT:        "CONSTRAINT",
+	COPY:              "COPY",
 	CREATE:            "CREATE",
 	CROSS:             "CROSS",
-	CTIME_KW:          "CTIME_KW",
 	CURRENT:           "CURRENT",
 	CURRENT_DATE:      "CURRENT_DATE",
 	CURRENT_TIMESTAMP: "CURRENT_TIMESTAMP",
@@ -393,11 +392,13 @@ var tokens = [...]string{
 	LAST:              "LAST",
 	LEFT:              "LEFT",
 	LIKE:              "LIKE",
+	LIMIT:             "LIMIT",
 	MAP:               "MAP",
 	LRU:               "LRU",
 	MATCH:             "MATCH",
 	MAX:               "MAX",
 	MIN:               "MIN",
+	MODEL:             "MODEL",
 	NO:                "NO",
 	NOT:               "NOT",
 	NOTBETWEEN:        "NOTBETWEEN",
@@ -420,6 +421,7 @@ var tokens = [...]string{
 	PLAN:              "PLAN",
 	PRAGMA:            "PRAGMA",
 	PRECEDING:         "PRECEDING",
+	PREDICT:           "PREDICT",
 	PRIMARY:           "PRIMARY",
 	QUERY:             "QUERY",
 	RANGE:             "RANGE",
