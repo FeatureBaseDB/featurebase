@@ -1,0 +1,79 @@
+# Dockerfile for building fbsql on darwin 
+# 
+# fbsql depends https://github.com/confluentinc/confluent-kafka-go thus
+# requiring cgo to build. This generally isn't an issue unless you want to cross
+# compile the darwin build on linux. To cross compile darwin build on linux with
+# cgo, you need a C cross compiler. This Dockerfile utilizes
+# "https://github.com/tpoechtrager/osxcross.git for this. 
+#
+# In order for osxcross to build compilers, it requires Xcode which is a
+# complete developer toolset for creating apps for Mac, iPhone, etc. This
+# version of the fbsql darwin builder does this build from an Xcode.xip file
+# which is more time consuming that doing it from an sdk tarball.
+#
+# For this to work, that Xcode.xip file must be in the working directory. See
+# the XCODE argument below. It's currently hardcoded but could be passes as a
+# parameter if needed (see the MAKE_FLAGS argument for example).
+
+ARG GO_VERSION=latest
+
+FROM jacobbrinlee/darwin-cgo-builder:13.4.1 AS builder
+
+WORKDIR /
+RUN apt-get update -y -qq && apt-get install -y -qq \
+  build-essential \
+  git \
+  musl-tools \
+  netcat \
+  unixodbc \
+  unixodbc-dev \
+  clang \
+  libxml2-dev \
+  liblzma-dev \
+  cmake \
+  cpio \
+  libssl-dev \
+  zlib1g-dev \
+  libbz2-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN ["git", "clone", "https://github.com/edenhill/librdkafka.git"]
+WORKDIR /librdkafka
+RUN ./configure --prefix /usr && \
+  make && \
+  make install
+
+WORKDIR /featurebase
+
+COPY . .
+
+ARG MAKE_FLAGS
+ARG GO_BUILD_FLAGS
+ARG SOURCE_DATE_EPOCH
+
+WORKDIR /featurebase/
+
+COPY --from=golang:1.19 /usr/local/go /usr/local/go
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV PATH="/osxcross/build/:${PATH}"
+ENV PATH="/osxcross/build/cctools-port/:${PATH}"
+ENV PATH="/osxcross/build/cctools-port/cctools:${PATH}"
+
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+RUN make build-fbsql-darwin GO_BUILD_FLAGS="-mod=vendor ${GO_BUILD_FLAGS}" ${MAKE_FLAGS} 
+
+FROM ubuntu:jammy AS runner 
+
+RUN apt-get update -y -qq && apt-get install -y -qq \
+    ca-certificates \
+    musl-tools \
+    netcat \
+    unixodbc-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /featurebase/fbsql /usr/local/bin/
+
+# Verify that the linker can find everything.
+FROM runner AS linkcheck
+RUN if [ -e /usr/local/bin/fbsql ] ; then ldd /usr/local/bin/fbsql; fi

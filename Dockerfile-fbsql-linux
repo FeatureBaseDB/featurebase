@@ -1,6 +1,6 @@
 ARG GO_VERSION=1.19
 
-FROM golang:1.19-buster as builder
+FROM golang:1.19-buster AS builder
 
 WORKDIR /
 RUN apt-get update -y -qq && apt-get install -y -qq \
@@ -28,9 +28,9 @@ ARG SOURCE_DATE_EPOCH
 WORKDIR /featurebase/
 
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
-RUN make build-fbsql GO_BUILD_FLAGS="-mod=vendor ${GO_BUILD_FLAGS}" ${MAKE_FLAGS}
+RUN make build-fbsql-linux GO_BUILD_FLAGS="-mod=vendor ${GO_BUILD_FLAGS}" ${MAKE_FLAGS}
 
-FROM ubuntu:20.04 as runner
+FROM ubuntu:20.04 AS runner
 
 RUN apt-get update -y -qq && apt-get install -y -qq \
   ca-certificates \
@@ -42,7 +42,7 @@ RUN apt-get update -y -qq && apt-get install -y -qq \
 COPY --from=builder /featurebase/fbsql /usr/local/bin/
 
 # Verify that the linker can find everything.
-FROM runner as linkcheck
+FROM runner AS linkcheck
 RUN if [ -e /usr/local/bin/fbsql ] ; then ldd /usr/local/bin/fbsql; fi
 
 FROM runner

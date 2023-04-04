@@ -192,7 +192,7 @@ build fbsql amd64:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
-    - GOOS="linux" GOARCH="amd64" make docker-build-fbsql BUILD_CGO=1
+    - GOOS="linux" GOARCH="amd64" make docker-build-fbsql
     - GOOS="darwin" GOARCH="amd64" make docker-build-fbsql
   artifacts:
     paths:
@@ -209,7 +209,7 @@ build fbsql arm64:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
-    - GOOS="linux" GOARCH="arm64" make docker-build-fbsql BUILD_CGO=1
+    - GOOS="linux" GOARCH="arm64" make docker-build-fbsql
     - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
   artifacts:
     paths:
@@ -341,6 +341,22 @@ run go tests dax/test/dax:
   artifacts:
     paths:
       - coverage-dax-integration.out
+
+# fbsql test
+run go tests cli kafka integration:
+  stage: integration
+  image: golang:$GOVERSION
+  variables:
+		KAFKA_RUNNER_TEST_FEATUREBASE_HOST: pilosa:10101
+		KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST: pilosa:20101
+		KAFKA_RUNNER_TEST_KAFKA_HOST: kafka:9092
+		KAFKA_RUNNER_TEST_REGISTRY_HOST: schema-registry:8081
+  script:
+    - echo "running fbsql integration tests"
+    - cd ./idk/
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-all
+    - cd ..
+    - go test -run TestKafkaRunner ./cli
 
 # idk tests
 run go tests idk race:

@@ -361,38 +361,44 @@ BUILD_NAME ?= fbsql-build
 LDFLAGS_STATIC="-linkmode external -extldflags \"-static\" -X 'github.com/featurebasedb/featurebase/v3/fbsql.Version=$(VERSION)' -X 'github.com/featurebasedb/featurebase/v3/fbsql.BuildTime=$(BUILD_TIME)' "
 
 UNAME_P := $(shell uname -p)
-BUILD_CGO ?= 0
 
 # Build fbsql
 build-fbsql:
 	@echo GOOS=$(GOOS) GOARCH=$(GOARCH) uname -p=$(UNAME_P) build_cgo=$(BUILD_CGO)
-ifeq ($(BUILD_CGO), 0)
-	make build-fbsql-non-cgo
-endif
-ifeq ($(BUILD_CGO), 1)
-	make build-fbsql-cgo
+ifeq ($(GOOS), linux)
+	$(MAKE) build-fbsql-linux
+else ifeq ($(GOOS), darwin)
+	$(MAKE) build-fbsql-darwin
 endif
 
-build-fbsql-non-cgo:
-	CGO_ENABLED=0 $(GO) build -ldflags $(LDFLAGS) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
-
-build-fbsql-cgo:
+build-fbsql-linux:
 ifeq ($(GOARCH), arm64)
-	CGO_ENABLED=1 $(GO) build -tags dynamic $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+	env GOOS=linux GOARCH=arm64 CGO_ENABLED=1 $(GO) build -tags dynamic $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+else ifeq ($(GOARCH), amd64)
+	env GOOS=linux GOARCH=amd64 CC=/usr/bin/musl-gcc CGO_ENABLED=1 $(GO) build -tags "musl static" -ldflags $(LDFLAGS_STATIC) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
 endif
-ifeq ($(GOARCH), amd64)
-	CC=/usr/bin/musl-gcc CGO_ENABLED=1 $(GO) build -tags "musl static" -ldflags $(LDFLAGS_STATIC) $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+
+build-fbsql-darwin:
+ifeq ($(GOARCH), arm64)
+	env GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=/osxcross/target/bin/arm64-apple-darwin21.4-clang $(GO) build  -tags dynamic $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+else ifeq ($(GOARCH), amd64)
+	env GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=/osxcross/target/bin/x86_64-apple-darwin21.4-clang $(GO) build $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
 endif
 
 docker-build-fbsql: vendor
+ifeq ($(GOOS), linux)
+	@$(eval export FBSQL_DOCKERFILE=Dockerfile-fbsql-linux)
+else ifeq ($(GOOS), darwin)
+	@$(eval export FBSQL_DOCKERFILE=Dockerfile-fbsql-darwin)
+endif
 	DOCKER_BUILDKIT=0 docker build \
-		--file Dockerfile-fbsql \
-	    --build-arg GO_VERSION=$(GO_VERSION) \
-	    --build-arg MAKE_FLAGS="GOOS=$(GOOS) GOARCH=$(GOARCH) BUILD_CGO=$(BUILD_CGO)" \
-	    --build-arg GO_BUILD_FLAGS=$(GO_BUILD_FLAGS) \
-		--build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
-	    --target builder \
-	    --tag fbsql:$(BUILD_NAME) .
+        --file=$(FBSQL_DOCKERFILE) \
+        --build-arg GO_VERSION=$(GO_VERSION) \
+        --build-arg MAKE_FLAGS="GOOS=$(GOOS) GOARCH=$(GOARCH)" \
+        --build-arg GO_BUILD_FLAGS=$(GO_BUILD_FLAGS) \
+        --build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
+        --target builder \
+        --tag fbsql:$(BUILD_NAME) .
 	mkdir -p build
 	docker create --name $(BUILD_NAME) fbsql:$(BUILD_NAME)
 	docker cp $(BUILD_NAME):/featurebase/fbsql ./build/fbsql_$(GOOS)_$(GOARCH)

@@ -49,6 +49,11 @@ func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 		return nil, errors.Wrap(err, "getting fields from config")
 	}
 
+	// for avro, let the SchemaManager and IDK handle fields
+	if cfg.Encode == "avro" {
+		flds = nil
+	}
+
 	return kafka.NewRunner(
 		idkCfg,
 		batch.NewSQLBatcher(cmd, flds),

@@ -1,0 +1,15 @@
+hosts = ["KAFKA_SERVICE"]
+group = "grp"
+topics = "topic06"
+table = "table06"
+batch-size = 1
+batch-max-staleness = "5s"
+timeout = "5s"
+encode = "avro"
+schemaRegistryHost = "localhost:8081"
+max-messages = MAX_MESSAGES
+
+[[fields]]
+name		= "pk"
+source-type	= "id"
+primary-key	= true

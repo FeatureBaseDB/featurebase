@@ -215,9 +215,7 @@ func (ii IDSet) String() string {
 // sorted
 func (ii IDSet) SortedInt64Slice() []int64 {
 	var idSetSlice = make([]int64, len(ii))
-	for i, str := range ii {
-		idSetSlice[i] = str
-	}
+	copy(idSetSlice, ii)
 	sort.Slice(idSetSlice, func(i, j int) bool { return idSetSlice[i] < idSetSlice[j] })
 	return idSetSlice
 }
@@ -243,9 +241,7 @@ func (ss StringSet) String() string {
 // that is sorted
 func (ss StringSet) SortedStringSlice() []string {
 	var stringSetSlice = make([]string, len(ss))
-	for i, str := range ss {
-		stringSetSlice[i] = str
-	}
+	copy(stringSetSlice, ss)
 	sort.Strings(stringSetSlice)
 	return stringSetSlice
 }

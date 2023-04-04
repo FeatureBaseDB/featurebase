@@ -41,7 +41,6 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	idkMain.OffsetMode = true
 	idkMain.Namespace = "sql_kafka_runner"
 	idkMain.Pprof = "" // don't initialize pprof until we actually use it in tests
-
 	kr := &Runner{
 		Main:    *idkMain,
 		Hosts:   cfg.Hosts,
