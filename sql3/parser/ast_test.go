@@ -750,7 +750,7 @@ func TestBulkInsertStatement_String(t *testing.T) {
 				MapExpr: &parser.Ident{Name: "2"}},
 			{Name: &parser.Ident{Name: "decimal"},
 				Type: &parser.Type{Name: &parser.Ident{Name: "DECIMAL"},
-					Scale: &parser.IntegerLit{Value: "2"}},
+					Modifier: &parser.IntegerLit{Value: "2"}},
 				MapExpr: &parser.Ident{Name: "3"}},
 			{Name: &parser.Ident{Name: "timestamp"},
 				Type:    &parser.Type{Name: &parser.Ident{Name: "TIMESTAMP"}},

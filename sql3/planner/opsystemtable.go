@@ -517,7 +517,7 @@ func generateTableDDL(tbl *dax.Table, newName string) string {
 			buf.WriteString(", ")
 		}
 		fmt.Fprintf(&buf, "%s", col.Name)
-		dataType := fieldSQLDataType(pilosa.FieldToFieldInfo(col))
+		dataType := FieldSQLDataType(pilosa.FieldToFieldInfo(col))
 		fmt.Fprintf(&buf, " %s", dataType.TypeDescription())
 
 		switch dt := dataType.(type) {
