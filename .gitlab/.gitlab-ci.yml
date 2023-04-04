@@ -198,23 +198,7 @@ build fbsql amd64:
     paths:
       - ./build/fbsql_*
 
-build fbsql arm64 darwin:
-  stage: test
-  variables:
-    BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
-  tags:
-    - shell
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
-    - date
-    - GOOS="darwin" GOARCH="amd64" make docker-build-fbsql
-  artifacts:
-    paths:
-      - ./build/fbsql_*
-
-build fbsql arm64 linux:
+build fbsql arm64:
   stage: test
   variables:
     BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
@@ -225,6 +209,7 @@ build fbsql arm64 linux:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
+    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
     - GOOS="linux" GOARCH="arm64" make docker-build-fbsql
   artifacts:
     paths:
@@ -361,7 +346,7 @@ run go tests dax/test/dax:
 
 # fbsql test
 run go tests cli kafka integration:
-  stage: nonblocking
+  stage: integration
   image: golang:$GOVERSION
   variables:
     KAFKA_RUNNER_TEST_FEATUREBASE_HOST: pilosa:10101
@@ -369,7 +354,7 @@ run go tests cli kafka integration:
     KAFKA_RUNNER_TEST_KAFKA_HOST: kafka:9092
     KAFKA_RUNNER_TEST_REGISTRY_HOST: schema-registry:8081
   rules:
-    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:
     - echo "running fbsql integration tests"
     - cd ./idk/
@@ -380,7 +365,11 @@ run go tests cli kafka integration:
     - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   artifacts:
     paths:
-      - coverage-cli-kafka-integration.out 
+      - coverage-cli-kafka-integration.out
+  needs:
+    - job: build amd container fb
+    - job: build fbsql amd64
+    - job: build fbsql arm64
 
 # idk tests
 run go tests idk race:
