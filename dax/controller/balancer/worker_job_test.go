@@ -115,7 +115,7 @@ func TestWorkerJobService(t *testing.T) {
 	dk := wjSvc.DatabaseForWorker(tx, nodeAddr)
 	require.EqualValues(t, "db__orgid__blah", dk)
 
-	err = wjSvc.DeleteWorker(tx, role, qdbid, nodeAddr)
+	err = wjSvc.ReleaseWorkers(tx, nodeAddr)
 	require.NoError(t, err)
 
 	addrs, err = wjSvc.ListWorkers(tx, role, qdbid)

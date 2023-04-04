@@ -267,11 +267,6 @@ func (b *Balancer) removeDatabaseWorker(tx dax.Transaction, roleType dax.RoleTyp
 		return nil, errors.Wrap(err, "marking jobs as free")
 	}
 
-	// Remove the worker.
-	if err := b.current.DeleteWorker(tx, roleType, qdbid, addr); err != nil {
-		return nil, errors.Wrap(err, "deleting worker")
-	}
-
 	// Even though this may not be useful to the caller (for example, in the
 	// case where the worker has died and no longer exists), return the diffs
 	// which represent the removal of jobs from the worker.
@@ -795,7 +790,6 @@ type WorkerJobService interface {
 	ListWorkers(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (dax.Addresses, error)
 
 	CreateWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error
-	DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error
 	ReleaseWorkers(tx dax.Transaction, addrs ...dax.Address) error
 
 	AssignWorkerToJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job ...dax.Job) error

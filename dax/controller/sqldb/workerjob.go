@@ -128,21 +128,6 @@ func (w *workerJobService) ReleaseWorkers(tx dax.Transaction, addrs ...dax.Addre
 	return errors.Wrap(err, "updating workers")
 }
 
-func (w *workerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error {
-	dt, ok := tx.(*DaxTransaction)
-	if !ok {
-		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
-	}
-
-	sql := fmt.Sprintf("UPDATE workers SET role_%s = false WHERE address = ? and database_id = ?", roleType)
-	err := dt.C.RawQuery(sql, addr, qdbid.DatabaseID).Exec()
-	if err != nil {
-		return errors.Wrapf(err, "deleting worker role: %s", roleType)
-	}
-
-	return nil
-}
-
 func (w *workerJobService) AssignWorkerToJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job ...dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
