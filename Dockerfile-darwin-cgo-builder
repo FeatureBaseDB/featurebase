@@ -13,8 +13,29 @@
 # https://developer.apple.com/download/all/. Decide which Xcode version you'd
 # like to build with AND what version of go you'd like to build with.
 #
-# For this to work, that Xcode.xip file must be in the working directory. For
-# now, you'll need to manually define the version.
+
+# Usage
+#
+# Assumptions
+#   1. For this dockerfile to work, you need to be serving the Xcode*.xip file.
+#      Here is the command I ran from the directory that contained the
+#      Xcode*.xip I had. Notice my private IP is hardcoded below. You'll need to
+#      update that below to you private IP. This was done (as opposed to using
+#      COPY) to keep the final image as small as possible.
+#
+#      python3 -m http.server --bind 192.168.1.212
+#
+#   2. The version of Xcode and the underlying sdk are hard coded below. If
+#      you're not using Xcode13.4.1.xip, you'll need to change both version
+#      below.
+#
+#   3. Note the architecture used to build this build may make it easier /
+#      harder to build what you intent to build.
+# 
+# Here is a build example:
+#
+# docker build -f Dockerfile-darwin-cgo-builder -t <image_name>:<tag> .
+
 
 FROM ubuntu:focal AS builder
 
@@ -40,7 +61,6 @@ RUN apt-get update -y -qq && apt-get install -y -qq \
   libmpc-dev \
   && rm -rf /var/lib/apt/lists/*
 
-# build compilers for cross compilation (darwin on linux) with cgo
 WORKDIR /
 RUN git clone https://github.com/tpoechtrager/osxcross.git \
  && wget http://192.168.1.212:8000/Xcode_13.4.1.xip \

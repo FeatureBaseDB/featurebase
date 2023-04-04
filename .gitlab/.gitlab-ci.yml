@@ -198,23 +198,7 @@ build fbsql amd64:
     paths:
       - ./build/fbsql_*
 
-build fbsql arm64 darwin:
-  stage: test
-  variables:
-    BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
-  tags:
-    - shell
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
-  script:
-    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
-    - date
-    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
-  artifacts:
-    paths:
-      - ./build/fbsql_*
-
-build fbsql arm64 linux:
+build fbsql arm64:
   stage: test
   variables:
     BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
@@ -225,10 +209,13 @@ build fbsql arm64 linux:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
+    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
     - GOOS="linux" GOARCH="arm64" make docker-build-fbsql
+
   artifacts:
     paths:
       - ./build/fbsql_*
+
 
 build amd container fb:
   stage: test
@@ -384,8 +371,7 @@ run go tests cli kafka integration:
   needs:
     - job: build amd container fb
     - job: build fbsql amd64
-    - job: build fbsql arm64 linux
-    - job: build fbsql arm64 darwin
+    - job: build fbsql arm64
 
 # idk tests
 run go tests idk race:
@@ -752,8 +738,7 @@ s3 dump:
   needs:
     - job: build featurebase
     - job: build fbsql amd64
-    - job: build fbsql arm64 linux
-    - job: build fbsql arm64 darwin
+    - job: build fbsql arm64
 
 s3 dump tag:
   stage: post build
