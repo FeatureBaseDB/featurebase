@@ -2919,10 +2919,7 @@ func (p *ExecutionPlanner) compileCallExpr(expr *parser.Call) (_ types.PlanExpre
 		if err != nil {
 			return nil, err
 		}
-		if fn != nil {
-			return newCallPlanExpression(parser.IdentName(expr.Name), args, expr.ResultDataType, fn), nil
-		}
-		return newCallPlanExpression(parser.IdentName(expr.Name), args, expr.ResultDataType, nil), nil
+		return newCallPlanExpression(parser.IdentName(expr.Name), args, expr.ResultDataType, fn), nil
 	}
 }
 

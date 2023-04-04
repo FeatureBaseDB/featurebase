@@ -52,7 +52,7 @@ func (p *PlanOpCopy) Iterator(ctx context.Context, row types.Row) (types.RowIter
 	if err != nil {
 		return nil, err
 	}
-	if len(p.url) > 0 {
+	if p.url != "" {
 		return newRemoteCopyIterator(p.planner, p.targetTable, p.url, p.apiKey, p.ddl, p.ChildOp.Schema(), child), nil
 	}
 	return newCopyIterator(p.planner, p.targetTable, p.ddl, p.ChildOp.Schema(), child), nil
