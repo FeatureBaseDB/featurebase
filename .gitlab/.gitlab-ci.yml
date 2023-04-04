@@ -286,10 +286,10 @@ run go tests race:
   script:
     - echo "Running featurebase race tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - SKIP_LIST=TestKafkaRunner
     - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - export SKIP_INTEGRATION_TEST=true
     - mkdir -p $TMPDIR
-    - go test -skip ${SKIP_LIST} -race -v -timeout=10m ${PKG_LIST//,/ }
+    - go test -race -v -timeout=10m ${PKG_LIST//,/ }
   after_script:
     - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   tags:
@@ -317,10 +317,10 @@ run go tests:
   script:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
-    - SKIP_LIST=TestKafkaRunner
     - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - export SKIP_INTEGRATION_TEST=true
     - mkdir -p $TMPDIR
-    - go test -skip ${SKIP_LIST} -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
+    - go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
   after_script:
     - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   artifacts:
@@ -368,12 +368,19 @@ run go tests cli kafka integration:
     KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST: pilosa:20101
     KAFKA_RUNNER_TEST_KAFKA_HOST: kafka:9092
     KAFKA_RUNNER_TEST_REGISTRY_HOST: schema-registry:8081
+  rules:
+    - if: '$CI_COMMIT_TAG != null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web")'
   script:
     - echo "running fbsql integration tests"
     - cd ./idk/
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-all
     - cd ..
     - go test -coverprofile=coverage-cli-kafka-integration.out -run -timeout=10m TestKafkaRunner ./cli
+  after_script:
+    - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
+  artifacts:
+    paths:
+      - coverage-cli-kafka-integration.out 
 
 # idk tests
 run go tests idk race:

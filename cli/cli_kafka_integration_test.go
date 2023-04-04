@@ -73,7 +73,7 @@ type testQuery struct {
 // A slice of KafkaRunnerTest structs that will be used in TestKafkaRunner test
 // function.
 var kafkaRunnerTests = []kafkaRunnerTest{
-	{ // id keys
+	{ // id keys json
 		ConfigFile: "config00.toml",
 		DataFile:   "data00.json",
 		Tests: []testQuery{
@@ -84,7 +84,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 		},
 		CreateTableStmt: "(_id ID, name String, age Int, hobbies StringSet)",
 	},
-	{ // string keys
+	{ // string keys json
 		ConfigFile: "config01.toml",
 		DataFile:   "data00.json",
 		Tests: []testQuery{
@@ -95,7 +95,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 		},
 		CreateTableStmt: "(_id String, name String, age Int, hobbies StringSet)",
 	},
-	{ // two string keys
+	{ // two string keys json
 		ConfigFile: "config02.toml",
 		DataFile:   "data00.json",
 		Tests: []testQuery{
@@ -106,7 +106,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 		},
 		CreateTableStmt: "(_id String, id String, name String, age Int, hobbies StringSet)",
 	},
-	{ // string, id, and int
+	{ // string, id, and int json
 		ConfigFile: "config03.toml",
 		DataFile:   "data00.json",
 		Tests: []testQuery{
@@ -117,7 +117,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 		},
 		CreateTableStmt: "(_id String, id id, name String, age Int, hobbies StringSet)",
 	},
-	{ // missing values
+	{ // missing values json
 		ConfigFile: "config05.toml",
 		DataFile:   "data02.json",
 		Tests: []testQuery{
@@ -128,7 +128,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 		},
 		CreateTableStmt: "(_id String, name String, age Int, hobbies StringSet)",
 	},
-	{ // string keys
+	{ // string keys avro
 		ConfigFile: "config04.toml",
 		DataFile:   "data01.json",
 		SchemaFile: "schema01.json",
@@ -140,7 +140,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 		},
 		CreateTableStmt: "(_id string, string_string string, string_bytes string, pk2 stringset, stringset_bytes stringset, idset_long idset, decimal_double decimal(2), timestamp_bytes_ts timestamp, idset_longarray idset, dateint_bytes_ts int, bools stringset, stringset_string stringset, stringset_stringarray stringset, idset_int idset, timestamp_bytes_int timestamp, int_long int, id_long id, id_int id, idset_intarray idset, decimal_float decimal(2), bools-exists stringset, stringset_bytesarray stringset, int_int int, decimal_bytes decimal(2), pk1 stringset)",
 	},
-	{ // id keys
+	{ // id keys avro
 		ConfigFile: "config06.toml",
 		DataFile:   "data03.json",
 		SchemaFile: "schema02.json",
@@ -152,7 +152,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 		},
 		CreateTableStmt: "(_id id, string_string string, idset_longarray idset, stringset_stringarray stringset, int_int int, bools stringset, bools-exists stringset)",
 	},
-	{ // compound keys
+	{ // compound keys avro
 		ConfigFile: "config07.toml",
 		DataFile:   "data01.json",
 		SchemaFile: "schema01.json",
@@ -175,7 +175,7 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 //  5. Runs the cli.Command
 //  6. Confirms that the data was written to FeatureBase as expected
 func TestKafkaRunner(t *testing.T) {
-	if testing.Short() {
+	if testing.Short() || os.Getenv("SKIP_INTEGRATION_TEST") == "true" {
 		t.Skip("skipping integration test")
 	}
 

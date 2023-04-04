@@ -77,3 +77,5 @@ COPY --from=builder /featurebase/fbsql /usr/local/bin/
 # Verify that the linker can find everything.
 FROM runner AS linkcheck
 RUN if [ -e /usr/local/bin/fbsql ] ; then ldd /usr/local/bin/fbsql; fi
+
+FROM runner
