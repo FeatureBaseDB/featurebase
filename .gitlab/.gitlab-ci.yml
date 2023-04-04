@@ -203,7 +203,7 @@ build fbsql arm64:
   variables:
     BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
   tags:
-    - shell-arm64
+    - shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   script:

@@ -55,10 +55,10 @@ func getKafkaRunnerTestServices() *KafkaRunnerTestServices {
 // data to kafka, configure the runner, and test that the runner successfully
 // ran.
 type kafkaRunnerTest struct {
-	ConfigFile      string // path to the configuration file used for the runner
-	DataFile        string // path to the data file to populate kafka with
-	CreateTableStmt string // statement used to create table prior to ingest
-	SchemaFile      string
+	ConfigFile      string      // path to the configuration file used for the runner
+	DataFile        string      // path to the data file to populate kafka with
+	CreateTableStmt string      // statement used to create table prior to ingest
+	SchemaFile      string      // path to schema file for schema encoded messages (e.g. avro)
 	Tests           []testQuery // list of test which are 2-tuples of query and expected results
 
 }
@@ -175,9 +175,9 @@ var kafkaRunnerTests = []kafkaRunnerTest{
 //  5. Runs the cli.Command
 //  6. Confirms that the data was written to FeatureBase as expected
 func TestKafkaRunner(t *testing.T) {
-	//if testing.Short() {
-	//	t.Skip("skipping integration test")
-	//}
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 
 	// Get host and port pair for services required for test (e.g. kafka and
 	// featurebase)
