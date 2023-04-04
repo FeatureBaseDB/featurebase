@@ -25,6 +25,7 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
 	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
 	router.HandleFunc("/database/options", server.patchDatabaseOptions).Methods("PATCH").Name("PatchDatabaseOptions")
+	router.HandleFunc("/database-number-of-workers", server.getDatabaseNumberOfWorkers).Methods("GET").Name("DatabaseWorkers")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")
@@ -210,6 +211,45 @@ func (s *server) patchDatabaseOptions(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.controller.SetDatabaseOption(r.Context(), req.QualifiedDatabaseID, req.Option, req.Value); err != nil {
 		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
+		return
+	}
+}
+
+// get the number of workers for a database
+// receive request
+
+// decode the id
+
+// send the id into the controller, get the number of workers back
+
+// send that number back to the client via request
+
+// create a response struct
+func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Request) {
+	// get the context
+	ctx := r.Context()
+
+	// create a variable to hold the id
+	var id dax.QualifiedDatabaseID
+
+	// for now, fill the id with a hard-coded value
+	id = dax.QualifiedDatabaseID{
+		OrganizationID: dax.OrganizationID("org1"),
+		DatabaseID:     dax.DatabaseID("db1"),
+	}
+
+	// send the id into the controller, get the number of workers back
+	numWorkers, err := s.controller.GetDatabaseNumberOfWorkers(ctx, id)
+
+	// handle error
+	if err != nil {
+		http.Error(w, errors.MarshalJSON(err), http.StatusBadRequest)
+		return
+	}
+
+	// send the number back to the client
+	if err := json.NewEncoder(w).Encode(numWorkers); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 }

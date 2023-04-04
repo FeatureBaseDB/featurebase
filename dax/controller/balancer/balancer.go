@@ -672,6 +672,10 @@ func (b *Balancer) WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qt
 	return workers, nil
 }
 
+func (b *Balancer) GetDatabaseNumberOfWorkers(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (int, error) {
+	return b.current.WorkerCount(tx, roleType, qdbid)
+}
+
 func (b *Balancer) removeJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, job dax.Job) (InternalDiffs, error) {
 	if addr, ok, err := b.workerForJob(tx, roleType, qdbid, job); err != nil {
 		return nil, errors.Wrapf(err, "getting worker for job: %s", job)
