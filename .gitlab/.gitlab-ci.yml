@@ -347,16 +347,16 @@ run go tests cli kafka integration:
   stage: integration
   image: golang:$GOVERSION
   variables:
-		KAFKA_RUNNER_TEST_FEATUREBASE_HOST: pilosa:10101
-		KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST: pilosa:20101
-		KAFKA_RUNNER_TEST_KAFKA_HOST: kafka:9092
-		KAFKA_RUNNER_TEST_REGISTRY_HOST: schema-registry:8081
+    KAFKA_RUNNER_TEST_FEATUREBASE_HOST: pilosa:10101
+    KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST: pilosa:20101
+    KAFKA_RUNNER_TEST_KAFKA_HOST: kafka:9092
+    KAFKA_RUNNER_TEST_REGISTRY_HOST: schema-registry:8081
   script:
     - echo "running fbsql integration tests"
     - cd ./idk/
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-all
     - cd ..
-    - go test -run TestKafkaRunner ./cli
+    - go test -coverprofile=coverage-cli-kafka-integration.out -run -timeout=10m TestKafkaRunner ./cli
 
 # idk tests
 run go tests idk race:
