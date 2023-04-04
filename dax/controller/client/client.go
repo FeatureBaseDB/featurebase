@@ -701,3 +701,22 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 
 	return nil
 }
+
+func (c *Client) GetDatabaseNumberOfWorkers(ctx context.Context, qdbid dax.QualifiedDatabaseID) error {
+	url := fmt.Sprintf("%s/database-number-of-workers", c.address.WithScheme(defaultScheme))
+	c.logger.Debugf("Database number of workers: %s", url)
+
+	// Get the request.
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return errors.Wrap(err, "getting number of workers")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+	}
+
+	return nil
+}
