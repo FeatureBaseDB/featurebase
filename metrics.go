@@ -807,6 +807,17 @@ var CounterQueryArrowTotal = prometheus.NewCounterVec(
 	},
 )
 
+var CounterQueryTstoreTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "pilosa",
+		Name:      "query_tstore_total",
+		Help:      "TODO",
+	},
+	[]string{
+		"index",
+	},
+)
+
 // CounterQueryBitmapTotal represents bitmap calls.
 var CounterQueryBitmapTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
@@ -1048,5 +1059,4 @@ func init() {
 
 	// index related
 	prometheus.MustRegister(GaugeIndexMaxShard)
-
 }
