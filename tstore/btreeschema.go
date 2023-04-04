@@ -12,6 +12,7 @@ import (
 )
 
 func (b *BTree) resolveSchema(schema types.Schema) error {
+
 	// get the last schema version
 	schemaSchema := types.Schema{
 		&types.PlannerColumn{
@@ -40,17 +41,13 @@ func (b *BTree) resolveSchema(schema types.Schema) error {
 	defer b.unpin(schemaNode)
 
 	// get an iterator on the schema and get the last row
-	zero := Int(0)
-	maxSlot := Int(0xFFFF)
-	iter, _, err := b.getReverseIterator(schemaNode, zero, maxSlot, schemaSchema)
-	if err != nil {
-		return err
-	}
+	iter := b.getIterator(schemaNode, nil, nil, true, schemaSchema)
 	sk, ss, err := iter.Next()
 	if err != nil {
 		return err
 	}
 	iter.Dispose()
+
 	// if there isn't any schema, insert this one as the last
 	if sk == nil {
 		// make a tuple
@@ -75,7 +72,7 @@ func (b *BTree) resolveSchema(schema types.Schema) error {
 		b.schema = schema
 	} else {
 		// if there is one, see if it is the same as this one, if it is not, insert this one as the latest
-		latestVersion := int(sk.(Int)) // TODO(twg) 2023/04/01 THIS IS NOT CORRECT
+		latestVersion := int(sk.(Int))
 
 		schemaBytes := ss.Tuple[0].([]byte)
 

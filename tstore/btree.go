@@ -164,16 +164,14 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 }
 
 // GetIterator constructs an iterator on the b+tree so that range scans may be performed or an error
-func (b *BTree) GetIterator(from Sortable, to Sortable, reverse bool) (BIterator, bool, error) {
+func (b *BTree) GetIterator(from Sortable, to Sortable, reverse bool) (*BTreeNodeIterator, error) {
 	n, err := b.fetchNode(b.rootNode)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	n.takeReadLatch()
-	if reverse {
-		return b.getReverseIterator(n, from, to, b.schema)
-	}
-	return b.getIterator(n, from, to, b.schema)
+	iter := b.getIterator(n, from, to, reverse, b.schema)
+	return iter, nil
 }
 
 // Search finds a key k in the b+tree and returns the matching tuple. If no tuple is
@@ -204,44 +202,17 @@ func (b *BTree) Insert(tup *BTreeTuple) error {
 // ====================================================================================================
 // private methods
 
-func (b *BTree) getIterator(node *BTreeNode, from Sortable, to Sortable, schema types.Schema) (*BTreeNodeIterator, bool, error) {
-	if node.isLeaf() {
-		defer node.releaseReadLatch()
-		defer b.unpin(node)
-		i, found := node.findKey(from)
-		return NewBTreeNodeIterator(b, node, from, to, schema, i), found, nil
-	} else {
-		nodePtr := b.findNextPointer(node, from)
-		nodeNext, err := b.fetchNode(nodePtr)
-		if err != nil {
-			return nil, false, err
+func (b *BTree) getIterator(node *BTreeNode, from Sortable, to Sortable, reverse bool, schema types.Schema) *BTreeNodeIterator {
+	if reverse {
+		// go to the right
+		if node.isLeaf() {
+			return NewBTreeNodeIterator(b, node, reverse, schema)
+		} else {
+			panic("implement me")
 		}
-		nodeNext.takeReadLatch()
-		node.releaseReadLatch()
-		b.unpin(node)
-		return b.getIterator(nodeNext, from, to, schema)
-	}
-}
-
-func (b *BTree) getReverseIterator(node *BTreeNode, from Sortable, to Sortable, schema types.Schema) (*BTreeReverseNodeIterator, bool, error) {
-	if node.isLeaf() {
-		defer node.releaseReadLatch()
-		defer b.unpin(node)
-		// search for the key
-		var i int
-		var found bool
-		i, found = node.findKey(to)
-		return NewBTreeReverseNodeIterator(b, node, from, to, schema, i), found, nil
 	} else {
-		nodePtr := b.findNextPointer(node, from)
-		nodeNext, err := b.fetchNode(nodePtr)
-		if err != nil {
-			return nil, false, err
-		}
-		nodeNext.takeReadLatch()
-		node.releaseReadLatch()
-		b.unpin(node)
-		return b.getReverseIterator(nodeNext, from, to, schema)
+		// go to the left
+		panic("implement me")
 	}
 }
 
@@ -300,7 +271,7 @@ func (b *BTree) insert(headerPageRootSlot int, node *BTreeNode, tup *BTreeTuple,
 				continue
 			}
 
-			// split the node
+			//split the node
 			lhs, pivot, rhs, err := b.splitNode(node)
 			if err != nil {
 				return err
@@ -610,7 +581,7 @@ func (b *BTree) compactLeafPage(node *BTreeNode) error {
 		// write the chunk
 		offset := scratchPage.WriteLeafPagePayloadHeader(int16(freeSpaceOffset), c.KeyLength, c.KeyBytes, c.Flags, c.OverflowPtr, c.PayloadTotalLength)
 		scratchPage.WriteLeafPagePayloadBytes(offset, c.PayloadChunkLength, c.PayloadChunkBytes)
-		// write the slot
+		//write the slot
 		scratchPage.WritePageSlot(int16(i), s)
 
 		// update the free space offset
@@ -656,7 +627,7 @@ func (b *BTree) compactInternalPage(node *BTreeNode) error {
 
 		// write the chunk
 		scratchPage.WriteInternalPageChunk(int16(freeSpaceOffset), c)
-		// write the slot
+		//write the slot
 		scratchPage.WritePageSlot(int16(i), s)
 
 		// update the free space offset
@@ -679,6 +650,7 @@ func (b *BTree) compactInternalPage(node *BTreeNode) error {
 // This function checks free space on the page and will compact if the write won't fit. It also handles overflowing data
 // to overflow pages if the payload will not fit on this page.
 func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes []byte, payloadBytes []byte) error {
+
 	// calculate the size of the stuf we plan on writing
 	keyLength := len(keyBytes)
 	payloadChunkLength := len(payloadBytes)
@@ -832,6 +804,7 @@ func (b *BTree) insertLeafEntryAt(node *BTreeNode, keyPosition int, key Sortable
 // We already know what slotNumber we want to insert into.
 // This function checks free space on the page and will compact if the write won't fit.
 func (b *BTree) writeInternalEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes []byte, ptrValue int64) error {
+
 	// get length info
 	keyLength := len(keyBytes)
 	onPageSize := node.page.ComputeInternalPayloadTotalLength(keyLength)
@@ -1010,7 +983,7 @@ func (b *BTree) insertNonFull(node *BTreeNode, key Sortable, tup *BTreeTuple, fo
 			if j < slotCount {
 				b.updatePointerEntryAt(node, j+1, rhs.page.ID())
 			} else {
-				// set the next ptr to point to the rhs page
+				//set the next ptr to point to the rhs page
 				node.page.WriteNextPointer(rhs.page.ID())
 			}
 
@@ -1041,6 +1014,7 @@ func (b *BTree) insertNonFull(node *BTreeNode, key Sortable, tup *BTreeTuple, fo
 // splitLeafNode handles splitting of a leaf node. It returns the original node, the seperator key on
 // which the split happended and the new node, or an error.
 func (b *BTree) splitLeafNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BTreeNode, error) {
+
 	// where we are going to split
 	slotCount := int(nodeToSplit.page.ReadSlotCount())
 	splitPoint := slotCount / 2
@@ -1060,9 +1034,9 @@ func (b *BTree) splitLeafNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BT
 	leftSlotCount := int(lhs.page.ReadSlotCount())
 
 	// find the split point
-	rightSlotCount := leftSlotCount - splitPoint
+	var rightSlotCount = leftSlotCount - splitPoint
 
-	// copy the data from left to right
+	//copy the data from left to right
 	freeSpaceOffset := rhs.page.ReadFreeSpaceOffset()
 	for i := 0; i < rightSlotCount; i++ {
 		j := splitPoint + i
@@ -1081,7 +1055,7 @@ func (b *BTree) splitLeafNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable, *BT
 		// write the chunk
 		offset := rhs.page.WriteLeafPagePayloadHeader(int16(freeSpaceOffset), c.KeyLength, c.KeyBytes, c.Flags, c.OverflowPtr, c.PayloadTotalLength)
 		rhs.page.WriteLeafPagePayloadBytes(offset, c.PayloadChunkLength, c.PayloadChunkBytes)
-		// write the slot
+		//write the slot
 		rhs.page.WritePageSlot(int16(i), s)
 
 		// update the free space offset
@@ -1126,9 +1100,9 @@ func (b *BTree) splitInternalNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable,
 	leftSlotCount := int(lhs.page.ReadSlotCount())
 
 	// find the split point
-	rightSlotCount := leftSlotCount - splitPoint
+	var rightSlotCount = leftSlotCount - splitPoint
 
-	// copy the data from left to right
+	//copy the data from left to right
 	freeSpaceOffset := rhs.page.ReadFreeSpaceOffset()
 	for i := 0; i < rightSlotCount; i++ {
 		j := splitPoint + i
@@ -1146,7 +1120,7 @@ func (b *BTree) splitInternalNode(nodeToSplit *BTreeNode) (*BTreeNode, Sortable,
 
 		// write the chunk
 		rhs.page.WriteInternalPageChunk(int16(freeSpaceOffset), c)
-		// write the slot
+		//write the slot
 		rhs.page.WritePageSlot(int16(i), s)
 
 		// update the free space offset
