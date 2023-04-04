@@ -94,11 +94,11 @@ func (i *alterTableRowIter) Next(ctx context.Context) (types.Row, error) {
 		fos := i.columnDef.fos
 
 		fld, err := pilosa.FieldFromFieldOptions(fname, fos...)
-		// all newly created fields unconditionally have TrackExistence turned on.
-		fld.Options.TrackExistence = true
 		if err != nil {
 			return nil, err
 		}
+		// all newly created fields unconditionally have TrackExistence turned on.
+		fld.Options.TrackExistence = true
 
 		if err := i.planner.schemaAPI.CreateField(ctx, tname, fld); err != nil {
 			return nil, err

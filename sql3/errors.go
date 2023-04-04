@@ -13,10 +13,13 @@ const (
 	ErrUnsupported      errors.Code = "ErrUnsupported"
 	ErrCacheKeyNotFound errors.Code = "ErrCacheKeyNotFound"
 
-	ErrDuplicateColumn   errors.Code = "ErrDuplicateColumn"
-	ErrUnknownType       errors.Code = "ErrUnknownType"
-	ErrUnknownIdentifier errors.Code = "ErrUnknownIdentifier"
+	// syntax/semantic errors
+	ErrDuplicateColumn       errors.Code = "ErrDuplicateColumn"
+	ErrUnknownType           errors.Code = "ErrUnknownType"
+	ErrUnknownIdentifier     errors.Code = "ErrUnknownIdentifier"
+	ErrTopLimitCannotCoexist errors.Code = "ErrTopLimitCannotCoexist"
 
+	// type related errors
 	ErrTypeIncompatibleWithBitwiseOperator               errors.Code = "ErrTypeIncompatibleWithBitwiseOperator"
 	ErrTypeIncompatibleWithLogicalOperator               errors.Code = "ErrTypeIncompatibleWithLogicalOperator"
 	ErrTypeIncompatibleWithEqualityOperator              errors.Code = "ErrTypeIncompatibleWithEqualityOperator"
@@ -39,8 +42,6 @@ const (
 	ErrSetExpressionExpected                             errors.Code = "ErrSetExpressionExpected"
 	ErrTimeQuantumExpressionExpected                     errors.Code = "ErrTimeQuantumExpressionExpected"
 	ErrSingleRowExpected                                 errors.Code = "ErrSingleRowExpected"
-
-	// type related errors
 
 	// decimal
 	ErrDecimalScaleExpected errors.Code = "ErrDecimalScaleExpected"
@@ -97,6 +98,9 @@ const (
 	ErrViewExists   errors.Code = "ErrViewExists"
 	ErrViewNotFound errors.Code = "ErrViewNotFound"
 
+	ErrModelExists   errors.Code = "ErrModelExists"
+	ErrModelNotFound errors.Code = "ErrModelNotFound"
+
 	ErrBadColumnConstraint         errors.Code = "ErrBadColumnConstraint"
 	ErrConflictingColumnConstraint errors.Code = "ErrConflictingColumnConstraint"
 
@@ -144,6 +148,9 @@ const (
 	ErrInvalidDatetimePart                 errors.Code = "ErrInvalidDatetimePart"
 	ErrOutputValueOutOfRange               errors.Code = "ErrOutputValueOutOfRange"
 	ErrDivideByZero                        errors.Code = "ErrDivideByZero"
+
+	// remote execution
+	ErrRemoteUnauthorized errors.Code = "ErrRemoteUnauthorized"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -164,6 +171,13 @@ func NewErrUnknownIdentifier(line int, col int, ident string) error {
 	return errors.New(
 		ErrUnknownIdentifier,
 		fmt.Sprintf("[%d:%d] unknown identifier '%s'", line, col, ident),
+	)
+}
+
+func NewErrErrTopLimitCannotCoexist(line int, col int) error {
+	return errors.New(
+		ErrTopLimitCannotCoexist,
+		fmt.Sprintf("[%d:%d] TOP and LIMIT cannot cannot be used at the same time (TOP will be deprecated in a future release)", line, col),
 	)
 }
 
@@ -657,6 +671,20 @@ func NewErrViewExists(line, col int, viewName string) error {
 	)
 }
 
+func NewErrModelNotFound(line, col int, viewName string) error {
+	return errors.New(
+		ErrModelNotFound,
+		fmt.Sprintf("[%d:%d] model '%s' not found", line, col, viewName),
+	)
+}
+
+func NewErrModelExists(line, col int, viewName string) error {
+	return errors.New(
+		ErrModelExists,
+		fmt.Sprintf("[%d:%d] model '%s' already exists", line, col, viewName),
+	)
+}
+
 func NewErrBadColumnConstraint(line, col int, constraint, columnType string) error {
 	return errors.New(
 		ErrBadColumnConstraint,
@@ -884,5 +912,12 @@ func NewErrDivideByZero(line, col int) error {
 	return errors.New(
 		ErrDivideByZero,
 		fmt.Sprintf("[%d:%d] divisor is equal to zero", line, col),
+	)
+}
+
+func NewErrRemoteUnauthorized(line, col int, remoteUrl string) error {
+	return errors.New(
+		ErrRemoteUnauthorized,
+		fmt.Sprintf("unauthorized on remote server '%s'", remoteUrl),
 	)
 }

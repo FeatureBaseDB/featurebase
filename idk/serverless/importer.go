@@ -191,13 +191,11 @@ func (m *importer) EncodeImportValues(ctx context.Context, tid dax.TableID, fld 
 		return "", nil, errors.Wrapf(err, "getting qtbl")
 	}
 
-	address, err := m.controller.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
-	if err != nil {
-		return "", nil, errors.Wrap(err, "calling ingest-shard")
-	}
-
-	// Set up a FeatureBase client with address.
-	fbClient, err := m.fbClient(address)
+	// Since we're calling EncodeImportValues on the client, we don't actually
+	// need a valid client (that method doesn't actually use the client).
+	// Really, that method should be a function on the client package rather
+	// than a method on the Client type.
+	fbClient, err := m.fbClient("")
 	if err != nil {
 		return "", nil, errors.Wrap(err, "getting featurebase client")
 	}
@@ -216,13 +214,11 @@ func (m *importer) EncodeImport(ctx context.Context, tid dax.TableID, fld *dax.F
 		return "", nil, errors.Wrapf(err, "getting qtbl")
 	}
 
-	address, err := m.controller.IngestShard(context.Background(), qtbl.QualifiedID(), dax.ShardNum(shard))
-	if err != nil {
-		return "", nil, errors.Wrap(err, "calling ingest-shard")
-	}
-
-	// Set up a FeatureBase client with address.
-	fbClient, err := m.fbClient(address)
+	// Since we're calling EncodeImportValues on the client, we don't actually
+	// need a valid client (that method doesn't actually use the client).
+	// Really, that method should be a function on the client package rather
+	// than a method on the Client type.
+	fbClient, err := m.fbClient("")
 	if err != nil {
 		return "", nil, errors.Wrap(err, "getting featurebase client")
 	}

@@ -40,7 +40,7 @@ func TestExpressions(t *testing.T) {
 		iop := newInOpPlanExpression(newIntLiteralPlanExpression(10), parser.IN, newIntLiteralPlanExpression(20))
 		assert.Equal(t, iop.String(), "10 in (20)")
 
-		callop := newCallPlanExpression("foo", []types.PlanExpression{newIntLiteralPlanExpression(10)}, parser.NewDataTypeInt())
+		callop := newCallPlanExpression("foo", []types.PlanExpression{newIntLiteralPlanExpression(10)}, parser.NewDataTypeInt(), nil)
 		assert.Equal(t, callop.String(), "foo(10)")
 
 		alop := newAliasPlanExpression("frobny", newIntLiteralPlanExpression(10))
@@ -65,7 +65,7 @@ func TestExpressions(t *testing.T) {
 		assert.Equal(t, blop.String(), "false")
 
 		tm, _ := time.ParseInLocation(time.RFC3339, "2012-11-01T22:08:41+00:00", time.UTC)
-		dlop := newDateLiteralPlanExpression(tm)
+		dlop := newTimestampLiteralPlanExpression(tm)
 		assert.Equal(t, dlop.String(), "2012-11-01T22:08:41Z")
 
 		slop := newStringLiteralPlanExpression("foo")

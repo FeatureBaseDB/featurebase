@@ -69,6 +69,10 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 		rootOperator, err = p.compileSelectStatement(stmt, false)
 	case *parser.ShowDatabasesStatement:
 		rootOperator, err = p.compileShowDatabasesStatement(ctx, stmt)
+	case *parser.CopyStatement:
+		rootOperator, err = p.compileCopyStatement(stmt)
+	case *parser.PredictStatement:
+		rootOperator, err = p.compilePredictStatement(ctx, stmt)
 	case *parser.ShowTablesStatement:
 		rootOperator, err = p.compileShowTablesStatement(ctx, stmt)
 	case *parser.ShowColumnsStatement:
@@ -93,16 +97,23 @@ func (p *ExecutionPlanner) CompilePlan(ctx context.Context, stmt parser.Statemen
 		rootOperator, err = p.compileDropTableStatement(ctx, stmt)
 	case *parser.DropViewStatement:
 		rootOperator, err = p.compileDropViewStatement(ctx, stmt)
+	case *parser.DropModelStatement:
+		rootOperator, err = p.compileDropModelStatement(stmt)
 	case *parser.InsertStatement:
 		rootOperator, err = p.compileInsertStatement(ctx, stmt)
 	case *parser.BulkInsertStatement:
 		rootOperator, err = p.compileBulkInsertStatement(ctx, stmt)
 	case *parser.DeleteStatement:
 		rootOperator, err = p.compileDeleteStatement(stmt)
+	case *parser.CreateModelStatement:
+		rootOperator, err = p.compileCreateModelStatement(stmt)
+	case *parser.CreateFunctionStatement:
+		rootOperator, err = p.compileCreateFunctionStatement(stmt)
+
 	default:
 		return nil, sql3.NewErrInternalf("cannot plan statement: %T", stmt)
 	}
-	// Optimize the plan.
+	// optimize the plan
 	if err == nil {
 		rootOperator, err = p.optimizePlan(ctx, rootOperator)
 	}
@@ -130,6 +141,10 @@ func (p *ExecutionPlanner) analyzePlan(ctx context.Context, stmt parser.Statemen
 		return err
 	case *parser.ShowDatabasesStatement:
 		return nil
+	case *parser.CopyStatement:
+		return p.analyzeCopyStatement(ctx, stmt)
+	case *parser.PredictStatement:
+		return p.analyzePredictStatement(ctx, stmt)
 	case *parser.ShowTablesStatement:
 		return nil
 	case *parser.ShowColumnsStatement:
@@ -154,12 +169,19 @@ func (p *ExecutionPlanner) analyzePlan(ctx context.Context, stmt parser.Statemen
 		return nil
 	case *parser.DropViewStatement:
 		return nil
+	case *parser.DropModelStatement:
+		return nil
 	case *parser.InsertStatement:
 		return p.analyzeInsertStatement(ctx, stmt)
 	case *parser.BulkInsertStatement:
 		return p.analyzeBulkInsertStatement(ctx, stmt)
 	case *parser.DeleteStatement:
 		return p.analyzeDeleteStatement(ctx, stmt)
+	case *parser.CreateModelStatement:
+		return p.analyzeCreateModelStatement(ctx, stmt)
+	case *parser.CreateFunctionStatement:
+		return p.analyzeCreateFunctionStatement(stmt)
+
 	default:
 		return sql3.NewErrInternalf("cannot analyze statement: %T", stmt)
 	}

@@ -172,15 +172,6 @@ func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.Column
 			unit := c.Expr.(*parser.StringLit)
 			timeUnit = unit.Value
 
-			if c.EpochExpr != nil {
-				epochString := c.EpochExpr.(*parser.StringLit)
-				tm, err := time.ParseInLocation(time.RFC3339, epochString.Value, time.UTC)
-				if err != nil {
-					return nil, sql3.NewErrInvalidTimeEpoch(c.EpochExpr.Pos().Line, c.EpochExpr.Pos().Line, epochString.Value)
-				}
-				epoch = tm
-			}
-
 		case *parser.TimeQuantumConstraint:
 			unit := c.Expr.(*parser.StringLit)
 			timeQuantum = pilosa.TimeQuantum(unit.Value)
@@ -398,13 +389,6 @@ func (p *ExecutionPlanner) analyzeColumn(typeName string, col *parser.ColumnDefi
 			}
 			if !pilosa.IsValidTimeUnit(unit.Value) {
 				return sql3.NewErrInvalidTimeUnit(c.Expr.Pos().Line, c.Expr.Pos().Column, unit.Value)
-			}
-			if c.EpochExpr != nil {
-				//check the type of the expression
-				_, ok := c.EpochExpr.(*parser.StringLit)
-				if !ok {
-					return sql3.NewErrStringLiteral(c.EpochExpr.Pos().Line, c.EpochExpr.Pos().Column)
-				}
 			}
 			handledConstraints[parser.TIMEUNIT] = struct{}{}
 

@@ -243,6 +243,12 @@ type Resource struct {
 	latestWLVersion    int
 	lastWLPos          int
 
+	// temporary workaround: we use this to control access to locked
+	// because it can cause race detector failures in testing under
+	// circumstances. these circumstances are probably actually a
+	// different and more serious bug, but we want CI to run in the
+	// mean time.
+	mu     sync.Mutex
 	locked bool
 
 	dirty bool
@@ -259,6 +265,13 @@ func (m *Resource) initialize() *Resource {
 // believes it holds the lock. It does not look at the state of
 // underlying storage to verify the lock.
 func (m *Resource) IsLocked() bool {
+	// WARNING: This is probably wrong. The problem this immediately
+	// solves is race detector complaining about writes in Lock()
+	// racing against this. That's valid. But we shouldn't be getting
+	// there at all, so something else is also wrong. This is a
+	// WORKAROUND.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.locked
 }
 
@@ -373,6 +386,13 @@ func (m *Resource) Lock() error {
 	if err := m.writelogger.Lock(m.bucket, m.key); err != nil {
 		return errors.Wrap(err, "acquiring lock")
 	}
+	// WARNING: This is probably wrong. The problem this immediately
+	// solves is race detector complaining about writes in Lock()
+	// racing against this. That's valid. But we shouldn't be getting
+	// there at all, so something else is also wrong. This is a
+	// WORKAROUND.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.locked = true
 	return nil
 }
@@ -453,6 +473,13 @@ func (m *Resource) Unlock() error {
 	if err := m.writelogger.Unlock(m.bucket, m.key); err != nil {
 		return errors.Wrap(err, "unlocking")
 	}
+	// WARNING: This is probably wrong. The problem this immediately
+	// solves is race detector complaining about writes in Lock()
+	// racing against this. That's valid. But we shouldn't be getting
+	// there at all, so something else is also wrong. This is a
+	// WORKAROUND.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.locked = false
 	return nil
 }

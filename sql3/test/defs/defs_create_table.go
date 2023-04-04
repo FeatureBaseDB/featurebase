@@ -32,6 +32,13 @@ var createTable = TableTest{
 			ExpErr: "expected literal, found bad",
 		},
 		{
+			name: "minAboveMax",
+			SQLs: sqls(
+				"create table bar (_id id, i1 int min 20 max 19)",
+			),
+			ExpErr: "int field min cannot be greater than max",
+		},
+		{
 			name: "commentString",
 			SQLs: sqls(
 				"create table bar (_id id, i1 int) comment 'this should work'",

@@ -89,6 +89,21 @@ func TestFeaturebaseVersion(t *testing.T) {
 		t.Fatalf("unmarshalling version: %v", err)
 	}
 	v := vh.Version
+	expectedTag := os.Getenv("IDK_FEATUREBASE_TAG")
+	if expectedTag != "" {
+		// if a tag is set, we're in a tagged pipeline, and the version
+		// should just be vX.Y or something similar, without a commit
+		// hash. in that case, the tag passed to us from the environment
+		// will look like vX.Y, but the version reported by the version
+		// endpoint is just X.Y. Argh.
+		if v != expectedTag && ("v"+v) != expectedTag {
+			t.Fatalf("version %s does not match expected tag %s", v, expectedTag)
+		}
+		t.Logf("featurebase version %q matches expectations", expectedTag)
+		return
+	}
+	// no tag. we expect to always have a hash, and if there's a specific
+	// expected hash, we verify it.
 	expectedHash := os.Getenv("IDK_FEATUREBASE_HASH")
 	if expectedHash == "" {
 		t.Skipf("featurebase version: %s [no expected version]", v)

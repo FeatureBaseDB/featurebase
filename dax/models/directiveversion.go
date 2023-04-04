@@ -7,7 +7,7 @@ import (
 
 // DirectiveVersion holds what version the current directive is
 type DirectiveVersion struct {
-	ID        int       `json:"id" db:"id"`
+	ID        string    `json:"id" db:"id"`
 	Version   int       `json:"version" db:"version"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`

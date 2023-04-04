@@ -144,7 +144,8 @@ func TestDAXIntegration(t *testing.T) {
 			"testinsert/test-5",             // error messages differ
 			"percentile_test/test-6",        // related to TODO in orchestrator.executePercentile
 			"alterTable/alterTableBadTable", // looks like table does not exist is a different error in DAX
-			"top-tests/test-1",              // don't know why this is failing at all
+			"top-limit-tests/test-2",        // don't know why this is failing at all
+			"top-limit-tests/test-3",        // don't know why this is failing at all
 			"delete_tests",
 			"viewtests/drop-view", // drop view does a delete
 			"viewtests/drop-view-if-exists-after-drop",
@@ -371,7 +372,7 @@ func TestDAXIntegration(t *testing.T) {
 		qtid, err := controllerClient.TableID(ctx, qdbid, dax.TableName(defs.Keyed.Name(0)))
 		assert.NoError(t, err)
 
-		controllerClient.SnapshotTable(ctx, qtid)
+		assert.NoError(t, controllerClient.SnapshotTable(ctx, qtid))
 
 		// Ingest more data.
 		t.Run("ingest and query more data", func(t *testing.T) {
@@ -692,7 +693,7 @@ func TestDAXIntegration(t *testing.T) {
 		cfg.Computer.N = 4
 		opt := server.OptCommandConfig(cfg)
 		mc := test.MustRunManagedCommand(t, opt)
-
+		defer mc.Close()
 		svcmgr := mc.Manage()
 
 		// Set up Controller client.

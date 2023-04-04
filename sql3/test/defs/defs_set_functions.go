@@ -37,10 +37,78 @@ var setLiteralTests = TableTest{
 			Compare: CompareExactUnordered,
 		},
 		{
+			// SetContainsAllSelectList
+			name: "set-contains-all-select-list",
+			SQLs: sqls(
+				"select _id, setcontainsall(event, ['POST']) from selectwithsetliterals",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), true),
+				row(int64(2), false),
+				row(int64(3), true),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			// SetContainsAnySelectList
+			name: "set-contains-any-select-list",
+			SQLs: sqls(
+				"select _id, setcontainsany(event, ['POST', 'DELETE']) from selectwithsetliterals",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), true),
+				row(int64(2), false),
+				row(int64(3), true),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
 			// SetContainsSelectListInt
 			name: "set-contains-select-list-int",
 			SQLs: sqls(
 				"select _id, setcontains(ievent, 101) from selectwithsetliterals",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), nil),
+				row(int64(2), nil),
+				row(int64(3), true),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			// SetContainsSelectAllListInt
+			name: "set-contains-select-all-list-int",
+			SQLs: sqls(
+				"select _id, setcontainsall(ievent, [101]) from selectwithsetliterals",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(int64(1), nil),
+				row(int64(2), nil),
+				row(int64(3), true),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			// SetContainsSelectAnyListInt
+			name: "set-contains-select-any-list-int",
+			SQLs: sqls(
+				"select _id, setcontainsany(ievent, [100, 101, 102]) from selectwithsetliterals",
 			),
 			ExpHdrs: hdrs(
 				hdr("_id", fldTypeID),

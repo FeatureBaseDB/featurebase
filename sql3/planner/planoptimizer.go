@@ -1,4 +1,4 @@
-// Copyright 2021 Molecula Corp. All rights reserved.
+// Copyright 2023 Molecula Corp. All rights reserved.
 
 package planner
 
@@ -14,6 +14,8 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
+//TODO(pok) give every expression an id 'Expr1234' and use that to match on
+//TODO(pok) have a rule to eliminate PlanOpRelAlias
 //TODO(pok) push filter down into join condition if terms reference either side of join
 //TODO(pok) push order by down as far as possible
 //TODO(pok) you can't group by _id in PQL, so we need to not use a PQL group by operator here
@@ -707,6 +709,10 @@ func tryToReplaceGroupByWithPQLAggregate(ctx context.Context, a *ExecutionPlanne
 							return n, true, err
 						}
 						thisNode.Aggregates[i] = newAgg
+
+					// these two can't be done in PQL
+					case *corrPlanExpression, *varPlanExpression:
+						return thisNode, true, nil
 
 					case types.Aggregable:
 						switch ref := aggregable.FirstChildExpr().(type) {
