@@ -118,6 +118,30 @@ var deleteTests = TableTest{
 			ExpRows: rows(),
 			Compare: CompareExactUnordered,
 		},
+		// inner joins in delete are apparently not supported yet
+		// when they are, this will fill in test coverage for expressionanalyzer.go
+		/*
+			{
+				SQLs: sqls(
+					"delete from del_all_types a1 inner join del_all_types a2 on a1._id=a2._id where a1._id in (select _id from del_all_types);",
+				),
+				ExpHdrs: hdrs(
+					hdr("_id", fldTypeID),
+				),
+				ExpRows: rows(),
+				Compare: CompareExactUnordered,
+			},
+			{
+				SQLs: sqls(
+					"select _id from del_all_types;",
+				),
+				ExpHdrs: hdrs(
+					hdr("_id", fldTypeID),
+				),
+				ExpRows: rows(),
+				Compare: CompareExactUnordered,
+			},
+		*/
 
 		// dates
 		{
