@@ -114,7 +114,7 @@ func TestHashTable_Get(t *testing.T) {
 	key := "478"
 	value := "Hi"
 
-	page.PutKeyValueInPageSlot(0, []byte(key), []byte(value))
+	d.putKeyValueInPageSlot(page, 0, []byte(key), []byte(value))
 	page.WriteSlotCount(int16(1))
 
 	result, _, err := d.Get([]byte(key))
@@ -150,7 +150,7 @@ func TestHashTable_Put(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.bufferPool.UnpinPage(page.ID())
-	err = addToPage(page, 5)
+	err = addToPage(d, page, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestHashTable_Put_ShouldIncreaseSize_WhenTableIsFull(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.bufferPool.UnpinPage(page.ID())
-	err = addToPage(page, 227) // keys per page with key 12, value 20
+	err = addToPage(d, page, 227) // keys per page with key 12, value 20
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestHashTable_PutShouldIncrementLD_WhenPageIsFull(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.bufferPool.UnpinPage(page.ID())
-	err = addToPage(page, 227) // keys per page with key 12, value 20
+	err = addToPage(d, page, 227) // keys per page with key 12, value 20
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +241,10 @@ func TestHashTable_Put_INT(t *testing.T) {
 		}
 	}
 
+	// for _, x := range d.directory {
+	// fmt.Printf("{ObjectID: 0, Shard: 0, Page: %d},\n", x.Page)
+	// }
+
 	assert.Equal(t, []bufferpool.PageID{
 		{ObjectID: 0, Shard: 0, Page: 0},
 		{ObjectID: 0, Shard: 0, Page: 1},
@@ -250,26 +254,26 @@ func TestHashTable_Put_INT(t *testing.T) {
 		{ObjectID: 0, Shard: 0, Page: 7},
 		{ObjectID: 0, Shard: 0, Page: 6},
 		{ObjectID: 0, Shard: 0, Page: 5},
-		{ObjectID: 0, Shard: 0, Page: 13},
+		{ObjectID: 0, Shard: 0, Page: 12},
 		{ObjectID: 0, Shard: 0, Page: 15},
-		{ObjectID: 0, Shard: 0, Page: 11},
+		{ObjectID: 0, Shard: 0, Page: 13},
 		{ObjectID: 0, Shard: 0, Page: 9},
 		{ObjectID: 0, Shard: 0, Page: 8},
 		{ObjectID: 0, Shard: 0, Page: 14},
+		{ObjectID: 0, Shard: 0, Page: 11},
 		{ObjectID: 0, Shard: 0, Page: 10},
-		{ObjectID: 0, Shard: 0, Page: 12},
 		{ObjectID: 0, Shard: 0, Page: 28},
-		{ObjectID: 0, Shard: 0, Page: 25},
-		{ObjectID: 0, Shard: 0, Page: 21},
-		{ObjectID: 0, Shard: 0, Page: 18},
-		{ObjectID: 0, Shard: 0, Page: 4},
+		{ObjectID: 0, Shard: 0, Page: 24},
+		{ObjectID: 0, Shard: 0, Page: 22},
+		{ObjectID: 0, Shard: 0, Page: 19},
+		{ObjectID: 0, Shard: 0, Page: 30},
 		{ObjectID: 0, Shard: 0, Page: 20},
 		{ObjectID: 0, Shard: 0, Page: 29},
-		{ObjectID: 0, Shard: 0, Page: 19},
+		{ObjectID: 0, Shard: 0, Page: 18},
 		{ObjectID: 0, Shard: 0, Page: 27},
-		{ObjectID: 0, Shard: 0, Page: 24},
+		{ObjectID: 0, Shard: 0, Page: 25},
+		{ObjectID: 0, Shard: 0, Page: 21},
 		{ObjectID: 0, Shard: 0, Page: 23},
-		{ObjectID: 0, Shard: 0, Page: 22},
 		{ObjectID: 0, Shard: 0, Page: 17},
 		{ObjectID: 0, Shard: 0, Page: 14},
 		{ObjectID: 0, Shard: 0, Page: 16},
@@ -347,11 +351,11 @@ func BenchmarkHashTable_Put_Many_Keys(b *testing.B) {
 	}
 }
 
-func addToPage(page *bufferpool.Page, numberOfRecords int) error {
+func addToPage(table *ExtendibleHashTable, page *bufferpool.Page, numberOfRecords int) error {
 	for i := 0; i < numberOfRecords; i++ {
 		//fmt.Printf("writing record %d\n", i+1)
 		itoa := strconv.Itoa(i)
-		err := page.PutKeyValueInPageSlot(int16(i), []byte("key"+itoa), []byte("value foo bar"))
+		err := table.putKeyValueInPageSlot(page, int16(i), []byte("key"+itoa), []byte("value foo bar"))
 		if err != nil {
 			return err
 		}

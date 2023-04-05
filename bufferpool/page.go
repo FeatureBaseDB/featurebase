@@ -2,7 +2,6 @@ package bufferpool
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"sync"
 )
@@ -39,8 +38,8 @@ const PAGE_TYPE_HASH_TABLE = 12
 // | <start of slot array 1..slotCount>                 |
 // |----------------------------------------------------|
 // | 52     | slotcount     |  slot entry is int16      |
-// |        |  * slotwidth  |   values (payloadOffset,  |
-// |        |  * #slots     |   payloadLength)          |
+// |        |  * slotwidth  |   values (payloadOffset)  |
+// |        |  * #slots     |  				            |
 // |----------------------------------------------------|
 // | <free space>                                       |
 // |----------------------------------------------------|
@@ -52,6 +51,12 @@ const PAGE_TYPE_HASH_TABLE = 12
 // keyLength (int16)
 // keyBytes
 // ptrValue (int64) (page number)
+
+// == hash table payload chunk ==
+// keyLength (int16)
+// keyBytes
+// rowPayloadChunkLen (int16)
+// rowPayloadChunkBytes
 
 // == leaf payload chunk ==
 // keyLength (int16)
@@ -87,15 +92,16 @@ const PAGE_SLOTS_START_OFFSET = 52  // offset 52
 // PAGE_SLOT_LENGTH is the size of the page slot offset value.
 const PAGE_SLOT_LENGTH = 2
 
-// 1k is the max key size for now
+// MAX_KEY_ON_PAGE_SIZE is 1k; the max key size for now
 // we can make this bigger later with overflow
 const MAX_KEY_ON_PAGE_SIZE = 1024
 
-// 768 bytes is the max payload on a page before we overflow
-// this gives us 1792 bytes for key and payload
-// available space on a page after header is 8144 ish
-// this gives us room for 4 key/value @ 2036 bytes per page, so
-// there is a little bit of wiggle room
+// MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE bytes is the max payload on a
+// page before we overflow. The default of 768 (assumming max key size)
+// gives us 1792 bytes for key and payload.
+// Thus available space on a page after header is 8144 (ish)
+// This gives us room for 4 key/value @ 2036 bytes per page, plus
+// a little bit of wiggle room.
 const MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE = 768
 
 type PageLatchState int
@@ -239,49 +245,6 @@ func (p *Page) WritePageSlot(slot int16, value PageSlot) {
 	binary.BigEndian.PutUint16(p.data[offset:], uint16(value.PayloadOffset))
 }
 
-// TODO(pok) deprecate this once we get b+tree working, this
-// is just used in hash table right now
-func (p *Page) PutKeyValueInPageSlot(slotNumber int16, keyBytes []byte, payloadBytes []byte) error {
-	freeSpaceOffset := p.ReadFreeSpaceOffset()
-
-	keyLength := len(keyBytes)
-	payloadChunkLength := len(payloadBytes)
-
-	// check for overflow
-	if payloadChunkLength > MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE {
-		return errors.New("overflow")
-	}
-
-	totalPayloadSize := p.ComputeLeafPayloadTotalLength(keyLength, payloadChunkLength)
-
-	// check to make sure we don't blow free space
-	if p.FreeSpaceOnPage() < int16(totalPayloadSize) {
-		return errors.New("page is full")
-	}
-
-	// compute the new free space offset
-	freeSpaceOffset -= int16(totalPayloadSize)
-	offset := freeSpaceOffset
-
-	// write the header
-	offset = p.WriteLeafPagePayloadHeader(offset, int16(keyLength), keyBytes, 0, 0, int32(payloadChunkLength))
-
-	// write the payload
-	p.WriteLeafPagePayloadBytes(offset, int16(payloadChunkLength), payloadBytes)
-
-	// update the free space offset
-	p.WriteFreeSpaceOffset(int16(freeSpaceOffset))
-
-	// make a slot
-	slot := PageSlot{
-		PayloadOffset: freeSpaceOffset,
-	}
-	// write the slot
-	p.WritePageSlot(slotNumber, slot)
-
-	return nil
-}
-
 func (p *Page) ComputeInternalPayloadTotalLength(keyLength int) int32 {
 	l := /*keyLength*/ 2 + keyLength + /*ptrValue*/ 8
 	return int32(l)
@@ -301,6 +264,11 @@ func (p *Page) ComputeLeafPayloadTotalLength(keyLength int, payloadLength int) i
 	if l > MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE {
 		l += 8 + 4 // add overflow ptr and total payload size
 	}
+	return int32(l)
+}
+
+func (p *Page) ComputeHashPayloadTotalLength(keyLength int, payloadLength int) int32 {
+	l := /*keyLength*/ 2 + keyLength + /*payLoadLength*/ 2 + payloadLength
 	return int32(l)
 }
 
@@ -338,6 +306,21 @@ func (p *Page) ReadLeafPagePayloadBytes(offset int16) (int16, []byte) {
 	chunkBytes := make([]byte, chunkLen)
 	copy(chunkBytes, p.data[offset:offset+chunkLen])
 	return chunkLen, chunkBytes
+}
+
+func (p *Page) WriteHashPagePayloadBytes(offset int16, keyLen int16, keyBytes []byte, payloadChunkLength int16, payloadChunkBytes []byte) {
+	// write key len
+	binary.BigEndian.PutUint16(p.data[offset:], uint16(keyLen))
+	offset += 2
+	// write key
+	copy(p.data[offset:], keyBytes)
+	offset += keyLen
+	// chunk length
+	binary.BigEndian.PutUint16(p.data[offset:], uint16(payloadChunkLength))
+	offset += 2
+	// now copy the payload bytes
+	copy(p.data[offset:], payloadChunkBytes)
+	p.isDirty = true
 }
 
 func (p *Page) WriteInternalPageChunk(offset int16, chunk InternalPageChunk) {
@@ -500,16 +483,6 @@ func (l *LeafPayload) ValueLength(page *Page) int32 {
 	return valueLen
 }
 
-// only call this if you are sure this there is no overflow
-func (l *LeafPayload) ValueAsBytes(page *Page) []byte {
-	offset := l.valueOffset(page)
-	valueLen := int32(binary.BigEndian.Uint32(page.data[offset:]))
-	offset += 4
-	result := make([]byte, valueLen)
-	copy(result, page.data[offset:int32(offset)+valueLen])
-	return result
-}
-
 func (l *LeafPayload) GetPayloadReader(page *Page) LeafPagePayLoadReader {
 	offset := l.BaseOffset
 	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
@@ -549,6 +522,42 @@ func (l *LeafPayload) IsVisibleToTID(page *Page, tid int64) bool {
 	return true
 }
 
+type HashPayload struct {
+	BaseOffset int16
+}
+
+func (l *HashPayload) valueOffset(page *Page) int16 {
+	offset := l.BaseOffset
+	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2 + keyLen
+	return offset
+}
+
+func (l *HashPayload) ValueLength(page *Page) int16 {
+	offset := l.valueOffset(page)
+	valueLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	return valueLen
+}
+
+func (l *HashPayload) GetPayloadReader(page *Page) HashPagePayLoadReader {
+	offset := l.BaseOffset
+	keyLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2
+	keyBytes := make([]byte, keyLen)
+	copy(keyBytes, page.data[offset:offset+keyLen])
+	offset += keyLen
+	valueLen := int16(binary.BigEndian.Uint16(page.data[offset:]))
+	offset += 2
+	valueBytes := make([]byte, valueLen)
+	copy(valueBytes, page.data[offset:int16(offset)+valueLen])
+	return HashPagePayLoadReader{
+		KeyLength:          keyLen,
+		KeyBytes:           keyBytes,
+		PayloadChunkLength: valueLen,
+		PayloadChunkBytes:  valueBytes,
+	}
+}
+
 type PageSlot struct {
 	PayloadOffset int16
 }
@@ -563,6 +572,22 @@ func (s *PageSlot) InternalPayload(page *Page) InternalPayload {
 
 func (s *PageSlot) LeafPayload(page *Page) LeafPayload {
 	return LeafPayload{BaseOffset: s.PayloadOffset}
+}
+
+func (s *PageSlot) HashPayload(page *Page) HashPayload {
+	return HashPayload{BaseOffset: s.PayloadOffset}
+}
+
+type HashPagePayLoadReader struct {
+	KeyLength          int16
+	KeyBytes           []byte
+	PayloadChunkLength int16
+	PayloadChunkBytes  []byte
+}
+
+func (pc *HashPagePayLoadReader) Length() int32 {
+	l := /*KeyLength*/ 2 + pc.KeyLength + /*PayLoadChunkLength*/ 2 + pc.PayloadChunkLength
+	return int32(l)
 }
 
 type LeafPagePayLoadReader struct {

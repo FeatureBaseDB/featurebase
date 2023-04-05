@@ -2,6 +2,7 @@ package extendiblehash
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/featurebasedb/featurebase/v3/bufferpool"
@@ -18,7 +19,7 @@ type ExtendibleHashTable struct {
 
 // NewExtendibleHashTable creates a new ExtendibleHashTable
 func NewExtendibleHashTable(keyLength int, valueLength int, bufferPool *bufferpool.BufferPool) (*ExtendibleHashTable, error) {
-	bytesPerKV := keyLength + valueLength + bufferpool.PAGE_SLOT_LENGTH
+	bytesPerKV := /* keyLength */ 2 + keyLength + /* valueLength */ 2 + valueLength + bufferpool.PAGE_SLOT_LENGTH
 	keysPerPage := int(bufferpool.PAGE_SIZE-bufferpool.PAGE_SLOTS_START_OFFSET) / bytesPerKV
 
 	//create the root page
@@ -54,8 +55,9 @@ func (e *ExtendibleHashTable) Get(key []byte) ([]byte, bool, error) {
 	index, found := e.findKey(page, key)
 	if found {
 		slot := page.ReadPageSlot(int16(index))
-		lpl := slot.LeafPayload(page)
-		return lpl.ValueAsBytes(page), true, nil
+		lpl := slot.HashPayload(page)
+		rdr := lpl.GetPayloadReader(page)
+		return rdr.PayloadChunkBytes, true, nil
 	}
 	return []byte{}, false, nil
 }
@@ -162,21 +164,21 @@ func (e *ExtendibleHashTable) splitOnKey(page *bufferpool.Page, key []byte) erro
 		if slot == nil {
 			break
 		}
-		pl := slot.KeyPayload(page)
-		lpl := slot.LeafPayload(page)
-		keyBytes := pl.KeyBytes(page)
+		lpl := slot.HashPayload(page)
+		rdr := lpl.GetPayloadReader(page)
+		keyBytes := rdr.KeyBytes
 		k := string(keyBytes)
 		h := Key(k).Hash()
 
 		if h&hiBit > 0 {
 			sc := p1.ReadSlotCount()
-			p1.PutKeyValueInPageSlot(sc, keyBytes, lpl.ValueAsBytes(page))
+			e.putKeyValueInPageSlot(p1, sc, keyBytes, rdr.PayloadChunkBytes)
 			// update the slot count
 			p1.WriteSlotCount(int16(sc + 1))
 
 		} else {
 			sc := p0.ReadSlotCount()
-			p0.PutKeyValueInPageSlot(sc, keyBytes, lpl.ValueAsBytes(page))
+			e.putKeyValueInPageSlot(p0, sc, keyBytes, rdr.PayloadChunkBytes)
 			// update the slot count
 			p0.WriteSlotCount(int16(sc + 1))
 		}
@@ -196,44 +198,54 @@ func (e *ExtendibleHashTable) splitOnKey(page *bufferpool.Page, key []byte) erro
 }
 
 func (e *ExtendibleHashTable) cleanPage(page *bufferpool.Page) error {
-	scratch := e.bufferPool.ScratchPage()
-	// copy page number
-	scratch.WritePageNumber(page.ID().Page)
-	// set the page type
-	scratch.WritePageType(bufferpool.PAGE_TYPE_HASH_TABLE)
-	// copy local depth
-	scratch.WriteLocalDepth(page.ReadLocalDepth())
+	// 1. make a scratch page
+	// 2. iterate the slots on this page and copy data
+	// 3. put the scratch page back over this one
 
-	// copy slots from page to scratch
-	si := bufferpool.NewPageSlotIterator(page, 0)
-	for {
-		slot := si.Next()
-		if slot == nil {
-			break
-		}
-		pl := slot.KeyPayload(page)
-		lpl := slot.LeafPayload(page)
-		scratch.PutKeyValueInPageSlot(si.Cursor(), pl.KeyBytes(page), lpl.ValueAsBytes(page))
+	scratchPage := e.bufferPool.ScratchPage()
+	scratchPage.WritePageType(bufferpool.PAGE_TYPE_BTREE_LEAF)
+	scratchPage.WritePageNumber(page.ID().Page)
+	freeSpaceOffset := scratchPage.ReadFreeSpaceOffset()
+
+	slotCount := int(page.ReadSlotCount())
+
+	for i := 0; i < slotCount; i++ {
+
+		// read the slot from the page
+		s := page.ReadPageSlot(int16(i))
+		// read the chunk from the page
+		lbl := s.HashPayload(page)
+		c := lbl.GetPayloadReader(page)
+
+		// mod the freespace offset based on the size of the chunk
+		freeSpaceOffset -= int16(c.Length())
+		// update the values in the slot
+		s.PayloadOffset = freeSpaceOffset
+
+		// write the chunk
+		scratchPage.WriteHashPagePayloadBytes(freeSpaceOffset, c.KeyLength, c.KeyBytes, c.PayloadChunkLength, c.PayloadChunkBytes)
+		//write the slot
+		scratchPage.WritePageSlot(int16(i), s)
+
+		// update the free space offset
+		scratchPage.WriteFreeSpaceOffset(int16(freeSpaceOffset))
 	}
+	// set the new slotcounts
+	scratchPage.WriteSlotCount(int16(slotCount))
 
-	// update the slot count
-	scratch.WriteSlotCount(page.ReadSlotCount())
+	scratchPage.CopyPageTo(page)
 
-	// write scratch back to page
-	scratch.CopyPageTo(page)
 	return nil
 }
 
 func (e *ExtendibleHashTable) keyValueWillFit(page *bufferpool.Page, key, value []byte) bool {
 	// will this k/v fit on the page?
-	slotLen := 4                          // we need 2 len words for the slot
-	chunkLen := 6 + len(key) + len(value) // int16 len + int32 len + len of respective []byte
+	payloadLen := page.ComputeHashPayloadTotalLength(len(key), len(value))
 	fs := page.FreeSpaceOnPage()
-	return fs > (int16(slotLen) + int16(chunkLen))
+	return fs > int16(payloadLen)
 }
 
 func (e *ExtendibleHashTable) putKeyValue(page *bufferpool.Page, key, value []byte) error {
-
 	if !e.keyValueWillFit(page, key, value) {
 		// try to garbage collect the page first
 		err := e.cleanPage(page)
@@ -248,25 +260,59 @@ func (e *ExtendibleHashTable) putKeyValue(page *bufferpool.Page, key, value []by
 	slotCount := int(page.ReadSlotCount())
 	if found {
 		// we found the key, so we will update the value
-		err := page.PutKeyValueInPageSlot(int16(newIndex), []byte(key), []byte(value))
+		err := e.putKeyValueInPageSlot(page, int16(newIndex), []byte(key), []byte(value))
 		if err != nil {
 			return err
 		}
 	} else {
-		// TODO(pok) should check in WriteSlot() to see if we are out space too...
-
-		// TODO(pok) we should move all the slots in one fell swoop, because,... performance
-		// move all the slots after where we are going to insert
+		// move the slots over if needed
 		for j := slotCount; j > newIndex; j-- {
 			sl := page.ReadPageSlot(int16(j - 1))
 			page.WritePageSlot(int16(j), sl)
 		}
-		err := page.PutKeyValueInPageSlot(int16(newIndex), []byte(key), []byte(value))
+		err := e.putKeyValueInPageSlot(page, int16(newIndex), []byte(key), []byte(value))
 		if err != nil {
 			return err
 		}
 		// update the slot count
 		page.WriteSlotCount(int16(slotCount + 1))
 	}
+	return nil
+}
+
+func (e *ExtendibleHashTable) putKeyValueInPageSlot(page *bufferpool.Page, slotNumber int16, keyBytes []byte, payloadBytes []byte) error {
+	freeSpaceOffset := page.ReadFreeSpaceOffset()
+
+	keyLength := len(keyBytes)
+	payloadChunkLength := len(payloadBytes)
+
+	// check for overflow
+	if payloadChunkLength > bufferpool.MAX_PAYLOAD_CHUNK_SIZE_ON_PAGE {
+		return errors.New("overflow")
+	}
+
+	totalPayloadSize := page.ComputeHashPayloadTotalLength(keyLength, payloadChunkLength)
+
+	// check to make sure we don't blow free space
+	if page.FreeSpaceOnPage() < int16(totalPayloadSize) {
+		return errors.New("page is full")
+	}
+
+	// compute the new free space offset
+	freeSpaceOffset -= int16(totalPayloadSize)
+
+	// write the payload
+	page.WriteHashPagePayloadBytes(freeSpaceOffset, int16(keyLength), keyBytes, int16(payloadChunkLength), payloadBytes)
+
+	// update the free space offset
+	page.WriteFreeSpaceOffset(int16(freeSpaceOffset))
+
+	// make a slot
+	slot := bufferpool.PageSlot{
+		PayloadOffset: freeSpaceOffset,
+	}
+	// write the slot
+	page.WritePageSlot(slotNumber, slot)
+
 	return nil
 }

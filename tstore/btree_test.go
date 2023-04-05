@@ -137,8 +137,8 @@ func TestAddItemsToBTreeAndValidate_VeryWide(t *testing.T) {
 	for j, i := range inserts {
 		rr[0] = int64(i)
 
-		for j := 0; j < numCols; j++ {
-			rr[j+1] = fmt.Sprintf("%04d", j)
+		for jn := 0; jn < numCols; jn++ {
+			rr[jn+1] = fmt.Sprintf("%04d", jn)
 		}
 
 		tup := &BTreeTuple{

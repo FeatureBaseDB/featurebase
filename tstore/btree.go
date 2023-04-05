@@ -561,6 +561,7 @@ func (b *BTree) compactLeafPage(node *BTreeNode) error {
 
 	scratchPage := b.bufferpool.ScratchPage()
 	scratchPage.WritePageType(bufferpool.PAGE_TYPE_BTREE_LEAF)
+	scratchPage.WritePageNumber(node.page.ID().Page)
 	freeSpaceOffset := scratchPage.ReadFreeSpaceOffset()
 
 	slotCount := int(node.page.ReadSlotCount())
@@ -608,6 +609,7 @@ func (b *BTree) compactInternalPage(node *BTreeNode) error {
 
 	scratchPage := b.bufferpool.ScratchPage()
 	scratchPage.WritePageType(bufferpool.PAGE_TYPE_BTREE_INTERNAL)
+	scratchPage.WritePageNumber(node.page.ID().Page)
 	freeSpaceOffset := scratchPage.ReadFreeSpaceOffset()
 
 	slotCount := int(node.page.ReadSlotCount())
@@ -742,16 +744,16 @@ func (b *BTree) writeLeafEntryInSlot(node *BTreeNode, slotNumber int16, keyBytes
 			lowWater = hiWater
 			// set the payload chunk length to the free space on the page
 			// less the 2 byte chunk length
-			payloadChunkLength := overflowFreeSpace - 2
-			if payloadChunkLength > bytesRemaining {
-				payloadChunkLength = bytesRemaining
+			overflowChunkLength := overflowFreeSpace - 2
+			if overflowChunkLength > bytesRemaining {
+				overflowChunkLength = bytesRemaining
 			}
-			hiWater += payloadChunkLength
+			hiWater += overflowChunkLength
 
 			overflowPage.page.WriteNextPointer(bufferpool.PageID{ObjectID: b.objectID, Shard: b.shard, Page: nextOverflowPtr})
 
 			overflowPage.page.WriteLeafPagePayloadBytes(bufferpool.PAGE_SLOTS_START_OFFSET, int16(payloadChunkLength), payloadBytes[lowWater:hiWater])
-			bytesRemaining -= payloadChunkLength
+			bytesRemaining -= overflowChunkLength
 			overflowPage = nextOverflowPage
 		}
 
