@@ -94,9 +94,9 @@ func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt 
 	columns := []types.PlanExpression{
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",
-			columnName:  "onject_id",
+			columnName:  string(dax.PrimaryKeyFieldName),
 			columnIndex: 0,
-			dataType:    parser.NewDataTypeInt(),
+			dataType:    parser.NewDataTypeString(),
 		},
 		&qualifiedRefPlanExpression{
 			tableName:   "fb_tables",

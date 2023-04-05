@@ -478,6 +478,7 @@ var sql1TestsQueries = TableTest{
 				hdr("cache_type", fldTypeString),
 				hdr("cache_size", fldTypeInt),
 				hdr("scale", fldTypeInt),
+				hdr("length", fldTypeInt),
 				hdr("min", fldTypeInt),
 				hdr("max", fldTypeInt),
 				hdr("timeunit", fldTypeString),
