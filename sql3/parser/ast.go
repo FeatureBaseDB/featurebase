@@ -4037,7 +4037,7 @@ func (s *SelectStatement) String() string {
 	}
 
 	if s.Limit.IsValid() {
-		fmt.Fprintf(&buf, "LIMIT %s", s.LimitExpr.String())
+		fmt.Fprintf(&buf, " LIMIT %s", s.LimitExpr.String())
 	}
 
 	return buf.String()

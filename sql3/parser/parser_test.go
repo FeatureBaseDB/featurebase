@@ -3347,16 +3347,106 @@ func TestParser_ParseStatement(t *testing.T) {
 				},
 			},
 		})
-
-		if false {
-			// not working because we don't support limit(x), we support top(x), i think?
-			AssertParseStatement(t, `SELECT fld1, fld2, COUNT(*) FROM tbl where fld1 = 1 group by fld1, fld2 limit 1`, nil) // 1:73: expected semicolon or EOF, found limit
-			AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score asc limit 5`, nil)                   // 1:55: expected semicolon or EOF, found limit
-			AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score desc limit 5`, nil)                  // 1:56: expected semicolon or EOF, found limit
-			AssertParseStatement(t, `SELECT fld FROM tbl limit 10`, nil)                                                    // 1:27: expected semicolon or EOF, found 10
-			AssertParseStatement(t, `SELECT fld FROM tbl limit 10, 5`, nil)                                                 // 1:27: expected semicolon or EOF, found 10
-			AssertParseStatement(t, `SELECT _id FROM tbl where not fld = 1 limit 10`, nil)                                  // 1:31: expected EXISTS, found fld
-		}
+		AssertParseStatement(t, `SELECT fld1, fld2, COUNT(*) FROM tbl where fld1 = 1 group by fld1, fld2 limit 1`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld1"}},
+				{Expr: &parser.Ident{NamePos: pos(13), Name: "fld2"}},
+				{
+					Expr: &parser.Call{
+						Name:   &parser.Ident{NamePos: pos(19), Name: "COUNT"},
+						Lparen: pos(24),
+						Star:   pos(25),
+						Rparen: pos(26),
+					},
+				},
+			},
+			From:   pos(28),
+			Source: &parser.QualifiedTableName{Name: &parser.Ident{NamePos: pos(33), Name: "tbl"}},
+			Where:  pos(37),
+			WhereExpr: &parser.BinaryExpr{
+				X:     &parser.Ident{NamePos: pos(43), Name: "fld1"},
+				OpPos: pos(48),
+				Op:    parser.EQ,
+				Y: &parser.IntegerLit{
+					ValuePos: pos(50),
+					Value:    "1",
+				},
+			},
+			Group:   pos(52),
+			GroupBy: pos(58),
+			GroupByExprs: []parser.Expr{
+				&parser.Ident{NamePos: pos(61), Name: "fld1"},
+				&parser.Ident{NamePos: pos(67), Name: "fld2"},
+			},
+			Limit: pos(72),
+			LimitExpr: &parser.IntegerLit{
+				ValuePos: pos(78),
+				Value:    "1",
+			},
+		})
+		AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score asc limit 5`, &parser.SelectStatement{
+			Select:   pos(0),
+			Distinct: pos(7),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(16), Name: "score"}},
+			},
+			From:    pos(22),
+			Source:  &parser.QualifiedTableName{Name: &parser.Ident{NamePos: pos(27), Name: "grouper"}},
+			Order:   pos(35),
+			OrderBy: pos(41),
+			OrderingTerms: []*parser.OrderingTerm{
+				{
+					X:   &parser.Ident{NamePos: pos(44), Name: "score"},
+					Asc: pos(50),
+				},
+			},
+			Limit: pos(54),
+			LimitExpr: &parser.IntegerLit{
+				ValuePos: pos(60),
+				Value:    "5",
+			},
+		})
+		AssertParseStatement(t, `SELECT DISTINCT score FROM grouper order by score desc limit 5`, &parser.SelectStatement{
+			Select:   pos(0),
+			Distinct: pos(7),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(16), Name: "score"}},
+			},
+			From:    pos(22),
+			Source:  &parser.QualifiedTableName{Name: &parser.Ident{NamePos: pos(27), Name: "grouper"}},
+			Order:   pos(35),
+			OrderBy: pos(41),
+			OrderingTerms: []*parser.OrderingTerm{
+				{
+					X:    &parser.Ident{NamePos: pos(44), Name: "score"},
+					Desc: pos(50),
+				},
+			},
+			Limit: pos(55),
+			LimitExpr: &parser.IntegerLit{
+				ValuePos: pos(61),
+				Value:    "5",
+			},
+		})
+		AssertParseStatement(t, `SELECT fld FROM tbl limit 10`, &parser.SelectStatement{
+			Select: pos(0),
+			Columns: []*parser.ResultColumn{
+				{Expr: &parser.Ident{NamePos: pos(7), Name: "fld"}},
+			},
+			From:   pos(11),
+			Source: &parser.QualifiedTableName{Name: &parser.Ident{NamePos: pos(16), Name: "tbl"}},
+			Limit:  pos(20),
+			LimitExpr: &parser.IntegerLit{
+				ValuePos: pos(26),
+				Value:    "10",
+			},
+		})
+		// our previous SQL implementation supported "limit 10, 5" to mean a limit of 10 items,
+		// starting from the 5th item. The new implementation does not support this feature yet.
+		// AssertParseStatement(t, `SELECT fld FROM tbl limit 10, 5`, nil)                                                 // 1:27: expected semicolon or EOF, found 10
+		// the previous SQL implementation allowed `where not [condition]` but we don't currently.
+		// AssertParseStatement(t, `SELECT _id FROM tbl where not fld = 1 limit 10`, nil)                                  // 1:31: expected EXISTS, found fld
 		/*AssertParseStatementError(t, `WITH `, `1:5: expected table name, found 'EOF'`)
 		AssertParseStatementError(t, `WITH cte`, `1:8: expected AS, found 'EOF'`)
 		AssertParseStatementError(t, `WITH cte (`, `1:10: expected column name, found 'EOF'`)
