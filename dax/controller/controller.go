@@ -4,10 +4,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"time"
 
+	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/poller"
@@ -624,19 +624,9 @@ func (c *Controller) translateWorkersToAssignedNodes(tx dax.Transaction, workers
 
 // CreateDatabase adds a database to the schemar.
 func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
-	// check to see if special characters are either first or last in the database name
-	fc := string(qdb.Name[0])
-	// lc := string(qdb.Name[len(qdb.Name)-1])
-	regexpattern := "[$&+,:;=?@#|'<>.^*()%!-]"
-	regex, err := regexp.Compile(regexpattern)
-	if err != nil {
-		c.logger.Printf("error in compiling regex: err %+v", err)
-		return errors.Wrap(err, "error compiling regex")
-	}
-
-	if ok, err := regexp.MatchString(regex.String(), fc); ok {
-		c.logger.Printf("error with database first character, err: %+v", err)
-		return errors.Errorf("invalid first character in database name, char: %s", fc)
+	// Sanitizing database name
+	if err := pilosa.ValidateName(string(qdb.Name)); err != nil {
+		return errors.Errorf("error with creating database, database name invalid: %v", err)
 	}
 
 	// Create Database ID.
