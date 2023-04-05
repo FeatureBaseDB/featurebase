@@ -2,6 +2,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/featurebasedb/featurebase/v3/tstore"
+	"github.com/featurebasedb/featurebase/v3/wireprotocol"
 	"github.com/pkg/errors"
 )
 
@@ -162,4 +164,83 @@ func (tr *TupleResults) MarshalJSON() ([]byte, error) {
 	results["schema"] = columns
 	results["rows"] = rows
 	return json.Marshal(results)
+}
+
+func (tr *TupleResults) ToBytes() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	// get the bytes for the schema
+	b, err := wireprotocol.WriteSchema(tr.TupleSchema)
+	if err != nil {
+		return nil, errors.Wrap(err, "serializing tuple schema")
+	}
+	_, err = buf.Write(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "serializing tuple schema")
+	}
+
+	// build a map of columnNames to column indexes in the schema
+	/*
+		colMap := make(map[string]int)
+		for i, sc := range tr.TupleSchema {
+			colMap[sc.ColumnName] = i
+		}
+	*/
+
+	// iterate the tupleData - outside loop is rows
+	for _, trow := range tr.rows {
+		rb, err := wireprotocol.WriteRow(trow, tr.TupleSchema)
+		if err != nil {
+			return nil, errors.Wrap(err, "serializing tuple row")
+		}
+		_, err = buf.Write(rb)
+		if err != nil {
+			return nil, errors.Wrap(err, "serializing tuple row")
+		}
+	}
+
+	// write done to the buffer
+	b = wireprotocol.WriteDone()
+	_, err = buf.Write(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "serializing tuples")
+	}
+
+	return buf.Bytes(), nil
+}
+
+func NewTupleResultFromBytes(data []byte) (*TupleResults, error) {
+	rdr := bytes.NewReader(data)
+	_, err := wireprotocol.ExpectToken(rdr, wireprotocol.TOKEN_SCHEMA_INFO)
+	if err != nil {
+		return nil, err
+	}
+	// get the row schema from the import data
+	schema, err := wireprotocol.ReadSchema(rdr)
+	if err != nil {
+		return nil, err
+	}
+
+	// read rows until we get to the end
+	tk, err := wireprotocol.ReadToken(rdr)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]types.Row, 0)
+	for tk == wireprotocol.TOKEN_ROW {
+		row, err := wireprotocol.ReadRow(rdr, schema)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+
+		tk, err = wireprotocol.ReadToken(rdr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if tk != wireprotocol.TOKEN_DONE {
+		return nil, errors.Errorf("unexpected token '%d'", tk)
+	}
+	return &TupleResults{TupleSchema: schema, rows: rows}, nil
 }

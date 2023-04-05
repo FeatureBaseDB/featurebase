@@ -175,6 +175,7 @@ message QueryResult {
 	DataFrame DataFrame = 18;
 	ArrowTable ArrowTable = 19;
 	ExtractedIDMatrixSorted ExtractedIDMatrixSorted = 20;
+	TupleResults TupleResults = 21;
 }
 
 message ImportRequest {
@@ -276,6 +277,9 @@ message DataFrame{
 	bytes Data =1;
 }
 message ArrowTable{
+	bytes Data =1;
+}
+message TupleResults{
 	bytes Data =1;
 }
 

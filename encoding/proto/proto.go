@@ -561,6 +561,9 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *pb.QueryRespon
 		case pilosa.ExtractedIDMatrixSorted:
 			resp.Results[i].Type = queryResultTypeExtractedIDMatrixSorted
 			resp.Results[i].ExtractedIDMatrixSorted = s.endcodeExtractedIDMatrixSorted(result)
+		case *pilosa.TupleResults:
+			resp.Results[i].Type = queryResultTypeTupleResults
+			resp.Results[i].TupleResults = s.encodeTupleResults(result)
 		default:
 			panic(fmt.Errorf("unknown type: %T", m.Results[i]))
 		}
@@ -1351,6 +1354,7 @@ const (
 	queryResultTypeDataFrame
 	queryResultTypeArrowTable
 	queryResultTypeExtractedIDMatrixSorted
+	queryResultTypeTupleResults
 )
 
 func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
@@ -1395,6 +1399,8 @@ func (s Serializer) decodeQueryResult(pb *pb.QueryResult) interface{} {
 		return s.decodeArrowTable(pb.ArrowTable)
 	case queryResultTypeExtractedIDMatrixSorted:
 		return s.decodeExtractedIDMatrixSorted(pb.ExtractedIDMatrixSorted)
+	case queryResultTypeTupleResults:
+		return s.decodeTupleResults(pb.TupleResults)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1990,4 +1996,23 @@ func (s Serializer) decodeRowKVs(m []*pb.RowKV) []pilosa.RowKV {
 		rows[i] = kv
 	}
 	return rows
+}
+
+func (s Serializer) decodeTupleResults(tr *pb.TupleResults) *pilosa.TupleResults {
+	r, _ := pilosa.NewTupleResultFromBytes(tr.Data)
+	return r
+}
+
+func (s Serializer) encodeTupleResults(tr *pilosa.TupleResults) *pb.TupleResults {
+	if tr == nil {
+		return &pb.TupleResults{} // Generated proto code doesn't like a nil Row.
+	}
+	buff, err := tr.ToBytes()
+	if err != nil {
+		panic(err)
+	}
+	// ugh hate having to swallow error here
+	return &pb.TupleResults{
+		Data: buff,
+	}
 }

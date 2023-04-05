@@ -15,7 +15,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -36,7 +35,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
@@ -1816,7 +1814,6 @@ func (api *API) importTuples(ctx context.Context, tx Tx, shard uint64, tableName
 	}
 
 	b, err := index.GetTStore(shard)
-
 	if err != nil {
 		return err
 	}
