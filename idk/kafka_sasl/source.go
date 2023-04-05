@@ -1,10 +1,8 @@
 package kafka_sasl
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"sort"
@@ -14,7 +12,6 @@ import (
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/featurebasedb/featurebase/v3/idk"
-	"github.com/featurebasedb/featurebase/v3/idk/common"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
@@ -24,14 +21,13 @@ import (
 // achieve concurrency, create multiple Sources.
 type Source struct {
 	idk.ConfluentCommand
-	Topics               []string
-	Group                string
-	Log                  logger.Logger
-	Timeout              time.Duration
-	SkipOld              bool
-	Verbose              bool
-	AllowMissingFields   bool
-	consumerCloseTimeout time.Duration
+	Topics             []string
+	Group              string
+	Log                logger.Logger
+	Timeout            time.Duration
+	SkipOld            bool
+	Verbose            bool
+	AllowMissingFields bool
 
 	// Header is a file referencing a file containing JSON header configuration.
 	Header string
@@ -63,15 +59,14 @@ type Source struct {
 // NewSource gets a new Source
 func NewSource() *Source {
 	src := &Source{
-		ConfluentCommand:     idk.ConfluentCommand{},
-		Topics:               []string{"test"},
-		Group:                "group0",
-		Log:                  logger.NopLogger,
-		recordChannel:        make(chan recordWithError),
-		quit:                 make(chan struct{}),
-		ConfigMap:            &confluent.ConfigMap{},
-		highmarks:            make([]confluent.TopicPartition, 0),
-		consumerCloseTimeout: 30,
+		ConfluentCommand: idk.ConfluentCommand{},
+		Topics:           []string{"test"},
+		Group:            "group0",
+		Log:              logger.NopLogger,
+		recordChannel:    make(chan recordWithError),
+		quit:             make(chan struct{}),
+		ConfigMap:        &confluent.ConfigMap{},
+		highmarks:        make([]confluent.TopicPartition, 0),
 	}
 	src.KafkaBootstrapServers = []string{"localhost:9092"}
 
@@ -90,9 +85,8 @@ func (s *Source) Record() (idk.Record, error) {
 	case context.DeadlineExceeded:
 		return nil, idk.ErrFlush
 	default:
-		return nil, errors.Wrap(rec.Err, "failed to fetch record from Kafka")
+		return nil, errors.Wrap(rec.Err, "failed to fetch record from Kafka Confluent")
 	}
-
 	if rec.Record == nil {
 		return nil, idk.ErrFlush
 	}
@@ -171,6 +165,7 @@ func (r *Record) Schema() interface{} { return nil }
 func (r *Record) Commit(ctx context.Context) error {
 	r.src.mu.Lock()
 	defer r.src.mu.Unlock()
+
 	idx, base := r.idx, r.src.spoolBase
 	if idx < base {
 		return errors.New("cannot commit a record that has already been committed")
@@ -184,6 +179,7 @@ func (r *Record) Commit(ctx context.Context) error {
 		}
 		return section[i].Offset > section[j].Offset
 	})
+	// calculate the high marks
 	p := int32(-1)
 	s := ""
 	r.src.highmarks = r.src.highmarks[:0]
@@ -195,16 +191,10 @@ func (r *Record) Commit(ctx context.Context) error {
 		}
 		p = x.Partition
 		s = *x.Topic
-
 	}
-	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)
+	_, err := r.src.CommitMessages(r.src.highmarks)
 	if err != nil {
 		return errors.Wrap(err, "failed to commit messages")
-	}
-	if r.src.Verbose {
-		for _, o := range committedOffsets {
-			r.src.Log.Debugf("t: %v p: %v o: %v", *o.Topic, o.Partition, o.Offset)
-		}
 	}
 
 	r.src.spool = remaining
@@ -219,17 +209,12 @@ func (r *Record) Data() []interface{} {
 
 // Open initializes the kafka source.
 func (s *Source) Open() error {
-	cfg, err := common.SetupConfluent(&s.ConfluentCommand)
-	if err != nil {
-		return err
-	}
-	s.ConfigMap = cfg
-
 	if len(s.Header) == 0 && len(s.HeaderFields) == 0 {
-		return errors.New("needs header specification file (file or fields)")
+		return errors.New("needs header specification (from file or from existing fields)")
 	}
 
 	var headerData []byte
+	var err error
 	if s.Header != "" {
 		headerData, err = os.ReadFile(s.Header)
 		if err != nil {
@@ -256,30 +241,21 @@ func (s *Source) Open() error {
 			return err
 		}
 	}
-
 	// when there is no initial offset in Kafka or if the current offset does not exist any more,
 	// use this as starting offset:
 	//  "earliest": automatically reset the offset to the earliest offset
 	//  "latest": automatically reset the offset to the latest offset
-	offset := "earliest"
-	if s.SkipOld {
-		offset = "latest"
-	}
-	err = s.ConfigMap.SetKey("auto.offset.reset", offset)
+	err = s.ConfigMap.SetKey("auto.offset.reset", "earliest")
 	if err != nil {
 		return err
 	}
-	if s.Verbose {
-		buf := bytes.NewBufferString("Confluent Config Map:")
-		encoder := json.NewEncoder(buf)
-		err = encoder.Encode(s.ConfigMap)
+	if s.SkipOld {
+		err = s.ConfigMap.SetKey("auto.offset.reset", "latest")
 		if err != nil {
 			return err
 		}
-		s.Log.Debugf(buf.String())
-		stv, iv := confluent.LibraryVersion()
-		s.Log.Debugf("version:(%v) %v", iv, stv)
 	}
+
 	cl, err := confluent.NewConsumer(s.ConfigMap)
 	if err != nil {
 		return errors.Wrap(err, "new consumer")
@@ -290,10 +266,6 @@ func (s *Source) Open() error {
 	err = cl.SubscribeTopics(s.Topics, nil)
 	if err != nil {
 		return errors.Wrap(err, "subscribe topics")
-	}
-
-	if s.Verbose {
-		s.Log.Debugf("subscribed to %v", s.Topics)
 	}
 
 	s.client = cl
@@ -317,9 +289,6 @@ func (c *Source) generator() {
 		select {
 
 		case <-c.quit:
-			if c.Verbose {
-				c.Log.Debugf("source quit")
-			}
 			return
 		default:
 			ev := c.client.Poll(100)
@@ -333,9 +302,6 @@ func (c *Source) generator() {
 			case confluent.AssignedPartitions:
 				err := c.client.Assign(e.Partitions)
 				if err != nil {
-					if c.Verbose {
-						c.Log.Debugf("quit AssignedParitions")
-					}
 					return
 				}
 				// If we received an `RevokedPartitions` event, we need to revoke this
@@ -344,9 +310,6 @@ func (c *Source) generator() {
 			case confluent.RevokedPartitions:
 				err := c.client.Unassign()
 				if err != nil {
-					if c.Verbose {
-						c.Log.Debugf("quit RevokeParkitions")
-					}
 					return
 				}
 
@@ -358,9 +321,6 @@ func (c *Source) generator() {
 				select {
 				case c.recordChannel <- msg:
 				case <-c.quit:
-					if c.Verbose {
-						c.Log.Debugf("source quit Error")
-					}
 					return
 				}
 
@@ -377,17 +337,9 @@ func (c *Source) generator() {
 				select {
 				case c.recordChannel <- msg:
 				case <-c.quit:
-					if c.Verbose {
-						c.Log.Debugf("source quit Message")
-					}
 					return
 				}
-			case confluent.OffsetsCommitted:
-				c.Log.Debugf("commited %s", e)
 			default:
-				if c.Verbose {
-					c.Log.Debugf("ignored %#v", ev)
-				}
 				continue // consumer doesn't care about all event types (e.g. OffsetsCommitted)
 			}
 		}
@@ -398,26 +350,10 @@ func (c *Source) generator() {
 func (s *Source) Close() error {
 	if s.client != nil {
 		if s.opened { // only close opened sources
-			var err error
-			closedReturned := make(chan error, 1)
-			// send quit message to polling routine & wait for it to exit
 			s.quit <- struct{}{}
 			s.wg.Wait()
-			s.Log.Debugf("Trying to close consumer %s...", s.client.String())
-			go func() {
-				closedReturned <- s.client.Close()
-			}()
-			start := time.Now()
-			select {
-			case err = <-closedReturned:
-				if err == nil {
-					s.Log.Debugf("Successfully closed consumer %s!", s.client.String())
-					s.opened = false
-				}
-			case <-time.After(time.Duration(s.consumerCloseTimeout * 1000 * 1000 * 1000)):
-				err = fmt.Errorf("unable to properly close consumer %s after %f seconds", s.client.String(), time.Since(start).Seconds())
-			}
-
+			err := s.client.Close()
+			s.opened = false
 			return errors.Wrap(err, "closing kafka consumer")
 		}
 	}

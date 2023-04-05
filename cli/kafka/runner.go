@@ -41,6 +41,7 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	idkMain.OffsetMode = true
 	idkMain.Namespace = "sql_kafka_runner"
 	idkMain.Pprof = "" // don't initialize pprof until we actually use it in tests
+
 	kr := &Runner{
 		Main:    *idkMain,
 		Hosts:   cfg.Hosts,
@@ -50,10 +51,16 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 		Timeout: cfg.Timeout,
 	}
 
+	kr.KafkaBootstrapServers = cfg.Hosts
+	kr.SchemaRegistryURL = cfg.SchemaRegistryURL
+	kr.SchemaRegistryUsername = cfg.SchemaRegistryUsername
+	kr.SchemaRegistryPassword = cfg.SchemaRegistryPassword
+
 	// NewSource should be set based on the encoding of the source (e.g. JSON, Avro)
-	if cfg.Encode == encodingTypeAvro {
+	switch cfg.Encode {
+	case encodingTypeAvro:
 		kr.GetAvroNewSource(cfg)
-	} else if cfg.Encode == encodingTypeJSON {
+	default:
 		kr.GetJSONNewSource(cfg)
 	}
 
@@ -61,9 +68,10 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 }
 
 func (r *Runner) GetJSONNewSource(cfg ConfigForIDK) {
+
 	r.NewSource = func() (idk.Source, error) {
 		source := kafka_sasl.NewSource()
-		source.KafkaBootstrapServers = r.Hosts
+		//source.KafkaBootstrapServers = r.Hosts
 		source.Group = r.Group
 		source.Topics = r.Topics
 		source.Log = r.Main.Log()
@@ -86,19 +94,23 @@ func (r *Runner) GetJSONNewSource(cfg ConfigForIDK) {
 }
 
 func (r *Runner) GetAvroNewSource(cfg ConfigForIDK) {
+
 	r.NewSource = func() (idk.Source, error) {
 		source := kafka.NewSource()
 		source.KafkaBootstrapServers = r.Hosts
+		source.SchemaRegistryURL = cfg.SchemaRegistryURL
+		source.SchemaRegistryUsername = cfg.SchemaRegistryUsername
+		source.SchemaRegistryPassword = cfg.SchemaRegistryPassword
 		source.Group = r.Group
 		source.Topics = r.Topics
 		source.Log = r.Main.Log()
 		source.Timeout = r.Timeout
 		source.KafkaConfiguration = cfg.ConfluentConfig
-		confluentcfg, err := common.SetupConfluent(&r.ConfluentCommand)
+		confluentCfg, err := common.SetupConfluent(&r.ConfluentCommand)
 		if err != nil {
 			return nil, err
 		}
-		source.ConfigMap = confluentcfg
+		source.ConfigMap = confluentCfg
 
 		err = source.Open()
 		if err != nil {

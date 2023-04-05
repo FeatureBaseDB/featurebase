@@ -32,10 +32,14 @@ type Config struct {
 	Table  string  `mapstructure:"table" help:"Destination table name."`
 	Fields []Field `mapstructure:"fields"`
 
+	SchemaRegistryURL      string `mapstructure:"schema-registry-url" help:"host and port of schema registry. Defaults to localhost:8081"`
+	SchemaRegistryUsername string `mapstructure:"schema-registry-username" help:"authenticaion key provided by confluent for schema registry."`
+	SchemaRegistryPassword string `mapstructure:"schema-registry-password" help:"authenticaion secret provided by confluent for schema registry."`
+
 	Encode             string `mapstructure:"encode" help:"Encoding format (currently supported formats: avro, json)"`
 	AllowMissingFields bool   `mapstructure:"allow-missing-fields" help:"allow missing fields in messages from kafka"`
 	MaxMessages        int    `mapstructure:"max-messages" help:"max messages read from kakfka"`
-	ConfluentConfig    string `mapstructure:"confluent-config" help:"max messages read from kakfka"`
+	ConfluentConfig    string `mapstructure:"confluent-config" help:"path to JSON file mapping librdkafka consumer configurations to configuration values"`
 }
 
 // Field is a user-facing configuration field.
@@ -61,6 +65,10 @@ type ConfigForIDK struct {
 	IDField     string
 	PrimaryKeys []string
 	Fields      []idk.RawField
+
+	SchemaRegistryURL      string
+	SchemaRegistryUsername string
+	SchemaRegistryPassword string
 
 	Encode             string
 	AllowMissingFields bool
@@ -117,40 +125,40 @@ func ValidateConfig(c Config) error {
 		return validateConfigJSON(c)
 	case encodingTypeAvro:
 		return validateConfigAvro(c)
+	default:
+		return errors.Errorf("encode configuration value must be %s or %s: got %s", encodingTypeJSON, encodingTypeAvro, c.Encode)
 	}
-
-	return nil
-
 }
 
 func validateConfigJSON(c Config) error {
 
-	if len(c.Fields) > 0 {
+	switch len(c.Fields) {
+	case 0:
 		// We only need to do these checks if any fields are specified at all.
 		// If no fields are specified, that's ok because then we default to
 		// using fields based off the existing table.
-		if len(c.Fields) < 2 {
-			return errors.Errorf("at least two fields are required (one should be a primary key)")
-		} else {
-			var found int
-			for i := range c.Fields {
-				if c.Fields[i].PrimaryKey {
-					found++
-				}
-				if c.Fields[i].Name == "" {
-					return errors.Errorf("a name attribute (which isn't equal to \"\") should exist for all fields")
-				}
-				if c.Fields[i].SourceType == "" {
-					return errors.Errorf("a source-type attribute (which isn't equal to \"\") should exist for all fields")
-				}
+		return nil
+	case 1:
+		return errors.Errorf("at least two fields are required (one should be a primary key)")
+	default:
+		var found int
+		for i := range c.Fields {
+			if c.Fields[i].PrimaryKey {
+				found++
 			}
-			if found < 1 {
-				return errors.Errorf("at least one primary key field is required")
+			if c.Fields[i].Name == "" {
+				return errors.Errorf("a name attribute (which isn't equal to \"\") should exist for all fields")
+			}
+			if c.Fields[i].SourceType == "" {
+				return errors.Errorf("a source-type attribute (which isn't equal to \"\") should exist for all fields")
 			}
 		}
+		if found < 1 {
+			return errors.Errorf("at least one primary key field is required")
+		}
+		return nil
 	}
 
-	return nil
 }
 
 // Only primary key fields required
@@ -181,17 +189,20 @@ func ConvertConfig(c Config) (ConfigForIDK, error) {
 
 	// Copy all the shared members from Config to ConfigForIDK.
 	out := ConfigForIDK{
-		Hosts:              c.Hosts,
-		Group:              c.Group,
-		Topics:             c.Topics,
-		BatchSize:          c.BatchSize,
-		BatchMaxStaleness:  c.BatchMaxStaleness,
-		Timeout:            c.Timeout,
-		Table:              c.Table,
-		Encode:             c.Encode,
-		AllowMissingFields: c.AllowMissingFields,
-		MaxMessages:        c.MaxMessages,
-		ConfluentConfig:    c.ConfluentConfig,
+		Hosts:                  c.Hosts,
+		Group:                  c.Group,
+		Topics:                 c.Topics,
+		BatchSize:              c.BatchSize,
+		BatchMaxStaleness:      c.BatchMaxStaleness,
+		Timeout:                c.Timeout,
+		Table:                  c.Table,
+		Encode:                 c.Encode,
+		AllowMissingFields:     c.AllowMissingFields,
+		MaxMessages:            c.MaxMessages,
+		ConfluentConfig:        c.ConfluentConfig,
+		SchemaRegistryURL:      c.SchemaRegistryURL,
+		SchemaRegistryUsername: c.SchemaRegistryUsername,
+		SchemaRegistryPassword: c.SchemaRegistryPassword,
 	}
 
 	if len(c.Fields) == 0 {
@@ -281,6 +292,11 @@ func ConfigToFields(c Config, primaryKeys []string) ([]*dax.Field, error) {
 	// We don't know if a primary key will be found, so we can't set the
 	// capacity to `len(c.Fields)-1`.
 	out := make([]*dax.Field, 0, len(c.Fields))
+
+	// for avro, let the SchemaManager and IDK handle fields
+	if c.Encode == encodingTypeAvro {
+		return nil, nil
+	}
 
 	for _, fld := range c.Fields {
 		// When we have a single primary key, don't also store that value as a

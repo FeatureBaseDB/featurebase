@@ -10,7 +10,7 @@ func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 
 	cfg, err := kafka.ConfigFromFile(cfgFile)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting config from file")
 	}
 
 	if err := kafka.ValidateConfig(cfg); err != nil {
@@ -49,14 +49,14 @@ func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 		return nil, errors.Wrap(err, "getting fields from config")
 	}
 
-	// for avro, let the SchemaManager and IDK handle fields
-	if cfg.Encode == "avro" {
-		flds = nil
-	}
-
-	return kafka.NewRunner(
+	kr := kafka.NewRunner(
 		idkCfg,
 		batch.NewSQLBatcher(cmd, flds),
 		cmd.stderr,
-	), nil
+	)
+
+	// set pilosa host which is the only IDK config to come through
+	// configuration flags rather than the kafka config file
+	kr.Main.PilosaHosts = []string{cmd.host + ":" + cmd.port}
+	return kr, nil
 }

@@ -6,7 +6,7 @@ batch-size = 1
 batch-max-staleness = "5s"
 timeout = "5s"
 encode = "avro"
-schemaRegistryHost = "localhost:8081"
+schema-registry-url = "SCHEMA_REGISTRY_SERVICE"
 max-messages = MAX_MESSAGES
 
 [[fields]]

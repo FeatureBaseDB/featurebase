@@ -338,3 +338,19 @@ update-mocks-%: install-mock-generator
 	$(eval AWS_SDK_VERSION := $(shell grep 'github.com/aws/aws-sdk-go' ../go.mod | cut -d ' ' -f 2))
 	echo Generating mock for AWS service $(AWS_SERVICE) and SDK version $(AWS_SDK_VERSION) && \
 	$(GOPATH)/bin/mockery --name $*API --output idktest/mocks --filename $(AWS_SERVICE).go --dir $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/$(AWS_SERVICE)/$(AWS_SERVICE)iface
+
+
+# Integration Testing for CLI / fbsql tooling that integrates with IDK tooling.
+test-cli: 
+	$(MAKE) startup
+	$(MAKE) test-cli-integration
+
+TPKG ?= ../cli_test
+test-cli-integration: testenv vendor
+	$(DOCKER_COMPOSE) build cli-test
+	$(DOCKER_COMPOSE) run -e  KAFKA_RUNNER_TEST_FEATUREBASE_HOST=pilosa:10101 \
+				-e  KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST=pilosa:20101 \
+				-e  KAFKA_RUNNER_TEST_KAFKA_HOST=kafka:9092 \
+                -e  KAFKA_RUNNER_TEST_REGISTRY_HOST=schema-registry:8081 \
+				-T cli-test bash -c "set -o pipefail; go test -v -mod=vendor -tags=odbc,dynamic -run TestKafkaRunner -covermode=atomic -coverpkg=$(TPKG) -coverprofile=/testdata/$(PROJECT)_base_coverage.out"
+

@@ -48,7 +48,8 @@ type Source struct {
 	highmarks     []confluent.TopicPartition
 	client        *confluent.Consumer
 	recordChannel chan recordWithError
-	ConfigMap     *confluent.ConfigMap
+
+	ConfigMap *confluent.ConfigMap
 
 	// lastSchemaID and lastSchema keep track of the most recent
 	// schema in use. We expect this not to change often, but when it
@@ -189,10 +190,6 @@ func (s *Source) toPDKRecord(vals map[string]interface{}) []interface{} {
 	return data
 }
 
-func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.TopicPartition, error) {
-	return s.client.CommitOffsets(recs)
-}
-
 type Record struct {
 	src        *Source
 	topic      string
@@ -208,10 +205,6 @@ func (r *Record) StreamOffset() (string, uint64) {
 }
 
 var _ idk.OffsetStreamRecord = &Record{}
-
-func (r *Record) Schema() interface{} {
-	return r.avroSchema
-}
 
 func (r *Record) Commit(ctx context.Context) error {
 	r.src.mu.Lock()
@@ -232,9 +225,10 @@ func (r *Record) Commit(ctx context.Context) error {
 	p := int32(-1)
 	s := ""
 	r.src.highmarks = r.src.highmarks[:0]
-
 	// sort by increasing partition, decreasing offset
+
 	for _, x := range section {
+
 		if s != *x.Topic || p != x.Partition {
 			r.src.highmarks = append(r.src.highmarks, x)
 		}
@@ -246,6 +240,7 @@ func (r *Record) Commit(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to commit messages")
 	}
+
 	if r.src.Verbose {
 		for _, o := range committedOffsets {
 			r.src.Log.Debugf("t: %v p: %v o: %v", *o.Topic, o.Partition, o.Offset)
@@ -254,12 +249,19 @@ func (r *Record) Commit(ctx context.Context) error {
 
 	r.src.spool = remaining
 	r.src.spoolBase = idx
-
 	return nil
 }
 
 func (r *Record) Data() []interface{} {
 	return r.data
+}
+
+func (r *Record) Schema() interface{} {
+	return r.avroSchema
+}
+
+func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.TopicPartition, error) {
+	return s.client.CommitOffsets(recs)
 }
 
 // Open initializes the kafka source. (i.e. creating and configuring a consumer)
@@ -268,7 +270,7 @@ func (r *Record) Data() []interface{} {
 func (s *Source) Open() error {
 	cfg, err := common.SetupConfluent(&s.ConfluentCommand)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up confluent command")
 	}
 	s.ConfigMap = cfg
 
@@ -284,8 +286,6 @@ func (s *Source) Open() error {
 		}
 		s.httpClient = getHTTPClient(tlsConfig)
 	}
-
-	// group
 	if s.Group != "" {
 		err = s.ConfigMap.SetKey("group.id", s.Group)
 		if err != nil {
@@ -321,8 +321,6 @@ func (s *Source) Open() error {
 		return errors.Wrap(err, "new consumer")
 	}
 
-	// by default, Kafka will use the stored offset (the latest committed message) and continue on from there.
-	// to skip old msgs, use rebalanceCbSkipOld to manually set offset to the end
 	err = cl.SubscribeTopics(s.Topics, nil)
 	if err != nil {
 		return errors.Wrap(err, "subscribe topics")
@@ -335,11 +333,27 @@ func (s *Source) Open() error {
 	s.client = cl
 	s.opened = true
 	s.wg.Add(1)
-
 	go func() {
 		s.generator()
 	}()
 
+	return nil
+}
+
+func (s *Source) cleanRegistryURL() error {
+	// We can't immediately url.Parse the RegistryURL because parsing
+	// a host without a scheme is invalid. First we'll check for a
+	// scheme and add the default http:// if needed.
+	if !strings.Contains(s.SchemaRegistryURL, "://") {
+		s.SchemaRegistryURL = "http://" + s.SchemaRegistryURL
+	}
+
+	SchemaRegistryURL, err := url.Parse(s.SchemaRegistryURL)
+	if err != nil {
+		return errors.Wrap(err, "parse registry URL")
+	}
+
+	s.SchemaRegistryURL = SchemaRegistryURL.String()
 	return nil
 }
 
@@ -457,23 +471,6 @@ func (s *Source) Close() error {
 			return errors.Wrap(err, "closing kafka consumer")
 		}
 	}
-	return nil
-}
-
-func (s *Source) cleanRegistryURL() error {
-	// We can't immediately url.Parse the RegistryURL because parsing
-	// a host without a scheme is invalid. First we'll check for a
-	// scheme and add the default http:// if needed.
-	if !strings.Contains(s.SchemaRegistryURL, "://") {
-		s.SchemaRegistryURL = "http://" + s.SchemaRegistryURL
-	}
-
-	SchemaRegistryURL, err := url.Parse(s.SchemaRegistryURL)
-	if err != nil {
-		return errors.Wrap(err, "parse registry URL")
-	}
-
-	s.SchemaRegistryURL = SchemaRegistryURL.String()
 	return nil
 }
 

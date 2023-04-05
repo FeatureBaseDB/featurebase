@@ -365,6 +365,9 @@ run go tests dax/test/dax:
 run go tests cli kafka integration:
   stage: integration
   image: golang:$GOVERSION
+  tags:
+  - shell
+  - aws
   variables:
     KAFKA_RUNNER_TEST_FEATUREBASE_HOST: pilosa:10101
     KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST: pilosa:20101
@@ -375,19 +378,14 @@ run go tests cli kafka integration:
   script:
     - echo "running fbsql integration tests"
     - cd ./idk/
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-pilosa
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-zookeeper
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-kafka
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-schema-registry
-    - cd ..
-    - go test -coverprofile=coverage-cli-kafka-integration.out -run -timeout=10m TestKafkaRunner ./cli
+    - make test-cli
   after_script:
     - cd ./idk/
+    - make save-pilosa-logs
     - make shutdown
-    - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   artifacts:
     paths:
-      - coverage-cli-kafka-integration.out
+      - ./idk/testdata/*_coverage.out
   needs:
     - job: build amd container fb
     - job: build fbsql amd64
@@ -523,16 +521,23 @@ upload to sonarcloud:
 package for linux amd64:
   stage: build
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
     GOOS: "linux"
     GOARCH: "amd64"
   script:
+    - export VERSION=$(git describe --tags 2>/dev/null || echo unknown)
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
-    - make package
+    - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
+    - nfpm version # smoke
+    - mv "featurebase_${GOOS}_${GOARCH}" featurebase
+    - mv "./build/fbsql_${GOOS}_${GOARCH}" fbsql
+    - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
+    - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
+  needs:
+    - build featurebase
+    - build fbsql amd64
   artifacts:
     paths:
       - "*.deb"
@@ -561,16 +566,23 @@ trigger_m-cloud-images:
 package for linux arm64:
   stage: build
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
     GOOS: "linux"
     GOARCH: "arm64"
   script:
+    - export VERSION=$(git describe --tags 2>/dev/null || echo unknown)
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
-    - make package
+    - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
+    - nfpm version # smoke
+    - mv "featurebase_${GOOS}_${GOARCH}" featurebase
+    - mv "./build/fbsql_${GOOS}_${GOARCH}" fbsql
+    - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
+    - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
+  needs:
+    - build featurebase
+    - build fbsql arm64 linux
   artifacts:
     paths:
       - "*.deb"

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -340,9 +341,11 @@ func verifyQueryReponse(t *testing.T, wqr *featurebase.WireQueryResponse, expect
 		for j, element := range line {
 			switch newElement := element.(type) {
 			case featurebase.StringSet:
-				newline[j] = newElement.SortedStringSlice()
+				sort.Strings(newElement)
+				newline[j] = newElement
 			case featurebase.IDSet:
-				newline[j] = newElement.SortedInt64Slice()
+				sort.Slice(newElement, func(i, j int) bool { return newElement[i] < newElement[j] })
+				newline[j] = newElement
 			default:
 				newline[j] = element
 			}

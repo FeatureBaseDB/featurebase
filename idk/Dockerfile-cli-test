@@ -1,0 +1,28 @@
+ARG GO_VERSION=1.19
+
+FROM golang:${GO_VERSION} as build_base
+
+WORKDIR /
+RUN ["apt-get","update","-y"]
+RUN ["apt-get","install","-y","git","unixodbc","unixodbc-dev","netcat", "build-essential","musl-tools"]
+RUN ["git", "clone", "https://github.com/edenhill/librdkafka.git"]
+WORKDIR /librdkafka
+RUN ["./configure", "--install-deps"] 
+RUN ["./configure", "--prefix", "/usr"]
+RUN ["make"]
+RUN ["make", "install"]
+
+FROM build_base
+
+ARG KAFKA_RUNNER_TEST_FEATUREBASE_HOST=pilosa:10101
+ARG KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST=pilosa:20101
+ARG KAFKA_RUNNER_TEST_KAFKA_HOST=kafka:9092
+ARG KAFKA_RUNNER_TEST_REGISTRY_HOST=schema-registry:8081
+
+WORKDIR /go/src/github.com/featurebasedb/featurebase/
+
+COPY . .
+
+WORKDIR /go/src/github.com/featurebasedb/featurebase/cli/
+
+CMD ["go","test","-v","-mod=vendor","-tags=odbc,dynamic" "-run TestKafkaRunner","./..."]
