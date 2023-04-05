@@ -14,7 +14,6 @@ import (
 
 	confluent "github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/featurebasedb/featurebase/v3/idk"
-	"github.com/featurebasedb/featurebase/v3/idk/common"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/pkg/errors"
 )
@@ -219,17 +218,12 @@ func (r *Record) Data() []interface{} {
 
 // Open initializes the kafka source.
 func (s *Source) Open() error {
-	cfg, err := common.SetupConfluent(&s.ConfluentCommand)
-	if err != nil {
-		return err
-	}
-	s.ConfigMap = cfg
-
 	if len(s.Header) == 0 && len(s.HeaderFields) == 0 {
-		return errors.New("needs header specification file (file or fields)")
+		return errors.New("needs header specification (from file or from existing fields)")
 	}
 
 	var headerData []byte
+	var err error
 	if s.Header != "" {
 		headerData, err = os.ReadFile(s.Header)
 		if err != nil {

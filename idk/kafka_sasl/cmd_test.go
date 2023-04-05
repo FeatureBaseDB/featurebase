@@ -1022,6 +1022,7 @@ func TestMaxMsgs(t *testing.T) {
 			producer.Close()
 
 			collector.reset()
+			fmt.Println("able to produce messages")
 			err = m.Run()
 			if err != nil {
 				t.Fatalf("running main: %v", err)

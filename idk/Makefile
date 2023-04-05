@@ -338,3 +338,16 @@ update-mocks-%: install-mock-generator
 	$(eval AWS_SDK_VERSION := $(shell grep 'github.com/aws/aws-sdk-go' ../go.mod | cut -d ' ' -f 2))
 	echo Generating mock for AWS service $(AWS_SERVICE) and SDK version $(AWS_SDK_VERSION) && \
 	$(GOPATH)/bin/mockery --name $*API --output idktest/mocks --filename $(AWS_SERVICE).go --dir $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/$(AWS_SERVICE)/$(AWS_SERVICE)iface
+
+
+### CLI Test Services
+
+cli-startup:
+	apt-get update
+	apt-get install -y pip git
+	pip install docker-compose
+	git clone https://github.com/square/certstrap
+	cd certstrap
+	go build
+	$(MAKE) testenv vendor
+	$(MAKE) startup

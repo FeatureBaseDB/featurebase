@@ -10,7 +10,7 @@ func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 
 	cfg, err := kafka.ConfigFromFile(cfgFile)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting config from file")
 	}
 
 	if err := kafka.ValidateConfig(cfg); err != nil {
@@ -47,11 +47,6 @@ func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 	flds, err := kafka.ConfigToFields(cfg, idkCfg.PrimaryKeys)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting fields from config")
-	}
-
-	// for avro, let the SchemaManager and IDK handle fields
-	if cfg.Encode == "avro" {
-		flds = nil
 	}
 
 	return kafka.NewRunner(

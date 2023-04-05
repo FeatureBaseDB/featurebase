@@ -51,9 +51,10 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	}
 
 	// NewSource should be set based on the encoding of the source (e.g. JSON, Avro)
-	if cfg.Encode == encodingTypeAvro {
+	switch cfg.Encode {
+	case encodingTypeAvro:
 		kr.GetAvroNewSource(cfg)
-	} else if cfg.Encode == encodingTypeJSON {
+	default:
 		kr.GetJSONNewSource(cfg)
 	}
 

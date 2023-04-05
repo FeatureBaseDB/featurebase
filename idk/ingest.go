@@ -309,50 +309,12 @@ func (m *Main) clone() (*Main, error) {
 
 	index = schema.Index(m.Index)
 
-	// use a copy (schema race condition issu)
+	// use a copy (schema race condition issues)
 	mClone := *m
 	mClone.index = index
 
 	return &mClone, nil
 }
-
-// func (m *Main) clone() (*Main, error) {
-// 	var index *pilosaclient.Index
-// 	noOpSchemaManager := false
-
-// 	// If you have a schema manager, it does it's thing. Otherwise, it's a no
-// 	// opt manager. Then you get a default schema. If you get a default schema,
-// 	// you get a default index. This seems fine for IDK. However, for the CLI /
-// 	// SQL kafka runner, we use the m.index to create the dax.Table. If m.index
-// 	// is set to default values, then keys is false even when we don't want it
-// 	// to be. This was causing issue in buildBulkInsert in the batch package of
-// 	// the CLI.
-// 	switch m.SchemaManager.(type) {
-// 	case *nopSchemaManager:
-// 		noOpSchemaManager = true
-// 	}
-
-// 	schema, err := m.SchemaManager.Schema()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if noOpSchemaManager && len(m.PrimaryKeyFields) > 0 {
-// 		// if IDK has PrimaryKeyFields, it expects keyed index
-// 		keys := pilosaclient.OptIndexKeys(true)
-// 		// most queries don't work with this set to false so set to true
-// 		exists := pilosaclient.OptIndexTrackExistence(true)
-// 		index = schema.Index(m.Index, keys, exists)
-// 	} else {
-// 		index = schema.Index(m.Index)
-// 	}
-
-// 	// use a copy (schema race condition issues)
-// 	mClone := *m
-// 	mClone.index = index
-
-// 	return &mClone, nil
-// }
 
 func (m *Main) runIngester(c int, l *msgCounter) error {
 	m.log.Printf("start ingester %d", c)
@@ -2203,7 +2165,7 @@ func (m *Main) newBatch(clientFields []*pilosaclient.Field) (pilosabatch.RecordB
 	ii := pilosaclient.FromClientIndex(m.index)
 	tbl := pilosacore.IndexInfoToTable(ii)
 
-	// Fields. // this is giving bad fieldInfos
+	// Fields.
 	fields := pilosaclient.FromClientFields(clientFields)
 
 	// If a custom Batcher has been defined, use that. Otherwise default to

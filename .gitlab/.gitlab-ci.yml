@@ -375,10 +375,7 @@ run go tests cli kafka integration:
   script:
     - echo "running fbsql integration tests"
     - cd ./idk/
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-pilosa
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-zookeeper
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-kafka
-    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make start-schema-registry
+    - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make cli-startup
     - cd ..
     - go test -coverprofile=coverage-cli-kafka-integration.out -run -timeout=10m TestKafkaRunner ./cli
   after_script:
@@ -532,6 +529,7 @@ package for linux amd64:
   script:
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
     - apt update && apt install nfpm=2.11.3
+    - apt-get update && apt-get install -y -qq musl-tools build-essential
     - make package
   artifacts:
     paths:
@@ -562,6 +560,8 @@ package for linux arm64:
   stage: build
   image: golang:$GOVERSION
   extends: .go-cache
+  tags:
+    - shell-arm64
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
@@ -570,6 +570,7 @@ package for linux arm64:
   script:
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
     - apt update && apt install nfpm=2.11.3
+    - apt-get update && apt-get install -y -qq build-essential
     - make package
   artifacts:
     paths:

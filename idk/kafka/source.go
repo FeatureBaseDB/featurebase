@@ -268,7 +268,7 @@ func (r *Record) Data() []interface{} {
 func (s *Source) Open() error {
 	cfg, err := common.SetupConfluent(&s.ConfluentCommand)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up confluent command")
 	}
 	s.ConfigMap = cfg
 
