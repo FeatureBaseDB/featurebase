@@ -24,27 +24,48 @@ type workerJobService struct {
 	log logger.Logger
 }
 
+// WorkersJobs returns all the workers for the database along with the jobs
+// associated to each worker, even if the number of jobs is 0.
 func (w *workerJobService) WorkersJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerInfo, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
+	// First, get all workers for the database.
 	workers := models.Workers{}
-	err := dt.C.Eager().Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).Order("address asc").All(&workers)
+	sql := fmt.Sprintf("role_%s = true and database_id = ?", roleType)
+	err := dt.C.Where(sql, qdbid.DatabaseID).Order("address asc").All(&workers)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting workers")
 	}
 
+	// Then, get the jobs for each worker. Ideally, we would do this in a single
+	// sql query, but it wasn't clear how to do an Eager() LeftJoin() where
+	// there is a where clause condition on the right side of the join (in this
+	// case, `jobs.role = ?`).
 	ret := make([]dax.WorkerInfo, len(workers))
 	for i, worker := range workers {
 		ret[i].Address = worker.Address
-		ret[i].Jobs = make([]dax.Job, len(worker.Jobs))
-		for j, job := range worker.Jobs {
-			ret[i].Jobs[j] = job.Name
+		jobs, err := jobsForWorker(dt, &worker, roleType)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting jobs for worker")
 		}
+		ret[i].Jobs = jobs
 	}
 
+	return ret, nil
+}
+
+func jobsForWorker(dt *DaxTransaction, worker *models.Worker, roleType dax.RoleType) ([]dax.Job, error) {
+	jobs := models.Jobs{}
+	if err := dt.C.Where("worker_id = ? and role = ?", worker.ID, roleType).Order("name asc").All(&jobs); err != nil {
+		return nil, errors.Wrapf(err, "getting jobs for worker: %s", worker.ID)
+	}
+	ret := make([]dax.Job, len(jobs))
+	for i := range jobs {
+		ret[i] = jobs[i].Name
+	}
 	return ret, nil
 }
 
@@ -54,7 +75,8 @@ func (w *workerJobService) WorkerCount(tx dax.Transaction, roleType dax.RoleType
 		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 	worker := &models.Worker{}
-	cnt, err := dt.C.Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).Count(worker)
+	sql := fmt.Sprintf("role_%s = true and database_id = ?", roleType)
+	cnt, err := dt.C.Where(sql, qdbid.DatabaseID).Count(worker)
 	return cnt, errors.Wrap(err, "getting count")
 }
 
@@ -65,7 +87,8 @@ func (w *workerJobService) ListWorkers(tx dax.Transaction, roleType dax.RoleType
 	}
 
 	workers := models.Workers{}
-	err := dt.C.Select("address").Where("role = ? and database_id = ?", roleType, qdbid.DatabaseID).Order("address asc").All(&workers)
+	sql := fmt.Sprintf("role_%s = true and database_id = ?", roleType)
+	err := dt.C.Select("address").Where(sql, qdbid.DatabaseID).Order("address asc").All(&workers)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting workers")
 	}
@@ -85,12 +108,13 @@ func (w *workerJobService) CreateWorker(tx dax.Transaction, roleType dax.RoleTyp
 	}
 
 	worker := &models.Worker{}
-	err := dt.C.RawQuery("UPDATE workers SET database_id = ? WHERE role = ? and address = ? RETURNING workers.ID", qdbid.DatabaseID, roleType, addr).First(worker)
+	sql := fmt.Sprintf("UPDATE workers SET database_id = ? WHERE role_%s = true and address = ? RETURNING workers.ID", roleType)
+	err := dt.C.RawQuery(sql, qdbid.DatabaseID, addr).First(worker)
 
 	return errors.Wrap(err, "associating worker to database")
 }
 
-func (w *workerJobService) FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error {
+func (w *workerJobService) ReleaseWorkers(tx dax.Transaction, addrs ...dax.Address) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -104,34 +128,17 @@ func (w *workerJobService) FreeWorkers(tx dax.Transaction, addrs ...dax.Address)
 	return errors.Wrap(err, "updating workers")
 }
 
-func (w *workerJobService) DeleteWorker(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address) error {
+func (w *workerJobService) AssignWorkerToJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job ...dax.Job) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	worker := &models.Worker{}
-	err := dt.C.Where("address = ? and role = ? and database_id = ?", addr, roleType, qdbid.DatabaseID).First(worker)
-	if isNoRowsError(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "getting worker")
-	}
-
-	err = dt.C.Destroy(worker)
-	return errors.Wrap(err, "deleting worker")
-}
-
-func (w *workerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job ...dax.Job) error {
-	dt, ok := tx.(*DaxTransaction)
-	if !ok {
-		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
-	}
-
-	worker := &models.Worker{}
-	err := dt.C.Where("address = ? and role = ?", addr, roleType).First(worker)
+	sql := fmt.Sprintf("address = ? and role_%s = true", roleType)
+	err := dt.C.Where(sql, addr).First(worker)
 	if err != nil {
-		return errors.Wrap(err, "getting worker")
+		return errors.Wrapf(err, "getting worker: (%s) %s", roleType, addr)
 	}
 
 	jobs := models.Jobs{}
@@ -140,35 +147,35 @@ func (w *workerJobService) CreateJobs(tx dax.Transaction, roleType dax.RoleType,
 		return errors.Wrap(err, "updating jobs")
 	}
 
-	// create jobs not in "jobs"
-	toCreate := jobsNotUpdated(job, jobs, worker)
+	// Assign jobs not in "jobs", and therefore didn't get updated by the
+	// previous sql statement.
+	toBeAssigned := jobsNotAssigned(job, jobs, roleType, worker)
 
-	err = dt.C.Create(toCreate)
-	if err != nil {
+	if err := dt.C.Create(toBeAssigned); err != nil {
 		return errors.Wrap(err, "creating jobs")
 	}
 
-	return errors.Wrap(err, "creating jobs")
+	return nil
 }
 
-func jobsNotUpdated(incomingJobs []dax.Job, created models.Jobs, worker *models.Worker) (toCreate models.Jobs) {
+func jobsNotAssigned(incomingJobs []dax.Job, assigned models.Jobs, roleType dax.RoleType, worker *models.Worker) (toBeAssigned models.Jobs) {
 outer:
 	for _, incJob := range incomingJobs {
-		for _, createdJob := range created {
-			if createdJob.Name == incJob {
+		for _, assignedJob := range assigned {
+			if assignedJob.Name == incJob {
 				continue outer
 			}
 		}
-		toCreate = append(toCreate,
+		toBeAssigned = append(toBeAssigned,
 			models.Job{
 				Name:       incJob,
-				Role:       worker.Role,
+				Role:       roleType,
 				DatabaseID: dax.DatabaseID(worker.DatabaseID.String),
 				Worker:     worker,
 			},
 		)
 	}
-	return toCreate
+	return toBeAssigned
 }
 
 func (w *workerJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr dax.Address, job dax.Job) error {
@@ -178,7 +185,8 @@ func (w *workerJobService) DeleteJob(tx dax.Transaction, roleType dax.RoleType, 
 	}
 
 	worker := &models.Worker{}
-	err := dt.C.Select("id").Where("role = ? and database_id = ? and address = ?", roleType, qdbid.DatabaseID, addr).First(worker)
+	sql := fmt.Sprintf("role_%s = true and database_id = ? and address = ?", roleType)
+	err := dt.C.Select("id").Where(sql, qdbid.DatabaseID, addr).First(worker)
 	if err != nil {
 		return errors.Wrap(err, "getting worker")
 	}
@@ -227,7 +235,7 @@ func (w *workerJobService) DeleteJobsForTable(tx dax.Transaction, roleType dax.R
 	return idiffs, errors.Wrap(err, "deleting jobs")
 }
 
-func (w *workerJobService) JobCounts(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addr ...dax.Address) (map[dax.Address]int, error) {
+func (w *workerJobService) JobCounts(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, addrs ...dax.Address) (map[dax.Address]int, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -238,18 +246,23 @@ func (w *workerJobService) JobCounts(tx dax.Transaction, roleType dax.RoleType, 
 		Count   int         `db:"count"`
 	}{}
 	var err error
-	if len(addr) == 0 {
+	if len(addrs) == 0 {
 		qstring := `select address, count(*) as count
                 from workers w inner join jobs j on j.worker_id = w.id
-                where w.database_id = ? and w.role = ?
+                where w.database_id = ? and w.role_%s = true
+				and j.role = ?
                 group by w.address`
-		err = dt.C.RawQuery(qstring, qdbid.DatabaseID, roleType).All(&results)
+		sql := fmt.Sprintf(qstring, roleType)
+		err = dt.C.RawQuery(sql, qdbid.DatabaseID, roleType).All(&results)
 	} else {
 		qstring := `select address, count(*) as count
                 from workers w inner join jobs j on j.worker_id = w.id
-                where w.address in (?) and w.database_id = ? and w.role = ?
+                where w.database_id = ? and w.role_%s = true
+				and j.role = ?
+                and w.address in (?)
                 group by w.address`
-		err = dt.C.RawQuery(qstring, addr, qdbid.DatabaseID, roleType).All(&results)
+		sql := fmt.Sprintf(qstring, roleType)
+		err = dt.C.RawQuery(sql, qdbid.DatabaseID, roleType, addrs).All(&results)
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "querying for jobs")
@@ -269,20 +282,15 @@ func (w *workerJobService) ListJobs(tx dax.Transaction, roleType dax.RoleType, q
 	}
 
 	worker := &models.Worker{}
-	err := dt.C.Eager().Where("role = ? and database_id = ? and address = ?", roleType, qdbid.DatabaseID, addr).First(worker)
+	sql := fmt.Sprintf("role_%s = true and database_id = ? and address = ?", roleType)
+	err := dt.C.Where(sql, qdbid.DatabaseID, addr).First(worker)
 	if isNoRowsError(err) {
 		return nil, nil
 	} else if err != nil {
 		return nil, errors.Wrap(err, "getting worker")
 	}
 
-	ret := make(dax.Jobs, len(worker.Jobs))
-	// jobs are ordered by "name asc" defined on the worker model.
-	for i, job := range worker.Jobs {
-		ret[i] = job.Name
-	}
-
-	return ret, nil
+	return jobsForWorker(dt, worker, roleType)
 }
 
 func (w *workerJobService) DatabaseForWorker(tx dax.Transaction, addr dax.Address) dax.DatabaseKey {

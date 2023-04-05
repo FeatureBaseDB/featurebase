@@ -20,12 +20,25 @@ func TestFreeWorkerService(t *testing.T) {
 		}
 	}()
 
-	fwSvc := sqldb.NewFreeWorkerService(nil)
-	err = fwSvc.AddWorkers(tx, role, nodeAddr, nodeAddr2, nodeAddr3, nodeAddr4, nodeAddr5)
-	require.NoError(t, err)
+	node1 := &dax.Node{Address: nodeAddr, RoleTypes: dax.AllRoleTypes}
+	node2 := &dax.Node{Address: nodeAddr2, RoleTypes: dax.AllRoleTypes}
+	node3 := &dax.Node{Address: nodeAddr3, RoleTypes: dax.AllRoleTypes}
+	node4 := &dax.Node{Address: nodeAddr4, RoleTypes: dax.AllRoleTypes}
+	node5 := &dax.Node{Address: nodeAddr5, RoleTypes: dax.AllRoleTypes}
 
-	err = fwSvc.RemoveWorker(tx, role, nodeAddr2)
-	require.NoError(t, err)
+	workerReg := sqldb.NewWorkerRegistry(nil)
+
+	// Add some workers.
+	require.NoError(t, workerReg.AddWorker(tx, node1))
+	require.NoError(t, workerReg.AddWorker(tx, node2))
+	require.NoError(t, workerReg.AddWorker(tx, node3))
+	require.NoError(t, workerReg.AddWorker(tx, node4))
+	require.NoError(t, workerReg.AddWorker(tx, node5))
+
+	// Remove one of the workers.
+	require.NoError(t, workerReg.RemoveWorker(tx, node2.Address))
+
+	fwSvc := sqldb.NewFreeWorkerService(nil)
 
 	addrs, err := fwSvc.ListWorkers(tx, role)
 	require.NoError(t, err)

@@ -40,9 +40,14 @@ func TestWorkerJobService(t *testing.T) {
 	wjSvc := sqldb.NewWorkerJobService(nil)
 	qdbid := dax.QualifiedDatabaseID{OrganizationID: orgID, DatabaseID: dbID}
 
+	node := &dax.Node{
+		Address:   nodeAddr,
+		RoleTypes: []dax.RoleType{role},
+	}
+
 	// have to create a free worker before you can create a worker job worker
-	fwSvc := sqldb.NewFreeWorkerService(nil)
-	err = fwSvc.AddWorkers(tx, role, nodeAddr)
+	workerReg := sqldb.NewWorkerRegistry(nil)
+	err = workerReg.AddWorker(tx, node)
 	require.NoError(t, err)
 
 	err = wjSvc.CreateWorker(tx, role, qdbid, nodeAddr)
@@ -65,7 +70,7 @@ func TestWorkerJobService(t *testing.T) {
 	err = fjSvc.CreateJobs(tx, role, qdbid, job1, job2, job3)
 	require.NoError(t, err)
 
-	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job1, job2)
+	err = wjSvc.AssignWorkerToJobs(tx, role, qdbid, nodeAddr, job1, job2)
 	require.NoError(t, err)
 
 	jobs, err := wjSvc.ListJobs(tx, role, qdbid, nodeAddr)
@@ -85,7 +90,7 @@ func TestWorkerJobService(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, dax.Addresses{nodeAddr}, addrs)
 
-	err = wjSvc.CreateJobs(tx, role, qdbid, nodeAddr, job3)
+	err = wjSvc.AssignWorkerToJobs(tx, role, qdbid, nodeAddr, job3)
 	require.NoError(t, err)
 
 	jcs, err := wjSvc.JobCounts(tx, role, qdbid, nodeAddr)
@@ -110,7 +115,7 @@ func TestWorkerJobService(t *testing.T) {
 	dk := wjSvc.DatabaseForWorker(tx, nodeAddr)
 	require.EqualValues(t, "db__orgid__blah", dk)
 
-	err = wjSvc.DeleteWorker(tx, role, qdbid, nodeAddr)
+	err = wjSvc.ReleaseWorkers(tx, nodeAddr)
 	require.NoError(t, err)
 
 	addrs, err = wjSvc.ListWorkers(tx, role, qdbid)

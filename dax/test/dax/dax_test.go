@@ -275,7 +275,7 @@ func TestDAXIntegration(t *testing.T) {
 		// TODO: implement this without a sleep.
 		time.Sleep(5 * time.Second)
 
-		// ensure paritions are still covered
+		// ensure partitions are still covered
 		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, append(partitions0, partitions1...)...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 1) {
@@ -465,7 +465,7 @@ func TestDAXIntegration(t *testing.T) {
 		assert.NoError(t, svcmgr.ControllerStart())
 		assert.True(t, mc.Healthy(controllerKey))
 
-		// ensure paritions are still covered
+		// ensure partitions are still covered
 		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, partitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 1) {

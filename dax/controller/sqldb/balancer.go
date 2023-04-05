@@ -11,7 +11,7 @@ func NewBalancer(log logger.Logger) *balancer.Balancer {
 	fjs := NewFreeJobService(log)
 	wjs := NewWorkerJobService(log)
 	fws := NewFreeWorkerService(log)
-	ns := NewNodeService(log)
+	ns := NewWorkerRegistry(log)
 
 	return balancer.New(ns, fjs, wjs, fws, schemar, log)
 }

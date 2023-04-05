@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
+	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/gobuffalo/nulls"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gobuffalo/validate/v3"
@@ -15,19 +16,38 @@ import (
 // Worker is a node plus a role that gets assigned to a database and
 // can be assigned jobs for that database.
 type Worker struct {
-	ID         uuid.UUID    `json:"id" db:"id"`
-	Address    dax.Address  `json:"address" db:"address"`
-	Role       dax.RoleType `json:"role" db:"role"`
-	DatabaseID nulls.String `json:"database_id" db:"database_id"` // this can be empty which means the worker is unassigned
-	CreatedAt  time.Time    `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time    `json:"updated_at" db:"updated_at"`
-	Jobs       Jobs         `json:"jobs" has_many:"jobs" order_by:"name asc"`
+	ID            uuid.UUID    `json:"id" db:"id"`
+	Address       dax.Address  `json:"address" db:"address"`
+	DatabaseID    nulls.String `json:"database_id" db:"database_id"` // this can be empty which means the worker is unassigned
+	CreatedAt     time.Time    `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at" db:"updated_at"`
+	Jobs          Jobs         `json:"jobs" has_many:"jobs" order_by:"name asc"`
+	RoleCompute   bool         `json:"role_compute" db:"role_compute"`
+	RoleTranslate bool         `json:"role_translate" db:"role_translate"`
+	RoleQuery     bool         `json:"role_query" db:"role_query"`
 }
 
 // String is not required by pop and may be deleted
 func (t *Worker) String() string {
 	jt, _ := json.MarshalIndent(t, " ", " ") //nolint:errchkjson
 	return string(jt)
+}
+
+// SetRole applies a dax.RoleType to one of the boolean fields on the Worker
+// model. It returns an error if the model does not support that role type.
+func (t *Worker) SetRole(role dax.RoleType) error {
+	switch role {
+	case dax.RoleTypeCompute:
+		t.RoleCompute = true
+	case dax.RoleTypeTranslate:
+		t.RoleTranslate = true
+	case dax.RoleTypeQuery:
+		t.RoleQuery = true
+	default:
+		errors.Errorf("invalid role type for worker: %s", role)
+	}
+
+	return nil
 }
 
 // Workers is not required by pop and may be deleted
