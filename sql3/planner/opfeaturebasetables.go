@@ -9,6 +9,7 @@ import (
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
@@ -54,8 +55,8 @@ func (p *PlanOpFeatureBaseTables) Schema() types.Schema {
 	return types.Schema{
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
-			ColumnName:   "object_id",
-			Type:         parser.NewDataTypeInt(),
+			ColumnName:   string(dax.PrimaryKeyFieldName),
+			Type:         parser.NewDataTypeString(),
 		},
 		&types.PlannerColumn{
 			RelationName: "fb_tables",
