@@ -36,8 +36,13 @@ RUN apt-get update -y -qq && apt-get install -y -qq \
   zlib1g-dev \
   libbz2-dev \
   pkg-config \
-  librdkafka-dev \
   && rm -rf /var/lib/apt/lists/*
+
+RUN ["git", "clone", "https://github.com/edenhill/librdkafka.git"]
+WORKDIR /librdkafka
+RUN ./configure --prefix /usr &&\ 
+  make && \
+  make install
 
 WORKDIR /featurebase
 

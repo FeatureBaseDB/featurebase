@@ -380,7 +380,7 @@ endif
 
 build-fbsql-darwin:
 ifeq ($(GOARCH), arm64)
-	env GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=/osxcross/target/bin/arm64-apple-darwin21.4-clang $(GO) build  -tags dynamic $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
+	env GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=/osxcross/target/bin/arm64-apple-darwin21.4-clang $(GO) build $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
 else ifeq ($(GOARCH), amd64)
 	env GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=/osxcross/target/bin/x86_64-apple-darwin21.4-clang $(GO) build $(GO_BUILD_FLAGS) -o fbsql ./cmd/fbsql
 endif
