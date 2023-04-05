@@ -15,7 +15,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -36,7 +35,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/roaring"
-	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	planner_types "github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 	"github.com/featurebasedb/featurebase/v3/tracing"
 	"github.com/pkg/errors"
@@ -1804,7 +1802,6 @@ func cleanupView(fieldType string, viewUpdate *RoaringUpdate) error {
 }
 
 func (api *API) importTuples(ctx context.Context, tx Tx, shard uint64, tableName string, tupleData []byte) error {
-
 	// get the table
 	index, err := api.Index(ctx, tableName)
 	if err != nil {
@@ -1815,36 +1812,8 @@ func (api *API) importTuples(ctx context.Context, tx Tx, shard uint64, tableName
 	if index.ID == 0 {
 		return errors.Errorf("cannot insert into table '%s' because it does not have a non-zero object id", tableName)
 	}
-	basePath := index.TStorePath()
 
-	// open or create btreefile for this shard
-	dataFile := filepath.Join(basePath, fmt.Sprintf("ts-shard.%04d", shard))
-	api.holder.tstoredisk.CreateOrOpenShard(index.ID, int32(shard), dataFile)
-
-	// get the schema from the FeatureBase table in the form of a planner_types.Schema
-	// we just want the t-store types
-
-	fieldList := make([]*Field, 0)
-	for _, f := range index.fields {
-		if strings.EqualFold(f.options.Type, FieldTypeVarchar) {
-			fieldList = append(fieldList, f)
-		}
-	}
-
-	sort.Slice(fieldList, func(i, j int) bool {
-		return fieldList[i].CreatedAt() < fieldList[j].CreatedAt()
-	})
-
-	indexSchema := make(planner_types.Schema, len(fieldList))
-	for i, f := range fieldList {
-		indexSchema[i] = &planner_types.PlannerColumn{
-			ColumnName: f.name,
-			Type:       parser.NewDataTypeVarchar(f.options.Length),
-		}
-	}
-
-	// create the b-tree we're going to use
-	b, err := tstore.NewBTree(tstore.KEY_SIZE_INT64, index.ID, int32(shard), indexSchema, api.holder.tstorepool)
+	b, err := index.GetTStore(shard)
 	if err != nil {
 		return err
 	}
@@ -3461,18 +3430,23 @@ func (n *NopSchemaAPI) DropDatabase(context.Context, dax.DatabaseID) error  { re
 func (n *NopSchemaAPI) DatabaseByName(ctx context.Context, dbname dax.DatabaseName) (*dax.Database, error) {
 	return nil, nil
 }
+
 func (n *NopSchemaAPI) DatabaseByID(ctx context.Context, dbid dax.DatabaseID) (*dax.Database, error) {
 	return nil, nil
 }
+
 func (n *NopSchemaAPI) SetDatabaseOption(ctx context.Context, dbid dax.DatabaseID, option string, value string) error {
 	return nil
 }
+
 func (n *NopSchemaAPI) Databases(context.Context, ...dax.DatabaseID) ([]*dax.Database, error) {
 	return nil, nil
 }
+
 func (n *NopSchemaAPI) TableByName(ctx context.Context, tname dax.TableName) (*dax.Table, error) {
 	return nil, nil
 }
+
 func (n *NopSchemaAPI) TableByID(ctx context.Context, tid dax.TableID) (*dax.Table, error) {
 	return nil, nil
 }

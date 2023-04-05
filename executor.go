@@ -352,6 +352,9 @@ func safeCopy(resp QueryResponse) (out QueryResponse) {
 			out.Results = append(out.Results, x)
 		case ExtractedIDMatrixSorted:
 			out.Results = append(out.Results, x)
+		case *TupleResults:
+			// dumpTable(x)
+			out.Results = append(out.Results, x)
 		default:
 			panic(fmt.Sprintf("handle %T here", v))
 		}
@@ -836,6 +839,10 @@ func (e *executor) executeCall(ctx context.Context, qcx *Qcx, index string, c *p
 		statFn(CounterQueryArrowTotal)
 		res, err := e.executeArrow(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeArrow")
+	case "Tstore":
+		statFn(CounterQueryTstoreTotal)
+		res, err := e.executeTstore(ctx, qcx, index, c, shards, opt)
+		return res, errors.Wrap(err, "executeTstore")
 	default: // e.g. "Row", "Union", "Intersect" or anything that returns a bitmap.
 		res, err := e.executeBitmapCall(ctx, qcx, index, c, shards, opt)
 		return res, errors.Wrap(err, "executeBitmapCall")

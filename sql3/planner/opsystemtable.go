@@ -614,6 +614,7 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 		for idx, tbl := range tbls {
 			// build the ddl for this table
 
+
 			ddl := generateTableDDL(tbl, "")
 
 			i.result[idx] = &fbTableDDLRow{

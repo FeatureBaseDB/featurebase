@@ -643,6 +643,12 @@ var callInfoByFunc = map[string]callInfo{
 			"header": interfaceOrVariable,
 		},
 	},
+	"Tstore": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"header": interfaceOrVariable,
+		},
+	},
 }
 
 // We want to allow case-insensitive names, but we want to continue using
