@@ -198,7 +198,7 @@ build fbsql amd64:
     paths:
       - ./build/fbsql_*
 
-build fbsql arm64:
+build fbsql arm64 darwin:
   stage: test
   variables:
     BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
@@ -226,6 +226,8 @@ build fbsql arm64 linux:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
+    - GOOS="linux" GOARCH="arm64" make docker-build-fbsql
+
   artifacts:
     paths:
       - ./build/fbsql_*
