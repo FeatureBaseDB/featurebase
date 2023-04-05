@@ -256,19 +256,11 @@ func MustRunManagedCommand(tb testing.TB, opts ...server.CommandOption) *Managed
 	// after). This has the advantage that if the tests fail partway
 	// through, you can inspect the state of the database for
 	// debugging purposes.
-	err := mc.trans.TruncateAll()
-	if err != nil {
+	if err := mc.trans.TruncateAll(); err != nil {
 		tb.Fatalf("truncating DB: %v", err)
 	}
 
-	// The migrations contain an insert, but since we just truncated everything we need to redo that insert.
-	err = mc.trans.RawQuery("INSERT INTO directive_versions (id, version, created_at, updated_at) VALUES (1, 1, '1970-01-01T00:00', '1970-01-01T00:00')").Exec()
-	if err != nil {
-		tb.Fatalf("reinserting directive_version record after truncation: %v", err)
-	}
-
-	err = mc.trans.Close()
-	if err != nil {
+	if err := mc.trans.Close(); err != nil {
 		tb.Fatalf("Closing conn after truncating all tables: %v", err)
 	}
 

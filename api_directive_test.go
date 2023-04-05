@@ -30,7 +30,7 @@ func TestAPI_Directive(t *testing.T) {
 		// Empty directive (and empty holder).
 		{
 			d := &dax.Directive{
-				Method:  dax.DirectiveMethodDiff,
+				Method:  dax.DirectiveMethodFull,
 				Version: 1,
 			}
 			err := api.ApplyDirective(ctx, d)
@@ -41,7 +41,7 @@ func TestAPI_Directive(t *testing.T) {
 		// Add a new table.
 		{
 			d := &dax.Directive{
-				Method: dax.DirectiveMethodDiff,
+				Method: dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl1,
 				},
@@ -55,7 +55,7 @@ func TestAPI_Directive(t *testing.T) {
 		// Add a new table, and keep the existing table.
 		{
 			d := &dax.Directive{
-				Method: dax.DirectiveMethodDiff,
+				Method: dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl1,
 					tbl2,
@@ -70,7 +70,7 @@ func TestAPI_Directive(t *testing.T) {
 		// Add a new table and remove one of the existing tables.
 		{
 			d := &dax.Directive{
-				Method: dax.DirectiveMethodDiff,
+				Method: dax.DirectiveMethodFull,
 				Tables: []*dax.QualifiedTable{
 					tbl2,
 					tbl3,

@@ -43,6 +43,26 @@ var joinTestsOrders = TableTest{
 	),
 	SQLTests: nil,
 }
+var joinTestsQuantity = TableTest{
+	name: "jointestquantity",
+	Table: tbl(
+		"quantity",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("userid", fldTypeInt),
+			srcHdr("quantity", fldTypeInt),
+		),
+		srcRows(
+			srcRow(int64(0), int64(1), int64(1)),
+			srcRow(int64(1), int64(0), int64(2)),
+			srcRow(int64(2), int64(2), int64(2)),
+			srcRow(int64(3), int64(3), int64(1)),
+			srcRow(int64(4), int64(1), int64(3)),
+			srcRow(int64(5), int64(2), int64(5)),
+		),
+	),
+	SQLTests: nil,
+}
 
 var joinTests = TableTest{
 	name: "joinTests",
@@ -117,6 +137,38 @@ var joinTests = TableTest{
 			Compare: CompareExactOrdered,
 		},
 		{
+			name: "nested-inner-join",
+			SQLs: sqls(
+				"select DISTINCT u._id from users u inner join orders o on o.userid = u._id join quantity q on o.userid = q.userid;",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(0)),
+				row(int64(1)),
+				row(int64(2)),
+				row(int64(3)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "nested-inner-and-left-join",
+			SQLs: sqls(
+				"select DISTINCT u._id from users u inner join orders o on o.userid = u._id left join quantity q on o.userid = q.userid;",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+			),
+			ExpRows: rows(
+				row(int64(0)),
+				row(int64(1)),
+				row(int64(2)),
+				row(int64(3)),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
 			name: "leftjoin",
 			SQLs: sqls(
 				"select u._id , o.userid from users u left join orders o on o.userid = u._id;",
@@ -130,6 +182,24 @@ var joinTests = TableTest{
 				row(int64(1), int64(1)),
 				row(int64(1), int64(1)),
 				row(int64(2), int64(2)),
+				row(int64(2), int64(2)),
+				row(int64(3), int64(3)),
+				row(int64(4), nil),
+			),
+			Compare: CompareExactOrdered,
+		},
+		{
+			name: "nested-left-join",
+			SQLs: sqls(
+				"select distinct u._id, o.userid from users u left join orders o on o.userid = u._id left join quantity q on o.userid = q.userid;",
+			),
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("userid", fldTypeInt),
+			),
+			ExpRows: rows(
+				row(int64(0), int64(0)),
+				row(int64(1), int64(1)),
 				row(int64(2), int64(2)),
 				row(int64(3), int64(3)),
 				row(int64(4), nil),
@@ -156,6 +226,13 @@ var joinTests = TableTest{
 			Compare: CompareExactOrdered,
 		},
 		{
+			name: "Unmatched-columns-in-join",
+			SQLs: sqls(
+				"select u._id, o.userid from users u join orders o on u.name = o.userid;",
+			),
+			ExpErr: "types 'string' and 'int' are not equatable",
+		},
+		{
 			name: "fulljoin",
 			SQLs: sqls(
 				"select u._id , o.userid from users u full join orders o on o.userid = u._id;",
@@ -166,6 +243,13 @@ var joinTests = TableTest{
 			name: "outerjoin",
 			SQLs: sqls(
 				"select u._id , o.userid from users u right join orders o on o.userid = u._id;",
+			),
+			ExpErr: "RIGHT join types are not supported",
+		},
+		{
+			name: "nested-inner-join-with-right-join",
+			SQLs: sqls(
+				"select * from users u inner join orders o on o.userid = u._id right join quantity q on o.userid = q.userid;",
 			),
 			ExpErr: "RIGHT join types are not supported",
 		},

@@ -305,13 +305,21 @@ func (p *ExecutionPlanner) compileSelectStatement(stmt *parser.SelectStatement, 
 		}
 	}
 
-	// insert the top operator if it exists
+	// insert the top operator if it exists, or limit - analyzer should have caught the case of both existing
 	if stmt.Top.IsValid() {
 		topExpr, err := p.compileExpr(stmt.TopExpr)
 		if err != nil {
 			return nil, err
 		}
 		compiledOp = NewPlanOpTop(topExpr, compiledOp)
+	}
+	// handle limit
+	if stmt.Limit.IsValid() {
+		limitExpr, err := p.compileExpr(stmt.LimitExpr)
+		if err != nil {
+			return nil, err
+		}
+		compiledOp = NewPlanOpTop(limitExpr, compiledOp)
 	}
 
 	// handle distinct
@@ -613,6 +621,10 @@ func (p *ExecutionPlanner) analyzeSelectStatement(ctx context.Context, stmt *par
 		}
 	}
 
+	if stmt.TopExpr != nil && stmt.LimitExpr != nil {
+		return nil, sql3.NewErrErrTopLimitCannotCoexist(stmt.TopExpr.Pos().Line, stmt.TopExpr.Pos().Column)
+	}
+
 	expr, err := p.analyzeExpression(ctx, stmt.TopExpr, stmt)
 	if err != nil {
 		return nil, err
@@ -622,6 +634,17 @@ func (p *ExecutionPlanner) analyzeSelectStatement(ctx context.Context, stmt *par
 			return nil, sql3.NewErrIntegerLiteral(stmt.TopExpr.Pos().Line, stmt.TopExpr.Pos().Column)
 		}
 		stmt.TopExpr = expr
+	}
+
+	expr, err = p.analyzeExpression(ctx, stmt.LimitExpr, stmt)
+	if err != nil {
+		return nil, err
+	}
+	if expr != nil {
+		if !(expr.IsLiteral() && typeIsInteger(expr.DataType())) {
+			return nil, sql3.NewErrIntegerLiteral(stmt.LimitExpr.Pos().Line, stmt.LimitExpr.Pos().Column)
+		}
+		stmt.LimitExpr = expr
 	}
 
 	expr, err = p.analyzeExpression(ctx, stmt.HavingExpr, stmt)

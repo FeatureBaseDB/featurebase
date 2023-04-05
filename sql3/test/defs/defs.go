@@ -39,7 +39,7 @@ var TableTests []TableTest = []TableTest{
 	subqueryTests,
 	viewTests,
 
-	topTests,
+	topLimitTests,
 
 	deleteTests,
 
@@ -179,6 +179,8 @@ var TableTests []TableTest = []TableTest{
 	avgTests,
 	percentileTests,
 	minmaxTests,
+	corrTests,
+	varTests,
 
 	// groupby tests
 	groupByTests,
@@ -190,11 +192,16 @@ var TableTests []TableTest = []TableTest{
 	// joins
 	joinTestsUsers,
 	joinTestsOrders,
+	joinTestsQuantity,
 	joinTests,
 
 	// bulk insert
 	bulkInsertTable,
 	bulkInsert,
+
+	// copy
+	copyTable,
+	copyTests,
 
 	// bool (batch logic)
 	boolTests,

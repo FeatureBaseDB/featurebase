@@ -34,11 +34,13 @@ func (*CaseExpr) node()                 {}
 func (*CastExpr) node()                 {}
 func (*CheckConstraint) node()          {}
 func (*ColumnDefinition) node()         {}
+func (*CopyStatement) node()            {}
 func (*CommitStatement) node()          {}
 func (*CreateDatabaseStatement) node()  {}
 func (*CreateIndexStatement) node()     {}
 func (*CreateTableStatement) node()     {}
 func (*CreateFunctionStatement) node()  {}
+func (*CreateModelStatement) node()     {}
 func (*CreateViewStatement) node()      {}
 func (*DateLit) node()                  {}
 func (*DefaultConstraint) node()        {}
@@ -48,6 +50,7 @@ func (*DropIndexStatement) node()       {}
 func (*DropTableStatement) node()       {}
 func (*DropFunctionStatement) node()    {}
 func (*DropViewStatement) node()        {}
+func (*DropModelStatement) node()       {}
 func (*Exists) node()                   {}
 func (*ExplainStatement) node()         {}
 func (*ExprList) node()                 {}
@@ -73,12 +76,14 @@ func (*OnConstraint) node()             {}
 func (*OrderingTerm) node()             {}
 func (*OverClause) node()               {}
 func (*ParenExpr) node()                {}
+func (*PredictStatement) node()         {}
 func (*SetLiteralExpr) node()           {}
 func (*ParenSource) node()              {}
 func (*PrimaryKeyConstraint) node()     {}
 func (*QualifiedRef) node()             {}
 func (*QualifiedTableName) node()       {}
 func (*Range) node()                    {}
+func (*ReturnStatement) node()          {}
 func (*ReleaseStatement) node()         {}
 func (*ResultColumn) node()             {}
 func (*RollbackStatement) node()        {}
@@ -111,6 +116,7 @@ func (*AlterTableStatement) stmt()      {}
 func (*AlterViewStatement) stmt()       {}
 func (*AnalyzeStatement) stmt()         {}
 func (*BeginStatement) stmt()           {}
+func (*CopyStatement) stmt()            {}
 func (*BulkInsertStatement) stmt()      {}
 func (*ShowDatabasesStatement) stmt()   {}
 func (*ShowTablesStatement) stmt()      {}
@@ -121,6 +127,7 @@ func (*CreateDatabaseStatement) stmt()  {}
 func (*CreateIndexStatement) stmt()     {}
 func (*CreateTableStatement) stmt()     {}
 func (*CreateFunctionStatement) stmt()  {}
+func (*CreateModelStatement) stmt()     {}
 func (*CreateViewStatement) stmt()      {}
 func (*DeleteStatement) stmt()          {}
 func (*DropDatabaseStatement) stmt()    {}
@@ -128,9 +135,12 @@ func (*DropIndexStatement) stmt()       {}
 func (*DropTableStatement) stmt()       {}
 func (*DropFunctionStatement) stmt()    {}
 func (*DropViewStatement) stmt()        {}
+func (*DropModelStatement) stmt()       {}
+func (*PredictStatement) stmt()         {}
 func (*ExplainStatement) stmt()         {}
 func (*InsertStatement) stmt()          {}
 func (*ReleaseStatement) stmt()         {}
+func (*ReturnStatement) stmt()          {}
 func (*RollbackStatement) stmt()        {}
 func (*SavepointStatement) stmt()       {}
 func (*SelectStatement) stmt()          {}
@@ -177,9 +187,13 @@ func CloneStatement(stmt Statement) Statement {
 		return stmt.Clone()
 	case *DropViewStatement:
 		return stmt.Clone()
+	case *DropModelStatement:
+		return stmt.Clone()
 	case *ExplainStatement:
 		return stmt.Clone()
 	case *InsertStatement:
+		return stmt.Clone()
+	case *BulkInsertStatement:
 		return stmt.Clone()
 	case *ReleaseStatement:
 		return stmt.Clone()
@@ -304,6 +318,12 @@ func CloneExpr(expr Expr) Expr {
 	case *UnaryExpr:
 		return expr.Clone()
 	case *Variable:
+		return expr.Clone()
+	case *SysVariable:
+		return expr.Clone()
+	case *DateLit:
+		return expr.Clone()
+	case *SetLiteralExpr:
 		return expr.Clone()
 	default:
 		panic(fmt.Sprintf("invalid expr type: %T", expr))
@@ -1237,10 +1257,8 @@ func (c *CacheTypeConstraint) String() string {
 }
 
 type TimeUnitConstraint struct {
-	TimeUnit  Pos  // position of TIMEUNIT keyword
-	Expr      Expr // expression
-	Epoch     Pos  // position of TIMEUNIT keyword
-	EpochExpr Expr // expression
+	TimeUnit Pos  // position of TIMEUNIT keyword
+	Expr     Expr // expression
 }
 
 // Clone returns a deep copy of c.
@@ -1258,10 +1276,6 @@ func (c *TimeUnitConstraint) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("TIMEUNIT ")
 	buf.WriteString(c.Expr.String())
-	if c.Epoch.IsValid() {
-		buf.WriteString(" EPOCH ")
-		buf.WriteString(c.EpochExpr.String())
-	}
 	return buf.String()
 }
 
@@ -1690,8 +1704,10 @@ func IdentName(ident *Ident) string {
 	return ident.Name
 }
 
-// SysVariable represents built-in system variables that can be referenced in the sql for current date, current time and other potential pre-determinable values.
-// In SQL these system provided data elements are referenced using keywords such as CURRENT_DATE & CURRENT_TIMESTAMP, etc.
+// SysVariable represents built-in system variables that can be referenced in
+// the sql for current date, current time and other potential system determinable
+// values. In SQL these system provided data elements are referenced using
+// keywords such as CURRENT_DATE & CURRENT_TIMESTAMP, etc.
 type SysVariable struct {
 	NamePos Pos   // variable position in sql
 	Token   Token // parser token mapped to the variable's name/keyword
@@ -1711,11 +1727,11 @@ func (svar *SysVariable) Clone() *SysVariable {
 	return &other
 }
 func (svar *SysVariable) Name() string {
-	return tokens[svar.Token]
+	return svar.String()
 }
 
 func (svar *SysVariable) String() string {
-	return svar.Name()
+	return svar.Token.String()
 }
 
 func (svar *SysVariable) DataType() ExprDataType {
@@ -2899,6 +2915,35 @@ func (s *DropViewStatement) String() string {
 	return buf.String()
 }
 
+type DropModelStatement struct {
+	Drop     Pos    // position of DROP keyword
+	Model    Pos    // position of MODEL keyword
+	If       Pos    // position of IF keyword
+	IfExists Pos    // position of EXISTS keyword after IF
+	Name     *Ident // view name
+}
+
+// Clone returns a deep copy of s.
+func (s *DropModelStatement) Clone() *DropModelStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Name = s.Name.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *DropModelStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("DROP MODEL")
+	if s.IfExists.IsValid() {
+		buf.WriteString(" IF EXISTS")
+	}
+	fmt.Fprintf(&buf, " %s", s.Name.String())
+	return buf.String()
+}
+
 type CreateIndexStatement struct {
 	Create      Pos              // position of CREATE keyword
 	Unique      Pos              // position of optional UNIQUE keyword
@@ -2987,6 +3032,11 @@ func (s *DropIndexStatement) String() string {
 	return buf.String()
 }
 
+type FunctionOptionDefinition struct {
+	Name       *Ident // option name
+	OptionExpr Expr   // option expression
+}
+
 type ParameterDefinition struct {
 	Name *Variable // parameter name
 	Type *Type     // data type
@@ -3004,8 +3054,11 @@ type CreateFunctionStatement struct {
 	Parameters []*ParameterDefinition // parameters
 	Rparen     Pos                    // position of parameter RParen
 
-	Returns   Pos                  // position of RETURNS keyword
-	ReturnDef *ParameterDefinition // return def
+	Returns    Pos   // position of RETURNS keyword
+	ReturnType *Type // return def
+
+	With    Pos                         // position of WITH keyword
+	Options []*FunctionOptionDefinition // options
 
 	As Pos // position of AS keyword
 
@@ -3046,7 +3099,21 @@ func (s *CreateFunctionStatement) String() string {
 	}
 
 	buf.WriteString(" RETURNS ")
-	fmt.Fprintf(&buf, "%s %s", s.ReturnDef.Name, s.ReturnDef.Type.Name)
+	fmt.Fprintf(&buf, "%s", s.ReturnType.String())
+
+	if s.With.IsValid() {
+		buf.WriteString(" WITH ")
+		if len(s.Options) > 0 {
+			buf.WriteString(" (")
+			for idx, p := range s.Options {
+				if idx > 0 {
+					buf.WriteString(", ")
+				}
+				fmt.Fprintf(&buf, "%s %s", p.Name.Name, p.OptionExpr.String())
+			}
+			buf.WriteString(")")
+		}
+	}
 
 	buf.WriteString(" AS BEGIN")
 	for i := range s.Body {
@@ -3085,6 +3152,86 @@ func (s *DropFunctionStatement) String() string {
 	return buf.String()
 }
 
+type ReturnStatement struct {
+	Return     Pos  // position of RETURN keyword
+	ReturnExpr Expr // what we are returning
+}
+
+// Clone returns a deep copy of s.
+func (s *ReturnStatement) Clone() *ReturnStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.ReturnExpr = CloneExpr(s.ReturnExpr)
+	return &other
+}
+
+func (s *ReturnStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("RETURN")
+	fmt.Fprintf(&buf, " %s", s.ReturnExpr.String())
+	return buf.String()
+}
+
+type ModelOptionDefinition struct {
+	Name       *Ident // option name
+	OptionExpr Expr   // option expression
+}
+
+type CreateModelStatement struct {
+	Create      Pos    // position of CREATE keyword
+	Model       Pos    // position of MODEL keyword
+	If          Pos    // position of IF keyword
+	IfNot       Pos    // position of NOT keyword after IF
+	IfNotExists Pos    // position of EXISTS keyword after IF NOT
+	Name        *Ident // model name
+	With        Pos    // position of WITH keyword
+
+	Options []*ModelOptionDefinition // options
+
+	As Pos // position of AS keyword
+
+	ModelQuery *SelectStatement // model query
+}
+
+// Clone returns a deep copy of s.
+func (s *CreateModelStatement) Clone() *CreateModelStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Name = s.Name.Clone()
+	other.ModelQuery = s.ModelQuery.Clone()
+	return &other
+}
+
+// String returns the string representation of the statement.
+func (s *CreateModelStatement) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("CREATE MODEL")
+	if s.IfNotExists.IsValid() {
+		buf.WriteString(" IF NOT EXISTS")
+	}
+	fmt.Fprintf(&buf, " %s", s.Name.String())
+
+	if len(s.Options) > 0 {
+		buf.WriteString(" (")
+		for idx, p := range s.Options {
+			if idx > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "%s %s", p.Name.Name, p.OptionExpr.String())
+		}
+		buf.WriteString(")")
+	}
+
+	buf.WriteString(" AS ")
+	buf.WriteString(s.ModelQuery.String())
+
+	return buf.String()
+}
+
 type BulkInsertMapDefinition struct {
 	Name    *Ident // map name
 	Type    *Type  // data type
@@ -3107,8 +3254,6 @@ func (d *BulkInsertMapDefinition) Clone() *BulkInsertMapDefinition {
 func (c *BulkInsertMapDefinition) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(c.MapExpr.String())
-	buf.WriteString(" ")
-	buf.WriteString(c.Name.String())
 	buf.WriteString(" ")
 	buf.WriteString(c.Type.String())
 	return buf.String()
@@ -3195,33 +3340,63 @@ func (s *BulkInsertStatement) String() string {
 
 	buf.WriteString(" FROM ")
 	fmt.Fprintf(&buf, " %s", s.DataSource.String())
-	buf.WriteString(" WITH ")
+	buf.WriteString(" WITH")
 
 	if s.Format != nil {
-		buf.WriteString("FORMAT ")
+		buf.WriteString(" FORMAT ")
 		buf.WriteString(s.Format.String())
 	}
 
 	if s.Input != nil {
-		buf.WriteString("INPUT ")
+		buf.WriteString(" INPUT ")
 		buf.WriteString(s.Input.String())
 	}
 
 	if s.HeaderRow != nil {
-		buf.WriteString("HEADER_ROW ")
+		buf.WriteString(" HEADER_ROW ")
 	}
 
 	if s.BatchSize != nil {
-		buf.WriteString("BATCHSIZE ")
+		buf.WriteString(" BATCHSIZE ")
 		buf.WriteString(s.BatchSize.String())
 	}
 
 	if s.RowsLimit != nil {
-		buf.WriteString("ROWSLIMIT ")
+		buf.WriteString(" ROWSLIMIT ")
 		buf.WriteString(s.RowsLimit.String())
 	}
 
+	if s.AllowMissingValues != nil {
+		buf.WriteString(" ALLOW_MISSING_VALUES ")
+	}
 	return buf.String()
+}
+
+func (s *BulkInsertStatement) Clone() *BulkInsertStatement {
+	if s == nil {
+		return nil
+	}
+	other := *s
+	other.Table = s.Table.Clone()
+	other.Columns = cloneIdents(s.Columns)
+	other.TransformList = cloneExprs(s.TransformList)
+	other.DataSource = CloneExpr(s.DataSource)
+	other.BatchSize = CloneExpr(s.BatchSize)
+	other.RowsLimit = CloneExpr(s.RowsLimit)
+	other.Format = CloneExpr(s.Format)
+	other.Input = CloneExpr(s.Input)
+	other.HeaderRow = CloneExpr(s.HeaderRow)
+	other.AllowMissingValues = CloneExpr(s.AllowMissingValues)
+	other.MapList = cloneBulkInsertMap(s.MapList)
+	return &other
+}
+
+func cloneBulkInsertMap(s []*BulkInsertMapDefinition) []*BulkInsertMapDefinition {
+	other := make([]*BulkInsertMapDefinition, len(s))
+	for i := range s {
+		other[i] = s[i].Clone()
+	}
+	return other
 }
 
 type InsertStatement struct {
@@ -3606,6 +3781,77 @@ func (c *IndexedColumn) String() string {
 	return c.X.String()
 }
 
+type CopyStatement struct {
+	Copy       Pos    // position of COPY keyword
+	Source     Source // source table
+	To         Pos    // position of TO keyword
+	TargetName *Ident // target table name
+	Where      Pos    // position of WHERE keyword
+	WhereExpr  Expr   // where clause expression
+	With       Pos    // position of WITH keyword
+
+	Url    Expr // url for target server
+	ApiKey Expr // apikey for target server
+}
+
+func (c *CopyStatement) Clone() *CopyStatement {
+	if c == nil {
+		return nil
+	}
+	other := *c
+	other.Source = CloneSource(c.Source)
+	other.TargetName = c.TargetName.Clone()
+	other.WhereExpr = CloneExpr(c.WhereExpr)
+	other.Url = CloneExpr(c.Url)
+	other.ApiKey = CloneExpr(c.ApiKey)
+	return &other
+}
+
+func (c *CopyStatement) String() string {
+	var buf bytes.Buffer
+
+	fmt.Fprintf(&buf, "COPY %s to %s", c.Source.String(), c.TargetName.String())
+	if c.WhereExpr != nil {
+		fmt.Fprintf(&buf, " WHERE %s", c.WhereExpr.String())
+	}
+	if c.With.IsValid() {
+		fmt.Fprintf(&buf, " WITH")
+		if c.Url != nil {
+			fmt.Fprintf(&buf, " URL %s", c.Url.String())
+		}
+		if c.ApiKey != nil {
+			fmt.Fprintf(&buf, " APIKEY %s", c.Url.String())
+		}
+	}
+	return buf.String()
+}
+
+type PredictStatement struct {
+	Predict   Pos    // position of PREDICT keyword
+	Using     Pos    // position of USING keyword
+	ModelName *Ident // model name
+
+	InputQuery *SelectStatement // input query
+}
+
+func (c *PredictStatement) Clone() *PredictStatement {
+	if c == nil {
+		return nil
+	}
+	other := *c
+	other.ModelName = c.ModelName.Clone()
+	other.InputQuery = c.InputQuery.Clone()
+	return &other
+}
+
+func (c *PredictStatement) String() string {
+	var buf bytes.Buffer
+
+	fmt.Fprintf(&buf, "PREDICT USING %s", c.ModelName.String())
+	fmt.Fprintf(&buf, " %s", c.InputQuery.String())
+	return buf.String()
+}
+
 type SelectStatement struct {
 	WithClause *WithClause // clause containing CTEs
 
@@ -3646,6 +3892,8 @@ type SelectStatement struct {
 	OrderBy       Pos             // position of BY keyword after ORDER
 	OrderingTerms []*OrderingTerm // terms of ORDER BY clause
 
+	Limit     Pos  // position of LIMIT keyword
+	LimitExpr Expr // LIMIT expr
 }
 
 // Clone returns a deep copy of s.
@@ -3655,7 +3903,6 @@ func (s *SelectStatement) Clone() *SelectStatement {
 	}
 	other := *s
 	other.WithClause = s.WithClause.Clone()
-	//other.ValueLists = cloneExprLists(s.ValueLists)
 	other.TopExpr = CloneExpr(s.TopExpr)
 	other.Columns = cloneResultColumns(s.Columns)
 	other.Source = CloneSource(s.Source)
@@ -3665,6 +3912,7 @@ func (s *SelectStatement) Clone() *SelectStatement {
 	other.Windows = cloneWindows(s.Windows)
 	other.Compound = s.Compound.Clone()
 	other.OrderingTerms = cloneOrderingTerms(s.OrderingTerms)
+	other.LimitExpr = CloneExpr(s.LimitExpr)
 	return &other
 }
 
@@ -3703,29 +3951,10 @@ func (s *SelectStatement) String() string {
 		buf.WriteString(" ")
 	}
 
-	/*if len(s.ValueLists) > 0 {
-		buf.WriteString("VALUES ")
-		for i, exprs := range s.ValueLists {
-			if i != 0 {
-				buf.WriteString(", ")
-			}
-
-			buf.WriteString("(")
-			for j, expr := range exprs.Exprs {
-				if j != 0 {
-					buf.WriteString(", ")
-				}
-				buf.WriteString(expr.String())
-			}
-			buf.WriteString(")")
-		}
-	} else {*/
 	buf.WriteString("SELECT ")
 	if s.Distinct.IsValid() {
 		buf.WriteString("DISTINCT ")
-	} //else if s.All.IsValid() {
-	//	buf.WriteString("ALL ")
-	//}
+	}
 	if s.Top.IsValid() {
 		fmt.Fprintf(&buf, "TOP(%s) ", s.TopExpr.String())
 	}
@@ -3771,7 +4000,6 @@ func (s *SelectStatement) String() string {
 			buf.WriteString(window.String())
 		}
 	}
-	//	}
 
 	// Write compound operator.
 	if s.Compound != nil {
@@ -3799,6 +4027,10 @@ func (s *SelectStatement) String() string {
 			}
 			buf.WriteString(term.String())
 		}
+	}
+
+	if s.Limit.IsValid() {
+		fmt.Fprintf(&buf, "LIMIT %s", s.LimitExpr.String())
 	}
 
 	return buf.String()
@@ -4132,6 +4364,7 @@ func (c *JoinClause) Clone() *JoinClause {
 	other.X = CloneSource(c.X)
 	other.Y = CloneSource(c.Y)
 	other.Constraint = CloneJoinConstraint(c.Constraint)
+	other.Operator = c.Operator.Clone()
 	return &other
 }
 

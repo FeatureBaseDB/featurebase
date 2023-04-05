@@ -169,7 +169,7 @@ func (b *Balancer) assignMinWorkers(tx dax.Transaction, roleType dax.RoleType) (
 
 	diffs := NewInternalDiffs()
 
-	// Create an ordered slice of map keys so that tests are predicatable.
+	// Create an ordered slice of map keys so that tests are predictable.
 	qdbids := make([]dax.QualifiedDatabaseID, 0, len(m))
 	for qdbid := range m {
 		qdbids = append(qdbids, qdbid)
@@ -366,7 +366,7 @@ func (b *Balancer) addJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.
 		// assigned workers until it has at least one job (which this database
 		// now has).
 		if diff, err := b.balanceDatabaseForRole(tx, roleType, qdbid); err != nil {
-			return nil, errors.Wrapf(err, "assigning min workers: (%s)", roleType)
+			return nil, errors.Wrapf(err, "balancing database for role: (%s)", roleType)
 		} else {
 			diffs.Merge(diff)
 		}

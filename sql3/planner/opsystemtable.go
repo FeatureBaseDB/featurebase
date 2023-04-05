@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
+	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/sql3"
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
@@ -500,6 +501,107 @@ type fbTableDDLRowIter struct {
 
 var _ types.RowIterator = (*fbTableDDLRowIter)(nil)
 
+func generateTableDDL(tbl *dax.Table, newName string) string {
+
+	var buf bytes.Buffer
+	buf.WriteString("create table ")
+	if len(newName) > 0 {
+		fmt.Fprintf(&buf, "%s", newName)
+	} else {
+		fmt.Fprintf(&buf, "%s", tbl.Name)
+	}
+	buf.WriteString(" (")
+
+	for idx, col := range tbl.Fields {
+		if idx > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "%s", col.Name)
+		dataType := FieldSQLDataType(pilosa.FieldToFieldInfo(col))
+		fmt.Fprintf(&buf, " %s", dataType.TypeDescription())
+
+		switch dt := dataType.(type) {
+		case *parser.DataTypeID, *parser.DataTypeString:
+			if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+				fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+			}
+			if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
+				// if we still have the default, we need to print that out if we have a non-default size
+				if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+					fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+				}
+				fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
+			}
+
+		case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
+			if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+				fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+			}
+			if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
+				// if we still have the default, we need to print that out if we have a non-default size
+				if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+					fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+				}
+				fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
+			}
+
+		case *parser.DataTypeIDSetQuantum, *parser.DataTypeStringSetQuantum:
+			if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+				fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+			}
+			if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
+				// if we still have the default, we need to print that out if we have a non-default size
+				if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
+					fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
+				}
+				fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
+			}
+			if !col.Options.TimeQuantum.IsEmpty() {
+				fmt.Fprintf(&buf, " timequantum '%s'", col.Options.TimeQuantum)
+			}
+			if col.Options.TTL > 0 {
+				fmt.Fprintf(&buf, " ttl '%s'", col.Options.TTL.String())
+			}
+
+		case *parser.DataTypeInt:
+			minValue, maxValue := pql.MinMax(0)
+
+			min := col.Options.Min
+			if !min.EqualTo(minValue) {
+				fmt.Fprintf(&buf, " min %d", min.ToInt64(0))
+			}
+
+			max := col.Options.Max
+			if !max.EqualTo(maxValue) {
+				fmt.Fprintf(&buf, " max %d", max.ToInt64(0))
+			}
+
+		case *parser.DataTypeDecimal:
+			minValue, maxValue := pql.MinMax(dt.Scale)
+
+			min := col.Options.Min
+			if !min.EqualTo(minValue) {
+				fmt.Fprintf(&buf, " min %v", min)
+			}
+
+			max := col.Options.Max
+			if !max.EqualTo(maxValue) {
+				fmt.Fprintf(&buf, " max %v", max)
+			}
+
+		case *parser.DataTypeTimestamp:
+			if len(col.Options.TimeUnit) > 0 {
+				fmt.Fprintf(&buf, " timeunit '%s'", col.Options.TimeUnit)
+			}
+			// TODO(pok) how do we get epoch out of col?
+
+		}
+	}
+	buf.WriteString(");")
+
+	return buf.String()
+}
+
 func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 	if i.result == nil {
 		tbls, err := i.planner.schemaAPI.Tables(ctx)
@@ -512,98 +614,8 @@ func (i *fbTableDDLRowIter) Next(ctx context.Context) (types.Row, error) {
 		for idx, tbl := range tbls {
 			// build the ddl for this table
 
-			var buf bytes.Buffer
-			buf.WriteString("create table ")
-			fmt.Fprintf(&buf, "%s", tbl.Name)
-			buf.WriteString(" (")
 
-			for idx, col := range tbl.Fields {
-				if idx > 0 {
-					buf.WriteString(", ")
-				}
-				fmt.Fprintf(&buf, "%s", col.Name)
-				dataType := FieldSQLDataType(pilosa.FieldToFieldInfo(col))
-				fmt.Fprintf(&buf, " %s", dataType.TypeDescription())
-
-				switch dt := dataType.(type) {
-				case *parser.DataTypeID, *parser.DataTypeString:
-					if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
-						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
-					}
-					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						// if we still have the default, we need to print that out if we have a non-default size
-						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
-							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
-						}
-						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
-					}
-
-				case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
-					if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
-						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
-					}
-					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						// if we still have the default, we need to print that out if we have a non-default size
-						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
-							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
-						}
-						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
-					}
-
-				case *parser.DataTypeIDSetQuantum, *parser.DataTypeStringSetQuantum:
-					if col.Options.CacheType != pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
-						fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
-					}
-					if col.Options.CacheSize != pilosa.DefaultCacheSize && col.Options.CacheSize > 0 {
-						// if we still have the default, we need to print that out if we have a non-default size
-						if col.Options.CacheType == pilosa.DefaultCacheType && len(col.Options.CacheType) > 0 {
-							fmt.Fprintf(&buf, " cachetype %s", col.Options.CacheType)
-						}
-						fmt.Fprintf(&buf, " size %d", col.Options.CacheSize)
-					}
-					if !col.Options.TimeQuantum.IsEmpty() {
-						fmt.Fprintf(&buf, " timequantum '%s'", col.Options.TimeQuantum)
-					}
-					if col.Options.TTL > 0 {
-						fmt.Fprintf(&buf, " ttl '%s'", col.Options.TTL.String())
-					}
-
-				case *parser.DataTypeInt:
-					minValue, maxValue := pql.MinMax(0)
-
-					min := col.Options.Min
-					if !min.EqualTo(minValue) {
-						fmt.Fprintf(&buf, " min %d", min.ToInt64(0))
-					}
-
-					max := col.Options.Max
-					if !max.EqualTo(maxValue) {
-						fmt.Fprintf(&buf, " max %d", max.ToInt64(0))
-					}
-
-				case *parser.DataTypeDecimal:
-					minValue, maxValue := pql.MinMax(dt.Scale)
-
-					min := col.Options.Min
-					if !min.EqualTo(minValue) {
-						fmt.Fprintf(&buf, " min %v", min)
-					}
-
-					max := col.Options.Max
-					if !max.EqualTo(maxValue) {
-						fmt.Fprintf(&buf, " max %v", max)
-					}
-
-				case *parser.DataTypeTimestamp:
-					if len(col.Options.TimeUnit) > 0 {
-						fmt.Fprintf(&buf, " timeunit '%s'", col.Options.TimeUnit)
-					}
-					// TODO(pok) how do we get epoch out of col?
-
-				}
-			}
-			buf.WriteString(");")
-			ddl := buf.String()
+			ddl := generateTableDDL(tbl, "")
 
 			i.result[idx] = &fbTableDDLRow{
 				id:   string(tbl.Name),

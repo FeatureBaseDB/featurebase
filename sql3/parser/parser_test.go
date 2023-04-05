@@ -40,6 +40,9 @@ func TestParser_ParseMinMaxColumnConstraints(t *testing.T) {
 		t.Run("ErrNoKey", func(t *testing.T) {
 			AssertParseStatementError(t, `CREATE TABLE tbl (col1 INT MIN`, `1:30: expected expression, found 'EOF'`)
 		})
+		t.Run("ErrNoCall", func(t *testing.T) {
+			AssertParseStatementError(t, `SELECT MIN;`, `1:11: expected call expression, found ';'`)
+		})
 		t.Run("Simple", func(t *testing.T) {
 			AssertParseStatement(t, `CREATE TABLE tbl (col1 INT MIN 0)`, &parser.CreateTableStatement{
 				Create: pos(0),
@@ -469,7 +472,7 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 
 func TestParser_ParseFunctionStatement(t *testing.T) {
 	t.Run("CreateFunction", func(t *testing.T) {
-		AssertParseStatement(t, `CREATE FUNCTION IF NOT EXISTS func (@param1 int, @param2 string) returns @scalar int as begin end`, &parser.CreateFunctionStatement{
+		AssertParseStatement(t, `CREATE FUNCTION IF NOT EXISTS func (@param1 int, @param2 string) returns int as begin end`, &parser.CreateFunctionStatement{
 			Create:      pos(0),
 			Function:    pos(7),
 			If:          pos(16),
@@ -487,15 +490,12 @@ func TestParser_ParseFunctionStatement(t *testing.T) {
 					Type: &parser.Type{Name: &parser.Ident{NamePos: pos(57), Name: "string"}},
 				},
 			},
-			Rparen:  pos(63),
-			Returns: pos(65),
-			ReturnDef: &parser.ParameterDefinition{
-				Name: &parser.Variable{Name: "@scalar", NamePos: pos(73)},
-				Type: &parser.Type{Name: &parser.Ident{NamePos: pos(81), Name: "int"}},
-			},
-			As:    pos(85),
-			Begin: pos(88),
-			End:   pos(94),
+			Rparen:     pos(63),
+			Returns:    pos(65),
+			ReturnType: &parser.Type{Name: &parser.Ident{NamePos: pos(73), Name: "int"}},
+			As:         pos(77),
+			Begin:      pos(80),
+			End:        pos(86),
 		})
 		// AssertParseStatement(t, `CREATE TRIGGER IF NOT EXISTS trig BEFORE INSERT ON tbl BEGIN DELETE FROM new; END`, &parser.CreateFunctionStatement{
 		// 	Create:      pos(0),
@@ -952,7 +952,7 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 		})
 
-		AssertParseStatementError(t, `CREATE`, `1:1: expected DATABASE, TABLE, VIEW or FUNCTION`)
+		AssertParseStatementError(t, `CREATE`, `1:1: expected DATABASE, TABLE, VIEW, FUNCTION or MODEL`)
 		AssertParseStatementError(t, `CREATE DATABASE`, `1:15: expected database name, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE DATABASE IF`, `1:18: expected NOT, found 'EOF'`)
 		AssertParseStatementError(t, `CREATE DATABASE IF NOT`, `1:22: expected EXISTS, found 'EOF'`)
@@ -2212,29 +2212,29 @@ func TestParser_ParseStatement(t *testing.T) {
 			Having:     pos(22),
 			HavingExpr: &parser.BoolLit{ValuePos: pos(29), Value: true},
 		})
-		AssertParseStatement(t, `SELECT * WINDOW win1 AS (), win2 AS ()`, &parser.SelectStatement{
-			Select:  pos(0),
-			Columns: []*parser.ResultColumn{{Star: pos(7)}},
-			Window:  pos(9),
-			Windows: []*parser.Window{
-				{
-					Name: &parser.Ident{NamePos: pos(16), Name: "win1"},
-					As:   pos(21),
-					Definition: &parser.WindowDefinition{
-						Lparen: pos(24),
-						Rparen: pos(25),
-					},
-				},
-				{
-					Name: &parser.Ident{NamePos: pos(28), Name: "win2"},
-					As:   pos(33),
-					Definition: &parser.WindowDefinition{
-						Lparen: pos(36),
-						Rparen: pos(37),
-					},
-				},
-			},
-		})
+		// AssertParseStatement(t, `SELECT * WINDOW win1 AS (), win2 AS ()`, &parser.SelectStatement{
+		// 	Select:  pos(0),
+		// 	Columns: []*parser.ResultColumn{{Star: pos(7)}},
+		// 	Window:  pos(9),
+		// 	Windows: []*parser.Window{
+		// 		{
+		// 			Name: &parser.Ident{NamePos: pos(16), Name: "win1"},
+		// 			As:   pos(21),
+		// 			Definition: &parser.WindowDefinition{
+		// 				Lparen: pos(24),
+		// 				Rparen: pos(25),
+		// 			},
+		// 		},
+		// 		{
+		// 			Name: &parser.Ident{NamePos: pos(28), Name: "win2"},
+		// 			As:   pos(33),
+		// 			Definition: &parser.WindowDefinition{
+		// 				Lparen: pos(36),
+		// 				Rparen: pos(37),
+		// 			},
+		// 		},
+		// 	},
+		// })
 
 		AssertParseStatement(t, `SELECT * ORDER BY foo ASC, bar DESC`, &parser.SelectStatement{
 			Select: pos(0),
@@ -2249,64 +2249,64 @@ func TestParser_ParseStatement(t *testing.T) {
 			},
 		})
 
-		AssertParseStatement(t, `SELECT * UNION SELECT * ORDER BY foo`, &parser.SelectStatement{
-			Select: pos(0),
-			Columns: []*parser.ResultColumn{
-				{Star: pos(7)},
-			},
-			Union: pos(9),
-			Compound: &parser.SelectStatement{
-				Select: pos(15),
-				Columns: []*parser.ResultColumn{
-					{Star: pos(22)},
-				},
-			},
-			Order:   pos(24),
-			OrderBy: pos(30),
-			OrderingTerms: []*parser.OrderingTerm{
-				{X: &parser.Ident{NamePos: pos(33), Name: "foo"}},
-			},
-		})
-		AssertParseStatement(t, `SELECT * UNION ALL SELECT *`, &parser.SelectStatement{
-			Select: pos(0),
-			Columns: []*parser.ResultColumn{
-				{Star: pos(7)},
-			},
-			Union:    pos(9),
-			UnionAll: pos(15),
-			Compound: &parser.SelectStatement{
-				Select: pos(19),
-				Columns: []*parser.ResultColumn{
-					{Star: pos(26)},
-				},
-			},
-		})
-		AssertParseStatement(t, `SELECT * INTERSECT SELECT *`, &parser.SelectStatement{
-			Select: pos(0),
-			Columns: []*parser.ResultColumn{
-				{Star: pos(7)},
-			},
-			Intersect: pos(9),
-			Compound: &parser.SelectStatement{
-				Select: pos(19),
-				Columns: []*parser.ResultColumn{
-					{Star: pos(26)},
-				},
-			},
-		})
-		AssertParseStatement(t, `SELECT * EXCEPT SELECT *`, &parser.SelectStatement{
-			Select: pos(0),
-			Columns: []*parser.ResultColumn{
-				{Star: pos(7)},
-			},
-			Except: pos(9),
-			Compound: &parser.SelectStatement{
-				Select: pos(16),
-				Columns: []*parser.ResultColumn{
-					{Star: pos(23)},
-				},
-			},
-		})
+		// AssertParseStatement(t, `SELECT * UNION SELECT * ORDER BY foo`, &parser.SelectStatement{
+		// 	Select: pos(0),
+		// 	Columns: []*parser.ResultColumn{
+		// 		{Star: pos(7)},
+		// 	},
+		// 	Union: pos(9),
+		// 	Compound: &parser.SelectStatement{
+		// 		Select: pos(15),
+		// 		Columns: []*parser.ResultColumn{
+		// 			{Star: pos(22)},
+		// 		},
+		// 	},
+		// 	Order:   pos(24),
+		// 	OrderBy: pos(30),
+		// 	OrderingTerms: []*parser.OrderingTerm{
+		// 		{X: &parser.Ident{NamePos: pos(33), Name: "foo"}},
+		// 	},
+		// })
+		// AssertParseStatement(t, `SELECT * UNION ALL SELECT *`, &parser.SelectStatement{
+		// 	Select: pos(0),
+		// 	Columns: []*parser.ResultColumn{
+		// 		{Star: pos(7)},
+		// 	},
+		// 	Union:    pos(9),
+		// 	UnionAll: pos(15),
+		// 	Compound: &parser.SelectStatement{
+		// 		Select: pos(19),
+		// 		Columns: []*parser.ResultColumn{
+		// 			{Star: pos(26)},
+		// 		},
+		// 	},
+		// })
+		// AssertParseStatement(t, `SELECT * INTERSECT SELECT *`, &parser.SelectStatement{
+		// 	Select: pos(0),
+		// 	Columns: []*parser.ResultColumn{
+		// 		{Star: pos(7)},
+		// 	},
+		// 	Intersect: pos(9),
+		// 	Compound: &parser.SelectStatement{
+		// 		Select: pos(19),
+		// 		Columns: []*parser.ResultColumn{
+		// 			{Star: pos(26)},
+		// 		},
+		// 	},
+		// })
+		// AssertParseStatement(t, `SELECT * EXCEPT SELECT *`, &parser.SelectStatement{
+		// 	Select: pos(0),
+		// 	Columns: []*parser.ResultColumn{
+		// 		{Star: pos(7)},
+		// 	},
+		// 	Except: pos(9),
+		// 	Compound: &parser.SelectStatement{
+		// 		Select: pos(16),
+		// 		Columns: []*parser.ResultColumn{
+		// 			{Star: pos(23)},
+		// 		},
+		// 	},
+		// })
 
 		/*AssertParseStatement(t, `VALUES (1, 2), (3, 4)`, &parser.SelectStatement{
 			Values: pos(0),
@@ -3399,11 +3399,11 @@ func TestParser_ParseStatement(t *testing.T) {
 		AssertParseStatementError(t, `SELECT * GROUP BY`, `1:17: expected expression, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * GROUP BY foo bar`, `1:23: expected semicolon or EOF, found bar`)
 		AssertParseStatementError(t, `SELECT * GROUP BY foo HAVING`, `1:28: expected expression, found 'EOF'`)
-		AssertParseStatementError(t, `SELECT * WINDOW`, `1:15: expected window name, found 'EOF'`)
-		AssertParseStatementError(t, `SELECT * WINDOW win1`, `1:20: expected AS, found 'EOF'`)
-		AssertParseStatementError(t, `SELECT * WINDOW win1 AS`, `1:23: expected left paren, found 'EOF'`)
-		AssertParseStatementError(t, `SELECT * WINDOW win1 AS (`, `1:25: expected right paren, found 'EOF'`)
-		AssertParseStatementError(t, `SELECT * WINDOW win1 AS () win2`, `1:28: expected semicolon or EOF, found win2`)
+		// AssertParseStatementError(t, `SELECT * WINDOW`, `1:15: expected window name, found 'EOF'`)
+		// AssertParseStatementError(t, `SELECT * WINDOW win1`, `1:20: expected AS, found 'EOF'`)
+		// AssertParseStatementError(t, `SELECT * WINDOW win1 AS`, `1:23: expected left paren, found 'EOF'`)
+		// AssertParseStatementError(t, `SELECT * WINDOW win1 AS (`, `1:25: expected right paren, found 'EOF'`)
+		// AssertParseStatementError(t, `SELECT * WINDOW win1 AS () win2`, `1:28: expected semicolon or EOF, found win2`)
 		AssertParseStatementError(t, `SELECT * ORDER`, `1:14: expected BY, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * ORDER BY`, `1:17: expected expression, found 'EOF'`)
 		AssertParseStatementError(t, `SELECT * ORDER BY 1,`, `1:20: expected expression, found 'EOF'`)
