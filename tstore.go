@@ -125,6 +125,7 @@ func (e *executor) executeTstoreShard(ctx context.Context, qcx *Qcx, index strin
 	for itr.Next() {
 		item, key := itr.Item()
 		if unset {
+			result.TupleSchema = item.TupleSchema
 			if len(columnFilter) > 0 {
 				newSchema := make(types.Schema, 0)
 				parts := make([]int, 0)
@@ -204,14 +205,6 @@ func (tr *TupleResults) ToBytes() ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "serializing tuple schema")
 	}
-
-	// build a map of columnNames to column indexes in the schema
-	/*
-		colMap := make(map[string]int)
-		for i, sc := range tr.TupleSchema {
-			colMap[sc.ColumnName] = i
-		}
-	*/
 
 	// iterate the tupleData - outside loop is rows
 	for _, trow := range tr.rows {
