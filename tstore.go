@@ -122,6 +122,20 @@ func (e *executor) executeTstoreShard(ctx context.Context, qcx *Qcx, index strin
 	for itr.Next() {
 		item, key := itr.Item()
 		if unset {
+			if len(columnFilter) > 0 {
+				newSchema := make(types.Schema, 0)
+				for _, name := range columnFilter {
+					for i := range item.TupleSchema {
+						if item.TupleSchema[i].ColumnName == name{
+							newSchema=append(newSchema, item.TupleSchema[i]))
+						}
+					}
+				}
+				if len(newSchema) == 0{
+					return &TupleResults{}, nil
+				}
+
+			}
 			result.TupleSchema = item.TupleSchema
 			unset = false
 		}
