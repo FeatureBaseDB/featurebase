@@ -117,3 +117,29 @@ func (iter *RangeIterator) Next() bool {
 	iter.key, iter.item, iter.err = iter.tree.getTuple(iter.node, int(iter.cursor), iter.schema)
 	return iter.key.Less(iter.to) && iter.err == nil
 }
+
+// TODO(twg) 2023/04/05 untested just added while it was top of mind
+func (iter *RangeIterator) Prev() bool {
+	if iter.done {
+		return false
+	}
+	iter.cursor--
+	if iter.cursor < 0 {
+		page := iter.node.page.ReadPrevPointer()
+		iter.node.releaseReadLatch()
+		iter.tree.unpin(iter.node)
+		if page.Page == bufferpool.INVALID_PAGE { // at the end
+			return false
+		}
+		n, err := iter.tree.fetchNode(page)
+		iter.err = err
+		if iter.err != nil {
+			return false
+		}
+		iter.node = n
+		iter.node.takeReadLatch()
+		iter.cursor = iter.node.slotCount() - 1
+	}
+	iter.key, iter.item, iter.err = iter.tree.getTuple(iter.node, int(iter.cursor), iter.schema)
+	return iter.from.Less(iter.key) && iter.err == nil
+}
