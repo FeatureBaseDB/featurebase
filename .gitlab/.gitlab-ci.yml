@@ -567,8 +567,7 @@ package for linux arm64:
     GOOS: "linux"
     GOARCH: "arm64"
   script:
-    - touch /etc/apt/sources.list.d/goreleaser.list
-    - chmod 666 /etc/apt/sources.list.d/goreleaser.list
+    - chmod 666 /etc/apt/sources.list.d
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
     - apt update && apt install nfpm=2.11.3
     - apt-get update && apt-get install -y -qq build-essential

@@ -350,6 +350,7 @@ cli-startup:
 	cd certstrap
 	go build
 	mv ./certstrap /usr/local/bin/
+	chmod 777 /usr/local/bin/certstrap
 	$(MAKE) testenv
 	$(MAKE) vendor
 	$(MAKE) startup
