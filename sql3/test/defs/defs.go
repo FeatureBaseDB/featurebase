@@ -184,6 +184,7 @@ var TableTests []TableTest = []TableTest{
 
 	// groupby tests
 	groupByTests,
+	groupBySetDistinctTests,
 
 	// create table tests
 	createTable,

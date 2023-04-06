@@ -90,6 +90,7 @@ func (*RollbackStatement) node()        {}
 func (*SavepointStatement) node()       {}
 func (*SelectStatement) node()          {}
 func (*StringLit) node()                {}
+func (*TableQueryOption) node()         {}
 func (*TableValuedFunction) node()      {}
 func (*TimeUnitConstraint) node()       {}
 func (*TimeQuantumConstraint) node()    {}
@@ -4139,15 +4140,45 @@ func (c *ResultColumn) String() string {
 	return c.Expr.String()
 }
 
+type TableQueryOption struct {
+	OptionName   *Ident
+	LParen       Pos
+	OptionParams []*Ident
+	RParen       Pos
+}
+
+func (n *TableQueryOption) Clone() *TableQueryOption {
+	if n == nil {
+		return nil
+	}
+	other := *n
+	other.OptionName = n.OptionName.Clone()
+	other.OptionParams = cloneIdents(n.OptionParams)
+	return &other
+}
+
+func (n *TableQueryOption) String() string {
+	var buf bytes.Buffer
+	buf.WriteString(n.OptionName.String())
+	buf.WriteString("(")
+	for i, o := range n.OptionParams {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, " %s", o.String())
+	}
+	buf.WriteString(")")
+	return buf.String()
+}
+
 type QualifiedTableName struct {
-	Name          *Ident                // table name
-	As            Pos                   // position of AS keyword
-	Alias         *Ident                // optional table alias
-	Indexed       Pos                   // position of INDEXED keyword
-	IndexedBy     Pos                   // position of BY keyword after INDEXED
-	Not           Pos                   // position of NOT keyword before INDEXED
-	NotIndexed    Pos                   // position of NOT keyword before INDEXED
-	Index         *Ident                // name of index
+	Name          *Ident // table name
+	As            Pos    // position of AS keyword
+	Alias         *Ident // optional table alias
+	With          Pos    // position of WITH keyword
+	LParen        Pos
+	QueryOptions  []*TableQueryOption
+	RParen        Pos
 	OutputColumns []*SourceOutputColumn // output columns - populated during analysis
 }
 
@@ -4164,6 +4195,17 @@ func (n *QualifiedTableName) MatchesTablenameOrAlias(match string) bool {
 	return strings.EqualFold(IdentName(n.Alias), match) || strings.EqualFold(IdentName(n.Name), match)
 }
 
+func cloneQueryOptions(a []*TableQueryOption) []*TableQueryOption {
+	if a == nil {
+		return nil
+	}
+	other := make([]*TableQueryOption, len(a))
+	for i := range a {
+		other[i] = a[i].Clone()
+	}
+	return other
+}
+
 // Clone returns a deep copy of n.
 func (n *QualifiedTableName) Clone() *QualifiedTableName {
 	if n == nil {
@@ -4172,7 +4214,7 @@ func (n *QualifiedTableName) Clone() *QualifiedTableName {
 	other := *n
 	other.Name = n.Name.Clone()
 	other.Alias = n.Alias.Clone()
-	other.Index = n.Index.Clone()
+	other.QueryOptions = cloneQueryOptions(n.QueryOptions)
 	return &other
 }
 
@@ -4187,10 +4229,15 @@ func (n *QualifiedTableName) String() string {
 		fmt.Fprintf(&buf, " %s", n.Alias.String())
 	}
 
-	if n.Index != nil {
-		fmt.Fprintf(&buf, " INDEXED BY %s", n.Index.String())
-	} else if n.NotIndexed.IsValid() {
-		buf.WriteString(" NOT INDEXED")
+	if n.With.IsValid() {
+		buf.WriteString(" WITH (")
+		for i, o := range n.QueryOptions {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, " %s", o.String())
+		}
+		buf.WriteString(")")
 	}
 	return buf.String()
 }
