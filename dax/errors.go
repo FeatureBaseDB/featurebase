@@ -13,6 +13,7 @@ const (
 	ErrDatabaseIDDoesNotExist   errors.Code = "DatabaseIDDoesNotExist"
 	ErrDatabaseNameDoesNotExist errors.Code = "DatabaseNameDoesNotExist"
 	ErrDatabaseNameExists       errors.Code = "DatabaseNameExists"
+	ErrDatabaseNameInvalid      errors.Code = "DatabaseNameInvalid"
 
 	ErrTableIDExists         errors.Code = "TableIDExists"
 	ErrTableKeyExists        errors.Code = "TableKeyExists"
@@ -36,6 +37,13 @@ func NewErrOrganizationIDDoesNotExist(orgID OrganizationID) error {
 	return errors.New(
 		ErrOrganizationIDDoesNotExist,
 		fmt.Sprintf("Organization ID '%s' does not exist", orgID),
+	)
+}
+
+func NewErrDatabaseNameInvalid(qdb QualifiedDatabase) error {
+	return errors.New(
+		ErrDatabaseNameInvalid,
+		fmt.Sprintf("invalid database name %s, must match [a-z][a-z0-9Θ_-]* and contain at most 300 characters", string(qdb.Name)),
 	)
 }
 

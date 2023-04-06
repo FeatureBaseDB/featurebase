@@ -38,11 +38,24 @@ func TestDAXIntegration(t *testing.T) {
 	dbID := dax.DatabaseID("db1")
 	qdbid := dax.NewQualifiedDatabaseID(orgID, dbID)
 	dbname := dax.DatabaseName("dbname1")
+	dbname2 := dax.DatabaseName("-dbname2")
 	qdb := &dax.QualifiedDatabase{
 		OrganizationID: qdbid.OrganizationID,
 		Database: dax.Database{
 			ID:   qdbid.DatabaseID,
 			Name: dbname,
+			Options: dax.DatabaseOptions{
+				WorkersMin: 1,
+				WorkersMax: 1,
+			},
+		},
+	}
+
+	qdb2 := &dax.QualifiedDatabase{
+		OrganizationID: qdbid.OrganizationID,
+		Database: dax.Database{
+			ID:   qdbid.DatabaseID,
+			Name: dbname2,
 			Options: dax.DatabaseOptions{
 				WorkersMin: 1,
 				WorkersMax: 1,
@@ -801,6 +814,11 @@ func TestDAXIntegration(t *testing.T) {
 				t.Run("CreateDatabase", func(t *testing.T) {
 					err := client.CreateDatabase(ctx, nil)
 					assertCode(t, err, schemar.ErrCodeDatabaseNameInvalid)
+				})
+
+				t.Run("CreateDatabase with Invalid Name", func(t *testing.T) {
+					err := client.CreateDatabase(ctx, qdb2)
+					assertCode(t, err, dax.ErrDatabaseNameInvalid)
 				})
 
 				t.Run("DropDatabase", func(t *testing.T) {
