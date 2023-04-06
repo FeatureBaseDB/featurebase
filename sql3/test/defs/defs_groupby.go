@@ -272,6 +272,7 @@ var groupBySetDistinctTests = TableTest{
 			srcRow(int64(2), []int64{3, 4}, []string{"d", "e"}),
 			srcRow(int64(3), []int64{1, 4}, []string{"a", "d"}),
 			srcRow(int64(4), []int64{3, 2}, []string{"c", "b"}),
+			srcRow(int64(5), []int64{3, 2}, []string{"c", "b"}),
 		),
 	),
 	SQLTests: []SQLTest{
@@ -325,6 +326,40 @@ var groupBySetDistinctTests = TableTest{
 		},
 		{
 			SQLs: sqls(
+				"select distinct ids1, ss1 from groupby_set_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("ids1", fldTypeIDSet),
+				hdr("ss1", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row([]int64{1, 2}, []string{"a", "b"}),
+				row([]int64{3, 4}, []string{"d", "e"}),
+				row([]int64{1, 4}, []string{"a", "d"}),
+				row([]int64{2, 3}, []string{"b", "c"}),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select distinct ids1, ss1 from groupby_set_test with (flatten(ids1))",
+			),
+			ExpHdrs: hdrs(
+				hdr("ids1", fldTypeIDSet),
+				hdr("ss1", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row([]int64{1, 2}, []string{"a", "b"}),
+				row([]int64{3, 4}, []string{"d", "e"}),
+				row([]int64{1, 4}, []string{"a", "d"}),
+				row([]int64{2, 3}, []string{"b", "c"}),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
 				"select count(*), ids1 from groupby_set_test group by ids1",
 			),
 			ExpHdrs: hdrs(
@@ -335,7 +370,7 @@ var groupBySetDistinctTests = TableTest{
 				row(int64(1), []int64{1, 2}),
 				row(int64(1), []int64{3, 4}),
 				row(int64(1), []int64{1, 4}),
-				row(int64(1), []int64{2, 3}),
+				row(int64(2), []int64{2, 3}),
 			),
 			Compare: CompareExactUnordered,
 		},
@@ -349,8 +384,8 @@ var groupBySetDistinctTests = TableTest{
 			),
 			ExpRows: rows(
 				row(int64(2), []int64{1}),
-				row(int64(2), []int64{2}),
-				row(int64(2), []int64{3}),
+				row(int64(3), []int64{2}),
+				row(int64(3), []int64{3}),
 				row(int64(2), []int64{4}),
 			),
 			Compare: CompareExactUnordered,
@@ -400,7 +435,7 @@ var groupBySetDistinctTests = TableTest{
 				row(int64(1), []string{"a", "b"}),
 				row(int64(1), []string{"d", "e"}),
 				row(int64(1), []string{"a", "d"}),
-				row(int64(1), []string{"b", "c"}),
+				row(int64(2), []string{"b", "c"}),
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,
@@ -415,8 +450,8 @@ var groupBySetDistinctTests = TableTest{
 			),
 			ExpRows: rows(
 				row(int64(2), []string{"a"}),
-				row(int64(2), []string{"b"}),
-				row(int64(1), []string{"c"}),
+				row(int64(3), []string{"b"}),
+				row(int64(2), []string{"c"}),
 				row(int64(2), []string{"d"}),
 				row(int64(1), []string{"e"}),
 			),

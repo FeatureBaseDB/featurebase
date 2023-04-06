@@ -4230,13 +4230,14 @@ func (n *QualifiedTableName) String() string {
 	}
 
 	if n.With.IsValid() {
-		buf.WriteString(" WITH")
+		buf.WriteString(" WITH (")
 		for i, o := range n.QueryOptions {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
 			fmt.Fprintf(&buf, " %s", o.String())
 		}
+		buf.WriteString(")")
 	}
 	return buf.String()
 }
