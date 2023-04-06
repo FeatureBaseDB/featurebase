@@ -376,9 +376,9 @@ run go tests cli kafka integration:
     - echo "running fbsql integration tests"
     - cd ./idk/
     - BRANCH_NAME=${CI_COMMIT_REF_SLUG} make cli-startup
-    - cd ..
     - go test -coverprofile=coverage-cli-kafka-integration.out -run -timeout=10m TestKafkaRunner ./cli
   after_script:
+    - cd ./idk/
     - make shutdown
     - rm -rf /mnt/ramdisk/test-$CI_JOB_ID
   artifacts:
@@ -559,15 +559,12 @@ package for linux arm64:
   stage: build
   image: golang:$GOVERSION
   extends: .go-cache
-  tags:
-    - shell-arm64
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
     GOOS: "linux"
     GOARCH: "arm64"
   script:
-    - chmod 666 /etc/apt/sources.list.d
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
     - apt update && apt install nfpm=2.11.3
     - apt-get update && apt-get install -y -qq build-essential
