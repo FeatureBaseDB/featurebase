@@ -407,7 +407,9 @@ func (sf *ShardFile) Process(cs *ChangesetRequest) error {
 	if err != nil {
 		return err
 	}
-	return os.Rename(rtemp+sf.executor.TableExtension(), sf.dest+sf.executor.TableExtension())
+	fname := sf.dest + sf.executor.TableExtension()
+	delete(sf.executor.arrowCache, fname)
+	return os.Rename(rtemp+sf.executor.TableExtension(), fname)
 }
 
 func (sf *ShardFile) LoadBlobs() error {

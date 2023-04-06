@@ -435,12 +435,24 @@ func (e *executor) dataFrameExists(fname string) bool {
 	return true
 }
 
-func (e *executor) getDataTable(ctx context.Context, fname string, mem memory.Allocator) (arrow.Table, error) {
+func (e *executor) getDataTable(ctx context.Context, fname string, memignore memory.Allocator) (arrow.Table, error) {
+	table, ok := e.arrowCache[fname]
+	if ok {
+		return table, nil
+	}
+	// ignoring the passed in allocatorsince where caching
+	mem := memory.NewGoAllocator()
 	if e.typeIsParquet() {
 		table, err := readTableParquetCtx(ctx, fname, mem)
+		e.arrowCache[fname] = table
 		return table, err
 	}
-	return readTableArrow(fname, mem)
+	table, err := readTableArrow(fname, mem)
+	if err != nil {
+		return nil, err
+	}
+	e.arrowCache[fname] = table
+	return table, nil
 }
 
 func (e *executor) typeIsParquet() bool {
