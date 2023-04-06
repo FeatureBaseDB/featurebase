@@ -17,7 +17,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -81,7 +80,7 @@ type executor struct {
 	// Temporary flag to be removed when stablized
 	dataframeEnabled   bool
 	datafameUseParquet bool
-	arrowCache         map[string]arrow.Table
+	arrowCache         map[string]*arrowCache
 }
 
 // executorOption is a functional option type for pilosa.executor
@@ -145,7 +144,7 @@ func newExecutor(opts ...executorOption) *executor {
 	e.work = make(chan job, e.workerPoolSize)
 	_ = testhook.Opened(NewAuditor(), e, nil)
 	e.workers = task.NewPool(e.workerPoolSize, e.doOneJob, e)
-	e.arrowCache = make(map[string]arrow.Table)
+	e.arrowCache = make(map[string]*arrowCache)
 	return e
 }
 

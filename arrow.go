@@ -394,7 +394,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 		return &BasicTable{name: name}, nil
 	}
 
-	table, err := e.getDataTable(ctx, fname, pool)
+	table, pool, err := e.getDataTable(ctx, fname)
 	if err != nil {
 		return nil, errors.Wrap(err, "arrow readTableParquet")
 	}
@@ -435,24 +435,29 @@ func (e *executor) dataFrameExists(fname string) bool {
 	return true
 }
 
-func (e *executor) getDataTable(ctx context.Context, fname string, memignore memory.Allocator) (arrow.Table, error) {
-	table, ok := e.arrowCache[fname]
+type arrowCache struct {
+	table arrow.Table
+	pool  memory.Allocator
+}
+
+func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, memory.Allocator, error) {
+	cache, ok := e.arrowCache[fname]
 	if ok {
-		return table, nil
+		return cache.table, cache.pool, nil
 	}
 	// ignoring the passed in allocatorsince where caching
 	mem := memory.NewGoAllocator()
 	if e.typeIsParquet() {
 		table, err := readTableParquetCtx(ctx, fname, mem)
-		e.arrowCache[fname] = table
-		return table, err
+		e.arrowCache[fname] = &arrowCache{table: table, pool: mem}
+		return table, mem, err
 	}
 	table, err := readTableArrow(fname, mem)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	e.arrowCache[fname] = table
-	return table, nil
+	e.arrowCache[fname] = &arrowCache{table: table, pool: mem}
+	return table, mem, nil
 }
 
 func (e *executor) typeIsParquet() bool {

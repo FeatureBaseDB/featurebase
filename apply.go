@@ -211,7 +211,6 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 		}
 	}
 	//
-	pool := memory.NewGoAllocator() // TODO(twg) 2022/09/01 singledton?
 
 	ids := filter.ShardColumns() // needs to be shard columns
 	// Fetch index.
@@ -226,7 +225,7 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 		return value.NewVector([]value.Value{}), nil
 	}
 
-	table, err := e.getDataTable(ctx, fname, pool)
+	table, pool, err := e.getDataTable(ctx, fname)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +263,7 @@ func NewShardFile(ctx context.Context, name string, mem memory.Allocator, e *exe
 		return &ShardFile{dest: name, executor: e, strings: make(map[key][]string)}, nil
 	}
 	// else read in existing
-	table, err := e.getDataTable(ctx, name, mem)
+	table, _, err := e.getDataTable(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -663,7 +662,6 @@ func (api *API) GetDataframeSchema(ctx context.Context, indexName string) (inter
 	dir, _ := os.Open(base)
 	files, _ := dir.Readdir(0)
 	parts := make([]column, 0)
-	mem := memory.NewGoAllocator()
 	for i := range files {
 		file := files[i]
 		name := file.Name()
@@ -672,7 +670,7 @@ func (api *API) GetDataframeSchema(ctx context.Context, indexName string) (inter
 			name = strings.TrimSuffix(name, filepath.Ext(name))
 			// read the parquet file and extract the schema
 			fname := filepath.Join(base, name)
-			table, err := api.server.executor.getDataTable(ctx, fname, mem)
+			table, _, err := api.server.executor.getDataTable(ctx, fname)
 			if err != nil {
 				return nil, err
 			}
