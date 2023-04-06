@@ -518,20 +518,19 @@ upload to sonarcloud:
 
 package for linux amd64:
   stage: build
-  image: gitlab/dind
-  services:
-    - docker:dind
-  extends: .go-cache
+  image: nfpm:v2.11.3
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
     GOOS: "linux"
     GOARCH: "amd64"
   script:
-    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
-    - apt-get update && apt-get install -y -qq musl-tools build-essential make
-    - make package
+    - export VERSION=$(git describe --tags 2>/dev/null || echo unknown)
+    - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
+    - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
+  dependencies:
+    - build featurebase # featurebase_linux_amd64 is all we want
+    - build fbsql amd64 # ./build/fbsql_linux_amd64 is all we want
   artifacts:
     paths:
       - "*.deb"
