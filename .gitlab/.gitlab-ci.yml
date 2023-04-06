@@ -526,7 +526,7 @@ package for linux amd64:
     GOOS: "linux"
     GOARCH: "amd64"
   script:
-    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
+    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
     - apt update && apt install nfpm=2.11.3
     - apt-get update && apt-get install -y -qq musl-tools build-essential
     - make package
@@ -567,7 +567,9 @@ package for linux arm64:
     GOOS: "linux"
     GOARCH: "arm64"
   script:
-    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
+    - touch /etc/apt/sources.list.d/goreleaser.list
+    - chmod 666 /etc/apt/sources.list.d/goreleaser.list
+    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
     - apt update && apt install nfpm=2.11.3
     - apt-get update && apt-get install -y -qq build-essential
     - make package

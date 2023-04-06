@@ -349,7 +349,7 @@ cli-startup:
 	git clone https://github.com/square/certstrap
 	cd certstrap
 	go build
-	sudo mv ./certstrap /usr/local/bin/
+	mv ./certstrap /usr/local/bin/
 	$(MAKE) testenv
 	$(MAKE) vendor
 	$(MAKE) startup
