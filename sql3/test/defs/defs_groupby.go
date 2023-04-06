@@ -257,3 +257,171 @@ var groupByTests = TableTest{
 		},
 	},
 }
+
+// groupby/distinct with sets tests
+var groupBySetDistinctTests = TableTest{
+	Table: tbl(
+		"groupby_set_test",
+		srcHdrs(
+			srcHdr("_id", fldTypeID),
+			srcHdr("ids1", fldTypeIDSet),
+			srcHdr("ss1", fldTypeStringSet),
+		),
+		srcRows(
+			srcRow(int64(1), []int64{1, 2}, []string{"a", "b"}),
+			srcRow(int64(2), []int64{3, 4}, []string{"d", "e"}),
+			srcRow(int64(3), []int64{1, 4}, []string{"a", "d"}),
+			srcRow(int64(4), []int64{3, 2}, []string{"c", "b"}),
+		),
+	),
+	SQLTests: []SQLTest{
+		{
+			SQLs: sqls(
+				"select distinct ids1 from groupby_set_test with (flatter(foo))",
+			),
+			ExpErr: "unknown query hint 'flatter'",
+		},
+		{
+			SQLs: sqls(
+				"select distinct ids1 from groupby_set_test with (flatten(foo))",
+			),
+			ExpErr: "column 'foo' not found",
+		},
+		{
+			SQLs: sqls(
+				"select distinct ids1 from groupby_set_test with (flatten(foo, bar))",
+			),
+			ExpErr: "query hint 'flatten' expected 1 parameter(s) (column name), got 2 parameters",
+		},
+		{
+			SQLs: sqls(
+				"select distinct ids1 from groupby_set_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("ids1", fldTypeIDSet),
+			),
+			ExpRows: rows(
+				row([]int64{1, 2}),
+				row([]int64{3, 4}),
+				row([]int64{1, 4}),
+				row([]int64{2, 3}),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select distinct ids1 from groupby_set_test with (flatten(ids1))",
+			),
+			ExpHdrs: hdrs(
+				hdr("ids1", fldTypeIDSet),
+			),
+			ExpRows: rows(
+				row([]int64{1}),
+				row([]int64{2}),
+				row([]int64{3}),
+				row([]int64{4}),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select count(*), ids1 from groupby_set_test group by ids1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("ids1", fldTypeIDSet),
+			),
+			ExpRows: rows(
+				row(int64(1), []int64{1, 2}),
+				row(int64(1), []int64{3, 4}),
+				row(int64(1), []int64{1, 4}),
+				row(int64(1), []int64{2, 3}),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select count(*), ids1 from groupby_set_test with (flatten(ids1)) group by ids1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("ids1", fldTypeIDSet),
+			),
+			ExpRows: rows(
+				row(int64(2), []int64{1}),
+				row(int64(2), []int64{2}),
+				row(int64(2), []int64{3}),
+				row(int64(2), []int64{4}),
+			),
+			Compare: CompareExactUnordered,
+		},
+		{
+			SQLs: sqls(
+				"select distinct ss1 from groupby_set_test",
+			),
+			ExpHdrs: hdrs(
+				hdr("ss1", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row([]string{"a", "b"}),
+				row([]string{"d", "e"}),
+				row([]string{"a", "d"}),
+				row([]string{"b", "c"}),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select distinct ss1 from groupby_set_test with (flatten(ss1))",
+			),
+			ExpHdrs: hdrs(
+				hdr("ss1", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row([]string{"a"}),
+				row([]string{"b"}),
+				row([]string{"c"}),
+				row([]string{"d"}),
+				row([]string{"e"}),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select count(*), ss1 from groupby_set_test group by ss1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("ss1", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row(int64(1), []string{"a", "b"}),
+				row(int64(1), []string{"d", "e"}),
+				row(int64(1), []string{"a", "d"}),
+				row(int64(1), []string{"b", "c"}),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+		{
+			SQLs: sqls(
+				"select count(*), ss1 from groupby_set_test with (flatten(ss1)) group by ss1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeInt),
+				hdr("ss1", fldTypeStringSet),
+			),
+			ExpRows: rows(
+				row(int64(2), []string{"a"}),
+				row(int64(2), []string{"b"}),
+				row(int64(1), []string{"c"}),
+				row(int64(2), []string{"d"}),
+				row(int64(1), []string{"e"}),
+			),
+			Compare:        CompareExactUnordered,
+			SortStringKeys: true,
+		},
+	},
+}

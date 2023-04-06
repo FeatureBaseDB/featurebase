@@ -148,6 +148,10 @@ const (
 
 	// remote execution
 	ErrRemoteUnauthorized errors.Code = "ErrRemoteUnauthorized"
+
+	// query hints
+	ErrUnknownQueryHint               errors.Code = "ErrInvalidQueryHint"
+	ErrInvalidQueryHintParameterCount errors.Code = "ErrInvalidQueryHintParameterCount"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -909,5 +913,21 @@ func NewErrRemoteUnauthorized(line, col int, remoteUrl string) error {
 	return errors.New(
 		ErrRemoteUnauthorized,
 		fmt.Sprintf("unauthorized on remote server '%s'", remoteUrl),
+	)
+}
+
+// query hints
+
+func NewErrUnknownQueryHint(line, col int, hintName string) error {
+	return errors.New(
+		ErrUnknownQueryHint,
+		fmt.Sprintf("[%d:%d] unknown query hint '%s'", line, col, hintName),
+	)
+}
+
+func NewErrInvalidQueryHintParameterCount(line, col int, hintName string, desiredList string, desiredCount int, actualCount int) error {
+	return errors.New(
+		ErrInvalidQueryHintParameterCount,
+		fmt.Sprintf("[%d:%d] query hint '%s' expected %d parameter(s) (%s), got %d parameters", line, col, hintName, desiredCount, desiredList, actualCount),
 	)
 }

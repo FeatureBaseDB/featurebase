@@ -15,6 +15,11 @@ import (
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
 )
 
+type TableQueryHint struct {
+	name   string
+	params []string
+}
+
 // PlanOpPQLTableScan plan operator handles a PQL table scan
 type PlanOpPQLTableScan struct {
 	planner            *ExecutionPlanner
@@ -23,15 +28,17 @@ type PlanOpPQLTableScan struct {
 	filter             types.PlanExpression
 	timeQuantumFilters []types.PlanExpression
 	topExpr            types.PlanExpression
+	hints              []*TableQueryHint
 	warnings           []string
 }
 
-func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []string) *PlanOpPQLTableScan {
+func NewPlanOpPQLTableScan(p *ExecutionPlanner, tableName string, columns []string, hints []*TableQueryHint) *PlanOpPQLTableScan {
 	return &PlanOpPQLTableScan{
 		planner:            p,
 		tableName:          tableName,
 		columns:            columns,
 		timeQuantumFilters: make([]types.PlanExpression, 0),
+		hints:              hints,
 		warnings:           make([]string, 0),
 	}
 }

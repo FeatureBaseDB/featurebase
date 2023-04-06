@@ -2760,27 +2760,83 @@ func (p *Parser) parseQualifiedTableName(ident *Ident) (_ *QualifiedTableName, e
 		}
 	}
 
-	// Parse optional "INDEXED BY index-name" or "NOT INDEXED".
-	/*switch p.peek() {
-	case INDEXED:
-		tbl.Indexed, _, _ = p.scan()
-		if p.peek() != BY {
-			return &tbl, p.errorExpected(p.pos, p.tok, "BY")
-		}
-		tbl.IndexedBy, _, _ = p.scan()
+	// handle query option
+	if p.peek() == WITH {
+		tbl.With, _, _ = p.scan()
 
-		if tbl.Index, err = p.parseIdent("index name"); err != nil {
-			return &tbl, err
+		tbl.QueryOptions = make([]*TableQueryOption, 0)
+		if p.peek() != LP {
+			return nil, p.errorExpected(p.pos, p.tok, "left paren")
 		}
-	case NOT:
-		tbl.Not, _, _ = p.scan()
-		if p.peek() != INDEXED {
-			return &tbl, p.errorExpected(p.pos, p.tok, "INDEXED")
-		}
-		tbl.NotIndexed, _, _ = p.scan()
-	}*/
+		tbl.LParen, _, _ = p.scan()
 
+		if tok := p.peek(); !isIdentToken(tok) {
+			return nil, p.errorExpected(p.pos, p.tok, "identifier")
+		}
+		for {
+			qo, err := p.parseTableQueryOption()
+			if err != nil {
+				return &tbl, err
+			}
+			tbl.QueryOptions = append(tbl.QueryOptions, qo)
+
+			if p.peek() != COMMA {
+				break
+			}
+			_, _, _ = p.scan()
+		}
+		if p.peek() != RP {
+			return nil, p.errorExpected(p.pos, p.tok, "right paren")
+		}
+		tbl.RParen, _, _ = p.scan()
+	}
 	return &tbl, nil
+}
+
+func (p *Parser) parseTableQueryOption() (_ *TableQueryOption, err error) {
+	var opt TableQueryOption
+	opt.OptionParams = make([]*Ident, 0)
+
+	if tok := p.peek(); !isIdentToken(tok) {
+		return nil, p.errorExpected(p.pos, p.tok, "identifier")
+	}
+
+	oi, err := p.parseIdent("query option")
+	if err != nil {
+		return &opt, err
+	}
+
+	opt.OptionName = oi
+
+	if p.peek() != LP {
+		return nil, p.errorExpected(p.pos, p.tok, "left paren")
+	}
+	opt.LParen, _, _ = p.scan()
+
+	for {
+		if tok := p.peek(); !isIdentToken(tok) {
+			return nil, p.errorExpected(p.pos, p.tok, "identifier")
+		}
+
+		opi, err := p.parseIdent("query option parameter")
+		if err != nil {
+			return &opt, err
+		}
+
+		opt.OptionParams = append(opt.OptionParams, opi)
+
+		if p.peek() != COMMA {
+			break
+		}
+		_, _, _ = p.scan()
+	}
+
+	if p.peek() != RP {
+		return nil, p.errorExpected(p.pos, p.tok, "right paren")
+	}
+	opt.RParen, _, _ = p.scan()
+
+	return &opt, nil
 }
 
 func (p *Parser) parseTableValuedFunction(ident *Ident) (_ *TableValuedFunction, err error) {

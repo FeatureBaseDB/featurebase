@@ -232,7 +232,12 @@ func (i *pqlGroupByRowIter) Next(ctx context.Context) (types.Row, error) {
 			if g.Value != nil {
 				row[idx] = *g.Value
 			} else if g.RowKey != "" {
-				row[idx] = g.RowKey
+				switch c.Type().(type) {
+				case *parser.DataTypeStringSet:
+					row[idx] = []string{g.RowKey}
+				default:
+					row[idx] = g.RowKey
+				}
 			} else {
 				switch c.Type().(type) {
 				case *parser.DataTypeIDSet:

@@ -1724,6 +1724,11 @@ func (n *qualifiedRefPlanExpression) Evaluate(currentRow []interface{}) (interfa
 
 	switch n.dataType.(type) {
 	case *parser.DataTypeIDSet, *parser.DataTypeIDSetQuantum:
+		// this could be an []int64 or a []uint64 internally
+		irow, ok := currentRow[n.columnIndex].([]int64)
+		if ok {
+			return irow, nil
+		}
 		row, ok := currentRow[n.columnIndex].([]uint64)
 		if !ok {
 			return nil, sql3.NewErrInternalf("unexpected type for current row '%T'", currentRow[n.columnIndex])
