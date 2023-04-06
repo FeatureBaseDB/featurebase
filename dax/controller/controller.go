@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/computer"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/poller"
@@ -624,11 +623,6 @@ func (c *Controller) translateWorkersToAssignedNodes(tx dax.Transaction, workers
 
 // CreateDatabase adds a database to the schemar.
 func (c *Controller) CreateDatabase(ctx context.Context, qdb *dax.QualifiedDatabase) error {
-	// Sanitizing database name
-	if err := pilosa.ValidateName(string(qdb.Name)); err != nil {
-		return errors.Errorf("error with creating database, database name invalid: %v", err)
-	}
-
 	// Create Database ID.
 	if _, err := qdb.CreateID(); err != nil {
 		return errors.Wrap(err, "creating database ID")

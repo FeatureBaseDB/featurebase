@@ -47,7 +47,7 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName = errors.New("invalid index or field name, must match [a-z][a-z0-9Θ_-]* and contain at most 230 characters")
+	ErrName = errors.New("invalid index or field name, must match [a-z][a-z0-9Θ_-]* and contain at most 300 characters")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
