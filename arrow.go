@@ -443,6 +443,7 @@ type arrowCache struct {
 func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, memory.Allocator, error) {
 	cache, ok := e.arrowCache[fname]
 	if ok {
+		cache.table.Retain()
 		return cache.table, e.pool, nil
 	}
 	// ignoring the passed in allocatorsince where caching
