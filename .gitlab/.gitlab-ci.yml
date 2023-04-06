@@ -529,6 +529,8 @@ package for linux amd64:
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
     - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
     - nfpm version # smoke
+    - mv "featurebase_${GOOS}_${GOARCH}" featurebase
+    - mv "./build/fbsql_${GOOS}_${GOARCH}" fbsql
     - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
     - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
   needs:
