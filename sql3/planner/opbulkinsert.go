@@ -867,7 +867,7 @@ func processColumnValue(rawValue interface{}, targetType parser.ExprDataType) (t
 		if !ok {
 			return nil, sql3.NewErrInternalf("unable to convert '%s", rawValue)
 		}
-		return newDateLiteralPlanExpression(tval), nil
+		return newTimestampLiteralPlanExpression(tval), nil
 
 	case *parser.DataTypeString:
 		sval, ok := rawValue.(string)

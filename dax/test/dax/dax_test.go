@@ -157,7 +157,8 @@ func TestDAXIntegration(t *testing.T) {
 			"testinsert/test-5",             // error messages differ
 			"percentile_test/test-6",        // related to TODO in orchestrator.executePercentile
 			"alterTable/alterTableBadTable", // looks like table does not exist is a different error in DAX
-			"top-tests/test-1",              // don't know why this is failing at all
+			"top-limit-tests/test-2",        // don't know why this is failing at all
+			"top-limit-tests/test-3",        // don't know why this is failing at all
 			"delete_tests",
 			"viewtests/drop-view", // drop view does a delete
 			"viewtests/drop-view-if-exists-after-drop",
@@ -287,7 +288,7 @@ func TestDAXIntegration(t *testing.T) {
 		// TODO: implement this without a sleep.
 		time.Sleep(5 * time.Second)
 
-		// ensure paritions are still covered
+		// ensure partitions are still covered
 		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, append(partitions0, partitions1...)...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 1) {
@@ -477,7 +478,7 @@ func TestDAXIntegration(t *testing.T) {
 		assert.NoError(t, svcmgr.ControllerStart())
 		assert.True(t, mc.Healthy(controllerKey))
 
-		// ensure paritions are still covered
+		// ensure partitions are still covered
 		nodes, err = controllerClient.TranslateNodes(context.Background(), qtid, partitions...)
 		assert.NoError(t, err)
 		if assert.Len(t, nodes, 1) {

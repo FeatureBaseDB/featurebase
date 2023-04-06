@@ -53,34 +53,34 @@ type AssignedNode struct {
 	Role    Role    `json:"role"`
 }
 
-// NodeService represents a service for managing Nodes.
-type NodeService interface {
-	CreateNode(context.Context, Address, *Node) error
-	ReadNode(context.Context, Address) (*Node, error)
-	DeleteNode(context.Context, Address) error
-	Nodes(context.Context) ([]*Node, error)
+// WorkerRegistry represents a service for managing Workers.
+type WorkerRegistry interface {
+	AddWorker(context.Context, Address, *Node) error
+	Worker(context.Context, Address) (*Node, error)
+	RemoveWorker(context.Context, Address) error
+	Workers(context.Context) ([]*Node, error)
 }
 
 // Ensure type implements interface.
-var _ NodeService = &nopNodeService{}
+var _ WorkerRegistry = &nopWorkerRegistry{}
 
-// nopNoder is a no-op implementation of the Noder interface.
-type nopNodeService struct{}
+// nopWorkerRegistry is a no-op implementation of the WorkerRegistry interface.
+type nopWorkerRegistry struct{}
 
-func NewNopNodeService() *nopNodeService {
-	return &nopNodeService{}
+func NewNopWorkerRegistry() *nopWorkerRegistry {
+	return &nopWorkerRegistry{}
 }
 
-func (n *nopNodeService) CreateNode(context.Context, Address, *Node) error {
+func (n *nopWorkerRegistry) AddWorker(context.Context, Address, *Node) error {
 	return nil
 }
-func (n *nopNodeService) ReadNode(context.Context, Address) (*Node, error) {
+func (n *nopWorkerRegistry) Worker(context.Context, Address) (*Node, error) {
 	return nil, nil
 }
-func (n *nopNodeService) DeleteNode(context.Context, Address) error {
+func (n *nopWorkerRegistry) RemoveWorker(context.Context, Address) error {
 	return nil
 }
-func (n *nopNodeService) Nodes(context.Context) ([]*Node, error) {
+func (n *nopWorkerRegistry) Workers(context.Context) ([]*Node, error) {
 	return []*Node{}, nil
 }
 

@@ -16,7 +16,7 @@ type Poller struct {
 
 	addressManager dax.AddressManager
 
-	nodeService dax.NodeService
+	workerRegistry dax.WorkerRegistry
 
 	nodePoller   NodePoller
 	pollInterval time.Duration
@@ -30,7 +30,7 @@ type Poller struct {
 func New(cfg Config) *Poller {
 	p := &Poller{
 		addressManager: dax.NewNopAddressManager(),
-		nodeService:    dax.NewNopNodeService(),
+		workerRegistry: dax.NewNopWorkerRegistry(),
 		nodePoller:     NewNopNodePoller(),
 		pollInterval:   time.Second,
 		logger:         logger.NopLogger,
@@ -40,8 +40,8 @@ func New(cfg Config) *Poller {
 	if cfg.AddressManager != nil {
 		p.addressManager = cfg.AddressManager
 	}
-	if cfg.NodeService != nil {
-		p.nodeService = cfg.NodeService
+	if cfg.WorkerRegistry != nil {
+		p.workerRegistry = cfg.WorkerRegistry
 	}
 	if cfg.NodePoller != nil {
 		p.nodePoller = cfg.NodePoller
@@ -57,7 +57,7 @@ func New(cfg Config) *Poller {
 }
 
 func (p *Poller) Addresses() []dax.Address {
-	nodes, err := p.nodeService.Nodes(context.Background())
+	nodes, err := p.workerRegistry.Workers(context.Background())
 	if err != nil {
 		p.logger.Errorf("POLLER: unable to get nodes from node service: %v", err)
 	}
