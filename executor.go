@@ -17,6 +17,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/apache/arrow/go/v10/arrow/memory"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/disco"
 	"github.com/featurebasedb/featurebase/v3/pql"
@@ -81,6 +82,7 @@ type executor struct {
 	dataframeEnabled   bool
 	datafameUseParquet bool
 	arrowCache         map[string]*arrowCache
+	pool               memory.Allocator
 }
 
 // executorOption is a functional option type for pilosa.executor
@@ -145,6 +147,7 @@ func newExecutor(opts ...executorOption) *executor {
 	_ = testhook.Opened(NewAuditor(), e, nil)
 	e.workers = task.NewPool(e.workerPoolSize, e.doOneJob, e)
 	e.arrowCache = make(map[string]*arrowCache)
+	e.pool = memory.NewGoAllocator()
 	return e
 }
 

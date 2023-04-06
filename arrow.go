@@ -443,21 +443,21 @@ type arrowCache struct {
 func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, memory.Allocator, error) {
 	cache, ok := e.arrowCache[fname]
 	if ok {
-		return cache.table, cache.pool, nil
+		return cache.table, e.pool, nil
 	}
 	// ignoring the passed in allocatorsince where caching
 	mem := memory.NewGoAllocator()
 	if e.typeIsParquet() {
 		table, err := readTableParquetCtx(ctx, fname, mem)
 		e.arrowCache[fname] = &arrowCache{table: table, pool: mem}
-		return table, mem, err
+		return table, e.pool, err
 	}
 	table, err := readTableArrow(fname, mem)
 	if err != nil {
 		return nil, nil, err
 	}
 	e.arrowCache[fname] = &arrowCache{table: table, pool: mem}
-	return table, mem, nil
+	return table, e.pool, nil
 }
 
 func (e *executor) typeIsParquet() bool {
