@@ -518,7 +518,7 @@ upload to sonarcloud:
 
 package for linux amd64:
   stage: build
-  image: goreleaser/nfpm:v2.11.3
+  image: golang:$GOVERSION
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
@@ -526,6 +526,9 @@ package for linux amd64:
     GOARCH: "amd64"
   script:
     - export VERSION=$(git describe --tags 2>/dev/null || echo unknown)
+    - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
+    - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
+    - nfpm version # smoke
     - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
     - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
   needs:
