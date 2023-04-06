@@ -518,7 +518,9 @@ upload to sonarcloud:
 
 package for linux amd64:
   stage: build
-  image: golang:$GOVERSION
+  image: gitlab/dind
+  services:
+    - docker:dind
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
@@ -557,7 +559,9 @@ trigger_m-cloud-images:
 
 package for linux arm64:
   stage: build
-  image: golang:$GOVERSION
+  image: gitlab/dind
+  services:
+    - docker:dind
   extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
