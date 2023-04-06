@@ -1,6 +1,6 @@
 package defs
 
-// join tests
+// bulk insert
 var bulkInsertTable = TableTest{
 	name: "bulkInsertTable",
 	Table: tbl(

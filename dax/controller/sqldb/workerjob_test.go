@@ -21,19 +21,19 @@ func TestJobsNotUpdated(t *testing.T) {
 		},
 	}
 
-	toCreate := jobsNotUpdated(incJobs, created, &models.Worker{
-		ID:         u2,
-		Role:       "compute",
-		DatabaseID: nulls.NewString("dbid"),
+	toCreate := jobsNotAssigned(incJobs, created, dax.RoleTypeCompute, &models.Worker{
+		ID:          u2,
+		RoleCompute: true,
+		DatabaseID:  nulls.NewString("dbid"),
 	})
 
 	require.Equal(t, 3, len(toCreate))
 
 	// Test when 0 jobs are updated
-	toCreate = jobsNotUpdated(incJobs, models.Jobs{}, &models.Worker{
-		ID:         u2,
-		Role:       "compute",
-		DatabaseID: nulls.NewString("dbid"),
+	toCreate = jobsNotAssigned(incJobs, models.Jobs{}, dax.RoleTypeCompute, &models.Worker{
+		ID:          u2,
+		RoleCompute: true,
+		DatabaseID:  nulls.NewString("dbid"),
 	})
 
 	require.Equal(t, 4, len(toCreate))

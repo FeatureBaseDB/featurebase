@@ -404,11 +404,8 @@ func TestCreateFunctionStatement_String(t *testing.T) {
 				Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
 			},
 		},
-		ReturnDef: &parser.ParameterDefinition{
-			Name: &parser.Variable{Name: "@scalar"},
-			Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
-		},
-	}, `CREATE FUNCTION func (@param1 int) RETURNS @scalar int AS BEGIN END`)
+		ReturnType: &parser.Type{Name: &parser.Ident{Name: "int"}},
+	}, `CREATE FUNCTION func (@param1 int) RETURNS int AS BEGIN END`)
 
 	AssertStatementStringer(t, &parser.CreateFunctionStatement{
 		IfNotExists: pos(0),
@@ -419,11 +416,8 @@ func TestCreateFunctionStatement_String(t *testing.T) {
 				Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
 			},
 		},
-		ReturnDef: &parser.ParameterDefinition{
-			Name: &parser.Variable{Name: "@scalar"},
-			Type: &parser.Type{Name: &parser.Ident{Name: "int"}},
-		},
-	}, `CREATE FUNCTION IF NOT EXISTS func (@param1 int) RETURNS @scalar int AS BEGIN END`)
+		ReturnType: &parser.Type{Name: &parser.Ident{Name: "int"}},
+	}, `CREATE FUNCTION IF NOT EXISTS func (@param1 int) RETURNS int AS BEGIN END`)
 }
 
 func TestCreateViewStatement_String(t *testing.T) {
@@ -866,34 +860,34 @@ func TestSelectStatement_String(t *testing.T) {
 		},
 	}, `SELECT * FROM (SELECT *)`)
 
-	AssertStatementStringer(t, &parser.SelectStatement{
-		Columns: []*parser.ResultColumn{{Star: pos(0)}},
-		Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}},
-		Windows: []*parser.Window{
-			{
-				Name: &parser.Ident{Name: "win1"},
-				Definition: &parser.WindowDefinition{
-					Base:       &parser.Ident{Name: "base"},
-					Partitions: []parser.Expr{&parser.Ident{Name: "x"}, &parser.Ident{Name: "y"}},
-					OrderingTerms: []*parser.OrderingTerm{
-						{X: &parser.Ident{Name: "x"}, Asc: pos(0), NullsFirst: pos(0)},
-						{X: &parser.Ident{Name: "y"}, Desc: pos(0), NullsLast: pos(0)},
-					},
-					Frame: &parser.FrameSpec{
-						Range:      pos(0),
-						UnboundedX: pos(0),
-						PrecedingX: pos(0),
-					},
-				},
-			},
-			{
-				Name: &parser.Ident{Name: "win2"},
-				Definition: &parser.WindowDefinition{
-					Base: &parser.Ident{Name: "base2"},
-				},
-			},
-		},
-	}, `SELECT * FROM tbl WINDOW win1 AS (base PARTITION BY x, y ORDER BY x ASC NULLS FIRST, y DESC NULLS LAST RANGE UNBOUNDED PRECEDING), win2 AS (base2)`)
+	// AssertStatementStringer(t, &parser.SelectStatement{
+	// 	Columns: []*parser.ResultColumn{{Star: pos(0)}},
+	// 	Source:  &parser.QualifiedTableName{Name: &parser.Ident{Name: "tbl"}},
+	// 	Windows: []*parser.Window{
+	// 		{
+	// 			Name: &parser.Ident{Name: "win1"},
+	// 			Definition: &parser.WindowDefinition{
+	// 				Base:       &parser.Ident{Name: "base"},
+	// 				Partitions: []parser.Expr{&parser.Ident{Name: "x"}, &parser.Ident{Name: "y"}},
+	// 				OrderingTerms: []*parser.OrderingTerm{
+	// 					{X: &parser.Ident{Name: "x"}, Asc: pos(0), NullsFirst: pos(0)},
+	// 					{X: &parser.Ident{Name: "y"}, Desc: pos(0), NullsLast: pos(0)},
+	// 				},
+	// 				Frame: &parser.FrameSpec{
+	// 					Range:      pos(0),
+	// 					UnboundedX: pos(0),
+	// 					PrecedingX: pos(0),
+	// 				},
+	// 			},
+	// 		},
+	// 		{
+	// 			Name: &parser.Ident{Name: "win2"},
+	// 			Definition: &parser.WindowDefinition{
+	// 				Base: &parser.Ident{Name: "base2"},
+	// 			},
+	// 		},
+	// 	},
+	// }, `SELECT * FROM tbl WINDOW win1 AS (base PARTITION BY x, y ORDER BY x ASC NULLS FIRST, y DESC NULLS LAST RANGE UNBOUNDED PRECEDING), win2 AS (base2)`)
 
 	// AssertStatementStringer(t, &sql.SelectStatement{
 	// 	WithClause: &sql.WithClause{
@@ -914,38 +908,38 @@ func TestSelectStatement_String(t *testing.T) {
 	// 	},
 	// }, `WITH "cte" ("x", "y") AS (SELECT *) VALUES (1, 2), (3, 4)`)
 
-	AssertStatementStringer(t, &parser.SelectStatement{
-		Columns: []*parser.ResultColumn{{Star: pos(0)}},
-		Union:   pos(0),
-		Compound: &parser.SelectStatement{
-			Columns: []*parser.ResultColumn{{Star: pos(0)}},
-		},
-	}, `SELECT * UNION SELECT *`)
+	// AssertStatementStringer(t, &parser.SelectStatement{
+	// 	Columns: []*parser.ResultColumn{{Star: pos(0)}},
+	// 	Union:   pos(0),
+	// 	Compound: &parser.SelectStatement{
+	// 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
+	// 	},
+	// }, `SELECT * UNION SELECT *`)
 
-	AssertStatementStringer(t, &parser.SelectStatement{
-		Columns:  []*parser.ResultColumn{{Star: pos(0)}},
-		Union:    pos(0),
-		UnionAll: pos(0),
-		Compound: &parser.SelectStatement{
-			Columns: []*parser.ResultColumn{{Star: pos(0)}},
-		},
-	}, `SELECT * UNION ALL SELECT *`)
+	// AssertStatementStringer(t, &parser.SelectStatement{
+	// 	Columns:  []*parser.ResultColumn{{Star: pos(0)}},
+	// 	Union:    pos(0),
+	// 	UnionAll: pos(0),
+	// 	Compound: &parser.SelectStatement{
+	// 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
+	// 	},
+	// }, `SELECT * UNION ALL SELECT *`)
 
-	AssertStatementStringer(t, &parser.SelectStatement{
-		Columns:   []*parser.ResultColumn{{Star: pos(0)}},
-		Intersect: pos(0),
-		Compound: &parser.SelectStatement{
-			Columns: []*parser.ResultColumn{{Star: pos(0)}},
-		},
-	}, `SELECT * INTERSECT SELECT *`)
+	// AssertStatementStringer(t, &parser.SelectStatement{
+	// 	Columns:   []*parser.ResultColumn{{Star: pos(0)}},
+	// 	Intersect: pos(0),
+	// 	Compound: &parser.SelectStatement{
+	// 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
+	// 	},
+	// }, `SELECT * INTERSECT SELECT *`)
 
-	AssertStatementStringer(t, &parser.SelectStatement{
-		Columns: []*parser.ResultColumn{{Star: pos(0)}},
-		Except:  pos(0),
-		Compound: &parser.SelectStatement{
-			Columns: []*parser.ResultColumn{{Star: pos(0)}},
-		},
-	}, `SELECT * EXCEPT SELECT *`)
+	// AssertStatementStringer(t, &parser.SelectStatement{
+	// 	Columns: []*parser.ResultColumn{{Star: pos(0)}},
+	// 	Except:  pos(0),
+	// 	Compound: &parser.SelectStatement{
+	// 		Columns: []*parser.ResultColumn{{Star: pos(0)}},
+	// 	},
+	// }, `SELECT * EXCEPT SELECT *`)
 
 	AssertStatementStringer(t, &parser.SelectStatement{
 		Columns: []*parser.ResultColumn{{Star: pos(0)}},

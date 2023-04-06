@@ -25,7 +25,7 @@ const (
 // Ensure type implements interface.
 var _ computer.Registrar = (*Controller)(nil)
 var _ dax.Schemar = (*Controller)(nil)
-var _ dax.NodeService = (*Controller)(nil)
+var _ dax.WorkerRegistry = (*Controller)(nil)
 
 type Controller struct {
 	// Schemar is used by the controller to get table, and other schema,
@@ -87,7 +87,7 @@ func New(cfg Config) *Controller {
 	// Poller.
 	pollerCfg := poller.Config{
 		AddressManager: c,
-		NodeService:    c,
+		WorkerRegistry: c,
 		NodePoller:     poller.NewHTTPNodePoller(logr),
 		PollInterval:   cfg.PollInterval,
 		Logger:         logr,
@@ -665,7 +665,7 @@ func (c *Controller) DropDatabase(ctx context.Context, qdbid dax.QualifiedDataba
 		for worker := range workerSet {
 			addrs = append(addrs, worker)
 		}
-		if err := c.Balancer.FreeWorkers(tx, addrs...); err != nil {
+		if err := c.Balancer.ReleaseWorkers(tx, addrs...); err != nil {
 			return errors.Wrap(err, "freeing workers")
 		}
 
@@ -1727,7 +1727,7 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 		if err != nil {
 			return nil, errors.Wrap(err, "getting nodes for table")
 		}
-		computeNodes, err := c.assignedToComputeNodes(assignedNodes)
+		computeNodes, err := assignedToComputeNodes(assignedNodes)
 		if err != nil {
 			return nil, errors.Wrap(err, "converting assigned to compute nodes")
 		}
@@ -1739,13 +1739,13 @@ func (c *Controller) ComputeNodes(ctx context.Context, qtid dax.QualifiedTableID
 		return nil, errors.Wrap(err, "getting compute nodes read or write")
 	}
 
-	return c.assignedToComputeNodes(assignedNodes)
+	return assignedToComputeNodes(assignedNodes)
 }
 
 // assignedToComputeNodes converts the provided []dax.AssignedNode to
 // []dax.ComputeNode. If any of the assigned nodes are not for RoleType
 // "compute", an error will be returned.
-func (c *Controller) assignedToComputeNodes(nodes []dax.AssignedNode) ([]dax.ComputeNode, error) {
+func assignedToComputeNodes(nodes []dax.AssignedNode) ([]dax.ComputeNode, error) {
 	computeNodes := make([]dax.ComputeNode, 0)
 
 	for _, node := range nodes {
@@ -1789,7 +1789,7 @@ func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTable
 		if err != nil {
 			return nil, errors.Wrap(err, "getting nodes for table")
 		}
-		translateNodes, err := c.assignedToTranslateNodes(assignedNodes)
+		translateNodes, err := assignedToTranslateNodes(assignedNodes)
 		if err != nil {
 			return nil, errors.Wrap(err, "converting assigned to translate nodes")
 		}
@@ -1801,7 +1801,7 @@ func (c *Controller) TranslateNodes(ctx context.Context, qtid dax.QualifiedTable
 		return nil, errors.Wrap(err, "getting translate nodes read or write")
 	}
 
-	return c.assignedToTranslateNodes(assignedNodes)
+	return assignedToTranslateNodes(assignedNodes)
 }
 
 func (c *Controller) nodesForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) ([]dax.AssignedNode, error) {
@@ -1822,7 +1822,7 @@ func (c *Controller) nodesForTable(tx dax.Transaction, roleType dax.RoleType, qt
 // assignedToTranslateNodes converts the provided []dax.AssignedNode to
 // []dax.TranslateNode. If any of the assigned nodes are not for RoleType
 // "translate", an error will be returned.
-func (c *Controller) assignedToTranslateNodes(nodes []dax.AssignedNode) ([]dax.TranslateNode, error) {
+func assignedToTranslateNodes(nodes []dax.AssignedNode) ([]dax.TranslateNode, error) {
 	translateNodes := make([]dax.TranslateNode, 0)
 
 	for _, node := range nodes {
@@ -1886,7 +1886,7 @@ func (c *Controller) IngestPartition(ctx context.Context, qtid dax.QualifiedTabl
 		}
 	}
 
-	translateNodes, err := c.assignedToTranslateNodes(nodes)
+	translateNodes, err := assignedToTranslateNodes(nodes)
 	if err != nil {
 		return "", errors.Wrap(err, "converting assigned to translate nodes")
 	}
@@ -1968,7 +1968,7 @@ func (c *Controller) IngestShard(ctx context.Context, qtid dax.QualifiedTableID,
 		retryAsWrite = true
 	}
 
-	computeNodes, err := c.assignedToComputeNodes(nodes)
+	computeNodes, err := assignedToComputeNodes(nodes)
 	if err != nil {
 		return "", errors.Wrap(err, "converting assigned to compute nodes")
 	}
@@ -2215,18 +2215,18 @@ func (c *Controller) TableID(ctx context.Context, qdbid dax.QualifiedDatabaseID,
 	return c.Schemar.TableID(tx, qdbid, name)
 }
 
-// NodeService
+// WorkerRegistry
 
-func (c *Controller) CreateNode(context.Context, dax.Address, *dax.Node) error {
-	return errors.Errorf("Controller.CreateNode() not implemented")
+func (c *Controller) AddWorker(context.Context, dax.Address, *dax.Node) error {
+	return errors.Errorf("Controller.AddWorker() not implemented")
 }
-func (c *Controller) ReadNode(context.Context, dax.Address) (*dax.Node, error) {
-	return nil, errors.Errorf("Controller.ReadNode() not implemented")
+func (c *Controller) Worker(context.Context, dax.Address) (*dax.Node, error) {
+	return nil, errors.Errorf("Controller.Worker() not implemented")
 }
-func (c *Controller) DeleteNode(context.Context, dax.Address) error {
+func (c *Controller) RemoveWorker(context.Context, dax.Address) error {
 	return errors.Errorf("Controller.DeleteNode() not implemented")
 }
-func (c *Controller) Nodes(ctx context.Context) ([]*dax.Node, error) {
+func (c *Controller) Workers(ctx context.Context) ([]*dax.Node, error) {
 	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "beginning tx")

@@ -13,8 +13,8 @@ type Balancer interface {
 	// be either transferred to other workers or placed on the free job list.
 	RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error)
 
-	// FreeWorkers dissociates the given workers from a database.
-	FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error
+	// ReleaseWorkers dissociates the given workers from a database.
+	ReleaseWorkers(tx dax.Transaction, addrs ...dax.Address) error
 
 	// AddJobs adds new jobs for the given database.
 	AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error)
@@ -67,7 +67,7 @@ func (b *NopBalancer) AddWorker(tx dax.Transaction, node *dax.Node) ([]dax.Worke
 func (b *NopBalancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) FreeWorkers(tx dax.Transaction, addrs ...dax.Address) error {
+func (b *NopBalancer) ReleaseWorkers(tx dax.Transaction, addrs ...dax.Address) error {
 	return nil
 }
 func (b *NopBalancer) AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error) {

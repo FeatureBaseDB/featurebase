@@ -45,10 +45,10 @@ func (p *Parser) ParseStatement() (stmt Statement, err error) {
 	switch tok := p.peek(); tok {
 	case EOF:
 		return nil, io.EOF
-	//case EXPLAIN:
-	//	if stmt, err = p.parseExplainStatement(); err != nil {
-	//		return stmt, err
-	//	}
+	case EXPLAIN:
+		if stmt, err = p.parseExplainStatement(); err != nil {
+			return stmt, err
+		}
 	default:
 		if stmt, err = p.parseNonExplainStatement(); err != nil {
 			return stmt, err
@@ -64,7 +64,6 @@ func (p *Parser) ParseStatement() (stmt Statement, err error) {
 	return stmt, nil
 }
 
-/*
 // parseExplain parses EXPLAIN [QUERY PLAN] STMT.
 func (p *Parser) parseExplainStatement() (_ *ExplainStatement, err error) {
 	var tok Token
@@ -89,7 +88,7 @@ func (p *Parser) parseExplainStatement() (_ *ExplainStatement, err error) {
 		return &stmt, err
 	}
 	return &stmt, nil
-}*/
+}
 
 // parseStmt parses all statement types.
 func (p *Parser) parseNonExplainStatement() (Statement, error) {
@@ -102,10 +101,14 @@ func (p *Parser) parseNonExplainStatement() (Statement, error) {
 		return p.parseBulkInsertStatement()
 	case CREATE:
 		return p.parseCreateStatement()
+	case COPY:
+		return p.parseCopyStatement()
 	case DROP:
 		return p.parseDropStatement()
 	case SELECT:
 		return p.parseSelectStatement(false, nil)
+	case PREDICT:
+		return p.parsePredictStatement()
 	case INSERT, REPLACE:
 		return p.parseInsertStatement(nil)
 	case UPDATE:
@@ -337,8 +340,10 @@ func (p *Parser) parseCreateStatement() (Statement, error) {
 		return p.parseCreateIndexStatement(pos)*/
 	case FUNCTION:
 		return p.parseCreateFunctionStatement(pos)
+	case MODEL:
+		return p.parseCreateModelStatement(pos)
 	default:
-		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE, VIEW or FUNCTION")
+		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE, VIEW, FUNCTION or MODEL")
 	}
 }
 
@@ -373,6 +378,8 @@ func (p *Parser) parseDropStatement() (Statement, error) {
 		return p.parseDropIndexStatement(pos)*/
 	case FUNCTION:
 		return p.parseDropFunctionStatement(pos)
+	case MODEL:
+		return p.parseDropModelStatement(pos)
 	default:
 		return nil, p.errorExpected(pos, tok, "DATABASE, TABLE, VIEW or FUNCTION")
 	}
@@ -1158,6 +1165,72 @@ func (p *Parser) parseDropTableStatement(dropPos Pos) (_ *DropTableStatement, er
 	return &stmt, nil
 }
 
+func (p *Parser) parseCopyStatement() (_ *CopyStatement, err error) {
+	assert(p.peek() == COPY)
+
+	var stmt CopyStatement
+	stmt.Copy, _, _ = p.scan()
+
+	ident, err := p.parseIdent("table name")
+	if err != nil {
+		return &stmt, err
+	}
+
+	if stmt.Source, err = p.parseQualifiedTableName(ident); err != nil {
+		return &stmt, err
+	}
+
+	if p.peek() != TO {
+		return &stmt, p.errorExpected(p.pos, p.tok, "TO")
+	}
+	stmt.To, _, _ = p.scan()
+
+	if stmt.TargetName, err = p.parseIdent("table name"); err != nil {
+		return &stmt, err
+	}
+
+	// parse optional "WHERE expr"
+	if p.peek() == WHERE {
+		stmt.Where, _, _ = p.scan()
+		if stmt.WhereExpr, err = p.ParseExpr(); err != nil {
+			return &stmt, err
+		}
+	}
+
+	// options
+	if p.peek() == WITH {
+		stmt.With, _, _ = p.scan()
+		if !isCopyOptionStartToken(p.peek(), p) {
+			return &stmt, p.errorExpected(p.pos, p.tok, "URL or APIKEY")
+		}
+
+		for {
+			option, err := p.parseIdent("copy option")
+			if err != nil {
+				return &stmt, err
+			}
+
+			switch strings.ToLower(option.Name) {
+			case "url":
+				stmt.Url, err = p.ParseExpr()
+				if err != nil {
+					return &stmt, err
+				}
+
+			case "apikey":
+				stmt.ApiKey, err = p.ParseExpr()
+				if err != nil {
+					return &stmt, err
+				}
+			}
+			if !isCopyOptionStartToken(p.peek(), p) {
+				break
+			}
+		}
+	}
+	return &stmt, nil
+}
+
 func (p *Parser) parseCreateViewStatement(createPos Pos) (_ *CreateViewStatement, err error) {
 	assert(p.peek() == VIEW)
 
@@ -1269,6 +1342,29 @@ func (p *Parser) parseDropViewStatement(dropPos Pos) (_ *DropViewStatement, err 
 	var stmt DropViewStatement
 	stmt.Drop = dropPos
 	stmt.View, _, _ = p.scan()
+
+	// Parse optional "IF EXISTS".
+	if p.peek() == IF {
+		stmt.If, _, _ = p.scan()
+		if p.peek() != EXISTS {
+			return &stmt, p.errorExpected(p.pos, p.tok, "EXISTS")
+		}
+		stmt.IfExists, _, _ = p.scan()
+	}
+
+	if stmt.Name, err = p.parseIdent("view name"); err != nil {
+		return &stmt, err
+	}
+
+	return &stmt, nil
+}
+
+func (p *Parser) parseDropModelStatement(dropPos Pos) (_ *DropModelStatement, err error) {
+	assert(p.peek() == MODEL)
+
+	var stmt DropModelStatement
+	stmt.Drop = dropPos
+	stmt.Model, _, _ = p.scan()
 
 	// Parse optional "IF EXISTS".
 	if p.peek() == IF {
@@ -1457,9 +1553,33 @@ func (p *Parser) parseCreateFunctionStatement(createPos Pos) (_ *CreateFunctionS
 		return &stmt, p.errorExpected(p.pos, p.tok, "RETURNS")
 	}
 	stmt.Returns, _, _ = p.scan()
-	stmt.ReturnDef, err = p.parseParameterDefinition()
+	stmt.ReturnType, err = p.parseType()
 	if err != nil {
 		return &stmt, err
+	}
+
+	// options
+	if p.peek() == WITH {
+		stmt.With, _, _ = p.scan()
+		stmt.Options = make([]*FunctionOptionDefinition, 0)
+		for {
+			option, err := p.parseIdent("function option")
+			if err != nil {
+				return &stmt, err
+			}
+
+			expr, err := p.ParseExpr()
+			if err != nil {
+				return &stmt, err
+			}
+			stmt.Options = append(stmt.Options, &FunctionOptionDefinition{
+				Name:       option,
+				OptionExpr: expr,
+			})
+			if p.peek() == AS {
+				break
+			}
+		}
 	}
 
 	if p.peek() != AS {
@@ -1473,7 +1593,7 @@ func (p *Parser) parseCreateFunctionStatement(createPos Pos) (_ *CreateFunctionS
 	stmt.Begin, _, _ = p.scan()
 
 	for {
-		s, err := p.parseFunctionBodyStatement()
+		s, err := p.parseFunctionBodyStatement(&stmt)
 		if err != nil {
 			return &stmt, err
 		}
@@ -1494,8 +1614,15 @@ func (p *Parser) parseCreateFunctionStatement(createPos Pos) (_ *CreateFunctionS
 	return &stmt, nil
 }
 
-func (p *Parser) parseFunctionBodyStatement() (stmt Statement, err error) {
+func (p *Parser) parseFunctionBodyStatement(cf *CreateFunctionStatement) (stmt Statement, err error) {
 	switch p.peek() {
+	case RETURN:
+		s, err := p.parseReturnStatement()
+		if err != nil {
+			return stmt, err
+		}
+		cf.Body = append(cf.Body, s)
+
 	case END:
 		break
 	default:
@@ -1505,6 +1632,20 @@ func (p *Parser) parseFunctionBodyStatement() (stmt Statement, err error) {
 		return stmt, err
 	}
 	return stmt, nil
+}
+
+func (p *Parser) parseReturnStatement() (_ *ReturnStatement, err error) {
+	assert(p.peek() == RETURN)
+
+	var stmt ReturnStatement
+	stmt.Return, _, _ = p.scan()
+
+	expr, err := p.ParseExpr()
+	if err != nil {
+		return &stmt, err
+	}
+	stmt.ReturnExpr = expr
+	return &stmt, nil
 }
 
 func (p *Parser) parseDropFunctionStatement(dropPos Pos) (_ *DropFunctionStatement, err error) {
@@ -1527,6 +1668,69 @@ func (p *Parser) parseDropFunctionStatement(dropPos Pos) (_ *DropFunctionStateme
 		return &stmt, err
 	}
 
+	return &stmt, nil
+}
+
+func (p *Parser) parseCreateModelStatement(createPos Pos) (_ *CreateModelStatement, err error) {
+	assert(p.peek() == MODEL)
+
+	var stmt CreateModelStatement
+	stmt.Create = createPos
+	stmt.Model, _, _ = p.scan()
+
+	// Parse optional "IF NOT EXISTS".
+	if p.peek() == IF {
+		stmt.If, _, _ = p.scan()
+
+		if p.peek() != NOT {
+			return &stmt, p.errorExpected(p.pos, p.tok, "NOT")
+		}
+		stmt.IfNot, _, _ = p.scan()
+
+		if p.peek() != EXISTS {
+			return &stmt, p.errorExpected(p.pos, p.tok, "EXISTS")
+		}
+		stmt.IfNotExists, _, _ = p.scan()
+	}
+
+	if stmt.Name, err = p.parseIdent("model name"); err != nil {
+		return &stmt, err
+	}
+
+	// options
+	if p.peek() != WITH {
+		return &stmt, p.errorExpected(p.pos, p.tok, "WITH")
+	}
+	stmt.With, _, _ = p.scan()
+
+	stmt.Options = make([]*ModelOptionDefinition, 0)
+	for {
+		option, err := p.parseIdent("model option")
+		if err != nil {
+			return &stmt, err
+		}
+
+		expr, err := p.ParseExpr()
+		if err != nil {
+			return &stmt, err
+		}
+		stmt.Options = append(stmt.Options, &ModelOptionDefinition{
+			Name:       option,
+			OptionExpr: expr,
+		})
+		if p.peek() == AS {
+			break
+		}
+	}
+
+	if p.peek() != AS {
+		return &stmt, p.errorExpected(p.pos, p.tok, "AS")
+	}
+	stmt.As, _, _ = p.scan()
+
+	if stmt.ModelQuery, err = p.parseSelectStatement(false, nil); err != nil {
+		return &stmt, err
+	}
 	return &stmt, nil
 }
 
@@ -2152,82 +2356,87 @@ func (p *Parser) parseSelectStatement(compounded bool, withClause *WithClause) (
 	//	}
 	//}
 
-	switch p.peek() {
-	/*case VALUES:
-	stmt.Values, _, _ = p.scan()
+	if p.peek() != SELECT {
+		return &stmt, p.errorExpected(p.pos, p.tok, "SELECT")
+	}
 
-	for {
-		var list ExprList
-		if p.peek() != LP {
-			return &stmt, p.errorExpected(p.pos, p.tok, "left paren")
+	stmt.Select, _, _ = p.scan()
+
+	// Parse optional "DISTINCT".
+	if tok := p.peek(); tok == DISTINCT {
+		stmt.Distinct, _, _ = p.scan()
+	}
+
+	if p.peek() == TOP {
+		stmt.Top, _, _ = p.scan()
+		if p.peek() == LP {
+			_, _, _ = p.scan()
 		}
-		list.Lparen, _, _ = p.scan()
+		if stmt.TopExpr, err = p.ParseExpr(); err != nil {
+			return &stmt, err
+		}
+		if p.peek() == RP {
+			_, _, _ = p.scan()
+		}
+	}
+
+	if p.peek() == TOPN {
+		stmt.TopN, _, _ = p.scan()
+		if p.peek() == LP {
+			_, _, _ = p.scan()
+		}
+		if stmt.TopExpr, err = p.ParseExpr(); err != nil {
+			return &stmt, err
+		}
+		if p.peek() == RP {
+			_, _, _ = p.scan()
+		}
+	}
+
+	// Parse result columns.
+	for {
+		col, err := p.parseResultColumn()
+		if err != nil {
+			return &stmt, err
+		}
+		stmt.Columns = append(stmt.Columns, col)
+
+		if p.peek() != COMMA {
+			break
+		}
+		p.scan()
+	}
+
+	// Parse FROM clause.
+	if p.peek() == FROM {
+		stmt.From, _, _ = p.scan()
+		if stmt.Source, err = p.parseSource(); err != nil {
+			return &stmt, err
+		}
+	}
+
+	// Parse WHERE clause.
+	if p.peek() == WHERE {
+		stmt.Where, _, _ = p.scan()
+		if stmt.WhereExpr, err = p.ParseExpr(); err != nil {
+			return &stmt, err
+		}
+	}
+
+	// Parse GROUP BY/HAVING clause.
+	if p.peek() == GROUP {
+		stmt.Group, _, _ = p.scan()
+		if p.peek() != BY {
+			return &stmt, p.errorExpected(p.pos, p.tok, "BY")
+		}
+		stmt.GroupBy, _, _ = p.scan()
 
 		for {
 			expr, err := p.ParseExpr()
 			if err != nil {
 				return &stmt, err
 			}
-			list.Exprs = append(list.Exprs, expr)
-
-			if p.peek() == RP {
-				break
-			} else if p.peek() != COMMA {
-				return &stmt, p.errorExpected(p.pos, p.tok, "comma or right paren")
-			}
-			p.scan()
-		}
-		list.Rparen, _, _ = p.scan()
-		stmt.ValueLists = append(stmt.ValueLists, &list)
-
-		if p.peek() != COMMA {
-			break
-		}
-		p.scan()
-
-	}*/
-
-	case SELECT:
-		stmt.Select, _, _ = p.scan()
-
-		// Parse optional "DISTINCT".
-		if tok := p.peek(); tok == DISTINCT {
-			stmt.Distinct, _, _ = p.scan()
-		}
-
-		if p.peek() == TOP {
-			stmt.Top, _, _ = p.scan()
-			if p.peek() == LP {
-				_, _, _ = p.scan()
-			}
-			if stmt.TopExpr, err = p.ParseExpr(); err != nil {
-				return &stmt, err
-			}
-			if p.peek() == RP {
-				_, _, _ = p.scan()
-			}
-		}
-
-		if p.peek() == TOPN {
-			stmt.TopN, _, _ = p.scan()
-			if p.peek() == LP {
-				_, _, _ = p.scan()
-			}
-			if stmt.TopExpr, err = p.ParseExpr(); err != nil {
-				return &stmt, err
-			}
-			if p.peek() == RP {
-				_, _, _ = p.scan()
-			}
-		}
-
-		// Parse result columns.
-		for {
-			col, err := p.parseResultColumn()
-			if err != nil {
-				return &stmt, err
-			}
-			stmt.Columns = append(stmt.Columns, col)
+			stmt.GroupByExprs = append(stmt.GroupByExprs, expr)
 
 			if p.peek() != COMMA {
 				break
@@ -2235,101 +2444,61 @@ func (p *Parser) parseSelectStatement(compounded bool, withClause *WithClause) (
 			p.scan()
 		}
 
-		// Parse FROM clause.
-		if p.peek() == FROM {
-			stmt.From, _, _ = p.scan()
-			if stmt.Source, err = p.parseSource(); err != nil {
+		// Parse optional HAVING clause.
+		if p.peek() == HAVING {
+			stmt.Having, _, _ = p.scan()
+			if stmt.HavingExpr, err = p.ParseExpr(); err != nil {
 				return &stmt, err
 			}
 		}
-
-		// Parse WHERE clause.
-		if p.peek() == WHERE {
-			stmt.Where, _, _ = p.scan()
-			if stmt.WhereExpr, err = p.ParseExpr(); err != nil {
-				return &stmt, err
-			}
-		}
-
-		// Parse GROUP BY/HAVING clause.
-		if p.peek() == GROUP {
-			stmt.Group, _, _ = p.scan()
-			if p.peek() != BY {
-				return &stmt, p.errorExpected(p.pos, p.tok, "BY")
-			}
-			stmt.GroupBy, _, _ = p.scan()
-
-			for {
-				expr, err := p.ParseExpr()
-				if err != nil {
-					return &stmt, err
-				}
-				stmt.GroupByExprs = append(stmt.GroupByExprs, expr)
-
-				if p.peek() != COMMA {
-					break
-				}
-				p.scan()
-			}
-
-			// Parse optional HAVING clause.
-			if p.peek() == HAVING {
-				stmt.Having, _, _ = p.scan()
-				if stmt.HavingExpr, err = p.ParseExpr(); err != nil {
-					return &stmt, err
-				}
-			}
-		}
-
-		// Parse WINDOW clause.
-		if p.peek() == WINDOW {
-			stmt.Window, _, _ = p.scan()
-
-			for {
-				var window Window
-				if window.Name, err = p.parseIdent("window name"); err != nil {
-					return &stmt, err
-				}
-
-				if p.peek() != AS {
-					return &stmt, p.errorExpected(p.pos, p.tok, "AS")
-				}
-				window.As, _, _ = p.scan()
-
-				if window.Definition, err = p.parseWindowDefinition(); err != nil {
-					return &stmt, err
-				}
-
-				stmt.Windows = append(stmt.Windows, &window)
-
-				if p.peek() != COMMA {
-					break
-				}
-				p.scan()
-			}
-		}
-	default:
-		return &stmt, p.errorExpected(p.pos, p.tok, "SELECT")
 	}
+
+	// Parse WINDOW clause.
+	// if p.peek() == WINDOW {
+	// 	stmt.Window, _, _ = p.scan()
+
+	// 	for {
+	// 		var window Window
+	// 		if window.Name, err = p.parseIdent("window name"); err != nil {
+	// 			return &stmt, err
+	// 		}
+
+	// 		if p.peek() != AS {
+	// 			return &stmt, p.errorExpected(p.pos, p.tok, "AS")
+	// 		}
+	// 		window.As, _, _ = p.scan()
+
+	// 		if window.Definition, err = p.parseWindowDefinition(); err != nil {
+	// 			return &stmt, err
+	// 		}
+
+	// 		stmt.Windows = append(stmt.Windows, &window)
+
+	// 		if p.peek() != COMMA {
+	// 			break
+	// 		}
+	// 		p.scan()
+	// 	}
+	// }
 
 	// Optionally compound additional SELECT/VALUES.
-	switch tok := p.peek(); tok {
-	case UNION, INTERSECT, EXCEPT:
-		if tok == UNION {
-			stmt.Union, _, _ = p.scan()
-			if p.peek() == ALL {
-				stmt.UnionAll, _, _ = p.scan()
-			}
-		} else if tok == INTERSECT {
-			stmt.Intersect, _, _ = p.scan()
-		} else {
-			stmt.Except, _, _ = p.scan()
-		}
+	// switch tok := p.peek(); tok {
+	// case UNION, INTERSECT, EXCEPT:
+	// 	if tok == UNION {
+	// 		stmt.Union, _, _ = p.scan()
+	// 		if p.peek() == ALL {
+	// 			stmt.UnionAll, _, _ = p.scan()
+	// 		}
+	// 	} else if tok == INTERSECT {
+	// 		stmt.Intersect, _, _ = p.scan()
+	// 	} else {
+	// 		stmt.Except, _, _ = p.scan()
+	// 	}
 
-		if stmt.Compound, err = p.parseSelectStatement(true, nil); err != nil {
-			return &stmt, err
-		}
-	}
+	// 	if stmt.Compound, err = p.parseSelectStatement(true, nil); err != nil {
+	// 		return &stmt, err
+	// 	}
+	// }
 
 	// Parse ORDER BY clause.
 	if !compounded && p.peek() == ORDER {
@@ -2353,6 +2522,13 @@ func (p *Parser) parseSelectStatement(compounded bool, withClause *WithClause) (
 		}
 	}
 
+	// Parse LIMIT clause.
+	if !compounded && p.peek() == LIMIT {
+		stmt.Limit, _, _ = p.scan()
+		if stmt.LimitExpr, err = p.ParseExpr(); err != nil {
+			return &stmt, err
+		}
+	}
 	return &stmt, nil
 }
 
@@ -2704,6 +2880,26 @@ func (p *Parser) parseTableValuedFunction(ident *Ident) (_ *TableValuedFunction,
 	return &cte, nil
 }*/
 
+func (p *Parser) parsePredictStatement() (_ *PredictStatement, err error) {
+	assert(p.peek() == PREDICT)
+
+	var stmt PredictStatement
+	stmt.Predict, _, _ = p.scan()
+	if p.peek() != USING {
+		return &stmt, p.errorExpected(p.pos, p.tok, "USING")
+	}
+	stmt.Using, _, _ = p.scan()
+
+	if stmt.ModelName, err = p.parseIdent("model name"); err != nil {
+		return &stmt, err
+	}
+
+	if stmt.InputQuery, err = p.parseSelectStatement(false, nil); err != nil {
+		return &stmt, err
+	}
+	return &stmt, nil
+}
+
 func (p *Parser) mustParseLiteral() Expr {
 	assert(isLiteralToken(p.tok))
 	pos, tok, lit := p.scan()
@@ -2748,7 +2944,7 @@ func (p *Parser) parseOperand() (expr Expr, err error) {
 			return p.parseCall(ident)
 		}
 		return nil, p.errorExpected(p.pos, pk, "call expression")
-	case STRING:
+	case STRING, BLOB:
 		return &StringLit{ValuePos: pos, Value: lit}, nil
 	case FLOAT:
 		return &FloatLit{ValuePos: pos, Value: lit}, nil
@@ -3627,6 +3823,22 @@ func isBulkInsertOptionStartToken(tok Token, p *Parser) bool {
 		}
 		switch strings.ToUpper(ident.Name) {
 		case "BATCHSIZE", "ROWSLIMIT", "FORMAT", "INPUT", "HEADER_ROW", "ALLOW_MISSING_VALUES":
+			return true
+		}
+	}
+	return false
+}
+
+func isCopyOptionStartToken(tok Token, p *Parser) bool {
+	switch tok {
+	case IDENT:
+		ident, err := p.parseIdent("copy option")
+		defer p.unscan()
+		if err != nil {
+			return false
+		}
+		switch strings.ToUpper(ident.Name) {
+		case "URL", "APIKEY":
 			return true
 		}
 	}

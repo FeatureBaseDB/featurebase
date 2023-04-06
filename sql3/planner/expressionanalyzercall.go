@@ -124,6 +124,71 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		//return the data type of the referenced column
 		call.ResultDataType = ref.DataType()
 
+	case "CORR":
+		// can't do this on a *
+		if call.Star.IsValid() && len(call.Args) == 0 {
+			return nil, sql3.NewErrExpectedColumnReference(call.Star.Line, call.Star.Column)
+		}
+
+		if len(call.Args) != 2 {
+			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
+		}
+
+		// if it is a ref, we shouldn't do a corr on the _id
+		arg1 := call.Args[0]
+
+		ref, ok := arg1.(*parser.QualifiedRef)
+		if ok && strings.EqualFold(ref.Column.Name, string(dax.PrimaryKeyFieldName)) {
+			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
+		}
+
+		// make sure the ref is the right type
+		if !(typeIsInteger(arg1.DataType()) || typeIsDecimal(arg1.DataType()) || typeIsTimestamp(arg1.DataType())) {
+			return nil, sql3.NewErrIntOrDecimalOrTimestampExpressionExpected(arg1.Pos().Line, arg1.Pos().Column)
+		}
+
+		// if it is a ref, we shouldn't do a corr on the _id
+		arg2 := call.Args[1]
+
+		ref, ok = arg2.(*parser.QualifiedRef)
+		if ok && strings.EqualFold(ref.Column.Name, string(dax.PrimaryKeyFieldName)) {
+			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Name.Name)
+		}
+
+		// make sure the ref is the right type
+		if !(typeIsInteger(arg2.DataType()) || typeIsDecimal(arg2.DataType()) || typeIsTimestamp(arg2.DataType())) {
+			return nil, sql3.NewErrIntOrDecimalOrTimestampExpressionExpected(arg2.Pos().Line, arg2.Pos().Column)
+		}
+
+		// return the data type of the referenced column
+		call.ResultDataType = parser.NewDataTypeDecimal(6)
+
+	case "VAR":
+		// can't do this on a *
+		if call.Star.IsValid() && len(call.Args) == 0 {
+			return nil, sql3.NewErrExpectedColumnReference(call.Star.Line, call.Star.Column)
+		}
+
+		if len(call.Args) != 1 {
+			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 1, len(call.Args))
+		}
+
+		// first arg should be a qualified ref
+		arg1 := call.Args[0]
+
+		ref, ok := arg1.(*parser.QualifiedRef)
+		if ok && strings.EqualFold(ref.Column.Name, string(dax.PrimaryKeyFieldName)) {
+			return nil, sql3.NewErrIdColumnNotValidForAggregateFunction(call.Args[0].Pos().Line, call.Args[0].Pos().Column, call.Name.Name)
+		}
+
+		// make sure the ref is the right type
+		if !(typeIsInteger(arg1.DataType()) || typeIsDecimal(arg1.DataType()) || typeIsTimestamp(arg1.DataType())) {
+			return nil, sql3.NewErrIntOrDecimalOrTimestampExpressionExpected(arg1.Pos().Line, arg1.Pos().Column)
+		}
+
+		// return the data type of the referenced column
+		call.ResultDataType = parser.NewDataTypeDecimal(6)
+
 	case "MIN", "MAX":
 		// can't do an min/max on a *
 		if call.Star.IsValid() && len(call.Args) == 0 {
@@ -270,6 +335,15 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 	case "DATETIMEDIFF":
 		return p.analyzeFunctionDateTimeDiff(call, scope)
 	default:
+		// could be a udf - try to look it up in functions
+		fn, err := p.getFunctionByName(call.Name.Name)
+		if err != nil {
+			return nil, err
+		}
+		if fn != nil {
+			return p.analyzeUserDefinedFunction(call, scope, fn)
+		}
+
 		return nil, sql3.NewErrCallUnknownFunction(call.Name.NamePos.Line, call.Name.NamePos.Column, call.Name.Name)
 	}
 	return call, nil

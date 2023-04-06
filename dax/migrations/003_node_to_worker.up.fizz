@@ -1,0 +1,16 @@
+add_column("workers", "role_compute", "bool", {"default": false})
+add_column("workers", "role_translate", "bool", {"default": false})
+add_column("workers", "role_query", "bool", {"default": false})
+
+sql("update jobs set worker_id = wc.id from workers wc inner join workers wt on wc.address = wt.address and wc.database_id = wt.database_id and wc.role = 'compute' and wt.role = 'translate' where worker_id = wt.id;")
+
+sql("update workers set role_compute = true where role = 'compute';")
+
+sql("update workers set role_translate = true from workers wt where workers.address = wt.address and workers.role = 'compute' and wt.role = 'translate';")
+
+sql("delete from workers where role = 'translate';")
+
+drop_column("workers", "role")
+
+drop_table("node_roles")
+drop_table("nodes")
