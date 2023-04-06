@@ -528,7 +528,7 @@ package for linux amd64:
     - export VERSION=$(git describe --tags 2>/dev/null || echo unknown)
     - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
     - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
-  dependencies:
+  needs:
     - build featurebase # featurebase_linux_amd64 is all we want
     - build fbsql amd64 # ./build/fbsql_linux_amd64 is all we want
   artifacts:
