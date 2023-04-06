@@ -435,29 +435,23 @@ func (e *executor) dataFrameExists(fname string) bool {
 	return true
 }
 
-type arrowCache struct {
-	table arrow.Table
-	pool  memory.Allocator
-}
-
 func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, memory.Allocator, error) {
-	cache, ok := e.arrowCache[fname]
+	table, ok := e.arrowCache[fname]
 	if ok {
-		cache.table.Retain()
-		return cache.table, e.pool, nil
+		table.Retain()
+		return table, e.pool, nil
 	}
 	// ignoring the passed in allocatorsince where caching
-	mem := memory.NewGoAllocator()
 	if e.typeIsParquet() {
-		table, err := readTableParquetCtx(ctx, fname, mem)
-		e.arrowCache[fname] = &arrowCache{table: table, pool: mem}
+		table, err := readTableParquetCtx(ctx, fname, e.pool)
+		e.arrowCache[fname] = table
 		return table, e.pool, err
 	}
-	table, err := readTableArrow(fname, mem)
+	table, err := readTableArrow(fname, e.pool)
 	if err != nil {
 		return nil, nil, err
 	}
-	e.arrowCache[fname] = &arrowCache{table: table, pool: mem}
+	e.arrowCache[fname] = table
 	return table, e.pool, nil
 }
 

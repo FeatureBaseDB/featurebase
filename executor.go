@@ -17,6 +17,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/memory"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/disco"
@@ -81,7 +82,7 @@ type executor struct {
 	// Temporary flag to be removed when stablized
 	dataframeEnabled   bool
 	datafameUseParquet bool
-	arrowCache         map[string]*arrowCache
+	arrowCache         map[string]arrow.Table
 	pool               memory.Allocator
 }
 
@@ -146,7 +147,7 @@ func newExecutor(opts ...executorOption) *executor {
 	e.work = make(chan job, e.workerPoolSize)
 	_ = testhook.Opened(NewAuditor(), e, nil)
 	e.workers = task.NewPool(e.workerPoolSize, e.doOneJob, e)
-	e.arrowCache = make(map[string]*arrowCache)
+	e.arrowCache = make(map[string]arrow.Table)
 	e.pool = memory.NewGoAllocator()
 	return e
 }
