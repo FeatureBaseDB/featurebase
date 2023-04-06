@@ -234,8 +234,8 @@ func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Reque
 
 	// for now, fill the id with a hard-coded value
 	id = dax.QualifiedDatabaseID{
-		OrganizationID: dax.OrganizationID("org1"),
-		DatabaseID:     dax.DatabaseID("db1"),
+		OrganizationID: dax.OrganizationID("3ff24bf5-2dff-4c33-993a-8459d53c92c2"),
+		DatabaseID:     dax.DatabaseID("b75114bf-75d4-4581-8899-7ba758548f56"),
 	}
 
 	//send the id into the controller, get the number of workers back

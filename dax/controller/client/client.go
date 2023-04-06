@@ -705,25 +705,28 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 func (c *Client) GetDatabaseNumberOfWorkers() (int, error) {
 	//url := fmt.Sprintf("%s/database-number-of-workers", c.address.WithScheme(defaultScheme))
 	//url := fmt.Sprintf("%s/database-number-of-workers", "localhost:8080/controller")
-	url := "http://localhost:8080/controller/database-number-of-workers"
+
+	// url := fmt.Sprintf("%s/database-number-of-workers", c.address.WithScheme(defaultScheme))
+	url := fmt.Sprintf("%s/database-number-of-workers", "http://localhost:8080/controller")
+
 	// print something
 	//fmt.Println("GetDatabaseNumberOfWorkers url: %s", url)
 
 	c.logger.Debugf("GetDatabaseNumberOfWorkers url: %s", url)
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
-		return 0, errors.Wrap(err, "getting database-number-of-workers")
+		return -3, errors.Wrap(err, "getting database-number-of-workers")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return 0, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return -4, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
 	}
 
 	var workers int
 	if err := json.NewDecoder(resp.Body).Decode(&workers); err != nil {
-		return 0, errors.Wrap(err, "reading response body")
+		return -5, errors.Wrap(err, "reading response body")
 	}
 
 	return workers, nil

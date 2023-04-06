@@ -786,9 +786,12 @@ func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, id
 
 // get the list of workers being used by a database
 func (c *Controller) GetDatabaseNumberOfWorkers(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
+
+	// print the id of the database
+	// c.logger.Debugf("GetDatabaseNumberOfWorkers %+v", qdbid)
 	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
-		return 0, errors.Wrap(err, "beginning tx")
+		return -1, errors.Wrap(err, "beginning tx")
 	}
 	defer tx.Rollback()
 
