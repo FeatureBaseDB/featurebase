@@ -28,7 +28,7 @@ func NewErrDatabaseIDInvalid(databaseID dax.DatabaseID) error {
 func NewErrDatabaseNameInvalid(databaseName dax.DatabaseName) error {
 	return errors.New(
 		ErrCodeDatabaseNameInvalid,
-		fmt.Sprintf("invalid index or field name %s, must match [a-z][a-z0-9Θ_-]* and contain at most 230 characters", databaseName),
+		fmt.Sprintf("invalid index or field name %s, must match [a-z][a-z0-9Θ_-]* and contain at most 300 characters", databaseName),
 	)
 }
 
