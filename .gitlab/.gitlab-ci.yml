@@ -210,7 +210,7 @@ build fbsql arm64 darwin:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
     - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
-    
+
   artifacts:
     paths:
       - ./build/fbsql_*
@@ -529,8 +529,8 @@ package for linux amd64:
     GOARCH: "amd64"
   script:
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
-    - apt-get update && apt-get install -y -qq musl-tools build-essential
+    - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
+    - apt-get update && apt-get install -y -qq musl-tools build-essential make
     - make package
   artifacts:
     paths:
