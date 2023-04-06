@@ -128,6 +128,51 @@ var inTests = TableTest{
 			),
 			Compare: CompareExactUnordered,
 		},
+		{
+			SQLs: sqls(
+				"select t1._id in (select t2._id from in_all_types as t2) from in_all_types as t1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(true)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		// This test fails - re-enable it when fixing the bug
+		/*
+			{
+				SQLs: sqls(
+					"select t1._id in (select t2.id1 from in_all_types as t2) from in_all_types as t1",
+				),
+				ExpHdrs: hdrs(
+					hdr("", fldTypeBool),
+				),
+				ExpRows: rows(
+					row(bool(false)),
+				),
+				Compare: CompareExactUnordered,
+			},
+		*/
+		// This test also fails.
+		// Once re-enabled and passing, it provides coverage for expressionanalyzer.go
+		// (*ExecutionPlanner).analyzeBinaryExpression in the case where the left hand side
+		// of the IN contains a JOIN.
+		/*
+			{
+				SQLs: sqls(
+					"select a1._id from in_all_types a1 inner join in_all_types a2 on a1._id=a2._id where a1._id in (select _id from in_all_types);",
+				),
+				ExpHdrs: hdrs(
+					hdr("", fldTypeBool),
+				),
+				ExpRows: rows(
+					row(bool(true)),
+				),
+				Compare: CompareExactUnordered,
+			},
+		*/
 	},
 }
 
@@ -259,5 +304,63 @@ var notInTests = TableTest{
 			),
 			Compare: CompareExactUnordered,
 		},
+		// this test currently causes a panic
+		/*
+			{
+				SQLs: sqls(
+					"select t1._id in (select t2.s1 from in_all_types as t2) from in_all_types as t1",
+				),
+				ExpHdrs: hdrs(
+					hdr("", fldTypeBool),
+				),
+				ExpErr:  "types 'id' and 'string' are not equatable",
+				Compare: CompareExactUnordered,
+			},
+		*/
+		{
+			SQLs: sqls(
+				"select t1._id not in (select t2._id from in_all_types as t2) from in_all_types as t1",
+			),
+			ExpHdrs: hdrs(
+				hdr("", fldTypeBool),
+			),
+			ExpRows: rows(
+				row(bool(false)),
+			),
+			Compare: CompareExactUnordered,
+		},
+		// This test fails - re-enable it when the bug is fixed
+		/*
+			{
+				SQLs: sqls(
+					"select t1._id not in (select t2.id1 from in_all_types as t2) from in_all_types as t1",
+				),
+				ExpHdrs: hdrs(
+					hdr("", fldTypeBool),
+				),
+				ExpRows: rows(
+					row(bool(true)),
+				),
+				Compare: CompareExactUnordered,
+			},
+		*/
+		// This test also fails.
+		// Once re-enabled and passing, it provides coverage for expressionanalyzer.go
+		// (*ExecutionPlanner).analyzeBinaryExpression in the case where the left hand side
+		// of the IN contains a JOIN.
+		/*
+			{
+				SQLs: sqls(
+					"select a1._id from in_all_types a1 inner join in_all_types a2 on a1._id=a2._id where a1._id not in (select _id from in_all_types);",
+				),
+				ExpHdrs: hdrs(
+					hdr("", fldTypeBool),
+				),
+				ExpRows: rows(
+					row(bool(true)),
+				),
+				Compare: CompareExactUnordered,
+			},
+		*/
 	},
 }

@@ -632,7 +632,7 @@ func (p *ExecutionPlanner) analyzeBinaryExpression(ctx context.Context, expr *pa
 			if ok {
 				//we have a select in the expression list so make sure it is the only thing in the expression list
 				if len(lst.Exprs) > 1 {
-					return nil, sql3.NewErrInternalf("expresion list should only contain one select statement")
+					return nil, sql3.NewErrInternalf("expression list should only contain one select statement")
 				}
 				//make sure select only returns one column
 				if len(sel.Columns) > 1 {
