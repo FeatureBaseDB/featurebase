@@ -518,7 +518,7 @@ upload to sonarcloud:
 
 package for linux amd64:
   stage: build
-  image: nfpm:v2.11.3
+  image: goreleaser/nfpm:v2.11.3
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
