@@ -232,9 +232,10 @@ var groupByTests = TableTest{
 				hdr("is1", fldTypeIDSet),
 			),
 			ExpRows: rows(
-				row(int64(5), []int64{1}),
-				row(int64(4), []int64{2}),
-				row(int64(4), []int64{3}),
+				row(int64(2), []int64{1, 2}),
+				row(int64(2), []int64{1, 3}),
+				row(int64(1), []int64{2, 3}),
+				row(int64(1), []int64{1, 2, 3}),
 			),
 			Compare: CompareExactOrdered,
 		},
