@@ -406,7 +406,9 @@ func (sf *ShardFile) Process(cs *ChangesetRequest) error {
 		return err
 	}
 	fname := sf.dest + sf.executor.TableExtension()
+	sf.executor.arrowmu.Lock()
 	delete(sf.executor.arrowCache, fname)
+	sf.executor.arrowmu.Unlock()
 	return os.Rename(rtemp+sf.executor.TableExtension(), fname)
 }
 

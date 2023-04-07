@@ -436,7 +436,9 @@ func (e *executor) dataFrameExists(fname string) bool {
 }
 
 func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, error) {
+	e.arrowmu.Lock()
 	table, ok := e.arrowCache[fname]
+	e.arrowmu.Unlock()
 	if ok {
 		vprint.VV("returning table from cache name:%v numcols:%v numrows:%v", fname, table.NumCols(), table.NumRows())
 
@@ -453,7 +455,9 @@ func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table,
 	if err != nil {
 		return nil, err
 	}
+	e.arrowmu.Lock()
 	e.arrowCache[fname] = table
+	e.arrowmu.Unlock()
 	vprint.VV("returning new table and cacheing at cache name:%v numcols:%v numrows:%v", fname, table.NumCols(), table.NumRows())
 	return table, nil
 }

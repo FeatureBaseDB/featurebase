@@ -84,6 +84,7 @@ type executor struct {
 	datafameUseParquet bool
 	arrowCache         map[string]arrow.Table
 	pool               memory.Allocator
+	arrowmu            sync.Mutex
 }
 
 // executorOption is a functional option type for pilosa.executor
