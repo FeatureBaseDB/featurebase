@@ -435,14 +435,23 @@ func (e *executor) dataFrameExists(fname string) bool {
 	return true
 }
 
+func (e *executor) dumpCache(msg string) {
+	e.arrowmu.Lock()
+	defer e.arrowmu.Unlock()
+	vprint.VV("dump:%v", msg)
+	for k, v := range e.arrowCache {
+		table := v
+		fname := k
+		vprint.VV(" cache name:%v numcols:%v numrows:%v", fname, table.NumCols(), table.NumRows())
+
+	}
+}
+
 func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, error) {
 	e.arrowmu.Lock()
 	table, ok := e.arrowCache[fname]
 	e.arrowmu.Unlock()
 	if ok {
-		vprint.VV("returning table from cache name:%v numcols:%v numrows:%v", fname, table.NumCols(), table.NumRows())
-
-		table.Retain()
 		return table, nil
 	}
 	// ignoring the passed in allocatorsince where caching
@@ -458,7 +467,6 @@ func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table,
 	e.arrowmu.Lock()
 	e.arrowCache[fname] = table
 	e.arrowmu.Unlock()
-	vprint.VV("returning new table and cacheing at cache name:%v numcols:%v numrows:%v", fname, table.NumCols(), table.NumRows())
 	return table, nil
 }
 

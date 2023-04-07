@@ -58,6 +58,7 @@ func (e *executor) IvyReduce(reduceCode string, opCode string, opt *ExecOptions)
 		if v == nil {
 			return prev
 		}
+
 		if accumulator == nil {
 			switch val := v.(type) {
 			case *dataframe.DataFrame:
@@ -228,7 +229,6 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 	if err != nil {
 		return nil, err
 	}
-	defer table.Release()
 	df, err := dataframe.NewDataFrameFromTable(e.pool, table)
 	if err != nil {
 		return nil, err
@@ -250,6 +250,7 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 	if err != nil {
 		return nil, fmt.Errorf("ivy map error: %w", err)
 	}
+
 	return context.Global("_"), nil
 }
 
@@ -407,7 +408,11 @@ func (sf *ShardFile) Process(cs *ChangesetRequest) error {
 	}
 	fname := sf.dest + sf.executor.TableExtension()
 	sf.executor.arrowmu.Lock()
-	delete(sf.executor.arrowCache, fname)
+	t, ok := sf.executor.arrowCache[fname]
+	if ok {
+		t.Release()
+		delete(sf.executor.arrowCache, fname)
+	}
 	sf.executor.arrowmu.Unlock()
 	return os.Rename(rtemp+sf.executor.TableExtension(), fname)
 }
