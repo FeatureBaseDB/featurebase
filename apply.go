@@ -47,7 +47,7 @@ func runIvyString(context value.Context, str string) (ok bool, err error) {
 
 // Possibly combine all arrays together then apply some interesting
 // computation at the end?
-func IvyReduce(reduceCode string, opCode string, opt *ExecOptions) (func(ctx context.Context, prev, v interface{}) interface{}, func() (*dataframe.DataFrame, error)) {
+func (e *executor) IvyReduce(reduceCode string, opCode string, opt *ExecOptions) (func(ctx context.Context, prev, v interface{}) interface{}, func() (*dataframe.DataFrame, error)) {
 	var accumulator value.Value
 	mu := &sync.Mutex{}
 	concat := value.BinaryOps[opCode]
@@ -90,10 +90,9 @@ func IvyReduce(reduceCode string, opCode string, opt *ExecOptions) (func(ctx con
 		return nil
 	}
 	tablerFn := func() (*dataframe.DataFrame, error) {
-		pool := memory.NewGoAllocator() // TODO(twg) 2022/09/01 singledton?
 		if opt.Remote {
-			col := value.ToArrowColumn(accumulator, pool)
-			return dataframe.NewDataFrameFromColumns(pool, []arrow.Column{*col})
+			col := value.ToArrowColumn(accumulator, e.pool)
+			return dataframe.NewDataFrameFromColumns(e.pool, []arrow.Column{*col})
 		}
 		// only actually reduce on the initiating node i hate the network
 		// over head but oh well
@@ -107,9 +106,9 @@ func IvyReduce(reduceCode string, opCode string, opt *ExecOptions) (func(ctx con
 			if v == nil {
 				return nil, errors.New("ivy reduction no result ")
 			}
-			col := value.ToArrowColumn(ctxIvy.Global("_"), pool)
+			col := value.ToArrowColumn(ctxIvy.Global("_"), e.pool)
 
-			return dataframe.NewDataFrameFromColumns(pool, []arrow.Column{*col})
+			return dataframe.NewDataFrameFromColumns(e.pool, []arrow.Column{*col})
 		}
 		return nil, errors.New("ivy reduction failed ")
 	}
@@ -141,9 +140,9 @@ func (e *executor) executeApply(ctx context.Context, qcx *Qcx, index string, c *
 	if err != nil {
 		return nil, err
 	}
-	reduceFn, tablerFn := IvyReduce("_", ",", opt)
+	reduceFn, tablerFn := e.IvyReduce("_", ",", opt)
 	if ok {
-		reduceFn, tablerFn = IvyReduce(ivyReduce, ",", opt)
+		reduceFn, tablerFn = e.IvyReduce(ivyReduce, ",", opt)
 	}
 
 	_, err = e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -225,12 +224,12 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 		return value.NewVector([]value.Value{}), nil
 	}
 
-	table, pool, err := e.getDataTable(ctx, fname)
+	table, err := e.getDataTable(ctx, fname)
 	if err != nil {
 		return nil, err
 	}
 	defer table.Release()
-	df, err := dataframe.NewDataFrameFromTable(pool, table)
+	df, err := dataframe.NewDataFrameFromTable(e.pool, table)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +240,7 @@ func (e *executor) executeApplyShard(ctx context.Context, qcx *Qcx, index string
 		if len(ids) == 0 {
 			return value.NewVector([]value.Value{}), nil
 		}
-		resolver, err = filterDataframe(resolver, pool, ids)
+		resolver, err = filterDataframe(resolver, e.pool, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +262,7 @@ func NewShardFile(ctx context.Context, name string, mem memory.Allocator, e *exe
 		return &ShardFile{dest: name, executor: e, strings: make(map[key][]string)}, nil
 	}
 	// else read in existing
-	table, _, err := e.getDataTable(ctx, name)
+	table, err := e.getDataTable(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -670,7 +669,7 @@ func (api *API) GetDataframeSchema(ctx context.Context, indexName string) (inter
 			name = strings.TrimSuffix(name, filepath.Ext(name))
 			// read the parquet file and extract the schema
 			fname := filepath.Join(base, name)
-			table, _, err := api.server.executor.getDataTable(ctx, fname)
+			table, err := api.server.executor.getDataTable(ctx, fname)
 			if err != nil {
 				return nil, err
 			}

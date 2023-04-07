@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow/go/v10/parquet/pqarrow"
 	"github.com/featurebasedb/featurebase/v3/pql"
 	"github.com/featurebasedb/featurebase/v3/tracing"
+	"github.com/featurebasedb/featurebase/v3/vprint"
 	"github.com/gomem/gomem/pkg/dataframe"
 	"github.com/pkg/errors"
 )
@@ -51,14 +52,13 @@ func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *
 	}
 	mapcounter := 0
 	reducecounter := 0
-	pool := memory.NewGoAllocator() // TODO(twg) 2022/09/01 singledton?
 	// Execute calls in bulk on each remote node and merge.
 	mu := &sync.Mutex{}
 	mapFn := func(ctx context.Context, shard uint64, mopt *mapOptions) (_ interface{}, err error) {
 		mu.Lock()
 		mapcounter++
 		mu.Unlock()
-		return e.executeArrowShard(ctx, qcx, index, c, shard, pool, columnFilter)
+		return e.executeArrowShard(ctx, qcx, index, c, shard, columnFilter)
 	}
 	tables := make([]*BasicTable, 0)
 
@@ -79,7 +79,7 @@ func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *
 			}
 		case arrow.Table:
 			if t.NumRows() > 0 {
-				bt := BasicTableFromArrow(t, pool)
+				bt := BasicTableFromArrow(t, e.pool)
 				mu.Lock()
 				tables = append(tables, bt)
 				mu.Unlock()
@@ -95,7 +95,7 @@ func (e *executor) executeArrow(ctx context.Context, qcx *Qcx, index string, c *
 	if len(tables) == 0 {
 		return &BasicTable{name: "empty"}, nil
 	}
-	tbl := Concat(tables[0].Schema(), tables, pool)
+	tbl := Concat(tables[0].Schema(), tables, e.pool)
 	r := dataframe.NewChunkResolver(tbl.Column(0))
 	return &BasicTable{resolver: &r, table: tbl}, nil
 }
@@ -363,7 +363,7 @@ func filterColumns(filters []string, table arrow.Table) arrow.Table {
 	return array.NewTable(filterdSchema, cols, table.NumRows())
 }
 
-func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, pool memory.Allocator, columnFilter []string) (*BasicTable, error) {
+func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string, c *pql.Call, shard uint64, columnFilter []string) (*BasicTable, error) {
 	name := fmt.Sprintf("a. %v", shard)
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeArrowShard")
 	defer span.Finish()
@@ -394,7 +394,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 		return &BasicTable{name: name}, nil
 	}
 
-	table, pool, err := e.getDataTable(ctx, fname)
+	table, err := e.getDataTable(ctx, fname)
 	if err != nil {
 		return nil, errors.Wrap(err, "arrow readTableParquet")
 	}
@@ -402,7 +402,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 	if len(columnFilter) > 0 {
 		table = filterColumns(columnFilter, table)
 	}
-	df, err := dataframe.NewDataFrameFromTable(pool, table)
+	df, err := dataframe.NewDataFrameFromTable(e.pool, table)
 	if err != nil {
 		return nil, errors.Wrap(err, "arrow NewDataFromTable")
 	}
@@ -413,7 +413,7 @@ func (e *executor) executeArrowShard(ctx context.Context, qcx *Qcx, index string
 		if len(ids) == 0 {
 			return &BasicTable{name: name}, nil
 		}
-		resolver, err = filterDataframe(resolver, pool, ids)
+		resolver, err = filterDataframe(resolver, e.pool, ids)
 		if err != nil {
 			return nil, errors.Wrap(err, "filtering dataframe")
 		}
@@ -435,24 +435,27 @@ func (e *executor) dataFrameExists(fname string) bool {
 	return true
 }
 
-func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, memory.Allocator, error) {
+func (e *executor) getDataTable(ctx context.Context, fname string) (arrow.Table, error) {
 	table, ok := e.arrowCache[fname]
 	if ok {
+		vprint.VV("returning table from cache name:%v numcols:%v numrows:%v", fname, table.NumCols(), table.NumRows())
+
 		table.Retain()
-		return table, e.pool, nil
+		return table, nil
 	}
 	// ignoring the passed in allocatorsince where caching
 	if e.typeIsParquet() {
 		table, err := readTableParquetCtx(ctx, fname, e.pool)
 		e.arrowCache[fname] = table
-		return table, e.pool, err
+		return table, err
 	}
 	table, err := readTableArrow(fname, e.pool)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	e.arrowCache[fname] = table
-	return table, e.pool, nil
+	vprint.VV("returning new table and cacheing at cache name:%v numcols:%v numrows:%v", fname, table.NumCols(), table.NumRows())
+	return table, nil
 }
 
 func (e *executor) typeIsParquet() bool {
