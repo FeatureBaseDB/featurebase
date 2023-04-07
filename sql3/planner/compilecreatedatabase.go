@@ -17,7 +17,10 @@ func (p *ExecutionPlanner) compileCreateDatabaseStatement(stmt *parser.CreateDat
 	databaseName := strings.ToLower(parser.IdentName(stmt.Name))
 	failIfExists := !stmt.IfNotExists.IsValid()
 
-	units := 0
+	// By default, a database needs at least 1 unit for simple querying, so by
+	// setting the default to 1, users can simply type `CREATE DATABASE [name]` without
+	// needing to append `WITH UNITS 1;`
+	units := 1
 	description := ""
 
 	// apply database options
