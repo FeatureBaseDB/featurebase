@@ -215,15 +215,6 @@ func (s *server) patchDatabaseOptions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// get the number of workers for a database
-// receive request
-
-// decode the id
-
-// send the id into the controller, get the number of workers back
-
-// send that number back to the client via request
-
 // create a response struct
 func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Request) {
 	// get the context

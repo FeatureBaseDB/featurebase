@@ -703,28 +703,24 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 }
 
 func (c *Client) GetDatabaseNumberOfWorkers(ctx context.Context, orgID string, databaseID string) (int, error) {
-	// baseEndpoint := c.address.WithScheme(defaultScheme)
-	baseEndpoint := "http://localhost:8080/controller"
+	baseEndpoint := c.address.WithScheme(defaultScheme)
 	url := fmt.Sprintf("%s/database-number-of-workers/%s/%s", baseEndpoint, orgID, databaseID)
-
-	// print something
-	//fmt.Println("GetDatabaseNumberOfWorkers url: %s", url)
 
 	c.logger.Debugf("GetDatabaseNumberOfWorkers url: %s", url)
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
-		return -3, errors.Wrap(err, "getting database-number-of-workers")
+		return -1, errors.Wrap(err, "getting database-number-of-workers")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return -4, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return -1, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
 	}
 
 	var workers int
 	if err := json.NewDecoder(resp.Body).Decode(&workers); err != nil {
-		return -5, errors.Wrap(err, "reading response body")
+		return -1, errors.Wrap(err, "reading response body")
 	}
 
 	return workers, nil

@@ -640,8 +640,6 @@ func (b *Balancer) WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qt
 }
 
 func (b *Balancer) WorkerCount(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (int, error) {
-	// print the database id
-	// fmt.Println(qdbid)
 	return b.current.WorkerCount(tx, "", qdbid)
 }
 

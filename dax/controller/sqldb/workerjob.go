@@ -70,34 +70,23 @@ func jobsForWorker(dt *DaxTransaction, worker *models.Worker, roleType dax.RoleT
 }
 
 func (w *workerJobService) WorkerCount(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (int, error) {
-	// print the database id
-	fmt.Println("database id: ", qdbid.DatabaseID)
-
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		// print that the transaction is not valid
-		fmt.Println("transaction is not valid")
-		return -2, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
+		return -1, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
-	// print that the transaction is valid
-	fmt.Println("transaction is valid")
 
 	worker := &models.Worker{}
 	query := dt.C.Q()
 
 	if roleType != "" {
-		// print the role type
 		query = query.Where(fmt.Sprintf("role_%s = true", roleType))
 	}
 
 	if qdbid.DatabaseID != "" {
-		// print the database id
-		fmt.Println("database id: [", qdbid.DatabaseID, "]")
 		query = query.Where("database_id = ?", qdbid.DatabaseID)
 	}
 
 	count, err := query.Count(worker)
-
 	return count, errors.Wrap(err, "getting count")
 }
 
