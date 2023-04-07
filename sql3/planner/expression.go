@@ -2990,11 +2990,12 @@ func (p *ExecutionPlanner) compileOrderingTermExpr(expr parser.Expr, projections
 // used by the LIKE/NOT LIKE operator
 func wildCardToRegexp(pattern string) string {
 	var result strings.Builder
-	result.WriteString("(?i)")
 
+	result.WriteString("(?i)^")
 	rpattern := strings.Replace(pattern, "%", ".*", -1)
 	rpattern = strings.Replace(rpattern, "_", ".+", -1)
 	result.WriteString(rpattern)
+	result.WriteString("$")
 
 	return result.String()
 }
