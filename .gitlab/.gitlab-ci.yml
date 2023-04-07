@@ -538,8 +538,9 @@ package for linux:
     - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
     - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
   needs:
-    - build featurebase # featurebase_$GOOS_$GOARCH is what we need
-    - build fbsql amd64 # ./build/fbsql_$GOOS_$GOARCH is what we need
+    - build featurebase # featurebase_linux_amd64, featurebase_linux_arm64
+    - build fbsql amd64 # ./build/fbsql_linux_amd64
+    - build fbsql arm64 # ./build/fbsql_linux_arm64
   artifacts:
     paths:
       - "*.deb"
