@@ -317,13 +317,11 @@ func (i *bulkInsertSourceCSVRowIter) Next(ctx context.Context) (types.Row, error
 		case *parser.DataTypeTimestamp:
 			intVal, err := strconv.ParseInt(evalValue, 10, 64)
 			if err != nil {
-				if tm, err := time.ParseInLocation(time.RFC3339Nano, evalValue, time.UTC); err == nil {
-					result[idx] = tm
-				} else if tm, err := time.ParseInLocation("2006-01-02", evalValue, time.UTC); err == nil {
-					result[idx] = tm
-				} else {
+				tm, err := parser.ConvertStringToTimestamp(evalValue)
+				if err != nil {
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, evalValue, mapColumn.colType.TypeDescription())
 				}
+				result[idx] = tm
 			} else {
 				// implicit conversion of int to timestamp will treat int as seconds since unix epoch
 				result[idx] = time.Unix(intVal, 0).UTC()
@@ -661,13 +659,11 @@ func (i *bulkInsertSourceNDJsonRowIter) Next(ctx context.Context) (types.Row, er
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 
 					case string:
-						if tm, err := time.ParseInLocation(time.RFC3339Nano, v, time.UTC); err == nil {
-							result[idx] = tm
-						} else if tm, err := time.ParseInLocation("2006-01-02", v, time.UTC); err == nil {
-							result[idx] = tm
-						} else {
+						tm, err := parser.ConvertStringToTimestamp(v)
+						if err != nil {
 							return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
 						}
+						result[idx] = tm
 
 					case bool:
 						return nil, sql3.NewErrTypeConversionOnMap(0, 0, v, mapColumn.colType.TypeDescription())
@@ -1153,13 +1149,11 @@ func (i *bulkInsertSourceParquetRowIter) Next(ctx context.Context) (types.Row, e
 				// implicit conversion of int to timestamp will treat int as seconds since unix epoch
 				result[idx] = time.Unix(intVal, 0).UTC()
 			} else if stringVal, ok := evalValue.(string); ok {
-				if tm, err := time.ParseInLocation(time.RFC3339Nano, stringVal, time.UTC); err == nil {
-					result[idx] = tm
-				} else if tm, err := time.ParseInLocation("2006-01-02", stringVal, time.UTC); err == nil {
-					result[idx] = tm
-				} else {
+				tm, err := parser.ConvertStringToTimestamp(stringVal)
+				if err != nil {
 					return nil, sql3.NewErrTypeConversionOnMap(0, 0, stringVal, mapColumn.colType.TypeDescription())
 				}
+				result[idx] = tm
 			}
 
 		case *parser.DataTypeString:

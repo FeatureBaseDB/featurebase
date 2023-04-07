@@ -11,6 +11,7 @@ import (
 	"github.com/PaesslerAG/gval"
 	"github.com/PaesslerAG/jsonpath"
 	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 // TableTests is the list of tests which get run by TestSQL_Execute in
@@ -219,7 +220,7 @@ var TableTests []TableTest = []TableTest{
 }
 
 func knownTimestamp() time.Time {
-	tm, err := time.ParseInLocation(time.RFC3339, "2012-11-01T22:08:41+00:00", time.UTC)
+	tm, err := parser.ConvertStringToTimestamp("2012-11-01T22:08:41+00:00")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -237,7 +238,7 @@ func knownSubSecondTimestamp() time.Time {
 }
 
 func knownSubSecondTimestamp2() time.Time {
-	tm, err := time.ParseInLocation(time.RFC3339, "2022-12-09T18:04:54+00:00", time.UTC)
+	tm, err := parser.ConvertStringToTimestamp("2022-12-09T18:04:54+00:00")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -250,7 +251,7 @@ func knownSubSecondTimestamp2() time.Time {
 }
 
 func timestampFromString(s string) time.Time {
-	tm, err := time.ParseInLocation(time.RFC3339, s, time.UTC)
+	tm, err := parser.ConvertStringToTimestamp(s)
 	if err != nil {
 		panic(err.Error())
 	}

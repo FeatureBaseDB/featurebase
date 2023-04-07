@@ -1838,15 +1838,20 @@ func (expr *StringLit) Pos() Pos {
 }
 
 func (expr *StringLit) ConvertToTimestamp() *DateLit {
-	//try to coerce to a date
-	if tm, err := time.ParseInLocation(time.RFC3339Nano, expr.Value, time.UTC); err == nil {
-		return &DateLit{ValuePos: expr.ValuePos, Value: tm}
-	} else if tm, err := time.ParseInLocation(time.RFC3339, expr.Value, time.UTC); err == nil {
-		return &DateLit{ValuePos: expr.ValuePos, Value: tm}
-	} else if tm, err := time.ParseInLocation("2006-01-02", expr.Value, time.UTC); err == nil {
-		return &DateLit{ValuePos: expr.ValuePos, Value: tm}
-	} else {
+	tm, err := ConvertStringToTimestamp(expr.Value)
+	if err != nil {
 		return nil
+	}
+	return &DateLit{ValuePos: expr.ValuePos, Value: tm}
+}
+
+func ConvertStringToTimestamp(date string) (time.Time, error) {
+	if tm, err := time.ParseInLocation(time.RFC3339, date, time.UTC); err == nil {
+		return tm, nil
+	} else if tm, err := time.ParseInLocation("2006-01-02", date, time.UTC); err == nil {
+		return tm, nil
+	} else {
+		return time.Time{}, err
 	}
 }
 

@@ -1,10 +1,14 @@
 // Copyright 2021 Molecula Corp. All rights reserved.
 package defs
 
-import "time"
+import (
+	"time"
+
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
+)
 
 func earlyMay2022() time.Time {
-	tm, err := time.ParseInLocation(time.RFC3339, "2022-05-05T13:00:00+00:00", time.UTC)
+	tm, err := parser.ConvertStringToTimestamp("2022-05-05T13:00:00+00:00")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -12,7 +16,7 @@ func earlyMay2022() time.Time {
 }
 
 func lateMay2022() time.Time {
-	tm, err := time.ParseInLocation(time.RFC3339, "2022-05-28T13:00:00+00:00", time.UTC)
+	tm, err := parser.ConvertStringToTimestamp("2022-05-28T13:00:00+00:00")
 	if err != nil {
 		panic(err.Error())
 	}

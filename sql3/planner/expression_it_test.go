@@ -2,7 +2,6 @@ package planner
 
 import (
 	"testing"
-	"time"
 
 	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	"github.com/featurebasedb/featurebase/v3/sql3/planner/types"
@@ -64,7 +63,7 @@ func TestExpressions(t *testing.T) {
 		blop := newBoolLiteralPlanExpression(false)
 		assert.Equal(t, blop.String(), "false")
 
-		tm, _ := time.ParseInLocation(time.RFC3339, "2012-11-01T22:08:41+00:00", time.UTC)
+		tm, _ := parser.ConvertStringToTimestamp("2012-11-01T22:08:41+00:00")
 		dlop := newTimestampLiteralPlanExpression(tm)
 		assert.Equal(t, dlop.String(), "2012-11-01T22:08:41Z")
 

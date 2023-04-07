@@ -21,6 +21,7 @@ import (
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/pql"
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 	sql_test "github.com/featurebasedb/featurebase/v3/sql3/test"
 	"github.com/featurebasedb/featurebase/v3/test"
 	"github.com/featurebasedb/featurebase/v3/vprint"
@@ -3055,9 +3056,9 @@ func TestPlanner_BulkInsertParquet(t *testing.T) {
 		// order by timestamp
 		results, _, _, err = sql_test.MustQueryRows(t, nil, c.GetNode(0).Server, `select _id, t from j1 order by t`)
 		assert.NoError(t, err)
-		t2, _ := time.ParseInLocation(time.RFC3339Nano, "1970-01-28T00:00:00Z", time.UTC)
-		t3, _ := time.ParseInLocation(time.RFC3339Nano, "1988-05-30T12:02:00Z", time.UTC)
-		t1, _ := time.ParseInLocation(time.RFC3339Nano, "2022-01-28T12:14:04Z", time.UTC)
+		t2, _ := parser.ConvertStringToTimestamp("1970-01-28T00:00:00Z")
+		t3, _ := parser.ConvertStringToTimestamp("1988-05-30T12:02:00Z")
+		t1, _ := parser.ConvertStringToTimestamp("2022-01-28T12:14:04Z")
 
 		if diff := cmp.Diff([][]interface{}{
 			{int64(2), t2},

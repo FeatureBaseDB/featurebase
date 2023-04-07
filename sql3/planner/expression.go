@@ -89,13 +89,11 @@ func coerceValue(sourceType parser.ExprDataType, targetType parser.ExprDataType,
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected value type '%T'", value)
 			}
-			if tm, err := time.ParseInLocation(time.RFC3339Nano, val, time.UTC); err == nil {
-				return tm, nil
-			} else if tm, err := time.ParseInLocation("2006-01-02", val, time.UTC); err == nil {
-				return tm, nil
-			} else {
+			tm, err := parser.ConvertStringToTimestamp(val)
+			if err != nil {
 				return nil, sql3.NewErrInvalidTypeCoercion(0, 0, val, targetType.TypeDescription())
 			}
+			return tm, nil
 		}
 
 	case *parser.DataTypeTimestamp:
@@ -2140,16 +2138,11 @@ func (n *stringLiteralPlanExpression) WithChildren(children ...types.PlanExpress
 }
 
 func (expr *stringLiteralPlanExpression) ConvertToTimestamp() *time.Time {
-	// try to coerce to a date
-	if tm, err := time.ParseInLocation(time.RFC3339Nano, expr.value, time.UTC); err == nil {
-		return &tm
-	} else if tm, err := time.ParseInLocation(time.RFC3339, expr.value, time.UTC); err == nil {
-		return &tm
-	} else if tm, err := time.ParseInLocation("2006-01-02", expr.value, time.UTC); err == nil {
-		return &tm
-	} else {
+	tm, err := parser.ConvertStringToTimestamp(expr.value)
+	if err != nil {
 		return nil
 	}
+	return &tm
 }
 
 // castPlanExpressionis a cast op
@@ -2289,15 +2282,11 @@ func (n *castPlanExpression) Evaluate(currentRow []interface{}) (interface{}, er
 			return nl, nil
 
 		case *parser.DataTypeTimestamp:
-			if tm, err := time.ParseInLocation(time.RFC3339Nano, nl, time.UTC); err == nil {
-				return tm, nil
-			} else if tm, err := time.ParseInLocation(time.RFC3339, nl, time.UTC); err == nil {
-				return tm, nil
-			} else if tm, err := time.ParseInLocation("2006-01-02", nl, time.UTC); err == nil {
-				return tm, nil
-			} else {
+			tm, err := parser.ConvertStringToTimestamp(nl)
+			if err != nil {
 				return nil, sql3.NewErrInvalidCast(0, 0, nl, n.targetType.TypeDescription())
 			}
+			return tm, nil
 		}
 
 	case *parser.DataTypeStringSet:
@@ -2998,16 +2987,4 @@ func wildCardToRegexp(pattern string) string {
 	result.WriteString("$")
 
 	return result.String()
-}
-
-// timeFromString attempts to parse the string to a time.Time using a series of
-// time formats.
-func timestampFromString(s string) (time.Time, error) {
-	if tm, err := time.ParseInLocation(time.RFC3339Nano, s, time.UTC); err == nil {
-		return tm, nil
-	} else if tm, err := time.ParseInLocation("2006-01-02", s, time.UTC); err == nil {
-		return tm, nil
-	}
-
-	return time.Time{}, sql3.NewErrInvalidTypeCoercion(0, 0, s, "time.Time")
 }

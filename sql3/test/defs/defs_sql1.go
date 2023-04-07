@@ -3,6 +3,8 @@ package defs
 import (
 	"fmt"
 	"time"
+
+	"github.com/featurebasedb/featurebase/v3/sql3/parser"
 )
 
 var sql1TestsGrouper = TableTest{
@@ -74,7 +76,7 @@ var sql1TestsDelete = TableTest{
 // grouperTimeX extracts the time associated with record ID x.
 // note that the record IDs are 1..10, not 0..9, so we subtract one.
 func grouperTimeX(x int) time.Time {
-	t, err := time.ParseInLocation(time.RFC3339, sql1TestsGrouper.Table.rows[0][x-1][5].(string), time.UTC)
+	t, err := parser.ConvertStringToTimestamp(sql1TestsGrouper.Table.rows[0][x-1][5].(string))
 	if err != nil {
 		panic(fmt.Sprintf("failed to parse time for id %d", x))
 	}

@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
@@ -230,7 +229,7 @@ func (i *distinctScanRowIter) Next(ctx context.Context) (types.Row, error) {
 		case pilosa.DistinctTimestamp:
 			result := make([]interface{}, 0)
 			for _, n := range res.Values {
-				if tm, err := time.ParseInLocation(time.RFC3339Nano, n, time.UTC); err == nil {
+				if tm, err := parser.ConvertStringToTimestamp(n); err == nil {
 					result = append(result, tm)
 				} else {
 					return nil, sql3.NewErrInternalf("unable to convert to time.Time: %v", n)

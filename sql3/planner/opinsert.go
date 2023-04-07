@@ -375,7 +375,7 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 				// string is the normal case for dates; used when the date is
 				// provided as a string in the INSERT INTO statement.
 				case string:
-					ts, err := timestampFromString(v)
+					ts, err := parser.ConvertStringToTimestamp(v)
 					if err != nil {
 						return nil, errors.Wrapf(err, "parsing timestamp: %s", v)
 					}
