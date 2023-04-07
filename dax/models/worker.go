@@ -6,7 +6,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/errors"
-	"github.com/gobuffalo/nulls"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gobuffalo/validate/v3"
 	"github.com/gobuffalo/validate/v3/validators"
@@ -23,7 +22,6 @@ type Worker struct {
 	RoleCompute   bool                `json:"role_compute" db:"role_compute"`
 	RoleTranslate bool                `json:"role_translate" db:"role_translate"`
 	RoleQuery     bool                `json:"role_query" db:"role_query"`
-	DatabaseID    nulls.String        `json:"database_id" db:"database_id"` // this can be empty which means the worker is unassigned. Probably get rid of this now that every worker is associated w/ a Service and every Service has an ID
 	CreatedAt     time.Time           `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time           `json:"updated_at" db:"updated_at"`
 }

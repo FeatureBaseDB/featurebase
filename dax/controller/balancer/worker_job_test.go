@@ -29,6 +29,24 @@ func TestWorkerJobService(t *testing.T) {
 		}
 	}()
 
+	wspSvc := sqldb.NewWorkerServiceProviderService(nil)
+	err = wspSvc.CreateWorkerServiceProvider(tx, dax.WorkerServiceProvider{
+		ID:          "wspID",
+		Roles:       []dax.RoleType{"compute", "translate"},
+		Address:     "wspaddr",
+		Description: "wspdesc",
+	})
+	require.NoError(t, err, "creating wsp")
+
+	wspSvc.CreateWorkerService(tx, dax.WorkerService{
+		ID:                      orgID,
+		Roles:                   []dax.RoleType{},
+		WorkerServiceProviderID: "",
+		DatabaseID:              dbID,
+		WorkersMin:              1,
+		WorkersMax:              1,
+	})
+
 	// must have a database to do workerjob stuff
 	schemar := sqldb.NewSchemar(nil)
 	err = schemar.CreateDatabase(tx,
@@ -42,15 +60,13 @@ func TestWorkerJobService(t *testing.T) {
 
 	node := &dax.Node{
 		Address:   nodeAddr,
+		ServiceID: "mysvc1",
 		RoleTypes: []dax.RoleType{role},
 	}
 
 	// have to create a free worker before you can create a worker job worker
 	workerReg := sqldb.NewWorkerRegistry(nil)
 	err = workerReg.AddWorker(tx, node)
-	require.NoError(t, err)
-
-	err = wjSvc.CreateWorker(tx, role, qdbid, nodeAddr)
 	require.NoError(t, err)
 
 	// we create a qtid to prefix jobs so that we can then test the

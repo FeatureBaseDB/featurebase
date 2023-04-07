@@ -4,24 +4,10 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
 	"github.com/featurebasedb/featurebase/v3/errors"
-	"github.com/featurebasedb/featurebase/v3/logger"
 	"github.com/gobuffalo/nulls"
 )
 
-func NewWorkerServiceProviderService(log logger.Logger) *workerServiceProviderService {
-	if log == nil {
-		log = logger.NopLogger
-	}
-	return &workerServiceProviderService{
-		log: log,
-	}
-}
-
-type workerServiceProviderService struct {
-	log logger.Logger
-}
-
-func (w *workerServiceProviderService) CreateWorkerServiceProvider(tx dax.Transaction, sp dax.WorkerServiceProvider) error {
+func (w *store) CreateWorkerServiceProvider(tx dax.Transaction, sp dax.WorkerServiceProvider) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -39,7 +25,7 @@ func (w *workerServiceProviderService) CreateWorkerServiceProvider(tx dax.Transa
 	return errors.Wrap(err, "inserting to DB")
 }
 
-func (w *workerServiceProviderService) CreateWorkerService(tx dax.Transaction, srv dax.WorkerService) error {
+func (w *store) CreateWorkerService(tx dax.Transaction, srv dax.WorkerService) error {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -64,7 +50,7 @@ func (w *workerServiceProviderService) CreateWorkerService(tx dax.Transaction, s
 	return errors.Wrap(err, "inserting to DB")
 }
 
-func (w *workerServiceProviderService) WorkerServiceProviders(tx dax.Transaction /*, future optional filters */) (dax.WorkerServiceProviders, error) {
+func (w *store) WorkerServiceProviders(tx dax.Transaction /*, future optional filters */) (dax.WorkerServiceProviders, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -98,7 +84,7 @@ func toDaxWSP(wsp models.WorkerServiceProvider) dax.WorkerServiceProvider {
 }
 
 // AssignFreeServiceToDatabase finds a WorkerService with the given service provider ID and
-func (w *workerServiceProviderService) AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error) {
+func (w *store) AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -122,7 +108,7 @@ func (w *workerServiceProviderService) AssignFreeServiceToDatabase(tx dax.Transa
 
 }
 
-func (w *workerServiceProviderService) WorkerServices(tx dax.Transaction, wspID dax.WorkerServiceProviderID) (dax.WorkerServices, error) {
+func (w *store) WorkerServices(tx dax.Transaction, wspID dax.WorkerServiceProviderID) (dax.WorkerServices, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")

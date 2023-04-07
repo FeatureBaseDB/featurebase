@@ -8,6 +8,7 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllerhttp "github.com/featurebasedb/featurebase/v3/dax/controller/http"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/sqldb"
+	wsphttp "github.com/featurebasedb/featurebase/v3/dax/worker_service_provider/http"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 	fbnet "github.com/featurebasedb/featurebase/v3/net"
@@ -31,6 +32,7 @@ func New(uri *fbnet.URI, cfg controller.Config) *controllerService {
 	}
 
 	controller := controller.New(cfg)
+	controller.WSPGetter = wsphttp.NewClient
 	controllerSvc := &controllerService{
 		uri:        uri,
 		controller: controller,

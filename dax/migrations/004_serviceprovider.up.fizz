@@ -24,4 +24,5 @@ create_table("worker_services") {
 
 add_column("workers", "service_id", "string", {})
 add_foreign_key("workers", "service_id", {"worker_services": ["id"]}, {"on_delete": "cascade"})
+drop_column("workers", "database_id")
 

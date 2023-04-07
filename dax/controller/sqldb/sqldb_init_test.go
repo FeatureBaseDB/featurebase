@@ -1,4 +1,4 @@
-package balancer_test
+package sqldb_test
 
 import (
 	"fmt"
@@ -12,8 +12,6 @@ import (
 func TestMain(m *testing.M) {
 	os.Exit(run(m))
 }
-
-// TODO moved to sqldb package, remove from here once the individual service tests aren't needed
 
 // SQLTransactor is a global connection to a SQL database which is
 // created, migrated, and destroyed for each test run. The database

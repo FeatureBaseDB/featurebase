@@ -13,17 +13,12 @@ type Balancer interface {
 	// be either transferred to other workers or placed on the free job list.
 	RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error)
 
-	// ReleaseWorkers dissociates the given workers from a database.
-	ReleaseWorkers(tx dax.Transaction, addrs ...dax.Address) error
-
 	// AddJobs adds new jobs for the given database.
 	AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error)
 
 	// RemoveJobs removes jobs for the given database.
 	RemoveJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error)
 
-	// BalanceDatabase forces a database balance. TODO(tlt): currently this is
-	// only used in tests, so perhaps we can get rid of it.
 	BalanceDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerDiff, error)
 
 	// CurrentState returns the workers and jobs currently active for the given
@@ -90,9 +85,6 @@ func (b *NopBalancer) AddWorker(tx dax.Transaction, node *dax.Node) ([]dax.Worke
 func (b *NopBalancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
-func (b *NopBalancer) ReleaseWorkers(tx dax.Transaction, addrs ...dax.Address) error {
-	return nil
-}
 func (b *NopBalancer) AddJobs(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID, jobs ...dax.Job) ([]dax.WorkerDiff, error) {
 	return []dax.WorkerDiff{}, nil
 }
@@ -136,4 +128,6 @@ func (b *NopBalancer) WorkerServiceProviders(tx dax.Transaction /*, future optio
 	return nil, nil
 }
 
-func (b *NopBalancer) AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error)
+func (b *NopBalancer) AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error) {
+	return nil, nil
+}

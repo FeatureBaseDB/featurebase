@@ -7,6 +7,7 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	computersvc "github.com/featurebasedb/featurebase/v3/dax/computer/service"
+	"github.com/featurebasedb/featurebase/v3/dax/controller"
 	controllerclient "github.com/featurebasedb/featurebase/v3/dax/controller/client"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -20,6 +21,8 @@ func NewConfig() Config {
 		Logger: logger.StderrLogger,
 	}
 }
+
+var _ controller.WorkerServiceProvider = (*WSP)(nil)
 
 type Config struct {
 	ID                string        `toml:"id"`
@@ -149,7 +152,7 @@ func (w *WSP) addService() error {
 	return nil
 }
 
-func (w *WSP) ClaimService(ctx context.Context, svc dax.WorkerService) error {
+func (w *WSP) ClaimService(ctx context.Context, svc *dax.WorkerService) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -166,7 +169,7 @@ func (w *WSP) ClaimService(ctx context.Context, svc dax.WorkerService) error {
 	}
 	isClaim := mysvc.DatabaseID == ""
 
-	mysvc.WorkerService = svc
+	mysvc.WorkerService = *svc
 	w.services[svc.ID] = mysvc
 
 	// claiming a service might update min/max workers, so we scale.
@@ -235,11 +238,11 @@ func (w *WSP) removeWorker(mysvc *workerService) error {
 	return nil
 }
 
-func (w *WSP) UpdateService(ctx context.Context, svc dax.WorkerService) error {
+func (w *WSP) UpdateService(ctx context.Context, svc *dax.WorkerService) error {
 	return w.ClaimService(ctx, svc)
 }
 
-func (w *WSP) DropService(ctx context.Context, svc dax.WorkerService) error {
+func (w *WSP) DropService(ctx context.Context, svc *dax.WorkerService) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

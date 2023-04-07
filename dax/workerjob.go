@@ -24,6 +24,7 @@ type Jobber interface {
 // WorkerInfo represents a Worker and the Jobs to which it has been assigned.
 type WorkerInfo struct {
 	Address Address
+	ID      WorkerID // internal identifier used in SQL database, used internally as an optimization to avoid extra queries
 	Jobs    []Job
 }
 

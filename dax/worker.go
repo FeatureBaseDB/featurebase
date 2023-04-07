@@ -6,11 +6,18 @@ import (
 	"strings"
 
 	"github.com/featurebasedb/featurebase/v3/errors"
+	"github.com/gofrs/uuid"
 )
+
+type WorkerID uuid.UUID
 
 // Node is used in API requests, like RegisterNode (before being assigned
 // roles).
 type Node struct {
+	// ID is a unique identifier assigned by the metadata storage
+	// layer (controller.Store).
+	ID WorkerID `json:"id"`
+
 	// Address is the node's network address
 	Address Address `json:"address"`
 
@@ -18,6 +25,10 @@ type Node struct {
 	// node. That will affect which database this node/worker can be
 	// assigned to.
 	ServiceID WorkerServiceID `json:"service_id"`
+
+	// DatabaseID may be nil if this Worker is not part of a service
+	// that's been assigned to a database.
+	DatabaseID *DatabaseID `json:"database_id"`
 
 	// RoleTypes allows a registering node to specify which role type(s) it is
 	// capable of filling. The controller will not assign a role to this node

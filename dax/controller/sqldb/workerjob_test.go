@@ -5,7 +5,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
-	"github.com/gobuffalo/nulls"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -24,8 +23,7 @@ func TestJobsNotUpdated(t *testing.T) {
 	toCreate := jobsNotAssigned(incJobs, created, dax.RoleTypeCompute, &models.Worker{
 		ID:          u2,
 		RoleCompute: true,
-		DatabaseID:  nulls.NewString("dbid"),
-	})
+	}, "dbid")
 
 	require.Equal(t, 3, len(toCreate))
 
@@ -33,8 +31,7 @@ func TestJobsNotUpdated(t *testing.T) {
 	toCreate = jobsNotAssigned(incJobs, models.Jobs{}, dax.RoleTypeCompute, &models.Worker{
 		ID:          u2,
 		RoleCompute: true,
-		DatabaseID:  nulls.NewString("dbid"),
-	})
+	}, "dbid")
 
 	require.Equal(t, 4, len(toCreate))
 }

@@ -47,8 +47,8 @@ func (s *server) postClaim(w http.ResponseWriter, r *http.Request) {
 	body := r.Body
 	defer body.Close()
 
-	req := dax.WorkerService{}
-	if err := json.NewDecoder(body).Decode(&req); err != nil {
+	req := &dax.WorkerService{}
+	if err := json.NewDecoder(body).Decode(req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -64,8 +64,8 @@ func (s *server) postUpdate(w http.ResponseWriter, r *http.Request) {
 	body := r.Body
 	defer body.Close()
 
-	req := dax.WorkerService{}
-	if err := json.NewDecoder(body).Decode(&req); err != nil {
+	req := &dax.WorkerService{}
+	if err := json.NewDecoder(body).Decode(req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -81,8 +81,8 @@ func (s *server) postDrop(w http.ResponseWriter, r *http.Request) {
 	body := r.Body
 	defer body.Close()
 
-	req := dax.WorkerService{}
-	if err := json.NewDecoder(body).Decode(&req); err != nil {
+	req := &dax.WorkerService{}
+	if err := json.NewDecoder(body).Decode(req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
