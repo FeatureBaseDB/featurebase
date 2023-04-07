@@ -25,7 +25,7 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
 	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
 	router.HandleFunc("/database/options", server.patchDatabaseOptions).Methods("PATCH").Name("PatchDatabaseOptions")
-	router.HandleFunc("/database-number-of-workers/{organization-id}/{database-id}", server.getDatabaseNumberOfWorkers).Methods("GET").Name("DatabaseWorkers")
+	router.HandleFunc("/database-worker-count/{organization-id}/{database-id}", server.getDatabaseNumberOfWorkers).Methods("GET").Name("DatabaseWorkers")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")
@@ -227,7 +227,7 @@ func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Reque
 	}
 
 	//send the id into the controller, get the number of workers back
-	numWorkers, err := s.controller.GetDatabaseNumberOfWorkers(ctx, id)
+	numWorkers, err := s.controller.GetDatabaseWorkerCount(ctx, id)
 
 	// handle error
 	if err != nil {

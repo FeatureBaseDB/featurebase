@@ -47,8 +47,8 @@ type Balancer interface {
 	// Nodes returns all nodes known by the Balancer.
 	Nodes(tx dax.Transaction) ([]*dax.Node, error)
 
-	// WorkerCount returns the number of workers
-	WorkerCount(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (int, error)
+	// GetDatabaseWorkerCount returns the number of workers
+	GetDatabaseWorkerCount(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (int, error)
 }
 
 // Ensure type implements interface.
@@ -97,6 +97,6 @@ func (b *NopBalancer) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node,
 func (b *NopBalancer) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
 	return []*dax.Node{}, nil
 }
-func (b *NopBalancer) WorkerCount(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (int, error) {
+func (b *NopBalancer) GetDatabaseWorkerCount(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (int, error) {
 	return 0, nil
 }

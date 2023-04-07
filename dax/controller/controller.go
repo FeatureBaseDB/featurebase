@@ -785,7 +785,7 @@ func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, id
 }
 
 // get the list of workers being used by a database
-func (c *Controller) GetDatabaseNumberOfWorkers(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
+func (c *Controller) GetDatabaseWorkerCount(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
 
 	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
@@ -793,7 +793,7 @@ func (c *Controller) GetDatabaseNumberOfWorkers(ctx context.Context, qdbid dax.Q
 	}
 	defer tx.Rollback()
 
-	return c.Balancer.WorkerCount(tx, qdbid)
+	return c.Balancer.GetDatabaseWorkerCount(tx, qdbid)
 }
 
 // CreateTable adds a table to the schemar, and then sends directives to all
