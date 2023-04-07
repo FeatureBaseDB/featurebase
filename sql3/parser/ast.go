@@ -198,6 +198,8 @@ func CloneStatement(stmt Statement) Statement {
 		return stmt.Clone()
 	case *ReleaseStatement:
 		return stmt.Clone()
+	case *ReturnStatement:
+		return stmt.Clone()
 	case *RollbackStatement:
 		return stmt.Clone()
 	case *SavepointStatement:
@@ -3133,7 +3135,10 @@ func (s *CreateFunctionStatement) String() string {
 
 	buf.WriteString(" AS BEGIN")
 	for i := range s.Body {
-		fmt.Fprintf(&buf, " %s;", s.Body[i].String())
+		if i > 0 {
+			buf.WriteString(";")
+		}
+		fmt.Fprintf(&buf, " %s", s.Body[i].String())
 	}
 	buf.WriteString(" END")
 

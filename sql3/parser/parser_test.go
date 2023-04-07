@@ -472,7 +472,7 @@ func TestParser_ParseAlterStatement(t *testing.T) {
 
 func TestParser_ParseFunctionStatement(t *testing.T) {
 	t.Run("CreateFunction", func(t *testing.T) {
-		AssertParseStatement(t, `CREATE FUNCTION IF NOT EXISTS func (@param1 int, @param2 string) returns int as begin end`, &parser.CreateFunctionStatement{
+		AssertParseStatement(t, `CREATE FUNCTION IF NOT EXISTS func (@param1 int, @param2 string) returns int as begin return 3 end`, &parser.CreateFunctionStatement{
 			Create:      pos(0),
 			Function:    pos(7),
 			If:          pos(16),
@@ -495,8 +495,50 @@ func TestParser_ParseFunctionStatement(t *testing.T) {
 			ReturnType: &parser.Type{Name: &parser.Ident{NamePos: pos(73), Name: "int"}},
 			As:         pos(77),
 			Begin:      pos(80),
-			End:        pos(86),
+			Body: []parser.Statement{&parser.ReturnStatement{
+				Return:     pos(86),
+				ReturnExpr: &parser.IntegerLit{ValuePos: pos(93), Value: "3"},
+			}},
+			End: pos(95),
 		})
+		// This example is probably invalid, but lets us verify that the semicolons between
+		// statements are working
+		AssertParseStatement(t, `CREATE FUNCTION IF NOT EXISTS func (@param1 int, @param2 string) returns int as begin return 3; return 4 end`, &parser.CreateFunctionStatement{
+			Create:      pos(0),
+			Function:    pos(7),
+			If:          pos(16),
+			IfNot:       pos(19),
+			IfNotExists: pos(23),
+			Name:        &parser.Ident{NamePos: pos(30), Name: "func"},
+			Lparen:      pos(35),
+			Parameters: []*parser.ParameterDefinition{
+				{
+					Name: &parser.Variable{Name: "@param1", NamePos: pos(36)},
+					Type: &parser.Type{Name: &parser.Ident{NamePos: pos(44), Name: "int"}},
+				},
+				{
+					Name: &parser.Variable{Name: "@param2", NamePos: pos(49)},
+					Type: &parser.Type{Name: &parser.Ident{NamePos: pos(57), Name: "string"}},
+				},
+			},
+			Rparen:     pos(63),
+			Returns:    pos(65),
+			ReturnType: &parser.Type{Name: &parser.Ident{NamePos: pos(73), Name: "int"}},
+			As:         pos(77),
+			Begin:      pos(80),
+			Body: []parser.Statement{
+				&parser.ReturnStatement{
+					Return:     pos(86),
+					ReturnExpr: &parser.IntegerLit{ValuePos: pos(93), Value: "3"},
+				},
+				&parser.ReturnStatement{
+					Return:     pos(96),
+					ReturnExpr: &parser.IntegerLit{ValuePos: pos(103), Value: "4"},
+				},
+			},
+			End: pos(105),
+		})
+		AssertParseStatementError(t, `CREATE FUNCTION IF NOT EXISTS func (@param1 int, @param2 string) returns int as begin return 3 return 4 end`, `1:96: expected semicolon or END, found 'RETURN'`)
 		// AssertParseStatement(t, `CREATE TRIGGER IF NOT EXISTS trig BEFORE INSERT ON tbl BEGIN DELETE FROM new; END`, &parser.CreateFunctionStatement{
 		// 	Create:      pos(0),
 		// 	Function:    pos(7),

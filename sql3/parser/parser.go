@@ -1610,6 +1610,19 @@ func (p *Parser) parseCreateFunctionStatement(createPos Pos) (_ *CreateFunctionS
 		if p.peek() == END {
 			break
 		}
+		if p.peek() != SEMI {
+			return &stmt, p.errorExpected(p.pos, p.peek(), "semicolon or END")
+		}
+		// we don't have a good place to stash the semicolon's position,
+		// so just consume it.
+		_, _, _ = p.scan()
+		// Allow a trailing semicolon. Note that the trailing semicolon won't
+		// be reproduced by .String(); to fix this, we either have to modify
+		// every statement to track its own semicolon, or the body to track
+		// the positions of semicolons. Either of those might be reasonable.
+		if p.peek() == END {
+			break
+		}
 	}
 
 	if p.peek() != END {
