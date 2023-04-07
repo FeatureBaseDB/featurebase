@@ -582,7 +582,15 @@ func walk(v Visitor, node Node) (_ Node, err error) {
 		if err := walkIdent(v, &n.Alias); err != nil {
 			return node, err
 		}
-		if err := walkIdent(v, &n.Index); err != nil {
+		if err := walkTableQueryOptionList(v, n.QueryOptions); err != nil {
+			return node, err
+		}
+
+	case *TableQueryOption:
+		if err := walkIdent(v, &n.OptionName); err != nil {
+			return node, err
+		}
+		if err := walkIdentList(v, n.OptionParams); err != nil {
 			return node, err
 		}
 
@@ -838,6 +846,19 @@ func walkColumnDefinitionList(v Visitor, a []*ColumnDefinition) error {
 			return err
 		} else if def != nil {
 			a[i] = def.(*ColumnDefinition)
+		} else {
+			a[i] = nil
+		}
+	}
+	return nil
+}
+
+func walkTableQueryOptionList(v Visitor, a []*TableQueryOption) error {
+	for i := range a {
+		if def, err := walk(v, a[i]); err != nil {
+			return err
+		} else if def != nil {
+			a[i] = def.(*TableQueryOption)
 		} else {
 			a[i] = nil
 		}

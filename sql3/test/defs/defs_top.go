@@ -67,8 +67,8 @@ var topLimitTests = TableTest{
 				hdr("skills", fldTypeStringSet),
 			),
 			ExpRows: rows(
-				row(int64(1), string("Marketing Manager")),
-				row(int64(1), string("Software Engineer I")),
+				row(int64(1), []string{"Marketing Manager"}),
+				row(int64(1), []string{"Software Engineer I"}),
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,
@@ -82,8 +82,8 @@ var topLimitTests = TableTest{
 				hdr("skills", fldTypeStringSet),
 			),
 			ExpRows: rows(
-				row(int64(1), string("Marketing Manager")),
-				row(int64(1), string("Software Engineer I")),
+				row(int64(1), []string{"Marketing Manager"}),
+				row(int64(1), []string{"Software Engineer I"}),
 			),
 			Compare:        CompareExactUnordered,
 			SortStringKeys: true,

@@ -313,7 +313,7 @@ func removeUnusedExtractColumnReferences(ctx context.Context, a *ExecutionPlanne
 			}
 
 			// newExtractList should now contain just the cols that are referenced
-			return NewPlanOpPQLTableScan(a, thisNode.tableName, newExtractList), false, nil
+			return NewPlanOpPQLTableScan(a, thisNode.tableName, newExtractList, thisNode.hints), false, nil
 
 		default:
 			return thisNode, true, nil
@@ -792,47 +792,63 @@ func tryToReplaceDistinctWithPQLDistinct(ctx context.Context, a *ExecutionPlanne
 	tables := getTableScanOperators(ctx, a, n, scope)
 
 	//only do this if we have one TableScanOperator
-	if len(tables) == 1 {
-		replacedWithDistinct := false
-		// replace the scan with the distinct scan
-		return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-			switch thisNode := node.(type) {
-			case *PlanOpDistinct:
-				if replacedWithDistinct {
-					return thisNode.ChildOp, false, nil
-				}
-				return thisNode, true, nil
+	if len(tables) != 1 {
+		return n, true, nil
+	}
+	replacedWithDistinct := false
+	// replace the scan with the distinct scan
+	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
+		switch thisNode := node.(type) {
+		case *PlanOpDistinct:
+			if replacedWithDistinct {
+				return thisNode.ChildOp, false, nil
+			}
+			return thisNode, true, nil
 
-			case *PlanOpPQLTableScan:
-				// bail if there is more than one output column
-				if len(thisNode.columns) != 1 {
-					return thisNode, true, nil
-				}
-
-				// make sure it's not the _id column
-				if strings.EqualFold(thisNode.columns[0], string(dax.PrimaryKeyFieldName)) {
-					return thisNode, true, nil
-				}
-
-				// make sure it's not a set type
-				s := thisNode.Schema()
-				switch s[0].Type.(type) {
-				case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
-					return thisNode, true, nil
-				}
-
-				newOp, err := NewPlanOpPQLDistinctScan(a, thisNode.tableName, thisNode.columns[0])
-				if err != nil {
-					return nil, false, err
-				}
-				replacedWithDistinct = true
-				return newOp, false, nil
-			default:
+		case *PlanOpPQLTableScan:
+			// bail if there is more than one output column
+			if len(thisNode.columns) != 1 {
 				return thisNode, true, nil
 			}
-		})
-	}
-	return n, true, nil
+
+			// make sure it's not the _id column
+			if strings.EqualFold(thisNode.columns[0], string(dax.PrimaryKeyFieldName)) {
+				return thisNode, true, nil
+			}
+
+			// if it is a set type, check to see if we have query hint that tells us to flatten on this column
+			s := thisNode.Schema()
+			switch s[0].Type.(type) {
+			case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
+				found := false
+				for _, h := range thisNode.hints {
+					if strings.EqualFold("flatten", h.name) {
+						for _, hp := range h.params {
+							if strings.EqualFold(s[0].ColumnName, hp) {
+								found = true
+								break
+							}
+						}
+						if found {
+							break
+						}
+					}
+				}
+				if !found {
+					return thisNode, true, nil
+				}
+			}
+
+			newOp, err := NewPlanOpPQLDistinctScan(a, thisNode.tableName, thisNode.columns[0])
+			if err != nil {
+				return nil, false, err
+			}
+			replacedWithDistinct = true
+			return newOp, false, nil
+		default:
+			return thisNode, true, nil
+		}
+	})
 }
 
 func tryToReplaceConstRowDeleteWithFilteredDelete(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {
@@ -871,71 +887,94 @@ func tryToReplaceGroupByWithPQLGroupBy(ctx context.Context, a *ExecutionPlanner,
 	tables := getTableScanOperators(ctx, a, n, scope)
 
 	//only do this if we have one TableScanOperator
-	if len(tables) == 1 {
-		return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
-			switch n := node.(type) {
-			case *PlanOpGroupBy:
-				//table scan
-				table := tables[0]
-				//only do this if we have group by expressions
-				if len(n.GroupByExprs) > 0 {
-					pkType, err := table.PrimaryKeyType()
-					if err != nil {
-						return n, true, err
-					}
-
-					//use a multi group by if more than 1 aggregate
-					if len(n.Aggregates) > 1 {
-						ops := make([]*PlanOpPQLGroupBy, 0)
-						for _, agg := range n.Aggregates {
-							aggregable, ok := agg.(types.Aggregable)
-							if !ok {
-								return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
-							}
-
-							// if it's a count(*) on a pql table scan, so add the arg
-							star, ok := agg.(*countStarPlanExpression)
-							if ok {
-								newChildren := []types.PlanExpression{newQualifiedRefPlanExpression(table.tableName, string(dax.PrimaryKeyFieldName), 0, pkType)}
-								newAgg, err := star.WithChildren(newChildren...)
-								if err != nil {
-									return n, true, err
-								}
-								aggregable = newAgg.(types.Aggregable)
-							}
-
-							ops = append(ops, NewPlanOpPQLGroupBy(a, table.tableName, n.GroupByExprs, table.filter, aggregable))
-						}
-						newOp := NewPlanOpPQLMultiGroupBy(a, ops, n.GroupByExprs)
-						newOp.AddWarning(fmt.Sprintf("Multiple (%d) aggregates referenced in select list will result in multiple group by aggregate queries being executed.", len(ops)))
-						return newOp, false, nil
-					}
-					//only one aggregate
-					aggregable, ok := n.Aggregates[0].(types.Aggregable)
-					if !ok {
-						return n, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", n.Aggregates[0])
-					}
-
-					// if it's a count(*) on a pql table scan, so add the arg
-					star, ok := aggregable.(*countStarPlanExpression)
-					if ok {
-						newChildren := []types.PlanExpression{newQualifiedRefPlanExpression(table.tableName, string(dax.PrimaryKeyFieldName), 0, pkType)}
-						newAgg, err := star.WithChildren(newChildren...)
-						if err != nil {
-							return n, true, err
-						}
-						aggregable = newAgg.(types.Aggregable)
-					}
-					newOp := NewPlanOpPQLGroupBy(a, table.tableName, n.GroupByExprs, table.filter, aggregable)
-					return newOp, false, nil
-				}
-				return n, true, nil
-			default:
-				return n, true, nil
-			}
-		})
+	if len(tables) != 1 {
+		return n, true, nil
 	}
-	return n, true, nil
+
+	return TransformPlanOp(n, func(node types.PlanOperator) (types.PlanOperator, bool, error) {
+		switch thisNode := node.(type) {
+		case *PlanOpGroupBy:
+
+			//only do this if we have group by expressions
+			if len(thisNode.GroupByExprs) == 0 {
+				return thisNode, true, nil
+			}
+
+			// get the table
+			table := tables[0]
+
+			// if we are grouping on set columns, see if we have any flatten query hints
+			for _, gbc := range thisNode.GroupByExprs {
+				gbcRef, ok := gbc.(*qualifiedRefPlanExpression)
+				if !ok {
+					// don't need to stop the world here
+					break
+				}
+				switch gbcRef.Type().(type) {
+				case *parser.DataTypeIDSet, *parser.DataTypeStringSet:
+					// we are grouping on a set, so see if we have any flatten hints,
+					// if we do, we can continue the transform
+					found := false
+					for _, h := range table.hints {
+						if strings.EqualFold("flatten", h.name) {
+							for _, hp := range h.params {
+								if strings.EqualFold(gbcRef.columnName, hp) {
+									found = true
+									break
+								}
+							}
+							if found {
+								break
+							}
+						}
+					}
+					if !found {
+						return thisNode, true, nil
+					}
+				}
+			}
+
+			// get the type of the _id column for this table
+			pkType, err := table.PrimaryKeyType()
+			if err != nil {
+				return thisNode, true, err
+			}
+
+			// for each of the aggregates, go make a PlanOpPQLGroupBy operator
+			ops := make([]*PlanOpPQLGroupBy, 0)
+			for _, agg := range thisNode.Aggregates {
+				aggregable, ok := agg.(types.Aggregable)
+				if !ok {
+					return thisNode, false, sql3.NewErrInternalf("unexpected aggregate function arg type '%T'", agg)
+				}
+
+				// if it's a count(*) on a pql table scan, so add the arg
+				star, ok := agg.(*countStarPlanExpression)
+				if ok {
+					newChildren := []types.PlanExpression{newQualifiedRefPlanExpression(table.tableName, string(dax.PrimaryKeyFieldName), 0, pkType)}
+					newAgg, err := star.WithChildren(newChildren...)
+					if err != nil {
+						return thisNode, true, err
+					}
+					aggregable = newAgg.(types.Aggregable)
+				}
+
+				ops = append(ops, NewPlanOpPQLGroupBy(a, table.tableName, thisNode.GroupByExprs, table.filter, aggregable))
+			}
+
+			// use a multi group by if more than 1 aggregate
+			if len(thisNode.Aggregates) > 1 {
+				newOp := NewPlanOpPQLMultiGroupBy(a, ops, thisNode.GroupByExprs)
+				return newOp, false, nil
+			}
+
+			// else only one aggregate
+			return ops[0], false, nil
+
+		default:
+			return thisNode, true, nil
+		}
+	})
 }
 
 func pushdownPQLTop(ctx context.Context, a *ExecutionPlanner, n types.PlanOperator, scope *OptimizerScope) (types.PlanOperator, bool, error) {

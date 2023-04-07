@@ -428,6 +428,19 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 			return op, nil
 
 		}
+
+		// get any query hints
+		queryHints := make([]*TableQueryHint, 0)
+		for _, o := range sourceExpr.QueryOptions {
+			h := &TableQueryHint{
+				name: parser.IdentName(o.OptionName),
+			}
+			for _, op := range o.OptionParams {
+				h.params = append(h.params, parser.IdentName(op))
+			}
+			queryHints = append(queryHints, h)
+		}
+
 		// get all the columns for this table - we will eliminate unused ones
 		// later on in the optimizer
 		extractColumns := make([]string, 0)
@@ -439,9 +452,9 @@ func (p *ExecutionPlanner) compileSource(scope *PlanOpQuery, source parser.Sourc
 		if sourceExpr.Alias != nil {
 			aliasName := parser.IdentName(sourceExpr.Alias)
 
-			return NewPlanOpRelAlias(aliasName, NewPlanOpPQLTableScan(p, tableName, extractColumns)), nil
+			return NewPlanOpRelAlias(aliasName, NewPlanOpPQLTableScan(p, tableName, extractColumns, queryHints)), nil
 		}
-		return NewPlanOpPQLTableScan(p, tableName, extractColumns), nil
+		return NewPlanOpPQLTableScan(p, tableName, extractColumns, queryHints), nil
 
 	case *parser.TableValuedFunction:
 		callExpr, err := p.compileCallExpr(sourceExpr.Call)
@@ -557,6 +570,8 @@ func (p *ExecutionPlanner) analyzeSource(ctx context.Context, source parser.Sour
 			return paren, nil
 		}
 
+		// if we got to here, not a view, so do table stuff
+
 		// check table exists
 		tname := dax.TableName(objectName)
 		tbl, err := p.schemaAPI.TableByName(ctx, tname)
@@ -576,6 +591,35 @@ func (p *ExecutionPlanner) analyzeSource(ctx context.Context, source parser.Sour
 				Datatype:    fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 			}
 			source.OutputColumns = append(source.OutputColumns, soc)
+		}
+
+		// check query hints
+		for _, o := range source.QueryOptions {
+			opt := parser.IdentName(o.OptionName)
+			switch strings.ToLower(opt) {
+			case "flatten":
+				// should have 1 param and should be a column name
+				if len(o.OptionParams) != 1 {
+					// error
+					return nil, sql3.NewErrInvalidQueryHintParameterCount(o.LParen.Column, o.LParen.Line, opt, "column name", 1, len(o.OptionParams))
+				}
+				for _, op := range o.OptionParams {
+					param := parser.IdentName(op)
+					found := false
+					for _, oc := range source.OutputColumns {
+						if strings.EqualFold(param, oc.ColumnName) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return nil, sql3.NewErrColumnNotFound(op.NamePos.Line, op.NamePos.Column, param)
+					}
+				}
+
+			default:
+				return nil, sql3.NewErrUnknownQueryHint(o.OptionName.NamePos.Line, o.OptionName.NamePos.Column, opt)
+			}
 		}
 
 		return source, nil
