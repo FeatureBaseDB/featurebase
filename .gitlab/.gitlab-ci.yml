@@ -540,7 +540,7 @@ package for linux:
   needs:
     - build featurebase # featurebase_linux_amd64, featurebase_linux_arm64
     - build fbsql amd64 # ./build/fbsql_linux_amd64
-    - build fbsql arm64 # ./build/fbsql_linux_arm64
+    - build fbsql arm64 linux # ./build/fbsql_linux_arm64
   artifacts:
     paths:
       - "*.deb"
