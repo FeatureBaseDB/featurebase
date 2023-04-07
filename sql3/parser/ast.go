@@ -540,11 +540,19 @@ func (s *ShowDatabasesStatement) Clone() *ShowDatabasesStatement {
 type ShowTablesStatement struct {
 	Show   Pos // position of SHOW
 	Tables Pos // position of TABLES
+	With   Pos
+	System *Ident
 }
 
 // String returns the string representation of the statement.
 func (s *ShowTablesStatement) String() string {
-	return "SHOW TABLES"
+	var buf bytes.Buffer
+	buf.WriteString("SHOW TABLES")
+	if s.With.IsValid() {
+		buf.WriteString(" WITH")
+		fmt.Fprintf(&buf, " %s", s.System.String())
+	}
+	return buf.String()
 }
 
 func (s *ShowTablesStatement) Clone() *ShowTablesStatement {
