@@ -77,7 +77,7 @@ func TestExpressions(t *testing.T) {
 		elop := newExprListExpression([]types.PlanExpression{newStringLiteralPlanExpression("foo"), newStringLiteralPlanExpression("bar")})
 		assert.Equal(t, elop.String(), "('foo', 'bar')")
 
-		stlop := newExprSetLiteralPlanExpression([]types.PlanExpression{newStringLiteralPlanExpression("foo"), newStringLiteralPlanExpression("bar")}, parser.NewDataTypeString())
+		stlop := newExprArrayLiteralPlanExpression([]types.PlanExpression{newStringLiteralPlanExpression("foo"), newStringLiteralPlanExpression("bar")}, parser.NewDataTypeString())
 		assert.Equal(t, stlop.String(), "['foo', 'bar']")
 
 		tplop := newExprTupleLiteralPlanExpression([]types.PlanExpression{newStringLiteralPlanExpression("foo"), newStringLiteralPlanExpression("bar")}, parser.NewDataTypeString())

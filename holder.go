@@ -1495,7 +1495,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags(snap *disco.ClusterSnapshot) {
 		}
 
 		for _, field := range index.Fields() {
-			if !strings.EqualFold(field.options.Type, FieldTypeVarchar) {
+			if !(strings.EqualFold(field.options.Type, FieldTypeVarchar) || strings.EqualFold(field.options.Type, FieldTypeVector)) {
 				field.TranslateStore().SetReadOnly(!isPrimaryFieldTranslator)
 			}
 		}

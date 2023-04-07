@@ -849,7 +849,7 @@ func processColumnValue(rawValue interface{}, targetType parser.ExprDataType) (t
 		for _, m := range val {
 			members = append(members, newIntLiteralPlanExpression(m))
 		}
-		return newExprSetLiteralPlanExpression(members, parser.NewDataTypeIDSet()), nil
+		return newExprArrayLiteralPlanExpression(members, parser.NewDataTypeArray(parser.NewDataTypeID())), nil
 
 	case *parser.DataTypeStringSet:
 		val, ok := rawValue.([]string)
@@ -860,7 +860,7 @@ func processColumnValue(rawValue interface{}, targetType parser.ExprDataType) (t
 		for _, m := range val {
 			members = append(members, newStringLiteralPlanExpression(m))
 		}
-		return newExprSetLiteralPlanExpression(members, parser.NewDataTypeStringSet()), nil
+		return newExprArrayLiteralPlanExpression(members, parser.NewDataTypeArray(parser.NewDataTypeString())), nil
 
 	case *parser.DataTypeTimestamp:
 		tval, ok := rawValue.(time.Time)

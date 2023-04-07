@@ -48,6 +48,7 @@ const (
 
 	// varchar
 	ErrVarcharLengthExpected errors.Code = "ErrVarcharLengthExpected"
+	ErrVectorLengthExpected  errors.Code = "ErrVectorLengthExpected"
 
 	ErrInvalidCast         errors.Code = "ErrInvalidCast"
 	ErrInvalidTypeCoercion errors.Code = "ErrInvalidTypeCoercion"
@@ -514,6 +515,13 @@ func NewErrVarcharLengthExpected(line, col int) error {
 	return errors.New(
 		ErrVarcharLengthExpected,
 		fmt.Sprintf("[%d:%d] varchar length expected", line, col),
+	)
+}
+
+func NewErrVectorLengthExpected(line, col int) error {
+	return errors.New(
+		ErrVectorLengthExpected,
+		fmt.Sprintf("[%d:%d] vector length expected", line, col),
 	)
 }
 

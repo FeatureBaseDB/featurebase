@@ -77,7 +77,7 @@ func (*OrderingTerm) node()             {}
 func (*OverClause) node()               {}
 func (*ParenExpr) node()                {}
 func (*PredictStatement) node()         {}
-func (*SetLiteralExpr) node()           {}
+func (*ArrayLiteralExpr) node()         {}
 func (*ParenSource) node()              {}
 func (*PrimaryKeyConstraint) node()     {}
 func (*QualifiedRef) node()             {}
@@ -269,7 +269,7 @@ func (*NullLit) expr()          {}
 func (*IntegerLit) expr()       {}
 func (*FloatLit) expr()         {}
 func (*ParenExpr) expr()        {}
-func (*SetLiteralExpr) expr()   {}
+func (*ArrayLiteralExpr) expr() {}
 func (*TupleLiteralExpr) expr() {}
 func (*QualifiedRef) expr()     {}
 func (*Range) expr()            {}
@@ -324,7 +324,7 @@ func CloneExpr(expr Expr) Expr {
 		return expr.Clone()
 	case *DateLit:
 		return expr.Clone()
-	case *SetLiteralExpr:
+	case *ArrayLiteralExpr:
 		return expr.Clone()
 	default:
 		panic(fmt.Sprintf("invalid expr type: %T", expr))
@@ -4701,7 +4701,7 @@ func (expr *ParenExpr) String() string {
 	return fmt.Sprintf("(%s)", expr.X.String())
 }
 
-type SetLiteralExpr struct {
+type ArrayLiteralExpr struct {
 	Lbracket Pos    // position of left bracket
 	Members  []Expr // bracketed expression
 	Rbracket Pos    // position of right bracket
@@ -4709,20 +4709,20 @@ type SetLiteralExpr struct {
 	ResultDataType ExprDataType
 }
 
-func (expr *SetLiteralExpr) IsLiteral() bool {
+func (expr *ArrayLiteralExpr) IsLiteral() bool {
 	return true
 }
 
-func (expr *SetLiteralExpr) DataType() ExprDataType {
+func (expr *ArrayLiteralExpr) DataType() ExprDataType {
 	return expr.ResultDataType
 }
 
-func (expr *SetLiteralExpr) Pos() Pos {
+func (expr *ArrayLiteralExpr) Pos() Pos {
 	return expr.Lbracket
 }
 
 // Clone returns a deep copy of expr.
-func (expr *SetLiteralExpr) Clone() *SetLiteralExpr {
+func (expr *ArrayLiteralExpr) Clone() *ArrayLiteralExpr {
 	if expr == nil {
 		return nil
 	}
@@ -4732,7 +4732,7 @@ func (expr *SetLiteralExpr) Clone() *SetLiteralExpr {
 }
 
 // String returns the string representation of the expression.
-func (expr *SetLiteralExpr) String() string {
+func (expr *ArrayLiteralExpr) String() string {
 	var buf bytes.Buffer
 
 	if len(expr.Members) != 0 {

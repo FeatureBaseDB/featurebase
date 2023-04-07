@@ -3475,8 +3475,8 @@ func (p *Parser) parseParenExpr() (_ *ParenExpr, err error) {
 	return &expr, nil
 }
 
-func (p *Parser) parseSetLiteralExpr() (_ *SetLiteralExpr, err error) {
-	var expr SetLiteralExpr
+func (p *Parser) parseSetLiteralExpr() (_ *ArrayLiteralExpr, err error) {
+	var expr ArrayLiteralExpr
 	expr.Lbracket, _, _ = p.scan()
 
 	for p.peek() != RB {

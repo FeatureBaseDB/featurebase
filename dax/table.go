@@ -84,6 +84,7 @@ const (
 	BaseTypeStringSetQ = "stringsetq" // keyed set timequantum
 	BaseTypeTimestamp  = "timestamp"  //
 	BaseTypeVarchar    = "varchar"    //
+	BaseTypeVector     = "vector"     //
 
 	DefaultPartitionN = 256
 
@@ -686,7 +687,8 @@ func BaseTypeFromString(s string) (BaseType, error) {
 		BaseTypeStringSet,
 		BaseTypeStringSetQ,
 		BaseTypeTimestamp,
-		BaseTypeVarchar:
+		BaseTypeVarchar,
+		BaseTypeVector:
 		return BaseType(lowered), nil
 	default:
 		return "", errors.Errorf("invalid field type: %s", s)

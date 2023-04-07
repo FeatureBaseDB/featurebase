@@ -43,7 +43,7 @@ func (p *ExecutionPlanner) compileCreateModelStatement(stmt *parser.CreateModelS
 			model.modelType = lit.Value
 
 		case "labels":
-			lit, ok := o.OptionExpr.(*parser.SetLiteralExpr)
+			lit, ok := o.OptionExpr.(*parser.ArrayLiteralExpr)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected type '%T'", o.OptionExpr)
 			}

@@ -133,7 +133,7 @@ type Batch struct {
 	// values holds the values for each record of an int field
 	values map[string][]int64
 
-	// values holds the values for each record of an varchar field
+	// values holds the values for each record of an t-store field
 	tupleValues map[string][]interface{}
 
 	// boolValues is a map[fieldName][idsIndex]bool, which holds the values for
@@ -303,6 +303,8 @@ func NewBatch(importer featurebase.Importer, size int, tbl *dax.Table, fields []
 		case featurebase.FieldTypeBool:
 			boolValues[field.Name] = make(map[int]bool)
 		case featurebase.FieldTypeVarchar:
+			tupleValues[field.Name] = make([]interface{}, 0, size)
+		case featurebase.FieldTypeVector:
 			tupleValues[field.Name] = make([]interface{}, 0, size)
 		default:
 			return nil, errors.Errorf("field type '%s' is not currently supported through Batch", typ)
@@ -666,6 +668,9 @@ func (b *Batch) Add(rec Row) error {
 			case featurebase.FieldTypeVarchar:
 				b.tupleValues[field.Name] = append(b.tupleValues[field.Name], nil)
 
+			case featurebase.FieldTypeVector:
+				b.tupleValues[field.Name] = append(b.tupleValues[field.Name], nil)
+
 			default:
 				// only append nil to rowIDs if this field already has
 				// rowIDs. Otherwise, this could be a []string or
@@ -683,6 +688,14 @@ func (b *Batch) Add(rec Row) error {
 
 		case pql.Decimal:
 			b.values[field.Name] = append(b.values[field.Name], val.ToInt64(field.Options.Scale))
+
+		case []float64:
+			switch field.Options.Type {
+			case featurebase.FieldTypeVector:
+				b.tupleValues[field.Name] = append(b.tupleValues[field.Name], val)
+			default:
+				return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
+			}
 
 		default:
 			return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
@@ -1820,31 +1833,41 @@ func (b *Batch) makeTupleStoreFragments(pvlfrags tuplefragments) (tuplefragments
 				AliasName:    "",
 				Type:         parser.NewDataTypeVarchar(field.Options.Length),
 			})
+		case featurebase.FieldTypeVector:
+			tupleSchema = append(tupleSchema, &types.PlannerColumn{
+				ColumnName:   fieldname,
+				RelationName: string(b.tbl.Name),
+				AliasName:    "",
+				Type:         parser.NewDataTypeVector(field.Options.Length),
+			})
 		default:
 			continue
 		}
 	}
 
-	// for each of the varcharValues mapped, this is a column
-	for fieldname, varcharMap := range b.tupleValues {
+	// for each of the values mapped, this is a column
+	for fieldname, tstoreMap := range b.tupleValues {
 		field := b.headerMap[fieldname]
-		if field.Options.Type != featurebase.FieldTypeVarchar {
-			continue
-		}
 
-		// for each of the row values for this column
-		for pos, varcharVal := range varcharMap {
-			recID := b.ids[pos]
+		switch field.Options.Type {
+		case featurebase.FieldTypeVarchar, featurebase.FieldTypeVector:
+			// for each of the row values for this column
+			for pos, tstoreVal := range tstoreMap {
+				recID := b.ids[pos]
 
-			shard := recID / shardWidth
-			tf := pvlfrags.GetOrCreate(shard, tupleSchema)
+				shard := recID / shardWidth
+				tf := pvlfrags.GetOrCreate(shard, tupleSchema)
 
-			_, ok := tf.tupleData[recID]
-			if !ok {
-				tf.tupleData[recID] = make(map[string]interface{})
+				_, ok := tf.tupleData[recID]
+				if !ok {
+					tf.tupleData[recID] = make(map[string]interface{})
+				}
+				tf.tupleData[recID][fieldname] = tstoreVal
+
 			}
-			tf.tupleData[recID][fieldname] = varcharVal
 
+		default:
+			continue
 		}
 	}
 

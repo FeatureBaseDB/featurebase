@@ -1353,7 +1353,7 @@ func TestDateLit_String(t *testing.T) {
 
 // test SetLiteralExpr.
 func TestSetLiteralExpr_String(t *testing.T) {
-	sl := &parser.SetLiteralExpr{
+	sl := &parser.ArrayLiteralExpr{
 		Lbracket: pos(0),
 		Rbracket: pos(0),
 		Members: []parser.Expr{

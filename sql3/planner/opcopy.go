@@ -227,7 +227,7 @@ func (i *copyIterator) Next(ctx context.Context) (types.Row, error) {
 					for _, m := range val {
 						members = append(members, newStringLiteralPlanExpression(m))
 					}
-					irow[i] = newExprSetLiteralPlanExpression(members, parser.NewDataTypeStringSet())
+					irow[i] = newExprArrayLiteralPlanExpression(members, parser.NewDataTypeArray(parser.NewDataTypeString()))
 
 				case *parser.DataTypeIDSet:
 					val, ok := row[i].([]int64)
@@ -239,7 +239,7 @@ func (i *copyIterator) Next(ctx context.Context) (types.Row, error) {
 					for _, m := range val {
 						members = append(members, newIntLiteralPlanExpression(m))
 					}
-					irow[i] = newExprSetLiteralPlanExpression(members, parser.NewDataTypeIDSet())
+					irow[i] = newExprArrayLiteralPlanExpression(members, parser.NewDataTypeArray(parser.NewDataTypeID()))
 
 				default:
 					return nil, sql3.NewErrInternalf("unhandled type '%T'", ty)

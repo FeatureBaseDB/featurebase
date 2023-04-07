@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
 
 	"github.com/pkg/errors"
 
@@ -118,6 +119,19 @@ func NewBTreeTupleFromBytes(b []byte, schema types.Schema) *BTreeTuple {
 			binary.Read(dataRdr, binary.BigEndian, &bvalue)
 			t.Tuple[i] = string(bvalue)
 
+		case *parser.DataTypeVector:
+			dataRdr.Seek(int64(fieldOffset), io.SeekStart)
+			var l int32
+			binary.Read(dataRdr, binary.BigEndian, &l)
+			bvalue := make([]float64, l)
+
+			for j := 0; j < int(l); j++ {
+				var fvalue float64
+				binary.Read(dataRdr, binary.BigEndian, &fvalue)
+				bvalue[j] = fvalue
+			}
+			t.Tuple[i] = bvalue
+
 		case *parser.DataTypeVarbinary:
 			dataRdr.Seek(int64(fieldOffset), io.SeekStart)
 			var l int32
@@ -204,10 +218,31 @@ func (b *BTreeTuple) Bytes(tid TID, schema types.Schema, schemaVersion int, vers
 			data := rd.(string)
 			b = make([]byte, 4)
 			l := len(data)
+			// update the offset to be the end of the data we're about to write
 			offset += 4 + l
 			binary.BigEndian.PutUint32(b, uint32(l))
 			fieldData.Write(b)
 			fieldData.WriteString(data)
+
+		case *parser.DataTypeVector:
+			// write field offset
+			b := make([]byte, 4)
+			binary.BigEndian.PutUint32(b, uint32(offset))
+			valueBuf.Write(b)
+
+			// write field data
+			data := rd.([]float64)
+			b = make([]byte, 4)
+			l := len(data)
+			// update the offset to be the end of the data we're about to write
+			offset += 4 + l*8
+			binary.BigEndian.PutUint32(b, uint32(l))
+			fieldData.Write(b)
+			for _, f := range data {
+				var fbuf [8]byte
+				binary.BigEndian.PutUint64(fbuf[:], math.Float64bits(f))
+				fieldData.Write(fbuf[:])
+			}
 
 		case *parser.DataTypeVarbinary:
 			// write field offset
@@ -219,6 +254,7 @@ func (b *BTreeTuple) Bytes(tid TID, schema types.Schema, schemaVersion int, vers
 			data := rd.([]byte)
 			b = make([]byte, 4)
 			l := len(data)
+			// update the offset to be the end of the data we're about to write
 			offset += 4 + l
 			binary.BigEndian.PutUint32(b, uint32(l))
 			binary.BigEndian.PutUint32(b, uint32(len(data)))

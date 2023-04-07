@@ -19,7 +19,8 @@ func IsValidTypeName(typeName string) bool {
 		dax.BaseTypeStringSet,
 		dax.BaseTypeStringSetQ,
 		dax.BaseTypeTimestamp,
-		dax.BaseTypeVarchar:
+		dax.BaseTypeVarchar,
+		dax.BaseTypeVector:
 		return true
 	default:
 		return false
@@ -42,9 +43,10 @@ type ExprDataType interface {
 }
 
 func (*DataTypeVoid) exprDataType()             {}
+func (*DataTypeArray) exprDataType()            {}
 func (*DataTypeRange) exprDataType()            {}
 func (*DataTypeTuple) exprDataType()            {}
-func (*DataTypeSubtable) exprDataType()         {}
+func (*DataTypeSubtable) exprDataType()         {} // TODO (pok) don't think we need this one?
 func (*DataTypeBool) exprDataType()             {}
 func (*DataTypeDecimal) exprDataType()          {}
 func (*DataTypeID) exprDataType()               {}
@@ -56,6 +58,7 @@ func (*DataTypeStringSet) exprDataType()        {}
 func (*DataTypeStringSetQuantum) exprDataType() {}
 func (*DataTypeTimestamp) exprDataType()        {}
 func (*DataTypeVarchar) exprDataType()          {}
+func (*DataTypeVector) exprDataType()           {}
 func (*DataTypeVarbinary) exprDataType()        {}
 
 type DataTypeVoid struct {
@@ -74,6 +77,28 @@ func (dt *DataTypeVoid) TypeDescription() string {
 }
 
 func (*DataTypeVoid) TypeInfo() map[string]interface{} {
+	return nil
+}
+
+type DataTypeArray struct {
+	SubscriptType ExprDataType
+}
+
+func NewDataTypeArray(subscriptType ExprDataType) *DataTypeArray {
+	return &DataTypeArray{
+		SubscriptType: subscriptType,
+	}
+}
+
+func (dt *DataTypeArray) BaseTypeName() string {
+	return "array"
+}
+
+func (dt *DataTypeArray) TypeDescription() string {
+	return fmt.Sprintf("array(%s)", dt.SubscriptType.TypeDescription())
+}
+
+func (*DataTypeArray) TypeInfo() map[string]interface{} {
 	return nil
 }
 
@@ -224,6 +249,30 @@ func (d *DataTypeVarchar) TypeDescription() string {
 }
 
 func (d *DataTypeVarchar) TypeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		"length": d.Length,
+	}
+}
+
+type DataTypeVector struct {
+	Length int64
+}
+
+func NewDataTypeVector(length int64) *DataTypeVector {
+	return &DataTypeVector{
+		Length: length,
+	}
+}
+
+func (d *DataTypeVector) BaseTypeName() string {
+	return dax.BaseTypeVector
+}
+
+func (d *DataTypeVector) TypeDescription() string {
+	return fmt.Sprintf("%s(%d)", dax.BaseTypeVector, d.Length)
+}
+
+func (d *DataTypeVector) TypeInfo() map[string]interface{} {
 	return map[string]interface{}{
 		"length": d.Length,
 	}

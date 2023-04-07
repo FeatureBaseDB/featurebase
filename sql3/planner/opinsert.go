@@ -429,6 +429,18 @@ func (i *insertRowIter) Next(ctx context.Context) (types.Row, error) {
 					return nil, sql3.NewErrInternalf("unexpected varchar type '%T'", v)
 				}
 
+			case pilosa.FieldTypeVector:
+				switch v := eval.(type) {
+				case []pql.Decimal:
+					nv := make([]float64, len(v))
+					for j, vv := range v {
+						nv[j] = vv.Float64()
+					}
+					row.Values[posVals[idx]] = nv
+				default:
+					return nil, sql3.NewErrInternalf("unexpected vector type '%T'", v)
+				}
+
 			default:
 				row.Values[posVals[idx]] = eval
 			}

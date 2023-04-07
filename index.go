@@ -383,7 +383,7 @@ func (i *Index) openField(mu *sync.Mutex, cfm *CreateFieldMessage, file string) 
 	var err error
 	var fld *Field
 	mu.Lock()
-	if strings.EqualFold(cfm.Meta.Type, FieldTypeVarchar) {
+	if strings.EqualFold(cfm.Meta.Type, FieldTypeVarchar) || strings.EqualFold(cfm.Meta.Type, FieldTypeVector) {
 		fld, err = i.newNonRBFField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
 	} else {
 		fld, err = i.newField(i.fieldPath(filepath.Base(file)), filepath.Base(file))
@@ -467,7 +467,7 @@ func (i *Index) setFieldBitDepths() error {
 func (i *Index) hasTStoreFields() bool {
 	for _, f := range i.fields {
 		switch f.Type() {
-		case FieldTypeVarchar:
+		case FieldTypeVarchar, FieldTypeVector:
 			return true
 		}
 	}
@@ -978,7 +978,7 @@ func (i *Index) createField(cfm *CreateFieldMessage) (*Field, error) {
 	var err error
 	var f *Field
 	// initialize non-rbf field
-	if strings.EqualFold(cfm.Meta.Type, FieldTypeVarchar) {
+	if strings.EqualFold(cfm.Meta.Type, FieldTypeVarchar) || strings.EqualFold(cfm.Meta.Type, FieldTypeVector) {
 		f, err = i.newNonRBFField(i.fieldPath(cfm.Field), cfm.Field)
 		if err != nil {
 			return nil, errors.Wrap(err, "initializing")
@@ -1118,7 +1118,7 @@ func (i *Index) GetTStore(shard uint64) (*tstore.BTree, error) {
 
 	fieldList := make([]*Field, 0)
 	for _, f := range i.fields {
-		if strings.EqualFold(f.options.Type, FieldTypeVarchar) {
+		if strings.EqualFold(f.options.Type, FieldTypeVarchar) || strings.EqualFold(f.options.Type, FieldTypeVector) {
 			fieldList = append(fieldList, f)
 		}
 	}
@@ -1129,9 +1129,19 @@ func (i *Index) GetTStore(shard uint64) (*tstore.BTree, error) {
 
 	indexSchema := make(planner_types.Schema, len(fieldList))
 	for i, f := range fieldList {
-		indexSchema[i] = &planner_types.PlannerColumn{
-			ColumnName: f.name,
-			Type:       parser.NewDataTypeVarchar(f.options.Length),
+		switch f.Type() {
+		case FieldTypeVarchar:
+			indexSchema[i] = &planner_types.PlannerColumn{
+				ColumnName: f.name,
+				Type:       parser.NewDataTypeVarchar(f.options.Length),
+			}
+		case FieldTypeVector:
+			indexSchema[i] = &planner_types.PlannerColumn{
+				ColumnName: f.name,
+				Type:       parser.NewDataTypeVarchar(f.options.Length),
+			}
+		default:
+			return nil, errors.Errorf("unexepected field type '%s'", f.Type())
 		}
 	}
 

@@ -34,6 +34,7 @@ const (
 	DefaultCacheSize = 50000
 
 	DefaultVarcharLength = 50
+	DefaultVectorLength  = 128
 
 	bitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
 	maxInt      = 1<<(bitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
@@ -50,6 +51,7 @@ const (
 	FieldTypeDecimal   = "decimal"
 	FieldTypeTimestamp = "timestamp"
 	FieldTypeVarchar   = "varchar"
+	FieldTypeVector    = "vector"
 )
 
 type protected struct {
@@ -419,6 +421,20 @@ func OptFieldTypeVarchar(length int64) FieldOption {
 	}
 }
 
+// OptFieldTypeVector is a functional option on FieldOptions
+// used to specify the field as being type `vector` and to
+// provide any respective configuration values.
+func OptFieldTypeVector(length int64) FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeVector
+		fo.Length = length
+		return nil
+	}
+}
+
 // newField returns a new instance of field (without name validation).
 func newField(holder *Holder, path, index, name string, opts ...FieldOption) (*Field, error) {
 	// Apply functional option.
@@ -612,7 +628,7 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "creating field dir")
 		}
 
-		if strings.EqualFold(f.options.Type, FieldTypeVarchar) {
+		if strings.EqualFold(f.options.Type, FieldTypeVarchar) || strings.EqualFold(f.options.Type, FieldTypeVector) {
 			f.holder.Logger.Debugf("opening b-tree for index/field: %s/%s", f.index, f.name)
 
 			// Apply the field options loaded from etcd (or set via setOptions()).
@@ -926,6 +942,9 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.ForeignIndex = ""
 	case FieldTypeVarchar:
 		f.options.Type = FieldTypeVarchar
+		f.options.Length = opt.Length
+	case FieldTypeVector:
+		f.options.Type = FieldTypeVector
 		f.options.Length = opt.Length
 	default:
 		return errors.New("invalid field type")
@@ -2406,6 +2425,14 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.Type,
 		})
 	case FieldTypeVarchar:
+		return json.Marshal(struct {
+			Type   string `json:"type"`
+			Length int64  `json:"length"`
+		}{
+			o.Type,
+			o.Length,
+		})
+	case FieldTypeVector:
 		return json.Marshal(struct {
 			Type   string `json:"type"`
 			Length int64  `json:"length"`

@@ -71,6 +71,8 @@ func FieldSQLDataType(f *pilosa.FieldInfo) parser.ExprDataType {
 	case pilosa.FieldTypeVarchar:
 		return parser.NewDataTypeVarchar(f.Options.Length)
 
+	case pilosa.FieldTypeVector:
+		return parser.NewDataTypeVector(f.Options.Length)
 	default:
 		return parser.NewDataTypeVoid()
 	}
@@ -248,6 +250,19 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 	}
 
 	switch lhs := targetType.(type) {
+
+	case *parser.DataTypeVector:
+		switch st := sourceType.(type) {
+		case *parser.DataTypeArray:
+			switch st.SubscriptType.(type) {
+			case *parser.DataTypeDecimal:
+				return true
+			default:
+				return false
+			}
+		default:
+			return false
+		}
 
 	case *parser.DataTypeInt:
 		switch sourceType.(type) {

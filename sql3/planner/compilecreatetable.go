@@ -249,6 +249,20 @@ func (p *ExecutionPlanner) compileColumn(ctx context.Context, col *parser.Column
 		}
 
 		column.fos = append(column.fos, pilosa.OptFieldTypeVarchar(length))
+
+	case dax.BaseTypeVector:
+		// if we don't have a length, it's an error
+		if col.Type.Modifier == nil {
+			return nil, sql3.NewErrVectorLengthExpected(col.Type.Name.NamePos.Line, col.Type.Name.NamePos.Column)
+		}
+
+		// get the modifier value
+		length, err = strconv.ParseInt(col.Type.Modifier.Value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		column.fos = append(column.fos, pilosa.OptFieldTypeVector(length))
 	}
 	return column, nil
 }

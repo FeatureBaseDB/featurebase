@@ -244,7 +244,6 @@ const (
 	USING
 	VACUUM
 	VALUES
-	VECTOR
 	VIEW
 	VIRTUAL
 	WHEN
@@ -471,7 +470,6 @@ var tokens = [...]string{
 	USING:             "USING",
 	VACUUM:            "VACUUM",
 	VALUES:            "VALUES",
-	VECTOR:            "VECTOR",
 	VIEW:              "VIEW",
 	VIRTUAL:           "VIRTUAL",
 	WHEN:              "WHEN",

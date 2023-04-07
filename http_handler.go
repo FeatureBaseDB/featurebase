@@ -2074,6 +2074,8 @@ func fieldOptionsToFunctionalOpts(opt fieldOptions) []FieldOption {
 		fos = append(fos, OptFieldTypeBool())
 	case FieldTypeVarchar:
 		fos = append(fos, OptFieldTypeVarchar(*opt.Length))
+	case FieldTypeVector:
+		fos = append(fos, OptFieldTypeVector(*opt.Length))
 	}
 	if opt.Keys != nil {
 		if *opt.Keys {
@@ -2315,6 +2317,10 @@ func (o *fieldOptions) validate() error {
 	case FieldTypeVarchar:
 		if o.Length == nil {
 			return NewBadRequestError(errors.New("varchar field requires a length argument"))
+		}
+	case FieldTypeVector:
+		if o.Length == nil {
+			return NewBadRequestError(errors.New("vector field requires a length argument"))
 		}
 	default:
 		return errors.Errorf("invalid field type: %s", o.Type)

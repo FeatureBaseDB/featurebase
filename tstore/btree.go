@@ -116,6 +116,9 @@ func NewBTree(maxKeySize int, objectID int32, shard int32, schema types.Schema, 
 		case *parser.DataTypeVarchar:
 			payLoadLength += 4                  // offset or null
 			payLoadLength += 4 + int(ty.Length) // actual data
+		case *parser.DataTypeVector:
+			payLoadLength += 4                    // offset or null
+			payLoadLength += 4 + int(ty.Length)*8 // actual data
 		default:
 			return nil, errors.Errorf("unsupported t-store data type '%T'", ty)
 		}

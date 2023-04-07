@@ -2435,22 +2435,27 @@ func (n *exprListPlanExpression) WithChildren(children ...types.PlanExpression) 
 	return newExprListExpression(children), nil
 }
 
-// exprSetLiteralPlanExpression is a set literal
-type exprSetLiteralPlanExpression struct {
+// exprArrayLiteralPlanExpression is a set literal
+type exprArrayLiteralPlanExpression struct {
 	members  []types.PlanExpression
 	dataType parser.ExprDataType
 }
 
-func newExprSetLiteralPlanExpression(members []types.PlanExpression, dataType parser.ExprDataType) *exprSetLiteralPlanExpression {
-	return &exprSetLiteralPlanExpression{
+func newExprArrayLiteralPlanExpression(members []types.PlanExpression, dataType parser.ExprDataType) *exprArrayLiteralPlanExpression {
+	return &exprArrayLiteralPlanExpression{
 		members:  members,
 		dataType: dataType,
 	}
 }
 
-func (n *exprSetLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
-	switch typ := n.dataType.(type) {
-	case *parser.DataTypeIDSet:
+func (n *exprArrayLiteralPlanExpression) Evaluate(currentRow []interface{}) (interface{}, error) {
+	arrayType, ok := n.dataType.(*parser.DataTypeArray)
+	if !ok {
+		return nil, sql3.NewErrInternalf("unexepcted array literal type '%T'", n.dataType)
+	}
+
+	switch typ := arrayType.SubscriptType.(type) {
+	case *parser.DataTypeID:
 		result := []int64{}
 		for _, e := range n.members {
 			er, err := e.Evaluate(currentRow)
@@ -2469,7 +2474,7 @@ func (n *exprSetLiteralPlanExpression) Evaluate(currentRow []interface{}) (inter
 		}
 		return result, nil
 
-	case *parser.DataTypeStringSet:
+	case *parser.DataTypeString:
 		result := []string{}
 		for _, e := range n.members {
 			er, err := e.Evaluate(currentRow)
@@ -2483,16 +2488,32 @@ func (n *exprSetLiteralPlanExpression) Evaluate(currentRow []interface{}) (inter
 			result = append(result, ers)
 		}
 		return result, nil
+
+	case *parser.DataTypeDecimal:
+		result := []pql.Decimal{}
+		for _, e := range n.members {
+			er, err := e.Evaluate(currentRow)
+			if err != nil {
+				return nil, err
+			}
+			ers, ok := er.(pql.Decimal)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unable to convert element result")
+			}
+			result = append(result, ers)
+		}
+		return result, nil
+
 	default:
-		return nil, sql3.NewErrInternalf("unexpected set literal type '%T'", typ)
+		return nil, sql3.NewErrInternalf("unexpected array literal subscript type '%T'", typ)
 	}
 }
 
-func (n *exprSetLiteralPlanExpression) Type() parser.ExprDataType {
+func (n *exprArrayLiteralPlanExpression) Type() parser.ExprDataType {
 	return n.dataType
 }
 
-func (n *exprSetLiteralPlanExpression) String() string {
+func (n *exprArrayLiteralPlanExpression) String() string {
 	var members string
 	for idx, m := range n.members {
 		if idx > 0 {
@@ -2503,7 +2524,7 @@ func (n *exprSetLiteralPlanExpression) String() string {
 	return fmt.Sprintf("[%s]", members)
 }
 
-func (n *exprSetLiteralPlanExpression) Plan() map[string]interface{} {
+func (n *exprArrayLiteralPlanExpression) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_expr"] = fmt.Sprintf("%T", n)
 	result["description"] = n.String()
@@ -2515,15 +2536,15 @@ func (n *exprSetLiteralPlanExpression) Plan() map[string]interface{} {
 	return result
 }
 
-func (n *exprSetLiteralPlanExpression) Children() []types.PlanExpression {
+func (n *exprArrayLiteralPlanExpression) Children() []types.PlanExpression {
 	return n.members
 }
 
-func (n *exprSetLiteralPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
+func (n *exprArrayLiteralPlanExpression) WithChildren(children ...types.PlanExpression) (types.PlanExpression, error) {
 	if len(children) != len(n.members) {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return newExprSetLiteralPlanExpression(children, n.dataType), nil
+	return newExprArrayLiteralPlanExpression(children, n.dataType), nil
 }
 
 // exprTupleLiteralPlanExpression is a tuple literal
@@ -2630,7 +2651,7 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 		}
 		return newExprListExpression(exprList), nil
 
-	case *parser.SetLiteralExpr:
+	case *parser.ArrayLiteralExpr:
 		exprList := []types.PlanExpression{}
 		for _, e := range expr.Members {
 			listExpr, err := p.compileExpr(e)
@@ -2639,7 +2660,7 @@ func (p *ExecutionPlanner) compileExpr(expr parser.Expr) (_ types.PlanExpression
 			}
 			exprList = append(exprList, listExpr)
 		}
-		return newExprSetLiteralPlanExpression(exprList, expr.DataType()), nil
+		return newExprArrayLiteralPlanExpression(exprList, expr.DataType()), nil
 
 	case *parser.TupleLiteralExpr:
 		exprList := []types.PlanExpression{}

@@ -162,7 +162,7 @@ func (p *ExecutionPlanner) analyzeExpression(ctx context.Context, expr parser.Ex
 		e.X = pexpr
 		return e, nil
 
-	case *parser.SetLiteralExpr:
+	case *parser.ArrayLiteralExpr:
 		for i, ex := range e.Members {
 			listExpr, err := p.analyzeExpression(ctx, ex, scope)
 			if err != nil {
@@ -175,8 +175,8 @@ func (p *ExecutionPlanner) analyzeExpression(ctx context.Context, expr parser.Ex
 			return nil, sql3.NewErrLiteralEmptySetNotAllowed(e.Lbracket.Line, e.Lbracket.Column)
 		}
 
-		setDataType := e.Members[0].DataType()
-		switch setDataType.(type) {
+		subDataType := e.Members[0].DataType()
+		switch subDataType.(type) {
 		case *parser.DataTypeID, *parser.DataTypeInt:
 			//make sure everything else is an int
 			for _, mbr := range e.Members {
@@ -184,7 +184,6 @@ func (p *ExecutionPlanner) analyzeExpression(ctx context.Context, expr parser.Ex
 					return nil, sql3.NewErrIntExpressionExpected(mbr.Pos().Line, mbr.Pos().Column)
 				}
 			}
-			e.ResultDataType = parser.NewDataTypeIDSet()
 
 		case *parser.DataTypeString:
 			//make sure everything else is a string
@@ -193,12 +192,20 @@ func (p *ExecutionPlanner) analyzeExpression(ctx context.Context, expr parser.Ex
 					return nil, sql3.NewErrStringExpressionExpected(mbr.Pos().Line, mbr.Pos().Column)
 				}
 			}
-			e.ResultDataType = parser.NewDataTypeStringSet()
+
+		case *parser.DataTypeDecimal:
+			//make sure everything else is a decimal
+			for _, mbr := range e.Members {
+				if !typeIsDecimal(mbr.DataType()) {
+					return nil, sql3.NewErrInternalf("unexpected data type")
+				}
+			}
 
 		default:
 			return nil, sql3.NewErrSetLiteralMustContainIntOrString(e.Members[0].Pos().Line, e.Members[0].Pos().Column)
 		}
 
+		e.ResultDataType = parser.NewDataTypeArray(subDataType)
 		return e, nil
 
 	case *parser.TupleLiteralExpr:

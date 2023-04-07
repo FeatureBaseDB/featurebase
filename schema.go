@@ -249,6 +249,9 @@ func FieldInfoToField(fi *FieldInfo) *dax.Field {
 	case FieldTypeVarchar:
 		fieldType = dax.BaseTypeVarchar
 		length = fo.Length
+	case FieldTypeVector:
+		fieldType = dax.BaseTypeVector
+		length = fo.Length
 	default:
 		panic(fmt.Sprintf("unhandled featurebase field type: %s", fo.Type))
 	}
@@ -500,6 +503,10 @@ func FieldOptionsFromField(fld *dax.Field) ([]FieldOption, error) {
 	case dax.BaseTypeVarchar:
 		opts = append(opts,
 			OptFieldTypeVarchar(fld.Options.Length),
+		)
+	case dax.BaseTypeVector:
+		opts = append(opts,
+			OptFieldTypeVector(fld.Options.Length),
 		)
 
 	default:

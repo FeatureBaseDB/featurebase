@@ -43,7 +43,7 @@ func (p *ExecutionPlanner) generatePQLCallFromExpr(ctx context.Context, expr typ
 		case "SETCONTAINSALL":
 			col := expr.args[0].(*qualifiedRefPlanExpression)
 
-			set, ok := expr.args[1].(*exprSetLiteralPlanExpression)
+			set, ok := expr.args[1].(*exprArrayLiteralPlanExpression)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected argument type '%T'", expr.args[1])
 			}
@@ -71,7 +71,7 @@ func (p *ExecutionPlanner) generatePQLCallFromExpr(ctx context.Context, expr typ
 		case "SETCONTAINSANY":
 			col := expr.args[0].(*qualifiedRefPlanExpression)
 
-			set, ok := expr.args[1].(*exprSetLiteralPlanExpression)
+			set, ok := expr.args[1].(*exprArrayLiteralPlanExpression)
 			if !ok {
 				return nil, sql3.NewErrInternalf("unexpected argument type '%T'", expr.args[1])
 			}
