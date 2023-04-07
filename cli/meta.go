@@ -364,7 +364,7 @@ Input/Output
   \warn [-n] [STRING]    write string to standard error (-n for no newline)
 
 Informational
-  \d                     list tables
+  \d                     list tables, including system tables
   \d NAME                describe table
   \dt                    list tables
   \dv                    list views
@@ -504,8 +504,17 @@ func (m *metaDescribe) execute(cmd *Command) (responseAction, error) {
 	switch len(m.args) {
 	case 0:
 		// Describe with no args should list all relations (tables, views,
-		// etc.). For now, we're just going to list the tables.
-		return newMetaListTables().execute(cmd)
+		// etc.). For now, we're just going to list the tables, including system
+		// tables.
+		qry := []queryPart{
+			newPartRaw("SHOW TABLES WITH SYSTEM"),
+		}
+
+		if err := cmd.executeAndWriteQuery(qry); err != nil {
+			return actionNone, errors.Wrap(err, "executing query")
+		}
+
+		return actionReset, nil
 
 	case 1:
 		// Describe with a single arg will assume the arg is a table name, so it

@@ -152,6 +152,9 @@ const (
 	// query hints
 	ErrUnknownQueryHint               errors.Code = "ErrInvalidQueryHint"
 	ErrInvalidQueryHintParameterCount errors.Code = "ErrInvalidQueryHintParameterCount"
+
+	// show options
+	ErrUnknownShowOption errors.Code = "ErrUnknownShowOption"
 )
 
 func NewErrDuplicateColumn(line int, col int, column string) error {
@@ -929,5 +932,14 @@ func NewErrInvalidQueryHintParameterCount(line, col int, hintName string, desire
 	return errors.New(
 		ErrInvalidQueryHintParameterCount,
 		fmt.Sprintf("[%d:%d] query hint '%s' expected %d parameter(s) (%s), got %d parameters", line, col, hintName, desiredCount, desiredList, actualCount),
+	)
+}
+
+// show options
+
+func NewErrUnknownShowOption(line, col int, optionName string) error {
+	return errors.New(
+		ErrUnknownShowOption,
+		fmt.Sprintf("[%d:%d] unknown show option '%s'", line, col, optionName),
 	)
 }

@@ -17,16 +17,18 @@ import (
 // PlanOpFeatureBaseTables wraps a []*IndexInfo that is returned from
 // schemaAPI.Schema().
 type PlanOpFeatureBaseTables struct {
-	planner   *ExecutionPlanner
-	indexInfo []*pilosa.IndexInfo
-	warnings  []string
+	planner    *ExecutionPlanner
+	indexInfo  []*pilosa.IndexInfo
+	withSystem bool
+	warnings   []string
 }
 
-func NewPlanOpFeatureBaseTables(planner *ExecutionPlanner, indexInfo []*pilosa.IndexInfo) *PlanOpFeatureBaseTables {
+func NewPlanOpFeatureBaseTables(planner *ExecutionPlanner, indexInfo []*pilosa.IndexInfo, withSystem bool) *PlanOpFeatureBaseTables {
 	return &PlanOpFeatureBaseTables{
-		planner:   planner,
-		indexInfo: indexInfo,
-		warnings:  make([]string, 0),
+		planner:    planner,
+		indexInfo:  indexInfo,
+		withSystem: withSystem,
+		warnings:   make([]string, 0),
 	}
 }
 
@@ -105,65 +107,85 @@ func (p *PlanOpFeatureBaseTables) Children() []types.PlanOperator {
 
 func (p *PlanOpFeatureBaseTables) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
 	return &showTablesRowIter{
-		planner:   p.planner,
-		indexInfo: p.indexInfo,
+		planner:    p.planner,
+		indexInfo:  p.indexInfo,
+		withSystem: p.withSystem,
 	}, nil
 }
 
 func (p *PlanOpFeatureBaseTables) WithChildren(children ...types.PlanOperator) (types.PlanOperator, error) {
-	return NewPlanOpFeatureBaseTables(p.planner, p.indexInfo), nil
+	return NewPlanOpFeatureBaseTables(p.planner, p.indexInfo, p.withSystem), nil
 }
 
 type showTablesRowIter struct {
-	planner   *ExecutionPlanner
-	indexInfo []*pilosa.IndexInfo
-	rowIndex  int
+	planner    *ExecutionPlanner
+	indexInfo  []*pilosa.IndexInfo
+	withSystem bool
+
+	result types.Rows
 }
 
 var _ types.RowIterator = (*showTablesRowIter)(nil)
 
 func (i *showTablesRowIter) Next(ctx context.Context) (types.Row, error) {
-	if i.rowIndex < len(i.indexInfo) {
+	if i.result == nil {
+		i.result = make(types.Rows, 0)
 
-		indexName := i.indexInfo[i.rowIndex].Name
+		for _, idx := range i.indexInfo {
 
-		var err error
-		var spaceUsed pilosa.DiskUsage
-		switch strings.ToLower(indexName) {
-		case fbDatabaseInfo, fbDatabaseNodes, fbPerformanceCounters, fbExecRequests, fbTableDDL:
-			spaceUsed = pilosa.DiskUsage{
-				Usage: 0,
+			indexName := idx.Name
+
+			// if we don't want system tables filter them out (currently by name prefix)
+			// TODO(pok) - we need an is_system attribute so we can filter on that instead
+			if !i.withSystem && strings.HasPrefix(indexName, "fb_") {
+				continue
 			}
-		default:
-			u := i.planner.systemAPI.DataDir()
 
-			// TODO(tlt): GetDiskUsage needs to be behind an interface because
-			// this doesn't work in serverless. For now I'm just going to skip
-			// it based on the emtpy DataDir, but let's do this the right way.
-			if u != "" {
-				u = fmt.Sprintf("%s/indexes/%s", u, indexName)
+			var err error
+			var spaceUsed pilosa.DiskUsage
+			switch strings.ToLower(indexName) {
+			case fbDatabaseInfo, fbDatabaseNodes, fbPerformanceCounters, fbExecRequests, fbTableDDL:
+				spaceUsed = pilosa.DiskUsage{
+					Usage: 0,
+				}
+			default:
+				u := i.planner.systemAPI.DataDir()
 
-				spaceUsed, err = pilosa.GetDiskUsage(u)
-				if err != nil {
-					return nil, err
+				// TODO(tlt): GetDiskUsage needs to be behind an interface because
+				// this doesn't work in serverless. For now I'm just going to skip
+				// it based on the emtpy DataDir, but let's do this the right way.
+				if u != "" {
+					u = fmt.Sprintf("%s/indexes/%s", u, indexName)
+
+					spaceUsed, err = pilosa.GetDiskUsage(u)
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
-		}
 
-		createdAt := time.Unix(0, i.indexInfo[i.rowIndex].CreatedAt)
-		updatedAt := time.Unix(0, i.indexInfo[i.rowIndex].UpdatedAt)
-		row := []interface{}{
-			indexName,
-			indexName,
-			i.indexInfo[i.rowIndex].Owner,
-			i.indexInfo[i.rowIndex].LastUpdateUser,
-			createdAt.Format(time.RFC3339),
-			updatedAt.Format(time.RFC3339),
-			i.indexInfo[i.rowIndex].Options.Keys,
-			spaceUsed.Usage,
-			i.indexInfo[i.rowIndex].Options.Description,
+			createdAt := time.Unix(0, idx.CreatedAt)
+			updatedAt := time.Unix(0, idx.UpdatedAt)
+			row := []interface{}{
+				indexName,
+				indexName,
+				idx.Owner,
+				idx.LastUpdateUser,
+				createdAt.Format(time.RFC3339),
+				updatedAt.Format(time.RFC3339),
+				idx.Options.Keys,
+				spaceUsed.Usage,
+				idx.Options.Description,
+			}
+			i.result = append(i.result, row)
 		}
-		i.rowIndex += 1
+	}
+
+	if len(i.result) > 0 {
+		row := i.result[0]
+
+		// Move to next result element.
+		i.result = i.result[1:]
 		return row, nil
 	}
 	return nil, types.ErrNoMoreRows
