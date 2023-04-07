@@ -87,22 +87,17 @@ func (w *workerJobService) WorkerCount(tx dax.Transaction, roleType dax.RoleType
 
 	if roleType != "" {
 		// print the role type
-		query = query.Where("role = ?", roleType)
+		query = query.Where(fmt.Sprintf("role_%s = true", roleType))
 	}
-	fmt.Println("query before: ", query)
 
 	if qdbid.DatabaseID != "" {
 		// print the database id
 		fmt.Println("database id: [", qdbid.DatabaseID, "]")
 		query = query.Where("database_id = ?", qdbid.DatabaseID)
 	}
-	//	sql := fmt.Sprintf("role_%s = true and database_id = ?", roleType)
-	//	cnt, err := dt.C.Where(sql, qdbid.DatabaseID).Count(worker)
-
-	// print the query
-	fmt.Println("query after: ", query)
 
 	count, err := query.Count(worker)
+
 	return count, errors.Wrap(err, "getting count")
 }
 

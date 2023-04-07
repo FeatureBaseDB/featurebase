@@ -25,7 +25,7 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
 	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
 	router.HandleFunc("/database/options", server.patchDatabaseOptions).Methods("PATCH").Name("PatchDatabaseOptions")
-	router.HandleFunc("/database-number-of-workers", server.getDatabaseNumberOfWorkers).Methods("GET").Name("DatabaseWorkers")
+	router.HandleFunc("/database-number-of-workers/{organization-id}/{database-id}", server.getDatabaseNumberOfWorkers).Methods("GET").Name("DatabaseWorkers")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")
@@ -229,13 +229,10 @@ func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Reque
 	// get the context
 	ctx := r.Context()
 
-	// create a variable to hold the id
-	var id dax.QualifiedDatabaseID
-
-	// for now, fill the id with a hard-coded value
-	id = dax.QualifiedDatabaseID{
-		OrganizationID: dax.OrganizationID("3ff24bf5-2dff-4c33-993a-8459d53c92c2"),
-		DatabaseID:     dax.DatabaseID("b75114bf-75d4-4581-8899-7ba758548f56"),
+	// get the id from the request
+	id := dax.QualifiedDatabaseID{
+		OrganizationID: dax.OrganizationID(mux.Vars(r)["organization-id"]),
+		DatabaseID:     dax.DatabaseID(mux.Vars(r)["database-id"]),
 	}
 
 	//send the id into the controller, get the number of workers back
