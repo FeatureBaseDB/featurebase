@@ -73,7 +73,19 @@ func (p *ExecutionPlanner) compileShowDatabasesStatement(ctx context.Context, st
 	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseDatabases(p, dbs)), p.sql), nil
 }
 
-func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt parser.Statement) (types.PlanOperator, error) {
+func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt *parser.ShowTablesStatement) (types.PlanOperator, error) {
+
+	showSystem := false
+	if stmt.With.IsValid() {
+		opt := parser.IdentName(stmt.System)
+
+		if !strings.EqualFold("system", opt) {
+			return nil, sql3.NewErrUnknownShowOption(stmt.System.NamePos.Line, stmt.System.NamePos.Column, opt)
+		}
+
+		showSystem = true
+	}
+
 	tbls, err := p.schemaAPI.Tables(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting tables")
@@ -135,7 +147,7 @@ func (p *ExecutionPlanner) compileShowTablesStatement(ctx context.Context, stmt 
 			dataType:    parser.NewDataTypeString(),
 		}}
 
-	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(p, pilosa.TablesToIndexInfos(tbls))), p.sql), nil
+	return NewPlanOpQuery(p, NewPlanOpProjection(columns, NewPlanOpFeatureBaseTables(p, pilosa.TablesToIndexInfos(tbls), showSystem)), p.sql), nil
 }
 
 func (p *ExecutionPlanner) compileShowColumnsStatement(ctx context.Context, stmt *parser.ShowColumnsStatement) (_ types.PlanOperator, err error) {

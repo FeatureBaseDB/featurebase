@@ -176,12 +176,18 @@ func (p *Parser) parseShowDatabasesStatement(showPos Pos) (*ShowDatabasesStateme
 	}
 }
 
-func (p *Parser) parseShowTablesStatement(showPos Pos) (*ShowTablesStatement, error) {
+func (p *Parser) parseShowTablesStatement(showPos Pos) (_ *ShowTablesStatement, err error) {
 	switch p.peek() {
 	case TABLES:
 		var stmt ShowTablesStatement
 		stmt.Show = showPos
 		stmt.Tables, _, _ = p.scan()
+		if p.peek() == WITH {
+			stmt.With, _, _ = p.scan()
+			if stmt.System, err = p.parseIdent("show tables option"); err != nil {
+				return &stmt, err
+			}
+		}
 		return &stmt, nil
 	default:
 		return nil, p.errorExpected(p.pos, p.tok, "TABLES")

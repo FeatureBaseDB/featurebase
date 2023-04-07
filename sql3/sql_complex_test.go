@@ -266,6 +266,42 @@ func TestPlanner_Show(t *testing.T) {
 		}
 	})
 
+	t.Run("ShowTablesWithBadOption", func(t *testing.T) {
+		_, _, _, err := sql_test.MustQueryRows(t, nil, c.GetNode(0).Server, `SHOW TABLES WITH SCOTCH`)
+		if err != nil {
+			if err.Error() != "[1:18] unknown show option 'SCOTCH'" {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	t.Run("ShowTablesWithSystem", func(t *testing.T) {
+		results, columns, _, err := sql_test.MustQueryRows(t, nil, c.GetNode(0).Server, `SHOW TABLES WITH SYSTEM`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// we keep adding system tables on the fly so as
+		// long as we get more than 0 tables, we're good
+		if len(results) == 0 {
+			t.Fatal(fmt.Errorf("unexpected result set length"))
+		}
+
+		if diff := cmp.Diff([]*pilosa.WireQueryField{
+			wireQueryFieldString("_id"),
+			wireQueryFieldString("name"),
+			wireQueryFieldString("owner"),
+			wireQueryFieldString("updated_by"),
+			wireQueryFieldTimestamp("created_at"),
+			wireQueryFieldTimestamp("updated_at"),
+			wireQueryFieldBool("keys"),
+			wireQueryFieldInt("space_used"),
+			wireQueryFieldString("description"),
+		}, columns); diff != "" {
+			t.Fatal(diff)
+		}
+	})
+
 	t.Run("ShowCreateTable", func(t *testing.T) {
 		results, columns, _, err := sql_test.MustQueryRows(t, nil, c.GetNode(0).Server, fmt.Sprintf(`SHOW CREATE TABLE %i`, c))
 		if err != nil {

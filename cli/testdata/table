@@ -1,5 +1,5 @@
-// Show tables for database using SHOW TABLES.
-SEND:SHOW TABLES;
+// Show tables for database using SHOW TABLES WITH SYSTEM.
+SEND:SHOW TABLES WITH SYSTEM;
 EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
 EXPECT:| _id                     | name                    | owner | updated_by | created_at           | updated_at           | keys  | space_used | description |
 EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
@@ -11,8 +11,8 @@ EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |     
 EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
 EXPECT:
 
-// Show tables for database using \dt.
-SEND:\dt
+// Show tables for database using \d.
+SEND:\d
 EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
 EXPECT:| _id                     | name                    | owner | updated_by | created_at           | updated_at           | keys  | space_used | description |
 EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
@@ -22,6 +22,23 @@ EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |     
 EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
 EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
 EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:
+
+// Show tables for database using SHOW TABLES.
+SEND:SHOW TABLES;
+EXPECT:+-----+------+-------+------------+------------+------------+------+------------+-------------+
+EXPECT:| _id | name | owner | updated_by | created_at | updated_at | keys | space_used | description |
+EXPECT:+-----+------+-------+------------+------------+------------+------+------------+-------------+
+EXPECT:+-----+------+-------+------------+------------+------------+------+------------+-------------+
+EXPECT:
+
+
+// Show tables for database using \dt.
+SEND:\dt
+EXPECT:+-----+------+-------+------------+------------+------------+------+------------+-------------+
+EXPECT:| _id | name | owner | updated_by | created_at | updated_at | keys | space_used | description |
+EXPECT:+-----+------+-------+------------+------------+------------+------+------------+-------------+
+EXPECT:+-----+------+-------+------------+------------+------------+------+------------+-------------+
 EXPECT:
 
 // Create a table. That can be used for general testing.
@@ -33,16 +50,11 @@ EXPECT:
 
 // Show tables for database to get the newly created table.
 SEND:\dt
-EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
-EXPECT:| _id                     | name                    | owner | updated_by | created_at           | updated_at           | keys  | space_used | description |
-EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
-EXPECTCOMP:WithFormat:| users                   | users                   |       |            | {timestamp} | {timestamp} | false |          0 |             |
-EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
-EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
-EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
-EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
-EXPECTCOMP:WithFormat:| fb_____________________ | fb_____________________ |       |            | {timestamp} | {timestamp} | false |          0 |             |
-EXPECT:+-------------------------+-------------------------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:+-------+-------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECT:| _id   | name  | owner | updated_by | created_at           | updated_at           | keys  | space_used | description |
+EXPECT:+-------+-------+-------+------------+----------------------+----------------------+-------+------------+-------------+
+EXPECTCOMP:WithFormat:| users | users |       |            | {timestamp} | {timestamp} | false |          0 |             |
+EXPECT:+-------+-------+-------+------------+----------------------+----------------------+-------+------------+-------------+
 EXPECT:
 
 // We don't select from users until AFTER we check SHOW TABLES above because

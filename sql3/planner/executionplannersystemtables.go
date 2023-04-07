@@ -4,6 +4,7 @@ package planner
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	pilosa "github.com/featurebasedb/featurebase/v3"
@@ -80,6 +81,11 @@ func (s *systemTableDefinitionsWrapper) Tables(ctx context.Context) ([]*dax.Tabl
 		}
 		tbls = append(tbls, pilosa.IndexInfoToTable(ii))
 	}
+
+	// order the result - by ID asc right now
+	sort.Slice(tbls, func(i, j int) bool {
+		return tbls[i].ID < tbls[j].ID
+	})
 
 	return tbls, nil
 }

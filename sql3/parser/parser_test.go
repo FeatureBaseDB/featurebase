@@ -658,8 +658,18 @@ func TestParser_ParseStatement(t *testing.T) {
 			Show:   pos(0),
 			Tables: pos(5),
 		})
+		AssertParseStatement(t, `SHOW TABLES WITH SYSTEM`, &parser.ShowTablesStatement{
+			Show:   pos(0),
+			Tables: pos(5),
+			With:   pos(12),
+			System: &parser.Ident{
+				Name:    "SYSTEM",
+				NamePos: pos(17),
+			},
+		})
 		AssertParseStatementError(t, `SHOW`, `1:4: expected DATABASES, TABLES, COLUMNS or CREATE, found 'EOF'`)
 		AssertParseStatementError(t, `SHOW BLAH`, `1:6: expected DATABASES, TABLES, COLUMNS or CREATE, found BLAH`)
+		AssertParseStatementError(t, `SHOW TABLES WITH`, `1:16: expected show tables option, found 'EOF'`)
 	})
 
 	t.Run("ShowColumns", func(t *testing.T) {
