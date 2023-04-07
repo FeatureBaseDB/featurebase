@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	featurebase "github.com/featurebasedb/featurebase/v3"
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
@@ -34,8 +35,8 @@ func (s *Schemar) CreateDatabase(tx dax.Transaction, qdb *dax.QualifiedDatabase)
 		return schemar.NewErrDatabaseIDInvalid(qdb.ID)
 	}
 
-	// Ensure the database name is not blank.
-	if qdb.Name == "" {
+	// Sanitizing database name
+	if err := featurebase.ValidateName(string(qdb.Name)); err != nil {
 		return schemar.NewErrDatabaseNameInvalid(qdb.Name)
 	}
 
