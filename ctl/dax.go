@@ -42,7 +42,6 @@ func BuildDAXFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVar(&srv.Config.WorkerServiceProvider.Config.ControllerAddress, "wsp.config.controller-address", srv.Config.WorkerServiceProvider.Config.ControllerAddress, "Address of remote Controller process.")
 	// Computer
 	flags.BoolVar(&srv.Config.Computer.Run, "computer.run", srv.Config.Computer.Run, "Run the Computer service in process.")
-	flags.IntVar(&srv.Config.Computer.N, "computer.n", srv.Config.Computer.N, "The number of Computer services to run in process.")
 	flags.StringVar(&srv.Config.Computer.WorkerServiceID, "computer.worker_service_id", srv.Config.Computer.WorkerServiceID, "ID of WorkerService which spawned this computer.")
 	flags.AddFlagSet(serverFlagSet(&srv.Config.Computer.Config, "computer.config"))
 }

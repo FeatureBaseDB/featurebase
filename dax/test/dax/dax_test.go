@@ -224,7 +224,6 @@ func TestDAXIntegration(t *testing.T) {
 
 	t.Run("Poller", func(t *testing.T) {
 		cfg := test.DefaultConfig()
-		cfg.Computer.N = 2
 		opt := server.OptCommandConfig(cfg)
 		mc := test.MustRunManagedCommand(t, opt)
 
@@ -690,7 +689,6 @@ func TestDAXIntegration(t *testing.T) {
 
 	t.Run("DatabaseOptions", func(t *testing.T) {
 		cfg := test.DefaultConfig()
-		cfg.Computer.N = 4
 		opt := server.OptCommandConfig(cfg)
 		mc := test.MustRunManagedCommand(t, opt)
 		defer mc.Close()

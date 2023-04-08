@@ -5,7 +5,6 @@ import (
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
-	"github.com/featurebasedb/featurebase/v3/dax/controller/balancer"
 	"github.com/featurebasedb/featurebase/v3/dax/models"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
@@ -62,24 +61,8 @@ func (s *store) AddWorker(tx dax.Transaction, node *dax.Node) (*dax.DatabaseID, 
 	return (*dax.DatabaseID)(&workerSvc.DatabaseID.String), nil
 }
 
-// WorkerCount returns the number of workers with the given service
-// ID.
-func (s *store) WorkerCount(tx dax.Transaction, role dax.RoleType, svcID dax.WorkerServiceID) (int, error) {
-	dt, ok := tx.(*DaxTransaction)
-	if !ok {
-		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
-	}
-
-	cnt, err := dt.C.Where(fmt.Sprintf("service_id = ? AND role_%s = true", role), svcID).Count(&models.Worker{})
-	if err != nil {
-		return 0, errors.Wrapf(err, "counting workers for service '%s'", svcID)
-	}
-	return cnt, nil
-}
-
-// WorkerCount returns the number of workers with the given service
-// ID.
-func (s *store) WorkerCountDatabase(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID) (int, error) {
+// WorkerCount returns the number of workers associated with the given database.
+func (s *store) WorkerCount(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID) (int, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -158,7 +141,7 @@ func (s *store) WorkerJobs(tx dax.Transaction, role dax.RoleType, addr dax.Addre
 	return wi, nil
 }
 
-func (s *store) WorkersJobs(tx dax.Transaction, role dax.RoleType, svcID dax.WorkerServiceID) ([]dax.WorkerInfo, error) {
+func (s *store) WorkersJobs(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID) ([]dax.WorkerInfo, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
 		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
@@ -166,7 +149,7 @@ func (s *store) WorkersJobs(tx dax.Transaction, role dax.RoleType, svcID dax.Wor
 
 	results := []struct {
 		Address  dax.Address  `db:"address"`
-		WorkerID string       `db:"worker_id"`
+		WorkerID dax.WorkerID `db:"worker_id"`
 		JobName  nulls.String `db:"job_name"`
 	}{}
 
@@ -176,14 +159,15 @@ func (s *store) WorkersJobs(tx dax.Transaction, role dax.RoleType, svcID dax.Wor
                 jobs.name as job_name
             FROM
                 workers LEFT JOIN jobs on jobs.worker_id = workers.id
+                INNER JOIN worker_service ws ON ws.id = workers.service_id
             WHERE
                 jobs.role = ?
-                workers.service_id = ?
+                ws.database_id = ?
             ORDER BY
                 address ASC
                 job_name ASC`
 
-	err := dt.C.RawQuery(sql, role, svcID).All(&results)
+	err := dt.C.RawQuery(sql, role, dbid).All(&results)
 	if err != nil {
 		return nil, errors.Wrap(err, "querying")
 	}
@@ -390,7 +374,7 @@ func (s *store) DeleteJobsForTable(tx dax.Transaction, role dax.RoleType, qtid d
 		return nil, errors.Wrap(err, "querying for jobs")
 	}
 
-	idiffs := make(balancer.InternalDiffs)
+	idiffs := make(controller.InternalDiffs)
 	ids := make([]uuid.UUID, 0, len(results))
 	for _, job := range results {
 		idiffs.Removed(job.Address, job.Name)
@@ -402,4 +386,57 @@ func (s *store) DeleteJobsForTable(tx dax.Transaction, role dax.RoleType, qtid d
 	}
 
 	return idiffs, errors.Wrap(err, "deleting jobs")
+}
+
+func (s *store) Workers(tx dax.Transaction) ([]*dax.Node, error) {
+	dt, ok := tx.(*DaxTransaction)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
+	}
+
+	workers := []*models.Worker{}
+	dt.C.Eager().Order("address asc").All(&workers)
+
+	ret := make([]*dax.Node, len(workers))
+	for i, worker := range workers {
+		ret[i] = &dax.Node{
+			Address:   worker.Address,
+			RoleTypes: workerRoleTypes(worker),
+		}
+	}
+
+	return ret, nil
+}
+
+func (w *store) Worker(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
+	dt, ok := tx.(*DaxTransaction)
+	if !ok {
+		return nil, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
+	}
+
+	worker := &models.Worker{}
+	err := dt.C.Eager().Where("address = ?", addr).First(worker)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting worker: %s", addr)
+	}
+
+	return &dax.Node{
+		Address:   worker.Address,
+		RoleTypes: workerRoleTypes(worker),
+	}, nil
+}
+
+func workerRoleTypes(worker *models.Worker) []dax.RoleType {
+	roleTypes := make([]dax.RoleType, 0)
+	if worker.RoleCompute {
+		roleTypes = append(roleTypes, dax.RoleTypeCompute)
+	}
+	if worker.RoleTranslate {
+		roleTypes = append(roleTypes, dax.RoleTypeTranslate)
+	}
+	if worker.RoleQuery {
+		roleTypes = append(roleTypes, dax.RoleTypeQuery)
+	}
+
+	return roleTypes
 }

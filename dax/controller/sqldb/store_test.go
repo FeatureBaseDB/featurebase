@@ -106,12 +106,6 @@ func TestStore(t *testing.T) {
 		require.Nil(t, qdbidp)
 	})
 
-	t.Run("test WorkerCount", func(t *testing.T) {
-		cnt, err := s.WorkerCount(tx, dax.RoleTypeCompute, ws.ID)
-		require.NoError(t, err)
-		require.Equal(t, 1, cnt)
-	})
-
 	t.Run("list workers", func(t *testing.T) {
 		addrs, err := s.ListWorkers(tx, dax.RoleTypeCompute, ws.ID)
 		require.NoError(t, err)
@@ -126,5 +120,4 @@ func TestStore(t *testing.T) {
 		require.Equal(t, ws.ID, node.ServiceID)
 		require.Equal(t, expectedDBID, node.DatabaseID)
 	})
-
 }

@@ -36,11 +36,10 @@ type Store interface {
 	WorkerService(tx dax.Transaction, dbid dax.DatabaseID) (dax.WorkerService, error)
 
 	AddWorker(tx dax.Transaction, node *dax.Node) (*dax.DatabaseID, error)
-	WorkerCount(tx dax.Transaction, role dax.RoleType, svcID dax.WorkerServiceID) (int, error)
-	WorkerCountDatabase(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID) (int, error)
+	WorkerCount(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID) (int, error)
 	ListFreeJobs(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID) (dax.Jobs, error)
-	WorkersJobs(tx dax.Transaction, role dax.RoleType, svcID dax.WorkerServiceID) ([]dax.WorkerInfo, error)
-	AssignWorkerToJobs(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID, workerID string, jobs ...dax.Job) error
+	WorkersJobs(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID) ([]dax.WorkerInfo, error)
+	AssignWorkerToJobs(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID, workerID dax.WorkerID, jobs ...dax.Job) error
 	ListWorkers(tx dax.Transaction, role dax.RoleType, svcID dax.WorkerServiceID) (dax.Addresses, error)
 
 	AssignFreeServiceToDatabase(tx dax.Transaction, wspID dax.WorkerServiceProviderID, qdb *dax.QualifiedDatabase) (*dax.WorkerService, error)
@@ -51,4 +50,6 @@ type Store interface {
 	CreateFreeJobs(tx dax.Transaction, role dax.RoleType, dbid dax.DatabaseID, jobs ...dax.Job) error
 	DeleteJobsForTable(tx dax.Transaction, role dax.RoleType, qtid dax.QualifiedTableID) (InternalDiffs, error)
 	WorkerJobs(tx dax.Transaction, role dax.RoleType, addr dax.Address) (dax.WorkerInfo, error)
+	Workers(tx dax.Transaction) ([]*dax.Node, error)
+	Worker(tx dax.Transaction, addr dax.Address) (*dax.Node, error)
 }

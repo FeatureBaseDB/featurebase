@@ -4,11 +4,12 @@ package balancer
 import (
 	"log"
 	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/dax/controller"
-	"github.com/featurebasedb/featurebase/v3/dax/controller/schemar"
 	"github.com/featurebasedb/featurebase/v3/errors"
 	"github.com/featurebasedb/featurebase/v3/logger"
 )
@@ -25,31 +26,15 @@ var _ controller.Balancer = (*Balancer)(nil)
 // jobs. It does not take anything else (such as job size, worker capabilities,
 // etc) into consideration.
 type Balancer struct {
-	workerRegistry controller.WorkerRegistry
-
-	// freeJobs is the set of jobs which have yet to be assigned to a worker.
-	// This could be because there are no available workers, or because a worker
-	// has been removed and the jobs for which it was responsible have yet to be
-	// reassigned.
-	freeJobs FreeJobService
-
-	freeWorkers FreeWorkerService
-
-	schemar schemar.Schemar
-
 	store controller.Store
 
 	logger logger.Logger
 }
 
 // New returns a new instance of Balancer.
-func New(wr controller.WorkerRegistry, fjs FreeJobService, wjs WorkerJobService, fws FreeWorkerService, schemar schemar.Schemar, store controller.Store, logger logger.Logger) *Balancer {
+func New(store controller.Store, logger logger.Logger) *Balancer {
 	return &Balancer{
-		workerRegistry: wr,
-		freeJobs:       fjs,
-		freeWorkers:    fws,
-		schemar:        schemar,
-		store:          store,
+		store: store,
 
 		logger: logger,
 	}
@@ -68,7 +53,7 @@ func (b *Balancer) AddWorker(tx dax.Transaction, node *dax.Node) ([]dax.WorkerDi
 		return nil, errors.Wrapf(err, "creating node on node service: %s", node.Address)
 	}
 
-	diffs, err := b.balanceDatabase(tx, *qdbidp, node.ServiceID)
+	diffs, err := b.balanceDatabase(tx, *qdbidp)
 	if err != nil {
 		return nil, errors.Wrap(err, "balancing db")
 	}
@@ -93,7 +78,7 @@ func (b *Balancer) RemoveWorker(tx dax.Transaction, addr dax.Address) ([]dax.Wor
 
 	if worker.DatabaseID != nil {
 		// Balance the affected database.
-		if diff, err := b.balanceDatabase(tx, *worker.DatabaseID, worker.ServiceID); err != nil {
+		if diff, err := b.balanceDatabase(tx, *worker.DatabaseID); err != nil {
 			return nil, errors.Wrapf(err, "balancing database: %s", worker.DatabaseID)
 		} else {
 			diffs.Merge(diff)
@@ -141,12 +126,7 @@ func (b *Balancer) addJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.D
 		return diffs, nil
 	}
 
-	ws, err := b.store.WorkerService(tx, dbid)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting worker service")
-	}
-
-	if cnt, err := b.store.WorkerCount(tx, roleType, ws.ID); err != nil {
+	if cnt, err := b.store.WorkerCount(tx, roleType, dbid); err != nil {
 		return nil, errors.Wrap(err, "getting worker count")
 	} else if cnt == 0 {
 		if err := b.store.CreateFreeJobs(tx, roleType, dbid, jobs...); err != nil {
@@ -154,7 +134,7 @@ func (b *Balancer) addJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.D
 		}
 	}
 
-	diff, err := b.addDatabaseJobs(tx, roleType, dbid, ws.ID, jobs...)
+	diff, err := b.addDatabaseJobs(tx, roleType, dbid, jobs...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "adding database jobs: (%s) %s", roleType, dbid)
 	}
@@ -164,14 +144,14 @@ func (b *Balancer) addJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.D
 }
 
 // addDatabaseJobs adds the job for the provided database. TODO, bad doc
-func (b *Balancer) addDatabaseJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID, svcID dax.WorkerServiceID, jobs ...dax.Job) (controller.InternalDiffs, error) {
-	workerJobs, err := b.store.WorkersJobs(tx, roleType, svcID)
+func (b *Balancer) addDatabaseJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID, jobs ...dax.Job) (controller.InternalDiffs, error) {
+	workerJobs, err := b.store.WorkersJobs(tx, roleType, dbid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting workers jobs: %s", roleType)
 	}
 
 	jset := dax.NewSet[dax.Job]()
-	addrToID := make(map[dax.Address]string)
+	addrToID := make(map[dax.Address]dax.WorkerID)
 	for _, workerInfo := range workerJobs {
 		addrToID[workerInfo.Address] = workerInfo.ID
 		jset.Merge(dax.NewSet(workerInfo.Jobs...))
@@ -227,11 +207,7 @@ func (b *Balancer) addDatabaseJobs(tx dax.Transaction, roleType dax.RoleType, db
 
 func (b *Balancer) CurrentState(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerInfo, error) {
 	dbid := qdbid.DatabaseID
-	ws, err := b.store.WorkerService(tx, dbid)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting worker service")
-	}
-	return b.store.WorkersJobs(tx, roleType, ws.ID)
+	return b.store.WorkersJobs(tx, roleType, dbid)
 }
 
 func (b *Balancer) WorkerState(tx dax.Transaction, roleType dax.RoleType, addr dax.Address) (dax.WorkerInfo, error) {
@@ -246,25 +222,95 @@ func (b *Balancer) RemoveJobs(tx dax.Transaction, roleType dax.RoleType, qtid da
 	return diffs.Output(), nil
 }
 
-func (b *Balancer) BalanceDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerDiff, error) {
-	dbid := qdbid.DatabaseID
-	ws, err := b.store.WorkerService(tx, dbid)
+// TODO can probably simplify this with better SQL
+func (b *Balancer) WorkersForJobs(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID, jobs ...dax.Job) ([]dax.WorkerInfo, error) {
+	out := make(map[dax.Address]dax.Set[dax.Job])
+
+	workerJobs, err := b.store.WorkersJobs(tx, roleType, qdbid.DatabaseID)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting worker service")
+		return nil, errors.Wrapf(err, "getting worker jobs: (%s) %s", roleType, qdbid)
+	}
+	for _, workerInfo := range workerJobs {
+		jset := dax.NewSet(workerInfo.Jobs...)
+
+		matches := dax.NewSet[dax.Job]()
+		for _, job := range jobs {
+			if jset.Contains(job) {
+				matches.Add(job)
+			}
+		}
+
+		if len(matches) > 0 {
+			out[workerInfo.Address] = matches
+		}
 	}
 
-	diffs, err := b.balanceDatabase(tx, qdbid.DatabaseID, ws.ID)
+	workers := make([]dax.WorkerInfo, 0, len(out))
+
+	for addr, jset := range out {
+		workers = append(workers, dax.WorkerInfo{
+			Address: addr,
+			Jobs:    jset.Sorted(),
+		})
+	}
+
+	sort.Sort(dax.WorkerInfos(workers))
+
+	return workers, nil
+}
+
+// TODO can probably simplify this with better SQL
+func (b *Balancer) WorkersForTable(tx dax.Transaction, roleType dax.RoleType, qtid dax.QualifiedTableID) ([]dax.WorkerInfo, error) {
+	out := make(map[dax.Address]dax.Set[dax.Job])
+
+	dbid := qtid.QualifiedDatabaseID.DatabaseID
+
+	prefix := string(qtid.Key())
+
+	workerJobs, err := b.store.WorkersJobs(tx, roleType, dbid)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting worker jobs: (%s) %s", roleType, dbid)
+	}
+	for _, workerInfo := range workerJobs {
+
+		matches := dax.NewSet[dax.Job]()
+		for _, job := range workerInfo.Jobs {
+			if strings.HasPrefix(string(job), prefix) {
+				matches.Add(job)
+			}
+		}
+		if len(matches) > 0 {
+			out[workerInfo.Address] = matches
+		}
+	}
+
+	workers := make([]dax.WorkerInfo, 0, len(out))
+
+	for addr, jset := range out {
+		workers = append(workers, dax.WorkerInfo{
+			Address: addr,
+			Jobs:    jset.Sorted(),
+		})
+	}
+
+	sort.Sort(dax.WorkerInfos(workers))
+
+	return workers, nil
+}
+
+func (b *Balancer) BalanceDatabase(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) ([]dax.WorkerDiff, error) {
+	diffs, err := b.balanceDatabase(tx, qdbid.DatabaseID)
 	if err != nil {
 		return nil, errors.Wrap(err, "balancing")
 	}
 	return diffs.Output(), nil
 }
 
-func (b *Balancer) balanceDatabase(tx dax.Transaction, dbid dax.DatabaseID, svcID dax.WorkerServiceID) (controller.InternalDiffs, error) {
+func (b *Balancer) balanceDatabase(tx dax.Transaction, dbid dax.DatabaseID) (controller.InternalDiffs, error) {
 	diffs := controller.NewInternalDiffs()
 
 	for _, role := range dax.AllRoleTypes {
-		diff, err := b.balanceDatabaseForRole(tx, role, dbid, svcID)
+		diff, err := b.balanceDatabaseForRole(tx, role, dbid)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting worker count: (%s) %s", role, dbid)
 		}
@@ -274,26 +320,26 @@ func (b *Balancer) balanceDatabase(tx dax.Transaction, dbid dax.DatabaseID, svcI
 	return diffs, nil
 }
 
-func (b *Balancer) balanceDatabaseForRole(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID, svcID dax.WorkerServiceID) (controller.InternalDiffs, error) {
+func (b *Balancer) balanceDatabaseForRole(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID) (controller.InternalDiffs, error) {
 	b.logger.Debugf("balancing database %s for role: %s\n", dbid, roleType)
 	diffs := controller.NewInternalDiffs()
 
 	// If there are no workers, we can't properly balance.
-	if cnt, err := b.store.WorkerCount(tx, roleType, svcID); err != nil {
+	if cnt, err := b.store.WorkerCount(tx, roleType, dbid); err != nil {
 		return nil, errors.Wrapf(err, "getting worker count: (%s) %s", roleType, dbid)
 	} else if cnt == 0 {
 		return controller.InternalDiffs{}, errors.Errorf("unexpected? no workers for database %v (TODO: this used to silently return nil)", dbid)
 	}
 
 	// Process the freeJobs.
-	if diff, err := b.processFreeJobs(tx, roleType, dbid, svcID); err != nil {
+	if diff, err := b.processFreeJobs(tx, roleType, dbid); err != nil {
 		return nil, errors.Wrapf(err, "processing free jobs: (%s) %s", roleType, dbid)
 	} else {
 		diffs.Merge(diff)
 	}
 
 	// Balance the jobs among workers.
-	diff, err := b.balanceDatabaseJobs(tx, roleType, dbid, svcID, diffs)
+	diff, err := b.balanceDatabaseJobs(tx, roleType, dbid, diffs)
 	if err != nil {
 		return nil, errors.Wrap(err, "balancing jobs")
 	}
@@ -308,8 +354,8 @@ func (b *Balancer) balanceDatabaseForRole(tx dax.Transaction, roleType dax.RoleT
 // the internalDiffs.merge() method, but we would need to modify that method to
 // be smarter about the order in which it applies the add/remove operations.
 // Until that's in place, we'll pass in a value here.
-func (b *Balancer) balanceDatabaseJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID, svcID dax.WorkerServiceID, diffs controller.InternalDiffs) (controller.InternalDiffs, error) {
-	workerInfos, err := b.store.WorkersJobs(tx, roleType, svcID)
+func (b *Balancer) balanceDatabaseJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID, diffs controller.InternalDiffs) (controller.InternalDiffs, error) {
+	workerInfos, err := b.store.WorkersJobs(tx, roleType, dbid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting current state: (%s) %s", roleType, dbid)
 	}
@@ -327,7 +373,7 @@ func (b *Balancer) balanceDatabaseJobs(tx dax.Transaction, roleType dax.RoleType
 	numWorkersAboveMin := numJobs % numWorkers
 
 	removedJobs := make(dax.Jobs, 0)
-	addedJobs := make(map[string]dax.Jobs)
+	addedJobs := make(map[dax.WorkerID]dax.Jobs)
 
 	// remove jobs loop
 	//
@@ -392,20 +438,27 @@ func (b *Balancer) balanceDatabaseJobs(tx dax.Transaction, roleType dax.RoleType
 }
 
 // processFreeJobs assigns all jobs in the free list to a worker.
-func (b *Balancer) processFreeJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID, svcID dax.WorkerServiceID) (controller.InternalDiffs, error) {
+func (b *Balancer) processFreeJobs(tx dax.Transaction, roleType dax.RoleType, dbid dax.DatabaseID) (controller.InternalDiffs, error) {
 	diffs := controller.NewInternalDiffs()
 	jobs, err := b.store.ListFreeJobs(tx, roleType, dbid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "listing free jobs: %s", roleType)
 	}
 
-	if aj, err := b.addDatabaseJobs(tx, roleType, dbid, svcID, jobs...); err != nil {
+	if aj, err := b.addDatabaseJobs(tx, roleType, dbid, jobs...); err != nil {
 		return nil, errors.Wrapf(err, "adding jobs: %s", jobs)
 	} else {
 		diffs.Merge(aj)
 	}
 
 	return diffs, nil
+}
+
+func (b *Balancer) ReadNode(tx dax.Transaction, addr dax.Address) (*dax.Node, error) {
+	return b.store.Worker(tx, addr)
+}
+func (b *Balancer) Nodes(tx dax.Transaction) ([]*dax.Node, error) {
+	return b.store.Workers(tx)
 }
 
 func (b *Balancer) CreateWorkerServiceProvider(tx dax.Transaction, sp dax.WorkerServiceProvider) error {
