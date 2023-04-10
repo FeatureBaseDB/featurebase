@@ -220,14 +220,17 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
 		}
 
-		ok, baseType := typeIsSet(call.Args[0].DataType())
+		// first arg should be assignment compatible with any set type
+		ok, baseType := typeIsAssignmentCompatibleWithSet(call.Args[0].DataType())
 		if !ok {
 			return nil, sql3.NewErrSetExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 
-		if !typesAreComparable(baseType, call.Args[1].DataType()) {
-			return nil, sql3.NewErrTypesAreNotEquatable(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[0].DataType().TypeDescription(), call.Args[1].DataType().TypeDescription())
+		// second argument should be assignment compatible with the base type
+		if !typesAreAssignmentCompatible(baseType, call.Args[1].DataType()) {
+			return nil, sql3.NewErrTypeAssignmentIncompatible(call.Args[1].Pos().Line, call.Args[1].Pos().Column, call.Args[1].DataType().TypeDescription(), baseType.TypeDescription())
 		}
+
 		call.ResultDataType = parser.NewDataTypeBool()
 
 	case "SETCONTAINSALL":
@@ -236,14 +239,14 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 			return nil, sql3.NewErrCallParameterCountMismatch(call.Rparen.Line, call.Rparen.Column, call.Name.Name, 2, len(call.Args))
 		}
 
-		// first arg should be set
-		ok, baseType1 := typeIsSet(call.Args[0].DataType())
+		// first arg should be assignment compatible with any set type
+		ok, baseType1 := typeIsAssignmentCompatibleWithSet(call.Args[0].DataType())
 		if !ok {
 			return nil, sql3.NewErrSetExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 
-		// second arg should be set
-		ok, baseType2 := typeIsSet(call.Args[1].DataType())
+		// second arg should be assignment compatible with any set type
+		ok, baseType2 := typeIsAssignmentCompatibleWithSet(call.Args[1].DataType())
 		if !ok {
 			return nil, sql3.NewErrSetExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
@@ -261,13 +264,13 @@ func (p *ExecutionPlanner) analyzeCallExpression(ctx context.Context, call *pars
 		}
 
 		// first arg should be set
-		ok, baseType1 := typeIsSet(call.Args[0].DataType())
+		ok, baseType1 := typeIsAssignmentCompatibleWithSet(call.Args[0].DataType())
 		if !ok {
 			return nil, sql3.NewErrSetExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}
 
 		// second arg should be set
-		ok, baseType2 := typeIsSet(call.Args[1].DataType())
+		ok, baseType2 := typeIsAssignmentCompatibleWithSet(call.Args[1].DataType())
 		if !ok {
 			return nil, sql3.NewErrSetExpressionExpected(call.Args[0].Pos().Line, call.Args[0].Pos().Column)
 		}

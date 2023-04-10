@@ -2455,6 +2455,25 @@ func (n *exprArrayLiteralPlanExpression) Evaluate(currentRow []interface{}) (int
 	}
 
 	switch typ := arrayType.SubscriptType.(type) {
+	case *parser.DataTypeInt:
+		result := []int64{}
+		for _, e := range n.members {
+			er, err := e.Evaluate(currentRow)
+			if err != nil {
+				return nil, err
+			}
+			coercedEr, err := coerceValue(e.Type(), &parser.DataTypeInt{}, er, parser.Pos{Line: 0, Column: 0})
+			if err != nil {
+				return nil, err
+			}
+			eri, ok := coercedEr.(int64)
+			if !ok {
+				return nil, sql3.NewErrInternalf("unable to convert element result")
+			}
+			result = append(result, eri)
+		}
+		return result, nil
+
 	case *parser.DataTypeID:
 		result := []int64{}
 		for _, e := range n.members {

@@ -296,7 +296,7 @@ var setFunctionTests = TableTest{
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, 1)",
 			),
-			ExpErr: "types 'stringset' and 'int' are not equatable",
+			ExpErr: "an expression of type 'int' cannot be assigned to type 'string'",
 		},
 		{
 			// SetContainsWrongTypeInt
@@ -304,7 +304,7 @@ var setFunctionTests = TableTest{
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(ievent, 'foo')",
 			),
-			ExpErr: "types 'idset' and 'string' are not equatable",
+			ExpErr: "an expression of type 'string' cannot be assigned to type 'id'",
 		},
 		{
 			// SetContainsWrongTypeSet
@@ -312,7 +312,7 @@ var setFunctionTests = TableTest{
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, ['foo'])",
 			),
-			ExpErr: "types 'stringset' and 'stringset' are not equatable",
+			ExpErr: "an expression of type 'array(string)' cannot be assigned to type 'string'",
 		},
 		{
 			// SetContainsWrongTypeSet
@@ -328,7 +328,14 @@ var setFunctionTests = TableTest{
 			SQLs: sqls(
 				"select * from selectwithset where setcontains(event, null)",
 			),
-			ExpErr: "types 'stringset' and 'void' are not equatable",
+			ExpHdrs: hdrs(
+				hdr("_id", fldTypeID),
+				hdr("a", fldTypeInt),
+				hdr("b", fldTypeInt),
+				hdr("event", fldTypeStringSet),
+				hdr("ievent", fldTypeIDSet),
+			),
+			ExpRows: rows(),
 		},
 		{
 			// SetContainsWrongTypeSet
@@ -376,13 +383,13 @@ var setParameterTests = TableTest{
 			SQLs: sqls(
 				"select setcontains(['POST', 'GET'], 1)",
 			),
-			ExpErr: "types 'stringset' and 'int' are not equatable",
+			ExpErr: "an expression of type 'int' cannot be assigned to type 'string'",
 		},
 		{
 			SQLs: sqls(
 				"select setcontains([1, 2], '1')",
 			),
-			ExpErr: "types 'idset' and 'string' are not equatable",
+			ExpErr: "an expression of type 'string' cannot be assigned to type 'int'",
 		},
 
 		{
@@ -404,14 +411,14 @@ var setParameterTests = TableTest{
 				"select setcontainsall(['POST', 'GET'], [1, 2])",
 				"select setcontainsany(['POST', 'GET'], [1, 2])",
 			),
-			ExpErr: "types 'string' and 'id' are not equatable",
+			ExpErr: "types 'string' and 'int' are not equatable",
 		},
 		{
 			SQLs: sqls(
 				"select setcontainsall([1, 2], ['1', '2'])",
 				"select setcontainsany([1, 2], ['1', '2'])",
 			),
-			ExpErr: "types 'id' and 'string' are not equatable",
+			ExpErr: "types 'int' and 'string' are not equatable",
 		},
 	},
 }

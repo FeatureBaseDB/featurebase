@@ -234,10 +234,10 @@ func NewErrCacheKeyNotFound(key uint64) error {
 	)
 }
 
-func NewErrTypeAssignmentIncompatible(line, col int, type1, type2 string) error {
+func NewErrTypeAssignmentIncompatible(line, col int, sourceType, targetType string) error {
 	return errors.New(
 		ErrTypeAssignmentIncompatible,
-		fmt.Sprintf("[%d:%d] an expression of type '%s' cannot be assigned to type '%s'", line, col, type1, type2),
+		fmt.Sprintf("[%d:%d] an expression of type '%s' cannot be assigned to type '%s'", line, col, sourceType, targetType),
 	)
 }
 

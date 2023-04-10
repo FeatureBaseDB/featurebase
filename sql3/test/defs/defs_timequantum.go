@@ -24,13 +24,13 @@ var timeQuantumTest = TableTest{
 			SQLs: sqls(
 				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {['1']}, {[1]})",
 			),
-			ExpErr: "an expression of type 'tuple(stringset)' cannot be assigned to type 'stringsetq'",
+			ExpErr: "an expression of type 'tuple(array(string))' cannot be assigned to type 'stringsetq'",
 		},
 		{
 			SQLs: sqls(
 				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, ['1'], {[1]})",
 			),
-			ExpErr: "an expression of type 'tuple(idset)' cannot be assigned to type 'idsetq'",
+			ExpErr: "an expression of type 'tuple(array(int))' cannot be assigned to type 'idsetq'",
 		},
 		{
 			SQLs: sqls(
@@ -48,13 +48,13 @@ var timeQuantumTest = TableTest{
 			SQLs: sqls(
 				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, {'2022-01-01T00:00:00Z', [1]}, {[1]})",
 			),
-			ExpErr: "an expression of type 'tuple(string, idset)' cannot be assigned to type 'stringsetq'",
+			ExpErr: "an expression of type 'tuple(string, array(int))' cannot be assigned to type 'stringsetq'",
 		},
 		{
 			SQLs: sqls(
 				"insert into time_quantum_insert (_id, i1, ss1, ids1) values (1, 1, ['1'], {'2022-01-01T00:00:00Z', ['1']})",
 			),
-			ExpErr: "an expression of type 'tuple(string, stringset)' cannot be assigned to type 'idsetq'",
+			ExpErr: "an expression of type 'tuple(string, array(string))' cannot be assigned to type 'idsetq'",
 		},
 		{
 			SQLs: sqls(

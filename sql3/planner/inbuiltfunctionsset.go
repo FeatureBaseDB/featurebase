@@ -25,6 +25,35 @@ func (n *callPlanExpression) EvaluateSetContains(currentRow []interface{}) (inte
 
 	if targetSetEval != nil {
 		switch typ := n.args[0].Type().(type) {
+		case *parser.DataTypeArray:
+			switch typ.SubscriptType.(type) {
+			case *parser.DataTypeString:
+				targetSet, ok := targetSetEval.([]string)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				testValue, ok := testValueEval.(string)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				return stringSetContains(targetSet, testValue), nil
+
+			case *parser.DataTypeID, *parser.DataTypeInt:
+				targetSet, ok := targetSetEval.([]int64)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				testValue, ok := testValueEval.(int64)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				return intSetContains(targetSet, testValue), nil
+			}
+
 		case *parser.DataTypeStringSet, *parser.DataTypeStringSetQuantum:
 			targetSet, ok := targetSetEval.([]string)
 			if !ok {
@@ -76,6 +105,35 @@ func (n *callPlanExpression) EvaluateSetContainsAny(currentRow []interface{}) (i
 
 	if targetSetEval != nil {
 		switch typ := n.args[0].Type().(type) {
+		case *parser.DataTypeArray:
+			switch typ.SubscriptType.(type) {
+			case *parser.DataTypeString:
+				targetSet, ok := targetSetEval.([]string)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				testSet, ok := testSetEval.([]string)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				return stringSetContainsAny(targetSet, testSet), nil
+
+			case *parser.DataTypeID, *parser.DataTypeInt:
+				targetSet, ok := targetSetEval.([]int64)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				testSet, ok := testSetEval.([]int64)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				return intSetContainsAny(targetSet, testSet), nil
+			}
+
 		case *parser.DataTypeStringSet:
 			targetSet, ok := targetSetEval.([]string)
 			if !ok {
@@ -128,6 +186,35 @@ func (n *callPlanExpression) EvaluateSetContainsAll(currentRow []interface{}) (i
 
 	if targetSetEval != nil {
 		switch typ := n.args[0].Type().(type) {
+		case *parser.DataTypeArray:
+			switch typ.SubscriptType.(type) {
+			case *parser.DataTypeString:
+				targetSet, ok := targetSetEval.([]string)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				testSet, ok := testSetEval.([]string)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				return stringSetContainsAll(targetSet, testSet), nil
+
+			case *parser.DataTypeID, *parser.DataTypeInt:
+				targetSet, ok := targetSetEval.([]int64)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				testSet, ok := testSetEval.([]int64)
+				if !ok {
+					return nil, sql3.NewErrInternalf("unable to convert value")
+				}
+
+				return intSetContainsAll(targetSet, testSet), nil
+			}
+
 		case *parser.DataTypeStringSet:
 			targetSet, ok := targetSetEval.([]string)
 			if !ok {

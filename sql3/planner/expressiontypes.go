@@ -290,65 +290,105 @@ func typesAreAssignmentCompatible(targetType parser.ExprDataType, sourceType par
 			return false
 		}
 	case *parser.DataTypeStringSet:
-		switch sourceType.(type) {
+		switch source := sourceType.(type) {
 		case *parser.DataTypeStringSet:
 			return true
+		case *parser.DataTypeArray:
+			switch source.SubscriptType.(type) {
+			case *parser.DataTypeString:
+				return true
+			default:
+				return false
+			}
 		default:
 			return false
 		}
+
 	case *parser.DataTypeStringSetQuantum:
 		switch source := sourceType.(type) {
 		case *parser.DataTypeStringSetQuantum:
 			return true
 		case *parser.DataTypeStringSet:
 			return true
+		case *parser.DataTypeArray:
+			switch source.SubscriptType.(type) {
+			case *parser.DataTypeString:
+				return true
+			default:
+				return false
+			}
 		case *parser.DataTypeTuple:
 			// if we are assigning to a time quantum, a tuple is allowed, but members
 			// have to be a timestamp (or coercable to a timestamp) and and stringset
+			//  (or coercable to a string set)
 			if len(source.Members) != 2 {
 				return false
 			}
 			if !typesAreAssignmentCompatible(parser.NewDataTypeTimestamp(), source.Members[0]) {
 				return false
 			}
-			_, ok = source.Members[1].(*parser.DataTypeStringSet)
+			ok, baseType := typeIsAssignmentCompatibleWithSet(source.Members[1])
 			if !ok {
+				return false
+			}
+			if !typesAreAssignmentCompatible(parser.NewDataTypeString(), baseType) {
 				return false
 			}
 			return true
 		default:
 			return false
 		}
+
 	case *parser.DataTypeIDSet:
-		switch sourceType.(type) {
+		switch st := sourceType.(type) {
 		case *parser.DataTypeIDSet:
 			return true
+		case *parser.DataTypeArray:
+			switch st.SubscriptType.(type) {
+			case *parser.DataTypeInt, *parser.DataTypeID:
+				return true
+			default:
+				return false
+			}
 		default:
 			return false
 		}
+
 	case *parser.DataTypeIDSetQuantum:
 		switch source := sourceType.(type) {
 		case *parser.DataTypeIDSetQuantum:
 			return true
 		case *parser.DataTypeIDSet:
 			return true
+		case *parser.DataTypeArray:
+			switch source.SubscriptType.(type) {
+			case *parser.DataTypeInt, *parser.DataTypeID:
+				return true
+			default:
+				return false
+			}
 		case *parser.DataTypeTuple:
 			// if we are assigning to a time quantum, a tuple is allowed, but members
-			// have to be a timestamp (or coercable to a timestamp) and and idset
+			// have to be a timestamp (or coercable to a timestamp) and and idset (or coercable to)
 			if len(source.Members) != 2 {
 				return false
 			}
 			if !typesAreAssignmentCompatible(parser.NewDataTypeTimestamp(), source.Members[0]) {
 				return false
 			}
-			_, ok = source.Members[1].(*parser.DataTypeIDSet)
+			ok, baseType := typeIsAssignmentCompatibleWithSet(source.Members[1])
 			if !ok {
+				return false
+			}
+			// make sure the base type matches
+			if !typesAreAssignmentCompatible(parser.NewDataTypeID(), baseType) {
 				return false
 			}
 			return true
 		default:
 			return false
 		}
+
 	case *parser.DataTypeDecimal:
 		switch rhs := sourceType.(type) {
 		case *parser.DataTypeDecimal:
@@ -480,9 +520,9 @@ func typeIsRange(testType parser.ExprDataType) bool {
 	}
 }
 
-// returns true if the type is a set type
-func typeIsSet(testType parser.ExprDataType) (bool, parser.ExprDataType) {
-	switch testType.(type) {
+// returns true if the type is assignment compatible with a set, and the subscript type
+func typeIsAssignmentCompatibleWithSet(testType parser.ExprDataType) (bool, parser.ExprDataType) {
+	switch tt := testType.(type) {
 	case *parser.DataTypeIDSet:
 		return true, parser.NewDataTypeID()
 	case *parser.DataTypeStringSet:
@@ -491,6 +531,13 @@ func typeIsSet(testType parser.ExprDataType) (bool, parser.ExprDataType) {
 		return true, parser.NewDataTypeID()
 	case *parser.DataTypeStringSetQuantum:
 		return true, parser.NewDataTypeString()
+	case *parser.DataTypeArray:
+		switch bt := tt.SubscriptType.(type) {
+		case *parser.DataTypeID, *parser.DataTypeInt, *parser.DataTypeString:
+			return true, bt
+		default:
+			return false, nil
+		}
 	default:
 		return false, nil
 	}
@@ -635,10 +682,14 @@ func typesAreComparable(testTypeL parser.ExprDataType, testTypeR parser.ExprData
 		}
 
 	case *parser.DataTypeIDSet:
-		switch testTypeR.(type) {
+		switch rhs := testTypeR.(type) {
 		case *parser.DataTypeIDSet:
 			return true
-
+		case *parser.DataTypeArray:
+			switch rhs.SubscriptType.(type) {
+			case *parser.DataTypeID, *parser.DataTypeInt:
+				return true
+			}
 		}
 
 	case *parser.DataTypeString:
@@ -649,10 +700,14 @@ func typesAreComparable(testTypeL parser.ExprDataType, testTypeR parser.ExprData
 		}
 
 	case *parser.DataTypeStringSet:
-		switch testTypeR.(type) {
+		switch rhs := testTypeR.(type) {
 		case *parser.DataTypeStringSet:
 			return true
-
+		case *parser.DataTypeArray:
+			switch rhs.SubscriptType.(type) {
+			case *parser.DataTypeString:
+				return true
+			}
 		}
 
 	}

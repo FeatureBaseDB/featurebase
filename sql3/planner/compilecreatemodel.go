@@ -165,7 +165,7 @@ func (p *ExecutionPlanner) analyzeModelOptionExpr(ctx context.Context, optName s
 		if !e.IsLiteral() {
 			return nil, sql3.NewErrInternalf("string array literal expected")
 		}
-		ok, baseType := typeIsSet(e.DataType())
+		ok, baseType := typeIsAssignmentCompatibleWithSet(e.DataType())
 		if !ok {
 			return nil, sql3.NewErrInternalf("array expression expected")
 		}

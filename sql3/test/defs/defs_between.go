@@ -90,7 +90,7 @@ var betweenTests = TableTest{
 			SQLs: sqls(
 				"select ids1 between [100, 102] and [456, 789] from between_all_types",
 			),
-			ExpErr: "type 'idset' cannot be used as a range subscript",
+			ExpErr: "type 'array(int)' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
@@ -102,7 +102,7 @@ var betweenTests = TableTest{
 			SQLs: sqls(
 				"select ss1 between ['a', 'b'] and ['c', 'd'] from between_all_types",
 			),
-			ExpErr: "type 'stringset' cannot be used as a range subscript",
+			ExpErr: "type 'array(string)' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
@@ -209,7 +209,7 @@ var notBetweenTests = TableTest{
 			SQLs: sqls(
 				"select ids1 not between [100, 102] and [456, 789] from not_between_all_types",
 			),
-			ExpErr: "type 'idset' cannot be used as a range subscript",
+			ExpErr: "type 'array(int)' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
@@ -221,7 +221,7 @@ var notBetweenTests = TableTest{
 			SQLs: sqls(
 				"select ss1 not between ['a', 'b'] and ['c', 'd'] from not_between_all_types",
 			),
-			ExpErr: "type 'stringset' cannot be used as a range subscript",
+			ExpErr: "type 'array(string)' cannot be used as a range subscript",
 		},
 		{
 			SQLs: sqls(
