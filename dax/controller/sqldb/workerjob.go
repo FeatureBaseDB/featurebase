@@ -72,7 +72,7 @@ func jobsForWorker(dt *DaxTransaction, worker *models.Worker, roleType dax.RoleT
 func (w *workerJobService) WorkerCount(tx dax.Transaction, roleType dax.RoleType, qdbid dax.QualifiedDatabaseID) (int, error) {
 	dt, ok := tx.(*DaxTransaction)
 	if !ok {
-		return -1, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
+		return 0, dax.NewErrInvalidTransaction("*sqldb.DaxTransaction")
 	}
 
 	worker := &models.Worker{}

@@ -789,7 +789,7 @@ func (c *Controller) WorkerCount(ctx context.Context, qdbid dax.QualifiedDatabas
 
 	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
-		return -1, errors.Wrap(err, "beginning tx")
+		return 0, errors.Wrap(err, "beginning tx")
 	}
 	defer tx.Rollback()
 

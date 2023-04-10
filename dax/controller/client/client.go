@@ -708,18 +708,18 @@ func (c *Client) GetDatabaseWorkerCount(ctx context.Context, orgID string, datab
 
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
-		return -1, errors.Wrap(err, "getting database-worker-count")
+		return 0, errors.Wrap(err, "getting database-worker-count")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return -1, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return 0, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
 	}
 
 	var workers int
 	if err := json.NewDecoder(resp.Body).Decode(&workers); err != nil {
-		return -1, errors.Wrap(err, "reading response body")
+		return 0, errors.Wrap(err, "reading response body")
 	}
 
 	return workers, nil
