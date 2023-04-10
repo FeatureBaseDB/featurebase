@@ -23,10 +23,9 @@ func NewMain() (*Main, error) {
 		ConfluentCommand: idk.ConfluentCommand{
 			KafkaBootstrapServers: []string{"localhost:9092"},
 		},
-		Group:                "defaultgroup",
-		Topics:               []string{"defaulttopic"},
-		Timeout:              time.Second,
-		ConsumerCloseTimeout: 30,
+		Group:   "defaultgroup",
+		Topics:  []string{"defaulttopic"},
+		Timeout: time.Second,
 	}
 
 	m.SchemaRegistryURL = "http://" + defaultRegistryHost

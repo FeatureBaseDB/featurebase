@@ -1,0 +1,14 @@
+{
+    "namespace": "org.test",
+    "type": "record",
+    "name": "id_keys",
+    "doc": "All supported avro types and property variations",
+    "fields": [
+        {"name": "pk", "type": "int", "mutex": true, "fieldType": "id"},
+        {"name": "string_string", "type": ["string", "null"], "mutex": true },
+        {"name": "stringset_stringarray", "type": [{"type": "array", "items": "string"}, "null"]},
+        {"name": "idset_longarray", "type": [{"type": "array", "items": "long"}, "null"], "fieldType": "id"},
+        {"name": "int_int", "type": ["int", "null"], "fieldType": "int"},
+        {"name": "bool_bool", "type": ["boolean", "null"]}
+    ]
+}

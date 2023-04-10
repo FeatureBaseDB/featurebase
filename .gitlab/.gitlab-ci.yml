@@ -192,13 +192,30 @@ build fbsql amd64:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
-    - GOOS="linux" GOARCH="amd64" make docker-build-fbsql BUILD_CGO=1
+    - GOOS="linux" GOARCH="amd64" make docker-build-fbsql
     - GOOS="darwin" GOARCH="amd64" make docker-build-fbsql
   artifacts:
     paths:
       - ./build/fbsql_*
 
-build fbsql arm64:
+build fbsql arm64 darwin:
+  stage: test
+  variables:
+    BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
+  tags:
+    - shell
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+    - date
+    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
+    
+  artifacts:
+    paths:
+      - ./build/fbsql_*
+
+build fbsql arm64 linux:
   stage: test
   variables:
     BUILD_NAME: build_${CI_COMMIT_SHA}_${CI_CONCURRENT_ID}
@@ -209,8 +226,8 @@ build fbsql arm64:
   script:
     - export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
     - date
-    - GOOS="linux" GOARCH="arm64" make docker-build-fbsql BUILD_CGO=1
-    - GOOS="darwin" GOARCH="arm64" make docker-build-fbsql
+    - GOOS="linux" GOARCH="arm64" make docker-build-fbsql
+
   artifacts:
     paths:
       - ./build/fbsql_*
@@ -272,6 +289,7 @@ run go tests race:
     - echo "Running featurebase race tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
     - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - export SKIP_INTEGRATION_TEST=true
     - mkdir -p $TMPDIR
     - go test -race -v -timeout=10m ${PKG_LIST//,/ }
   after_script:
@@ -302,6 +320,7 @@ run go tests:
     - echo "Running featurebase unit tests..."
     - PKG_LIST=$(go list ./... | grep -Ev 'internal/clustertests|simulacraData|batch|idk|v3/dax/test/dax' | paste -s -d, -)
     - export TMPDIR=/mnt/ramdisk/test-$CI_JOB_ID
+    - export SKIP_INTEGRATION_TEST=true
     - mkdir -p $TMPDIR
     - go test -tags=shardwidth22 -timeout=10m -coverprofile=coverage.out -covermode=atomic -coverpkg=${PKG_LIST} ${PKG_LIST//,/ }
   after_script:
@@ -341,6 +360,37 @@ run go tests dax/test/dax:
   artifacts:
     paths:
       - coverage-dax-integration.out
+
+# fbsql test
+run go tests cli kafka integration:
+  stage: integration
+  image: golang:$GOVERSION
+  tags:
+  - shell
+  - aws
+  variables:
+    KAFKA_RUNNER_TEST_FEATUREBASE_HOST: pilosa:10101
+    KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST: pilosa:20101
+    KAFKA_RUNNER_TEST_KAFKA_HOST: kafka:9092
+    KAFKA_RUNNER_TEST_REGISTRY_HOST: schema-registry:8081
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - echo "running fbsql integration tests"
+    - cd ./idk/
+    - make test-cli
+  after_script:
+    - cd ./idk/
+    - make save-pilosa-logs
+    - make shutdown
+  artifacts:
+    paths:
+      - ./idk/testdata/*_coverage.out
+  needs:
+    - job: build amd container fb
+    - job: build fbsql amd64
+    - job: build fbsql arm64 linux
+    - job: build fbsql arm64 darwin
 
 # idk tests
 run go tests idk race:
@@ -471,16 +521,23 @@ upload to sonarcloud:
 package for linux amd64:
   stage: build
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
     GOOS: "linux"
     GOARCH: "amd64"
   script:
+    - export VERSION=$(git describe --tags 2>/dev/null || echo unknown)
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
-    - make package
+    - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
+    - nfpm version # smoke
+    - mv "featurebase_${GOOS}_${GOARCH}" featurebase
+    - mv "./build/fbsql_${GOOS}_${GOARCH}" fbsql
+    - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
+    - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
+  needs:
+    - build featurebase
+    - build fbsql amd64
   artifacts:
     paths:
       - "*.deb"
@@ -509,16 +566,23 @@ trigger_m-cloud-images:
 package for linux arm64:
   stage: build
   image: golang:$GOVERSION
-  extends: .go-cache
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
   variables:
     GOOS: "linux"
     GOARCH: "arm64"
   script:
+    - export VERSION=$(git describe --tags 2>/dev/null || echo unknown)
     - echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | tee /etc/apt/sources.list.d/goreleaser.list
-    - apt update && apt install nfpm=2.11.3
-    - make package
+    - apt-get update -y && apt-get install -y -qq nfpm=2.11.3
+    - nfpm version # smoke
+    - mv "featurebase_${GOOS}_${GOARCH}" featurebase
+    - mv "./build/fbsql_${GOOS}_${GOARCH}" fbsql
+    - nfpm package --packager deb --target "featurebase.${VERSION}.${GOARCH}.deb"
+    - nfpm package --packager rpm --target "featurebase.${VERSION}.${GOARCH}.rpm"
+  needs:
+    - build featurebase
+    - build fbsql arm64 linux
   artifacts:
     paths:
       - "*.deb"
@@ -707,7 +771,8 @@ s3 dump:
   needs:
     - job: build featurebase
     - job: build fbsql amd64
-    - job: build fbsql arm64
+    - job: build fbsql arm64 linux
+    - job: build fbsql arm64 darwin
 
 s3 dump tag:
   stage: post build

@@ -175,10 +175,13 @@ func buildBulkInsert(tbl *dax.Table, fields []*dax.Field, ids []interface{}, row
 	sb.WriteString(strings.Join(flds, ","))
 
 	// MAP
+
+	// map values in the MAP clause
 	keyType := dax.BaseTypeID
 	if tbl.StringKeys() {
 		keyType = dax.BaseTypeString
 	}
+
 	sb.WriteString(`) MAP ('$._id' `)
 	sb.WriteString(keyType)
 	sb.WriteString(`,`)
@@ -191,9 +194,16 @@ func buildBulkInsert(tbl *dax.Table, fields []*dax.Field, ids []interface{}, row
 	// bulk insert as one line in the NDJSON payload. We re-use the map for each
 	// row.
 	m := make(map[string]interface{})
+
 	for i := range rows {
 		// Write the ID value.
-		m[string(dax.PrimaryKeyFieldName)] = ids[i]
+		if keyType == dax.BaseTypeID {
+			m[string(dax.PrimaryKeyFieldName)] = ids[i]
+		} else {
+			// ids for key index can be string or []byte
+			m[string(dax.PrimaryKeyFieldName)] = fmt.Sprintf("%s", ids[i])
+		}
+
 		// Write the rest of the data values.
 		for col := range rows[i] {
 			m[fmt.Sprintf("col_%d", col)] = rows[i][col]

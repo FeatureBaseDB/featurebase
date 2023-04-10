@@ -1,0 +1,15 @@
+hosts = ["KAFKA_SERVICE"]
+group = "grp"
+topics = "topic04"
+table = "table04"
+batch-size = 1
+batch-max-staleness = "5s"
+timeout = "5s"
+encode = "avro"
+schema-registry-url = "SCHEMA_REGISTRY_SERVICE"
+max-messages = MAX_MESSAGES
+
+[[fields]]
+name		= "pk0"
+source-type	= "string"
+primary-key	= true

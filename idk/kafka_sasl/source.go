@@ -26,8 +26,16 @@ type Source struct {
 	Log                logger.Logger
 	Timeout            time.Duration
 	SkipOld            bool
-	Header             string
+	Verbose            bool
 	AllowMissingFields bool
+
+	// Header is a file referencing a file containing JSON header configuration.
+	Header string
+
+	// HeaderFields can be provided instead of Header. It is a slice of
+	// RawFields which will be marshalled and parsed the same way a JSON object
+	// in Header would be. It is used only if a Header is not provided.
+	HeaderFields []idk.RawField
 
 	schema []idk.Field
 	paths  idk.PathTable
@@ -51,11 +59,14 @@ type Source struct {
 // NewSource gets a new Source
 func NewSource() *Source {
 	src := &Source{
-		Topics:        []string{"test"},
-		Group:         "group0",
-		Log:           logger.NopLogger,
-		recordChannel: make(chan recordWithError),
-		quit:          make(chan struct{}),
+		ConfluentCommand: idk.ConfluentCommand{},
+		Topics:           []string{"test"},
+		Group:            "group0",
+		Log:              logger.NopLogger,
+		recordChannel:    make(chan recordWithError),
+		quit:             make(chan struct{}),
+		ConfigMap:        &confluent.ConfigMap{},
+		highmarks:        make([]confluent.TopicPartition, 0),
 	}
 	src.KafkaBootstrapServers = []string{"localhost:9092"}
 
@@ -160,21 +171,26 @@ func (r *Record) Commit(ctx context.Context) error {
 		return errors.New("cannot commit a record that has already been committed")
 	}
 	section, remaining := r.src.spool[:idx-base], r.src.spool[idx-base:]
-	// sort by increasing partition, decreasing offset
 	sort.Slice(section, func(i, j int) bool {
-		if section[i].Partition != section[j].Partition {
+		if *section[i].Topic != *section[j].Topic {
+			return *section[i].Topic < *section[j].Topic
+		} else if section[i].Partition != section[j].Partition {
 			return section[i].Partition < section[j].Partition
 		}
 		return section[i].Offset > section[j].Offset
 	})
 	// calculate the high marks
 	p := int32(-1)
+	s := ""
 	r.src.highmarks = r.src.highmarks[:0]
+
+	// sort by increasing partition, decreasing offset
 	for _, x := range section {
-		if p != x.Partition {
+		if s != *x.Topic || p != x.Partition {
 			r.src.highmarks = append(r.src.highmarks, x)
 		}
 		p = x.Partition
+		s = *x.Topic
 	}
 	_, err := r.src.CommitMessages(r.src.highmarks)
 	if err != nil {
@@ -193,14 +209,24 @@ func (r *Record) Data() []interface{} {
 
 // Open initializes the kafka source.
 func (s *Source) Open() error {
-	if len(s.Header) == 0 {
-		return errors.New("needs header specification file")
+	if len(s.Header) == 0 && len(s.HeaderFields) == 0 {
+		return errors.New("needs header specification (from file or from existing fields)")
 	}
 
-	headerData, err := os.ReadFile(s.Header)
-	if err != nil {
-		return errors.Wrap(err, "reading header file")
+	var headerData []byte
+	var err error
+	if s.Header != "" {
+		headerData, err = os.ReadFile(s.Header)
+		if err != nil {
+			return errors.Wrap(err, "reading header file")
+		}
+	} else {
+		headerData, err = json.Marshal(s.HeaderFields)
+		if err != nil {
+			return errors.Wrap(err, "marshalling header fields")
+		}
 	}
+
 	schema, paths, err := idk.ParseHeader(headerData)
 	if err != nil {
 		return errors.Wrap(err, "processing header")

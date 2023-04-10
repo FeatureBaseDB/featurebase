@@ -156,3 +156,19 @@ services:
     depends_on:
       - postgres
 
+  cli-test:
+    build:
+      context: ../.
+      dockerfile: ./idk/Dockerfile-cli-test
+    environment:
+      KAFKA_RUNNER_TEST_FEATUREBASE_HOST: pilosa:10101
+      KAFKA_RUNNER_TEST_FEATUREBASEGRPC_HOST: pilosa:20101
+      KAFKA_RUNNER_TEST_KAFKA_HOST: kafka:9092
+      KAFKA_RUNNER_TEST_REGISTRY_HOST: schema-registry:8081
+    volumes:
+      - ./testenv/certs:/certs
+      - ./docker-sasl/ssl_keys:/ssl_keys
+      - ./testdata:/testdata
+    depends_on:
+      - schema-registry
+

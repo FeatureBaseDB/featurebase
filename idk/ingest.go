@@ -659,7 +659,6 @@ initialFetch:
 			for n := range lookupRow {
 				lookupRow[n] = nil
 			}
-
 		}
 	}
 
@@ -690,6 +689,13 @@ initialFetch:
 
 func (m *Main) Setup() (onFinishRun func(), err error) {
 	if m.basic {
+		// set up SchemaManager which is required for some logic in fbsql
+		// ingest. basic setup doesn't currently support tls so the tls config
+		// is ignored below
+		if _, err = m.setupClient(); err != nil {
+			return nil, errors.Wrap(err, "setting up client")
+		}
+
 		return m.basicSetup()
 	}
 	return m.setup()

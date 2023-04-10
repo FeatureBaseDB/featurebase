@@ -1,34 +1,21 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/featurebasedb/featurebase/v3/cli/batch"
 	"github.com/featurebasedb/featurebase/v3/cli/kafka"
 	"github.com/featurebasedb/featurebase/v3/errors"
-	"github.com/spf13/viper"
 )
 
 func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
-	// Read the kafka config file.
-	v := viper.New()
-	v.SetConfigFile(cfgFile)
-	v.SetConfigType("toml")
-	err := v.ReadInConfig()
-	if err != nil {
-		return nil, fmt.Errorf("error reading configuration file '%s': %v", cfgFile, err)
-	}
 
-	cfg := kafka.Config{}
-	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, errors.Wrap(err, "unmarshalling config")
+	cfg, err := kafka.ConfigFromFile(cfgFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting config from file")
 	}
 
 	if err := kafka.ValidateConfig(cfg); err != nil {
 		return nil, errors.Wrap(err, "validating config")
 	}
-
-	// Create a new config with defaults.
 
 	// Look up fields based on table provided in the config.
 	wqr, err := cmd.executeQuery(newRawQuery("SHOW COLUMNS FROM " + cfg.Table))
@@ -57,14 +44,19 @@ func (cmd *Command) newKafkaRunner(cfgFile string) (*kafka.Runner, error) {
 		return nil, errors.Wrap(err, "cleaning config")
 	}
 
-	flds, err := kafka.ConfigToFields(cfg)
+	flds, err := kafka.ConfigToFields(cfg, idkCfg.PrimaryKeys)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting fields from config")
 	}
 
-	return kafka.NewRunner(
+	kr := kafka.NewRunner(
 		idkCfg,
 		batch.NewSQLBatcher(cmd, flds),
 		cmd.stderr,
-	), nil
+	)
+
+	// set pilosa host which is the only IDK config to come through
+	// configuration flags rather than the kafka config file
+	kr.Main.PilosaHosts = []string{cmd.host + ":" + cmd.port}
+	return kr, nil
 }

@@ -1,0 +1,32 @@
+{
+    "namespace": "org.test",
+    "type": "record",
+    "name": "all_type_schema",
+    "doc": "All supported avro types and property variations",
+    "fields": [
+        {"name": "pk0", "type": "string"},
+        {"name": "pk1", "type": "string"},
+        {"name": "pk2", "type": "string"},
+        {"name": "stringset_string", "type": ["string", "null"], "mutex": false },
+        {"name": "string_string", "type": ["string", "null"], "mutex": true },
+        {"name": "stringset_bytes", "type": ["bytes", "null"], "mutex": false},
+        {"name": "string_bytes", "type": ["bytes", "null"] , "mutex": true },
+        {"name": "stringset_stringarray", "type": [{"type": "array", "items": "string"}, "null"]},
+        {"name": "stringset_bytesarray", "type": [{"type": "array", "items": "string"}, "null"]},
+        {"name": "idset_long", "type": ["long", "null"], "mutex": false, "fieldType": "id"},
+        {"name": "id_long", "type": ["long", "null"], "mutex": true, "fieldType": "id"},
+        {"name": "idset_int", "type": ["int", "null"], "mutex": false, "fieldType": "id"},
+        {"name": "id_int", "type": ["int", "null"], "mutex": true, "fieldType": "id"},
+        {"name": "idset_longarray", "type": [{"type": "array", "items": "long"}, "null"], "fieldType": "id"},
+        {"name": "idset_intarray", "type": [{"type": "array", "items": "int"}, "null"]},
+        {"name": "int_long", "type": ["long", "null"], "fieldType": "int"},
+        {"name": "int_int", "type": ["int", "null"], "fieldType": "int"},
+        {"name": "decimal_bytes", "type": ["bytes", "null"], "fieldType": "decimal", "scale": 2},
+        {"name": "decimal_float", "type": ["float", "null"], "fieldType": "decimal", "scale": 2},
+        {"name": "decimal_double", "type": ["double", "null"], "fieldType": "decimal", "scale": 2},
+        {"name": "dateint_bytes_ts", "type": ["bytes", "null"], "fieldType": "dateInt", "layout": "2006-01-02 15:04:05", "unit": "s", "epoch": "1970-01-01 00:00:00"},
+        {"name": "bool_bool", "type": ["boolean", "null"]},
+        {"name": "timestamp_bytes_ts", "type": ["bytes", "null"], "fieldType": "timestamp", "layout": "2006-01-02 15:04:05", "epoch": "1970-01-01 00:00:00"},
+        {"name": "timestamp_bytes_int", "type": ["bytes", "null"], "fieldType": "timestamp", "unit": "s", "layout": "2006-01-02 15:04:05", "epoch": "1970-01-01 00:00:00"}
+    ]
+}

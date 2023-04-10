@@ -78,12 +78,13 @@ func NewSource() *Source {
 		Group:            "group0",
 		Log:              logger.NopLogger,
 
-		lastSchemaID:  -1,
-		cache:         make(map[int32]avro.Schema),
-		recordChannel: make(chan recordWithError),
-		quit:          make(chan struct{}),
-		ConfigMap:     &confluent.ConfigMap{},
-		highmarks:     make([]confluent.TopicPartition, 0),
+		lastSchemaID:         -1,
+		cache:                make(map[int32]avro.Schema),
+		recordChannel:        make(chan recordWithError),
+		quit:                 make(chan struct{}),
+		ConfigMap:            &confluent.ConfigMap{},
+		highmarks:            make([]confluent.TopicPartition, 0),
+		consumerCloseTimeout: 30,
 	}
 
 	src.SchemaRegistryURL = "http://" + defaultRegistryHost
@@ -224,10 +225,10 @@ func (r *Record) Commit(ctx context.Context) error {
 	p := int32(-1)
 	s := ""
 	r.src.highmarks = r.src.highmarks[:0]
-
 	// sort by increasing partition, decreasing offset
 
 	for _, x := range section {
+
 		if s != *x.Topic || p != x.Partition {
 			r.src.highmarks = append(r.src.highmarks, x)
 		}
@@ -235,7 +236,6 @@ func (r *Record) Commit(ctx context.Context) error {
 		s = *x.Topic
 
 	}
-
 	committedOffsets, err := r.src.CommitMessages(r.src.highmarks)
 	if err != nil {
 		return errors.Wrap(err, "failed to commit messages")
@@ -270,7 +270,7 @@ func (s *Source) CommitMessages(recs []confluent.TopicPartition) ([]confluent.To
 func (s *Source) Open() error {
 	cfg, err := common.SetupConfluent(&s.ConfluentCommand)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up confluent command")
 	}
 	s.ConfigMap = cfg
 

@@ -1,0 +1,27 @@
+hosts = ["KAFKA_SERVICE"]
+group = "grp"
+topics = "topic05"
+table = "table05"
+batch-size = 1
+batch-max-staleness = "5s"
+timeout = "5s"
+encode = "json"
+allow-missing-fields = true
+max-messages = MAX_MESSAGES
+
+[[fields]]
+name		= "id"
+source-type	= "string"
+primary-key	= true
+
+[[fields]]
+name		= "name"
+source-type	= "string"
+
+[[fields]]
+name		= "age"
+source-type	= "int"
+
+[[fields]]
+name		= "hobbies"
+source-type	= "stringset"

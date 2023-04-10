@@ -1,0 +1,78 @@
+# Dockerfile for building a container which can cross compile darwin with cgo
+# on linux
+# 
+# fbsql depends https://github.com/confluentinc/confluent-kafka-go thus
+# requiring cgo to build. This generally isn't an issue unless you want to cross
+# compile the darwin build on linux. To cross compile darwin build on linux with
+# cgo, you need a C cross compiler. This Dockerfile utilizes
+# "https://github.com/tpoechtrager/osxcross.git for this. 
+#
+# In order for osxcross to build compilers, it requires Xcode. Xcode is a
+# complete developer toolset for creating apps for Mac, iPhone, etc. The .xip
+# file required for this docker files can be founder here:
+# https://developer.apple.com/download/all/. Decide which Xcode version you'd
+# like to build with AND what version of go you'd like to build with.
+#
+
+# Usage
+#
+# Assumptions
+#   1. For this dockerfile to work, you need to be serving the Xcode*.xip file.
+#      Here is the command I ran from the directory that contained the
+#      Xcode*.xip I had. Notice my private IP is hardcoded below. You'll need to
+#      update that below to you private IP. This was done (as opposed to using
+#      COPY) to keep the final image as small as possible.
+#
+#      python3 -m http.server --bind 192.168.1.212
+#
+#   2. The version of Xcode and the underlying sdk are hard coded below. If
+#      you're not using Xcode13.4.1.xip, you'll need to change both version
+#      below.
+#
+#   3. Note the architecture used to build this build may make it easier /
+#      harder to build what you intent to build.
+# 
+# Here is a build example:
+#
+# docker build -f Dockerfile-darwin-cgo-builder -t <image_name>:<tag> .
+
+
+FROM ubuntu:focal AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /
+RUN apt-get update -y -qq && apt-get install -y -qq \
+  build-essential \
+  git \
+  musl-tools \
+  netcat \
+  unixodbc \
+  unixodbc-dev \
+  clang \
+  libxml2-dev \
+  liblzma-dev \
+  cmake \
+  cpio \
+  libssl-dev \
+  zlib1g-dev \
+  libbz2-dev \
+  wget \
+  libmpc-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /
+RUN git clone https://github.com/tpoechtrager/osxcross.git \
+ && wget http://192.168.1.212:8000/Xcode_13.4.1.xip \
+ && cd /osxcross \
+ && ./tools/gen_sdk_package_pbzx.sh /Xcode_13.4.1.xip \
+ && mv ./MacOSX12.3.sdk.tar.xz /osxcross/tarballs \
+ && rm /Xcode_13.4.1.xip
+
+WORKDIR /osxcross
+RUN export UNATTENDED=1 \
+ && export PATH=/osxcross/build/cctools-port:$PATH \
+ && export PATH=/osxcross/build/cctools-port/cctools:$PATH \
+ && export PATH=/osxcross/build/cctools-port/cctools:$PATH \
+ && export PATH=/osxcross/build/:$PATH \
+ && ./build.sh \

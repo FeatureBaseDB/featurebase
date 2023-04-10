@@ -8,6 +8,14 @@ import (
 	"github.com/featurebasedb/featurebase/v3/dax"
 	"github.com/featurebasedb/featurebase/v3/idk"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+)
+
+// Kafka message encoding types supported - changes here should be
+// propogated to the Config struct and ValidateConfig error message
+const (
+	encodingTypeJSON = "json"
+	encodingTypeAvro = "avro"
 )
 
 // Config is the user-facing configuration for kafka support in the CLI. This is
@@ -23,6 +31,15 @@ type Config struct {
 
 	Table  string  `mapstructure:"table" help:"Destination table name."`
 	Fields []Field `mapstructure:"fields"`
+
+	SchemaRegistryURL      string `mapstructure:"schema-registry-url" help:"host and port of schema registry. Defaults to localhost:8081"`
+	SchemaRegistryUsername string `mapstructure:"schema-registry-username" help:"authenticaion key provided by confluent for schema registry."`
+	SchemaRegistryPassword string `mapstructure:"schema-registry-password" help:"authenticaion secret provided by confluent for schema registry."`
+
+	Encode             string `mapstructure:"encode" help:"Encoding format (currently supported formats: avro, json)"`
+	AllowMissingFields bool   `mapstructure:"allow-missing-fields" help:"allow missing fields in messages from kafka"`
+	MaxMessages        int    `mapstructure:"max-messages" help:"max messages read from kakfka"`
+	ConfluentConfig    string `mapstructure:"confluent-config" help:"path to JSON file mapping librdkafka consumer configurations to configuration values"`
 }
 
 // Field is a user-facing configuration field.
@@ -44,72 +61,175 @@ type ConfigForIDK struct {
 	BatchMaxStaleness time.Duration
 	Timeout           time.Duration
 
-	Table   string
-	IDField string
-	Fields  []idk.RawField
+	Table       string
+	IDField     string
+	PrimaryKeys []string
+	Fields      []idk.RawField
+
+	SchemaRegistryURL      string
+	SchemaRegistryUsername string
+	SchemaRegistryPassword string
+
+	Encode             string
+	AllowMissingFields bool
+	MaxMessages        int
+	ConfluentConfig    string
 }
 
-// ValidateConfig validates the config is usable.
+// ConfigFromFile returns a Config struct based on a configuration file Default
+// values for Config struct are defined here
+func ConfigFromFile(cfgFile string) (cfg Config, err error) {
+	// configure viper
+	v := viper.New()
+	v.SetConfigFile(cfgFile)
+	v.SetConfigType("toml")
+
+	// set defaults
+	v.SetDefault("hosts", []string{"localhost:9092"})
+	v.SetDefault("group", "default-featurebase-group")
+	v.SetDefault("batch-size", 1)
+	v.SetDefault("batch-max-staleness", 5*time.Second)
+	v.SetDefault("timeout", 5*time.Second)
+	v.SetDefault("encode", encodingTypeJSON)
+
+	// Read the kafka config file.
+	err = v.ReadInConfig()
+	if err != nil {
+		return cfg, fmt.Errorf("error reading configuration file '%s': %v", cfgFile, err)
+	}
+
+	if err := v.Unmarshal(&cfg); err != nil {
+		return cfg, errors.Wrap(err, "unmarshalling config")
+	}
+
+	return
+
+}
+
+// ValidateConfig validates the config is usable. Note that different encoding
+// methods require different configurations
 func ValidateConfig(c Config) error {
+
+	// validate common
 	if c.Table == "" {
 		return errors.Errorf("table is required")
-	} else if len(c.Topics) == 0 {
+	}
+
+	if len(c.Topics) == 0 {
 		return errors.Errorf("at least one topic is required")
-	} else if len(c.Fields) > 0 {
+	}
+
+	// validate on a by encoding basis
+	switch c.Encode {
+	case encodingTypeJSON:
+		return validateConfigJSON(c)
+	case encodingTypeAvro:
+		return validateConfigAvro(c)
+	default:
+		return errors.Errorf("encode configuration value must be %s or %s: got %s", encodingTypeJSON, encodingTypeAvro, c.Encode)
+	}
+}
+
+func validateConfigJSON(c Config) error {
+
+	switch len(c.Fields) {
+	case 0:
 		// We only need to do these checks if any fields are specified at all.
 		// If no fields are specified, that's ok because then we default to
 		// using fields based off the existing table.
-		if len(c.Fields) < 2 {
-			return errors.Errorf("at least two fields are required (one should be a primary key)")
-		} else {
-			var found int
-			for i := range c.Fields {
-				if c.Fields[i].PrimaryKey {
-					found++
-				}
-				if c.Fields[i].Name == "" {
-					return errors.Errorf("a name attribute (which isn't equal to \"\") should exist for all fields")
-				}
+		return nil
+	case 1:
+		return errors.Errorf("at least two fields are required (one should be a primary key)")
+	default:
+		var found int
+		for i := range c.Fields {
+			if c.Fields[i].PrimaryKey {
+				found++
 			}
-			if found != 1 {
-				return errors.Errorf("exactly one primary key field is required")
+			if c.Fields[i].Name == "" {
+				return errors.Errorf("a name attribute (which isn't equal to \"\") should exist for all fields")
+			}
+			if c.Fields[i].SourceType == "" {
+				return errors.Errorf("a source-type attribute (which isn't equal to \"\") should exist for all fields")
 			}
 		}
+		if found < 1 {
+			return errors.Errorf("at least one primary key field is required")
+		}
+		return nil
 	}
+
+}
+
+// Only primary key fields required
+func validateConfigAvro(c Config) error {
+
+	// for avro encoded messages, we just need to know what avro fields are
+	// going to be used for the primary key. We'll check that there is at least
+	// one field. For every field, we'll check that it has a name attribute and
+	// has primary-key set.
+	if len(c.Fields) < 1 {
+		return errors.New("at least one field is required for avro encoded messages")
+	}
+	for i := range c.Fields {
+		if !c.Fields[i].PrimaryKey {
+			return errors.New("each field must be a primary key for avro encoded messages")
+		}
+		if c.Fields[i].Name == "" {
+			return errors.New("a name attribute (which isn't equal to \"\") should exist for all fields")
+		}
+
+	}
+
 	return nil
 }
 
 // ConvertConfig converts a Config to one that suitable for IDK.
 func ConvertConfig(c Config) (ConfigForIDK, error) {
-	// Set a default kafka host in case one isn't provided.
-	hosts := []string{"localhost:9092"}
-	if len(c.Hosts) > 0 {
-		hosts = c.Hosts
-	}
 
 	// Copy all the shared members from Config to ConfigForIDK.
 	out := ConfigForIDK{
-		Hosts:             hosts,
-		Group:             c.Group,
-		Topics:            c.Topics,
-		BatchSize:         c.BatchSize,
-		BatchMaxStaleness: c.BatchMaxStaleness,
-		Timeout:           c.Timeout,
-		Table:             c.Table,
+		Hosts:                  c.Hosts,
+		Group:                  c.Group,
+		Topics:                 c.Topics,
+		BatchSize:              c.BatchSize,
+		BatchMaxStaleness:      c.BatchMaxStaleness,
+		Timeout:                c.Timeout,
+		Table:                  c.Table,
+		Encode:                 c.Encode,
+		AllowMissingFields:     c.AllowMissingFields,
+		MaxMessages:            c.MaxMessages,
+		ConfluentConfig:        c.ConfluentConfig,
+		SchemaRegistryURL:      c.SchemaRegistryURL,
+		SchemaRegistryUsername: c.SchemaRegistryUsername,
+		SchemaRegistryPassword: c.SchemaRegistryPassword,
 	}
 
 	if len(c.Fields) == 0 {
 		return out, errors.New("fields cannot be empty")
 	}
 
-	// rawFields wil be the same as c.Fields, but possibly enhanced.
+	// rawFields will be the same as c.Fields, but possibly enhanced.
 	rawFields := make([]idk.RawField, 0, len(c.Fields))
 
-	var foundPK bool
+	var stringKeys bool
+	primaryKeys := []string{}
 	for _, fld := range c.Fields {
+
+		// handle primary key
 		if fld.PrimaryKey {
-			out.IDField = fld.Name
-			foundPK = true
+			switch keyType := fld.SourceType; keyType {
+			case dax.BaseTypeID:
+			case dax.BaseTypeString, dax.BaseTypeInt:
+				stringKeys = true
+			default:
+				// IDK can handle other field types as primary keys but limiting
+				// here to the ones above for now. ID and string are the ones
+				// that make sense and existing users also use int fields so I'm
+				// including that as well.
+				return out, errors.Errorf("primary-key fields must be \"id\", \"string\", or \"int\": got field %s which is type %s", fld.Name, keyType)
+			}
+			primaryKeys = append(primaryKeys, fld.Name)
 		}
 
 		typ, quals, err := dax.SplitFieldType(fld.SourceType)
@@ -149,8 +269,16 @@ func ConvertConfig(c Config) (ConfigForIDK, error) {
 
 		rawFields = append(rawFields, rawFld)
 	}
-	if !foundPK {
+
+	// Should have at least one primary key.  If there is more than one primary key OR
+	// using a string field as the key then use string keys (i.e. table will be keyed)
+	// Else, use ids (i.e. table will not be keyed)
+	if len(primaryKeys) < 1 {
 		return out, errors.New("primary-key not found in fields")
+	} else if stringKeys || len(primaryKeys) > 1 {
+		out.PrimaryKeys = primaryKeys
+	} else {
+		out.IDField = primaryKeys[0]
 	}
 
 	out.Fields = rawFields
@@ -160,13 +288,22 @@ func ConvertConfig(c Config) (ConfigForIDK, error) {
 
 // ConfigToFields returns a list of *dax.Field based on the IDField and Fields
 // in the Config.
-func ConfigToFields(c Config) ([]*dax.Field, error) {
+func ConfigToFields(c Config, primaryKeys []string) ([]*dax.Field, error) {
 	// We don't know if a primary key will be found, so we can't set the
 	// capacity to `len(c.Fields)-1`.
 	out := make([]*dax.Field, 0, len(c.Fields))
 
+	// for avro, let the SchemaManager and IDK handle fields
+	if c.Encode == encodingTypeAvro {
+		return nil, nil
+	}
+
 	for _, fld := range c.Fields {
-		if fld.PrimaryKey {
+		// When we have a single primary key, don't also store that value as a
+		// field in FeatureBase. However, when we have more than one primary
+		// key, store all the values used for the compound key as fields in
+		// FeatureBase.
+		if fld.PrimaryKey && len(primaryKeys) < 2 {
 			continue
 		}
 		typ, quals, err := dax.SplitFieldType(fld.SourceType)
