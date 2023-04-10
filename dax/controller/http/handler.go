@@ -226,7 +226,7 @@ func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Reque
 		DatabaseID:     dax.DatabaseID(mux.Vars(r)["database-id"]),
 	}
 
-	//send the id into the controller, get the number of workers back
+	// send the id into the controller, get the number of workers back
 	numWorkers, err := s.controller.WorkerCount(ctx, id)
 
 	// handle error
