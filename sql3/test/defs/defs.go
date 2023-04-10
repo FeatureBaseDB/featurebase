@@ -203,6 +203,8 @@ var TableTests []TableTest = []TableTest{
 	// copy
 	copyTable,
 	copyTests,
+	copyTableCache,
+	copyTestsCache,
 
 	// bool (batch logic)
 	boolTests,
