@@ -72,7 +72,7 @@ const PAGE_TYPE_HASH_TABLE = 12
 // schemaVersion (int16)
 // versionsPtr (int64)
 // flags (int8) flags that include a deletion marker
-// fieldOffsets (one for each field, int32, FF is null)
+// fieldOffsets (one for each field, int32, FFFFFFFF is null)
 //   offsets point to:
 // fieldData (one for each field)
 //   	valueLen (int32) only used for variable length types
