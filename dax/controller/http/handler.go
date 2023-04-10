@@ -25,7 +25,7 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
 	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
 	router.HandleFunc("/database/options", server.patchDatabaseOptions).Methods("PATCH").Name("PatchDatabaseOptions")
-	router.HandleFunc("/worker-count/{organization-id}/{database-id}", server.WorkerCount).Methods("GET").Name("DatabaseWorkers")
+	router.HandleFunc("/worker-count", server.WorkerCount).Methods("POST").Name("DatabaseWorkers")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")
@@ -217,13 +217,15 @@ func (s *server) patchDatabaseOptions(w http.ResponseWriter, r *http.Request) {
 
 // create a response struct
 func (s *server) WorkerCount(w http.ResponseWriter, r *http.Request) {
-	// get the context
+	body := r.Body
+	defer body.Close()
+
 	ctx := r.Context()
 
-	// get the id from the request
-	id := dax.QualifiedDatabaseID{
-		OrganizationID: dax.OrganizationID(mux.Vars(r)["organization-id"]),
-		DatabaseID:     dax.DatabaseID(mux.Vars(r)["database-id"]),
+	id := dax.QualifiedDatabaseID{}
+	if err := json.NewDecoder(body).Decode(&id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	// send the id into the controller, get the number of workers back
