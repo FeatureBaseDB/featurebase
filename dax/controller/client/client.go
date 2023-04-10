@@ -702,19 +702,27 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 	return nil
 }
 
-func (c *Client) WorkerCount(ctx context.Context, orgID string, databaseID string) (int, error) {
+func (c *Client) WorkerCount(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
 	baseEndpoint := c.address.WithScheme(defaultScheme)
-	url := fmt.Sprintf("%s/worker-count/%s/%s", baseEndpoint, orgID, databaseID)
+	url := fmt.Sprintf("%s/worker-count", baseEndpoint)
 
-	resp, err := c.httpClient.Get(url)
+	// Encode the request.
+	postBody, err := json.Marshal(qdbid)
 	if err != nil {
-		return 0, errors.Wrap(err, "getting worker-count")
+		return 0, errors.Wrap(err, "marshalling post request")
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	// Post the request.
+	c.logger.Debugf("POST database-by-id request: url: %s", url)
+	resp, err := c.httpClient.Post(url, "application/json", responseBody)
+	if err != nil {
+		return 0, errors.Wrap(err, "posting database-by-id request")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return 0, errors.Errorf("status code: %d: %s", resp.StatusCode, b)
+		return 0, errors.Wrapf(errors.UnmarshalJSON(resp.Body), "status code: %d", resp.StatusCode)
 	}
 
 	var workers int
