@@ -227,7 +227,7 @@ func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Reque
 	}
 
 	//send the id into the controller, get the number of workers back
-	numWorkers, err := s.controller.GetDatabaseWorkerCount(ctx, id)
+	numWorkers, err := s.controller.WorkerCount(ctx, id)
 
 	// handle error
 	if err != nil {

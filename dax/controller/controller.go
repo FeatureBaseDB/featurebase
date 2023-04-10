@@ -785,7 +785,7 @@ func (c *Controller) Databases(ctx context.Context, orgID dax.OrganizationID, id
 }
 
 // get the list of workers being used by a database
-func (c *Controller) GetDatabaseWorkerCount(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
+func (c *Controller) WorkerCount(ctx context.Context, qdbid dax.QualifiedDatabaseID) (int, error) {
 
 	tx, err := c.Transactor.BeginTx(ctx, false)
 	if err != nil {
