@@ -60,10 +60,12 @@ func NewRunner(cfg ConfigForIDK, batcher fbbatch.Batcher, logWriter io.Writer) *
 	switch cfg.Encode {
 	case encodingTypeAvro:
 		kr.GetAvroNewSource(cfg)
+	case encodingTypeAvroDelete:
+		kr.GetAvroNewSource(cfg)
+		kr.Delete = true
 	default:
 		kr.GetJSONNewSource(cfg)
 	}
-
 	return kr
 }
 

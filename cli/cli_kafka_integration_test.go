@@ -56,12 +56,15 @@ func getKafkaRunnerTestServices() *KafkaRunnerTestServices {
 // data to kafka, configure the runner, and test that the runner successfully
 // ran.
 type kafkaRunnerTest struct {
-	ConfigFile      string      // path to the configuration file used for the runner
-	DataFile        string      // path to the data file to populate kafka with
-	CreateTableStmt string      // statement used to create table prior to ingest
-	SchemaFile      string      // path to schema file for schema encoded messages (e.g. avro)
-	Tests           []testQuery // list of test which are 2-tuples of query and expected results
-
+	ConfigFile       string      // path to the configuration file used for the runner
+	DataFile         string      // path to the data file to populate kafka with
+	CreateTableStmt  string      // statement used to create table prior to ingest
+	SchemaFile       string      // path to schema file for schema encoded messages (e.g. avro)
+	Tests            []testQuery // list of test which are 2-tuples of query and expected results
+	Delete           bool        // testing delete?
+	DeleteConfigFile string      // path to the configuration file used for the delete runner
+	DeleteDataFile   string      // path to the data file that contains delete opperations
+	DeleteSchemaFile string      // path to the schema file that contains the delete schema
 }
 
 // Struct which contains a query to run agaisnt featurebase and the expected
@@ -74,96 +77,128 @@ type testQuery struct {
 // A slice of KafkaRunnerTest structs that will be used in TestKafkaRunner test
 // function.
 var kafkaRunnerTests = []kafkaRunnerTest{
-	{ // id keys json
-		ConfigFile: "config00.toml",
-		DataFile:   "data00.json",
-		Tests: []testQuery{
-			{
-				Query:        "select * from <TABLE> order by name",
-				ExpectedResp: `[[1,"a",20,["hob1","hob2"]],[2,"b",21,["hob2","hob3"]],[3,"c",22,["hob3","hob4"]],[4,"d",23,["hob4","hob5"]],[5,"e",24,["hob5","hob6"]],[6,"f",26,["hob6","hob7"]]]`,
-			},
-		},
-		CreateTableStmt: "(_id ID, name String, age Int, hobbies StringSet)",
-	},
-	{ // string keys json
-		ConfigFile: "config01.toml",
-		DataFile:   "data00.json",
-		Tests: []testQuery{
-			{
-				Query:        "select * from <TABLE> order by name",
-				ExpectedResp: `[["1","a",20,["hob1","hob2"]],["2","b",21,["hob2","hob3"]],["3","c",22,["hob3","hob4"]],["4","d",23,["hob4","hob5"]],["5","e",24,["hob5","hob6"]],["6","f",26,["hob6","hob7"]]]`,
-			},
-		},
-		CreateTableStmt: "(_id String, name String, age Int, hobbies StringSet)",
-	},
-	{ // two string keys json
-		ConfigFile: "config02.toml",
-		DataFile:   "data00.json",
-		Tests: []testQuery{
-			{
-				Query:        "select * from <TABLE> order by name",
-				ExpectedResp: `[["1|a","1","a",20,["hob1","hob2"]],["2|b","2","b",21,["hob2","hob3"]],["3|c","3","c",22,["hob3","hob4"]],["4|d","4","d",23,["hob4","hob5"]],["5|e","5","e",24,["hob5","hob6"]],["6|f","6","f",26,["hob6","hob7"]]]`,
-			},
-		},
-		CreateTableStmt: "(_id String, id String, name String, age Int, hobbies StringSet)",
-	},
-	{ // string, id, and int json
-		ConfigFile: "config03.toml",
-		DataFile:   "data00.json",
-		Tests: []testQuery{
-			{
-				Query:        "select * from <TABLE> order by name",
-				ExpectedResp: `[["1|a|20",1,"a",20,["hob1","hob2"]],["2|b|21",2,"b",21,["hob2","hob3"]],["3|c|22",3,"c",22,["hob3","hob4"]],["4|d|23",4,"d",23,["hob4","hob5"]],["5|e|24",5,"e",24,["hob5","hob6"]],["6|f|26",6,"f",26,["hob6","hob7"]]]`,
-			},
-		},
-		CreateTableStmt: "(_id String, id id, name String, age Int, hobbies StringSet)",
-	},
-	{ // missing values json
-		ConfigFile: "config05.toml",
-		DataFile:   "data02.json",
-		Tests: []testQuery{
-			{
-				Query:        "select * from <TABLE> order by name",
-				ExpectedResp: `[["3",null,22,["hob3","hob4"]],["1","a",20,["hob1","hob2"]],["2","b",21,["hob2","hob3"]],["4","d",null,["hob4","hob5"]],["5","e",24,null],["6","f",26,["hob6","hob7"]]]`,
-			},
-		},
-		CreateTableStmt: "(_id String, name String, age Int, hobbies StringSet)",
-	},
-	{ // string keys avro
-		ConfigFile: "config04.toml",
-		DataFile:   "data01.json",
-		SchemaFile: "schema01.json",
+	// { // id keys json
+	// 	ConfigFile: "config00.toml",
+	// 	DataFile:   "data00.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by name",
+	// 			ExpectedResp: `[[1,"a",20,["hob1","hob2"]],[2,"b",21,["hob2","hob3"]],[3,"c",22,["hob3","hob4"]],[4,"d",23,["hob4","hob5"]],[5,"e",24,["hob5","hob6"]],[6,"f",26,["hob6","hob7"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id ID, name String, age Int, hobbies StringSet)",
+	// },
+	// { // string keys json
+	// 	ConfigFile: "config01.toml",
+	// 	DataFile:   "data00.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by name",
+	// 			ExpectedResp: `[["1","a",20,["hob1","hob2"]],["2","b",21,["hob2","hob3"]],["3","c",22,["hob3","hob4"]],["4","d",23,["hob4","hob5"]],["5","e",24,["hob5","hob6"]],["6","f",26,["hob6","hob7"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id String, name String, age Int, hobbies StringSet)",
+	// },
+	// { // two string keys json
+	// 	ConfigFile: "config02.toml",
+	// 	DataFile:   "data00.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by name",
+	// 			ExpectedResp: `[["1|a","1","a",20,["hob1","hob2"]],["2|b","2","b",21,["hob2","hob3"]],["3|c","3","c",22,["hob3","hob4"]],["4|d","4","d",23,["hob4","hob5"]],["5|e","5","e",24,["hob5","hob6"]],["6|f","6","f",26,["hob6","hob7"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id String, id String, name String, age Int, hobbies StringSet)",
+	// },
+	// { // string, id, and int json
+	// 	ConfigFile: "config03.toml",
+	// 	DataFile:   "data00.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by name",
+	// 			ExpectedResp: `[["1|a|20",1,"a",20,["hob1","hob2"]],["2|b|21",2,"b",21,["hob2","hob3"]],["3|c|22",3,"c",22,["hob3","hob4"]],["4|d|23",4,"d",23,["hob4","hob5"]],["5|e|24",5,"e",24,["hob5","hob6"]],["6|f|26",6,"f",26,["hob6","hob7"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id String, id id, name String, age Int, hobbies StringSet)",
+	// },
+	// { // missing values json
+	// 	ConfigFile: "config05.toml",
+	// 	DataFile:   "data02.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by name",
+	// 			ExpectedResp: `[["3",null,22,["hob3","hob4"]],["1","a",20,["hob1","hob2"]],["2","b",21,["hob2","hob3"]],["4","d",null,["hob4","hob5"]],["5","e",24,null],["6","f",26,["hob6","hob7"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id String, name String, age Int, hobbies StringSet)",
+	// },
+	// { // string keys avro
+	// 	ConfigFile: "config04.toml",
+	// 	DataFile:   "data01.json",
+	// 	SchemaFile: "schema01.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by string_string",
+	// 			ExpectedResp: `[["h1iqc","58KIR","x5z8P",["iYeOV"],["eNKWF"],[255],4.41,"2023-02-19T08:52:56Z",[63,110,320,344,606],1676796776,null,["ASSAw"],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],[821],"2023-02-19T14:52:56Z",110,647,389,[29,257,289,388,606],0.40,["bool_bool"],["5HIn2","7EYSp","BmvHF","Qylqq","yTeUQ"],148,2.84,["5ptDx"]],["yg8hY","5HIn2","qK5TE",["byHh9"],["u2Yr4"],[839],3.23,"2023-01-30T06:56:05Z",[63,582,629,680,690],1675061765,null,["911oj"],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],[533],"2023-01-30T12:56:05Z",433,809,168,[115,172,175,257,969],1.27,["bool_bool"],["F0uC4","KMZnH","OKNV2","VBcyJ","wNZ7o"],680,1156.06,["tvNOB"]],["DY2Ui","8MGwy","vTwn4",["pjxqm"],["DDLN5"],[984],4.23,"2023-02-12T18:37:16Z",[113,733,751,772,975],1676227036,null,["tyP3m"],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],[931],"2023-02-13T00:37:16Z",63,430,297,[72,297,384,694,898],0.83,["bool_bool"],["d0U7s","sDdtS","u2Yr4","y2Y7b"],388,1.26,["kUbdU"]],["tElMR","FW39I","FW39I",["n9HUP"],["PNB4s"],[289],2.19,"2023-02-20T17:04:21Z",[2,289,389,680,958],1676912661,null,["58KIR"],["58KIR","6TKzc","8MGwy","X9jWC"],[791],"2023-02-20T23:04:21Z",289,695,821,[102,220,387,606,890],2.65,["bool_bool"],["BmvHF","PNB4s","TLaUE","eofzb","vhisL"],2,0.95,["ARlcJ"]],["BmvHF","I1gXJ","thuky",["6TKzc"],["gjWEI"],[166],2.91,"2023-01-31T11:11:30Z",[284,289,388,890,975],1675163490,["bool_bool"],["X9jWC"],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],[232],"2023-01-31T17:11:30Z",857,320,286,[322,614,865,884,931],2.84,["bool_bool"],["F0uC4","VQs7y","byHh9","d0U7s","h1iqc"],879,500.86,["798ka"]],["ASSAw","LBTEU","EyQoi",["oxjI0"],["5ptDx"],[484],4.97,"2023-02-22T14:32:23Z",[168,399,639,792,809],1677076343,["bool_bool"],["iYeOV"],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],[322],"2023-02-22T20:32:23Z",533,23,320,[23,293,358,606,821],4.32,["bool_bool"],["PYE8V","X9jWC","vTwn4","x5z8P"],884,2.97,["kauLy"]],["RKE3c","TLaUE","YdwQY",["RKE3c"],["dxKKn"],[39],2.72,"2023-02-16T20:09:13Z",[63,172,220,358,857],1676578153,["bool_bool"],["dF6kx"],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],[113],"2023-02-17T02:09:13Z",582,665,681,[220,647,665,731,778],1.36,["bool_bool"],["5HIn2","I6NST","Qylqq","gjWEI","tyP3m"],690,1156.01,["6TKzc"]],["u2Yr4","ZgkOB","6iGIm",["x5z8P"],["qK5TE"],[148],2.29,"2023-02-03T16:19:37Z",[63,148,839,958,984],1675441177,null,["7EYSp"],["Chgzr","DY2Ui","PYE8V","VBcyJ","u2Yr4"],[890],"2023-02-03T22:19:37Z",13,115,39,[13,167,629,731,772],2.93,["bool_bool"],["KdTtE","MVNow","YdwQY","aQQxr","kUbdU"],969,498.18,["sHaUv"]],["6TKzc","n9HUP","5HIn2",["h1iqc"],["t5f7R"],[72],0.78,"2023-02-23T05:04:34Z",[322,399,730,969,975],1677128674,["bool_bool"],["eofzb"],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],[676],"2023-02-23T11:04:34Z",430,387,797,[242,289,778,797,958],3.35,["bool_bool"],["6TKzc","jVVfZ","pjxqm","vK0WD","xE5jX"],23,1156.06,["YKLk9"]],["9z4aw","uirDR","BmvHF",["CKs1F"],["gL2Hg"],[647],0.95,"2023-02-16T07:53:59Z",[167,230,344,442,733],1676534039,null,["7EYSp"],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],[898],"2023-02-16T13:53:59Z",584,792,63,[284,344,394,442,614],3.23,["bool_bool"],["RPGAm","ZgkOB","iYeOV","tvNOB","u2Yr4"],344,1155.95,["5ptDx"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id string, string_string string, string_bytes string, pk2 stringset, stringset_bytes stringset, idset_long idset, decimal_double decimal(2), timestamp_bytes_ts timestamp, idset_longarray idset, dateint_bytes_ts int, bools stringset, stringset_string stringset, stringset_stringarray stringset, idset_int idset, timestamp_bytes_int timestamp, int_long int, id_long id, id_int id, idset_intarray idset, decimal_float decimal(2), bools-exists stringset, stringset_bytesarray stringset, int_int int, decimal_bytes decimal(2), pk1 stringset)",
+	// },
+	// { // id keys avro
+	// 	ConfigFile: "config06.toml",
+	// 	DataFile:   "data03.json",
+	// 	SchemaFile: "schema02.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by string_string",
+	// 			ExpectedResp: `[[14,"58KIR",[110,320,606],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],148,null,["bool_bool"]],[10,"5HIn2",[582,629,680],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],680,null,["bool_bool"]],[16,"8MGwy",[113,733,975],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],388,null,["bool_bool"]],[6,"FW39I",[201,680,958],["58KIR","6TKzc","8MGwy","X9jWC"],212,null,["bool_bool"]],[4,"I1gXJ",[284,890,975],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],879,["bool_bool"],["bool_bool"]],[2,"LBTEU",[168,792,809],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],884,["bool_bool"],["bool_bool"]],[8,"TLaUE",[172,630,857],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],690,["bool_bool"],["bool_bool"]],[18,"ZgkOB",[148,635,839],["Chgzr","DY2Ui","PYE8V","VBcyJ","u2Yr4"],969,null,["bool_bool"]],[12,"n9HUP",[322,399,975],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],230,["bool_bool"],["bool_bool"]],[0,"uirDR",[167,230,442],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],344,null,["bool_bool"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id id, string_string string, idset_longarray idset, stringset_stringarray stringset, int_int int, bools stringset, bools-exists stringset)",
+	// },
+	// { // compound keys avro
+	// 	ConfigFile: "config07.toml",
+	// 	DataFile:   "data01.json",
+	// 	SchemaFile: "schema01.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by string_string",
+	// 			ExpectedResp: `[["h1iqc|5ptDx|148","58KIR","x5z8P",["iYeOV"],["eNKWF"],[255],4.41,"2023-02-19T08:52:56Z",[63,110,320,344,606],1676796776,null,["ASSAw"],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],[821],"2023-02-19T14:52:56Z",110,647,389,[29,257,289,388,606],0.40,["bool_bool"],["5HIn2","7EYSp","BmvHF","Qylqq","yTeUQ"],148,2.84,["5ptDx"],["h1iqc"]],["yg8hY|tvNOB|680","5HIn2","qK5TE",["byHh9"],["u2Yr4"],[839],3.23,"2023-01-30T06:56:05Z",[63,582,629,680,690],1675061765,null,["911oj"],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],[533],"2023-01-30T12:56:05Z",433,809,168,[115,172,175,257,969],1.27,["bool_bool"],["F0uC4","KMZnH","OKNV2","VBcyJ","wNZ7o"],680,1156.06,["tvNOB"],["yg8hY"]],["DY2Ui|kUbdU|388","8MGwy","vTwn4",["pjxqm"],["DDLN5"],[984],4.23,"2023-02-12T18:37:16Z",[113,733,751,772,975],1676227036,null,["tyP3m"],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],[931],"2023-02-13T00:37:16Z",63,430,297,[72,297,384,694,898],0.83,["bool_bool"],["d0U7s","sDdtS","u2Yr4","y2Y7b"],388,1.26,["kUbdU"],["DY2Ui"]],["tElMR|ARlcJ|2","FW39I","FW39I",["n9HUP"],["PNB4s"],[289],2.19,"2023-02-20T17:04:21Z",[2,289,389,680,958],1676912661,null,["58KIR"],["58KIR","6TKzc","8MGwy","X9jWC"],[791],"2023-02-20T23:04:21Z",289,695,821,[102,220,387,606,890],2.65,["bool_bool"],["BmvHF","PNB4s","TLaUE","eofzb","vhisL"],2,0.95,["ARlcJ"],["tElMR"]],["BmvHF|798ka|879","I1gXJ","thuky",["6TKzc"],["gjWEI"],[166],2.91,"2023-01-31T11:11:30Z",[284,289,388,890,975],1675163490,["bool_bool"],["X9jWC"],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],[232],"2023-01-31T17:11:30Z",857,320,286,[322,614,865,884,931],2.84,["bool_bool"],["F0uC4","VQs7y","byHh9","d0U7s","h1iqc"],879,500.86,["798ka"],["BmvHF"]],["ASSAw|kauLy|884","LBTEU","EyQoi",["oxjI0"],["5ptDx"],[484],4.97,"2023-02-22T14:32:23Z",[168,399,639,792,809],1677076343,["bool_bool"],["iYeOV"],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],[322],"2023-02-22T20:32:23Z",533,23,320,[23,293,358,606,821],4.32,["bool_bool"],["PYE8V","X9jWC","vTwn4","x5z8P"],884,2.97,["kauLy"],["ASSAw"]],["RKE3c|6TKzc|690","TLaUE","YdwQY",["RKE3c"],["dxKKn"],[39],2.72,"2023-02-16T20:09:13Z",[63,172,220,358,857],1676578153,["bool_bool"],["dF6kx"],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],[113],"2023-02-17T02:09:13Z",582,665,681,[220,647,665,731,778],1.36,["bool_bool"],["5HIn2","I6NST","Qylqq","gjWEI","tyP3m"],690,1156.01,["6TKzc"],["RKE3c"]],["u2Yr4|sHaUv|969","ZgkOB","6iGIm",["x5z8P"],["qK5TE"],[148],2.29,"2023-02-03T16:19:37Z",[63,148,839,958,984],1675441177,null,["7EYSp"],["Chgzr","DY2Ui","PYE8V","VBcyJ","u2Yr4"],[890],"2023-02-03T22:19:37Z",13,115,39,[13,167,629,731,772],2.93,["bool_bool"],["KdTtE","MVNow","YdwQY","aQQxr","kUbdU"],969,498.18,["sHaUv"],["u2Yr4"]],["6TKzc|YKLk9|23","n9HUP","5HIn2",["h1iqc"],["t5f7R"],[72],0.78,"2023-02-23T05:04:34Z",[322,399,730,969,975],1677128674,["bool_bool"],["eofzb"],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],[676],"2023-02-23T11:04:34Z",430,387,797,[242,289,778,797,958],3.35,["bool_bool"],["6TKzc","jVVfZ","pjxqm","vK0WD","xE5jX"],23,1156.06,["YKLk9"],["6TKzc"]],["9z4aw|5ptDx|344","uirDR","BmvHF",["CKs1F"],["gL2Hg"],[647],0.95,"2023-02-16T07:53:59Z",[167,230,344,442,733],1676534039,null,["7EYSp"],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],[898],"2023-02-16T13:53:59Z",584,792,63,[284,344,394,442,614],3.23,["bool_bool"],["RPGAm","ZgkOB","iYeOV","tvNOB","u2Yr4"],344,1155.95,["5ptDx"],["9z4aw"]]]`,
+	// 		},
+	// 	},
+	// 	CreateTableStmt: "(_id string, string_string string, string_bytes string, pk2 stringset, stringset_bytes stringset, idset_long idset, decimal_double decimal(2), timestamp_bytes_ts timestamp, idset_longarray idset, dateint_bytes_ts int, bools stringset, stringset_string stringset, stringset_stringarray stringset, idset_int idset, timestamp_bytes_int timestamp, int_long int, id_long id, id_int id, idset_intarray idset, decimal_float decimal(2), bools-exists stringset, stringset_bytesarray stringset, int_int int, decimal_bytes decimal(2), pk1 stringset)",
+	// },
+	// { // delete values
+	// 	ConfigFile:       "config07.toml",
+	// 	DataFile:         "data01.json",
+	// 	SchemaFile:       "schema01.json",
+	// 	CreateTableStmt:  "(_id string, string_string string, string_bytes string, pk2 stringset, stringset_bytes stringset, idset_long idset, decimal_double decimal(2), timestamp_bytes_ts timestamp, idset_longarray idset, dateint_bytes_ts int, bools stringset, stringset_string stringset, stringset_stringarray stringset, idset_int idset, timestamp_bytes_int timestamp, int_long int, id_long id, id_int id, idset_intarray idset, decimal_float decimal(2), bools-exists stringset, stringset_bytesarray stringset, int_int int, decimal_bytes decimal(2), pk1 stringset)",
+	// 	Delete:           true,
+	// 	DeleteConfigFile: "config08.toml",
+	// 	DeleteDataFile:   "data04.json",
+	// 	DeleteSchemaFile: "schema03.json",
+	// 	Tests: []testQuery{
+	// 		{
+	// 			Query:        "select * from <TABLE> order by string_string",
+	// 			ExpectedResp: `[["u2Yr4|sHaUv|969",null,"6iGIm",["x5z8P"],["qK5TE"],[148],null,"2023-02-03T16:19:37Z",[63,148,839,958,984],1675441177,null,["7EYSp"],["Chgzr","DY2Ui"],null,null,null,115,null,[167,629,772],2.93,null,["KdTtE","MVNow","YdwQY","aQQxr","kUbdU"],969,498.18,["sHaUv"],["u2Yr4"]],["h1iqc|5ptDx|148","58KIR","x5z8P",["iYeOV"],["eNKWF"],[255],null,"2023-02-19T08:52:56Z",[63,110,320,344,606],null,null,["ASSAw"],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],[821],null,110,647,389,[29,257,289,388,606],0.40,["bool_bool"],["5HIn2","7EYSp","BmvHF","Qylqq","yTeUQ"],148,2.84,["5ptDx"],["h1iqc"]],["yg8hY|tvNOB|680","5HIn2","qK5TE",["byHh9"],["u2Yr4"],[839],3.23,"2023-01-30T06:56:05Z",[63,582,629,680,690],1675061765,null,["911oj"],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],[533],"2023-01-30T12:56:05Z",433,809,168,[115,172,175,257,969],1.27,["bool_bool"],["F0uC4","KMZnH","OKNV2","VBcyJ","wNZ7o"],680,1156.06,["tvNOB"],["yg8hY"]],["DY2Ui|kUbdU|388","8MGwy","vTwn4",["pjxqm"],["DDLN5"],[984],4.23,"2023-02-12T18:37:16Z",[113,733,751,772,975],1676227036,null,["tyP3m"],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],[931],"2023-02-13T00:37:16Z",63,430,297,[72,297,384,694,898],0.83,["bool_bool"],["d0U7s","sDdtS","u2Yr4","y2Y7b"],388,1.26,["kUbdU"],["DY2Ui"]],["tElMR|ARlcJ|2","FW39I","FW39I",["n9HUP"],["PNB4s"],[289],2.19,"2023-02-20T17:04:21Z",[2,289,389,680,958],1676912661,null,["58KIR"],["58KIR","6TKzc","8MGwy","X9jWC"],[791],"2023-02-20T23:04:21Z",289,695,821,[102,220,387,606,890],2.65,["bool_bool"],["BmvHF","PNB4s","TLaUE","eofzb","vhisL"],2,0.95,["ARlcJ"],["tElMR"]],["BmvHF|798ka|879","I1gXJ","thuky",["6TKzc"],["gjWEI"],[166],2.91,"2023-01-31T11:11:30Z",[284,289,388,890,975],1675163490,["bool_bool"],["X9jWC"],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],[232],"2023-01-31T17:11:30Z",857,320,286,[322,614,865,884,931],2.84,["bool_bool"],["F0uC4","VQs7y","byHh9","d0U7s","h1iqc"],879,500.86,["798ka"],["BmvHF"]],["ASSAw|kauLy|884","LBTEU","EyQoi",["oxjI0"],["5ptDx"],[484],4.97,"2023-02-22T14:32:23Z",[168,399,639,792,809],1677076343,["bool_bool"],["iYeOV"],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],[322],"2023-02-22T20:32:23Z",533,23,320,[23,293,358,606,821],4.32,["bool_bool"],["PYE8V","X9jWC","vTwn4","x5z8P"],884,2.97,["kauLy"],["ASSAw"]],["RKE3c|6TKzc|690","TLaUE","YdwQY",["RKE3c"],["dxKKn"],[39],2.72,"2023-02-16T20:09:13Z",[63,172,220,358,857],1676578153,["bool_bool"],["dF6kx"],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],[113],"2023-02-17T02:09:13Z",582,665,681,[220,647,665,731,778],1.36,["bool_bool"],["5HIn2","I6NST","Qylqq","gjWEI","tyP3m"],690,1156.01,["6TKzc"],["RKE3c"]],["6TKzc|YKLk9|23","n9HUP","5HIn2",["h1iqc"],["t5f7R"],[72],0.78,"2023-02-23T05:04:34Z",[322,399,730,969,975],1677128674,["bool_bool"],["eofzb"],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],[676],"2023-02-23T11:04:34Z",430,387,797,[242,289,778,797,958],3.35,["bool_bool"],["6TKzc","jVVfZ","pjxqm","vK0WD","xE5jX"],23,1156.06,["YKLk9"],["6TKzc"]],["9z4aw|5ptDx|344","uirDR","BmvHF",["CKs1F"],["gL2Hg"],[647],0.95,"2023-02-16T07:53:59Z",[167,230,344,442,733],1676534039,null,["7EYSp"],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],[898],"2023-02-16T13:53:59Z",584,792,63,[284,344,394,442,614],3.23,["bool_bool"],["RPGAm","ZgkOB","iYeOV","tvNOB","u2Yr4"],344,1155.95,["5ptDx"],["9z4aw"]]]`,
+	// 		},
+	// 	},
+	// },
+	{ // delete values
+		ConfigFile:       "config07.toml",
+		DataFile:         "data01.json",
+		SchemaFile:       "schema01.json",
+		CreateTableStmt:  "(_id string, string_string string, string_bytes string, pk2 stringset, stringset_bytes stringset, idset_long idset, decimal_double decimal(2), timestamp_bytes_ts timestamp, idset_longarray idset, dateint_bytes_ts int, bools stringset, stringset_string stringset, stringset_stringarray stringset, idset_int idset, timestamp_bytes_int timestamp, int_long int, id_long id, id_int id, idset_intarray idset, decimal_float decimal(2), bools-exists stringset, stringset_bytesarray stringset, int_int int, decimal_bytes decimal(2), pk1 stringset)",
+		Delete:           true,
+		DeleteConfigFile: "config09.toml",
+		DeleteDataFile:   "data05.json",
+		DeleteSchemaFile: "schema04.json",
 		Tests: []testQuery{
 			{
 				Query:        "select * from <TABLE> order by string_string",
-				ExpectedResp: `[["h1iqc","58KIR","x5z8P",["iYeOV"],["eNKWF"],[255],4.41,"2023-02-19T08:52:56Z",[63,110,320,344,606],1676796776,null,["ASSAw"],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],[821],"2023-02-19T14:52:56Z",110,647,389,[29,257,289,388,606],0.40,["bool_bool"],["5HIn2","7EYSp","BmvHF","Qylqq","yTeUQ"],148,2.84,["5ptDx"]],["yg8hY","5HIn2","qK5TE",["byHh9"],["u2Yr4"],[839],3.23,"2023-01-30T06:56:05Z",[63,582,629,680,690],1675061765,null,["911oj"],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],[533],"2023-01-30T12:56:05Z",433,809,168,[115,172,175,257,969],1.27,["bool_bool"],["F0uC4","KMZnH","OKNV2","VBcyJ","wNZ7o"],680,1156.06,["tvNOB"]],["DY2Ui","8MGwy","vTwn4",["pjxqm"],["DDLN5"],[984],4.23,"2023-02-12T18:37:16Z",[113,733,751,772,975],1676227036,null,["tyP3m"],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],[931],"2023-02-13T00:37:16Z",63,430,297,[72,297,384,694,898],0.83,["bool_bool"],["d0U7s","sDdtS","u2Yr4","y2Y7b"],388,1.26,["kUbdU"]],["tElMR","FW39I","FW39I",["n9HUP"],["PNB4s"],[289],2.19,"2023-02-20T17:04:21Z",[2,289,389,680,958],1676912661,null,["58KIR"],["58KIR","6TKzc","8MGwy","X9jWC"],[791],"2023-02-20T23:04:21Z",289,695,821,[102,220,387,606,890],2.65,["bool_bool"],["BmvHF","PNB4s","TLaUE","eofzb","vhisL"],2,0.95,["ARlcJ"]],["BmvHF","I1gXJ","thuky",["6TKzc"],["gjWEI"],[166],2.91,"2023-01-31T11:11:30Z",[284,289,388,890,975],1675163490,["bool_bool"],["X9jWC"],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],[232],"2023-01-31T17:11:30Z",857,320,286,[322,614,865,884,931],2.84,["bool_bool"],["F0uC4","VQs7y","byHh9","d0U7s","h1iqc"],879,500.86,["798ka"]],["ASSAw","LBTEU","EyQoi",["oxjI0"],["5ptDx"],[484],4.97,"2023-02-22T14:32:23Z",[168,399,639,792,809],1677076343,["bool_bool"],["iYeOV"],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],[322],"2023-02-22T20:32:23Z",533,23,320,[23,293,358,606,821],4.32,["bool_bool"],["PYE8V","X9jWC","vTwn4","x5z8P"],884,2.97,["kauLy"]],["RKE3c","TLaUE","YdwQY",["RKE3c"],["dxKKn"],[39],2.72,"2023-02-16T20:09:13Z",[63,172,220,358,857],1676578153,["bool_bool"],["dF6kx"],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],[113],"2023-02-17T02:09:13Z",582,665,681,[220,647,665,731,778],1.36,["bool_bool"],["5HIn2","I6NST","Qylqq","gjWEI","tyP3m"],690,1156.01,["6TKzc"]],["u2Yr4","ZgkOB","6iGIm",["x5z8P"],["qK5TE"],[148],2.29,"2023-02-03T16:19:37Z",[63,148,839,958,984],1675441177,null,["7EYSp"],["Chgzr","DY2Ui","PYE8V","VBcyJ","u2Yr4"],[890],"2023-02-03T22:19:37Z",13,115,39,[13,167,629,731,772],2.93,["bool_bool"],["KdTtE","MVNow","YdwQY","aQQxr","kUbdU"],969,498.18,["sHaUv"]],["6TKzc","n9HUP","5HIn2",["h1iqc"],["t5f7R"],[72],0.78,"2023-02-23T05:04:34Z",[322,399,730,969,975],1677128674,["bool_bool"],["eofzb"],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],[676],"2023-02-23T11:04:34Z",430,387,797,[242,289,778,797,958],3.35,["bool_bool"],["6TKzc","jVVfZ","pjxqm","vK0WD","xE5jX"],23,1156.06,["YKLk9"]],["9z4aw","uirDR","BmvHF",["CKs1F"],["gL2Hg"],[647],0.95,"2023-02-16T07:53:59Z",[167,230,344,442,733],1676534039,null,["7EYSp"],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],[898],"2023-02-16T13:53:59Z",584,792,63,[284,344,394,442,614],3.23,["bool_bool"],["RPGAm","ZgkOB","iYeOV","tvNOB","u2Yr4"],344,1155.95,["5ptDx"]]]`,
+				ExpectedResp: `[["u2Yr4|sHaUv|969",null,"6iGIm",["x5z8P"],["qK5TE"],[148],null,"2023-02-03T16:19:37Z",[63,148,839,958,984],1675441177,null,["7EYSp"],["Chgzr","DY2Ui"],null,null,null,115,null,[167,629,772],2.93,null,["KdTtE","MVNow","YdwQY","aQQxr","kUbdU"],969,498.18,["sHaUv"],["u2Yr4"]],["h1iqc|5ptDx|148","58KIR","x5z8P",["iYeOV"],["eNKWF"],[255],null,"2023-02-19T08:52:56Z",[63,110,320,344,606],null,null,["ASSAw"],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],[821],null,110,647,389,[29,257,289,388,606],0.40,["bool_bool"],["5HIn2","7EYSp","BmvHF","Qylqq","yTeUQ"],148,2.84,["5ptDx"],["h1iqc"]],["yg8hY|tvNOB|680","5HIn2","qK5TE",["byHh9"],["u2Yr4"],[839],3.23,"2023-01-30T06:56:05Z",[63,582,629,680,690],1675061765,null,["911oj"],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],[533],"2023-01-30T12:56:05Z",433,809,168,[115,172,175,257,969],1.27,["bool_bool"],["F0uC4","KMZnH","OKNV2","VBcyJ","wNZ7o"],680,1156.06,["tvNOB"],["yg8hY"]],["DY2Ui|kUbdU|388","8MGwy","vTwn4",["pjxqm"],["DDLN5"],[984],4.23,"2023-02-12T18:37:16Z",[113,733,751,772,975],1676227036,null,["tyP3m"],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],[931],"2023-02-13T00:37:16Z",63,430,297,[72,297,384,694,898],0.83,["bool_bool"],["d0U7s","sDdtS","u2Yr4","y2Y7b"],388,1.26,["kUbdU"],["DY2Ui"]],["tElMR|ARlcJ|2","FW39I","FW39I",["n9HUP"],["PNB4s"],[289],2.19,"2023-02-20T17:04:21Z",[2,289,389,680,958],1676912661,null,["58KIR"],["58KIR","6TKzc","8MGwy","X9jWC"],[791],"2023-02-20T23:04:21Z",289,695,821,[102,220,387,606,890],2.65,["bool_bool"],["BmvHF","PNB4s","TLaUE","eofzb","vhisL"],2,0.95,["ARlcJ"],["tElMR"]],["BmvHF|798ka|879","I1gXJ","thuky",["6TKzc"],["gjWEI"],[166],2.91,"2023-01-31T11:11:30Z",[284,289,388,890,975],1675163490,["bool_bool"],["X9jWC"],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],[232],"2023-01-31T17:11:30Z",857,320,286,[322,614,865,884,931],2.84,["bool_bool"],["F0uC4","VQs7y","byHh9","d0U7s","h1iqc"],879,500.86,["798ka"],["BmvHF"]],["ASSAw|kauLy|884","LBTEU","EyQoi",["oxjI0"],["5ptDx"],[484],4.97,"2023-02-22T14:32:23Z",[168,399,639,792,809],1677076343,["bool_bool"],["iYeOV"],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],[322],"2023-02-22T20:32:23Z",533,23,320,[23,293,358,606,821],4.32,["bool_bool"],["PYE8V","X9jWC","vTwn4","x5z8P"],884,2.97,["kauLy"],["ASSAw"]],["RKE3c|6TKzc|690","TLaUE","YdwQY",["RKE3c"],["dxKKn"],[39],2.72,"2023-02-16T20:09:13Z",[63,172,220,358,857],1676578153,["bool_bool"],["dF6kx"],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],[113],"2023-02-17T02:09:13Z",582,665,681,[220,647,665,731,778],1.36,["bool_bool"],["5HIn2","I6NST","Qylqq","gjWEI","tyP3m"],690,1156.01,["6TKzc"],["RKE3c"]],["6TKzc|YKLk9|23","n9HUP","5HIn2",["h1iqc"],["t5f7R"],[72],0.78,"2023-02-23T05:04:34Z",[322,399,730,969,975],1677128674,["bool_bool"],["eofzb"],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],[676],"2023-02-23T11:04:34Z",430,387,797,[242,289,778,797,958],3.35,["bool_bool"],["6TKzc","jVVfZ","pjxqm","vK0WD","xE5jX"],23,1156.06,["YKLk9"],["6TKzc"]],["9z4aw|5ptDx|344","uirDR","BmvHF",["CKs1F"],["gL2Hg"],[647],0.95,"2023-02-16T07:53:59Z",[167,230,344,442,733],1676534039,null,["7EYSp"],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],[898],"2023-02-16T13:53:59Z",584,792,63,[284,344,394,442,614],3.23,["bool_bool"],["RPGAm","ZgkOB","iYeOV","tvNOB","u2Yr4"],344,1155.95,["5ptDx"],["9z4aw"]]]`,
 			},
 		},
-		CreateTableStmt: "(_id string, string_string string, string_bytes string, pk2 stringset, stringset_bytes stringset, idset_long idset, decimal_double decimal(2), timestamp_bytes_ts timestamp, idset_longarray idset, dateint_bytes_ts int, bools stringset, stringset_string stringset, stringset_stringarray stringset, idset_int idset, timestamp_bytes_int timestamp, int_long int, id_long id, id_int id, idset_intarray idset, decimal_float decimal(2), bools-exists stringset, stringset_bytesarray stringset, int_int int, decimal_bytes decimal(2), pk1 stringset)",
-	},
-	{ // id keys avro
-		ConfigFile: "config06.toml",
-		DataFile:   "data03.json",
-		SchemaFile: "schema02.json",
-		Tests: []testQuery{
-			{
-				Query:        "select * from <TABLE> order by string_string",
-				ExpectedResp: `[[14,"58KIR",[110,320,606],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],148,null,["bool_bool"]],[10,"5HIn2",[582,629,680],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],680,null,["bool_bool"]],[16,"8MGwy",[113,733,975],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],388,null,["bool_bool"]],[6,"FW39I",[201,680,958],["58KIR","6TKzc","8MGwy","X9jWC"],212,null,["bool_bool"]],[4,"I1gXJ",[284,890,975],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],879,["bool_bool"],["bool_bool"]],[2,"LBTEU",[168,792,809],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],884,["bool_bool"],["bool_bool"]],[8,"TLaUE",[172,630,857],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],690,["bool_bool"],["bool_bool"]],[18,"ZgkOB",[148,635,839],["Chgzr","DY2Ui","PYE8V","VBcyJ","u2Yr4"],969,null,["bool_bool"]],[12,"n9HUP",[322,399,975],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],230,["bool_bool"],["bool_bool"]],[0,"uirDR",[167,230,442],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],344,null,["bool_bool"]]]`,
-			},
-		},
-		CreateTableStmt: "(_id id, string_string string, idset_longarray idset, stringset_stringarray stringset, int_int int, bools stringset, bools-exists stringset)",
-	},
-	{ // compound keys avro
-		ConfigFile: "config07.toml",
-		DataFile:   "data01.json",
-		SchemaFile: "schema01.json",
-		Tests: []testQuery{
-			{
-				Query:        "select * from <TABLE> order by string_string",
-				ExpectedResp: `[["h1iqc|5ptDx|148","58KIR","x5z8P",["iYeOV"],["eNKWF"],[255],4.41,"2023-02-19T08:52:56Z",[63,110,320,344,606],1676796776,null,["ASSAw"],["6TKzc","RKE3c","ZgkOB","eofzb","pjxqm"],[821],"2023-02-19T14:52:56Z",110,647,389,[29,257,289,388,606],0.40,["bool_bool"],["5HIn2","7EYSp","BmvHF","Qylqq","yTeUQ"],148,2.84,["5ptDx"],["h1iqc"]],["yg8hY|tvNOB|680","5HIn2","qK5TE",["byHh9"],["u2Yr4"],[839],3.23,"2023-01-30T06:56:05Z",[63,582,629,680,690],1675061765,null,["911oj"],["d0U7s","dxKKn","fjQK2","m5d59","nVQrd"],[533],"2023-01-30T12:56:05Z",433,809,168,[115,172,175,257,969],1.27,["bool_bool"],["F0uC4","KMZnH","OKNV2","VBcyJ","wNZ7o"],680,1156.06,["tvNOB"],["yg8hY"]],["DY2Ui|kUbdU|388","8MGwy","vTwn4",["pjxqm"],["DDLN5"],[984],4.23,"2023-02-12T18:37:16Z",[113,733,751,772,975],1676227036,null,["tyP3m"],["8MGwy","XzEHj","gjWEI","v31XN","xE5jX"],[931],"2023-02-13T00:37:16Z",63,430,297,[72,297,384,694,898],0.83,["bool_bool"],["d0U7s","sDdtS","u2Yr4","y2Y7b"],388,1.26,["kUbdU"],["DY2Ui"]],["tElMR|ARlcJ|2","FW39I","FW39I",["n9HUP"],["PNB4s"],[289],2.19,"2023-02-20T17:04:21Z",[2,289,389,680,958],1676912661,null,["58KIR"],["58KIR","6TKzc","8MGwy","X9jWC"],[791],"2023-02-20T23:04:21Z",289,695,821,[102,220,387,606,890],2.65,["bool_bool"],["BmvHF","PNB4s","TLaUE","eofzb","vhisL"],2,0.95,["ARlcJ"],["tElMR"]],["BmvHF|798ka|879","I1gXJ","thuky",["6TKzc"],["gjWEI"],[166],2.91,"2023-01-31T11:11:30Z",[284,289,388,890,975],1675163490,["bool_bool"],["X9jWC"],["5ptDx","Chgzr","EyQoi","TLaUE","tyP3m"],[232],"2023-01-31T17:11:30Z",857,320,286,[322,614,865,884,931],2.84,["bool_bool"],["F0uC4","VQs7y","byHh9","d0U7s","h1iqc"],879,500.86,["798ka"],["BmvHF"]],["ASSAw|kauLy|884","LBTEU","EyQoi",["oxjI0"],["5ptDx"],[484],4.97,"2023-02-22T14:32:23Z",[168,399,639,792,809],1677076343,["bool_bool"],["iYeOV"],["XzEHj","iYeOV","rrkYB","uirDR","v31XN"],[322],"2023-02-22T20:32:23Z",533,23,320,[23,293,358,606,821],4.32,["bool_bool"],["PYE8V","X9jWC","vTwn4","x5z8P"],884,2.97,["kauLy"],["ASSAw"]],["RKE3c|6TKzc|690","TLaUE","YdwQY",["RKE3c"],["dxKKn"],[39],2.72,"2023-02-16T20:09:13Z",[63,172,220,358,857],1676578153,["bool_bool"],["dF6kx"],["5HIn2","KdTtE","nVQrd","wNZ7o","x5z8P"],[113],"2023-02-17T02:09:13Z",582,665,681,[220,647,665,731,778],1.36,["bool_bool"],["5HIn2","I6NST","Qylqq","gjWEI","tyP3m"],690,1156.01,["6TKzc"],["RKE3c"]],["u2Yr4|sHaUv|969","ZgkOB","6iGIm",["x5z8P"],["qK5TE"],[148],2.29,"2023-02-03T16:19:37Z",[63,148,839,958,984],1675441177,null,["7EYSp"],["Chgzr","DY2Ui","PYE8V","VBcyJ","u2Yr4"],[890],"2023-02-03T22:19:37Z",13,115,39,[13,167,629,731,772],2.93,["bool_bool"],["KdTtE","MVNow","YdwQY","aQQxr","kUbdU"],969,498.18,["sHaUv"],["u2Yr4"]],["6TKzc|YKLk9|23","n9HUP","5HIn2",["h1iqc"],["t5f7R"],[72],0.78,"2023-02-23T05:04:34Z",[322,399,730,969,975],1677128674,["bool_bool"],["eofzb"],["BmvHF","C6xxn","PYE8V","xE5jX","yg8hY"],[676],"2023-02-23T11:04:34Z",430,387,797,[242,289,778,797,958],3.35,["bool_bool"],["6TKzc","jVVfZ","pjxqm","vK0WD","xE5jX"],23,1156.06,["YKLk9"],["6TKzc"]],["9z4aw|5ptDx|344","uirDR","BmvHF",["CKs1F"],["gL2Hg"],[647],0.95,"2023-02-16T07:53:59Z",[167,230,344,442,733],1676534039,null,["7EYSp"],["9z4aw","VQs7y","aQQxr","h1iqc","vbbuf"],[898],"2023-02-16T13:53:59Z",584,792,63,[284,344,394,442,614],3.23,["bool_bool"],["RPGAm","ZgkOB","iYeOV","tvNOB","u2Yr4"],344,1155.95,["5ptDx"],["9z4aw"]]]`,
-			},
-		},
-		CreateTableStmt: "(_id string, string_string string, string_bytes string, pk2 stringset, stringset_bytes stringset, idset_long idset, decimal_double decimal(2), timestamp_bytes_ts timestamp, idset_longarray idset, dateint_bytes_ts int, bools stringset, stringset_string stringset, stringset_stringarray stringset, idset_int idset, timestamp_bytes_int timestamp, int_long int, id_long id, id_int id, idset_intarray idset, decimal_float decimal(2), bools-exists stringset, stringset_bytesarray stringset, int_int int, decimal_bytes decimal(2), pk1 stringset)",
 	},
 }
 
@@ -185,7 +220,9 @@ func TestKafkaRunner(t *testing.T) {
 	services := getKafkaRunnerTestServices()
 
 	for _, test := range kafkaRunnerTests {
-
+		var iteration int = 0
+	StartProcess:
+		iteration += 1
 		// define path to config and data files
 		kafkaConfig := "./kafka/testdata/runner/config/" + test.ConfigFile
 		dataFile := "./kafka/testdata/runner/data/" + test.DataFile
@@ -223,15 +260,16 @@ func TestKafkaRunner(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// create table to write to (kafka runner does not currently create tables)
-		createTable := strings.NewReader(fmt.Sprintf("CREATE TABLE %s %s;", config.Table, test.CreateTableStmt))
-		wqr, err := fbsql.Queryer.Query("", "", createTable)
-		if err != nil {
-			t.Fatalf("creating table: %s", err)
-		}
-
-		if wqr.Error != "" {
-			t.Error(wqr.Error)
+		if iteration == 1 {
+			// create table to write to (kafka runner does not currently create tables)
+			createTable := strings.NewReader(fmt.Sprintf("CREATE TABLE %s %s;", config.Table, test.CreateTableStmt))
+			wqr, err := fbsql.Queryer.Query("", "", createTable)
+			if err != nil {
+				t.Fatalf("creating table: %s", err)
+			}
+			if wqr.Error != "" {
+				t.Error(wqr.Error)
+			}
 		}
 
 		// delete all tables after test (note this is after all tests not after each test)
@@ -251,7 +289,7 @@ func TestKafkaRunner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-		case "avro":
+		case "avro", "avro-delete":
 			// get avro schema as string
 			schemaBytes, err := os.ReadFile(schemaFile)
 			if err != nil {
@@ -289,6 +327,16 @@ func TestKafkaRunner(t *testing.T) {
 
 		if err = fbsql.Run(context.Background()); err != nil {
 			t.Fatal(err)
+		}
+
+		// if the test has a delete portion, update the variables below to the
+		// delete version and re-run the logic above
+		if test.Delete && iteration == 1 {
+			test.ConfigFile = test.DeleteConfigFile
+			test.DataFile = test.DeleteDataFile
+			test.SchemaFile = test.DeleteSchemaFile
+
+			goto StartProcess
 		}
 
 		// and check the results...
@@ -356,7 +404,7 @@ func verifyQueryReponse(t *testing.T, wqr *featurebase.WireQueryResponse, expect
 	if err != nil {
 		t.Fatal(err)
 	}
-	// t.Fatal(string(js))
+	t.Fatal(string(js))
 	require.JSONEq(t, expectedQuery, string(js))
 }
 

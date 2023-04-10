@@ -14,8 +14,9 @@ import (
 // Kafka message encoding types supported - changes here should be
 // propogated to the Config struct and ValidateConfig error message
 const (
-	encodingTypeJSON = "json"
-	encodingTypeAvro = "avro"
+	encodingTypeJSON       = "json"
+	encodingTypeAvro       = "avro"
+	encodingTypeAvroDelete = "avro-delete"
 )
 
 // Config is the user-facing configuration for kafka support in the CLI. This is
@@ -123,10 +124,10 @@ func ValidateConfig(c Config) error {
 	switch c.Encode {
 	case encodingTypeJSON:
 		return validateConfigJSON(c)
-	case encodingTypeAvro:
+	case encodingTypeAvro, encodingTypeAvroDelete:
 		return validateConfigAvro(c)
 	default:
-		return errors.Errorf("encode configuration value must be %s or %s: got %s", encodingTypeJSON, encodingTypeAvro, c.Encode)
+		return errors.Errorf("encode configuration value must be %s, %s or %s: got %s", encodingTypeJSON, encodingTypeAvro, encodingTypeAvroDelete, c.Encode)
 	}
 }
 
@@ -169,7 +170,9 @@ func validateConfigAvro(c Config) error {
 	// one field. For every field, we'll check that it has a name attribute and
 	// has primary-key set.
 	if len(c.Fields) < 1 {
-		return errors.New("at least one field is required for avro encoded messages")
+		if c.Encode != encodingTypeAvroDelete {
+			return errors.New("at least one field is required for avro encoded messages")
+		}
 	}
 	for i := range c.Fields {
 		if !c.Fields[i].PrimaryKey {
