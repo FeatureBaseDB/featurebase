@@ -793,7 +793,7 @@ func (c *Controller) GetDatabaseWorkerCount(ctx context.Context, qdbid dax.Quali
 	}
 	defer tx.Rollback()
 
-	return c.Balancer.GetDatabaseWorkerCount(tx, qdbid)
+	return c.Balancer.WorkerCount(tx, qdbid)
 }
 
 // CreateTable adds a table to the schemar, and then sends directives to all
