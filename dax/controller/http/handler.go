@@ -25,7 +25,7 @@ func Handler(c *controller.Controller) http.Handler {
 	router.HandleFunc("/database-by-name", server.postDatabaseByName).Methods("POST").Name("PostDatabaseByName")
 	router.HandleFunc("/databases", server.postDatabases).Methods("POST").Name("PostDatabases")
 	router.HandleFunc("/database/options", server.patchDatabaseOptions).Methods("PATCH").Name("PatchDatabaseOptions")
-	router.HandleFunc("/database-worker-count/{organization-id}/{database-id}", server.getDatabaseNumberOfWorkers).Methods("GET").Name("DatabaseWorkers")
+	router.HandleFunc("/worker-count/{organization-id}/{database-id}", server.WorkerCount).Methods("GET").Name("DatabaseWorkers")
 
 	router.HandleFunc("/create-table", server.postCreateTable).Methods("POST").Name("PostCreateTable")
 	router.HandleFunc("/drop-table", server.postDropTable).Methods("POST").Name("PostDropTable")
@@ -216,7 +216,7 @@ func (s *server) patchDatabaseOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 // create a response struct
-func (s *server) getDatabaseNumberOfWorkers(w http.ResponseWriter, r *http.Request) {
+func (s *server) WorkerCount(w http.ResponseWriter, r *http.Request) {
 	// get the context
 	ctx := r.Context()
 

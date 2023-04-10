@@ -702,13 +702,13 @@ func (c *Client) SnapshotTable(ctx context.Context, qtid dax.QualifiedTableID) e
 	return nil
 }
 
-func (c *Client) GetDatabaseWorkerCount(ctx context.Context, orgID string, databaseID string) (int, error) {
+func (c *Client) WorkerCount(ctx context.Context, orgID string, databaseID string) (int, error) {
 	baseEndpoint := c.address.WithScheme(defaultScheme)
-	url := fmt.Sprintf("%s/database-worker-count/%s/%s", baseEndpoint, orgID, databaseID)
+	url := fmt.Sprintf("%s/worker-count/%s/%s", baseEndpoint, orgID, databaseID)
 
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
-		return 0, errors.Wrap(err, "getting database-worker-count")
+		return 0, errors.Wrap(err, "getting worker-count")
 	}
 	defer resp.Body.Close()
 
