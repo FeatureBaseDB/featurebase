@@ -47,7 +47,7 @@ type Balancer interface {
 	// Nodes returns all nodes known by the Balancer.
 	Nodes(tx dax.Transaction) ([]*dax.Node, error)
 
-	// WorkerCount returns the number of workers
+	// WorkerCount returns the number of workers for the given database.
 	WorkerCount(tx dax.Transaction, qdbid dax.QualifiedDatabaseID) (int, error)
 }
 
