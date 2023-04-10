@@ -21,6 +21,7 @@ import (
 type PlanOpPQLDistinctScan struct {
 	planner   *ExecutionPlanner
 	tableName string
+	aliasName string
 	column    string
 	filter    types.PlanExpression
 	topExpr   types.PlanExpression
@@ -44,6 +45,7 @@ func (p *PlanOpPQLDistinctScan) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
+	result["aliasName"] = p.aliasName
 
 	if p.topExpr != nil {
 		result["topExpr"] = p.topExpr.Plan()
@@ -69,6 +71,10 @@ func (p *PlanOpPQLDistinctScan) Warnings() []string {
 
 func (p *PlanOpPQLDistinctScan) Name() string {
 	return p.tableName
+}
+
+func (p *PlanOpPQLDistinctScan) Alias() string {
+	return p.aliasName
 }
 
 func (p *PlanOpPQLDistinctScan) IsFilterable() bool {

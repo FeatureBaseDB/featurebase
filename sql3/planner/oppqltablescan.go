@@ -24,6 +24,7 @@ type TableQueryHint struct {
 type PlanOpPQLTableScan struct {
 	planner            *ExecutionPlanner
 	tableName          string
+	aliasName          string
 	columns            []string
 	filter             types.PlanExpression
 	timeQuantumFilters []types.PlanExpression
@@ -48,6 +49,7 @@ func (p *PlanOpPQLTableScan) Plan() map[string]interface{} {
 	result["_op"] = fmt.Sprintf("%T", p)
 	result["_schema"] = p.Schema().Plan()
 	result["tableName"] = p.tableName
+	result["aliasName"] = p.aliasName
 
 	if p.topExpr != nil {
 		result["topExpr"] = p.topExpr.Plan()
@@ -80,6 +82,10 @@ func (p *PlanOpPQLTableScan) Name() string {
 	return p.tableName
 }
 
+func (p *PlanOpPQLTableScan) Alias() string {
+	return p.aliasName
+}
+
 func (p *PlanOpPQLTableScan) IsFilterable() bool {
 	return true
 }
@@ -109,6 +115,7 @@ func (p *PlanOpPQLTableScan) Schema() types.Schema {
 				result = append(result, &types.PlannerColumn{
 					ColumnName:   string(fld.Name),
 					RelationName: p.tableName,
+					AliasName:    p.aliasName,
 					Type:         fieldSQLDataType(pilosa.FieldToFieldInfo(fld)),
 				})
 				break

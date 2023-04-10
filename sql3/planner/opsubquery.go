@@ -12,8 +12,9 @@ import (
 
 // PlanOpSubquery is an operator for a subquery
 type PlanOpSubquery struct {
-	ChildOp  types.PlanOperator
-	warnings []string
+	ChildOp   types.PlanOperator
+	aliasName string
+	warnings  []string
 }
 
 func NewPlanOpSubquery(child types.PlanOperator) *PlanOpSubquery {
@@ -24,7 +25,11 @@ func NewPlanOpSubquery(child types.PlanOperator) *PlanOpSubquery {
 }
 
 func (p *PlanOpSubquery) Schema() types.Schema {
-	return p.ChildOp.Schema()
+	schema := p.ChildOp.Schema()
+	for _, s := range schema {
+		s.AliasName = p.aliasName
+	}
+	return schema
 }
 
 func (p *PlanOpSubquery) Iterator(ctx context.Context, row types.Row) (types.RowIterator, error) {
@@ -41,13 +46,16 @@ func (p *PlanOpSubquery) WithChildren(children ...types.PlanOperator) (types.Pla
 	if len(children) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return NewPlanOpSubquery(children[0]), nil
+	n := NewPlanOpSubquery(children[0])
+	n.aliasName = p.aliasName
+	return n, nil
 }
 
 func (p *PlanOpSubquery) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
 	result["_schema"] = p.Schema().Plan()
+	result["aliasName"] = p.aliasName
 	result["child"] = p.ChildOp.Plan()
 	return result
 }
@@ -71,4 +79,20 @@ func (p *PlanOpSubquery) Warnings() []string {
 
 func (p *PlanOpSubquery) Name() string {
 	return ""
+}
+
+func (p *PlanOpSubquery) Alias() string {
+	return p.aliasName
+}
+
+func (p *PlanOpSubquery) IsFilterable() bool {
+	return false
+}
+
+func (p *PlanOpSubquery) UpdateFilters(filterCondition types.PlanExpression) (types.PlanOperator, error) {
+	return p, nil
+}
+
+func (p *PlanOpSubquery) UpdateTimeQuantumFilters(filters ...types.PlanExpression) (types.PlanOperator, error) {
+	return p, nil
 }

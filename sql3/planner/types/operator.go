@@ -56,6 +56,7 @@ type PlannerColumn struct {
 // Relation is an interface to something that can be treated as a relation
 type Relation interface {
 	Name() string
+	Alias() string
 }
 
 // FilteredRelation is an interface to something that can be treated as a relation that can be filtered

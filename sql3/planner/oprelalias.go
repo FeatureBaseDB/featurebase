@@ -12,23 +12,23 @@ import (
 
 // PlanOpRelAlias implements an alias for a relation
 type PlanOpRelAlias struct {
-	ChildOp  types.PlanOperator
-	alias    string
-	warnings []string
+	ChildOp   types.PlanOperator
+	aliasName string
+	warnings  []string
 }
 
 func NewPlanOpRelAlias(alias string, child types.PlanOperator) *PlanOpRelAlias {
 	return &PlanOpRelAlias{
-		ChildOp:  child,
-		alias:    alias,
-		warnings: make([]string, 0),
+		ChildOp:   child,
+		aliasName: alias,
+		warnings:  make([]string, 0),
 	}
 }
 
 func (p *PlanOpRelAlias) Schema() types.Schema {
 	schema := p.ChildOp.Schema()
 	for _, s := range schema {
-		s.AliasName = p.alias
+		s.AliasName = p.aliasName
 	}
 	return schema
 }
@@ -47,14 +47,14 @@ func (p *PlanOpRelAlias) WithChildren(children ...types.PlanOperator) (types.Pla
 	if len(children) != 1 {
 		return nil, sql3.NewErrInternalf("unexpected number of children '%d'", len(children))
 	}
-	return NewPlanOpRelAlias(p.alias, children[0]), nil
+	return NewPlanOpRelAlias(p.aliasName, children[0]), nil
 }
 
 func (p *PlanOpRelAlias) Plan() map[string]interface{} {
 	result := make(map[string]interface{})
 	result["_op"] = fmt.Sprintf("%T", p)
 	result["_schema"] = p.Schema().Plan()
-	result["alias"] = p.alias
+	result["aliasName"] = p.aliasName
 	result["child"] = p.ChildOp.Plan()
 	return result
 }
@@ -74,40 +74,40 @@ func (p *PlanOpRelAlias) Warnings() []string {
 	return w
 }
 
-func (p *PlanOpRelAlias) Name() string {
-	return p.alias
-}
+// func (p *PlanOpRelAlias) Name() string {
+// 	return p.aliasName
+// }
 
-func (p *PlanOpRelAlias) IsFilterable() bool {
-	ch, ok := p.ChildOp.(types.FilteredRelation)
-	if !ok {
-		return false
-	}
-	return ch.IsFilterable()
-}
+// func (p *PlanOpRelAlias) IsFilterable() bool {
+// 	ch, ok := p.ChildOp.(types.FilteredRelation)
+// 	if !ok {
+// 		return false
+// 	}
+// 	return ch.IsFilterable()
+// }
 
-func (p *PlanOpRelAlias) UpdateFilters(filterCondition types.PlanExpression) (types.PlanOperator, error) {
-	ch, ok := p.ChildOp.(types.FilteredRelation)
-	if !ok {
-		return nil, sql3.NewErrInternalf("childop is not filterable")
-	}
-	newChild, err := ch.UpdateFilters(filterCondition)
-	if err != nil {
-		return nil, err
-	}
-	p.ChildOp = newChild
-	return p, nil
-}
+// func (p *PlanOpRelAlias) UpdateFilters(filterCondition types.PlanExpression) (types.PlanOperator, error) {
+// 	ch, ok := p.ChildOp.(types.FilteredRelation)
+// 	if !ok {
+// 		return nil, sql3.NewErrInternalf("childop is not filterable")
+// 	}
+// 	newChild, err := ch.UpdateFilters(filterCondition)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	p.ChildOp = newChild
+// 	return p, nil
+// }
 
-func (p *PlanOpRelAlias) UpdateTimeQuantumFilters(filters ...types.PlanExpression) (types.PlanOperator, error) {
-	ch, ok := p.ChildOp.(types.FilteredRelation)
-	if !ok {
-		return nil, sql3.NewErrInternalf("childop is not filterable")
-	}
-	newChild, err := ch.UpdateTimeQuantumFilters(filters...)
-	if err != nil {
-		return nil, err
-	}
-	p.ChildOp = newChild
-	return p, nil
-}
+// func (p *PlanOpRelAlias) UpdateTimeQuantumFilters(filters ...types.PlanExpression) (types.PlanOperator, error) {
+// 	ch, ok := p.ChildOp.(types.FilteredRelation)
+// 	if !ok {
+// 		return nil, sql3.NewErrInternalf("childop is not filterable")
+// 	}
+// 	newChild, err := ch.UpdateTimeQuantumFilters(filters...)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	p.ChildOp = newChild
+// 	return p, nil
+// }
