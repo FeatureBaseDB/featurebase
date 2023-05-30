@@ -54,7 +54,7 @@ Because FeatureBase is built on bitmaps, there is bit of a learning curve to gra
 
 ## Community
 
-You can email us at community@featurebase.com or learn more about contributing at [https://www.featurebase.com/community][Community].
+You can email us at community@featurebase.com and [learn more about contributing](https://github.com/FeatureBaseDB/featurebase/blob/master/OPENSOURCE.md).
 
 Chat with us: [https://discord.gg/FBn2vEp7Na][Discord]
 
