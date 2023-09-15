@@ -60,7 +60,7 @@ Chat with us: [https://discord.gg/FBn2vEp7Na][Discord]
 
 ## What's Changed Since the Pilosa Days? 
 
-A lot has changed since the days of Pilosa. This list highlights some new capabilites included in FeatureBase. We have also made signficant improvements to the performance, scalability, and stability of the FeatureBase product. 
+A lot has changed since the days of Pilosa. This list highlights some new capabilities included in FeatureBase. We have also made significant improvements to the performance, scalability, and stability of the FeatureBase product. 
 
 * Query Languages: FeatureBase supports Pilosa Query Language (PQL), as well as SQL
 * Stream and Batch Ingest: Combine real-time data streams with batch historical data and act on it within milliseconds.
