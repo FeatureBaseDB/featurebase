@@ -1,4 +1,10 @@
-# FeatureBase
+# FeatureBase Community
+
+FeatureBase Community is now archived and no longer maintained.
+
+* [FeatureBase Community Help](https://github.com/FeatureBaseDB/FB-community-help)
+
+
 
 ## Pilosa is now FeatureBase
 
@@ -10,6 +16,8 @@ For more information about FeatureBase, please visit [www.featurebase.com][HomeP
 
 ## Getting Started
 
+* [Learn how to install FeatureBase Community](https://github.com/FeatureBaseDB/FB-community-help/blob/main/docs/community/com-getstart/com-getstart-home.md)
+
 ### Build FeatureBase Server from source
 
 0. Install go. Ensure that your shell's search path includes the go/bin directory.
@@ -19,38 +27,16 @@ For more information about FeatureBase, please visit [www.featurebase.com][HomeP
 4. Run `featurebase server --handler.allowed-origins=http://localhost:3000` to run FeatureBase server with default settings (learn more about configuring FeatureBase at the link below). The `--handler.allowed-origins` parameter allows the standalone web UI to talk to the server; this can be omitted if the web UI is not needed.
 5. Run `curl localhost:10101/status` to verify the server is running and accessible.
 
-### Ingest Data and Query
-
-1. Run 
-```
-molecula-consumer-csv \
-    --index repository \
-    --header "language__ID_F,project_id__ID_F" \
-    --id-field project_id \
-    --batch-size 1000 \
-    --files example.csv
-```
-
-This will ingest the `example.csv` file into a FeatureBase table called `repository`. If the table does not exist, it will be automatically created. Learn more about [ingesting data into FeatureBase][Ingest]
-
-2. Query your data. 
-```
-curl localhost:10101/index/repository/query \
-     -X POST \
-     -d 'Row(example=5)'
-```
-Learn about supported [SQL][SQL], native [Pilosa Query Language (PQL)][PQL].
-
 ### Data Model
 
 Because FeatureBase is built on bitmaps, there is bit of a learning curve to grasp how your data is represented. 
-[Learn about Data Modeling][DataModel].
 
-### More Information
+* [Learn about Data Modeling](https://github.com/FeatureBaseDB/FB-community-help/blob/main/docs/concepts/concepts-home.md)
 
-[Installation][Install]
 
-[Configuration][Config]
+### Ingest Data and Query
+
+* [Learn how to ingest data from multiple data sources](https://github.com/FeatureBaseDB/FB-community-help/blob/main/docs/community/com-ingest/com-ingest-manage.md)
 
 ## Community
 
@@ -73,13 +59,14 @@ A lot has changed since the days of Pilosa. This list highlights some new capabi
 
 FeatureBase is licensed under the [Apache License, Version 2.0][License]
 
-[Community]: http://www.featurebase.com/community?utm_campaign=Open%20Source&utm_source=GitHub
-[Config]: https://docs.featurebase.com/docs/community/com-config/old-config-flags/?utm_campaign=Open%20Source&utm_source=GitHub
-[DataModel]: https://docs.featurebase.com/docs/concepts/overview-data-modeling/?utm_campaign=Open%20Source&utm_source=GitHub
+[Community]: https://github.com/FeatureBaseDB/FB-community-help/tree/main
+[Install]:https://github.com/FeatureBaseDB/FB-community-help/blob/main/docs/community/com-getstart/com-getstart-home.md
+[Config]: https://github.com/FeatureBaseDB/FB-community-help/tree/main/docs/community/com-config
+[DataModel]: https://github.com/FeatureBaseDB/FB-community-help/blob/main/docs/concepts/concepts-home.md
 [Discord]: https://discord.gg/FBn2vEp7Na
 [HomePage]: http://featurebase.com?utm_campaign=Open%20Source&utm_source=GitHub
-[Ingest]: https://docs.featurebase.com/docs/community/com-ingest/old-ingesters/?utm_campaign=Open%20Source&utm_source=GitHub
-[Install]: https://docs.featurebase.com/docs/community/com-home/#install-featurebase-community?utm_campaign=Open%20Source&utm_source=GitHub
+[Ingest]: https://github.com/FeatureBaseDB/FB-community-help/blob/main/docs/community/com-ingest/com-ingest-manage.md
+ 
 [License]: http://www.apache.org/licenses/LICENSE-2.0
 [PQL]: https://docs.featurebase.com/docs/pql-guide/pql-home/?utm_campaign=Open%20Source&utm_source=GitHub
 [SQL]: https://docs.featurebase.com/docs/sql-guide/sql-guide-home/?utm_campaign=Open%20Source&utm_source=GitHub
